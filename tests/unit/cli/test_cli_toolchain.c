@@ -47,12 +47,13 @@ TEST(list_supported_targets) {
     const char *const *targets = xr_cli_build_target_supported_names(&count);
 
     ASSERT_NOT_NULL(targets);
-    ASSERT_EQ_INT((int) count, 7);
+    ASSERT_EQ_INT((int) count, 8);
     ASSERT_STR_EQ(targets[0], "native");
     ASSERT_STR_EQ(targets[1], "x86_64-unknown-none");
     ASSERT_STR_EQ(targets[2], "riscv32imac-unknown-none-elf");
-    ASSERT_STR_EQ(targets[3], "x86_64-linux-musl");
-    ASSERT_STR_EQ(targets[6], "aarch64-windows-gnu");
+    ASSERT_STR_EQ(targets[3], "thumbv7em-none-eabi");
+    ASSERT_STR_EQ(targets[4], "x86_64-linux-musl");
+    ASSERT_STR_EQ(targets[7], "aarch64-windows-gnu");
 }
 
 TEST(parse_x86_64_none_target) {
@@ -99,6 +100,23 @@ TEST(parse_riscv32_none_elf_target) {
     ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_RISCV32);
     ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
     ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_NONE);
+    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
+    ASSERT_EQ_INT(target.pointer_bits, 32);
+    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
+}
+
+TEST(parse_thumbv7em_none_eabi_target) {
+    XrCliBuildTarget target;
+    char err[256];
+
+    ASSERT_TRUE(xr_cli_build_target_parse("thumbv7em-none-eabi", &target, err, sizeof(err)));
+    ASSERT_FALSE(target.is_native);
+    ASSERT_STR_EQ(target.name, "thumbv7em-none-eabi");
+    ASSERT_STR_EQ(target.zig_triple, "thumb-freestanding-eabi");
+    ASSERT_STR_EQ(target.cpu, "cortex_m4");
+    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_THUMBV7EM);
+    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
+    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_EABI);
     ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
     ASSERT_EQ_INT(target.pointer_bits, 32);
     ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
@@ -255,12 +273,34 @@ TEST(build_zig_standalone_command) {
     ASSERT_STR_EQ(cmd.argv[9], "-I/include/runtime");
 }
 
+TEST(build_thumb_standalone_command_uses_cpu) {
+    XrCliBuildTarget target;
+    XrCliToolchainPlan plan;
+    XrCliToolchainCommand cmd;
+    char err[256];
+
+    ASSERT_TRUE(xr_cli_build_target_parse("thumbv7em-none-eabi", &target, err, sizeof(err)));
+    ASSERT_TRUE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_ZIG, &target, "cc", "/opt/zig", &plan,
+                                         err, sizeof(err)));
+    ASSERT_TRUE(xr_cli_toolchain_build_standalone(&plan, &target, "-O2", "firmware.elf",
+                                                  "firmware.c", "/include/aot", "/include/runtime",
+                                                  NULL, false, &cmd, err, sizeof(err)));
+
+    ASSERT_STR_EQ(cmd.argv[0], "/opt/zig");
+    ASSERT_STR_EQ(cmd.argv[1], "cc");
+    ASSERT_STR_EQ(cmd.argv[2], "-target");
+    ASSERT_STR_EQ(cmd.argv[3], "thumb-freestanding-eabi");
+    ASSERT_STR_EQ(cmd.argv[4], "-mcpu=cortex_m4");
+    ASSERT_STR_EQ(cmd.argv[5], "-O2");
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("AOT Target Parser");
 RUN_TEST(parse_native_target);
 RUN_TEST(list_supported_targets);
 RUN_TEST(parse_x86_64_none_target);
 RUN_TEST(parse_riscv32_none_elf_target);
+RUN_TEST(parse_thumbv7em_none_eabi_target);
 RUN_TEST(parse_linux_musl_target);
 RUN_TEST(parse_windows_gnu_target);
 RUN_TEST(reject_unknown_target);
@@ -273,4 +313,5 @@ RUN_TEST(reject_cross_host_toolchain);
 RUN_TEST(reject_cross_clang_toolchain);
 RUN_TEST(find_missing_executable);
 RUN_TEST(build_zig_standalone_command);
+RUN_TEST(build_thumb_standalone_command_uses_cpu);
 TEST_MAIN_END()

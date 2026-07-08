@@ -63,8 +63,10 @@ static void print_supported_targets(const char *program_hint) {
             printf("  %-24s toolchain=%s program=%s\n", target.name,
                    xr_cli_toolchain_kind_name(plan.kind), plan.program);
         else
-            printf("  %-24s toolchain=%s command=\"%s cc -target %s\"\n", target.name,
-                   xr_cli_toolchain_kind_name(plan.kind), plan.program, target.zig_triple);
+            printf("  %-24s toolchain=%s command=\"%s cc -target %s%s%s\"\n", target.name,
+                   xr_cli_toolchain_kind_name(plan.kind), plan.program, target.zig_triple,
+                   (target.cpu && target.cpu[0]) ? " -mcpu=" : "",
+                   (target.cpu && target.cpu[0]) ? target.cpu : "");
     }
 }
 

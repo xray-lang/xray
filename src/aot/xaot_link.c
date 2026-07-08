@@ -285,6 +285,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "little";
         return true;
     }
+    if (strcmp(name, "thumbv7em-none-eabi") == 0) {
+        *arch = "thumbv7em";
+        *os = "none";
+        *abi = "eabi";
+        *object_format = "elf";
+        *triple = "thumbv7em-none-eabi";
+        *pointer_bits = 32;
+        *endian = "little";
+        return true;
+    }
     if (strcmp(name, "aarch64-linux-musl") == 0) {
         *arch = "aarch64";
         *os = "linux";

@@ -324,6 +324,10 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
         "freestanding-profile: passes freestanding compile flag"
     expect_log_contains "$FREESTANDING_EXPORT_LOG" "-fno-stack-protector" \
         "freestanding-profile: disables hosted stack protector runtime"
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "-fno-unwind-tables" \
+        "freestanding-profile: disables hosted unwind table dependency"
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "-fno-asynchronous-unwind-tables" \
+        "freestanding-profile: disables async unwind table dependency"
     expect_log_contains "$FREESTANDING_EXPORT_LOG" "-nostdlib" \
         "freestanding-profile: passes nostdlib link flag"
     expect_log_not_contains "$FREESTANDING_EXPORT_LOG" "-lm" \
@@ -439,6 +443,39 @@ if "$XRAY" build --native --profile freestanding --shared \
 else
     record_fail "freestanding-profile/riscv32-target: dry-run build failed"
     sed 's/^/      /' "$FREESTANDING_RISCV32_TARGET_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_THUMB_TARGET_OBJ="$WORK/freestanding_export_thumbv7em.o"
+FREESTANDING_THUMB_TARGET_LOG="$WORK/freestanding_export_thumbv7em.log"
+if "$XRAY" build --native --profile freestanding --shared \
+        --target thumbv7em-none-eabi --toolchain zig \
+        --dry-run-link --dump-link-command --dump-link-manifest \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_THUMB_TARGET_OBJ" \
+        "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_THUMB_TARGET_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" \
+        "Link command: zig cc -target thumb-freestanding-eabi" \
+        "freestanding-profile/thumbv7em-target: maps through zig thumb target"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" "-mcpu=cortex_m4" \
+        "freestanding-profile/thumbv7em-target: selects Cortex-M4 CPU"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" "-DXR_AOT_TARGET_PTR_BITS=32" \
+        "freestanding-profile/thumbv7em-target: defines 32-bit pointer width"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" "-DXR_AOT_TARGET_LITTLE_ENDIAN=1" \
+        "freestanding-profile/thumbv7em-target: defines little-endian target"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" "-fno-unwind-tables" \
+        "freestanding-profile/thumbv7em-target: disables ARM unwind dependency"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" '"arch": "thumbv7em"' \
+        "freestanding-profile/thumbv7em-target: manifest records arch"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" '"abi": "eabi"' \
+        "freestanding-profile/thumbv7em-target: manifest records EABI"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" '"object_format": "elf"' \
+        "freestanding-profile/thumbv7em-target: manifest records object format"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" '"pointer_bits": 32' \
+        "freestanding-profile/thumbv7em-target: manifest records pointer width"
+    expect_log_contains "$FREESTANDING_THUMB_TARGET_LOG" '"endian": "little"' \
+        "freestanding-profile/thumbv7em-target: manifest records endian"
+else
+    record_fail "freestanding-profile/thumbv7em-target: dry-run build failed"
+    sed 's/^/      /' "$FREESTANDING_THUMB_TARGET_LOG" | sed -n '1,120p'
 fi
 
 if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1 &&
@@ -576,8 +613,58 @@ if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1 &&
         record_fail "freestanding-profile/riscv32-endian-native: real object build failed"
         sed 's/^/      /' "$FREESTANDING_ENDIAN_NATIVE_RISCV32_LOG" | sed -n '1,120p'
     fi
+
+    FREESTANDING_THUMB_REAL_OBJ="$WORK/freestanding_export_thumbv7em_real.o"
+    FREESTANDING_THUMB_REAL_LOG="$WORK/freestanding_export_thumbv7em_real.log"
+    FREESTANDING_THUMB_REAL_ELF="$WORK/freestanding_export_thumbv7em_real.elf"
+    FREESTANDING_THUMB_REAL_ATTRS="$WORK/freestanding_export_thumbv7em_real.attrs"
+    FREESTANDING_THUMB_REAL_UNDEF="$WORK/freestanding_export_thumbv7em_real.undefined"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding --shared \
+            --target thumbv7em-none-eabi --toolchain zig --keep-c --rebuild \
+            --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_THUMB_REAL_OBJ" \
+            "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_THUMB_REAL_LOG" 2>&1; then
+        llvm-readelf -h "$FREESTANDING_THUMB_REAL_OBJ" >"$FREESTANDING_THUMB_REAL_ELF" 2>&1
+        llvm-readelf -A "$FREESTANDING_THUMB_REAL_OBJ" >"$FREESTANDING_THUMB_REAL_ATTRS" 2>&1
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ELF" "Class:                             ELF32" \
+            "freestanding-profile/thumbv7em-target: real object is ELF32"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ELF" \
+            "Data:                              2's complement, little endian" \
+            "freestanding-profile/thumbv7em-target: real object is little-endian"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ELF" "Type:                              REL" \
+            "freestanding-profile/thumbv7em-target: real object is relocatable"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ELF" "Machine:                           ARM" \
+            "freestanding-profile/thumbv7em-target: real object targets ARM"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ATTRS" "CPU_name" \
+            "freestanding-profile/thumbv7em-target: real object records CPU attributes"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ATTRS" "cortex-m4" \
+            "freestanding-profile/thumbv7em-target: real object targets Cortex-M4"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ATTRS" "ARM v7E-M" \
+            "freestanding-profile/thumbv7em-target: real object records v7E-M"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ATTRS" "Microcontroller" \
+            "freestanding-profile/thumbv7em-target: real object records MCU profile"
+        expect_log_contains "$FREESTANDING_THUMB_REAL_ATTRS" "Thumb-2" \
+            "freestanding-profile/thumbv7em-target: real object records Thumb-2 ISA"
+        if llvm-nm -u "$FREESTANDING_THUMB_REAL_OBJ" >"$FREESTANDING_THUMB_REAL_UNDEF" \
+                2>&1; then
+            if [ ! -s "$FREESTANDING_THUMB_REAL_UNDEF" ]; then
+                record_pass "freestanding-profile/thumbv7em-target: real object has no undefined symbols"
+            else
+                record_fail "freestanding-profile/thumbv7em-target: real object has undefined symbols"
+                sed 's/^/      /' "$FREESTANDING_THUMB_REAL_UNDEF" | sed -n '1,80p'
+            fi
+        else
+            record_fail "freestanding-profile/thumbv7em-target: llvm-nm failed"
+            sed 's/^/      /' "$FREESTANDING_THUMB_REAL_UNDEF" | sed -n '1,80p'
+        fi
+    else
+        record_fail "freestanding-profile/thumbv7em-target: real object build failed"
+        sed 's/^/      /' "$FREESTANDING_THUMB_REAL_LOG" | sed -n '1,120p'
+    fi
 else
-    record_skip "freestanding-profile/riscv32-target: real object (requires zig, llvm-readelf and llvm-nm)"
+    record_skip "freestanding-profile/riscv32/thumb targets: real objects (requires zig, llvm-readelf and llvm-nm)"
 fi
 
 FREESTANDING_EXPORT_OBJ="$WORK/freestanding_export.o"

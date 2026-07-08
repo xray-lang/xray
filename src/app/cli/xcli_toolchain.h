@@ -19,7 +19,8 @@ typedef enum XrCliTargetArch {
     XR_CLI_TARGET_ARCH_NATIVE,
     XR_CLI_TARGET_ARCH_X86_64,
     XR_CLI_TARGET_ARCH_AARCH64,
-    XR_CLI_TARGET_ARCH_RISCV32
+    XR_CLI_TARGET_ARCH_RISCV32,
+    XR_CLI_TARGET_ARCH_THUMBV7EM
 } XrCliTargetArch;
 
 typedef enum XrCliTargetOs {
@@ -32,6 +33,7 @@ typedef enum XrCliTargetOs {
 typedef enum XrCliTargetAbi {
     XR_CLI_TARGET_ABI_NATIVE,
     XR_CLI_TARGET_ABI_NONE,
+    XR_CLI_TARGET_ABI_EABI,
     XR_CLI_TARGET_ABI_MUSL,
     XR_CLI_TARGET_ABI_GNU
 } XrCliTargetAbi;
@@ -45,6 +47,7 @@ typedef enum XrCliTargetEndian {
 typedef struct XrCliBuildTarget {
     const char *name;
     const char *zig_triple;
+    const char *cpu;
     const char *exe_suffix;
     XrCliTargetArch arch;
     XrCliTargetOs os;
@@ -67,6 +70,7 @@ typedef struct XrCliToolchainCommand {
     char aot_include_flag[600];
     char runtime_include_flag[600];
     char sysroot_flag[600];
+    char cpu_flag[96];
     char define_target_flag[96];
 } XrCliToolchainCommand;
 

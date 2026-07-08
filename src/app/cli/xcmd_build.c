@@ -548,6 +548,9 @@ static bool xaot_cli_apply_freestanding_profile(XaotLinkManifest *manifest, char
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1") ||
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffreestanding") ||
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-stack-protector") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-unwind-tables") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG,
+                                       "-fno-asynchronous-unwind-tables") ||
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-nostdlib")) {
         snprintf(err, err_size, "failed to apply freestanding build profile");
         return false;
@@ -701,6 +704,14 @@ static bool xaot_cli_link_add_target_metadata_flags(XaotCliLinkCommand *cmd,
     return true;
 }
 
+static bool xaot_cli_link_add_target_cpu_flag(XaotCliLinkCommand *cmd,
+                                              const XrCliBuildTarget *target, char *err,
+                                              size_t err_size) {
+    if (!cmd || !target || !target->cpu || !target->cpu[0])
+        return true;
+    return xaot_cli_link_add_prefixed(cmd, "-mcpu=", target->cpu, err, err_size);
+}
+
 static bool xaot_cli_build_objcopy_command(const XrTargetConfig *config, const char *input_file,
                                            const char *output_file, XaotCliLinkCommand *cmd,
                                            char *err, size_t err_size) {
@@ -784,7 +795,8 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
             return false;
         if (!target->is_native) {
             if (!xaot_cli_link_add_arg(cmd, "-target", err, err_size) ||
-                !xaot_cli_link_add_arg(cmd, target->zig_triple, err, err_size))
+                !xaot_cli_link_add_arg(cmd, target->zig_triple, err, err_size) ||
+                !xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size))
                 return false;
         }
     }
@@ -931,7 +943,8 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
             return false;
         if (!target->is_native) {
             if (!xaot_cli_link_add_arg(cmd, "-target", err, err_size) ||
-                !xaot_cli_link_add_arg(cmd, target->zig_triple, err, err_size))
+                !xaot_cli_link_add_arg(cmd, target->zig_triple, err, err_size) ||
+                !xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size))
                 return false;
         }
     }
@@ -1816,6 +1829,7 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     if (target) {
         h = xaot_hash_fold_str(h, target->name);
         h = xaot_hash_fold_str(h, target->zig_triple);
+        h = xaot_hash_fold_str(h, target->cpu);
         h = xaot_hash_fold(h, &target->is_native, sizeof(target->is_native));
     }
     if (plan) {
@@ -1850,6 +1864,7 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
     if (target) {
         h = xaot_hash_fold_str(h, target->name);
         h = xaot_hash_fold_str(h, target->zig_triple);
+        h = xaot_hash_fold_str(h, target->cpu);
         h = xaot_hash_fold_bool(h, target->is_native);
     }
     if (plan) {
