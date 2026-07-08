@@ -171,7 +171,8 @@ LINK_LOG="$WORK/link.log"
 if ! ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
         ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
         "$ZIG" cc -target x86_64-linux-musl -O2 -ffp-contract=off \
-        -ffreestanding -fno-stack-protector -ffunction-sections \
+        -ffreestanding -fno-stack-protector -fno-unwind-tables \
+        -fno-asynchronous-unwind-tables -ffunction-sections \
         -fdata-sections -DXRT_IMPL -DXR_AOT_CROSS_TARGET=1 \
         -DXRAY_PROFILE_FREESTANDING=1 -I"$PROJECT_DIR/src/aot" \
         -I"$PROJECT_DIR/src" -c "$GEN_C" -o "$GEN_OBJ" >"$LINK_LOG" 2>&1; then
@@ -181,7 +182,8 @@ fi
 if ! ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
         ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
         "$ZIG" cc -target x86_64-linux-musl -O2 -ffp-contract=off \
-        -ffreestanding -fno-stack-protector -ffunction-sections \
+        -ffreestanding -fno-stack-protector -fno-unwind-tables \
+        -fno-asynchronous-unwind-tables -ffunction-sections \
         -fdata-sections -I"$PROJECT_DIR/src/aot" -I"$PROJECT_DIR/src" \
         -c "$HOOK_C" -o "$HOOK_OBJ" >>"$LINK_LOG" 2>&1; then
     sed 's/^/  /' "$LINK_LOG" >&2
