@@ -1,0 +1,24 @@
+import sys
+
+fn waitThread(t: Thread<int>) -> int {
+    var v = t.join()
+    print("joined " + string(v))
+    return v
+}
+
+fn tick() -> int {
+    print("tick")
+    return 1
+}
+
+shared thread = sys.Thread.spawn(fn() -> int {
+    sys.sleepMs(40)
+    return 7
+})
+
+var waiter = go waitThread(thread)
+Coro.yield()
+
+var ticker = go tick()
+print(await ticker)
+print(await waiter)
