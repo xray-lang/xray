@@ -1053,6 +1053,13 @@ static bool xa_path_is_stdlib_module(const char *file, const char *module_name) 
         return false;
     size_t flen = strlen(file);
     size_t slen = strlen(suffix);
+    if (flen >= slen && strcmp(file + flen - slen, suffix) == 0)
+        return true;
+
+    n = snprintf(suffix, sizeof(suffix), "<embedded stdlib>/%s/%s.xr", module_name, module_name);
+    if (n < 0 || (size_t) n >= sizeof(suffix))
+        return false;
+    slen = strlen(suffix);
     return flen >= slen && strcmp(file + flen - slen, suffix) == 0;
 }
 
@@ -1066,9 +1073,15 @@ static bool xa_stdlib_module_name_from_path(const char *file, char *out, size_t 
 
     const char *marker = "stdlib/";
     const char *base = strstr(file, marker);
-    if (!base)
-        return false;
-    base += strlen(marker);
+    if (base) {
+        base += strlen(marker);
+    } else {
+        marker = "<embedded stdlib>/";
+        base = strstr(file, marker);
+        if (!base)
+            return false;
+        base += strlen(marker);
+    }
 
     const char *slash = strchr(base, '/');
     if (!slash || slash == base)
