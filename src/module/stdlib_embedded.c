@@ -5,32 +5,55 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * stdlib_embedded.c - Stub for embedded stdlib bytecode API
+ * stdlib_embedded.c - Embedded stdlib script lookup
  *
  * KEY CONCEPT:
- *   All built-in stdlib modules are now pure C. No embedded bytecode is
- *   shipped for built-in modules.
- *
- *   The API (xr_get_embedded_stdlib_bytecode / xr_get_embedded_stdlib)
- *   is retained so that third-party hybrid modules can provide their own
- *   embedded bytecode via a custom provider in the future.
- *
- *   The script extension loading mechanism in xmodule.c (file-system
- *   fallback + export override) is also preserved for third-party use.
+ *   Pure-Xray stdlib modules must be loadable without relying on cwd or an
+ *   installed stdlib directory. Bytecode is the preferred artifact; embedded
+ *   source remains as a bootstrap fallback while the stdlib bytecode generator
+ *   is being wired into the build.
  */
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
-// Embedded bytecode lookup — always returns NULL (no built-in embedded scripts)
+typedef struct {
+    const char *name;
+    const char *source;
+} XrEmbeddedStdlibSource;
+
+typedef struct {
+    const char *name;
+    const uint8_t *bytecode;
+    size_t size;
+} XrEmbeddedStdlibBytecode;
+
+#include <stdlib_embedded_generated.inc>
+
 const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size) {
-    (void) module_name;
-    (void) out_size;
+    if (out_size)
+        *out_size = 0;
+    if (!module_name)
+        return NULL;
+    for (size_t i = 0; i < xr_embedded_stdlib_bytecode_count; i++) {
+        const XrEmbeddedStdlibBytecode *entry = &xr_embedded_stdlib_bytecodes[i];
+        if (entry->name && strcmp(entry->name, module_name) == 0) {
+            if (out_size)
+                *out_size = entry->size;
+            return entry->bytecode;
+        }
+    }
     return NULL;
 }
 
-// Legacy source lookup — always returns NULL
 const char *xr_get_embedded_stdlib(const char *module_name) {
-    (void) module_name;
+    if (!module_name)
+        return NULL;
+    for (size_t i = 0; i < xr_embedded_stdlib_source_count; i++) {
+        const XrEmbeddedStdlibSource *entry = &xr_embedded_stdlib_sources[i];
+        if (strcmp(entry->name, module_name) == 0)
+            return entry->source;
+    }
     return NULL;
 }

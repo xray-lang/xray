@@ -704,6 +704,25 @@ else()
     endif()
 endif()
 
+file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
+set(XRAY_STDLIB_EMBEDDED_INC
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_generated.inc")
+add_custom_command(
+    OUTPUT ${XRAY_STDLIB_EMBEDDED_INC}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}
+            --output ${XRAY_STDLIB_EMBEDDED_INC}
+            ${XRAY_STDLIB_SCRIPT_SOURCES}
+    DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+        ${XRAY_STDLIB_SCRIPT_SOURCES}
+    COMMENT "Generating embedded stdlib script table"
+    VERBATIM
+)
+add_custom_target(gen-stdlib-embedded DEPENDS ${XRAY_STDLIB_EMBEDDED_INC})
+
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
 foreach(XRAY_SRC_LIST
@@ -751,7 +770,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata)
+add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata gen-stdlib-embedded)
 
 add_library(xray_aot_core STATIC
     src/aot/xrt_regex_core.c
@@ -829,7 +848,7 @@ set(XRAY_VM_RUNTIME_SOURCES
 list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 
 add_library(xray_vm_runtime STATIC ${XRAY_VM_RUNTIME_SOURCES})
-add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-embedded)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
@@ -853,6 +872,7 @@ target_include_directories(xray_core PUBLIC
 
 target_include_directories(xray_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
 target_include_directories(xray_rt_coro PUBLIC
@@ -869,6 +889,7 @@ target_include_directories(xray_vm_runtime PUBLIC
 
 target_include_directories(xray_vm_runtime PRIVATE
     ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
 # Link libraries

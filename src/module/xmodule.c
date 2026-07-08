@@ -682,52 +682,103 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 
     XrProto *code = NULL;
     char path[XR_PATH_MAX];
-    char *source = NULL;
+    const char *source = NULL;
+    char *owned_source = NULL;
 
-    // Load script extension from file system (stdlib/<name>/<name>.xr).
-    // Pure-Xray stdlib modules (module->requires_script, e.g. sync) get
-    // all their exports from this layer; hybrid modules may use it to
-    // extend or override C exports.
+#ifndef XR_STDLIB_FROM_FILE
+    // Prefer embedded bytecode: bytecode-only embedders can execute pure-Xray
+    // stdlib modules without linking the compiler or reading from disk.
+    size_t embedded_bc_size = 0;
+    const uint8_t *embedded_bc = xr_get_embedded_stdlib_bytecode(module_name, &embedded_bc_size);
+    if (embedded_bc && embedded_bc_size > 0) {
+        XrBcError bc_error;
+        code = xr_bytecode_read(isolate, embedded_bc, embedded_bc_size, &bc_error);
+        if (!code) {
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_log_warning("module", "failed to load embedded stdlib bytecode for '%s': %d",
+                           module_name, bc_error);
+            return false;
+        }
+        snprintf(path, sizeof(path), "<embedded stdlib>/%s/%s.xrc", module_name, module_name);
+        XR_DBG_MODULE("load_script_extension: loaded embedded bytecode for %s", module_name);
+    }
+
+    // Source fallback keeps the installed/runtime layout independent while the
+    // stdlib bytecode generation path is filled in.
+    if (!code) {
+        source = xr_get_embedded_stdlib(module_name);
+        if (source) {
+            snprintf(path, sizeof(path), "<embedded stdlib>/%s/%s.xr", module_name, module_name);
+            XR_DBG_MODULE("load_script_extension: loaded embedded source for %s", module_name);
+        }
+    }
+#endif
+
+    // Development override from file system (stdlib/<name>/<name>.xr).
+    // Pure-Xray stdlib modules (module->requires_script) get all their
+    // exports from this layer; hybrid modules may use it to extend or
+    // override C exports.
+#ifdef XR_STDLIB_FROM_FILE
     if (registry->stdlib_path) {
         snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
                  module_name);
 
         XR_DBG_MODULE("load_script_extension: trying %s", path);
 
-        source = xr_file_read_all(path, "r", NULL);
-        if (source) {
+        owned_source = xr_file_read_all(path, "r", NULL);
+        source = owned_source;
+        if (owned_source) {
             XR_DBG_MODULE("load_script_extension: loaded from file");
         }
     }
+#else
+    if (!code && !source && registry->stdlib_path) {
+        snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
+                 module_name);
+
+        XR_DBG_MODULE("load_script_extension: trying fallback %s", path);
+
+        owned_source = xr_file_read_all(path, "r", NULL);
+        source = owned_source;
+        if (owned_source) {
+            XR_DBG_MODULE("load_script_extension: loaded fallback file");
+        }
+    }
+#endif
 
     // No extension script: fine for hybrid/pure-C modules, fatal for
     // pure-Xray modules (an empty export table would surface later as
     // confusing "call a non-function value" panics at use sites).
-    if (!source) {
+    if (!code && !source) {
         XR_DBG_MODULE("load_script_extension: no extension for '%s'", module_name);
         xr_isolate_set_current_module(isolate, prev_module);
         if (module->requires_script) {
             xr_log_warning("module",
-                           "stdlib module '%s' requires its script layer but '%s' was not found; "
-                           "set XRAY_STDLIB_PATH or reinstall xray",
+                           "stdlib module '%s' requires its script layer but no embedded or file "
+                           "artifact was found at '%s'; set XRAY_STDLIB_PATH or reinstall xray",
                            module_name, registry->stdlib_path ? path : "<no stdlib path>");
             return false;
         }
         return true;
     }
 
-    if (!registry->compiler_session || !registry->fn_compile_src) {
-        xr_isolate_set_current_module(isolate, prev_module);
-        xr_free(source);
-        xr_log_warning("module", "compiler not available (lite runtime)");
-        return false;
-    }
-    code = registry->fn_compile_src(registry->compiler_session, source, path);
     if (!code) {
-        xr_isolate_set_current_module(isolate, prev_module);
-        xr_free(source);
-        xr_log_warning("module", "failed to compile extension '%s'", path);
-        return false;
+        if (!registry->compiler_session || !registry->fn_compile_src) {
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_free(owned_source);
+            xr_log_warning("module",
+                           "compiler not available for embedded stdlib source '%s' "
+                           "(embedded bytecode missing)",
+                           path);
+            return false;
+        }
+        code = registry->fn_compile_src(registry->compiler_session, source, path);
+        if (!code) {
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_free(owned_source);
+            xr_log_warning("module", "failed to compile extension '%s'", path);
+            return false;
+        }
     }
 
     // Execute extension script
@@ -744,7 +795,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
                       : "null");
 
     // Cleanup
-    xr_free(source);
+    xr_free(owned_source);
     xr_isolate_set_current_module(isolate, prev_module);
 
     if (result != 0) {

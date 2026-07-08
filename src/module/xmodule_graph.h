@@ -43,9 +43,10 @@ typedef enum {
 /* One module in the graph.  Owns its AST, canonical ID, and
  * the list of edges (import dependencies). */
 typedef struct XrModuleSpec {
-    char *canonical;   /* Canonical module ID (owned, xr_free) */
-    char *source_path; /* Absolute path to source file (owned) */
-    XrModuleKind kind; /* stdlib / file / package */
+    char *canonical;      /* Canonical module ID (owned, xr_free) */
+    char *source_path;    /* Absolute path to source file (owned) */
+    XrModuleKind kind;    /* stdlib / file / package */
+    bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
     XrModSpecStatus status;
 
     struct AstNode *ast; /* Parsed AST (owned; freed via xr_program_destroy) */
