@@ -61,6 +61,8 @@ XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
  * comparison as a cross-block operand (e.g. && short-circuit merge). */
 static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
     XR_DCHECK(ctrl != NULL, "ctrl must not be NULL");
+    if (ctrl->block != blk)
+        return false;
     uint16_t op = ctrl->op;
     if (op < XI_EQ || op > XI_GE || ctrl->nargs < 2)
         return false;

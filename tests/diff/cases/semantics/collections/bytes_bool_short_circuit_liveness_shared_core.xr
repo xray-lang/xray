@@ -1,0 +1,18 @@
+// Bool values derived from Bytes reads must remain live after short-circuit
+// nullable-bool comparisons.
+
+fn check(raw: Bytes, expectMasked: bool? = null) {
+    var second = raw[1]
+    var masked = (second & 128) != 0
+    if (expectMasked != null && masked != expectMasked!) {
+        print("expect mismatch")
+    }
+    if (masked) {
+        print("masked")
+    } else {
+        print("unmasked")
+    }
+}
+
+check(Bytes([129, 2, 72, 105]), false)
+check(Bytes([129, 130, 1, 2, 3, 4, 73, 107]), true)
