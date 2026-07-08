@@ -17,6 +17,29 @@ var headers = "GET /chat HTTP/1.1\r\n" +
 print(ws.isUpgradeRequest(headers))
 print(ws.pickSubprotocol(headers, ["chat", "superchat"])!)
 
+var upgradeRequest = "GET /chat?room=1 HTTP/1.1\r\n" +
+    "Host: example.com\r\n" +
+    "Origin: https://app.example\r\n" +
+    "Upgrade: websocket\r\n" +
+    "Connection: keep-alive, Upgrade\r\n" +
+    "Sec-WebSocket-Key: " + key + "\r\n" +
+    "Sec-WebSocket-Version: 13\r\n" +
+    "Sec-WebSocket-Protocol: superchat, chat\r\n" +
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover\r\n\r\n"
+var parsedRequest = ws.parseUpgradeRequest(upgradeRequest, ["chat"], true, ["https://app.example"])!
+print(parsedRequest.target)
+print(parsedRequest.secKey == key)
+print(parsedRequest.protocol!)
+print(parsedRequest.deflate)
+print(parsedRequest.origin!)
+
+var noDeflateRequest = ws.parseUpgradeRequest(upgradeRequest, ["chat"], false, ["*"])!
+print(noDeflateRequest.deflate)
+print(ws.parseUpgradeRequest(upgradeRequest.replace("GET ", "POST "), ["chat"], true, ["*"]) == null)
+print(ws.parseUpgradeRequest(upgradeRequest.replace(key, "bad"), ["chat"], true, ["*"]) == null)
+print(ws.parseUpgradeRequest(upgradeRequest.replace("Sec-WebSocket-Version: 13", "Sec-WebSocket-Version: 12"), ["chat"], true, ["*"]) == null)
+print(ws.parseUpgradeRequest(upgradeRequest, ["chat"], true, ["https://other.example"]) == null)
+
 var url = ws.parseUrl("wss://example.com/chat?room=1")!
 print(url.secure)
 print(url.host)

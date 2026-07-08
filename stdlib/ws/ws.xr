@@ -76,6 +76,28 @@ class ParsedUpgradeResponse {
     }
 }
 
+class ParsedUpgradeRequest {
+    target: string
+    secKey: string
+    protocol: string?
+    deflate: bool
+    origin: string?
+
+    constructor(
+        target: string,
+        secKey: string,
+        protocol: string? = null,
+        deflate: bool = false,
+        origin: string? = null
+    ) {
+        this.target = target
+        this.secKey = secKey
+        this.protocol = protocol
+        this.deflate = deflate
+        this.origin = origin
+    }
+}
+
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + prefix.length > s.length) { return false }
     for (var i = 0; i < prefix.length; i++) {
@@ -301,6 +323,20 @@ fn _containsString(values: Array<string>, value: string) -> bool {
     return false
 }
 
+fn _originAllowed(origin: string?, allowedOrigins: Array<string>?) -> bool {
+    if (allowedOrigins == null || allowedOrigins!.length == 0) { return true }
+    for (var i = 0; i < allowedOrigins!.length; i++) {
+        if (allowedOrigins![i] == "*") { return true }
+    }
+    if (origin == null || origin!.length == 0) { return false }
+    return _containsString(allowedOrigins!, origin!)
+}
+
+fn _validSecKey(secKey: string) -> bool {
+    var raw = base64.decodeToBytes(secKey)
+    return raw != null && raw!.length == 16
+}
+
 fn acceptKey(secKey: string) -> string {
     var digest = _hexBytes(crypto.sha1(secKey + _GUID))
     if (digest == null) { return "" }
@@ -331,6 +367,46 @@ fn pickSubprotocol(headers: string, serverProtocols: Array<string>) -> string? {
         }
     }
     return null
+}
+
+fn parseUpgradeRequest(
+    request: string,
+    serverProtocols: Array<string>? = null,
+    allowDeflate: bool = true,
+    allowedOrigins: Array<string>? = null
+) -> ParsedUpgradeRequest? {
+    var line = _firstLine(request)
+    if (!_startsWithAt(line, 0, "GET ")) { return null }
+    var versionStart = _indexOfFrom(line, " ", 4)
+    if (versionStart <= 4) { return null }
+    var target = line.slice(4, versionStart)
+    if (target.length == 0 || target.charAt(0) != "/") { return null }
+    if (line.slice(versionStart + 1, line.length) != "HTTP/1.1") { return null }
+
+    var upgrade = _header(request, "Upgrade")
+    var connection = _header(request, "Connection")
+    var secKey = _header(request, "Sec-WebSocket-Key")
+    var version = _header(request, "Sec-WebSocket-Version")
+    if (upgrade == null || upgrade!.toLowerCase() != "websocket") { return null }
+    if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
+    if (secKey == null || !_validSecKey(secKey!)) { return null }
+    if (version == null || _trim(version!) != "13") { return null }
+
+    var origin = _header(request, "Origin")
+    if (!_originAllowed(origin, allowedOrigins)) { return null }
+
+    var protocol: string? = null
+    if (serverProtocols != null) {
+        protocol = pickSubprotocol(request, serverProtocols!)
+    }
+
+    var deflate = false
+    var extensions = _header(request, "Sec-WebSocket-Extensions")
+    if (allowDeflate && extensions != null) {
+        deflate = _headerHasElementToken(extensions!, "permessage-deflate")
+    }
+
+    return ParsedUpgradeRequest(target, secKey!, protocol, deflate, origin)
 }
 
 fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
@@ -638,10 +714,12 @@ export {
     WsUrl,
     ClosePayload,
     ParsedUpgradeResponse,
+    ParsedUpgradeRequest,
     acceptKey,
     randomKey,
     isUpgradeRequest,
     pickSubprotocol,
+    parseUpgradeRequest,
     upgradeResponse,
     clientRequest,
     parseUpgradeResponse,
