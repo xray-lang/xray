@@ -1,0 +1,5 @@
+regex=span-access [0-9]+ func=roundtrip value=v[0-9]+ kind=span_as_bytes evidence=recv_agg\+pod\+len_rel drop=type\+pod\+helper
+regex=span-access [0-9]+ func=roundtrip value=v[0-9]+ kind=reinterpret evidence=recv_agg\+byte_span\+pod\+len_rel drop=type\+pod\+helper
+c_not_contains=ByteSpan.reinterpret<T>() length is not divisible by target size
+c_not_contains=xrt_span_as_bytes_checked_raw(
+c_not_contains=xrt_span_reinterpret_checked_raw(

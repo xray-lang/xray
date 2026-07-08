@@ -7106,19 +7106,27 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
     uint8_t elem_size = (uint8_t) ((v->aux_int >> 8) & 0xff);
     uint8_t elem_tid = (uint8_t) ((v->aux_int >> 16) & 0xff);
-    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_REINTERPRET, XAOT_SPAN_DROP_HELPER)) {
+    const XaotSpanAccessPlan *plan = cg_span_access_plan(ctx, v, XAOT_SPAN_ACCESS_REINTERPRET);
+    if (plan && (plan->eliminated_checks & XAOT_SPAN_DROP_HELPER) == XAOT_SPAN_DROP_HELPER) {
+        bool length_rel_proven = (plan->evidence & XAOT_SPAN_EV_LENGTH_REL_PROVEN) != 0;
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out,
                 "; if (XR_UNLIKELY(_s.length < 0)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"ByteSpan.reinterpret<T>() byte length overflow\"); if (XR_UNLIKELY(_s.length "
-                "%% (int64_t)%u != 0)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"ByteSpan.reinterpret<T>() length is not divisible by target size\"); "
+                "\"ByteSpan.reinterpret<T>() byte length overflow\"); ");
+        if (!length_rel_proven) {
+            fprintf(out,
+                    "if (XR_UNLIKELY(_s.length %% (int64_t)%u != 0)) "
+                    "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                    "\"ByteSpan.reinterpret<T>() length is not divisible by target size\"); ",
+                    (unsigned) elem_size);
+        }
+        fprintf(out,
                 "xr_span_t _out = _s; _out.length = _s.length / (int64_t)%u; _out.elem_type = "
                 "(uint8_t)%u; _out.elem_size = (uint8_t)%u; _out.elem_tid = (uint8_t)%u; "
                 "_out.contains_refs = 0; _out; })",
-                (unsigned) elem_size, (unsigned) elem_size, (unsigned) elem_type,
-                (unsigned) elem_size, (unsigned) elem_tid);
+                (unsigned) elem_size, (unsigned) elem_type, (unsigned) elem_size,
+                (unsigned) elem_tid);
         return;
     }
     fprintf(out, "xrt_span_reinterpret_checked_raw(");
