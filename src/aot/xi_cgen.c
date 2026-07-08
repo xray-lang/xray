@@ -2841,6 +2841,29 @@ static const char *cg_no_alloc_regex_alloc_detail(const char *name) {
     return NULL;
 }
 
+static const char *cg_no_alloc_datetime_alloc_detail(const char *name) {
+    if (!name)
+        return NULL;
+    static const struct {
+        const char *name;
+        const char *detail;
+    } allocating_datetime_funcs[] = {
+        {"now", "datetime.now"},
+        {"utc", "datetime.utc"},
+        {"create", "datetime.create"},
+        {"createUTC", "datetime.createUTC"},
+        {"fromTimestamp", "datetime.fromTimestamp"},
+        {"fromTimestampMs", "datetime.fromTimestampMs"},
+        {"parse", "datetime.parse"},
+    };
+    for (size_t i = 0; i < sizeof(allocating_datetime_funcs) / sizeof(allocating_datetime_funcs[0]);
+         i++) {
+        if (strcmp(name, allocating_datetime_funcs[i].name) == 0)
+            return allocating_datetime_funcs[i].detail;
+    }
+    return NULL;
+}
+
 static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
                                                    const char *method_name) {
     if (!receiver_type || !method_name)
@@ -2900,6 +2923,12 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_FLOAT, NULL, "toString", "float.toString"},
         {XR_KIND_BOOL, NULL, "toString", "bool.toString"},
         {XR_KIND_CHAR, NULL, "toString", "char.toString"},
+        {XR_KIND_UNKNOWN, "DateTime", "toString", "DateTime.toString"},
+        {XR_KIND_UNKNOWN, "DateTime", "format", "DateTime.format"},
+        {XR_KIND_UNKNOWN, "DateTime", "toISOString", "DateTime.toISOString"},
+        {XR_KIND_UNKNOWN, "DateTime", "add", "DateTime.add"},
+        {XR_KIND_UNKNOWN, "DateTime", "toUTC", "DateTime.toUTC"},
+        {XR_KIND_UNKNOWN, "DateTime", "toLocal", "DateTime.toLocal"},
         {XR_KIND_UNKNOWN, "Regex", "find", "Regex.find"},
         {XR_KIND_UNKNOWN, "Regex", "findText", "Regex.findText"},
         {XR_KIND_UNKNOWN, "Regex", "findGroup", "Regex.findGroup"},
@@ -2972,6 +3001,18 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         }
     }
 
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
+        cg_value_is_module_import_ctx(ctx, f, v->args[0], "datetime")) {
+        const char *detail = cg_no_alloc_datetime_alloc_detail((const char *) v->aux);
+        if (detail) {
+            if (kind_out)
+                *kind_out = "stdlib";
+            if (detail_out)
+                *detail_out = detail;
+            return true;
+        }
+    }
+
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
         const char *detail = cg_no_alloc_method_alloc_detail(v->args[0] ? v->args[0]->type : NULL,
                                                              (const char *) v->aux);
@@ -2992,6 +3033,8 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
                 detail = cg_no_alloc_mem_alloc_detail(ref->member_name);
             else if (strcmp(ref->module_path, "regex") == 0)
                 detail = cg_no_alloc_regex_alloc_detail(ref->member_name);
+            else if (strcmp(ref->module_path, "datetime") == 0)
+                detail = cg_no_alloc_datetime_alloc_detail(ref->member_name);
         }
         if (detail) {
             if (kind_out)
