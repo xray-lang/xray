@@ -394,6 +394,15 @@ static bool xa_lifecycle_lint_break_targets_loop(AstNode *stmt, const char *loop
     return loop_label && strcmp(break_label, loop_label) == 0;
 }
 
+static bool xa_lifecycle_lint_continue_targets_loop(AstNode *stmt, const char *loop_label) {
+    if (!stmt || stmt->type != AST_CONTINUE_STMT)
+        return false;
+    const char *continue_label = stmt->as.continue_stmt.label;
+    if (!continue_label)
+        return true;
+    return loop_label && strcmp(continue_label, loop_label) == 0;
+}
+
 static bool xa_lifecycle_lint_branch_is_loop_break(AstNode *branch, const char *loop_label) {
     if (!branch)
         return false;
@@ -403,6 +412,29 @@ static bool xa_lifecycle_lint_branch_is_loop_break(AstNode *branch, const char *
     int count = 0;
     if (xa_block_node_statements(branch, &statements, &count) && count == 1)
         return xa_lifecycle_lint_branch_is_loop_break(statements[0], loop_label);
+    return false;
+}
+
+static bool xa_lifecycle_lint_node_skips_loop_tail(AstNode *node, const char *loop_label) {
+    if (!node)
+        return false;
+    if (xa_lifecycle_lint_break_targets_loop(node, loop_label) ||
+        xa_lifecycle_lint_continue_targets_loop(node, loop_label) ||
+        node->type == AST_RETURN_STMT || node->type == AST_THROW_STMT)
+        return true;
+    AstNode **statements = NULL;
+    int count = 0;
+    if (xa_block_node_statements(node, &statements, &count)) {
+        for (int i = 0; i < count; i++) {
+            if (xa_lifecycle_lint_node_skips_loop_tail(statements[i], loop_label))
+                return true;
+        }
+        return false;
+    }
+    if (node->type == AST_IF_STMT) {
+        return xa_lifecycle_lint_node_skips_loop_tail(node->as.if_stmt.then_branch, loop_label) ||
+               xa_lifecycle_lint_node_skips_loop_tail(node->as.if_stmt.else_branch, loop_label);
+    }
     return false;
 }
 
@@ -427,6 +459,37 @@ static bool xa_lifecycle_lint_node_exits_current_scope(AstNode *node, const char
                xa_lifecycle_lint_node_exits_current_scope(node->as.if_stmt.else_branch, loop_label);
     }
     return false;
+}
+
+static bool xa_lifecycle_lint_loop_always_enters(AstNode *stmt) {
+    if (!stmt)
+        return false;
+    if (stmt->type == AST_WHILE_STMT)
+        return xa_lifecycle_lint_expr_is_true(stmt->as.while_stmt.condition);
+    if (stmt->type == AST_FOR_STMT)
+        return !stmt->as.for_stmt.condition ||
+               xa_lifecycle_lint_expr_is_true(stmt->as.for_stmt.condition);
+    return false;
+}
+
+static AstNode *xa_lifecycle_lint_loop_body(AstNode *stmt) {
+    if (!stmt)
+        return NULL;
+    if (stmt->type == AST_WHILE_STMT)
+        return stmt->as.while_stmt.body;
+    if (stmt->type == AST_FOR_STMT)
+        return stmt->as.for_stmt.body;
+    return NULL;
+}
+
+static const char *xa_lifecycle_lint_loop_label(AstNode *stmt) {
+    if (!stmt)
+        return NULL;
+    if (stmt->type == AST_WHILE_STMT)
+        return stmt->as.while_stmt.label;
+    if (stmt->type == AST_FOR_STMT)
+        return stmt->as.for_stmt.label;
+    return NULL;
 }
 
 static uint32_t xa_thread_lint_expr_symbol_id(AstNode *expr) {
@@ -1157,12 +1220,12 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
 
 static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintState *states,
                                                             AstNode *stmt) {
-    if (!states || !stmt || stmt->type != AST_WHILE_STMT ||
-        !xa_lifecycle_lint_expr_is_true(stmt->as.while_stmt.condition))
+    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
-    if (!xa_block_node_statements(stmt->as.while_stmt.body, &statements, &count) || count <= 0)
+    if (!xa_block_node_statements(xa_lifecycle_lint_loop_body(stmt), &statements, &count) ||
+        count <= 0)
         return false;
 
     int state_count = xa_thread_lint_state_count(states);
@@ -1177,7 +1240,7 @@ static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintSt
         return false;
     }
 
-    const char *loop_label = stmt->as.while_stmt.label;
+    const char *loop_label = xa_lifecycle_lint_loop_label(stmt);
     xa_thread_lint_snapshot_states(states, before);
     for (int i = 0; i < count; i++) {
         AstNode *child = statements[i];
@@ -1197,7 +1260,7 @@ static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintSt
             xr_free(after);
             return closed;
         }
-        if (xa_lifecycle_lint_node_exits_current_scope(child, loop_label)) {
+        if (xa_lifecycle_lint_node_skips_loop_tail(child, loop_label)) {
             xa_thread_lint_restore_states(states, before);
             xr_free(before);
             xr_free(after);
@@ -1267,6 +1330,8 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_expr(states, stmt->as.for_stmt.condition, false, can_escape);
             xa_thread_lint_scan_expr(states, stmt->as.for_stmt.increment, false, false);
             xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.body, false);
+            if (can_escape)
+                xa_thread_lint_mark_linear_finalizer_break_loop(states, stmt);
             return;
         case AST_FOR_IN_STMT:
             xa_thread_lint_scan_expr(states, stmt->as.for_in_stmt.collection, false, can_escape);
@@ -1833,15 +1898,15 @@ static bool xa_os_resource_lint_try_wait_break_stmt(XaOsResourceLintState *state
 
 static bool xa_os_resource_lint_mark_try_wait_poll_loop(XaOsResourceLintState *states,
                                                         AstNode *stmt) {
-    if (!stmt || stmt->type != AST_WHILE_STMT ||
-        !xa_lifecycle_lint_expr_is_true(stmt->as.while_stmt.condition))
+    if (!stmt || !xa_lifecycle_lint_loop_always_enters(stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
-    if (!xa_block_node_statements(stmt->as.while_stmt.body, &statements, &count) || count <= 0)
+    if (!xa_block_node_statements(xa_lifecycle_lint_loop_body(stmt), &statements, &count) ||
+        count <= 0)
         return false;
 
-    const char *loop_label = stmt->as.while_stmt.label;
+    const char *loop_label = xa_lifecycle_lint_loop_label(stmt);
     bool found = false;
     for (int i = 0; i < count; i++) {
         XaOsResourceLintState *state = NULL;
@@ -1849,6 +1914,8 @@ static bool xa_os_resource_lint_mark_try_wait_poll_loop(XaOsResourceLintState *s
             found = true;
             continue;
         }
+        if (!found && xa_lifecycle_lint_node_skips_loop_tail(statements[i], loop_label))
+            return false;
         if (xa_lifecycle_lint_node_exits_current_scope(statements[i], loop_label))
             return false;
     }
@@ -1864,12 +1931,12 @@ static bool xa_os_resource_lint_mark_try_wait_poll_loop(XaOsResourceLintState *s
 
 static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLintState *states,
                                                                  AstNode *stmt) {
-    if (!states || !stmt || stmt->type != AST_WHILE_STMT ||
-        !xa_lifecycle_lint_expr_is_true(stmt->as.while_stmt.condition))
+    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
-    if (!xa_block_node_statements(stmt->as.while_stmt.body, &statements, &count) || count <= 0)
+    if (!xa_block_node_statements(xa_lifecycle_lint_loop_body(stmt), &statements, &count) ||
+        count <= 0)
         return false;
 
     int state_count = xa_os_resource_lint_state_count(states);
@@ -1884,7 +1951,7 @@ static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLin
         return false;
     }
 
-    const char *loop_label = stmt->as.while_stmt.label;
+    const char *loop_label = xa_lifecycle_lint_loop_label(stmt);
     xa_os_resource_lint_snapshot_states(states, before);
     for (int i = 0; i < count; i++) {
         AstNode *child = statements[i];
@@ -1904,7 +1971,7 @@ static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLin
             xr_free(after);
             return closed;
         }
-        if (xa_lifecycle_lint_node_exits_current_scope(child, loop_label)) {
+        if (xa_lifecycle_lint_node_skips_loop_tail(child, loop_label)) {
             xa_os_resource_lint_restore_states(states, before);
             xr_free(before);
             xr_free(after);
@@ -2549,6 +2616,10 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_expr(states, stmt->as.for_stmt.condition, false, can_escape);
             xa_os_resource_lint_scan_expr(states, stmt->as.for_stmt.increment, false, false);
             xa_os_resource_lint_scan_stmt(states, stmt->as.for_stmt.body, false);
+            if (can_escape) {
+                xa_os_resource_lint_mark_linear_finalizer_break_loop(states, stmt);
+                xa_os_resource_lint_mark_try_wait_poll_loop(states, stmt);
+            }
             return;
         case AST_FOR_IN_STMT:
             xa_os_resource_lint_scan_expr(states, stmt->as.for_in_stmt.collection, false,

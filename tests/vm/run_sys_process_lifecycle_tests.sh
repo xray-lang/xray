@@ -73,6 +73,7 @@ PROCESS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_warning.xr"
 PIPE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_warning.xr"
 PIPE_HALF_CLOSE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_half_close_warning.xr"
 PROCESS_TRYWAIT_ONCE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_trywait_once_warning.xr"
+PROCESS_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_continue_warning.xr"
 CONTROL_FLOW_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_control_flow_ok.xr"
 EXPR_CONTAINERS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_expr_containers_ok.xr"
 DESTRUCTURE_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_alias_ok.xr"
@@ -82,7 +83,7 @@ PIPE_MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_match_warning.x
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
-    $'0\n0\n0\n0\ntrue\ntrue\n0\ntrue'
+    $'0\n0\n0\n0\ntrue\ntrue\n0\ntrue\n0\ntrue'
 expect_output "process_pipe_lifecycle_expr_containers_ok" "$EXPR_CONTAINERS_OK_SRC" \
     $'0\ntrue\ncode 0\n2\n0\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_destructure_alias_ok" "$DESTRUCTURE_ALIAS_OK_SRC" $'0\ntrue'
@@ -94,6 +95,8 @@ expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \
 expect_warning "process_lifecycle_warning" "$PROCESS_WARNING_SRC" "" \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "process_lifecycle_trywait_once_warning" "$PROCESS_TRYWAIT_ONCE_WARNING_SRC" "" \
+    "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
+expect_warning "process_lifecycle_continue_warning" "$PROCESS_CONTINUE_WARNING_SRC" "0" \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "process_lifecycle_try_catch_warning" "$PROCESS_TRY_CATCH_WARNING_SRC" \
     $'0\ntry-catch-open' \

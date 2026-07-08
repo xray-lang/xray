@@ -1,0 +1,16 @@
+import sys
+
+fn loopContinueJoin(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    while (true) {
+        if (flag) {
+            continue
+        }
+        print(t.join())
+        break
+    }
+}
+
+loopContinueJoin(false)

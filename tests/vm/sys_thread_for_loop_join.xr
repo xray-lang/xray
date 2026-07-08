@@ -1,0 +1,13 @@
+import sys
+
+fn forLoopJoin() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    for (;;) {
+        print(t.join())
+        break
+    }
+}
+
+forLoopJoin()

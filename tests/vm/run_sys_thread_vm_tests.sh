@@ -93,6 +93,8 @@ DESTRUCTURE_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_destructure_alias_j
 ASSIGNMENT_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_assignment_alias_join.xr"
 LOOP_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_loop_join.xr"
 LOOP_JOIN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_loop_join_warning.xr"
+FOR_LOOP_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_for_loop_join.xr"
+LOOP_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_loop_continue_warning.xr"
 TEMPLATE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_template_join.xr"
 SLICE_BOUND_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_slice_bound_join.xr"
 CHANNEL_CAPACITY_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_channel_capacity_join.xr"
@@ -116,6 +118,7 @@ expect_output "destructure_join" "$DESTRUCTURE_JOIN_SRC" "42"
 expect_output "destructure_alias_join" "$DESTRUCTURE_ALIAS_JOIN_SRC" "42"
 expect_output "assignment_alias_join" "$ASSIGNMENT_ALIAS_JOIN_SRC" "42"
 expect_output "loop_join" "$LOOP_JOIN_SRC" "42"
+expect_output "for_loop_join" "$FOR_LOOP_JOIN_SRC" "42"
 expect_output "template_join" "$TEMPLATE_JOIN_SRC" "joined 42"
 expect_output "slice_bound_join" "$SLICE_BOUND_JOIN_SRC" $'2\n20'
 expect_output "channel_capacity_join" "$CHANNEL_CAPACITY_JOIN_SRC" "channel"
@@ -138,6 +141,8 @@ expect_warning "select_warning" "$SELECT_WARNING_SRC" $'select-open\nafter-selec
 expect_warning "ternary_warning" "$TERNARY_WARNING_SRC" $'0\nafter-ternary' \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "loop_join_warning" "$LOOP_JOIN_WARNING_SRC" "conditional-loop" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "loop_continue_warning" "$LOOP_CONTINUE_WARNING_SRC" "42" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
