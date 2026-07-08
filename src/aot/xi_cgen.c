@@ -2819,6 +2819,15 @@ static const char *cg_no_alloc_mem_alloc_detail(const char *name) {
     return NULL;
 }
 
+static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
+                                                   const char *method_name) {
+    if (!receiver_type || !method_name)
+        return NULL;
+    if (xr_type_is_named_class(receiver_type, "Buffer") && strcmp(method_name, "resize") == 0)
+        return "Buffer.resize";
+    return NULL;
+}
+
 static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
                                         const char **kind_out, const char **detail_out) {
     if (!v)
@@ -2850,6 +2859,18 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         if (detail) {
             if (kind_out)
                 *kind_out = "stdlib";
+            if (detail_out)
+                *detail_out = detail;
+            return true;
+        }
+    }
+
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
+        const char *detail = cg_no_alloc_method_alloc_detail(v->args[0] ? v->args[0]->type : NULL,
+                                                             (const char *) v->aux);
+        if (detail) {
+            if (kind_out)
+                *kind_out = "method";
             if (detail_out)
                 *detail_out = detail;
             return true;

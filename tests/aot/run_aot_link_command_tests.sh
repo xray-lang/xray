@@ -2180,6 +2180,20 @@ else
         "freestanding-profile/no-alloc: rejects heap allocator use"
 fi
 
+FREESTANDING_NO_ALLOC_RESIZE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_no_alloc_buffer_resize_reject.xr"
+FREESTANDING_NO_ALLOC_RESIZE_LOG="$WORK/freestanding_no_alloc_buffer_resize_reject.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_no_alloc_buffer_resize_reject.o" \
+        "$FREESTANDING_NO_ALLOC_RESIZE_SRC" >"$FREESTANDING_NO_ALLOC_RESIZE_LOG" 2>&1; then
+    record_fail "freestanding-profile/no-alloc: rejects Buffer.resize allocation"
+    sed 's/^/      /' "$FREESTANDING_NO_ALLOC_RESIZE_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_NO_ALLOC_RESIZE_LOG" \
+        "@no_alloc function 'xray_no_alloc_buffer_resize_reject' allocates via method 'Buffer.resize'" \
+        "freestanding-profile/no-alloc: rejects Buffer.resize allocation"
+fi
+
 FREESTANDING_NO_ALLOC_CALL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_no_alloc_call_reject.xr"
 FREESTANDING_NO_ALLOC_CALL_LOG="$WORK/freestanding_no_alloc_call_reject.log"
 if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
