@@ -1438,6 +1438,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "responseText",
+        .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?",
+        .summary = "",
+    },
+    {
         .name = "route",
         .signature = "(method: string, path: string, handler: fn | string | Json): ()",
         .summary = "Register a route handler or static response",
@@ -3069,6 +3074,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
+        .name = "Dylib",
+        .signature = "Dylib",
+        .summary = "",
+    },
+    {
+        .name = "Dylib.close",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Dylib.constructor",
+        .signature = "(handle: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "Dylib.lastError",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "Dylib.open",
+        .signature = "(path: string): Dylib?",
+        .summary = "",
+    },
+    {
+        .name = "Dylib.symbol",
+        .signature = "(name: string): RawPtr<uint8>?",
+        .summary = "",
+    },
+    {
         .name = "OsBarrier",
         .signature = "(parties: int): OsBarrier",
         .summary = "Create a reusable OS-domain barrier",
@@ -3416,6 +3451,116 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
+        .name = "ClosePayload",
+        .signature = "ClosePayload",
+        .summary = "",
+    },
+    {
+        .name = "ClosePayload.code",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ClosePayload.constructor",
+        .signature = "(code: int, reason: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "ClosePayload.reason",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame",
+        .signature = "ParsedFrame",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.consumedBytes",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.fin",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.masked",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.opcode",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.payload",
+        .signature = ": Array<uint8>",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.rsv1",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest",
+        .signature = "ParsedUpgradeRequest",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest.deflate",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest.origin",
+        .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest.protocol",
+        .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest.secKey",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest.target",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeResponse",
+        .signature = "ParsedUpgradeResponse",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeResponse.constructor",
+        .signature = "(statusCode: int, protocol: string? = null, deflate: bool = false): ()",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeResponse.deflate",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeResponse.protocol",
+        .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeResponse.statusCode",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
         .name = "WsConn",
         .signature = "WsConn",
         .summary = "Handle type",
@@ -3456,6 +3601,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Handle field",
     },
     {
+        .name = "WsUrl",
+        .signature = "WsUrl",
+        .summary = "",
+    },
+    {
+        .name = "WsUrl.constructor",
+        .signature = "(secure: bool, host: string, port: int, path: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "WsUrl.host",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "WsUrl.path",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "WsUrl.port",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "WsUrl.secure",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
         .name = "acceptKey",
         .signature = "(secKey: string): string",
         .summary = "",
@@ -3463,6 +3638,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "binaryFrame",
         .signature = "(data: Bytes, mask: bool = true): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "clientHandshakeRequest",
+        .signature = "(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?",
         .summary = "",
     },
     {
@@ -3486,11 +3666,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Connect to a WebSocket server",
     },
     {
-        .name = "echoServe",
-        .signature = "(port: int): bool",
-        .summary = "Pure C echo server with zero VM allocation overhead per message",
-    },
-    {
         .name = "frame",
         .signature = "(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes",
         .summary = "",
@@ -3511,8 +3686,38 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
+        .name = "isValidCloseCode",
+        .signature = "(code: int): bool",
+        .summary = "",
+    },
+    {
         .name = "maskPayload",
         .signature = "(payload: Bytes, key: Bytes): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "parseClosePayload",
+        .signature = "(payload: Bytes): ClosePayload?",
+        .summary = "",
+    },
+    {
+        .name = "parseFrame",
+        .signature = "(raw: Bytes, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?",
+        .summary = "",
+    },
+    {
+        .name = "parseUpgradeRequest",
+        .signature = "(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?",
+        .summary = "",
+    },
+    {
+        .name = "parseUpgradeResponse",
+        .signature = "(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?",
+        .summary = "",
+    },
+    {
+        .name = "parseUrl",
+        .signature = "(url: string): WsUrl?",
         .summary = "",
     },
     {
@@ -5495,6 +5700,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"
+            "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.router` | `(): Router` |  |\n"
             "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
@@ -6072,6 +6278,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `Dylib` | `Dylib` |  |\n"
+            "| `Dylib.close` | `(): bool` |  |\n"
+            "| `Dylib.constructor` | `(handle: int): ()` |  |\n"
+            "| `Dylib.lastError` | `(): string` |  |\n"
+            "| `Dylib.open` | `(path: string): Dylib?` |  |\n"
+            "| `Dylib.symbol` | `(name: string): RawPtr<uint8>?` |  |\n"
             "| `sys.OsBarrier` | `(parties: int): OsBarrier` | Create a reusable OS-domain barrier |\n"
             "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
             "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"
@@ -6211,6 +6423,28 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `ClosePayload` | `ClosePayload` |  |\n"
+            "| `ClosePayload.code` | `: int` |  |\n"
+            "| `ClosePayload.constructor` | `(code: int, reason: string): ()` |  |\n"
+            "| `ClosePayload.reason` | `: string` |  |\n"
+            "| `ParsedFrame` | `ParsedFrame` |  |\n"
+            "| `ParsedFrame.consumedBytes` | `: int` |  |\n"
+            "| `ParsedFrame.fin` | `: bool` |  |\n"
+            "| `ParsedFrame.masked` | `: bool` |  |\n"
+            "| `ParsedFrame.opcode` | `: int` |  |\n"
+            "| `ParsedFrame.payload` | `: Array<uint8>` |  |\n"
+            "| `ParsedFrame.rsv1` | `: bool` |  |\n"
+            "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
+            "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
+            "| `ParsedUpgradeRequest.origin` | `: string?` |  |\n"
+            "| `ParsedUpgradeRequest.protocol` | `: string?` |  |\n"
+            "| `ParsedUpgradeRequest.secKey` | `: string` |  |\n"
+            "| `ParsedUpgradeRequest.target` | `: string` |  |\n"
+            "| `ParsedUpgradeResponse` | `ParsedUpgradeResponse` |  |\n"
+            "| `ParsedUpgradeResponse.constructor` | `(statusCode: int, protocol: string? = null, deflate: bool = false): ()` |  |\n"
+            "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
+            "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
+            "| `ParsedUpgradeResponse.statusCode` | `: int` |  |\n"
             "| `ws.WsConn` | `WsConn` | Handle type |\n"
             "| `ws.WsConn.state` | `string` | Handle field |\n"
             "| `ws.WsConn.url` | `string` | Handle field |\n"
@@ -6219,18 +6453,30 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
             "| `ws.WsMessage.data` | `const string \\| Array<uint8> \\| null` | Handle field |\n"
             "| `ws.WsMessage.error` | `const string?` | Handle field |\n"
+            "| `WsUrl` | `WsUrl` |  |\n"
+            "| `WsUrl.constructor` | `(secure: bool, host: string, port: int, path: string): ()` |  |\n"
+            "| `WsUrl.host` | `: string` |  |\n"
+            "| `WsUrl.path` | `: string` |  |\n"
+            "| `WsUrl.port` | `: int` |  |\n"
+            "| `WsUrl.secure` | `: bool` |  |\n"
             "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
             "| `ws.binaryFrame` | `(data: Bytes, mask: bool = true): Bytes` |  |\n"
+            "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
             "| `ws.clientRequest` | `(path: string, host: string, secKey: string): string` |  |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes` |  |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
-            "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM allocation overhead per message |\n"
             "| `ws.frame` | `(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes` |  |\n"
             "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
             "| `ws.isServerRunning` | `(): bool` | Check if the WebSocket server is running |\n"
             "| `ws.isUpgradeRequest` | `(headers: string): bool` |  |\n"
+            "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Bytes, key: Bytes): Bytes` |  |\n"
+            "| `ws.parseClosePayload` | `(payload: Bytes): ClosePayload?` |  |\n"
+            "| `ws.parseFrame` | `(raw: Bytes, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?` |  |\n"
+            "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
+            "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
+            "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
             "| `ws.pickSubprotocol` | `(headers: string, serverProtocols: Array<string>): string?` |  |\n"
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
             "| `ws.pingFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"

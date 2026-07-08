@@ -16,4 +16,14 @@ if (process.args.length > 0) {
 
 print("xray WebSocket Echo Server on port " + string(port))
 
-ws.echoServe(port)
+ws.serve(port, fn(conn) {
+    while (ws.isOpen(conn)) {
+        var msg = ws.recv(conn, null)
+        if (msg == null || msg!.error != null) {
+            break
+        }
+        if (msg!.data != null) {
+            ws.send(conn, msg!.data!, msg!.binary)
+        }
+    }
+})
