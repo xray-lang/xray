@@ -829,6 +829,43 @@ static XgInterfaceId body_lookup_local_interface(XgBodyCollect *bc, const char *
     return row ? row->interface_id : XG_NO_ID;
 }
 
+static bool body_has_name_local(XgBodyCollect *bc, const char *name) {
+    if (!bc || !name)
+        return false;
+    for (uint32_t i = bc->nname_locals; i > 0; i--) {
+        const XgLocalName *row = &bc->name_locals[i - 1];
+        if (row->name && strcmp(row->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool body_has_symbol_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id) {
+    if (!bc || !name)
+        return false;
+    for (uint32_t i = bc->nname_locals; i > 0; i--) {
+        const XgLocalName *row = &bc->name_locals[i - 1];
+        if (symbol_id != 0 && row->symbol_id != 0 && row->symbol_id == symbol_id)
+            return true;
+        if (row->name && strcmp(row->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) {
+    if (!bc || !var || !var->name)
+        return;
+    if (body_has_symbol_local(bc, var->name, var->symbol_id))
+        return;
+    if (producer_lookup_func_row(bc->producer, var->name) ||
+        producer_lookup_class(bc->producer, var->name) != XG_NO_ID ||
+        producer_lookup_interface(bc->producer, var->name) != XG_NO_ID ||
+        producer_stdlib_module_known(var->name))
+        return;
+    bc->effect_bits |= XG_BODY_MAY_READ_MEM;
+}
+
 static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
                               XgClassId class_id, XgInterfaceId interface_id) {
     XgLocalType *row = body_find_local(bc, name);
@@ -1361,9 +1398,17 @@ static const XgStdlibImportRow *body_stdlib_import_for_expr(XgBodyCollect *bc,
 
 static const char *body_stdlib_module_for_expr(XgBodyCollect *bc, const AstNode *expr) {
     const XgStdlibImportRow *row = body_stdlib_import_for_expr(bc, expr);
-    if (!row || row->member_name)
+    if (row)
+        return row->member_name ? NULL : row->module_name;
+    if (!bc || !expr)
         return NULL;
-    return row->module_name;
+    if (expr->type == AST_GROUPING)
+        return body_stdlib_module_for_expr(bc, expr->as.grouping);
+    if (expr->type == AST_VARIABLE && expr->as.variable.name &&
+        !body_has_name_local(bc, expr->as.variable.name) &&
+        producer_stdlib_module_known(expr->as.variable.name))
+        return expr->as.variable.name;
+    return NULL;
 }
 
 static bool body_call_is_sys_thread_spawn(const CallExprNode *call) {
@@ -1477,11 +1522,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
                 row.method_name_id = method ? method->name_id : method_name_id;
                 row.method_signature_key = method ? method->signature_key : 0;
+                if (method && (method->flags & XG_METHOD_NATIVE) != 0) {
+                    bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
+                    bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
+                    bc->capability_bits |= XG_CAP_NATIVE;
+                }
             } else {
                 bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                 bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
-                if (!stdlib_module)
-                    bc->capability_bits |= XG_CAP_NATIVE;
                 row.kind = XG_CALL_NATIVE;
                 row.method_id = (XgMethodId) method_name_id;
                 row.method_name_id = method_name_id;
@@ -1769,6 +1817,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_EXPR_STMT:
             walk_body_for_calls(bc, node->as.expr_stmt);
             break;
+        case AST_VARIABLE:
+            body_note_variable_read(bc, &node->as.variable);
+            break;
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++)
                 walk_body_for_calls(bc, node->as.print_stmt.exprs[i]);
@@ -1807,6 +1858,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_MEMBER_ACCESS: {
             const char *stdlib_module =
                 body_stdlib_module_for_expr(bc, node->as.member_access.object);
+            bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             if (stdlib_module &&
                 producer_stdlib_member_is_constant(stdlib_module, node->as.member_access.name)) {
                 (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
@@ -1823,6 +1875,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->escape_bits |= XG_BODY_ESCAPE_FIELD;
             break;
         case AST_INDEX_GET:
+            bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             walk_body_for_calls(bc, node->as.index_get.array);
             walk_body_for_calls(bc, node->as.index_get.index);
             break;
@@ -1834,6 +1887,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->escape_bits |= XG_BODY_ESCAPE_CONTAINER;
             break;
         case AST_SLICE_EXPR:
+            bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             walk_body_for_calls(bc, node->as.slice_expr.source);
             walk_body_for_calls(bc, node->as.slice_expr.start);
             walk_body_for_calls(bc, node->as.slice_expr.end);
@@ -2129,6 +2183,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             XgInterfaceId item_interface =
                 producer_lookup_interface_from_tref(bc->producer, node->as.for_in_stmt.item_type);
             bc->capability_bits |= body_capabilities_for_type_ref(node->as.for_in_stmt.item_type);
+            bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
             (void) body_push_name_local(bc, node->as.for_in_stmt.value_name,
                                         node->as.for_in_stmt.value_symbol_id);
