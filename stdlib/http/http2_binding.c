@@ -194,6 +194,15 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
 
+    XrHttpContext *ctx = xr_http_get_context(X);
+    if (!ctx)
+        return xr_null();
+    if (!ctx->h2_client_pool) {
+        ctx->h2_client_pool = xr_h2_pool_create();
+        if (!ctx->h2_client_pool)
+            return xr_null();
+    }
+
     XrJson *opts = xr_value_to_json(args[0]);
 
     const char *url = json_get_string(X, opts, "url", NULL);
@@ -211,7 +220,7 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
         req.header_count = hcount;
     }
 
-    XrH2Response *resp = xr_h2_request(url, &req);
+    XrH2Response *resp = xr_h2_request(ctx->h2_client_pool, url, &req);
 
     if (headers)
         xr_free(headers);
