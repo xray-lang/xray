@@ -981,26 +981,23 @@ static inline int64_t parse_int(const char *p, const char *end) {
     return val;
 }
 
-/* RFC 9112 §6.1/6.3: a message body is chunked-framed only when "chunked"
- * is the FINAL transfer coding. A sliding substring search would also match
- * "notchunked" or accept "chunked, gzip" (where the body is NOT chunked at
- * the outermost layer) — both are request-smuggling vectors. */
-static bool te_final_coding_is_chunked(const char *value, size_t len) {
-    // Trim trailing OWS
+/* RFC 9112 §6.1/6.3: this runtime only implements the chunked transfer
+ * coding. Since it does not decode a transfer-coding chain, accept exactly a
+ * single "chunked" token and reject "gzip, chunked" instead of returning a
+ * still-encoded body under a decoded-body API. */
+static bool te_is_supported_chunked(const char *value, size_t len) {
+    // Trim OWS
+    while (len > 0 && (*value == ' ' || *value == '\t')) {
+        value++;
+        len--;
+    }
     while (len > 0 && (value[len - 1] == ' ' || value[len - 1] == '\t'))
         len--;
-    // Find the start of the final comma-separated token
-    size_t start = 0;
-    for (size_t i = len; i > 0; i--) {
-        if (value[i - 1] == ',') {
-            start = i;
-            break;
-        }
+    for (size_t i = 0; i < len; i++) {
+        if (value[i] == ',')
+            return false;
     }
-    // Trim leading OWS of the final token
-    while (start < len && (value[start] == ' ' || value[start] == '\t'))
-        start++;
-    return (len - start) == 7 && strcasecmp_n(value + start, "chunked", 7);
+    return len == 7 && strcasecmp_n(value, "chunked", 7);
 }
 
 /* ========== Process Special Headers ========== */
@@ -1043,7 +1040,7 @@ static void process_special_header_request(XrHttpRequest *req, XrHttpHeader *h) 
             break;
         case 17:  // Transfer-Encoding
             if (strcasecmp_n(h->name, "Transfer-Encoding", 17)) {
-                if (te_final_coding_is_chunked(h->value, h->value_len)) {
+                if (te_is_supported_chunked(h->value, h->value_len)) {
                     req->chunked = true;
                 } else {
                     // TE present but body is not chunked at the outer
@@ -1086,7 +1083,7 @@ static void process_special_header_response(XrHttpResponse *resp, XrHttpHeader *
             break;
         case 17:  // Transfer-Encoding
             if (strcasecmp_n(h->name, "Transfer-Encoding", 17)) {
-                if (te_final_coding_is_chunked(h->value, h->value_len)) {
+                if (te_is_supported_chunked(h->value, h->value_len)) {
                     resp->chunked = true;
                 } else {
                     resp->framing_invalid = true;

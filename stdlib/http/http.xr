@@ -923,26 +923,17 @@ fn _hasHeaderToken(value: string, token: string) -> bool {
     return false
 }
 
-fn _teFinalCodingIsChunked(value: string) -> bool {
+fn _teIsSupportedChunked(value: string) -> bool {
     var trimmed = value.trim()
     if (trimmed.length == 0) { return false }
-
-    var start = 0
-    var scan = 0
-    while (scan <= trimmed.length) {
-        var comma = trimmed.indexOf(",", scan)
-        if (comma < 0) { break }
-        start = comma + 1
-        scan = comma + 1
-    }
-    return trimmed.slice(start).trim().toLowerCase() == "chunked"
+    return trimmed.indexOf(",") < 0 && trimmed.toLowerCase() == "chunked"
 }
 
 fn _chunkedFramingFrom(pairs: Array<(string, string)>) -> bool? {
     var chunked = false
     for (var i = 0; i < pairs.length; i++) {
         if (!_headerKeyEquals(pairs[i].0, "Transfer-Encoding")) { continue }
-        if (!_teFinalCodingIsChunked(pairs[i].1)) { return null }
+        if (!_teIsSupportedChunked(pairs[i].1)) { return null }
         chunked = true
     }
     return chunked
