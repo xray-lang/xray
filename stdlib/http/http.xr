@@ -1551,6 +1551,7 @@ fn requestText(
     var hasContentLength = false
     var hasUserAgent = false
     var hasAccept = false
+    var hasAcceptEncoding = false
     var hasConnection = false
     var custom: Array<(string, string)> = []
 
@@ -1567,6 +1568,7 @@ fn requestText(
             if (_headerKeyEquals(name, "Content-Length")) { hasContentLength = true }
             if (_headerKeyEquals(name, "User-Agent")) { hasUserAgent = true }
             if (_headerKeyEquals(name, "Accept")) { hasAccept = true }
+            if (_headerKeyEquals(name, "Accept-Encoding")) { hasAcceptEncoding = true }
             if (_headerKeyEquals(name, "Connection")) { hasConnection = true }
             custom.push((name, value))
         }
@@ -1590,7 +1592,7 @@ fn requestText(
     if (!hasUserAgent) { _appendHeader(out, "User-Agent", "xray-http/1.0") }
     if (!hasAccept) { _appendHeader(out, "Accept", "*/*") }
     if (!hasConnection) { _appendHeader(out, "Connection", "keep-alive") }
-    _appendHeader(out, "Accept-Encoding", "gzip, deflate")
+    if (!hasAcceptEncoding) { _appendHeader(out, "Accept-Encoding", "gzip, deflate") }
     if (body.byteLength > 0 && !hasContentLength) {
         _appendHeader(out, "Content-Length", string(body.byteLength))
     }
