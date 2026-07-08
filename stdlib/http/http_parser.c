@@ -632,27 +632,6 @@ int xr_http_parse_response_ex(const char *buf_start, size_t len, int *minor_ver,
     return (int) (buf - buf_start);
 }
 
-int xr_http_parse_headers(const char *buf_start, size_t len, XrHttpHeader *headers,
-                          size_t *num_headers, size_t last_len) {
-    const char *buf = buf_start;
-    const char *buf_end = buf + len;
-    size_t max_headers = *num_headers;
-    int r;
-
-    *num_headers = 0;
-
-    // If has history position, first check if complete
-    if (last_len != 0 && is_complete(buf, buf_end, last_len, &r) == NULL) {
-        return r;
-    }
-
-    if ((buf = parse_headers(buf, buf_end, headers, num_headers, max_headers, &r)) == NULL) {
-        return r;
-    }
-
-    return (int) (buf - buf_start);
-}
-
 /* ========== Chunked Decoder ========== */
 
 // Chunked decoder states
@@ -851,10 +830,6 @@ Exit:
     return ret;
 }
 
-int xr_http_chunked_is_in_data(XrChunkedDecoder *decoder) {
-    return decoder->_state == CHUNKED_IN_CHUNK_DATA;
-}
-
 /* ========== HTTP Method Parsing ========== */
 
 XrHttpMethod xr_http_method_from_string(const char *str, size_t len) {
@@ -912,19 +887,7 @@ const char *xr_http_method_to_string(XrHttpMethod method) {
 /* ========== Initialization Functions ========== */
 
 void xr_http_parser_init(XrHttpParser *parser) {
-    parser->state = HTTP_STATE_REQUEST_LINE;
-    parser->consumed = 0;
-    parser->line_start = 0;
-}
-
-void xr_http_parser_reset(XrHttpParser *parser) {
-    xr_http_parser_init(parser);
-}
-
-void xr_http_request_init(XrHttpRequest *req) {
-    memset(req, 0, sizeof(XrHttpRequest));
-    req->content_length = -1;
-    req->keep_alive = true;  // HTTP/1.1 defaults to keep-alive
+    parser->state = HTTP_STATE_RESPONSE_LINE;
 }
 
 void xr_http_response_init(XrHttpResponse *resp) {
@@ -943,21 +906,6 @@ static inline bool strcasecmp_n(const char *a, const char *b, size_t len) {
         }
     }
     return true;
-}
-
-const char *xr_http_get_header(XrHttpHeader *headers, size_t count, const char *name,
-                               size_t *out_len) {
-    size_t name_len = strlen(name);
-
-    for (size_t i = 0; i < count; i++) {
-        if (headers[i].name_len == name_len && strcasecmp_n(headers[i].name, name, name_len)) {
-            if (out_len)
-                *out_len = headers[i].value_len;
-            return headers[i].value;
-        }
-    }
-
-    return NULL;
 }
 
 /* ========== Parse Decimal Number ========== */
@@ -1002,58 +950,6 @@ static bool te_is_supported_chunked(const char *value, size_t len) {
 
 /* ========== Process Special Headers ========== */
 
-static void process_special_header_request(XrHttpRequest *req, XrHttpHeader *h) {
-    // Length-based dispatch: compiler emits jump table, O(1) vs O(n) if-else
-    switch (h->name_len) {
-        case 4:  // Host
-            if (strcasecmp_n(h->name, "Host", 4)) {
-                req->host = h->value;
-                req->host_len = h->value_len;
-            }
-            break;
-        case 10:  // Connection
-            if (strcasecmp_n(h->name, "Connection", 10)) {
-                if (h->value_len == 10 && strcasecmp_n(h->value, "keep-alive", 10)) {
-                    req->keep_alive = true;
-                } else if (h->value_len == 5 && strcasecmp_n(h->value, "close", 5)) {
-                    req->keep_alive = false;
-                }
-            }
-            break;
-        case 12:  // Content-Type
-            if (strcasecmp_n(h->name, "Content-Type", 12)) {
-                req->content_type = h->value;
-                req->content_type_len = h->value_len;
-            }
-            break;
-        case 14:  // Content-Length
-            if (strcasecmp_n(h->name, "Content-Length", 14)) {
-                int64_t cl = parse_int(h->value, h->value + h->value_len);
-                // Malformed value, or duplicate headers that disagree,
-                // are framing errors (smuggling vectors), not data.
-                if (cl < 0 || (req->content_length >= 0 && req->content_length != cl)) {
-                    req->framing_invalid = true;
-                } else {
-                    req->content_length = cl;
-                }
-            }
-            break;
-        case 17:  // Transfer-Encoding
-            if (strcasecmp_n(h->name, "Transfer-Encoding", 17)) {
-                if (te_is_supported_chunked(h->value, h->value_len)) {
-                    req->chunked = true;
-                } else {
-                    // TE present but body is not chunked at the outer
-                    // layer: we cannot frame it — reject.
-                    req->framing_invalid = true;
-                }
-            }
-            break;
-        default:
-            break;
-    }
-}
-
 static void process_special_header_response(XrHttpResponse *resp, XrHttpHeader *h) {
     switch (h->name_len) {
         case 10:  // Connection
@@ -1096,78 +992,6 @@ static void process_special_header_response(XrHttpResponse *resp, XrHttpHeader *
 }
 
 /* ========== Simplified API ========== */
-
-XrHttpParseResult xr_http_parse_request(XrHttpParser *parser, XrHttpRequest *req, const char *data,
-                                        size_t len) {
-    // Use new API to parse
-    size_t num_headers = XR_HTTP_MAX_HEADERS;
-    int r = xr_http_parse_request_ex(data, len, &req->method_str, &req->method_len, &req->path,
-                                     &req->path_len, &req->version_minor, req->headers,
-                                     &num_headers, 0);
-
-    if (r == -2) {
-        return XR_HTTP_PARSE_INCOMPLETE;
-    }
-    if (r == -1) {
-        parser->state = HTTP_STATE_ERROR;
-        return XR_HTTP_PARSE_ERROR;
-    }
-
-    // Fill request structure
-    req->version_major = 1;
-    req->header_count = num_headers;
-    req->header_bytes = (size_t) r;
-    req->method = xr_http_method_from_string(req->method_str, req->method_len);
-
-    // Separate path and query string
-    const char *q = memchr(req->path, '?', req->path_len);
-    if (q) {
-        req->query = q + 1;
-        req->query_len = req->path_len - (q - req->path) - 1;
-        req->path_len = q - req->path;
-    }
-
-    // Set keep-alive default value
-    req->keep_alive = (req->version_minor >= 1);
-
-    // Process special headers
-    for (size_t i = 0; i < req->header_count; i++) {
-        process_special_header_request(req, &req->headers[i]);
-    }
-
-    // Set body pointer
-    req->body = data + r;
-    size_t remaining = len - r;
-
-    /* RFC 9112 §6.3: malformed/conflicting Content-Length, unsupported
-     * transfer codings, or CL+TE together make the body framing ambiguous
-     * (request smuggling). Reject instead of guessing. */
-    if (req->framing_invalid || (req->chunked && req->content_length >= 0)) {
-        parser->state = HTTP_STATE_ERROR;
-        return XR_HTTP_PARSE_ERROR;
-    }
-
-    if (req->chunked) {
-        req->body_len = remaining;
-        parser->state = HTTP_STATE_CHUNK_SIZE;
-        return XR_HTTP_PARSE_OK;
-    }
-
-    if (req->content_length >= 0) {
-        if (remaining >= (size_t) req->content_length) {
-            req->body_len = (size_t) req->content_length;
-            parser->state = HTTP_STATE_DONE;
-            return XR_HTTP_PARSE_OK;
-        }
-        req->body_len = remaining;
-        return XR_HTTP_PARSE_INCOMPLETE;
-    }
-
-    // No Content-Length and not chunked, assume no body
-    req->body_len = 0;
-    parser->state = HTTP_STATE_DONE;
-    return XR_HTTP_PARSE_OK;
-}
 
 XrHttpParseResult xr_http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
                                          const char *data, size_t len) {

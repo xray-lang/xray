@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Tests HTTP request/response parsing, method conversion,
- *   header lookup, chunked decoding, and helper functions.
+ *   response framing, and helper functions.
  */
 
 #include "../test_framework.h"
@@ -130,30 +130,6 @@ TEST(http_parse_response_404) {
     ASSERT_EQ_INT(status, 404);
 }
 
-/* ========== Header Lookup ========== */
-
-TEST(http_get_header) {
-    XrHttpHeader headers[3];
-    headers[0] = (XrHttpHeader) {"Host", 4, "example.com", 11};
-    headers[1] = (XrHttpHeader) {"Content-Type", 12, "text/html", 9};
-    headers[2] = (XrHttpHeader) {"Accept", 6, "*/*", 3};
-
-    size_t val_len = 0;
-    const char *val = xr_http_get_header(headers, 3, "Content-Type", &val_len);
-    ASSERT_NOT_NULL(val);
-    ASSERT_EQ_INT((int) val_len, 9);
-    ASSERT_EQ_INT(memcmp(val, "text/html", 9), 0);
-}
-
-TEST(http_get_header_not_found) {
-    XrHttpHeader headers[1];
-    headers[0] = (XrHttpHeader) {"Host", 4, "example.com", 11};
-
-    size_t val_len = 0;
-    const char *val = xr_http_get_header(headers, 1, "X-Missing", &val_len);
-    ASSERT_NULL(val);
-}
-
 /* ========== Helper Functions ========== */
 
 TEST(http_find_header_end) {
@@ -177,50 +153,11 @@ TEST(http_parse_status_code_helper) {
 
 /* ========== Simplified API ========== */
 
-TEST(http_parser_init_reset) {
-    XrHttpParser parser;
-    xr_http_parser_init(&parser);
-    ASSERT_EQ_INT(parser.state, HTTP_STATE_REQUEST_LINE);
-
-    xr_http_parser_reset(&parser);
-    ASSERT_EQ_INT(parser.state, HTTP_STATE_REQUEST_LINE);
-}
-
-TEST(http_request_init) {
-    XrHttpRequest req;
-    xr_http_request_init(&req);
-    ASSERT_EQ_INT(req.method, XR_HTTP_METHOD_GET);
-    ASSERT_EQ_INT((int) req.content_length, -1);
-    ASSERT_EQ_INT((int) req.header_count, 0);
-}
-
 TEST(http_response_init) {
     XrHttpResponse resp;
     xr_http_response_init(&resp);
     ASSERT_EQ_INT(resp.status_code, 0);
     ASSERT_EQ_INT((int) resp.content_length, -1);
-}
-
-TEST(http_request_rejects_unsupported_transfer_coding) {
-    const char *ok_data = "POST / HTTP/1.1\r\n"
-                          "Transfer-Encoding: chunked\r\n"
-                          "\r\n"
-                          "0\r\n\r\n";
-    XrHttpParser parser;
-    XrHttpRequest req;
-    xr_http_parser_init(&parser);
-    xr_http_request_init(&req);
-    ASSERT_EQ_INT(xr_http_parse_request(&parser, &req, ok_data, strlen(ok_data)), XR_HTTP_PARSE_OK);
-    ASSERT(req.chunked);
-
-    const char *bad_data = "POST / HTTP/1.1\r\n"
-                           "Transfer-Encoding: gzip, chunked\r\n"
-                           "\r\n"
-                           "0\r\n\r\n";
-    xr_http_parser_init(&parser);
-    xr_http_request_init(&req);
-    ASSERT_EQ_INT(xr_http_parse_request(&parser, &req, bad_data, strlen(bad_data)),
-                  XR_HTTP_PARSE_ERROR);
 }
 
 TEST(http_response_rejects_unsupported_transfer_coding) {
@@ -280,20 +217,13 @@ RUN_TEST_SUITE("HTTP - Response Parsing");
 RUN_TEST(http_parse_response_200);
 RUN_TEST(http_parse_response_404);
 
-RUN_TEST_SUITE("HTTP - Header Lookup");
-RUN_TEST(http_get_header);
-RUN_TEST(http_get_header_not_found);
-
 RUN_TEST_SUITE("HTTP - Helpers");
 RUN_TEST(http_find_header_end);
 RUN_TEST(http_find_header_end_not_found);
 RUN_TEST(http_parse_status_code_helper);
 
 RUN_TEST_SUITE("HTTP - Init/Reset");
-RUN_TEST(http_parser_init_reset);
-RUN_TEST(http_request_init);
 RUN_TEST(http_response_init);
-RUN_TEST(http_request_rejects_unsupported_transfer_coding);
 RUN_TEST(http_response_rejects_unsupported_transfer_coding);
 
 RUN_TEST_SUITE("HTTP - Edge Cases");
