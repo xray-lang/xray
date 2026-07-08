@@ -1664,14 +1664,6 @@ static uint32_t verify_capability_transfer_count(const XaotBundle *bundle, uint3
     return count;
 }
 
-static uint32_t verify_static_data_action(uint32_t profile, uint32_t static_data) {
-    if (profile == XG_BUILD_FREESTANDING && static_data == XG_STATIC_DATA_RUNTIME_INIT)
-        return XAOT_STATIC_DATA_ACTION_REJECT;
-    if (static_data == XG_STATIC_DATA_RUNTIME_INIT)
-        return XAOT_STATIC_DATA_ACTION_RUNTIME_INIT;
-    return XAOT_STATIC_DATA_ACTION_MATERIALIZE;
-}
-
 static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
                                       XgClassId implementor_class_id) {
     if (!ev || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
@@ -1946,8 +1938,18 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (plan->evidence != XAOT_STATIC_DATA_EV_GLOBAL_BODY ||
             plan->unproven_reason != XAOT_STATIC_DATA_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT static-data plan lacks evidence");
-        if (plan->action != verify_static_data_action(bundle->global_evidence_plan.profile, bit))
+        uint32_t expected_action =
+            xaot_static_data_action_for(bundle->global_evidence_plan.profile, bit);
+        if (plan->action != expected_action)
             return set_error(errbuf, errbuf_len, "AOT static-data action does not re-derive");
+        if (plan->section != xaot_static_data_section_for(bit, expected_action))
+            return set_error(errbuf, errbuf_len, "AOT static-data section does not re-derive");
+        if (plan->align != xaot_static_data_align_for(bit, expected_action))
+            return set_error(errbuf, errbuf_len, "AOT static-data align does not re-derive");
+        if (plan->type_hash != xaot_static_data_type_hash_for(bit, expected_action))
+            return set_error(errbuf, errbuf_len, "AOT static-data type hash is stale");
+        if (plan->data_hash != xaot_static_data_data_hash_for(ev, bit, expected_action))
+            return set_error(errbuf, errbuf_len, "AOT static-data data hash is stale");
     }
     if (bundle->nstatic_data_plans != expected_static_data_plans)
         return set_error(errbuf, errbuf_len, "AOT static-data plan count mismatches evidence");

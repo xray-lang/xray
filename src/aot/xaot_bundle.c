@@ -893,15 +893,87 @@ static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalE
     return true;
 }
 
-static uint32_t xaot_static_data_action(uint32_t profile, uint32_t static_data) {
+static uint64_t xaot_static_data_hash_mix_u32(uint64_t hash, uint32_t value) {
+    hash ^= (uint64_t) value;
+    return hash * UINT64_C(1099511628211);
+}
+
+static uint64_t xaot_static_data_hash_mix_u64(uint64_t hash, uint64_t value) {
+    hash = xaot_static_data_hash_mix_u32(hash, (uint32_t) value);
+    return xaot_static_data_hash_mix_u32(hash, (uint32_t) (value >> 32));
+}
+
+XR_FUNC uint32_t xaot_static_data_action_for(uint32_t profile, uint32_t static_data) {
     if (profile == XG_BUILD_FREESTANDING && static_data == XG_STATIC_DATA_RUNTIME_INIT)
         return XAOT_STATIC_DATA_ACTION_REJECT;
     if (static_data == XG_STATIC_DATA_RUNTIME_INIT)
         return XAOT_STATIC_DATA_ACTION_RUNTIME_INIT;
+    if (static_data == XG_STATIC_DATA_FREESTANDING_SAFE)
+        return XAOT_STATIC_DATA_ACTION_PROVE;
     return XAOT_STATIC_DATA_ACTION_MATERIALIZE;
 }
 
+XR_FUNC uint32_t xaot_static_data_section_for(uint32_t static_data, uint32_t action) {
+    switch ((XaotStaticDataAction) action) {
+        case XAOT_STATIC_DATA_ACTION_PROVE:
+            return XAOT_STATIC_DATA_SECTION_EVIDENCE;
+        case XAOT_STATIC_DATA_ACTION_MATERIALIZE:
+            (void) static_data;
+            return XAOT_STATIC_DATA_SECTION_RODATA;
+        case XAOT_STATIC_DATA_ACTION_RUNTIME_INIT:
+            return XAOT_STATIC_DATA_SECTION_RUNTIME_INIT;
+        case XAOT_STATIC_DATA_ACTION_REJECT:
+        default:
+            return XAOT_STATIC_DATA_SECTION_NONE;
+    }
+}
+
+XR_FUNC uint32_t xaot_static_data_align_for(uint32_t static_data, uint32_t action) {
+    if (action != XAOT_STATIC_DATA_ACTION_MATERIALIZE)
+        return 0;
+    if (static_data == XG_STATIC_DATA_RODATA)
+        return 1;
+    return 8;
+}
+
+XR_FUNC uint64_t xaot_static_data_type_hash_for(uint32_t static_data, uint32_t action) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = xaot_static_data_hash_mix_u32(hash, UINT32_C(0x58534454)); /* XSDT */
+    hash = xaot_static_data_hash_mix_u32(hash, static_data);
+    hash = xaot_static_data_hash_mix_u32(hash, action);
+    hash = xaot_static_data_hash_mix_u32(hash, xaot_static_data_section_for(static_data, action));
+    return xaot_static_data_hash_mix_u32(hash, xaot_static_data_align_for(static_data, action));
+}
+
+XR_FUNC uint64_t xaot_static_data_data_hash_for(const XgGlobalEvidence *evidence,
+                                                uint32_t static_data, uint32_t action) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    uint32_t matched = 0;
+
+    if (!evidence || static_data == 0)
+        return 0;
+
+    hash = xaot_static_data_hash_mix_u32(hash, UINT32_C(0x58534444)); /* XSDD */
+    hash = xaot_static_data_hash_mix_u32(hash, static_data);
+    hash = xaot_static_data_hash_mix_u32(hash, action);
+    for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+        const XgBodySummary *body = &evidence->bodies[bi];
+        if ((body->static_data_use_bits & static_data) == 0)
+            continue;
+        matched++;
+        hash = xaot_static_data_hash_mix_u32(hash, body->func_id);
+        hash = xaot_static_data_hash_mix_u32(hash, body->module_id);
+        hash = xaot_static_data_hash_mix_u32(hash, body->source_span_id);
+        hash = xaot_static_data_hash_mix_u64(hash, body->body_hash);
+        hash = xaot_static_data_hash_mix_u32(hash, body->static_data_use_bits);
+    }
+    if (matched == 0)
+        return 0;
+    return xaot_static_data_hash_mix_u32(hash, matched);
+}
+
 static bool xaot_bundle_add_static_data_plan(XaotBundle *bundle, uint32_t static_data,
+                                             const XgGlobalEvidence *evidence,
                                              uint32_t body_count) {
     XaotStaticDataPlan *plan;
     if (!bundle || static_data == 0 || body_count == 0)
@@ -914,7 +986,11 @@ static bool xaot_bundle_add_static_data_plan(XaotBundle *bundle, uint32_t static
     plan->static_data = static_data;
     plan->body_count = body_count;
     plan->evidence = XAOT_STATIC_DATA_EV_GLOBAL_BODY;
-    plan->action = xaot_static_data_action(bundle->global_evidence_plan.profile, static_data);
+    plan->action = xaot_static_data_action_for(bundle->global_evidence_plan.profile, static_data);
+    plan->section = xaot_static_data_section_for(static_data, plan->action);
+    plan->align = xaot_static_data_align_for(static_data, plan->action);
+    plan->type_hash = xaot_static_data_type_hash_for(static_data, plan->action);
+    plan->data_hash = xaot_static_data_data_hash_for(evidence, static_data, plan->action);
     plan->unproven_reason = XAOT_STATIC_DATA_UNPROVEN_NONE;
     return true;
 }
@@ -930,7 +1006,7 @@ static bool xaot_bundle_add_static_data_plans(XaotBundle *bundle,
             if ((evidence->bodies[bi].static_data_use_bits & bit) != 0)
                 body_count++;
         }
-        if (!xaot_bundle_add_static_data_plan(bundle, bit, body_count))
+        if (!xaot_bundle_add_static_data_plan(bundle, bit, evidence, body_count))
             return false;
     }
     return true;
@@ -2344,12 +2420,29 @@ static const char *metadata_unproven_reason_name(uint8_t reason) {
 
 static const char *static_data_action_name(uint32_t action) {
     switch ((XaotStaticDataAction) action) {
+        case XAOT_STATIC_DATA_ACTION_PROVE:
+            return "prove";
         case XAOT_STATIC_DATA_ACTION_MATERIALIZE:
             return "materialize";
         case XAOT_STATIC_DATA_ACTION_RUNTIME_INIT:
             return "runtime_init";
         case XAOT_STATIC_DATA_ACTION_REJECT:
             return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *static_data_section_name(uint32_t section) {
+    switch ((XaotStaticDataSection) section) {
+        case XAOT_STATIC_DATA_SECTION_NONE:
+            return "none";
+        case XAOT_STATIC_DATA_SECTION_EVIDENCE:
+            return "evidence";
+        case XAOT_STATIC_DATA_SECTION_RODATA:
+            return "rodata";
+        case XAOT_STATIC_DATA_SECTION_RUNTIME_INIT:
+            return "runtime_init";
         default:
             return "unknown";
     }
@@ -2770,9 +2863,12 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     for (uint32_t si = 0; si < bundle->nstatic_data_plans; si++) {
         const XaotStaticDataPlan *sp = &bundle->static_data_plans[si];
-        fprintf(out, "static-data %u name=%s bodies=%u action=%s evidence=0x%x reason=%s\n", si,
-                xg_static_data_name(sp->static_data), sp->body_count,
-                static_data_action_name(sp->action), sp->evidence,
+        fprintf(out,
+                "static-data %u name=%s bodies=%u action=%s section=%s align=%u "
+                "type_hash=%016" PRIx64 " data_hash=%016" PRIx64 " evidence=0x%x reason=%s\n",
+                si, xg_static_data_name(sp->static_data), sp->body_count,
+                static_data_action_name(sp->action), static_data_section_name(sp->section),
+                sp->align, sp->type_hash, sp->data_hash, sp->evidence,
                 static_data_unproven_reason_name(sp->unproven_reason));
     }
 

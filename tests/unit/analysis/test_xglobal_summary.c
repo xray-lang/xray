@@ -520,6 +520,10 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(static_data);
     ASSERT_EQ_UINT(static_data->body_count, 1);
     ASSERT_EQ_UINT(static_data->action, XAOT_STATIC_DATA_ACTION_MATERIALIZE);
+    ASSERT_EQ_UINT(static_data->section, XAOT_STATIC_DATA_SECTION_RODATA);
+    ASSERT_EQ_UINT(static_data->align, 8);
+    ASSERT_TRUE(static_data->type_hash != 0);
+    ASSERT_TRUE(static_data->data_hash != 0);
     const XaotLinkDependencyPlan *link_plan =
         xaot_bundle_find_link_dependency_plan(&bundle, link_dep.link_id);
     ASSERT_NOT_NULL(link_plan);
@@ -1585,6 +1589,117 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
     ASSERT_TRUE(!xaot_verify_bundle(&static_bad, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT static-data action does not re-derive"));
     xaot_bundle_free(&static_bad);
+
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rederives_static_data_materialization_contract) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x51,
+                      .compiler_semver_hash = 0x52,
+                      .profile_hash = 0x53,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = 7,
+                          .signature_key = 901,
+                          .source_span_id = 3};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 7,
+                          .signature_key = 901,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x424242,
+                          .effect_bits = 0,
+                          .escape_bits = 0,
+                          .capability_bits = 0,
+                          .metadata_use_bits = 0,
+                          .static_data_use_bits =
+                              XG_STATIC_DATA_COMPTIME_VALUE | XG_STATIC_DATA_RODATA};
+    XiFunc init_func;
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    XiModule *modules[1] = {&module};
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+
+    XaotBundle good;
+    memset(&good, 0, sizeof(good));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
+    good.modules = modules;
+    good.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    ASSERT_EQ_UINT(good.nstatic_data_plans, 2);
+    ASSERT_EQ_UINT(good.static_data_plans[0].section, XAOT_STATIC_DATA_SECTION_RODATA);
+    ASSERT_EQ_UINT(good.static_data_plans[0].align, 8);
+    ASSERT_TRUE(good.static_data_plans[0].type_hash != 0);
+    ASSERT_TRUE(good.static_data_plans[0].data_hash != 0);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&good);
+
+    XaotBundle bad_section;
+    memset(&bad_section, 0, sizeof(bad_section));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bad_section, &ev, XG_BUILD_NATIVE_RELEASE));
+    bad_section.modules = modules;
+    bad_section.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bad_section, &init_func, 0, 0));
+    bad_section.static_data_plans[0].section = XAOT_STATIC_DATA_SECTION_NONE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bad_section, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT static-data section does not re-derive"));
+    xaot_bundle_free(&bad_section);
+
+    XaotBundle bad_align;
+    memset(&bad_align, 0, sizeof(bad_align));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bad_align, &ev, XG_BUILD_NATIVE_RELEASE));
+    bad_align.modules = modules;
+    bad_align.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bad_align, &init_func, 0, 0));
+    bad_align.static_data_plans[0].align = 1;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bad_align, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT static-data align does not re-derive"));
+    xaot_bundle_free(&bad_align);
+
+    XaotBundle bad_type_hash;
+    memset(&bad_type_hash, 0, sizeof(bad_type_hash));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bad_type_hash, &ev, XG_BUILD_NATIVE_RELEASE));
+    bad_type_hash.modules = modules;
+    bad_type_hash.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bad_type_hash, &init_func, 0, 0));
+    bad_type_hash.static_data_plans[0].type_hash ^= 1;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bad_type_hash, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT static-data type hash is stale"));
+    xaot_bundle_free(&bad_type_hash);
+
+    XaotBundle bad_data_hash;
+    memset(&bad_data_hash, 0, sizeof(bad_data_hash));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bad_data_hash, &ev, XG_BUILD_NATIVE_RELEASE));
+    bad_data_hash.modules = modules;
+    bad_data_hash.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bad_data_hash, &init_func, 0, 0));
+    bad_data_hash.static_data_plans[0].data_hash ^= 1;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bad_data_hash, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT static-data data hash is stale"));
+    xaot_bundle_free(&bad_data_hash);
 
     xg_global_evidence_free(&ev);
 }
@@ -4371,6 +4486,7 @@ RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
+RUN_TEST(global_evidence_verifier_rederives_static_data_materialization_contract);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_interface_extends_rows);
