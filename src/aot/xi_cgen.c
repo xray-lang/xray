@@ -603,6 +603,9 @@ struct XiCgenCtx {
     int nno_alloc_summaries;
     int no_alloc_summary_cap;
     bool no_alloc_summaries_valid;
+    char **no_alloc_detail_strings;
+    int nno_alloc_detail_strings;
+    int no_alloc_detail_cap;
 };
 
 /* Grow the parallel shared-slot tables to at least `need` entries.  All four
@@ -718,6 +721,24 @@ static bool cg_reserve_no_alloc_summaries(XiCgenCtx *ctx, int need) {
            (size_t) (nc - ctx->no_alloc_summary_cap) * sizeof(*rows));
     ctx->no_alloc_summaries = rows;
     ctx->no_alloc_summary_cap = nc;
+    return true;
+}
+
+static bool cg_reserve_no_alloc_detail_strings(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->no_alloc_detail_cap)
+        return true;
+    int nc = ctx->no_alloc_detail_cap > 0 ? ctx->no_alloc_detail_cap : 16;
+    while (nc < need)
+        nc *= 2;
+    char **rows = (char **) xr_realloc(ctx->no_alloc_detail_strings, (size_t) nc * sizeof(*rows));
+    if (!rows) {
+        ctx->error = true;
+        return false;
+    }
+    memset(&rows[ctx->no_alloc_detail_cap], 0,
+           (size_t) (nc - ctx->no_alloc_detail_cap) * sizeof(*rows));
+    ctx->no_alloc_detail_strings = rows;
+    ctx->no_alloc_detail_cap = nc;
     return true;
 }
 
@@ -2905,7 +2926,32 @@ static bool cg_no_alloc_signature_return_allocates(const char *signature) {
     return cg_no_alloc_type_name_allocates(ret);
 }
 
-static const char *cg_no_alloc_generated_stdlib_alloc_detail(const char *module, const char *name) {
+static const char *cg_no_alloc_owned_stdlib_detail(XiCgenCtx *ctx, const char *module,
+                                                   const char *name) {
+    if (!ctx || !module || !name)
+        return NULL;
+    size_t module_len = strlen(module);
+    size_t name_len = strlen(name);
+    size_t total = module_len + 1 + name_len + 1;
+    char *detail = (char *) xr_malloc(total);
+    if (!detail) {
+        ctx->error = true;
+        return NULL;
+    }
+    memcpy(detail, module, module_len);
+    detail[module_len] = '.';
+    memcpy(detail + module_len + 1, name, name_len);
+    detail[total - 1] = '\0';
+    if (!cg_reserve_no_alloc_detail_strings(ctx, ctx->nno_alloc_detail_strings + 1)) {
+        xr_free(detail);
+        return NULL;
+    }
+    ctx->no_alloc_detail_strings[ctx->nno_alloc_detail_strings++] = detail;
+    return detail;
+}
+
+static const char *cg_no_alloc_generated_stdlib_alloc_detail(XiCgenCtx *ctx, const char *module,
+                                                             const char *name) {
     if (!module || !name)
         return NULL;
     for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
@@ -2918,11 +2964,13 @@ static const char *cg_no_alloc_generated_stdlib_alloc_detail(const char *module,
             continue;
         if (entry->link_object && entry->link_object[0])
             return entry->link_object;
+        return cg_no_alloc_owned_stdlib_detail(ctx, module, name);
     }
     return NULL;
 }
 
-static const char *cg_no_alloc_stdlib_alloc_detail(const char *module, const char *name) {
+static const char *cg_no_alloc_stdlib_alloc_detail(XiCgenCtx *ctx, const char *module,
+                                                   const char *name) {
     if (!module || !name)
         return NULL;
     const char *detail = NULL;
@@ -2934,7 +2982,7 @@ static const char *cg_no_alloc_stdlib_alloc_detail(const char *module, const cha
         detail = cg_no_alloc_datetime_alloc_detail(name);
     if (detail)
         return detail;
-    return cg_no_alloc_generated_stdlib_alloc_detail(module, name);
+    return cg_no_alloc_generated_stdlib_alloc_detail(ctx, module, name);
 }
 
 static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
@@ -3053,7 +3101,8 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
         const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v->args[0]);
         const char *detail =
-            ref ? cg_no_alloc_stdlib_alloc_detail(ref->module_path, (const char *) v->aux) : NULL;
+            ref ? cg_no_alloc_stdlib_alloc_detail(ctx, ref->module_path, (const char *) v->aux)
+                : NULL;
         if (detail) {
             if (kind_out)
                 *kind_out = "stdlib";
@@ -3078,7 +3127,7 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
     if (v->op == XI_CALL && v->nargs >= 1) {
         const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v->args[0]);
         const char *detail =
-            ref ? cg_no_alloc_stdlib_alloc_detail(ref->module_path, ref->member_name) : NULL;
+            ref ? cg_no_alloc_stdlib_alloc_detail(ctx, ref->module_path, ref->member_name) : NULL;
         if (detail) {
             if (kind_out)
                 *kind_out = "stdlib";

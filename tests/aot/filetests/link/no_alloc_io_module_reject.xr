@@ -1,0 +1,8 @@
+import io
+
+@no_alloc
+fn xray_no_alloc_io_cwd_reject() -> string {
+    return io.cwd()
+}
+
+print(xray_no_alloc_io_cwd_reject())
