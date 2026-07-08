@@ -3114,6 +3114,21 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
     return NULL;
 }
 
+static bool cg_no_alloc_value_is_null(const XiValue *v) {
+    return v && v->type && v->type->kind == XR_KIND_NULL;
+}
+
+static const char *cg_no_alloc_method_call_alloc_detail(const XiValue *v) {
+    if (!v || !v->aux || v->nargs < 1)
+        return NULL;
+    const char *method = (const char *) v->aux;
+    const XrType *receiver_type = v->args[0] ? v->args[0]->type : NULL;
+    if (receiver_type && receiver_type->kind == XR_KIND_ARRAY && strcmp(method, "sort") == 0 &&
+        v->nargs >= 2 && !cg_no_alloc_value_is_null(v->args[1]))
+        return "Array.sort";
+    return cg_no_alloc_method_alloc_detail(receiver_type, method);
+}
+
 static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
                                         const char **kind_out, const char **detail_out) {
     if (!v)
@@ -3179,8 +3194,7 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
     }
 
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
-        const char *detail = cg_no_alloc_method_alloc_detail(v->args[0] ? v->args[0]->type : NULL,
-                                                             (const char *) v->aux);
+        const char *detail = cg_no_alloc_method_call_alloc_detail(v);
         if (detail) {
             if (kind_out)
                 *kind_out = "method";
@@ -3315,6 +3329,40 @@ static const XiFunc *cg_no_alloc_call_target(XiCgenCtx *ctx, const XiFunc *curre
     return NULL;
 }
 
+static int cg_no_alloc_hof_callback_arg_index(const XiValue *call) {
+    if (!call || !call->aux ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs < 2)
+        return -1;
+    const XiValue *receiver = call->args[0];
+    const XrType *receiver_type = receiver ? receiver->type : NULL;
+    const char *method = (const char *) call->aux;
+    if (!receiver_type || !method)
+        return -1;
+
+    if (receiver_type->kind == XR_KIND_ARRAY) {
+        if (strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
+            strcmp(method, "reduce") == 0 || strcmp(method, "forEach") == 0 ||
+            strcmp(method, "find") == 0 || strcmp(method, "findIndex") == 0 ||
+            strcmp(method, "every") == 0 || strcmp(method, "some") == 0 ||
+            strcmp(method, "sort") == 0)
+            return cg_no_alloc_value_is_null(call->args[1]) ? -1 : 1;
+    }
+    if ((receiver_type->kind == XR_KIND_MAP || receiver_type->kind == XR_KIND_SET) &&
+        strcmp(method, "forEach") == 0)
+        return cg_no_alloc_value_is_null(call->args[1]) ? -1 : 1;
+    return -1;
+}
+
+static const XiFunc *cg_no_alloc_hof_callback_target(XiCgenCtx *ctx, const XiFunc *current,
+                                                     const XiValue *call) {
+    int arg_index = cg_no_alloc_hof_callback_arg_index(call);
+    if (arg_index < 0 || !ctx || !current || !call || arg_index >= (int) call->nargs)
+        return NULL;
+    CgStaticFunctionCall static_call =
+        cg_resolve_static_function_call(ctx, current, call->args[arg_index]);
+    return static_call.is_class_constructor ? NULL : static_call.func;
+}
+
 static bool cg_no_alloc_func_calls_allocating_func(XiCgenCtx *ctx, const XiFunc *f,
                                                    const XiValue **value_out,
                                                    const XiFunc **callee_out) {
@@ -3329,15 +3377,19 @@ static bool cg_no_alloc_func_calls_allocating_func(XiCgenCtx *ctx, const XiFunc 
             if (!v ||
                 (v->op != XI_CALL && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
                 continue;
-            const XiFunc *target = cg_no_alloc_call_target(ctx, f, v);
-            CgNoAllocSummary *target_row = cg_no_alloc_find_summary(ctx, target);
-            if (!target_row || !target_row->may_alloc)
-                continue;
-            if (value_out)
-                *value_out = v;
-            if (callee_out)
-                *callee_out = target;
-            return true;
+            const XiFunc *targets[] = {cg_no_alloc_call_target(ctx, f, v),
+                                       cg_no_alloc_hof_callback_target(ctx, f, v)};
+            for (size_t ti = 0; ti < sizeof(targets) / sizeof(targets[0]); ti++) {
+                const XiFunc *target = targets[ti];
+                CgNoAllocSummary *target_row = cg_no_alloc_find_summary(ctx, target);
+                if (!target_row || !target_row->may_alloc)
+                    continue;
+                if (value_out)
+                    *value_out = v;
+                if (callee_out)
+                    *callee_out = target;
+                return true;
+            }
         }
     }
     return false;

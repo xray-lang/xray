@@ -1,0 +1,3 @@
+status=pass
+contains=xray_no_alloc_array_sort_default
+not_contains=allocates via method 'Array.sort'
