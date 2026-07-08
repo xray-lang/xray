@@ -1397,6 +1397,7 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
     XaotBundle bundle;
     const XaotMethodDispatchPlan *dispatch;
     const XaotInterfaceAbiPlan *abi;
+    const XaotGenericSpecializationPlan *spec;
     char *dump;
     char err[256];
 
@@ -1494,6 +1495,16 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
     ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT);
     ASSERT_EQ_UINT(abi->tag_source, XAOT_INTERFACE_ABI_SOURCE_NONE);
 
+    ASSERT_EQ_UINT(bundle.ngeneric_specialization_plans, 1);
+    spec = xaot_bundle_find_generic_specialization_plan(&bundle, 1);
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_UINT(spec->action, XAOT_SPECIALIZATION_FALLBACK);
+    ASSERT_EQ_UINT(spec->dispatch_kind, XAOT_DISPATCH_ITABLE);
+    ASSERT_EQ_UINT(spec->implementor_count, IMPLEMENTOR_COUNT);
+    ASSERT_EQ_UINT(spec->target_count, 0);
+    ASSERT_EQ_UINT(spec->single_implementor_class_id, XG_NO_ID);
+    ASSERT_EQ_UINT(spec->unproven_reason, XAOT_SPECIALIZATION_UNPROVEN_LARGE_SET);
+
     dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "kind=itable"));
@@ -1501,6 +1512,11 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
     ASSERT_NOT_NULL(strstr(dump, "flags=iface_object+itable+boxed_receiver"));
     ASSERT_NOT_NULL(
         strstr(dump, "data=boxed_value type=native_type_id itable=dispatch_slot tag=none"));
+    ASSERT_NOT_NULL(strstr(dump, "generic-specialization 0 callsite=1 owner=9 interface=77"));
+    ASSERT_NOT_NULL(strstr(dump, "action=fallback dispatch=itable"));
+    ASSERT_NOT_NULL(strstr(dump, "implementors=5 single=0 targets=0"));
+    ASSERT_NOT_NULL(strstr(dump, "evidence=callsite+dispatch+implementors"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=large_set"));
     xr_free(dump);
 
     memset(err, 0, sizeof(err));
@@ -1509,6 +1525,11 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT interface ABI sources do not re-derive"));
+    bundle.interface_abi_plans[0].itable_source = XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT;
+    bundle.generic_specialization_plans[0].action = XAOT_SPECIALIZATION_DIRECT;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic specialization action does not re-derive"));
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -1576,6 +1597,7 @@ TEST(global_evidence_lowers_unresolved_interface_target_to_itable_abi_plan) {
     XaotBundle bundle;
     const XaotMethodDispatchPlan *dispatch;
     const XaotInterfaceAbiPlan *abi;
+    const XaotGenericSpecializationPlan *spec;
     char err[256];
 
     xg_global_evidence_init(&ev, key);
@@ -1618,6 +1640,14 @@ TEST(global_evidence_lowers_unresolved_interface_target_to_itable_abi_plan) {
                                    XAOT_INTERFACE_ABI_NEEDS_ITABLE |
                                    XAOT_INTERFACE_ABI_BOXED_RECEIVER);
     ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT);
+
+    spec = xaot_bundle_find_generic_specialization_plan(&bundle, 1);
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_UINT(spec->action, XAOT_SPECIALIZATION_FALLBACK);
+    ASSERT_EQ_UINT(spec->dispatch_kind, XAOT_DISPATCH_ITABLE);
+    ASSERT_EQ_UINT(spec->implementor_count, 1);
+    ASSERT_EQ_UINT(spec->target_count, 0);
+    ASSERT_EQ_UINT(spec->unproven_reason, XAOT_SPECIALIZATION_UNPROVEN_NO_TARGET);
 
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
@@ -5870,6 +5900,16 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(abi->type_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
     ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_NONE);
     ASSERT_EQ_UINT(abi->tag_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
+    const XaotGenericSpecializationPlan *spec_plan =
+        xaot_bundle_find_generic_specialization_plan(&bundle, parent_callsite_id);
+    ASSERT_NOT_NULL(spec_plan);
+    ASSERT_EQ_UINT(spec_plan->action, XAOT_SPECIALIZATION_TYPE_SWITCH);
+    ASSERT_EQ_UINT(spec_plan->dispatch_kind, XAOT_DISPATCH_TYPE_SWITCH);
+    ASSERT_EQ_UINT(spec_plan->interface_id, shape_id);
+    ASSERT_EQ_UINT(spec_plan->implementor_count, 2);
+    ASSERT_EQ_UINT(spec_plan->target_count, 2);
+    ASSERT_EQ_UINT(spec_plan->single_implementor_class_id, XG_NO_ID);
+    ASSERT_EQ_UINT(spec_plan->unproven_reason, XAOT_SPECIALIZATION_UNPROVEN_NONE);
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "interface-abi 0 interface="));
@@ -5877,6 +5917,10 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_NOT_NULL(strstr(dump, "flags=iface_object+type_switch_tag+boxed_receiver"));
     ASSERT_NOT_NULL(
         strstr(dump, "data=boxed_value type=native_type_id itable=none tag=native_type_id"));
+    ASSERT_NOT_NULL(strstr(dump, "generic-specialization 0 callsite="));
+    ASSERT_NOT_NULL(strstr(dump, "action=type_switch dispatch=type_switch"));
+    ASSERT_NOT_NULL(strstr(dump, "implementors=2 single=0 targets=2"));
+    ASSERT_NOT_NULL(strstr(dump, "evidence=callsite+dispatch+implementors+targets"));
     xr_free(dump);
 
     char err[256];
@@ -5892,6 +5936,11 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan slot does not re-derive"));
     bundle.method_dispatch_plans[0].dispatch_slot = 0;
+    bundle.generic_specialization_plans[0].target_count = 1;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic specialization target set does not re-derive"));
+    bundle.generic_specialization_plans[0].target_count = 2;
     for (uint32_t i = 0; i < bundle.ninterface_use_plans; i++) {
         XaotInterfaceUsePlan *use_plan = &bundle.interface_use_plans[i];
         XgClassId saved_implementor;

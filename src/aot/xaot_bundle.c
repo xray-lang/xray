@@ -189,6 +189,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->ninterface_abi_plans = 0;
     bundle->interface_abi_plan_cap = 0;
 
+    xr_free(bundle->generic_specialization_plans);
+    bundle->generic_specialization_plans = NULL;
+    bundle->ngeneric_specialization_plans = 0;
+    bundle->generic_specialization_plan_cap = 0;
+
     xr_free(bundle->metadata_plans);
     bundle->metadata_plans = NULL;
     bundle->nmetadata_plans = 0;
@@ -879,6 +884,98 @@ static bool xaot_bundle_add_interface_abi_plans(XaotBundle *bundle,
     return true;
 }
 
+static uint8_t specialization_action_for_dispatch(uint8_t dispatch_kind) {
+    switch ((XaotMethodDispatchKind) dispatch_kind) {
+        case XAOT_DISPATCH_DIRECT:
+            return XAOT_SPECIALIZATION_DIRECT;
+        case XAOT_DISPATCH_TYPE_SWITCH:
+            return XAOT_SPECIALIZATION_TYPE_SWITCH;
+        default:
+            return XAOT_SPECIALIZATION_FALLBACK;
+    }
+}
+
+static uint8_t specialization_reason_for_dispatch(const XaotMethodDispatchPlan *dispatch) {
+    if (!dispatch)
+        return XAOT_SPECIALIZATION_UNPROVEN_DYNAMIC_BOUNDARY;
+    if (dispatch->kind == XAOT_DISPATCH_DIRECT || dispatch->kind == XAOT_DISPATCH_TYPE_SWITCH)
+        return XAOT_SPECIALIZATION_UNPROVEN_NONE;
+    switch (dispatch->unproven_reason) {
+        case XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID:
+            return XAOT_SPECIALIZATION_UNPROVEN_NO_INTERFACE;
+        case XAOT_DISPATCH_UNPROVEN_NO_TARGET_METHOD:
+            return XAOT_SPECIALIZATION_UNPROVEN_NO_TARGET;
+        case XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET:
+            return XAOT_SPECIALIZATION_UNPROVEN_LARGE_SET;
+        default:
+            return XAOT_SPECIALIZATION_UNPROVEN_DYNAMIC_BOUNDARY;
+    }
+}
+
+static XgClassId specialization_single_implementor_from_dispatch(const XaotBundle *bundle,
+                                                                 const XaotMethodDispatchPlan *dp) {
+    if (!bundle || !dp || dp->target_count != 1 || dp->target_start == 0)
+        return XG_NO_ID;
+    if (dp->target_start - 1 >= bundle->ndispatch_target_cases)
+        return XG_NO_ID;
+    return bundle->dispatch_target_cases[dp->target_start - 1].receiver_class_id;
+}
+
+static bool xaot_bundle_add_generic_specialization_plan(XaotBundle *bundle,
+                                                        const XgGlobalEvidence *evidence,
+                                                        const XgCallsiteSummary *call) {
+    XaotGenericSpecializationPlan *plan;
+    const XaotMethodDispatchPlan *dispatch;
+    uint32_t evidence_bits = XAOT_SPECIALIZATION_EV_GLOBAL_CALLSITE;
+    if (!bundle || !evidence || !call || call->kind != XG_CALL_INTERFACE)
+        return false;
+    dispatch = xaot_bundle_find_method_dispatch_plan(bundle, call->callsite_id);
+    if (dispatch)
+        evidence_bits |= XAOT_SPECIALIZATION_EV_DISPATCH_PLAN;
+    if (call->receiver_static_interface_id != XG_NO_ID &&
+        xg_evidence_effective_interface_implementor_count(evidence,
+                                                          call->receiver_static_interface_id) != 0)
+        evidence_bits |= XAOT_SPECIALIZATION_EV_IMPLEMENTOR_SET;
+    if (dispatch && dispatch->target_count != 0)
+        evidence_bits |= XAOT_SPECIALIZATION_EV_TARGET_CASES;
+    if (!reserve_plan_array((void **) &bundle->generic_specialization_plans,
+                            &bundle->generic_specialization_plan_cap,
+                            bundle->ngeneric_specialization_plans + 1,
+                            sizeof(XaotGenericSpecializationPlan), 8))
+        return false;
+    plan = &bundle->generic_specialization_plans[bundle->ngeneric_specialization_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->callsite_id = call->callsite_id;
+    plan->owner_func_id = call->owner_func_id;
+    plan->interface_id = call->receiver_static_interface_id;
+    plan->method_name_id = call->method_name_id;
+    plan->method_signature_key = call->method_signature_key;
+    plan->single_implementor_class_id =
+        specialization_single_implementor_from_dispatch(bundle, dispatch);
+    plan->implementor_count = xg_evidence_effective_interface_implementor_count(
+        evidence, call->receiver_static_interface_id);
+    plan->target_count = dispatch ? dispatch->target_count : 0;
+    plan->dispatch_kind = dispatch ? dispatch->kind : XAOT_DISPATCH_RUNTIME_FALLBACK;
+    plan->action = specialization_action_for_dispatch(plan->dispatch_kind);
+    plan->evidence = evidence_bits;
+    plan->unproven_reason = specialization_reason_for_dispatch(dispatch);
+    return true;
+}
+
+static bool xaot_bundle_add_generic_specialization_plans(XaotBundle *bundle,
+                                                         const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->ncallsites; i++) {
+        const XgCallsiteSummary *call = &evidence->callsites[i];
+        if (call->kind != XG_CALL_INTERFACE)
+            continue;
+        if (!xaot_bundle_add_generic_specialization_plan(bundle, evidence, call))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
     if (profile == XG_BUILD_FREESTANDING) {
         switch (metadata) {
@@ -1212,6 +1309,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_interface_abi_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT interface ABI plan";
+        return false;
+    }
+    if (!xaot_bundle_add_generic_specialization_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT generic specialization plan";
         return false;
     }
     if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
@@ -1702,6 +1803,17 @@ xaot_bundle_find_interface_abi_plan(const XaotBundle *bundle, XgInterfaceId inte
     for (uint32_t i = 0; i < bundle->ninterface_abi_plans; i++) {
         if (bundle->interface_abi_plans[i].interface_id == interface_id)
             return &bundle->interface_abi_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotGenericSpecializationPlan *
+xaot_bundle_find_generic_specialization_plan(const XaotBundle *bundle, XgCallsiteId callsite_id) {
+    if (!bundle || callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ngeneric_specialization_plans; i++) {
+        if (bundle->generic_specialization_plans[i].callsite_id == callsite_id)
+            return &bundle->generic_specialization_plans[i];
     }
     return NULL;
 }
@@ -2941,6 +3053,54 @@ static void print_interface_abi_evidence_bits(FILE *out, uint32_t bits) {
 #undef PRINT_BIT
 }
 
+static const char *specialization_action_name(uint8_t action) {
+    switch ((XaotSpecializationAction) action) {
+        case XAOT_SPECIALIZATION_DIRECT:
+            return "direct";
+        case XAOT_SPECIALIZATION_TYPE_SWITCH:
+            return "type_switch";
+        case XAOT_SPECIALIZATION_FALLBACK:
+            return "fallback";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *specialization_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_SPECIALIZATION_UNPROVEN_NONE:
+            return "none";
+        case XAOT_SPECIALIZATION_UNPROVEN_NO_INTERFACE:
+            return "no_interface";
+        case XAOT_SPECIALIZATION_UNPROVEN_NO_TARGET:
+            return "no_target";
+        case XAOT_SPECIALIZATION_UNPROVEN_LARGE_SET:
+            return "large_set";
+        case XAOT_SPECIALIZATION_UNPROVEN_DYNAMIC_BOUNDARY:
+            return "dynamic_boundary";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_specialization_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_SPECIALIZATION_EV_GLOBAL_CALLSITE, "callsite");
+    PRINT_BIT(XAOT_SPECIALIZATION_EV_DISPATCH_PLAN, "dispatch");
+    PRINT_BIT(XAOT_SPECIALIZATION_EV_IMPLEMENTOR_SET, "implementors");
+    PRINT_BIT(XAOT_SPECIALIZATION_EV_TARGET_CASES, "targets");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static void print_bounds_evidence_bits(FILE *out, uint32_t bits) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -3305,6 +3465,20 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 interface_abi_source_name(ap->tag_source));
         print_interface_abi_evidence_bits(out, ap->evidence);
         fprintf(out, " reason=%s\n", interface_abi_unproven_reason_name(ap->unproven_reason));
+    }
+
+    for (uint32_t gi = 0; gi < bundle->ngeneric_specialization_plans; gi++) {
+        const XaotGenericSpecializationPlan *gp = &bundle->generic_specialization_plans[gi];
+        fprintf(out,
+                "generic-specialization %u callsite=%u owner=%u interface=%u method_name=%u "
+                "method_sig=%u action=%s dispatch=%s implementors=%u single=%u targets=%u "
+                "evidence=",
+                gi, gp->callsite_id, gp->owner_func_id, gp->interface_id, gp->method_name_id,
+                gp->method_signature_key, specialization_action_name(gp->action),
+                dispatch_kind_name(gp->dispatch_kind), gp->implementor_count,
+                gp->single_implementor_class_id, (unsigned) gp->target_count);
+        print_specialization_evidence_bits(out, gp->evidence);
+        fprintf(out, " reason=%s\n", specialization_unproven_reason_name(gp->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {
