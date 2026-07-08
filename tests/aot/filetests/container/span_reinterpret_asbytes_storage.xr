@@ -3,3 +3,9 @@ fn views(words: Span<uint32>, raw: ByteSpan) -> int {
     var pairs: Span<uint16> = raw.reinterpret<uint16>()
     return bytes.length + pairs.length
 }
+
+fn roundtrip(words: Span<uint32>) -> int {
+    var bytes: ByteSpan = words.asBytes()
+    var words_again: Span<uint32> = bytes.reinterpret<uint32>()
+    return words_again.length
+}

@@ -1911,6 +1911,17 @@ static bool prepare_span_elem_is_pod(const XaotContainerElemPlan *elem) {
            elem->rep != XAOT_REP_TAGGED;
 }
 
+static bool prepare_span_elem_size(const XaotContainerElemPlan *elem, uint8_t *out_size) {
+    const XaotRepInfo *info;
+    if (!elem || !out_size)
+        return false;
+    info = xaot_rep_info(elem->rep);
+    if (!info || info->size == 0)
+        return false;
+    *out_size = info->size;
+    return true;
+}
+
 static bool prepare_span_source_owner_is_writable(const XiValue *value) {
     const XiValue *origin = unwrap_identity_value(value);
     if (!origin || !origin->type)
@@ -2046,6 +2057,25 @@ static uint8_t prepare_span_reason_from_bounds_reason(uint8_t bounds_reason) {
     }
 }
 
+static bool prepare_span_reinterpret_length_relation_proven(const XaotBundle *bundle,
+                                                            const XiValue *value,
+                                                            uint8_t target_elem_size) {
+    XaotContainerElemPlan source_elem;
+    uint8_t source_elem_size = 0;
+    const XiValue *receiver;
+
+    if (!bundle || !value || target_elem_size == 0 || value->nargs < 1)
+        return false;
+    receiver = unwrap_identity_value(value->args[0]);
+    if (!receiver || receiver->op != XI_SPAN_AS_BYTES || receiver->nargs < 1)
+        return false;
+    if (!prepare_span_elem_plan_for_value(bundle, receiver->args[0], &source_elem) ||
+        !prepare_span_elem_is_pod(&source_elem) ||
+        !prepare_span_elem_size(&source_elem, &source_elem_size))
+        return false;
+    return (source_elem_size % target_elem_size) == 0;
+}
+
 XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
                                                      const XiValue *value,
                                                      XaotSpanAccessPlan *out) {
@@ -2142,6 +2172,8 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
                 reason = XAOT_SPAN_UNPROVEN_NOT_POD;
                 break;
             }
+            if (kind == XAOT_SPAN_ACCESS_SPAN_AS_BYTES)
+                evidence |= XAOT_SPAN_EV_LENGTH_REL_PROVEN;
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_SPAN_COPY:
@@ -2164,6 +2196,9 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_REINTERPRET:
+            if (prepare_span_reinterpret_length_relation_proven(
+                    bundle, value, (uint8_t) ((value->aux_int >> 8) & 0xff)))
+                evidence |= XAOT_SPAN_EV_LENGTH_REL_PROVEN;
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         default:
