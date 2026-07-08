@@ -1798,6 +1798,101 @@ static bool verify_has_effective_interface_impl(const XgGlobalEvidence *ev,
     return false;
 }
 
+static uint32_t verify_interface_visible_method_count(const XgGlobalEvidence *ev,
+                                                      XgInterfaceId interface_id) {
+    uint32_t count = 0;
+    if (!ev || interface_id == XG_NO_ID)
+        return 0;
+    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+        if (verify_interface_method_visible_from(ev, interface_id, &ev->interface_methods[i]))
+            count++;
+    }
+    return count;
+}
+
+static uint32_t verify_effective_interface_implementor_count(const XgGlobalEvidence *ev,
+                                                             XgInterfaceId interface_id) {
+    uint32_t count = 0;
+    if (!ev || interface_id == XG_NO_ID)
+        return 0;
+    for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (!verify_interface_impl_matches(ev, impl->interface_id, interface_id))
+            continue;
+        if (verify_effective_interface_implementor_seen(ev, interface_id,
+                                                        impl->implementor_class_id, i))
+            continue;
+        count++;
+    }
+    return count;
+}
+
+static bool verify_interface_abi_plan_rederives(const XgGlobalEvidence *ev,
+                                                const XaotBundle *bundle,
+                                                const XaotInterfaceAbiPlan *plan, char *errbuf,
+                                                size_t errbuf_len) {
+    uint32_t callsite_count = 0;
+    uint32_t flags = 0;
+    uint32_t evidence = 0;
+    uint8_t data_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
+    uint8_t type_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
+    uint8_t itable_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
+    uint8_t tag_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
+
+    if (!ev || !bundle || !plan)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI verifier has incomplete input");
+    if (plan->interface_id == XG_NO_ID)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI plan has no interface");
+
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev->callsites[i];
+        const XaotMethodDispatchPlan *dispatch;
+        if (call->kind != XG_CALL_INTERFACE ||
+            call->receiver_static_interface_id != plan->interface_id)
+            continue;
+        dispatch = xaot_bundle_find_method_dispatch_plan(bundle, call->callsite_id);
+        if (!dispatch)
+            return set_error(errbuf, errbuf_len, "AOT interface ABI plan has no dispatch evidence");
+        callsite_count++;
+        flags |= XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT | XAOT_INTERFACE_ABI_BOXED_RECEIVER;
+        data_source = XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE;
+        type_source = XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID;
+        evidence |= XAOT_INTERFACE_ABI_EV_GLOBAL_CALLSITE | XAOT_INTERFACE_ABI_EV_DISPATCH_PLAN;
+        if (dispatch->kind == XAOT_DISPATCH_TYPE_SWITCH) {
+            flags |= XAOT_INTERFACE_ABI_NEEDS_TYPE_SWITCH_TAG;
+            tag_source = XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID;
+        } else if (dispatch->kind == XAOT_DISPATCH_ITABLE) {
+            flags |= XAOT_INTERFACE_ABI_NEEDS_ITABLE;
+            itable_source = XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT;
+        }
+    }
+    if (callsite_count == 0)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI plan has no callsite");
+
+    if (verify_interface_visible_method_count(ev, plan->interface_id) != 0)
+        evidence |= XAOT_INTERFACE_ABI_EV_INTERFACE_METHODS;
+    if (verify_effective_interface_implementor_count(ev, plan->interface_id) != 0)
+        evidence |= XAOT_INTERFACE_ABI_EV_IMPLEMENTOR_SET;
+
+    if (plan->callsite_count != callsite_count)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI callsite count mismatches");
+    if (plan->implementor_count !=
+        verify_effective_interface_implementor_count(ev, plan->interface_id))
+        return set_error(errbuf, errbuf_len, "AOT interface ABI implementor count mismatches");
+    if (plan->method_slot_count != verify_interface_visible_method_count(ev, plan->interface_id))
+        return set_error(errbuf, errbuf_len, "AOT interface ABI slot count mismatches");
+    if (plan->flags != flags)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI flags do not re-derive");
+    if (plan->data_source != data_source || plan->type_source != type_source ||
+        plan->itable_source != itable_source || plan->tag_source != tag_source)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI sources do not re-derive");
+    if (plan->evidence != evidence)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI evidence does not re-derive");
+    if (plan->unproven_reason != XAOT_INTERFACE_ABI_UNPROVEN_NONE)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI reason does not re-derive");
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -1809,6 +1904,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t runtime_class_count = 0;
     uint32_t expected_dispatch_plans = 0;
     uint32_t expected_dispatch_target_cases = 0;
+    uint32_t expected_interface_abi_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -1943,6 +2039,32 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
                                  "AOT interface-use plan target does not re-derive");
         }
     }
+
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev->callsites[i];
+        const XaotInterfaceAbiPlan *plan;
+        bool seen = false;
+        if (call->kind != XG_CALL_INTERFACE || call->receiver_static_interface_id == XG_NO_ID)
+            continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const XgCallsiteSummary *prev = &ev->callsites[j];
+            if (prev->kind == XG_CALL_INTERFACE &&
+                prev->receiver_static_interface_id == call->receiver_static_interface_id) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen)
+            continue;
+        expected_interface_abi_plans++;
+        plan = xaot_bundle_find_interface_abi_plan(bundle, call->receiver_static_interface_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT interface callsite has no ABI plan");
+        if (!verify_interface_abi_plan_rederives(ev, bundle, plan, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->ninterface_abi_plans != expected_interface_abi_plans)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];
