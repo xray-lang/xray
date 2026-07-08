@@ -35,17 +35,6 @@ typedef struct XrH2Context {
     XrH2Conn *conn;      // HTTP/2 connection
     XrH2Stream *stream;  // Current stream
 
-    // Request info
-    const char *method;
-    const char *path;
-    const char *authority;
-    const char *scheme;
-    char **header_names;
-    char **header_values;
-    int header_count;
-    char *body;
-    size_t body_len;
-
     // Response state
     bool headers_sent;
     bool response_ended;

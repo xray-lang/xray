@@ -142,6 +142,24 @@ static void h2_conn_close(XrH2Server *server, XrH2FastConn *conn) {
     conn->state = H2_CONN_FREE;
 }
 
+static int h2_server_send_all(XrH2Conn *conn, const void *buf, size_t len) {
+    const uint8_t *p = (const uint8_t *) buf;
+    size_t sent = 0;
+
+    while (sent < len) {
+        int n;
+        if (conn->tls_conn) {
+            n = xr_tls_conn_write(NULL, (XrTlsConn *) conn->tls_conn, p + sent, len - sent);
+        } else {
+            n = (int) write(conn->fd, p + sent, len - sent);
+        }
+        if (n <= 0)
+            return -1;
+        sent += (size_t) n;
+    }
+    return 0;
+}
+
 /* ========== Request Processing ========== */
 
 static void process_streams(XrH2Server *server, XrH2FastConn *conn) {
@@ -157,10 +175,6 @@ static void process_streams(XrH2Server *server, XrH2FastConn *conn) {
                 XrH2Context ctx = {0};
                 ctx.conn = conn->h2;
                 ctx.stream = stream;
-
-                // Parse method and path from headers
-                ctx.method = "GET";
-                ctx.path = "/";
 
                 // Call request handler
                 server->on_request(&ctx, server->user_data);
@@ -728,10 +742,9 @@ int xr_h2_ctx_push(XrH2Context *ctx, const char *path, const char *content_type,
     p += strlen(path);
     *p++ = 0x87;
     *p++ = 0x01;
-    *p++ = (uint8_t) strlen(ctx->authority ? ctx->authority : "localhost");
-    memcpy(p, ctx->authority ? ctx->authority : "localhost",
-           strlen(ctx->authority ? ctx->authority : "localhost"));
-    p += strlen(ctx->authority ? ctx->authority : "localhost");
+    *p++ = (uint8_t) strlen("localhost");
+    memcpy(p, "localhost", strlen("localhost"));
+    p += strlen("localhost");
 
     size_t payload_len = p - (frame + XR_H2_FRAME_HEADER_SIZE);
 
@@ -741,7 +754,7 @@ int xr_h2_ctx_push(XrH2Context *ctx, const char *path, const char *content_type,
                               .stream_id = ctx->stream->id};
     xr_h2_write_frame_header(frame, &header);
 
-    if (write(ctx->conn->fd, frame, XR_H2_FRAME_HEADER_SIZE + payload_len) < 0) {
+    if (h2_server_send_all(ctx->conn, frame, XR_H2_FRAME_HEADER_SIZE + payload_len) < 0) {
         return -1;
     }
 
