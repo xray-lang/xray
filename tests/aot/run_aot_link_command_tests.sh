@@ -2057,6 +2057,56 @@ else
     sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_NO_ALLOC_STACK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_no_alloc_stack.xr"
+FREESTANDING_NO_ALLOC_STACK_OBJ="$WORK/freestanding_no_alloc_stack.o"
+FREESTANDING_NO_ALLOC_STACK_LOG="$WORK/freestanding_no_alloc_stack.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_NO_ALLOC_STACK_OBJ" \
+        "$FREESTANDING_NO_ALLOC_STACK_SRC" >"$FREESTANDING_NO_ALLOC_STACK_LOG" 2>&1; then
+    FREESTANDING_NO_ALLOC_STACK_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_NO_ALLOC_STACK_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_NO_ALLOC_STACK_C" ]; then
+        expect_log_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_span_from_array_slice" \
+            "freestanding-profile/no-alloc: fixed-array Span path remains allowed"
+        expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_mem_alloc" \
+            "freestanding-profile/no-alloc: fixed-array path avoids allocator hook"
+        expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_arc_alloc" \
+            "freestanding-profile/no-alloc: fixed-array path avoids hosted ARC allocator"
+        expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_array_with_capacity" \
+            "freestanding-profile/no-alloc: fixed-array path avoids hosted array allocation"
+    else
+        record_fail "freestanding-profile/no-alloc: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_NO_ALLOC_STACK_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_NO_ALLOC_STACK_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_NO_ALLOC_STACK_OBJ")"
+    FREESTANDING_NO_ALLOC_STACK_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_NO_ALLOC_STACK_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(xr_hook_panic|memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_NO_ALLOC_STACK_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/no-alloc: undefined symbols stay hook/memcpy-only"
+    else
+        record_fail "freestanding-profile/no-alloc: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_NO_ALLOC_STACK_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/no-alloc: fixed-array object build failed"
+    sed 's/^/      /' "$FREESTANDING_NO_ALLOC_STACK_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_NO_ALLOC_HEAP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_no_alloc_heap_reject.xr"
+FREESTANDING_NO_ALLOC_HEAP_LOG="$WORK/freestanding_no_alloc_heap_reject.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_no_alloc_heap_reject.o" \
+        "$FREESTANDING_NO_ALLOC_HEAP_SRC" >"$FREESTANDING_NO_ALLOC_HEAP_LOG" 2>&1; then
+    record_fail "freestanding-profile/no-alloc: rejects heap allocator use"
+    sed 's/^/      /' "$FREESTANDING_NO_ALLOC_HEAP_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_NO_ALLOC_HEAP_LOG" \
+        "@no_alloc function 'xray_no_alloc_heap_reject' allocates via stdlib 'mem.alloc'" \
+        "freestanding-profile/no-alloc: rejects heap allocator use"
+fi
+
 FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_reject.xr"
 FREESTANDING_MEM_PAGE_LOG="$WORK/freestanding_mem_page_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \

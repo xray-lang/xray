@@ -1,0 +1,16 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_caps": []
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="ld_flags": ["-nostdlib"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=xray_no_alloc_stack_score
+c_contains=xrt_span_from_array_slice
+c_not_contains=xrt_mem_alloc
+c_not_contains=xrt_arc_alloc
+c_not_contains=xrt_array_with_capacity
+c_not_contains=xrt_shared[
+not_contains=xray_rt_coro
+not_contains=xray_core

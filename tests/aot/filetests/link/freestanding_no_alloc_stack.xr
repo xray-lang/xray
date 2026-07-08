@@ -1,0 +1,8 @@
+@no_alloc
+@c_export("xray_no_alloc_stack_score")
+fn xray_no_alloc_stack_score(i: int) -> int {
+    var bytes: [uint8; 4] = [1, 2, 3, 4]
+    var view: ByteSpan = bytes[:]
+    view[i] = 9
+    return int(view[i]) + int(bytes[0])
+}
