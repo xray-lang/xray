@@ -217,7 +217,6 @@ XR_FUNC int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_
 struct XrHttpHeader;
 
 XR_FUNC XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client);
-XR_FUNC XrH2Conn *xr_h2_conn_new_client(int fd, void *tls_conn);
 XR_FUNC void xr_h2_conn_free(XrH2Conn *conn);
 XR_FUNC int xr_h2_conn_init(XrH2Conn *conn);
 XR_FUNC XrH2Stream *xr_h2_stream_new(XrH2Conn *conn);
