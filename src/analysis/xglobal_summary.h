@@ -374,9 +374,9 @@ xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
                                        const XgLinkDependencySummary *summary);
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id);
-XR_FUNC bool xg_body_effects_compose_direct_calls(const XgGlobalEvidence *evidence,
-                                                  const XgBodySummary *body,
-                                                  uint32_t *out_effect_bits);
+XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                        const XgBodySummary *body,
+                                                        uint32_t *out_effect_bits);
 
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);

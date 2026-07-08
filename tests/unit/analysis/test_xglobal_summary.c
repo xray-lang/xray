@@ -1987,7 +1987,7 @@ TEST(global_evidence_composes_direct_callee_effects_for_func_attr) {
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &target_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
-    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
     ASSERT_EQ_UINT(composed_effects, 0);
 
     XaotBundle const_caller;
@@ -2007,7 +2007,7 @@ TEST(global_evidence_composes_direct_callee_effects_for_func_attr) {
     xaot_bundle_free(&const_caller);
 
     ev.bodies[1].effect_bits = XG_BODY_MAY_READ_MEM;
-    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
     ASSERT_EQ_UINT(composed_effects, XG_BODY_MAY_READ_MEM);
 
     XaotBundle pure_caller;
@@ -2090,11 +2090,12 @@ TEST(global_evidence_composes_direct_callee_effects_for_func_attr) {
                                                    XAOT_FN_ATTR_CONST, &ev.bodies[0]));
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&extra_direct_calls, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_MSG(strstr(err, "AOT function attribute plan has extra direct calls") != NULL, err);
+    ASSERT_MSG(strstr(err, "AOT function attribute plan has extra closed-world calls") != NULL,
+               err);
     xaot_bundle_free(&extra_direct_calls);
 
     ev.callsites[0].kind = XG_CALL_METHOD;
-    ASSERT_TRUE(!xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(!xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
     xg_global_evidence_free(&ev);
 }
 
@@ -2191,7 +2192,7 @@ TEST(global_evidence_composes_direct_method_effects_for_func_attr) {
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &method_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
-    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
     ASSERT_EQ_UINT(composed_effects, 0);
 
     XaotBundle method_caller;
@@ -2327,7 +2328,7 @@ TEST(global_evidence_composes_single_implementor_interface_effects_for_func_attr
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &method_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
-    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
     ASSERT_EQ_UINT(composed_effects, 0);
 
     XaotBundle interface_caller;
@@ -2347,7 +2348,7 @@ TEST(global_evidence_composes_single_implementor_interface_effects_for_func_attr
     xaot_bundle_free(&interface_caller);
 
     ev.bodies[1].effect_bits = XG_BODY_MAY_READ_MEM;
-    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
     ASSERT_EQ_UINT(composed_effects, XG_BODY_MAY_READ_MEM);
 
     ev.bodies[1].effect_bits = 0;
@@ -2356,7 +2357,302 @@ TEST(global_evidence_composes_single_implementor_interface_effects_for_func_attr
                                           .name_id = interface_id,
                                           .source_span_id = 41};
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &second_impl));
-    ASSERT_TRUE(!xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(!xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0xb1,
+                      .compiler_semver_hash = 0xb2,
+                      .profile_hash = 0xb3,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    uint32_t base_name_id = xg_name_id("BaseShape");
+    uint32_t leaf_name_id = xg_name_id("LeafShape");
+    uint32_t method_name_id = xg_name_id("area");
+    XgDeclSummary base_decl = {.module_id = 1,
+                               .decl_id = 1,
+                               .kind = XG_DECL_CLASS,
+                               .name_id = base_name_id,
+                               .source_span_id = 10};
+    XgDeclSummary leaf_decl = {.module_id = 1,
+                               .decl_id = 2,
+                               .kind = XG_DECL_CLASS,
+                               .name_id = leaf_name_id,
+                               .source_span_id = 20};
+    XgDeclSummary caller_decl = {.module_id = 1,
+                                 .decl_id = 3,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("vtable_caller"),
+                                 .signature_key = 1101,
+                                 .source_span_id = 30};
+    XgClassSummary base_cls = {.module_id = 1,
+                               .decl_id = 1,
+                               .class_id = 1,
+                               .name_id = base_name_id,
+                               .flags = XG_CLASS_HAS_SUBCLASS,
+                               .method_start = 1,
+                               .method_count = 1,
+                               .decl_kind = XG_DECL_CLASS};
+    XgClassSummary leaf_cls = {.module_id = 1,
+                               .decl_id = 2,
+                               .class_id = 2,
+                               .parent_class_id = 1,
+                               .name_id = leaf_name_id,
+                               .flags = XG_CLASS_INFERRED_FINAL,
+                               .method_start = 2,
+                               .method_count = 1,
+                               .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary base_method = {.method_id = 1,
+                                   .owner_class_id = 1,
+                                   .name_id = method_name_id,
+                                   .signature_key = 1102,
+                                   .flags = XG_METHOD_OVERRIDDEN};
+    XgMethodSummary leaf_method = {.method_id = 2,
+                                   .owner_class_id = 2,
+                                   .name_id = method_name_id,
+                                   .signature_key = 1102,
+                                   .override_of = 1};
+    XgBodySummary caller_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 3,
+                                 .name_id = xg_name_id("vtable_caller"),
+                                 .signature_key = 1101,
+                                 .source_span_id = 30,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0xb1b1,
+                                 .effect_bits = XG_BODY_MAY_CALL,
+                                 .callsite_start = 1,
+                                 .callsite_count = 1};
+    XgBodySummary base_body = {.func_id = 2,
+                               .module_id = 1,
+                               .owner_decl_id = 1,
+                               .owner_class_id = 1,
+                               .owner_method_id = 1,
+                               .name_id = method_name_id,
+                               .signature_key = 1102,
+                               .source_span_id = 12,
+                               .kind = XG_BODY_METHOD,
+                               .body_hash = 0xb2b2};
+    XgBodySummary leaf_body = {.func_id = 3,
+                               .module_id = 1,
+                               .owner_decl_id = 2,
+                               .owner_class_id = 2,
+                               .owner_method_id = 2,
+                               .name_id = method_name_id,
+                               .signature_key = 1102,
+                               .source_span_id = 22,
+                               .kind = XG_BODY_METHOD,
+                               .body_hash = 0xb3b3};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 31,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_METHOD,
+                              .receiver_static_class_id = 1,
+                              .method_id = 1,
+                              .method_name_id = method_name_id,
+                              .method_signature_key = 1102,
+                              .arg_count = 1};
+    XiFunc init_func;
+    XiFunc caller_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    uint32_t composed_effects = UINT32_MAX;
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&caller_func, 0, sizeof(caller_func));
+    memset(&module, 0, sizeof(module));
+    init_func.name = "init";
+    caller_func.name = "vtable_caller";
+    caller_func.parent_func = &init_func;
+    children[0] = &caller_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &base_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &leaf_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &caller_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &base_cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &leaf_cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &base_method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &leaf_method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &caller_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &base_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &leaf_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, 0);
+
+    XaotBundle vtable_caller;
+    memset(&vtable_caller, 0, sizeof(vtable_caller));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&vtable_caller, &ev, XG_BUILD_NATIVE_RELEASE));
+    vtable_caller.modules = modules;
+    vtable_caller.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&vtable_caller, &caller_func, XAOT_FN_ATTR_CONST,
+                                                   &ev.bodies[0]));
+    ASSERT_EQ_UINT(vtable_caller.func_attr_plans[0].evidence, XAOT_FN_ATTR_EV_BODY_SUMMARY |
+                                                                  XAOT_FN_ATTR_EV_XI_EFFECT_SCAN |
+                                                                  XAOT_FN_ATTR_EV_CALLEE_SUMMARY);
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&vtable_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&vtable_caller);
+
+    ev.bodies[2].effect_bits = XG_BODY_MAY_READ_MEM;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, XG_BODY_MAY_READ_MEM);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_composes_interface_type_switch_effects_for_func_attr) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0xc1,
+                      .compiler_semver_hash = 0xc2,
+                      .profile_hash = 0xc3,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgInterfaceId interface_id = (XgInterfaceId) xg_name_id("SwitchBox");
+    uint32_t left_name_id = xg_name_id("SwitchLeft");
+    uint32_t right_name_id = xg_name_id("SwitchRight");
+    uint32_t method_name_id = xg_name_id("id");
+    XgDeclSummary interface_decl = {.module_id = 1,
+                                    .decl_id = 1,
+                                    .kind = XG_DECL_INTERFACE,
+                                    .name_id = interface_id,
+                                    .signature_key = 1,
+                                    .source_span_id = 10};
+    XgDeclSummary left_decl = {.module_id = 1,
+                               .decl_id = 2,
+                               .kind = XG_DECL_CLASS,
+                               .name_id = left_name_id,
+                               .source_span_id = 20};
+    XgDeclSummary right_decl = {.module_id = 1,
+                                .decl_id = 3,
+                                .kind = XG_DECL_CLASS,
+                                .name_id = right_name_id,
+                                .source_span_id = 30};
+    XgDeclSummary caller_decl = {.module_id = 1,
+                                 .decl_id = 4,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("type_switch_caller"),
+                                 .signature_key = 1201,
+                                 .source_span_id = 40};
+    XgClassSummary left_cls = {.module_id = 1,
+                               .decl_id = 2,
+                               .class_id = 1,
+                               .name_id = left_name_id,
+                               .flags = XG_CLASS_INFERRED_FINAL,
+                               .method_start = 1,
+                               .method_count = 1,
+                               .interface_start = 1,
+                               .interface_count = 1,
+                               .decl_kind = XG_DECL_CLASS};
+    XgClassSummary right_cls = {.module_id = 1,
+                                .decl_id = 3,
+                                .class_id = 2,
+                                .name_id = right_name_id,
+                                .flags = XG_CLASS_INFERRED_FINAL,
+                                .method_start = 2,
+                                .method_count = 1,
+                                .interface_start = 2,
+                                .interface_count = 1,
+                                .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary left_method = {
+        .method_id = 1, .owner_class_id = 1, .name_id = method_name_id, .signature_key = 1202};
+    XgMethodSummary right_method = {
+        .method_id = 2, .owner_class_id = 2, .name_id = method_name_id, .signature_key = 1202};
+    XgInterfaceImplSummary left_impl = {.implementor_class_id = 1,
+                                        .interface_id = interface_id,
+                                        .name_id = interface_id,
+                                        .source_span_id = 21};
+    XgInterfaceImplSummary right_impl = {.implementor_class_id = 2,
+                                         .interface_id = interface_id,
+                                         .name_id = interface_id,
+                                         .source_span_id = 31};
+    XgInterfaceMethodSummary interface_method = {.interface_method_id = 1,
+                                                 .owner_interface_id = interface_id,
+                                                 .name_id = method_name_id,
+                                                 .signature_key = 1202,
+                                                 .ordinal = 0,
+                                                 .source_span_id = 11};
+    XgBodySummary caller_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 4,
+                                 .name_id = xg_name_id("type_switch_caller"),
+                                 .signature_key = 1201,
+                                 .source_span_id = 40,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0xc1c1,
+                                 .effect_bits = XG_BODY_MAY_CALL,
+                                 .callsite_start = 1,
+                                 .callsite_count = 1};
+    XgBodySummary left_body = {.func_id = 2,
+                               .module_id = 1,
+                               .owner_decl_id = 2,
+                               .owner_class_id = 1,
+                               .owner_method_id = 1,
+                               .name_id = method_name_id,
+                               .signature_key = 1202,
+                               .source_span_id = 22,
+                               .kind = XG_BODY_METHOD,
+                               .body_hash = 0xc2c2};
+    XgBodySummary right_body = {.func_id = 3,
+                                .module_id = 1,
+                                .owner_decl_id = 3,
+                                .owner_class_id = 2,
+                                .owner_method_id = 2,
+                                .name_id = method_name_id,
+                                .signature_key = 1202,
+                                .source_span_id = 32,
+                                .kind = XG_BODY_METHOD,
+                                .body_hash = 0xc3c3};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 41,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_INTERFACE,
+                              .receiver_static_interface_id = interface_id,
+                              .method_id = 1,
+                              .method_name_id = method_name_id,
+                              .method_signature_key = 1202,
+                              .arg_count = 1};
+    uint32_t composed_effects = UINT32_MAX;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &interface_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &left_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &right_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &caller_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &left_cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &right_cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &left_method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &right_method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &left_impl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &right_impl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(&ev, &interface_method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &caller_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &left_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &right_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, 0);
+    ev.bodies[2].effect_bits = XG_BODY_MAY_READ_MEM;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, XG_BODY_MAY_READ_MEM);
     xg_global_evidence_free(&ev);
 }
 
@@ -5446,6 +5742,8 @@ RUN_TEST(global_evidence_verifier_rederives_func_attr_body_summary);
 RUN_TEST(global_evidence_composes_direct_callee_effects_for_func_attr);
 RUN_TEST(global_evidence_composes_direct_method_effects_for_func_attr);
 RUN_TEST(global_evidence_composes_single_implementor_interface_effects_for_func_attr);
+RUN_TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr);
+RUN_TEST(global_evidence_composes_interface_type_switch_effects_for_func_attr);
 RUN_TEST(global_evidence_verifier_rederives_bounds_body_summary);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
