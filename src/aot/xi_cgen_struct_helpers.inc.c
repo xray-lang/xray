@@ -2403,6 +2403,8 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
     const XrAggregateFieldLayout *field = cg_struct_field(sl, ref->aux_int);
     if (!field)
         return false;
+    if (cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, ref->args[0]))
+        return false;
     XrRep elem_rep = cg_struct_native_rep(field->elem_native_type);
     const XrAggregateLayout *static_struct_layout = NULL;
     int64_t static_struct_slot = -1;

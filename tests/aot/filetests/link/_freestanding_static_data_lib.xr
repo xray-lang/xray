@@ -116,4 +116,17 @@ const ENTRIES: [Entry; 2] = comptime [
     Entry{code: TABLE[2], flag: false},
 ]
 
-export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED, ENTRIES }
+struct Row {
+    samples: [uint8; 4]
+    weight: int
+}
+
+@section("__DATA,.xr_irow")
+@weak
+@used
+const ROWS: [Row; 2] = comptime [
+    Row{samples: [2, 4, 6, 8], weight: TABLE[0]},
+    Row{samples: [1, 3, 5, 7], weight: TABLE[1]},
+]
+
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED, ENTRIES, ROWS }
