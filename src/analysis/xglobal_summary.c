@@ -684,6 +684,61 @@ static bool xg_global_evidence_find_body_index_by_func(const XgGlobalEvidence *e
     return false;
 }
 
+static bool xg_global_evidence_find_body_index_by_method(const XgGlobalEvidence *evidence,
+                                                         XgMethodId method_id,
+                                                         uint32_t *out_index) {
+    if (!evidence || method_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < evidence->nbodies; i++) {
+        if (evidence->bodies[i].kind == XG_BODY_METHOD &&
+            evidence->bodies[i].owner_method_id == method_id) {
+            if (out_index)
+                *out_index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static const XgClassSummary *xg_global_evidence_find_class(const XgGlobalEvidence *evidence,
+                                                           XgClassId class_id) {
+    if (!evidence || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nclasses; i++) {
+        if (evidence->classes[i].class_id == class_id)
+            return &evidence->classes[i];
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *xg_global_evidence_find_method(const XgGlobalEvidence *evidence,
+                                                             XgMethodId method_id) {
+    if (!evidence || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nmethods; i++) {
+        if (evidence->methods[i].method_id == method_id)
+            return &evidence->methods[i];
+    }
+    return NULL;
+}
+
+static bool xg_method_callsite_is_direct_dispatch(const XgGlobalEvidence *evidence,
+                                                  const XgCallsiteSummary *call) {
+    const XgClassSummary *receiver_class;
+    const XgMethodSummary *method;
+
+    if (!evidence || !call || call->kind != XG_CALL_METHOD ||
+        call->receiver_static_class_id == XG_NO_ID || call->method_id == XG_NO_ID)
+        return false;
+    receiver_class = xg_global_evidence_find_class(evidence, call->receiver_static_class_id);
+    method = xg_global_evidence_find_method(evidence, call->method_id);
+    if (!receiver_class || !method || (method->flags & XG_METHOD_NATIVE) != 0)
+        return false;
+    if ((receiver_class->flags & (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL)) != 0)
+        return true;
+    return (method->flags & XG_METHOD_OVERRIDDEN) == 0;
+}
+
 static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
                                         uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits) {
     const XgBodySummary *body;
@@ -711,12 +766,20 @@ static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32
             uint32_t target_index = 0;
             uint32_t target_effects = 0;
 
-            if (!call || call->owner_func_id != body->func_id || call->body_ordinal != i ||
-                call->kind != XG_CALL_DIRECT_FUNC || call->static_target_func_id == XG_NO_ID)
+            if (!call || call->owner_func_id != body->func_id || call->body_ordinal != i)
                 return false;
-            if (!xg_global_evidence_find_body_index_by_func(evidence, call->static_target_func_id,
-                                                            &target_index))
+            if (call->kind == XG_CALL_DIRECT_FUNC) {
+                if (call->static_target_func_id == XG_NO_ID ||
+                    !xg_global_evidence_find_body_index_by_func(
+                        evidence, call->static_target_func_id, &target_index))
+                    return false;
+            } else if (xg_method_callsite_is_direct_dispatch(evidence, call)) {
+                if (!xg_global_evidence_find_body_index_by_method(evidence, call->method_id,
+                                                                  &target_index))
+                    return false;
+            } else {
                 return false;
+            }
             if (!xg_body_effects_compose_rec(evidence, target_index, state, memo, &target_effects))
                 return false;
             effect_bits |= target_effects;

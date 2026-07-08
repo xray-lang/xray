@@ -1,0 +1,14 @@
+class Echo {
+    constructor() {
+    }
+
+    idText(text: string) -> string {
+        return text
+    }
+}
+
+fn wrap(e: Echo, text: string) -> string {
+    return e.idText(text)
+}
+
+print(wrap(Echo(), "method"))
