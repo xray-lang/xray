@@ -92,6 +92,19 @@ static uint32_t evidence_body_count_with_escape(const XgGlobalEvidence *ev, uint
     return count;
 }
 
+static const XgBodySummary *evidence_find_body_by_name(const XgGlobalEvidence *ev,
+                                                       const char *name) {
+    uint32_t name_id;
+    if (!ev || !name)
+        return NULL;
+    name_id = xg_name_id(name);
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].name_id == name_id)
+            return &ev->bodies[i];
+    }
+    return NULL;
+}
+
 static uint32_t evidence_decl_count_with_flags(const XgGlobalEvidence *ev, uint32_t flags) {
     uint32_t count = 0;
     if (!ev)
@@ -3849,6 +3862,13 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
                          "}\n"
                          "fn spawnIt() {\n"
                          "    go touch([1, 2, 3])\n"
+                         "}\n"
+                         "fn makeAdder(base: int) -> (int) -> int {\n"
+                         "    var bias = 1\n"
+                         "    return fn(v: int) -> int { return base + bias + v }\n"
+                         "}\n"
+                         "fn makeIdentity() -> (int) -> int {\n"
+                         "    return fn(v: int) -> int { return v }\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -3866,11 +3886,22 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
+    char *dump;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    const XgBodySummary *make_adder = evidence_find_body_by_name(&ev, "makeAdder");
+    const XgBodySummary *make_identity = evidence_find_body_by_name(&ev, "makeIdentity");
+    ASSERT_NOT_NULL(make_adder);
+    ASSERT_NOT_NULL(make_identity);
     ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_FIELD) >= 1);
     ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_CONTAINER) >= 1);
     ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_RETURN) >= 1);
     ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_CORO) >= 1);
+    ASSERT_TRUE((make_adder->escape_bits & XG_BODY_ESCAPE_CAPTURE) != 0);
+    ASSERT_TRUE((make_identity->escape_bits & XG_BODY_ESCAPE_CAPTURE) == 0);
+    dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "capture"));
+    xr_free(dump);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();

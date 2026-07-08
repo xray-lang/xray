@@ -157,6 +157,7 @@ enum {
     XG_BODY_ESCAPE_CORO = 1u << 3,
     XG_BODY_ESCAPE_NATIVE = 1u << 4,
     XG_BODY_ESCAPE_EXTERN = 1u << 5,
+    XG_BODY_ESCAPE_CAPTURE = 1u << 6,
 };
 
 typedef struct XgBuildKey {
