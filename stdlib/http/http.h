@@ -50,10 +50,6 @@ typedef struct XrHttpContext {
     XrConnPool *conn_pool;     // TCP/TLS connection pool (net layer)
     XrH2Pool *h2_client_pool;  // HTTP/2 client connection pool
 
-/* === Streaming Responses === */
-#define XR_HTTP_MAX_STREAMS 16
-    XrHttpResult *streams[XR_HTTP_MAX_STREAMS];  // Active stream slots (NULL = free)
-
 } XrHttpContext;
 
 // Get or create HTTP context for this Isolate

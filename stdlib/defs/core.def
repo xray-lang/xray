@@ -3281,10 +3281,6 @@ module http {
     fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json, const streaming: bool"
   }
 
-  handle DownloadResult {
-    fields: "const status: int, const downloaded: int, const total: int, const completed: bool, const error: string"
-  }
-
   fn get {
     signature: "(url: string): HttpResponse"
     doc: "HTTP GET request"
@@ -3401,57 +3397,11 @@ module http {
     layer: "runtime"
   }
 
-  fn readChunk {
-    signature: "(resp: Json, maxBytes?: int): string?"
-    doc: "Read the next chunk from a streaming HTTP response"
-    vm: "http_read_chunk"
-    vm_binding: "slow"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn closeStream {
-    signature: "(resp: Json): ()"
-    doc: "Close a streaming HTTP response"
-    vm: "http_close_stream"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn stopServer {
     signature: "(): ()"
     doc: "Stop the HTTP server"
     vm: "http_stop_server"
     argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn download {
-    signature: "(url: string, path: string): DownloadResult"
-    doc: "Download file from URL"
-    vm: "http_download"
-    vm_binding: "slow"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn getContentLength {
-    signature: "(url: string): int"
-    doc: "Get content length of URL"
-    vm: "http_get_content_length"
-    argc: 1
     arg_spec: ""
     aot_direct: false
     link_object: false

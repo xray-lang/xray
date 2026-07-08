@@ -152,21 +152,11 @@ static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
     {"streaming", "bool", true},
 };
 
-// http.DownloadResult handle fields
-static const XaBuiltinHandleField g_gen_http_downloadresult_fields[] = {
-    {"status", "int", true},
-    {"downloaded", "int", true},
-    {"total", "int", true},
-    {"completed", "bool", true},
-    {"error", "string", true},
-};
-
 static const XaBuiltinHandle g_gen_http_handles[] = {
     {"HttpResponse", g_gen_http_httpresponse_fields, 6, NULL, 0},
     {"HttpRequest", g_gen_http_httprequest_fields, 8, NULL, 0},
-    {"DownloadResult", g_gen_http_downloadresult_fields, 5, NULL, 0},
 };
-#define GEN_HTTP_HANDLE_COUNT 3
+#define GEN_HTTP_HANDLE_COUNT 2
 
 // http module functions
 static const XaBuiltinMember g_gen_http_functions[] = {
@@ -180,11 +170,7 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"config", "(opts: Json): ()", "Configure HTTP server limits and timeouts", true, false, false},
     {"serverStats", "(): Json", "Return HTTP server counters", true, false, false},
     {"ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", true, false, false},
-    {"readChunk", "(resp: Json, maxBytes?: int): string?", "Read the next chunk from a streaming HTTP response", true, false, false},
-    {"closeStream", "(resp: Json): ()", "Close a streaming HTTP response", true, false, false},
     {"stopServer", "(): ()", "Stop the HTTP server", true, false, false},
-    {"download", "(url: string, path: string): DownloadResult", "Download file from URL", true, false, false},
-    {"getContentLength", "(url: string): int", "Get content length of URL", true, false, false},
     {"h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", true, false, false},
     {"h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", true, false, false},
     {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false},
@@ -193,7 +179,7 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"h2Stop", "(): ()", "Stop HTTP/2 server", true, false, false},
     {"h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", true, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 22
+#define GEN_HTTP_FUNCTION_COUNT 18
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {

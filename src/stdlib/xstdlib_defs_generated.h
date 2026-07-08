@@ -339,11 +339,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http", "config", "(opts: Json): ()", "Configure HTTP server limits and timeouts", "xr_http_config_impl", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "serverStats", "(): Json", "Return HTTP server counters", "xr_http_server_stats", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"http", "ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", "http_ws_route", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"http", "readChunk", "(resp: Json, maxBytes?: int): string?", "Read the next chunk from a streaming HTTP response", "http_read_chunk", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"http", "closeStream", "(resp: Json): ()", "Close a streaming HTTP response", "http_close_stream", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "stopServer", "(): ()", "Stop the HTTP server", "http_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
-    {"http", "download", "(url: string, path: string): DownloadResult", "Download file from URL", "http_download", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"http", "getContentLength", "(url: string): int", "Get content length of URL", "http_get_content_length", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", "h2_get", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", "h2_post", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
@@ -451,14 +447,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpReques
     {"http", "HttpRequest", "streaming", "bool", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_DownloadResult[] = {
-    {"http", "DownloadResult", "status", "int", true},
-    {"http", "DownloadResult", "downloaded", "int", true},
-    {"http", "DownloadResult", "total", "int", true},
-    {"http", "DownloadResult", "completed", "bool", true},
-    {"http", "DownloadResult", "error", "string", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
     {"ws", "WsConn", "wsid", "int", true},
     {"ws", "WsConn", "url", "string", false},
@@ -477,7 +465,6 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"net", "UdpPacket", "Native handle type", xr_stdlib_handle_fields_net_UdpPacket, 3},
     {"http", "HttpResponse", "Native handle type", xr_stdlib_handle_fields_http_HttpResponse, 6},
     {"http", "HttpRequest", "Native handle type", xr_stdlib_handle_fields_http_HttpRequest, 8},
-    {"http", "DownloadResult", "Native handle type", xr_stdlib_handle_fields_http_DownloadResult, 5},
     {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
     {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
 };
