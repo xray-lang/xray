@@ -377,7 +377,9 @@ static char *build_request(const XrHttpRequestConfig *config, const XrHttpUrl *u
     char *p = buf;
 
     // Request line
-    const char *method = xr_http_method_to_string(config->method);
+    const char *method = (config->method_name && config->method_name_len > 0)
+                             ? config->method_name
+                             : xr_http_method_to_string(config->method);
     p += sprintf(p, "%s %s HTTP/1.1\r\n", method, url->path);
 
     // Custom Headers
@@ -620,6 +622,8 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                     // 303 redirect forces GET method
                     if (redirect_status == 303) {
                         redirect_config.method = XR_HTTP_METHOD_GET;
+                        redirect_config.method_name = NULL;
+                        redirect_config.method_name_len = 0;
                         redirect_config.body = NULL;
                         redirect_config.body_len = 0;
                     }

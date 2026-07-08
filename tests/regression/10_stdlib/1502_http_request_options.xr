@@ -1,6 +1,33 @@
 // Test http request options object construction
 
 import http
+import net
+
+fn recv_line(ch: Channel<string>) -> string {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> ""
+    }
+}
+
+fn capture_request_line(lst: NetListener, lines: Channel<string>) {
+    var conn = net.accept(lst)
+    if (conn == null) {
+        lines.send("")
+        net.close(lst)
+        return
+    }
+
+    var raw = net.read(conn!, 4096) ?? ""
+    var end = raw.indexOf("\r\n")
+    var line = raw
+    if (end >= 0) { line = raw.slice(0, end) }
+    lines.send(line)
+
+    net.write(conn!, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+    net.close(conn!)
+    net.close(lst)
+}
 
 @test
 fn test_request_options_object() {
@@ -40,6 +67,24 @@ fn test_request_rejects_invalid_explicit_port() {
     var tooLarge = http.request({url: "http://example.com:99999/path"})
     assert(!tooLarge.ok)
     assert_eq(tooLarge.error, "URL parse error")
+}
+
+@test
+fn test_request_preserves_custom_method_token() {
+    var maybeLst = net.listen(0, 1)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    shared lines: Channel<string> = Channel(1)
+    go capture_request_line(lst, lines)
+
+    var resp = http.request({
+        url: "http://127.0.0.1:" + string(lst.port()) + "/custom",
+        method: "propfind"
+    })
+
+    var line = recv_line(lines)
+    assert(resp.ok)
+    assert_eq(line, "PROPFIND /custom HTTP/1.1")
 }
 
 print("All http request options tests passed")
