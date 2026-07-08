@@ -314,22 +314,14 @@ XR_FUNC XrWsError xr_ws_url_validate(const char *url);
 
 /* ========== WebSocket Server API ========== */
 
-// Upgrade from HTTP request to WebSocket (server side)
-// fd: client socket
-// request_headers: HTTP request headers (containing Upgrade, Sec-WebSocket-Key, etc.)
-// isolate: XrVMRuntime for coroutine-aware I/O (required, must not be NULL)
-// Returns: upgraded WebSocket connection, NULL on failure
-XR_FUNC XrWebSocket *xr_ws_upgrade(struct XrVMRuntime *isolate, int fd,
-                                   const char *request_headers);
-
 /*
  * Optional policy knobs for xr_ws_upgrade_ex.
  *
  * allowed_origins:
  *   NULL-terminated array of Origin strings. When set, the upgrade is
  *   rejected with HTTP 403 unless the client's Origin header exactly
- *   matches one of the entries. NULL disables the check (legacy
- *   behaviour). A single "*" entry matches any non-empty origin.
+ *   matches one of the entries. NULL intentionally allows any Origin.
+ *   A single "*" entry matches any non-empty origin.
  *
  * server_protocols:
  *   NULL-terminated, ordered list of subprotocols the server supports.
@@ -348,9 +340,8 @@ typedef struct XrWsUpgradeOptions {
 } XrWsUpgradeOptions;
 
 /*
- * Extended upgrade with Origin policy and subprotocol picker.
- * See XrWsUpgradeOptions. Passing `opts == NULL` is equivalent to
- * xr_ws_upgrade (no policy).
+ * Upgrade from HTTP request to WebSocket (server side), with optional Origin
+ * policy and subprotocol picker. Passing `opts == NULL` applies no policy.
  *
  * On Origin rejection this sends an HTTP 403 response and returns NULL;
  * on any other failure it also returns NULL but no response is sent

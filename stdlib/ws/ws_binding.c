@@ -1328,7 +1328,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
                 }
             }
         }
-        XrWebSocket *ws = xr_ws_upgrade(X, ctx->fd, ctx->upgrade_buf);
+        XrWebSocket *ws = xr_ws_upgrade_ex(X, ctx->fd, ctx->upgrade_buf, NULL);
         XrValue conn_val = ws_wrap_server_conn(X, ws, url_str, url_len);
         xr_free(ctx->upgrade_buf);
         ctx->upgrade_buf = NULL;
@@ -1617,7 +1617,7 @@ XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_heade
             }
         }
     }
-    XrWebSocket *ws = xr_ws_upgrade(X, fd, request_headers);
+    XrWebSocket *ws = xr_ws_upgrade_ex(X, fd, request_headers, NULL);
     if (!ws)
         return xr_null();
     return ws_wrap_server_conn(X, ws, url_str, url_len);
