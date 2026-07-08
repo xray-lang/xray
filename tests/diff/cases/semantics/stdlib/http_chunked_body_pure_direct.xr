@@ -1,0 +1,29 @@
+// Pure-Xray Transfer-Encoding: chunked body decoder.
+import http
+import { parseChunkedBody, decodeChunkedBody } from http
+
+var raw = "4\r\nWiki\r\n5;ext=x\r\npedia\r\n0\r\n" +
+    "Expires: soon\r\n" +
+    "X-Trailer: one\r\n" +
+    "X-Trailer: two\r\n\r\nignored"
+
+var parsed = parseChunkedBody(raw)!
+print(parsed.body)
+print(parsed.consumedBytes)
+print(raw.slice(parsed.consumedBytes))
+print(parsed.getTrailer("expires")!)
+print(parsed.getTrailers("x-trailer").join("|"))
+print(Json.get(parsed.trailers, "X-Trailer", ""))
+print(decodeChunkedBody(raw)!)
+
+var empty = parseChunkedBody("0\r\n\r\n")!
+print(empty.body == "")
+print(empty.consumedBytes)
+
+print(parseChunkedBody("3\r\nab\r\n0\r\n\r\n") == null)
+print(parseChunkedBody("z\r\nbad\r\n0\r\n\r\n") == null)
+print(parseChunkedBody("2\r\nab\n0\r\n\r\n") == null)
+print(parseChunkedBody("2\r\nab\r\n0\r\n folded: nope\r\n\r\n") == null)
+print(parseChunkedBody("4\r\nWiki\r\n0\r\nA: 1\r\nB: 2\r\n\r\n", 99, 1) == null)
+print(decodeChunkedBody("4\r\nWiki\r\n0\r\n\r\n", 3) == null)
+print(http.decodeChunkedBody("4\r\nWiki\r\n0\r\n\r\n") == "Wiki")

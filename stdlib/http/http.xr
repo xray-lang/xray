@@ -849,6 +849,41 @@ fn _parseStatusCode(raw: string) -> int {
     return code
 }
 
+fn _hexValue(c: string) -> int {
+    var o = c.ord()!
+    if (o >= 48 && o <= 57) { return o - 48 }
+    if (o >= 65 && o <= 70) { return 10 + o - 65 }
+    if (o >= 97 && o <= 102) { return 10 + o - 97 }
+    return -1
+}
+
+fn _parseChunkSize(line: string) -> int? {
+    var semi = line.indexOf(";")
+    var raw = line
+    if (semi >= 0) { raw = line.slice(0, semi) }
+    raw = raw.trim()
+    if (raw.length == 0) { return null }
+
+    var size = 0
+    for (var i = 0; i < raw.length; i++) {
+        var v = _hexValue(raw.charAt(i))
+        if (v < 0) { return null }
+        size = size * 16 + v
+    }
+    return size
+}
+
+fn _parseHeaderLine(line: string) -> (string, string)? {
+    if (line.length == 0) { return null }
+    if (line.charAt(0) == " " || line.charAt(0) == "\t") { return null }
+    var colon = line.indexOf(":")
+    if (colon <= 0) { return null }
+    var name = line.slice(0, colon)
+    var value = line.slice(colon + 1).trim()
+    if (!_headerNameValid(name) || !_headerValueValid(value)) { return null }
+    return (name, value)
+}
+
 fn _headerListGet(pairs: Array<(string, string)>, name: string) -> string? {
     var target = name.toLowerCase()
     for (var i = 0; i < pairs.length; i++) {
@@ -996,6 +1031,91 @@ class RedirectDecision {
         this.stripSensitiveHeaders = stripSensitiveHeaders
         this.dropBody = dropBody
     }
+}
+
+// ChunkedBody - Decoded Transfer-Encoding: chunked body and parsed trailers.
+class ChunkedBody {
+    body: string
+    trailers: Json
+    trailerPairs: Array<(string, string)>
+    consumedBytes: int
+
+    constructor(
+        body: string,
+        trailers: Json,
+        trailerPairs: Array<(string, string)>,
+        consumedBytes: int
+    ) {
+        this.body = body
+        this.trailers = trailers
+        this.trailerPairs = trailerPairs
+        this.consumedBytes = consumedBytes
+    }
+
+    getTrailer(name: string) -> string? {
+        return _headerListGet(this.trailerPairs, name)
+    }
+
+    getTrailers(name: string) -> Array<string> {
+        return _headerListAll(this.trailerPairs, name)
+    }
+}
+
+// parseChunkedBody - Decode a complete Transfer-Encoding: chunked body.
+fn parseChunkedBody(
+    raw: string,
+    maxBodyBytes: int = 67108864,
+    maxTrailerHeaders: int = 50
+) -> ChunkedBody? {
+    var pos = 0
+    var total = 0
+    var body = StringBuilder()
+
+    while (true) {
+        var lineEnd = raw.indexOf("\r\n", pos)
+        if (lineEnd < 0) { return null }
+        var size = _parseChunkSize(raw.slice(pos, lineEnd))
+        if (size == null) { return null }
+        pos = lineEnd + 2
+
+        if (size! == 0) {
+            var trailers: Json = {}
+            var pairs: Array<(string, string)> = []
+            while (true) {
+                var trailerEnd = raw.indexOf("\r\n", pos)
+                if (trailerEnd < 0) { return null }
+                var line = raw.slice(pos, trailerEnd)
+                pos = trailerEnd + 2
+                if (line.length == 0) {
+                    return ChunkedBody(body.toString(), trailers, pairs, pos)
+                }
+
+                var parsed = _parseHeaderLine(line)
+                if (parsed == null) { return null }
+                pairs.push(parsed!)
+                trailers[parsed!.0] = parsed!.1
+                if (maxTrailerHeaders > 0 && pairs.length > maxTrailerHeaders) {
+                    return null
+                }
+            }
+        }
+
+        if (maxBodyBytes > 0 && total + size! > maxBodyBytes) { return null }
+        if (pos + size! + 2 > raw.length) { return null }
+        body.append(raw.slice(pos, pos + size!))
+        pos = pos + size!
+        if (raw.slice(pos, pos + 2) != "\r\n") { return null }
+        pos = pos + 2
+        total = total + size!
+    }
+    return null
+}
+
+// decodeChunkedBody - Decode a chunked body and discard trailers.
+fn decodeChunkedBody(raw: string, maxBodyBytes: int = 67108864) -> string? {
+    var parsed = parseChunkedBody(raw, maxBodyBytes)
+    if (parsed == null) { return null }
+    return parsed!.body
 }
 
 // parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
@@ -1225,12 +1345,15 @@ export {
     RouteMatch,
     ResponseHead,
     RedirectDecision,
+    ChunkedBody,
     router,
     urlEncode,
     urlDecode,
     response,
     requestText,
     parseResponseHead,
+    parseChunkedBody,
+    decodeChunkedBody,
     isRedirectStatus,
     redirectTarget,
     redirectDecision,
