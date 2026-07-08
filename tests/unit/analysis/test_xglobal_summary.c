@@ -3562,6 +3562,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
     ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_EXTERN) != 0);
     ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_RETURN) != 0);
+    ASSERT_TRUE((ev.bodies[0].capability_bits & XG_CAP_EXTERN) != 0);
 
     XiFunc init_func;
     memset(&init_func, 0, sizeof(init_func));
@@ -3576,6 +3577,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     char err[256];
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_EXTERN));
     bundle.modules = modules;
     bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
@@ -3838,11 +3840,13 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
     ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_NATIVE) != 0);
     ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_RETURN) != 0);
+    ASSERT_TRUE((ev.bodies[0].capability_bits & XG_CAP_NATIVE) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 0);
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_NATIVE));
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);

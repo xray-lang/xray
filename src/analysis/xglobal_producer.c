@@ -1427,12 +1427,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
+            bc->capability_bits |= XG_CAP_EXTERN;
             row.kind = XG_CALL_EXTERN;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
         } else if (target && (target->decl_flags & XG_DECL_NATIVE)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
+            bc->capability_bits |= XG_CAP_NATIVE;
             row.kind = XG_CALL_NATIVE;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
@@ -1478,6 +1480,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             } else {
                 bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                 bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
+                if (!stdlib_module)
+                    bc->capability_bits |= XG_CAP_NATIVE;
                 row.kind = XG_CALL_NATIVE;
                 row.method_id = (XgMethodId) method_name_id;
                 row.method_name_id = method_name_id;
