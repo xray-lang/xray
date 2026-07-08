@@ -1,6 +1,6 @@
 contains=xaot-plan v0
 regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=vtable .*recv_class=[1-9][0-9]* recv_iface=0 slot=- targets=[0-9]+\+2 evidence=0x81 reason=polymorphic
-regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* name=[1-9][0-9]* sig=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x81
+regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* owner_class=[1-9][0-9]* name=[1-9][0-9]* sig=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x81
 regex=fn-attr [0-9]+ func=score body=[0-9]+ attr=pure effect=0x60 escape=0x1 evidence=0x7
 c_regex=static XRT_FN_PURE int64_t class_vtable_dispatch_score_[0-9]+\(xrt_closure_t \*_cl, xrt_native_class_vtable_dispatch_Shape \*p0\)
 c_contains=xrt_instance_exact_type(

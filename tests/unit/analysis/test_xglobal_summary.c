@@ -546,6 +546,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_EQ_UINT(dispatch->method_id, 2);
     ASSERT_EQ_UINT(dispatch->method_root_id, 1);
     ASSERT_EQ_UINT(dispatch->target_count, 1);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_owner_class_id, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_name_id, 900);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_signature_key, 901);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_root_id, 1);
@@ -584,7 +585,8 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(strstr(dump, "method=2 root=1"));
     ASSERT_NOT_NULL(strstr(
         dump,
-        "dispatch-target 0 callsite=7 recv_class=2 method=2 name=900 sig=901 root=1 depth=1"));
+        "dispatch-target 0 callsite=7 recv_class=2 method=2 owner_class=2 name=900 sig=901 root=1 "
+        "depth=1"));
     ASSERT_NOT_NULL(strstr(dump, "method_name=900 method_sig=901 args=0+0"));
     ASSERT_NOT_NULL(strstr(dump, "interface-use 0 interface=77 implementor=2"));
     ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
@@ -767,6 +769,11 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch target method slot does not re-derive"));
     good.dispatch_target_cases[0].method_root_id = good.method_dispatch_plans[0].method_root_id;
+    good.dispatch_target_cases[0].method_owner_class_id = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch target method slot does not re-derive"));
+    good.dispatch_target_cases[0].method_owner_class_id = 1;
     good.dispatch_target_cases[0].method_signature_key = 99;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
@@ -1294,12 +1301,14 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].receiver_class_id, 1);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_id, 1);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_owner_class_id, 1);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_name_id, 700);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_signature_key, 701);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_root_id, 1);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_override_depth, 0);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].receiver_class_id, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_id, 2);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_owner_class_id, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_name_id, 700);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_signature_key, 701);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_root_id, 2);
@@ -2974,11 +2983,15 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
                                                                   XAOT_FN_ATTR_EV_XI_EFFECT_SCAN |
                                                                   XAOT_FN_ATTR_EV_CALLEE_SUMMARY);
     ASSERT_EQ_UINT(vtable_caller.ndispatch_target_cases, 2);
+    ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_owner_class_id,
+                   base_method.owner_class_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_name_id, base_method.name_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_signature_key,
                    base_method.signature_key);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_root_id, base_method.method_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_override_depth, 0);
+    ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_owner_class_id,
+                   leaf_method.owner_class_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_name_id, leaf_method.name_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_signature_key,
                    leaf_method.signature_key);
@@ -2986,6 +2999,11 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_override_depth, 1);
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&vtable_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    vtable_caller.dispatch_target_cases[1].method_owner_class_id = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&vtable_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch vtable target method slot does not re-derive"));
+    vtable_caller.dispatch_target_cases[1].method_owner_class_id = leaf_method.owner_class_id;
     vtable_caller.dispatch_target_cases[1].method_name_id = 99;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&vtable_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)));

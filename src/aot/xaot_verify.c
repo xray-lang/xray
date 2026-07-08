@@ -1575,7 +1575,8 @@ static bool verify_dispatch_target_anchor_rederives(
         target_method = verify_find_evidence_method_by_id(ev, target->method_id);
         if (!verify_find_evidence_class(ev, target->receiver_class_id) || !target_method)
             return set_error(errbuf, errbuf_len, "AOT dispatch target is missing");
-        if (target->method_name_id != target_method->name_id ||
+        if (target->method_owner_class_id != target_method->owner_class_id ||
+            target->method_name_id != target_method->name_id ||
             target->method_signature_key != target_method->signature_key ||
             target->method_root_id != target_method->root_method_id ||
             target->method_override_depth != target_method->override_depth)
@@ -1618,7 +1619,8 @@ static bool verify_dispatch_vtable_targets_rederive(
             target->receiver_class_id != candidate->class_id ||
             target->method_id != target_method->method_id || target->evidence != expected_evidence)
             return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
-        if (target->method_name_id != target_method->name_id ||
+        if (target->method_owner_class_id != target_method->owner_class_id ||
+            target->method_name_id != target_method->name_id ||
             target->method_signature_key != target_method->signature_key ||
             target->method_root_id != target_method->root_method_id ||
             target->method_override_depth != target_method->override_depth)
