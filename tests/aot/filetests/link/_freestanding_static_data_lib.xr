@@ -9,4 +9,32 @@ const TABLE: [int; 4] = comptime [3, 5, 7, 11]
 @weak
 const BYTES: [uint8; 4] = comptime [1, 2, 4, 8]
 
-export { MAGIC, TABLE, BYTES }
+struct Header {
+    magic: int
+    flags: int
+}
+
+@weak
+const HEADER = comptime Header{magic: TABLE[1], flags: TABLE[2]}
+
+struct Packet {
+    bytes: [uint8; 4]
+    base: int
+}
+
+@weak
+const PACKET = comptime Packet{bytes: [9, 10, 11, 12], base: HEADER.flags}
+
+struct Inner {
+    code: int
+}
+
+struct Outer {
+    inner: Inner
+    base: int
+}
+
+@weak
+const OUTER = comptime Outer{inner: Inner{code: TABLE[3]}, base: PACKET.base}
+
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER }
