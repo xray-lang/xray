@@ -200,6 +200,16 @@ static const char *status_reason(int status) {
     }
 }
 
+static bool response_header_is_reserved(const XrHttpHeader *h) {
+    if (!h || !h->name)
+        return true;
+    return (h->name_len == 14 && strncasecmp(h->name, "Content-Length", 14) == 0) ||
+           (h->name_len == 12 && strncasecmp(h->name, "Content-Type", 12) == 0) ||
+           (h->name_len == 10 && strncasecmp(h->name, "Connection", 10) == 0) ||
+           (h->name_len == 17 && strncasecmp(h->name, "Transfer-Encoding", 17) == 0) ||
+           (h->name_len == 7 && strncasecmp(h->name, "Trailer", 7) == 0);
+}
+
 /*
  * Build HTTP response header into caller-provided buf[1024].
  * Fast path for 200+text/plain and 200+json uses prebuilt prefix + memcpy.
@@ -246,12 +256,15 @@ static int build_response_header(char *buf, int status, const char *content_type
                        status, status_reason(status), content_type, body_len);
 
     // Append user-supplied extra headers (each "Name: Value\r\n").
-    // Skip any header whose name/value contains CR, LF or NUL: handler code
-    // echoing attacker-controlled strings must not be able to inject extra
-    // headers or split the response.
+    // Skip reserved framing headers and any header whose name/value contains
+    // CR, LF or NUL: handler code echoing attacker-controlled strings must
+    // not be able to inject extra headers, split the response, or smuggle a
+    // conflicting Content-Length / Transfer-Encoding.
     for (int i = 0; i < extra_count && pos < 900; i++) {
         const XrHttpHeader *h = &extra_headers[i];
         if (!h->name || h->name_len == 0)
+            continue;
+        if (response_header_is_reserved(h))
             continue;
         bool unsafe = false;
         for (size_t k = 0; k < h->name_len && !unsafe; k++) {
