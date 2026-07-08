@@ -379,6 +379,9 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 decl=2"));
     ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
+    ASSERT_NOT_NULL(strstr(dump, "caps=0x4[exception]"));
+    ASSERT_NOT_NULL(strstr(dump, "metadata=0x8[tooling]"));
+    ASSERT_NOT_NULL(strstr(dump, "static=0x10[runtime_init]"));
     ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method ordinal=2"));
     ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
     ASSERT_NOT_NULL(strstr(dump, "link-dep 1 id=7 module=1 decl=0 span=78 kind=stdlib_module"));
