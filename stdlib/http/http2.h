@@ -202,14 +202,6 @@ XR_FUNC void xr_h2_conn_free(XrH2Conn *conn);
 XR_FUNC int xr_h2_conn_init(XrH2Conn *conn);
 XR_FUNC XrH2Stream *xr_h2_stream_new(XrH2Conn *conn);
 
-/* ========== Stream Hash Table API ========== */
-
-XR_FUNC void xr_h2_stream_hash_init(XrH2StreamHash *hash);
-XR_FUNC void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream);
-XR_FUNC XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id);
-XR_FUNC void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id);
-XR_FUNC void xr_h2_stream_hash_free(XrH2StreamHash *hash);
-
 // Send HEADERS frame
 XR_FUNC int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
                                const size_t *name_lens, const char **values,
@@ -222,28 +214,5 @@ XR_FUNC int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data
 // Receive stream data (blocking)
 XR_FUNC int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data,
                                    size_t *out_len);
-
-// Receive and process frames
-XR_FUNC int xr_h2_recv(XrH2Conn *conn);
-
-// Get stream response
-XR_FUNC XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id);
-
-/* ========== Frame Parsing/Generation ========== */
-
-XR_FUNC int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header);
-XR_FUNC void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header);
-XR_FUNC int xr_h2_send_settings(XrH2Conn *conn);
-XR_FUNC int xr_h2_send_settings_ack(XrH2Conn *conn);
-XR_FUNC int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
-XR_FUNC int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
-
-/* ========== Stream Cancel API ========== */
-
-XR_FUNC int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
-
-/* ========== PING API ========== */
-
-XR_FUNC int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
 
 #endif  // XR_STDLIB_HTTP2_H
