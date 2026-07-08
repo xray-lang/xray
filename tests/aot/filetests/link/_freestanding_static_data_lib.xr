@@ -59,4 +59,21 @@ const BITS = comptime I32Bits{i: -1}
 @weak
 const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
 
-export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED, BITS, WORD_BYTES }
+@weak
+const LABEL = comptime "score"
+
+@weak
+const LABELS: [string; 2] = comptime ["level", LABEL]
+
+struct Named {
+    label: string
+    code: int
+}
+
+@weak
+const NAMED = comptime Named{label: LABEL, code: TABLE[1]}
+
+@weak
+const LABELED = comptime (LABEL, TABLE[0])
+
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED }
