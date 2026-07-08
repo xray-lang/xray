@@ -2,6 +2,7 @@
 
 import ws
 import net
+import time
 
 fn headerValue(headers: string, name: string) -> string? {
     var prefix = name + ": "
@@ -32,6 +33,12 @@ fn serveMissingUpgradeResponse(lst: NetListener) {
     }
     net.close(conn)
     net.close(lst)
+}
+
+fn startRejectingUpgradeServer(port: int) {
+    ws.serve(port, fn(conn) {
+        ws.close(conn)
+    })
 }
 
 @test
@@ -100,6 +107,35 @@ fn test_connect_rejects_missing_upgrade_response_header() {
     var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
     assert(conn != null)
     assert_eq(conn!.error, "Handshake failed")
+}
+
+@test
+fn test_serve_rejects_missing_connection_upgrade_header() {
+    var port = 9191
+    var probe = net.listen(port, 1)
+    if (probe == null) { return }
+    net.close(probe!)
+
+    go startRejectingUpgradeServer(port)
+    time.sleep(100)
+
+    var tcp = net.dial("127.0.0.1", port)
+    if (tcp == null) {
+        ws.stopServer()
+        return
+    }
+
+    var request = "GET / HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n"
+    net.write(tcp!, request)
+    var response = net.read(tcp!)
+    assert(response != null)
+    assert(response!.startsWith("HTTP/1.1 400 Bad Request"))
+    net.close(tcp!)
+    ws.stopServer()
 }
 
 @test

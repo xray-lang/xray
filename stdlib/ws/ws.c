@@ -2255,38 +2255,64 @@ static bool ws_header_list_has_token(const char *value, const char *token) {
     return false;
 }
 
+static bool ws_valid_sec_key_value(const char *key) {
+    if (!key || !key[0])
+        return false;
+    size_t decoded_len = 0;
+    unsigned char *decoded = xr_base64_decode(key, strlen(key), &decoded_len);
+    if (!decoded)
+        return false;
+    bool ok = decoded_len == 16;
+    xr_free(decoded);
+    return ok;
+}
+
 bool xr_ws_is_upgrade_request(const char *request_headers) {
     if (!request_headers)
         return false;
 
-    const char *upgrade = ws_find_header(request_headers, "Upgrade");
-    if (!upgrade)
-        return false;
-
-    // Extract header value and check for "websocket" (case-insensitive)
-    const char *val = upgrade + 8;  // strlen("Upgrade:")
-    while (*val == ' ' || *val == '\t')
-        val++;
-
-    const char *line_end = strchr(val, '\r');
-    if (!line_end)
-        line_end = strchr(val, '\n');
+    const char *line_end = strstr(request_headers, "\r\n");
     if (!line_end)
         return false;
-
-    size_t val_len = line_end - val;
-    char buf[256];
-    if (val_len >= sizeof(buf))
+    if (line_end <= request_headers || strncmp(request_headers, "GET ", 4) != 0)
         return false;
-    memcpy(buf, val, val_len);
-    buf[val_len] = '\0';
-
-    for (char *c = buf; *c; c++) {
-        if (*c >= 'A' && *c <= 'Z')
-            *c += 32;
+    const char *target = request_headers + 4;
+    const char *version = memchr(target, ' ', (size_t) (line_end - target));
+    if (!version || version == target || target[0] != '/')
+        return false;
+    version++;
+    if ((size_t) (line_end - version) != strlen("HTTP/1.1") ||
+        strncmp(version, "HTTP/1.1", strlen("HTTP/1.1")) != 0) {
+        return false;
     }
 
-    return strstr(buf, "websocket") != NULL;
+    char upgrade_val[64];
+    if (!ws_get_header_value(request_headers, "Upgrade", upgrade_val, sizeof(upgrade_val)) ||
+        strcasecmp(upgrade_val, "websocket") != 0) {
+        return false;
+    }
+
+    char connection_val[256];
+    if (!ws_get_header_value(request_headers, "Connection", connection_val,
+                             sizeof(connection_val)) ||
+        !ws_header_list_has_token(connection_val, "upgrade")) {
+        return false;
+    }
+
+    char key_val[128];
+    if (!ws_get_header_value(request_headers, "Sec-WebSocket-Key", key_val, sizeof(key_val)) ||
+        !ws_valid_sec_key_value(key_val)) {
+        return false;
+    }
+
+    char version_val[16];
+    if (!ws_get_header_value(request_headers, "Sec-WebSocket-Version", version_val,
+                             sizeof(version_val)) ||
+        strcmp(version_val, "13") != 0) {
+        return false;
+    }
+
+    return true;
 }
 
 char *xr_ws_get_sec_key(const char *request_headers) {
@@ -2320,6 +2346,11 @@ char *xr_ws_get_sec_key(const char *request_headers) {
     // Trim trailing whitespace
     while (key_len > 0 && (key[key_len - 1] == ' ' || key[key_len - 1] == '\t')) {
         key[--key_len] = '\0';
+    }
+
+    if (!ws_valid_sec_key_value(key)) {
+        xr_free(key);
+        return NULL;
     }
 
     return key;
