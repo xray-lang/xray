@@ -1,0 +1,74 @@
+import sys
+
+enum ProcessLintErr {
+    Msg(s: string)
+}
+
+shared processLintCh = Channel<int>(1)
+processLintCh.trySend(1)
+
+fn closeProcessInTryOrCatch(throwNow: bool) {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    try {
+        if (throwNow) {
+            throw ProcessLintErr.Msg("boom")
+        }
+        print(p!.wait())
+    } catch (e) {
+        print(p!.wait())
+    }
+}
+
+fn closeProcessInMatch(tag: int) {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    match (tag) {
+        0 -> {
+            print(p!.wait())
+        }
+        _ -> {
+            print(p!.wait())
+        }
+    }
+}
+
+fn closeProcessInSelect() {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    select {
+        msg from processLintCh -> {
+            print(p!.wait())
+        }
+        _ -> {
+            print(p!.wait())
+        }
+    }
+}
+
+fn closeProcessInTernary(flag: bool) {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    print(flag ? p!.wait() : p!.wait())
+}
+
+fn closePipeInMatch(tag: int) {
+    var pipe = sys.Pipe.open()
+    match (tag) {
+        0 -> {
+            print(pipe!.close())
+        }
+        _ -> {
+            print(pipe!.close())
+        }
+    }
+}
+
+fn closePipeInTernary(flag: bool) {
+    var pipe = sys.Pipe.open()
+    print(flag ? pipe!.close() : pipe!.close())
+}
+
+closeProcessInTryOrCatch(false)
+closeProcessInMatch(1)
+closeProcessInSelect()
+closeProcessInTernary(true)
+closePipeInMatch(1)
+closePipeInTernary(false)
+processLintCh.close()

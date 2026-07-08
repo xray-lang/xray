@@ -1,0 +1,17 @@
+import sys
+
+enum ProcessLintWarningErr {
+    Msg(s: string)
+}
+
+fn closeOnlyInTry() {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    try {
+        print(p!.wait())
+    } catch (e) {
+        print("catch-open")
+    }
+    print("try-catch-open")
+}
+
+closeOnlyInTry()
