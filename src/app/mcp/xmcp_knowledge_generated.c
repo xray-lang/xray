@@ -663,6 +663,41 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
+        .name = "ChunkedBody",
+        .signature = "ChunkedBody",
+        .summary = "",
+    },
+    {
+        .name = "ChunkedBody.body",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ChunkedBody.consumedBytes",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ChunkedBody.getTrailer",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "ChunkedBody.getTrailers",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "ChunkedBody.trailerPairs",
+        .signature = ": Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "ChunkedBody.trailers",
+        .signature = ": Json",
+        .summary = "",
+    },
+    {
         .name = "Cookie",
         .signature = "Cookie",
         .summary = "",
@@ -1108,6 +1143,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "decodeChunkedBody",
+        .signature = "(raw: string, maxBodyBytes: int = 67108864): string?",
+        .summary = "",
+    },
+    {
         .name = "delete",
         .signature = "(url: string): HttpResponse",
         .summary = "HTTP DELETE request",
@@ -1176,6 +1216,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "listen",
         .signature = "(port: int): bool",
         .summary = "Start HTTP server accept loop",
+    },
+    {
+        .name = "parseChunkedBody",
+        .signature = "(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?",
+        .summary = "",
     },
     {
         .name = "parseRequest",
@@ -5105,6 +5150,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `ChunkedBody` | `ChunkedBody` |  |\n"
+            "| `ChunkedBody.body` | `: string` |  |\n"
+            "| `ChunkedBody.consumedBytes` | `: int` |  |\n"
+            "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
+            "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
+            "| `ChunkedBody.trailerPairs` | `: Array<(string, string)>` |  |\n"
+            "| `ChunkedBody.trailers` | `: Json` |  |\n"
             "| `Cookie` | `Cookie` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
             "| `Cookie.expires` | `: int` |  |\n"
@@ -5194,6 +5246,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
+            "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
             "| `http.download` | `(url: string, path: string): DownloadResult` | Download file from URL |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
@@ -5208,6 +5261,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
+            "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
