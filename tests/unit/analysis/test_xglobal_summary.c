@@ -4010,6 +4010,54 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_static_data_runtime_init) {
+    setup_parser_session();
+    const char *source = "fn useDynamicStatic() -> int {\n"
+                         "    const table = comptime #{\"a\": 1}\n"
+                         "    return 1\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_COMPTIME_VALUE), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_RUNTIME_INIT), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_FREESTANDING_SAFE), 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotStaticDataPlan *runtime_plan =
+        xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_RUNTIME_INIT);
+    ASSERT_NOT_NULL(runtime_plan);
+    ASSERT_EQ_UINT(runtime_plan->body_count, 1);
+    ASSERT_EQ_UINT(runtime_plan->action, XAOT_STATIC_DATA_ACTION_RUNTIME_INIT);
+    xaot_bundle_free(&bundle);
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_FREESTANDING));
+    runtime_plan = xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_RUNTIME_INIT);
+    ASSERT_NOT_NULL(runtime_plan);
+    ASSERT_EQ_UINT(runtime_plan->action, XAOT_STATIC_DATA_ACTION_REJECT);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_runtime_capabilities) {
     setup_parser_session();
     const char *source =
@@ -4340,6 +4388,7 @@ RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
 RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
+RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
