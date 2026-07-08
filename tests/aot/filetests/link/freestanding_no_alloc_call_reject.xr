@@ -1,0 +1,12 @@
+import mem
+
+fn xray_no_alloc_helper_allocates(n: int) -> int {
+    var b = mem.alloc(n)
+    return b.length()
+}
+
+@no_alloc
+@c_export("xray_no_alloc_call_reject")
+fn xray_no_alloc_call_reject(n: int) -> int {
+    return xray_no_alloc_helper_allocates(n) + 1
+}

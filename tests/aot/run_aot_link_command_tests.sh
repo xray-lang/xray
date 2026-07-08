@@ -2107,6 +2107,20 @@ else
         "freestanding-profile/no-alloc: rejects heap allocator use"
 fi
 
+FREESTANDING_NO_ALLOC_CALL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_no_alloc_call_reject.xr"
+FREESTANDING_NO_ALLOC_CALL_LOG="$WORK/freestanding_no_alloc_call_reject.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_no_alloc_call_reject.o" \
+        "$FREESTANDING_NO_ALLOC_CALL_SRC" >"$FREESTANDING_NO_ALLOC_CALL_LOG" 2>&1; then
+    record_fail "freestanding-profile/no-alloc: rejects indirect allocator use"
+    sed 's/^/      /' "$FREESTANDING_NO_ALLOC_CALL_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_NO_ALLOC_CALL_LOG" \
+        "@no_alloc function 'xray_no_alloc_call_reject' allocates via call 'xray_no_alloc_helper_allocates'" \
+        "freestanding-profile/no-alloc: rejects indirect allocator use"
+fi
+
 FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_reject.xr"
 FREESTANDING_MEM_PAGE_LOG="$WORK/freestanding_mem_page_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
