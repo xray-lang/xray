@@ -167,15 +167,13 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"serverStats", "(): Json", "Return HTTP server counters", true, false, false},
     {"ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", true, false, false},
     {"stopServer", "(): ()", "Stop the HTTP server", true, false, false},
-    {"h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", true, false, false},
-    {"h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", true, false, false},
     {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false},
     {"h2CreateServer", "(options?: Json): bool", "Create HTTP/2 server", true, false, false},
     {"h2Listen", "(): bool", "Start HTTP/2 server", true, false, false},
     {"h2Stop", "(): ()", "Stop HTTP/2 server", true, false, false},
     {"h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", true, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 14
+#define GEN_HTTP_FUNCTION_COUNT 12
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {

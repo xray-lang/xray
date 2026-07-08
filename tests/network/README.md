@@ -47,9 +47,7 @@ done
 - `http.urlDecode(str)` - URL 解码
 
 ### HTTP/2 客户端
-- `http.h2Get(url)` - HTTP/2 GET
-- `http.h2Post(url, body, contentType)` - HTTP/2 POST
-- `http.h2Request(options)` - HTTP/2 通用请求
+- `http.h2Request(options)` - HTTP/2 通用请求（通过 `method`/`body`/`headers` 表达 GET/POST 等请求）
 
 ### WebSocket (独立 ws 模块)
 ```xray

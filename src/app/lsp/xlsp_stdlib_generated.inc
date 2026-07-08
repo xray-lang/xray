@@ -133,8 +133,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"serverStats", XLSP_SYM_FUNCTION, "fn(): Json", "Return HTTP server counters", NULL, 0},
     {"ws", XLSP_SYM_FUNCTION, "fn(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", NULL, 0},
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the HTTP server", NULL, 0},
-    {"h2Get", XLSP_SYM_FUNCTION, "fn(url: string, options?: Json): Json", "HTTP/2 GET request", NULL, 0},
-    {"h2Post", XLSP_SYM_FUNCTION, "fn(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", NULL, 0},
     {"h2Request", XLSP_SYM_FUNCTION, "fn(options: Json): Json", "Generic HTTP/2 request", NULL, 0},
     {"h2CreateServer", XLSP_SYM_FUNCTION, "fn(options?: Json): bool", "Create HTTP/2 server", NULL, 0},
     {"h2Listen", XLSP_SYM_FUNCTION, "fn(): bool", "Start HTTP/2 server", NULL, 0},
@@ -173,7 +171,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 46
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 44
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
