@@ -802,6 +802,12 @@ fn _requestPath(path: string) -> string? {
     return p
 }
 
+fn _requestTarget(raw: string) -> string? {
+    var t = raw.trim()
+    if (t.length == 0 || _hasCtlOr(t, " \t\r\n")) { return null }
+    return t
+}
+
 fn _hostHeaderValue(host: string) -> string? {
     var h = host.trim()
     if (h.length == 0) { return null }
@@ -1061,6 +1067,49 @@ class ChunkedBody {
     }
 }
 
+// RequestHead - Parsed HTTP/1.x request line and headers.
+class RequestHead {
+    method: string
+    target: string
+    version: string
+    headers: Json
+    headerPairs: Array<(string, string)>
+    headerBytes: int
+    contentLength: int
+    chunked: bool
+    keepAlive: bool
+
+    constructor(
+        method: string,
+        target: string,
+        version: string,
+        headers: Json,
+        headerPairs: Array<(string, string)>,
+        headerBytes: int,
+        contentLength: int,
+        chunked: bool,
+        keepAlive: bool
+    ) {
+        this.method = method
+        this.target = target
+        this.version = version
+        this.headers = headers
+        this.headerPairs = headerPairs
+        this.headerBytes = headerBytes
+        this.contentLength = contentLength
+        this.chunked = chunked
+        this.keepAlive = keepAlive
+    }
+
+    getHeader(name: string) -> string? {
+        return _headerListGet(this.headerPairs, name)
+    }
+
+    getHeaders(name: string) -> Array<string> {
+        return _headerListAll(this.headerPairs, name)
+    }
+}
+
 // parseChunkedBody - Decode a complete Transfer-Encoding: chunked body.
 fn parseChunkedBody(
     raw: string,
@@ -1116,6 +1165,53 @@ fn decodeChunkedBody(raw: string, maxBodyBytes: int = 67108864) -> string? {
     var parsed = parseChunkedBody(raw, maxBodyBytes)
     if (parsed == null) { return null }
     return parsed!.body
+}
+
+// parseRequestHead - Parse an HTTP/1.x request head without reading sockets.
+fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
+    var end = _responseHeadEnd(raw)
+    if (end < 0) { return null }
+    var lines = raw.slice(0, end).split("\n")
+    if (lines.length == 0) { return null }
+
+    var requestLine = _trimLineEnd(lines[0])
+    var firstSpace = requestLine.indexOf(" ")
+    if (firstSpace <= 0) { return null }
+    var rest = requestLine.slice(firstSpace + 1)
+    var secondSpace = rest.indexOf(" ")
+    if (secondSpace <= 0) { return null }
+
+    var method = _requestMethod(requestLine.slice(0, firstSpace))
+    var target = _requestTarget(rest.slice(0, secondSpace))
+    var version = rest.slice(secondSpace + 1)
+    if (method == null || target == null) { return null }
+    if (version != "HTTP/1.0" && version != "HTTP/1.1") { return null }
+
+    var headers: Json = {}
+    var pairs: Array<(string, string)> = []
+    for (var i = 1; i < lines.length; i++) {
+        var line = _trimLineEnd(lines[i])
+        if (line.length == 0) { break }
+        var parsed = _parseHeaderLine(line)
+        if (parsed == null) { return null }
+        pairs.push(parsed!)
+        headers[parsed!.0] = parsed!.1
+        if (maxHeaders > 0 && pairs.length > maxHeaders) { return null }
+    }
+
+    var contentLength = _contentLengthFrom(pairs)
+    if (contentLength == null) { return null }
+    return RequestHead(
+        method!,
+        target!,
+        version,
+        headers,
+        pairs,
+        end,
+        contentLength!,
+        _isChunked(pairs),
+        _keepAlive(version, pairs)
+    )
 }
 
 // parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
@@ -1346,12 +1442,14 @@ export {
     ResponseHead,
     RedirectDecision,
     ChunkedBody,
+    RequestHead,
     router,
     urlEncode,
     urlDecode,
     response,
     requestText,
     parseResponseHead,
+    parseRequestHead,
     parseChunkedBody,
     decodeChunkedBody,
     isRedirectStatus,
