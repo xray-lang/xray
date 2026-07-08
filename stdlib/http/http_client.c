@@ -529,6 +529,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
     bool follow_redirects = config->follow_redirects;
     int max_redirects = config->max_redirects > 0 ? config->max_redirects : 10;
 
+    XrHttpRequestConfig redirect_config = *config;
     char *current_url = xr_strdup(config->url);
     int redirect_count = 0;
     // Once a redirect crosses an origin boundary, credential headers are dropped
@@ -537,28 +538,51 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
 
     while (current_url) {
         // Execute single request
-        result = xr_http_request_internal(X, config, current_url, strip_auth);
+        result = xr_http_request_internal(X, &redirect_config, current_url, strip_auth);
 
         // Check if redirect needed
         if (follow_redirects && is_redirect_status(result.status_code) &&
             redirect_count < max_redirects) {
+            int redirect_status = result.status_code;
             char *location = get_redirect_location(&result);
             if (location) {
                 // Handle relative URL
                 char *new_url = NULL;
-                if (location[0] == '/') {
+                if (location[0] == '/' && location[1] == '/') {
+                    XrHttpUrl parsed;
+                    if (xr_http_url_parse(current_url, &parsed) == 0) {
+                        const char *scheme = parsed.is_https ? "https" : "http";
+                        size_t len = strlen(scheme) + strlen(location) + 2;
+                        new_url = (char *) xr_malloc(len);
+                        if (new_url) {
+                            snprintf(new_url, len, "%s:%s", scheme, location);
+                        }
+                        xr_http_url_free(&parsed);
+                    }
+                    xr_free(location);
+                } else if (location[0] == '/') {
                     // Relative path: extract scheme://host
                     XrHttpUrl parsed;
                     if (xr_http_url_parse(current_url, &parsed) == 0) {
-                        size_t len = strlen(parsed.host) + strlen(location) + 16;
+                        bool is_v6 = strchr(parsed.host, ':') != NULL;
+                        bool default_port = parsed.is_https
+                                                ? parsed.port == XR_HTTP_DEFAULT_HTTPS_PORT
+                                                : parsed.port == XR_HTTP_DEFAULT_PORT;
+                        size_t len = strlen(parsed.host) + strlen(location) + 32;
                         new_url = (char *) xr_malloc(len);
                         if (!new_url) {
                             xr_http_url_free(&parsed);
                             xr_free(location);
                             break;
                         }
-                        snprintf(new_url, len, "%s://%s%s", parsed.is_https ? "https" : "http",
-                                 parsed.host, location);
+                        if (default_port) {
+                            snprintf(new_url, len, is_v6 ? "%s://[%s]%s" : "%s://%s%s",
+                                     parsed.is_https ? "https" : "http", parsed.host, location);
+                        } else {
+                            snprintf(new_url, len, is_v6 ? "%s://[%s]:%d%s" : "%s://%s:%d%s",
+                                     parsed.is_https ? "https" : "http", parsed.host, parsed.port,
+                                     location);
+                        }
                         xr_http_url_free(&parsed);
                     }
                     xr_free(location);
@@ -582,11 +606,10 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                     redirect_count++;
 
                     // 303 redirect forces GET method
-                    if (result.status_code == 303) {
-                        XrHttpRequestConfig *mutable_config = (XrHttpRequestConfig *) config;
-                        mutable_config->method = XR_HTTP_METHOD_GET;
-                        mutable_config->body = NULL;
-                        mutable_config->body_len = 0;
+                    if (redirect_status == 303) {
+                        redirect_config.method = XR_HTTP_METHOD_GET;
+                        redirect_config.body = NULL;
+                        redirect_config.body_len = 0;
                     }
                     continue;
                 }

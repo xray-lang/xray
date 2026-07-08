@@ -34,6 +34,7 @@
 #include "../mem/xcoro_heap.h"
 #include "../mem/xsystem_heap.h"
 #include "../xshared.h"
+#include "../../shared/xr_string_core.h"
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -525,6 +526,15 @@ xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr)
     }
 
     return -1;
+}
+
+xr_Integer xr_string_index_of_from(XrVMRuntime *iso, XrString *str, XrString *substr,
+                                   xr_Integer start) {
+    (void) iso;
+    if (str == NULL || substr == NULL)
+        return -1;
+    return (xr_Integer) xr_string_core_index_of_from(str->data, str->length, substr->data,
+                                                     substr->length, start);
 }
 
 // size - get string length

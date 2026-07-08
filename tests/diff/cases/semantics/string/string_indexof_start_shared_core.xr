@@ -1,0 +1,9 @@
+// string.indexOf(search, start) must honor the optional start argument.
+var s = "one,two,three"
+print(s.indexOf(","))
+print(s.indexOf(",", 4))
+print(s.indexOf(",", 8))
+print(s.indexOf(",", -20))
+print(s.indexOf(",", 99))
+print(s.indexOf("", 4))
+print(s.indexOf("", 99))
