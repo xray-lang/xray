@@ -335,8 +335,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http", "delete", "(url: string): HttpResponse", "HTTP DELETE request", "http_delete", "slow", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "request", "(options: Json): HttpResponse", "Generic HTTP request", "http_request", "slow", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", "http_route", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
-    {"http", "setConnHandler", "(handler: fn(fd: int): ()): ()", "Set low-level HTTP connection handler", "http_set_conn_handler", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"http", "__getConnHandler", "(): fn", "Return the current low-level HTTP connection handler", "http_get_conn_handler", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"http", "listen", "(port: int): bool", "Start HTTP server accept loop", "xr_http_listen_impl", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "config", "(opts: Json): ()", "Configure HTTP server limits and timeouts", "xr_http_config_impl", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "serverStats", "(): Json", "Return HTTP server counters", "xr_http_server_stats", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
