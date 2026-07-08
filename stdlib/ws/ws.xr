@@ -64,6 +64,18 @@ class ClosePayload {
     }
 }
 
+class ParsedUpgradeResponse {
+    statusCode: int
+    protocol: string?
+    deflate: bool
+
+    constructor(statusCode: int, protocol: string? = null, deflate: bool = false) {
+        this.statusCode = statusCode
+        this.protocol = protocol
+        this.deflate = deflate
+    }
+}
+
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + prefix.length > s.length) { return false }
     for (var i = 0; i < prefix.length; i++) {
@@ -246,6 +258,49 @@ fn _headerHasToken(value: string, token: string) -> bool {
     return false
 }
 
+fn _headerHasElementToken(value: string, token: string) -> bool {
+    var needle = token.toLowerCase()
+    var start = 0
+    while (start <= value.length) {
+        var comma = _indexOfFrom(value, ",", start)
+        var end = comma >= 0 ? comma : value.length
+        var item = _trim(value.slice(start, end))
+        var semi = item.indexOf(";")
+        if (semi >= 0) { item = _trim(item.slice(0, semi)) }
+        if (item.toLowerCase() == needle) { return true }
+        if (comma < 0) { break }
+        start = comma + 1
+    }
+    return false
+}
+
+fn _parseStatusCode(line: string) -> int {
+    if (!_startsWithAt(line, 0, "HTTP/1.1 ")) { return -1 }
+    if (line.length < 12) { return -1 }
+    if (line.length > 12 && line.charAt(12) != " ") { return -1 }
+    var code = 0
+    for (var i = 9; i < 12; i++) {
+        var c = line.charAt(i)
+        if (!_isDigit(c)) { return -1 }
+        code = code * 10 + (c.ord()! - 48)
+    }
+    return code
+}
+
+fn _firstLine(s: string) -> string {
+    var end = _indexOfFrom(s, "\r\n", 0)
+    if (end < 0) { end = _indexOfFrom(s, "\n", 0) }
+    if (end < 0) { return s }
+    return s.slice(0, end)
+}
+
+fn _containsString(values: Array<string>, value: string) -> bool {
+    for (var i = 0; i < values.length; i++) {
+        if (values[i] == value) { return true }
+    }
+    return false
+}
+
 fn acceptKey(secKey: string) -> string {
     var digest = _hexBytes(crypto.sha1(secKey + _GUID))
     if (digest == null) { return "" }
@@ -306,6 +361,43 @@ fn clientRequest(path: string, host: string, secKey: string) -> string {
         "Connection: Upgrade\r\n" +
         "Sec-WebSocket-Key: " + secKey + "\r\n" +
         "Sec-WebSocket-Version: 13\r\n\r\n"
+}
+
+fn parseUpgradeResponse(
+    response: string,
+    secKey: string,
+    protocols: Array<string>? = null,
+    allowDeflate: bool = true
+) -> ParsedUpgradeResponse? {
+    var statusCode = _parseStatusCode(_firstLine(response))
+    if (statusCode != 101) { return null }
+
+    var upgrade = _header(response, "Upgrade")
+    if (upgrade == null || upgrade!.toLowerCase() != "websocket") { return null }
+
+    var connection = _header(response, "Connection")
+    if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
+
+    var accept = _header(response, "Sec-WebSocket-Accept")
+    if (accept == null || accept! != acceptKey(secKey)) { return null }
+
+    var protocol: string? = null
+    var selected = _header(response, "Sec-WebSocket-Protocol")
+    if (selected != null) {
+        var p = _trim(selected!)
+        if (p.length == 0) { return null }
+        if (protocols != null && !_containsString(protocols!, p)) { return null }
+        protocol = p
+    }
+
+    var deflate = false
+    var extensions = _header(response, "Sec-WebSocket-Extensions")
+    if (extensions != null) {
+        deflate = _headerHasElementToken(extensions!, "permessage-deflate")
+        if (deflate && !allowDeflate) { return null }
+    }
+
+    return ParsedUpgradeResponse(statusCode, protocol, deflate)
 }
 
 fn parseUrl(url: string) -> WsUrl? {
@@ -545,12 +637,14 @@ export {
     ParsedFrame,
     WsUrl,
     ClosePayload,
+    ParsedUpgradeResponse,
     acceptKey,
     randomKey,
     isUpgradeRequest,
     pickSubprotocol,
     upgradeResponse,
     clientRequest,
+    parseUpgradeResponse,
     parseUrl,
     isValidCloseCode,
     parseClosePayload,
