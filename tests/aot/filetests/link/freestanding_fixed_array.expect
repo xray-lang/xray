@@ -29,7 +29,6 @@ c_contains=memmove(_dst.data, _src.data
 c_contains=Span.copyFrom(src) byte length overflow
 c_contains=Span.asBytes() byte length overflow
 c_contains=_out.elem_type = XR_ELEM_U8
-c_contains=ByteSpan.reinterpret<T>() length is not divisible by target size
 c_contains=Span.compare(other) byte length overflow
 c_contains=xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS
 c_not_contains=xrt_index_get(
@@ -57,6 +56,7 @@ c_not_contains=xrt_span_copy_checked_raw
 c_not_contains=xrt_span_compare_checked_raw
 c_not_contains=xrt_span_as_bytes_checked_raw
 c_not_contains=xrt_span_reinterpret_checked_raw
+c_not_contains=ByteSpan.reinterpret<T>() length is not divisible by target size
 c_not_contains=__memcpy_chk
 c_not_contains=___memcpy_chk
 not_contains=xray_rt_coro

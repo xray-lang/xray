@@ -3136,6 +3136,17 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         return false;
     }
 
+    if (v->op == XI_CONVERT && v->type && v->type->kind == XR_KIND_STRING) {
+        const XiValue *src = v->nargs >= 1 ? v->args[0] : NULL;
+        if (src && src->type && src->type->kind == XR_KIND_STRING)
+            return false;
+        if (kind_out)
+            *kind_out = "conversion";
+        if (detail_out)
+            *detail_out = "string";
+        return true;
+    }
+
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
         const char *json_static_detail =
             xicgen_receiver_is_builtin_global(v->args[0], XR_GLOBAL_VAR_JSON)
