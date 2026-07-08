@@ -1020,6 +1020,10 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 #endif
 }
 
+static inline XrValue xrt_sys_thread_local_id(void) {
+    return XR_FROM_INT((int64_t) xr_thread_current_id());
+}
+
 static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t program_len,
                                             XrValue args_value, XrValue cwd_value,
                                             XrValue env_keys_value, XrValue env_values_value,

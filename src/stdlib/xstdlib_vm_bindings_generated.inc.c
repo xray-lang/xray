@@ -312,6 +312,7 @@ static void xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *
 #ifdef XR_STDLIB_VM_BIND_MODULE_SYS
 static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "OsMutex", sys_mutex_new);
+    XRS_EXPORT(module, isolate, "__osMutexNew", sys_mutex_new);
     XRS_EXPORT(module, isolate, "OsRwLock", sys_rwlock_new);
     XRS_EXPORT(module, isolate, "OsCondvar", sys_condvar_new);
     XRS_EXPORT(module, isolate, "OsBarrier", sys_barrier_new);
@@ -320,6 +321,7 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "threadYield", sys_thread_yield);
     XRS_EXPORT(module, isolate, "sleepMs", sys_sleep_ms);
     XRS_EXPORT(module, isolate, "pinToCpu", sys_pin_to_cpu);
+    XRS_EXPORT(module, isolate, "__threadLocalId", sys_thread_local_id);
     XRS_EXPORT(module, isolate, "__dylibOpen", sys_dylib_open);
     XRS_EXPORT(module, isolate, "__dylibSymbol", sys_dylib_symbol);
     XRS_EXPORT(module, isolate, "__dylibClose", sys_dylib_close);

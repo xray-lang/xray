@@ -5279,6 +5279,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         is_super ? NULL
                  : xaot_bundle_find_method_dispatch_plan_for_xi_call(cg_ctx_aot_bundle(ctx), v);
 
+    if (!is_super && xicgen_emit_import_module_member_call(ctx, out, f, v, prefix, method))
+        return;
     if (xicgen_emit_time_method(ctx, out, f, v))
         return;
     if (xicgen_emit_stdlib_method(ctx, out, f, v))
@@ -5288,8 +5290,6 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (!is_super && method && strcmp(method, "constructor") == 0 &&
         xicgen_emit_user_constructor(ctx, out, f, v, prefix))
-        return;
-    if (!is_super && xicgen_emit_import_module_member_call(ctx, out, f, v, prefix, method))
         return;
     if (is_super)
         mfunc = xicgen_lookup_super_method(ctx, f, method, &method_prefix);
