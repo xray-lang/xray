@@ -104,13 +104,4 @@ XR_FUNC XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2R
  */
 XR_FUNC void xr_h2_response_free(XrH2Response *resp);
 
-/*
- * Auto-select HTTP version
- *
- * Automatically selects HTTP/1.1 or HTTP/2 based on ALPN negotiation result
- *
- * Returns: true = HTTP/2, false = HTTP/1.1
- */
-XR_FUNC bool xr_http_auto_version(const char *host, int port, bool is_https);
-
 #endif
