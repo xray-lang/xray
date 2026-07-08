@@ -6959,11 +6959,16 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                                  const char *prefix) {
     (void) f;
     (void) prefix;
-    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_AS_BYTES, XAOT_SPAN_DROP_HELPER)) {
+    const XaotSpanAccessPlan *plan = cg_span_access_plan(ctx, v, XAOT_SPAN_ACCESS_SPAN_AS_BYTES);
+    if (plan && (plan->eliminated_checks & XAOT_SPAN_DROP_HELPER) == XAOT_SPAN_DROP_HELPER) {
+        bool overflow_check_dropped =
+            (plan->eliminated_checks & XAOT_SPAN_DROP_OVERFLOW) == XAOT_SPAN_DROP_OVERFLOW;
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; if (XR_UNLIKELY(_s.length < 0 || (_s.elem_size > 0 && _s.length > "
-                     "INT64_MAX / (int64_t)_s.elem_size))) xrt_throw_error("
+        fprintf(out, "; if (XR_UNLIKELY(_s.length < 0");
+        if (!overflow_check_dropped)
+            fprintf(out, " || (_s.elem_size > 0 && _s.length > INT64_MAX / (int64_t)_s.elem_size)");
+        fprintf(out, ")) xrt_throw_error("
                      "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Span.asBytes() byte length overflow\"); "
                      "xr_span_t _out = _s; _out.length = _s.length * (int64_t)_s.elem_size; "
                      "_out.elem_type = XR_ELEM_U8; _out.elem_size = 1; _out.elem_tid = 0; "

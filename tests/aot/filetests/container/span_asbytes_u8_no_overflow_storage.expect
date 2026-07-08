@@ -1,0 +1,4 @@
+regex=span-access [0-9]+ func=bytesView value=v[0-9]+ kind=span_as_bytes evidence=recv_agg\+byte_span\+pod\+len_rel\+no_overflow drop=type\+pod\+overflow\+helper
+c_contains=Span.asBytes() byte length overflow
+c_not_contains=INT64_MAX / (int64_t)_s.elem_size
+c_not_contains=xrt_span_as_bytes_checked_raw(
