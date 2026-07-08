@@ -1328,12 +1328,19 @@ xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId cal
     return NULL;
 }
 
+static XgFuncId xi_call_owner_body_func_id(const XiValue *call) {
+    if (!call || !call->block || !call->block->func)
+        return XG_NO_ID;
+    return (XgFuncId) call->block->func->xg_body_func_id;
+}
+
 XR_FUNC const XaotMethodDispatchPlan *
 xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, const XiValue *call) {
     const XaotMethodDispatchPlan *match = NULL;
     const char *method_name;
     uint32_t method_name_id;
     uint16_t arg_count;
+    XgFuncId owner_func_id;
     if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
         call->nargs == 0)
         return NULL;
@@ -1342,12 +1349,15 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
     if (method_name_id == 0)
         return NULL;
     arg_count = (uint16_t) (call->nargs - 1);
+    owner_func_id = xi_call_owner_body_func_id(call);
     if (call->xg_callsite_id != XG_NO_ID) {
         const XaotMethodDispatchPlan *plan =
             xaot_bundle_find_method_dispatch_plan(bundle, call->xg_callsite_id);
         if (!plan)
             return NULL;
         if (plan->callsite_id != call->xg_callsite_id)
+            return NULL;
+        if (owner_func_id != XG_NO_ID && plan->owner_func_id != owner_func_id)
             return NULL;
         if (call->line != 0 && plan->source_span_id != call->line)
             return NULL;
@@ -1361,6 +1371,8 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
         return NULL;
     for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
+        if (owner_func_id != XG_NO_ID && plan->owner_func_id != owner_func_id)
+            continue;
         if (plan->source_span_id != call->line)
             continue;
         if (plan->arg_count != arg_count)
