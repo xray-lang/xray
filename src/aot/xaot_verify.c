@@ -296,10 +296,10 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     uint32_t expected_evidence;
     uint32_t composed_effect_bits = 0;
     uint32_t bi, vi;
-    uint32_t direct_call_ops = 0;
-    uint32_t direct_callsite_count = 0;
+    uint32_t closed_world_call_ops = 0;
+    uint32_t closed_world_callsite_count = 0;
     bool reads_mem;
-    bool direct_calls_composed;
+    bool closed_world_calls_composed;
 
     if (!bundle || !plan)
         return set_error(errbuf, errbuf_len, "AOT function attribute plan is NULL");
@@ -321,7 +321,7 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
         return set_error(errbuf, errbuf_len, "AOT function attribute effect bits are stale");
     if (plan->body_escape_bits != body->escape_bits)
         return set_error(errbuf, errbuf_len, "AOT function attribute escape bits are stale");
-    if (!xg_body_effects_compose_direct_calls(ev, body, &composed_effect_bits))
+    if (!xg_body_effects_compose_closed_world_calls(ev, body, &composed_effect_bits))
         return set_error(errbuf, errbuf_len,
                          "AOT function attribute plan has unresolved call effects");
     if ((composed_effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
@@ -331,8 +331,8 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT function attribute plan func has no func plan");
 
-    direct_calls_composed = (body->effect_bits & XG_BODY_MAY_CALL) != 0;
-    direct_callsite_count = direct_calls_composed ? body->callsite_count : 0;
+    closed_world_calls_composed = (body->effect_bits & XG_BODY_MAY_CALL) != 0;
+    closed_world_callsite_count = closed_world_calls_composed ? body->callsite_count : 0;
     reads_mem = ((composed_effect_bits & XG_BODY_MAY_READ_MEM) != 0) || plan->func->ncaptures > 0;
     for (bi = 0; bi < plan->func->nblocks; bi++) {
         const XiBlock *blk = plan->func->blocks[bi];
@@ -348,13 +348,14 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
                 case XI_CALL_METHOD:
                 case XI_CALL_METHOD_DIRECT:
                 case XI_TAIL_CALL:
-                    if (!direct_calls_composed)
+                    if (!closed_world_calls_composed)
                         return set_error(errbuf, errbuf_len,
                                          "AOT function attribute plan func contains a call");
-                    direct_call_ops++;
-                    if (direct_call_ops > direct_callsite_count)
-                        return set_error(errbuf, errbuf_len,
-                                         "AOT function attribute plan has extra direct calls");
+                    closed_world_call_ops++;
+                    if (closed_world_call_ops > closed_world_callsite_count)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT function attribute plan has extra closed-world calls");
                     composed_call = true;
                     break;
                 case XI_CALL_BUILTIN:

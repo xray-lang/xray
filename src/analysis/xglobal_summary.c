@@ -711,6 +711,28 @@ static const XgClassSummary *xg_global_evidence_find_class(const XgGlobalEvidenc
     return NULL;
 }
 
+static bool xg_class_summary_is_runtime_class(const XgClassSummary *cls) {
+    return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
+}
+
+static bool xg_global_evidence_class_is_descendant_or_self(const XgGlobalEvidence *evidence,
+                                                           XgClassId class_id,
+                                                           XgClassId ancestor_id) {
+    const XgClassSummary *cls;
+    uint8_t depth = 0;
+    if (!evidence || class_id == XG_NO_ID || ancestor_id == XG_NO_ID)
+        return false;
+    if (class_id == ancestor_id)
+        return true;
+    cls = xg_global_evidence_find_class(evidence, class_id);
+    while (cls && cls->parent_class_id != XG_NO_ID && depth++ < 64) {
+        if (cls->parent_class_id == ancestor_id)
+            return true;
+        cls = xg_global_evidence_find_class(evidence, cls->parent_class_id);
+    }
+    return false;
+}
+
 static const XgMethodSummary *xg_global_evidence_find_method(const XgGlobalEvidence *evidence,
                                                              XgMethodId method_id) {
     if (!evidence || method_id == XG_NO_ID)
@@ -881,6 +903,95 @@ static bool xg_interface_callsite_direct_target_method(const XgGlobalEvidence *e
 }
 
 static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
+                                        uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits);
+
+static bool xg_body_effects_compose_method_target(const XgGlobalEvidence *evidence,
+                                                  XgMethodId method_id, uint8_t *state,
+                                                  uint32_t *memo, uint32_t *effect_bits) {
+    uint32_t target_index = 0;
+    uint32_t target_effects = 0;
+    if (!effect_bits ||
+        !xg_global_evidence_find_body_index_by_method(evidence, method_id, &target_index))
+        return false;
+    if (!xg_body_effects_compose_rec(evidence, target_index, state, memo, &target_effects))
+        return false;
+    *effect_bits |= target_effects;
+    return true;
+}
+
+static bool xg_method_callsite_compose_target_set(const XgGlobalEvidence *evidence,
+                                                  const XgCallsiteSummary *call, uint8_t *state,
+                                                  uint32_t *memo, uint32_t *effect_bits) {
+    const XgMethodSummary *method;
+    uint32_t target_count = 0;
+
+    if (!evidence || !call || call->kind != XG_CALL_METHOD ||
+        call->receiver_static_class_id == XG_NO_ID || call->method_id == XG_NO_ID ||
+        call->method_name_id == 0 || call->method_signature_key == 0)
+        return false;
+    method = xg_global_evidence_find_method(evidence, call->method_id);
+    if (!method || (method->flags & XG_METHOD_NATIVE) != 0)
+        return false;
+    for (uint32_t i = 0; i < evidence->nclasses; i++) {
+        const XgClassSummary *candidate = &evidence->classes[i];
+        const XgMethodSummary *target_method;
+        if (!xg_class_summary_is_runtime_class(candidate))
+            continue;
+        if (!xg_global_evidence_class_is_descendant_or_self(evidence, candidate->class_id,
+                                                            call->receiver_static_class_id))
+            continue;
+        target_method = xg_global_evidence_find_method_by_signature_in_hierarchy(
+            evidence, candidate->class_id, call->method_name_id, call->method_signature_key);
+        if (!target_method || (target_method->flags & XG_METHOD_NATIVE) != 0 ||
+            !xg_body_effects_compose_method_target(evidence, target_method->method_id, state, memo,
+                                                   effect_bits))
+            return false;
+        target_count++;
+    }
+    return target_count > 0;
+}
+
+static bool xg_interface_callsite_compose_target_set(const XgGlobalEvidence *evidence,
+                                                     const XgCallsiteSummary *call, uint8_t *state,
+                                                     uint32_t *memo, uint32_t *effect_bits) {
+    enum {
+        XG_SMALL_IMPLEMENTOR_LIMIT = 4
+    };
+    const XgInterfaceMethodSummary *interface_method;
+    uint32_t target_count = 0;
+
+    if (!evidence || !call || call->kind != XG_CALL_INTERFACE ||
+        call->receiver_static_interface_id == XG_NO_ID || call->method_id == XG_NO_ID ||
+        call->method_name_id == 0 || call->method_signature_key == 0)
+        return false;
+    interface_method = xg_global_evidence_find_visible_interface_method(
+        evidence, call->receiver_static_interface_id, call->method_name_id,
+        call->method_signature_key);
+    if (!interface_method || interface_method->interface_method_id != call->method_id)
+        return false;
+    for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
+        const XgMethodSummary *target_method;
+        if (!xg_global_evidence_interface_impl_matches(evidence, impl->interface_id,
+                                                       call->receiver_static_interface_id))
+            continue;
+        if (xg_global_evidence_effective_interface_implementor_seen(
+                evidence, call->receiver_static_interface_id, impl->implementor_class_id, i))
+            continue;
+        target_count++;
+        if (target_count > XG_SMALL_IMPLEMENTOR_LIMIT)
+            return false;
+        target_method = xg_global_evidence_find_method_by_signature_in_hierarchy(
+            evidence, impl->implementor_class_id, call->method_name_id, call->method_signature_key);
+        if (!target_method || (target_method->flags & XG_METHOD_NATIVE) != 0 ||
+            !xg_body_effects_compose_method_target(evidence, target_method->method_id, state, memo,
+                                                   effect_bits))
+            return false;
+    }
+    return target_count > 0;
+}
+
+static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
                                         uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits) {
     const XgBodySummary *body;
     uint32_t effect_bits;
@@ -914,23 +1025,31 @@ static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32
                     !xg_global_evidence_find_body_index_by_func(
                         evidence, call->static_target_func_id, &target_index))
                     return false;
+                if (!xg_body_effects_compose_rec(evidence, target_index, state, memo,
+                                                 &target_effects))
+                    return false;
+                effect_bits |= target_effects;
             } else if (xg_method_callsite_is_direct_dispatch(evidence, call)) {
-                if (!xg_global_evidence_find_body_index_by_method(evidence, call->method_id,
-                                                                  &target_index))
+                if (!xg_body_effects_compose_method_target(evidence, call->method_id, state, memo,
+                                                           &effect_bits))
                     return false;
             } else if (call->kind == XG_CALL_INTERFACE) {
                 XgMethodId target_method_id = XG_NO_ID;
-                if (!xg_interface_callsite_direct_target_method(evidence, call,
-                                                                &target_method_id) ||
-                    !xg_global_evidence_find_body_index_by_method(evidence, target_method_id,
-                                                                  &target_index))
+                if (xg_interface_callsite_direct_target_method(evidence, call, &target_method_id)) {
+                    if (!xg_body_effects_compose_method_target(evidence, target_method_id, state,
+                                                               memo, &effect_bits))
+                        return false;
+                } else if (!xg_interface_callsite_compose_target_set(evidence, call, state, memo,
+                                                                     &effect_bits)) {
+                    return false;
+                }
+            } else if (call->kind == XG_CALL_METHOD) {
+                if (!xg_method_callsite_compose_target_set(evidence, call, state, memo,
+                                                           &effect_bits))
                     return false;
             } else {
                 return false;
             }
-            if (!xg_body_effects_compose_rec(evidence, target_index, state, memo, &target_effects))
-                return false;
-            effect_bits |= target_effects;
         }
     }
 
@@ -940,9 +1059,9 @@ static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32
     return true;
 }
 
-XR_FUNC bool xg_body_effects_compose_direct_calls(const XgGlobalEvidence *evidence,
-                                                  const XgBodySummary *body,
-                                                  uint32_t *out_effect_bits) {
+XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                        const XgBodySummary *body,
+                                                        uint32_t *out_effect_bits) {
     uint8_t *state;
     uint32_t *memo;
     uint32_t body_index = 0;

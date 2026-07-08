@@ -3390,7 +3390,7 @@ static bool func_attr_op_is_call_like(uint16_t op) {
     }
 }
 
-static bool func_attr_op_is_direct_call_like(uint16_t op) {
+static bool func_attr_op_is_closed_world_call_like(uint16_t op) {
     switch ((XiOp) op) {
         case XI_CALL:
         case XI_CALL_METHOD:
@@ -3458,7 +3458,7 @@ static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const 
     const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
     uint32_t effect_bits = 0;
 
-    if (!body || !xg_body_effects_compose_direct_calls(ev, body, &effect_bits))
+    if (!body || !xg_body_effects_compose_closed_world_calls(ev, body, &effect_bits))
         return true;
     if (out_effect_bits)
         *out_effect_bits = effect_bits;
@@ -3474,9 +3474,9 @@ static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const 
 static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
                                    const XgBodySummary *body) {
     bool reads_mem;
-    bool direct_calls_composed;
-    uint32_t direct_call_ops = 0;
-    uint32_t direct_callsite_count = 0;
+    bool closed_world_calls_composed;
+    uint32_t closed_world_call_ops = 0;
+    uint32_t closed_world_callsite_count = 0;
     uint32_t composed_effect_bits = 0;
     uint32_t bi, vi;
 
@@ -3484,8 +3484,8 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
         return false;
     if (func_attr_body_summary_disqualifies(bundle, body, &composed_effect_bits))
         return true;
-    direct_calls_composed = (body->effect_bits & XG_BODY_MAY_CALL) != 0;
-    direct_callsite_count = direct_calls_composed ? body->callsite_count : 0;
+    closed_world_calls_composed = (body->effect_bits & XG_BODY_MAY_CALL) != 0;
+    closed_world_callsite_count = closed_world_calls_composed ? body->callsite_count : 0;
     reads_mem = ((composed_effect_bits & XG_BODY_MAY_READ_MEM) != 0) || func->ncaptures > 0;
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
@@ -3497,10 +3497,10 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
             if (!v)
                 continue;
             if (func_attr_op_is_call_like(v->op)) {
-                if (!(direct_calls_composed && func_attr_op_is_direct_call_like(v->op)))
+                if (!(closed_world_calls_composed && func_attr_op_is_closed_world_call_like(v->op)))
                     return true;
-                direct_call_ops++;
-                if (direct_call_ops > direct_callsite_count)
+                closed_world_call_ops++;
+                if (closed_world_call_ops > closed_world_callsite_count)
                     return true;
                 composed_call = true;
             }
