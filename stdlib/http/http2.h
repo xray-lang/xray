@@ -136,8 +136,6 @@ typedef struct XrH2Stream {
     size_t data_len;
     size_t data_cap;
 
-    bool cancelled;
-
     struct XrH2Stream *next;
 } XrH2Stream;
 
@@ -178,12 +176,6 @@ typedef struct {
     size_t recv_len;
     size_t recv_cap;
 
-    // State
-    bool settings_sent;
-    bool settings_acked;
-    bool goaway_sent;
-    bool goaway_received;
-    uint32_t last_stream_id;
 } XrH2Conn;
 
 /* ========== HPACK API ========== */
