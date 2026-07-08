@@ -1,0 +1,17 @@
+// anchor: sys-threadlocal-nullable
+// ThreadLocal<T> must distinguish "slot exists with a null T" from "slot is
+// absent"; nullable values are valid typed payloads, not initialization misses.
+
+import sys
+
+shared calls = Atomic<int>(0)
+shared local = sys.ThreadLocal<int?>(fn() -> int? {
+    calls.fetchAdd(1, Ordering.AcquireRelease)
+    return null
+})
+
+var first: int? = local.get()
+var second: int? = local.get()
+print(first == null)
+print(second == null)
+print(calls.load(Ordering.Acquire))

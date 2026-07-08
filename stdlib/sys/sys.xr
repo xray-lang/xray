@@ -166,9 +166,17 @@ class Process {
     }
 }
 
+class _ThreadLocalSlot {
+    value: unknown
+
+    constructor(value: unknown) {
+        this.value = value
+    }
+}
+
 class ThreadLocal<T> {
     _lock: OsMutex
-    _values: Map<int, T>
+    _values: Map<int, _ThreadLocalSlot>
     _init: () -> T
 
     constructor(init: () -> T) {
@@ -182,8 +190,7 @@ class ThreadLocal<T> {
         {
             this._lock.lock()
             defer { this._lock.unlock() }
-            var existing = this._values.get(key)
-            if (existing != null) { return existing! }
+            if (this._values.has(key)) { return this._values.get(key)!.value as T }
         }
 
         var init = this._init
@@ -192,9 +199,9 @@ class ThreadLocal<T> {
             this._lock.lock()
             defer { this._lock.unlock() }
             if (!this._values.has(key)) {
-                this._values.set(key, value)
+                this._values.set(key, _ThreadLocalSlot(value))
             }
-            return this._values.get(key)!
+            return this._values.get(key)!.value as T
         }
     }
 
@@ -202,7 +209,11 @@ class ThreadLocal<T> {
         var key = __threadLocalId()
         this._lock.lock()
         defer { this._lock.unlock() }
-        this._values.set(key, value)
+        if (this._values.has(key)) {
+            this._values.get(key)!.value = value
+        } else {
+            this._values.set(key, _ThreadLocalSlot(value))
+        }
     }
 }
 
