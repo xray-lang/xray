@@ -63,6 +63,21 @@ nm_undefined_normalized() {
         sed 's/.*[[:space:]]//; s/^_//'
 }
 
+object_has_weak_symbol() {
+    local obj="$1"
+    local sym="$2"
+    local dump="$3"
+    if nm -m "$obj" >"$dump" 2>/dev/null; then
+        grep -E "weak external.*_?${sym}$" "$dump" >/dev/null
+        return $?
+    fi
+    if nm -g "$obj" >"$dump" 2>/dev/null; then
+        grep -Eq "[[:space:]][WwVv][[:space:]]+_?${sym}$" "$dump"
+        return $?
+    fi
+    return 1
+}
+
 build_native() {
     local src="$1"
     local out="$2"
@@ -1309,16 +1324,22 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     if [ -f "$FREESTANDING_TOP_CONST_SCALAR_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const int64_t _xctscalar_" \
             "freestanding-profile/top-const-scalar: materializes attributed integer/bool/char const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" \
+            "const int64_t xray_const_freestanding_top_const_scalar_MAGIC" \
+            "freestanding-profile/top-const-scalar: weak integer const uses stable external data symbol"
         expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const double _xctscalar_" \
             "freestanding-profile/top-const-scalar: materializes attributed float const as static data"
-        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const xrt_str_t _xctstr_" \
-            "freestanding-profile/top-const-scalar: materializes attributed string const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" \
+            "const xrt_str_t xray_const_freestanding_top_const_scalar_LABEL" \
+            "freestanding-profile/top-const-scalar: weak string const uses stable external data symbol"
         expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const XrValue _xctvalue_" \
             "freestanding-profile/top-const-scalar: materializes attributed null const as static data"
-        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "XRT_ATTR_SECTION(\"__DATA,.xray_magic\") XRT_ATTR_USED" \
-            "freestanding-profile/top-const-scalar: emits section/used attrs on scalar const"
-        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "XRT_ATTR_SECTION(\"__DATA,.xray_label\") XRT_ATTR_USED" \
-            "freestanding-profile/top-const-scalar: emits section/used attrs on string const"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xray_magic\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-scalar: emits section/weak/used attrs on scalar const"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xray_label\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-scalar: emits section/weak/used attrs on string const"
         expect_log_not_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "(xrt_shared[0] =" \
             "freestanding-profile/top-const-scalar: elides const slot initialization"
         expect_log_not_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "xrt_shared[" \
@@ -1341,6 +1362,23 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_fail "freestanding-profile/top-const-scalar: unexpected undefined symbols"
         printf '%s\n' "$FREESTANDING_TOP_CONST_SCALAR_UNEXPECTED" | sed 's/^/      /'
     fi
+    FREESTANDING_TOP_CONST_SCALAR_NM="$WORK/freestanding_top_const_scalar.nm"
+    if object_has_weak_symbol "$FREESTANDING_TOP_CONST_SCALAR_OBJ" \
+            "xray_const_freestanding_top_const_scalar_MAGIC" \
+            "$FREESTANDING_TOP_CONST_SCALAR_NM"; then
+        record_pass "freestanding-profile/top-const-scalar: weak integer data symbol is external"
+    else
+        record_fail "freestanding-profile/top-const-scalar: weak integer data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_SCALAR_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_TOP_CONST_SCALAR_OBJ" \
+            "xray_const_freestanding_top_const_scalar_LABEL" \
+            "$FREESTANDING_TOP_CONST_SCALAR_NM"; then
+        record_pass "freestanding-profile/top-const-scalar: weak string data symbol is external"
+    else
+        record_fail "freestanding-profile/top-const-scalar: weak string data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_SCALAR_NM" | sed -n '1,80p'
+    fi
 else
     record_fail "freestanding-profile/top-const-scalar: object build failed"
     sed 's/^/      /' "$FREESTANDING_TOP_CONST_SCALAR_LOG" | sed -n '1,120p'
@@ -1358,10 +1396,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     if [ -f "$FREESTANDING_TOP_CONST_AGG_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "INT64_C(14)" \
             "freestanding-profile/top-const-aggregate: folds aggregate uses into export"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const int64_t _xctarr_" \
-            "freestanding-profile/top-const-aggregate: materializes scalar table as static data"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XRT_ATTR_SECTION(\"__DATA,.xray_table\") XRT_ATTR_USED" \
-            "freestanding-profile/top-const-aggregate: emits section/used attrs on static table"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "const int64_t xray_const_freestanding_top_const_aggregate_TABLE" \
+            "freestanding-profile/top-const-aggregate: weak scalar table uses stable external data symbol"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xray_table\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits section/weak/used attrs on static table"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const uint8_t _xctarr_" \
             "freestanding-profile/top-const-aggregate: materializes byte table as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const double _xctarr_" \
@@ -1370,8 +1410,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-const-aggregate: materializes scalar struct as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xctstruct_" \
             "freestanding-profile/top-const-aggregate: names scalar struct static data"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XRT_ATTR_SECTION(\"__DATA,.xray_header\")" \
-            "freestanding-profile/top-const-aggregate: emits section attr on static struct"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_HEADER" \
+            "freestanding-profile/top-const-aggregate: weak struct uses stable external data symbol"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xray_header\") XRT_ATTR_WEAK" \
+            "freestanding-profile/top-const-aggregate: emits section/weak attrs on static struct"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "__attribute__((packed" \
             "freestanding-profile/top-const-aggregate: preserves packed static struct layout"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "aligned(16)" \
@@ -1412,8 +1456,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-const-aggregate: reads static string fixed-array struct field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xcttuple_" \
             "freestanding-profile/top-const-aggregate: names scalar tuple static data"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XRT_ATTR_SECTION(\"__DATA,.xray_pair\") XRT_ATTR_USED" \
-            "freestanding-profile/top-const-aggregate: emits section/used attrs on static tuple"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_PAIR" \
+            "freestanding-profile/top-const-aggregate: weak tuple uses stable external data symbol"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xray_pair\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits section/weak/used attrs on static tuple"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0" \
             "freestanding-profile/top-const-aggregate: reads static tuple first field"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f2" \
@@ -1469,6 +1517,31 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     else
         record_fail "freestanding-profile/top-const-aggregate: unexpected undefined symbols"
         printf '%s\n' "$FREESTANDING_TOP_CONST_AGG_UNEXPECTED" | sed 's/^/      /'
+    fi
+    FREESTANDING_TOP_CONST_AGG_NM="$WORK/freestanding_top_const_aggregate.nm"
+    if object_has_weak_symbol "$FREESTANDING_TOP_CONST_AGG_OBJ" \
+            "xray_const_freestanding_top_const_aggregate_TABLE" \
+            "$FREESTANDING_TOP_CONST_AGG_NM"; then
+        record_pass "freestanding-profile/top-const-aggregate: weak fixed-array data symbol is external"
+    else
+        record_fail "freestanding-profile/top-const-aggregate: weak fixed-array data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_TOP_CONST_AGG_OBJ" \
+            "xray_const_freestanding_top_const_aggregate_HEADER" \
+            "$FREESTANDING_TOP_CONST_AGG_NM"; then
+        record_pass "freestanding-profile/top-const-aggregate: weak struct data symbol is external"
+    else
+        record_fail "freestanding-profile/top-const-aggregate: weak struct data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_TOP_CONST_AGG_OBJ" \
+            "xray_const_freestanding_top_const_aggregate_PAIR" \
+            "$FREESTANDING_TOP_CONST_AGG_NM"; then
+        record_pass "freestanding-profile/top-const-aggregate: weak tuple data symbol is external"
+    else
+        record_fail "freestanding-profile/top-const-aggregate: weak tuple data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_NM" | sed -n '1,80p'
     fi
 else
     record_fail "freestanding-profile/top-const-aggregate: object build failed"

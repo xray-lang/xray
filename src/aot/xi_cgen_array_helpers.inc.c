@@ -172,8 +172,9 @@ static bool cg_value_is_elided_static_fixed_array_const_ref(XiCgenCtx *ctx, cons
     return cg_static_fixed_array_ref_safe_uses(ctx, f, v, 0);
 }
 
-static void cg_emit_static_fixed_array_name(FILE *out, int64_t slot) {
-    fprintf(out, "_xctarr_%" PRId64, slot);
+static void cg_emit_static_fixed_array_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                            int64_t slot) {
+    cg_emit_static_const_data_name(ctx, out, module, slot, "_xctarr");
 }
 
 static void cg_emit_static_fixed_array_i64(FILE *out, int64_t value) {
@@ -223,8 +224,9 @@ static bool cg_emit_freestanding_static_fixed_array_defs(XiCgenCtx *ctx, FILE *o
             continue;
         const XiConstLiteral *lit = &module->slot_const_literals[slot];
         const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
-        fprintf(out, "static const %s ", info.ctype);
-        cg_emit_static_fixed_array_name(out, slot);
+        cg_emit_static_const_storage(out, lit);
+        fprintf(out, "%s ", info.ctype);
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
         fprintf(out, "[%u]", (unsigned) info.count);
         emit_aot_const_data_attrs(out, lit);
         fprintf(out, " = {");
@@ -317,9 +319,9 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     emit_fixed_array_lane_load_prefix(out, &info, target_rep);
     if (static_slot_read)
-        cg_emit_static_fixed_array_name(out, static_slot);
+        cg_emit_static_fixed_array_name(ctx, out, ctx->module, static_slot);
     else if (static_struct_field_read)
-        cg_emit_static_struct_field_lvalue(out, static_struct_layout, static_struct_slot,
+        cg_emit_static_struct_field_lvalue(ctx, out, static_struct_layout, static_struct_slot,
                                            static_struct_field_idx);
     else
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);

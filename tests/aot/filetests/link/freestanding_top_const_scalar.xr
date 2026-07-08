@@ -1,4 +1,5 @@
 @section("__DATA,.xray_magic")
+@weak
 @used
 const MAGIC: int = 40 + 1
 
@@ -16,8 +17,12 @@ const SCALE: float = 0.5
 const NOTHING = null
 
 @section("__DATA,.xray_label")
+@weak
 @used
 const LABEL = comptime "scalar"
+
+@section("__DATA,.xray_local_label")
+const LOCAL_LABEL = comptime "local"
 
 @c_export("xray_magic")
 fn xray_magic() -> int {
