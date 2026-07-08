@@ -1337,7 +1337,8 @@ module sys {
   fn __pipeRead {
     signature: "(handle: int, maxBytes: int): Bytes?"
     doc: "Read one chunk from a pipe endpoint"
-    vm: "sys_pipe_read"
+    vm: "sys_pipe_read_yieldable"
+    vm_binding: "yieldable"
     aot: "xrt_sys_pipe_read"
     argc: 2
     arg_spec: "vv"
@@ -1350,7 +1351,8 @@ module sys {
   fn __pipeWrite {
     signature: "(handle: int, data: Bytes): int"
     doc: "Write one chunk to a pipe endpoint"
-    vm: "sys_pipe_write"
+    vm: "sys_pipe_write_yieldable"
+    vm_binding: "yieldable"
     aot: "xrt_sys_pipe_write"
     argc: 2
     arg_spec: "vv"

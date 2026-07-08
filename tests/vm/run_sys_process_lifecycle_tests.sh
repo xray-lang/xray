@@ -102,6 +102,7 @@ PIPE_MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_match_warning.x
 DETACHED_NO_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_detached_no_warning.xr"
 SIGNAL_ON_SIGNAL_SRC="$PROJECT_DIR/tests/vm/sys_signal_on_signal.xr"
 YIELDABLE_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_yieldable_wait.xr"
+YIELDABLE_PIPE_READ_SRC="$PROJECT_DIR/tests/vm/sys_pipe_yieldable_read.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -114,6 +115,7 @@ expect_output "process_detached_no_warning" "$DETACHED_NO_WARNING_SRC" \
     $'true\ntrue\n-1\nfalse\ndetached-orphan-ok'
 expect_output "signal_on_signal" "$SIGNAL_ON_SIGNAL_SRC" $'true\nfalse\ntrue\ntrue'
 expect_output_workers "process_yieldable_wait" "$YIELDABLE_WAIT_SRC" $'tick\n1\nwaited 7\n7' 1
+expect_output_workers "pipe_yieldable_read" "$YIELDABLE_PIPE_READ_SRC" $'tick\n1\nread 2\n2\n0\ntrue' 1
 expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly"
 expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \
