@@ -39,6 +39,23 @@ print(ws.parseUrl("ws://example.com:65536") == null)
 print(ws.parseUrl("ws://[::1") == null)
 print(ws.parseUrl("ws://example.com/#fragment") == null)
 
+var serverResponse = "HTTP/1.1 101 Switching Protocols\r\n" +
+    "Upgrade: websocket\r\n" +
+    "Connection: keep-alive, Upgrade\r\n" +
+    "Sec-WebSocket-Accept: " + ws.acceptKey(key) + "\r\n" +
+    "Sec-WebSocket-Protocol: chat\r\n" +
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover\r\n\r\n"
+var parsedUpgrade = ws.parseUpgradeResponse(serverResponse, key, ["chat"], true)!
+print(parsedUpgrade.statusCode)
+print(parsedUpgrade.protocol!)
+print(parsedUpgrade.deflate)
+
+print(ws.parseUpgradeResponse(serverResponse.replace("101", "200"), key, ["chat"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse.replace(ws.acceptKey(key), "bad"), key, ["chat"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse.replace("Upgrade: websocket\r\n", ""), key, ["chat"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse, key, ["other"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse, key, ["chat"], false) == null)
+
 var closePayload = ws.parseClosePayload(Bytes([3, 232, 79, 75]))!
 print(closePayload.code)
 print(closePayload.reason)
