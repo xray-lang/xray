@@ -506,6 +506,8 @@ static bool xaot_bundle_add_dispatch_target_case(XaotBundle *bundle, XgCallsiteI
     target->callsite_id = callsite_id;
     target->receiver_class_id = receiver_class_id;
     target->method_id = method->method_id;
+    target->method_name_id = method->name_id;
+    target->method_signature_key = method->signature_key;
     target->method_root_id = method->root_method_id;
     target->method_override_depth = method->override_depth;
     target->evidence = evidence;
@@ -3134,10 +3136,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     for (uint32_t ti = 0; ti < bundle->ndispatch_target_cases; ti++) {
         const XaotDispatchTargetCase *tc = &bundle->dispatch_target_cases[ti];
         fprintf(out,
-                "dispatch-target %u callsite=%u recv_class=%u method=%u root=%u depth=%u "
-                "evidence=0x%x\n",
-                ti, tc->callsite_id, tc->receiver_class_id, tc->method_id, tc->method_root_id,
-                tc->method_override_depth, tc->evidence);
+                "dispatch-target %u callsite=%u recv_class=%u method=%u name=%u sig=%u root=%u "
+                "depth=%u evidence=0x%x\n",
+                ti, tc->callsite_id, tc->receiver_class_id, tc->method_id, tc->method_name_id,
+                tc->method_signature_key, tc->method_root_id, tc->method_override_depth,
+                tc->evidence);
     }
 
     for (uint32_t ii = 0; ii < bundle->ninterface_use_plans; ii++) {

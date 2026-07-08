@@ -1,6 +1,6 @@
 contains=xaot-plan v0
 regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=type_switch .*recv_class=0 recv_iface=[1-9][0-9]* slot=0 targets=[0-9]+\+2 evidence=0x51 reason=none
-regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x51
+regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* name=[1-9][0-9]* sig=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x51
 regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=[1-9][0-9]* reason=value flags=iface_object\+type_switchable
 regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=2 slots=1 flags=iface_object\+type_switch_tag\+boxed_receiver data=boxed_value type=native_type_id itable=none tag=native_type_id evidence=callsite\+methods\+implementors\+dispatch reason=none
 regex=fn-attr [0-9]+ func=score body=[0-9]+ attr=pure effect=0x60 escape=0x1 evidence=0x7
