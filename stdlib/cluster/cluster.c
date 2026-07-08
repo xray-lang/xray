@@ -198,8 +198,6 @@ static void cluster_accept_loop(void *arg) {
         xr_cluster_add_node(c, node);
         xr_cluster_node_start_writer(node, c->isolate);
         xr_cluster_node_start_reader(c, node);
-        if (c->on_node_added)
-            c->on_node_added(node->name);
     }
 
     atomic_store(&c->accept_running, false);
@@ -218,7 +216,7 @@ static void cluster_accept_loop(void *arg) {
  * instead of raw SSL_CTX * handles.
  */
 static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
-    // Client context covers outgoing xr_cluster_join / reconnect traffic.
+    // Client context covers outgoing xr_cluster_join traffic.
     XrTlsContext *client_ctx = xr_tls_context_new_client();
     if (!client_ctx)
         return -1;
@@ -330,8 +328,6 @@ int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const c
     c->tombstone_cap = 16;
     c->tombstones = xr_calloc((size_t) c->tombstone_cap, sizeof(c->tombstones[0]));
     c->tombstone_count = 0;
-    c->on_node_added = NULL;
-    c->on_node_removed = NULL;
     c->monitors = NULL;
     c->monitor_count = 0;
     xr_amutex_init(&c->monitors_lock);
@@ -563,7 +559,7 @@ void xr_cluster_stop(XrCluster *c) {
 
     /*
      * Close the read end of stop_pipe last — after every user
-     * (heartbeat coro, accept coro, discovery coro, reconnect helper)
+     * (heartbeat coro, accept coro, discovery coro)
      * has exited. Doing it earlier would risk a use-after-close on a
      * coroutine that had not yet observed EOF on pipe[1].
      */
@@ -1470,11 +1466,6 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 break;
             }
 
-            case XR_FRAME_NODE_INFO: {
-                xr_cluster_handle_node_info(c, recv_buf, payload_len);
-                break;
-            }
-
             case XR_FRAME_CHANNEL_SYNC: {
                 // Remote node telling us about their Named Channels
                 // Parse: [name_len 1B] [name] [owner_len 1B] [owner] [buf_size 4B]
@@ -1611,22 +1602,8 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     xr_free(recv_buf);
     xr_cluster_remove_all_subscribers_for_node(c, node);
     xr_cluster_fire_monitors(c, node->name);
-    if (c->on_node_removed)
-        c->on_node_removed(node->name);
     xr_cluster_remove_node(c, node);
     xr_cluster_node_free(node);
-}
-
-/* ========== Event Callbacks ========== */
-
-void xr_cluster_on_node_added(XrCluster *c, void (*cb)(const char *name)) {
-    if (c)
-        c->on_node_added = cb;
-}
-
-void xr_cluster_on_node_removed(XrCluster *c, void (*cb)(const char *name)) {
-    if (c)
-        c->on_node_removed = cb;
 }
 
 // xray binding: cluster.publish(topic, value)

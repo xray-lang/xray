@@ -136,7 +136,7 @@ typedef struct XrCluster {
     // Controls backpressure on concurrent RPC / channel recv proxies.
     int max_pending_requests;
 
-    // Dead nodes tombstone (prevent reconnecting to recently departed nodes)
+    // Dead node tombstones prevent immediate rejoin of recently departed nodes.
     struct {
         char name[XR_NODE_NAME_MAX + 1];
         int64_t time;
@@ -144,10 +144,6 @@ typedef struct XrCluster {
     int tombstone_count;
     int tombstone_cap;
     XrAdaptiveMutex dead_nodes_lock;
-
-    // Node event callbacks
-    void (*on_node_added)(const char *name);
-    void (*on_node_removed)(const char *name);
 
     // Node monitors (CSP-style: Channel receives notification on disconnect)
     struct XrNodeMonitor *monitors;
@@ -288,7 +284,7 @@ XR_FUNC bool xr_cluster_is_running(XrCluster *c);
  *
  * Sleeps for up to `ms` milliseconds or until xr_cluster_stop signals
  * shutdown. Intended for use inside cluster-owned native coroutines
- * (heartbeat, accept retry, reconnect backoff, discovery tick) that
+ * (heartbeat, accept retry, discovery tick) that
  * need periodic wake-up without blocking the worker thread with
  * nanosleep/usleep.
  *
@@ -355,25 +351,9 @@ XR_FUNC void xr_cluster_check_heartbeats(XrCluster *c);
 // Send heartbeat pings to all connected nodes
 XR_FUNC void xr_cluster_send_heartbeats(XrCluster *c);
 
-// Reconnect to a node with exponential backoff
-// base_ms: initial delay (default 500), max_ms: cap (default 30000)
-XR_FUNC int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port, int base_ms,
-                                 int max_ms, int max_attempts);
-
-// Gossip: send NODE_INFO to a peer (list of known nodes)
-XR_FUNC void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *node);
-
-// Handle incoming NODE_INFO gossip frame
-XR_FUNC void xr_cluster_handle_node_info(XrCluster *c, const uint8_t *payload, uint32_t len);
-
 // Dead node tombstone management
 XR_FUNC void xr_cluster_mark_dead(XrCluster *c, const char *name);
 XR_FUNC bool xr_cluster_is_dead(XrCluster *c, const char *name);
-XR_FUNC void xr_cluster_sweep_tombstones(XrCluster *c, int64_t max_age_ms);
-
-// Set node event callbacks
-XR_FUNC void xr_cluster_on_node_added(XrCluster *c, void (*cb)(const char *name));
-XR_FUNC void xr_cluster_on_node_removed(XrCluster *c, void (*cb)(const char *name));
 
 /* ========== Node Monitor (CSP-style fault detection) ========== */
 
