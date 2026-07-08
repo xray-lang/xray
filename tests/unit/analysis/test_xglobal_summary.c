@@ -5035,6 +5035,50 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_generic_instantiation_roots) {
+    setup_parser_session();
+    const char *source = "fn id<T>(x: T) -> T { return x }\n"
+                         "fn wrapper() -> int { return id<int>(41) }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ngeneric_insts, 1);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    const XgGenericInstSummary *inst = &ev.generic_insts[0];
+    ASSERT_EQ_UINT(inst->kind, XG_GENERIC_INST_FUNCTION);
+    ASSERT_EQ_UINT(inst->origin_decl_id, 1);
+    ASSERT_TRUE(inst->origin_func_id != XG_NO_ID);
+    ASSERT_EQ_UINT(inst->root_callsite_id, ev.callsites[0].callsite_id);
+    ASSERT_EQ_UINT(inst->type_arg_count, 1);
+    ASSERT_TRUE((inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) != 0);
+    ASSERT_TRUE(inst->type_key != 0);
+    ASSERT_TRUE(inst->type_arg_key_start != 0);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "generic-inst 0 id=1 module=1 kind=function"));
+    ASSERT_NOT_NULL(strstr(dump, "origin_decl=1 origin_func=1"));
+    ASSERT_NOT_NULL(strstr(dump, "root_callsite=1"));
+    xr_free(dump);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     setup_parser_session();
     const char *source = "fn caller() -> int { return unknown(41) }\n";
@@ -6522,6 +6566,7 @@ RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_direct_function_callsite_targets);
+RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
