@@ -444,16 +444,6 @@ fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = fal
     return out.toString()
 }
 
-fn clientRequest(path: string, host: string, secKey: string) -> string {
-    var requestPath = path.length > 0 ? path : "/"
-    return "GET " + requestPath + " HTTP/1.1\r\n" +
-        "Host: " + host + "\r\n" +
-        "Upgrade: websocket\r\n" +
-        "Connection: Upgrade\r\n" +
-        "Sec-WebSocket-Key: " + secKey + "\r\n" +
-        "Sec-WebSocket-Version: 13\r\n\r\n"
-}
-
 fn clientHandshakeRequest(
     url: WsUrl,
     secKey: string,
@@ -779,7 +769,6 @@ export {
     pickSubprotocol,
     parseUpgradeRequest,
     upgradeResponse,
-    clientRequest,
     clientHandshakeRequest,
     parseUpgradeResponse,
     parseUrl,

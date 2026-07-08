@@ -3596,11 +3596,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "clientRequest",
-        .signature = "(path: string, host: string, secKey: string): string",
-        .summary = "",
-    },
-    {
         .name = "close",
         .signature = "(conn: WsConn, code?: int?, reason?: string?): bool",
         .summary = "Close a WebSocket connection",
@@ -6402,7 +6397,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
             "| `ws.binaryFrame` | `(data: Bytes, mask: bool = true): Bytes` |  |\n"
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
-            "| `ws.clientRequest` | `(path: string, host: string, secKey: string): string` |  |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes` |  |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
