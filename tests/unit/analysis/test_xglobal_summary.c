@@ -1187,6 +1187,175 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
+    enum {
+        IMPLEMENTOR_COUNT = 5
+    };
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x181,
+                      .compiler_semver_hash = 0x182,
+                      .profile_hash = 0x183,
+                      .imported_summary_hash = 0x184,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary body_decl = {
+        .module_id = 1, .decl_id = 9, .kind = XG_DECL_FUNC, .name_id = 9, .source_span_id = 1};
+    XgDeclSummary shape_decl = {.module_id = 1,
+                                .decl_id = 77,
+                                .kind = XG_DECL_INTERFACE,
+                                .name_id = 77,
+                                .signature_key = 1,
+                                .source_span_id = 4};
+    XgInterfaceMethodSummary shape_draw = {.interface_method_id = 99,
+                                           .owner_interface_id = 77,
+                                           .name_id = 700,
+                                           .signature_key = 701,
+                                           .ordinal = 0,
+                                           .source_span_id = 4};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 9,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_INTERFACE,
+                              .receiver_static_interface_id = 77,
+                              .method_id = 99,
+                              .method_name_id = 700,
+                              .method_signature_key = 701};
+    XgBodySummary body = {.func_id = 9,
+                          .module_id = 1,
+                          .owner_decl_id = 9,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 9,
+                          .source_span_id = 1,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x1999,
+                          .callsite_start = 1,
+                          .callsite_count = 1};
+    XgDeclSummary class_decls[IMPLEMENTOR_COUNT];
+    XgClassSummary classes[IMPLEMENTOR_COUNT];
+    XgMethodSummary methods[IMPLEMENTOR_COUNT];
+    XgInterfaceImplSummary impls[IMPLEMENTOR_COUNT];
+    XgBodySummary method_bodies[IMPLEMENTOR_COUNT];
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    const XaotMethodDispatchPlan *dispatch;
+    const XaotInterfaceAbiPlan *abi;
+    char *dump;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &shape_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &body_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(&ev, &shape_draw));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    for (uint32_t i = 0; i < IMPLEMENTOR_COUNT; i++) {
+        uint32_t id = i + 1;
+        memset(&class_decls[i], 0, sizeof(class_decls[i]));
+        class_decls[i].module_id = 1;
+        class_decls[i].decl_id = id;
+        class_decls[i].kind = XG_DECL_CLASS;
+        class_decls[i].name_id = 100 + id;
+        class_decls[i].source_span_id = 10 + id;
+        ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &class_decls[i]));
+
+        memset(&classes[i], 0, sizeof(classes[i]));
+        classes[i].module_id = 1;
+        classes[i].decl_id = id;
+        classes[i].class_id = id;
+        classes[i].name_id = 100 + id;
+        classes[i].parent_class_id = XG_NO_ID;
+        classes[i].flags = XG_CLASS_INFERRED_FINAL;
+        classes[i].method_start = id;
+        classes[i].method_count = 1;
+        classes[i].interface_start = id;
+        classes[i].interface_count = 1;
+        classes[i].decl_kind = XG_DECL_CLASS;
+        ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &classes[i]));
+
+        methods[i].method_id = id;
+        methods[i].owner_class_id = id;
+        methods[i].name_id = 700;
+        methods[i].signature_key = 701;
+        methods[i].override_of = XG_NO_ID;
+        methods[i].flags = 0;
+        ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &methods[i]));
+
+        impls[i].implementor_class_id = id;
+        impls[i].interface_id = 77;
+        impls[i].name_id = 77;
+        impls[i].type_key = 770;
+        ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[i]));
+
+        method_bodies[i].func_id = 100 + id;
+        method_bodies[i].module_id = 1;
+        method_bodies[i].owner_decl_id = id;
+        method_bodies[i].owner_class_id = id;
+        method_bodies[i].owner_method_id = id;
+        method_bodies[i].name_id = 700;
+        method_bodies[i].signature_key = 701;
+        method_bodies[i].source_span_id = 20 + id;
+        method_bodies[i].kind = XG_BODY_METHOD;
+        method_bodies[i].body_hash = 0x2000 + id;
+        ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &method_bodies[i]));
+    }
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+
+    dispatch = xaot_bundle_find_method_dispatch_plan(&bundle, 1);
+    ASSERT_NOT_NULL(dispatch);
+    ASSERT_EQ_UINT(dispatch->kind, XAOT_DISPATCH_ITABLE);
+    ASSERT_EQ_UINT(dispatch->dispatch_slot, 0);
+    ASSERT_EQ_UINT(dispatch->target_count, 0);
+    ASSERT_EQ_UINT(dispatch->unproven_reason, XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET);
+
+    abi = xaot_bundle_find_interface_abi_plan(&bundle, 77);
+    ASSERT_NOT_NULL(abi);
+    ASSERT_EQ_UINT(abi->callsite_count, 1);
+    ASSERT_EQ_UINT(abi->implementor_count, IMPLEMENTOR_COUNT);
+    ASSERT_EQ_UINT(abi->method_slot_count, 1);
+    ASSERT_EQ_UINT(abi->flags, XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT |
+                                   XAOT_INTERFACE_ABI_NEEDS_ITABLE |
+                                   XAOT_INTERFACE_ABI_BOXED_RECEIVER);
+    ASSERT_EQ_UINT(abi->data_source, XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE);
+    ASSERT_EQ_UINT(abi->type_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
+    ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT);
+    ASSERT_EQ_UINT(abi->tag_source, XAOT_INTERFACE_ABI_SOURCE_NONE);
+
+    dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "kind=itable"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=large_implementor_set"));
+    ASSERT_NOT_NULL(strstr(dump, "flags=iface_object+itable+boxed_receiver"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "data=boxed_value type=native_type_id itable=dispatch_slot tag=none"));
+    xr_free(dump);
+
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.interface_abi_plans[0].itable_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT interface ABI sources do not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 static void assert_class_graph_verifier_rejects(const XgClassSummary *classes, uint32_t nclasses,
                                                 const char *expected_error) {
     XgGlobalEvidence ev;
@@ -5759,6 +5928,7 @@ RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
 RUN_TEST(global_evidence_attaches_callsite_ids_to_xi_calls);
 RUN_TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound);
 RUN_TEST(global_evidence_lowers_interface_call_to_type_switch);
+RUN_TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan);
 RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
