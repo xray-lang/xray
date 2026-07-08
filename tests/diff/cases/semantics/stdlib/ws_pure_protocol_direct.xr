@@ -55,6 +55,19 @@ print(ipv6.path)
 var queryOnly = ws.parseUrl("ws://example.com?token=a")!
 print(queryOnly.path)
 
+var handshakeRequest = ws.clientHandshakeRequest(url, key, ["chat"], true)!
+print(handshakeRequest.includes("GET /chat?room=1 HTTP/1.1\r\n"))
+print(handshakeRequest.includes("Host: example.com\r\n"))
+print(handshakeRequest.includes("Sec-WebSocket-Protocol: chat\r\n"))
+print(handshakeRequest.includes("permessage-deflate"))
+
+var ipv6Handshake = ws.clientHandshakeRequest(ipv6, key, null, false)!
+print(ipv6Handshake.includes("Host: [::1]:8080\r\n"))
+print(ipv6Handshake.includes("permessage-deflate"))
+
+print(ws.clientHandshakeRequest(url, "bad", ["chat"], true) == null)
+print(ws.clientHandshakeRequest(url, key, ["chat\nbad"], true) == null)
+
 print(ws.parseUrl("http://example.com") == null)
 print(ws.parseUrl("ws://") == null)
 print(ws.parseUrl("ws://example.com:abc") == null)

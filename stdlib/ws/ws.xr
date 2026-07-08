@@ -337,6 +337,21 @@ fn _validSecKey(secKey: string) -> bool {
     return raw != null && raw!.length == 16
 }
 
+fn _hasCrLf(s: string) -> bool {
+    return _indexOfFrom(s, "\r", 0) >= 0 || _indexOfFrom(s, "\n", 0) >= 0
+}
+
+fn _hostHeader(url: WsUrl) -> string {
+    var host = url.host
+    if (_indexOfFrom(host, ":", 0) >= 0 && !_startsWithAt(host, 0, "[")) {
+        host = "[" + host + "]"
+    }
+    if ((url.secure && url.port != 443) || (!url.secure && url.port != 80)) {
+        host = host + ":" + url.port.toString()
+    }
+    return host
+}
+
 fn acceptKey(secKey: string) -> string {
     var digest = _hexBytes(crypto.sha1(secKey + _GUID))
     if (digest == null) { return "" }
@@ -437,6 +452,49 @@ fn clientRequest(path: string, host: string, secKey: string) -> string {
         "Connection: Upgrade\r\n" +
         "Sec-WebSocket-Key: " + secKey + "\r\n" +
         "Sec-WebSocket-Version: 13\r\n\r\n"
+}
+
+fn clientHandshakeRequest(
+    url: WsUrl,
+    secKey: string,
+    protocols: Array<string>? = null,
+    deflate: bool = true
+) -> string? {
+    if (!_validSecKey(secKey) || _hasCrLf(secKey)) { return null }
+    if (url.path.length == 0 || url.path.charAt(0) != "/" || _hasCrLf(url.path)) { return null }
+    if (_hasCrLf(url.host)) { return null }
+
+    var out = StringBuilder()
+    out.append("GET ")
+    out.append(url.path)
+    out.append(" HTTP/1.1\r\n")
+    out.append("Host: ")
+    out.append(_hostHeader(url))
+    out.append("\r\n")
+    out.append("Upgrade: websocket\r\n")
+    out.append("Connection: Upgrade\r\n")
+    out.append("Sec-WebSocket-Key: ")
+    out.append(secKey)
+    out.append("\r\n")
+    out.append("Sec-WebSocket-Version: 13\r\n")
+
+    if (deflate) {
+        out.append("Sec-WebSocket-Extensions: permessage-deflate; ")
+        out.append("client_no_context_takeover; server_no_context_takeover\r\n")
+    }
+
+    if (protocols != null && protocols!.length > 0) {
+        out.append("Sec-WebSocket-Protocol: ")
+        for (var i = 0; i < protocols!.length; i++) {
+            if (protocols![i].length == 0 || _hasCrLf(protocols![i])) { return null }
+            if (i > 0) { out.append(", ") }
+            out.append(protocols![i])
+        }
+        out.append("\r\n")
+    }
+
+    out.append("\r\n")
+    return out.toString()
 }
 
 fn parseUpgradeResponse(
@@ -722,6 +780,7 @@ export {
     parseUpgradeRequest,
     upgradeResponse,
     clientRequest,
+    clientHandshakeRequest,
     parseUpgradeResponse,
     parseUrl,
     isValidCloseCode,

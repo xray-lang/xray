@@ -542,6 +542,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"parseUpgradeRequest", XLSP_SYM_FUNCTION, "fn(request: string, serverProtocols?: Array<string>?, allowDeflate?: bool, allowedOrigins?: Array<string>?): ParsedUpgradeRequest?", "", NULL, 0},
     {"upgradeResponse", XLSP_SYM_FUNCTION, "fn(secKey: string, protocol?: string?, deflate?: bool): string", "", NULL, 0},
     {"clientRequest", XLSP_SYM_FUNCTION, "fn(path: string, host: string, secKey: string): string", "", NULL, 0},
+    {"clientHandshakeRequest", XLSP_SYM_FUNCTION, "fn(url: WsUrl, secKey: string, protocols?: Array<string>?, deflate?: bool): string?", "", NULL, 0},
     {"parseUpgradeResponse", XLSP_SYM_FUNCTION, "fn(response: string, secKey: string, protocols?: Array<string>?, allowDeflate?: bool): ParsedUpgradeResponse?", "", NULL, 0},
     {"parseUrl", XLSP_SYM_FUNCTION, "fn(url: string): WsUrl?", "", NULL, 0},
     {"isValidCloseCode", XLSP_SYM_FUNCTION, "fn(code: int): bool", "", NULL, 0},
@@ -562,7 +563,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"ParsedUpgradeResponse", XLSP_SYM_CLASS, "type ParsedUpgradeResponse", "Class type", NULL, 0},
     {"ParsedUpgradeRequest", XLSP_SYM_CLASS, "type ParsedUpgradeRequest", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 39
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 40
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
