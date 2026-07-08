@@ -112,14 +112,8 @@ XR_FUNC void xr_http_server_set_ws_handler(XrHttpServer *server, XrWsConnectionH
 XR_FUNC int xr_http_read_request(struct XrVMRuntime *X, int fd, XrHttpReq *req, char *buf,
                                  size_t buf_size);
 
-// Send simple text response
-XR_FUNC int xr_http_send_text(struct XrVMRuntime *X, int fd, int status, const char *body);
-
 // Send error response
 XR_FUNC int xr_http_send_error(struct XrVMRuntime *X, int fd, int status, const char *message);
-
-// Send redirect response (301/302)
-XR_FUNC int xr_http_send_redirect(struct XrVMRuntime *X, int fd, int status, const char *location);
 
 /*
  * Try to find a prebuilt response for raw HTTP data.
