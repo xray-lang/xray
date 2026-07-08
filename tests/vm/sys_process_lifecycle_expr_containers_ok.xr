@@ -1,0 +1,32 @@
+import sys
+
+var pMap = sys.Process.spawn("sh", ["-c", "exit 0"])
+var m: Map<string, int> = #{"code": pMap!.wait()}
+print(m.get("code") ?? -1)
+
+var pSet = sys.Process.spawn("sh", ["-c", "exit 0"])
+var s: Set<int> = #[pSet!.wait()]
+print(s.has(0))
+
+var pTemplate = sys.Process.spawn("sh", ["-c", "exit 0"])
+print("code ${pTemplate!.wait()}")
+
+var xs = Array<int>(3, 0)
+xs[0] = 10
+xs[1] = 20
+xs[2] = 30
+var pSlice = sys.Process.spawn("sh", ["-c", "exit 0"])
+var ys: Array<int> = copy(xs[0:pSlice!.wait() + 2])
+print(ys.length)
+
+var pUnsafe = sys.Process.spawn("sh", ["-c", "exit 0"])
+var code = unsafe { pUnsafe!.wait() }
+print(code)
+
+var pipeMap = sys.Pipe.open()
+var pm: Map<string, bool> = #{"closed": pipeMap!.close()}
+print(pm.get("closed") ?? false)
+
+var pipeSet = sys.Pipe.open()
+var ps: Set<bool> = #[pipeSet!.close()]
+print(ps.has(true))

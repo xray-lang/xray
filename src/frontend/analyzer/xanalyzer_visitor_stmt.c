@@ -616,7 +616,14 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             xa_thread_lint_scan_expr(states, expr->as.comptime_expr.expr, false, can_escape);
             return;
         case AST_UNSAFE_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false, can_escape);
+            if (expr->as.unsafe_expr.operand &&
+                (expr->as.unsafe_expr.operand->type == AST_BLOCK ||
+                 expr->as.unsafe_expr.operand->type == AST_PROGRAM)) {
+                xa_thread_lint_scan_stmt(states, expr->as.unsafe_expr.operand, can_escape);
+            } else {
+                xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false,
+                                         can_escape);
+            }
             return;
         case AST_MOVE_EXPR: {
             uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
@@ -1486,6 +1493,15 @@ static void xa_os_resource_lint_scan_expr_array(XaOsResourceLintState *states, A
         xa_os_resource_lint_scan_expr(states, nodes[i], return_value, can_escape);
 }
 
+static void xa_os_resource_lint_scan_parallel_locals(XaOsResourceLintState *states,
+                                                     XrParallelLocalBinding *locals, int count,
+                                                     bool can_escape) {
+    if (!locals || count <= 0)
+        return;
+    for (int i = 0; i < count; i++)
+        xa_os_resource_lint_scan_expr(states, locals[i].source, false, can_escape);
+}
+
 static void xa_os_resource_lint_note_var_alias(XaOsResourceLintState *states, VarDeclNode *var) {
     if (!states || !var || var->symbol_id == 0 || !var->initializer ||
         var->storage_mode != XR_STORAGE_NORMAL)
@@ -1697,6 +1713,24 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         case AST_MEMBER_ACCESS:
             xa_os_resource_lint_scan_expr(states, expr->as.member_access.object, false, can_escape);
             return;
+        case AST_MEMBER_SET:
+            xa_os_resource_lint_scan_expr(states, expr->as.member_set.object, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.member_set.value, false, can_escape);
+            return;
+        case AST_INDEX_GET:
+            xa_os_resource_lint_scan_expr(states, expr->as.index_get.array, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.index_get.index, false, can_escape);
+            return;
+        case AST_INDEX_SET:
+            xa_os_resource_lint_scan_expr(states, expr->as.index_set.array, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.index_set.index, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.index_set.value, false, can_escape);
+            return;
+        case AST_SLICE_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.slice_expr.source, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.slice_expr.start, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.slice_expr.end, false, can_escape);
+            return;
         case AST_FORCE_UNWRAP:
             xa_os_resource_lint_scan_expr(states, expr->as.unary.operand, false, can_escape);
             return;
@@ -1705,6 +1739,15 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
             return;
         case AST_ASSIGNMENT:
             xa_os_resource_lint_scan_expr(states, expr->as.assignment.value, false, can_escape);
+            return;
+        case AST_COMPOUND_ASSIGNMENT:
+            xa_os_resource_lint_scan_expr(states, expr->as.compound_assignment.object, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.compound_assignment.value, false,
+                                          can_escape);
+            return;
+        case AST_INC:
+        case AST_DEC:
             return;
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -1754,6 +1797,25 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
                                                 expr->as.template_str.part_count, false,
                                                 can_escape);
             return;
+        case AST_SPREAD_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.spread_expr.expr, false, can_escape);
+            return;
+        case AST_OBJECT_LITERAL:
+            xa_os_resource_lint_scan_expr_array(states, expr->as.object_literal.keys,
+                                                expr->as.object_literal.count, false, can_escape);
+            xa_os_resource_lint_scan_expr_array(states, expr->as.object_literal.values,
+                                                expr->as.object_literal.count, false, can_escape);
+            return;
+        case AST_MAP_LITERAL:
+            xa_os_resource_lint_scan_expr_array(states, expr->as.map_literal.keys,
+                                                expr->as.map_literal.count, false, can_escape);
+            xa_os_resource_lint_scan_expr_array(states, expr->as.map_literal.values,
+                                                expr->as.map_literal.count, false, can_escape);
+            return;
+        case AST_SET_LITERAL:
+            xa_os_resource_lint_scan_expr_array(states, expr->as.set_literal.elements,
+                                                expr->as.set_literal.count, false, can_escape);
+            return;
         case AST_STRUCT_LITERAL:
             xa_os_resource_lint_scan_expr_array(states, expr->as.struct_literal.field_values,
                                                 expr->as.struct_literal.field_count, false,
@@ -1761,6 +1823,35 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
             return;
         case AST_TERNARY:
             xa_os_resource_lint_scan_ternary_expr(states, expr, return_value, can_escape);
+            return;
+        case AST_OPTIONAL_CHAIN:
+            xa_os_resource_lint_scan_expr(states, expr->as.optional_chain.object, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.optional_chain.index, false,
+                                          can_escape);
+            return;
+        case AST_RANGE:
+            xa_os_resource_lint_scan_expr(states, expr->as.range.start, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.range.end, false, can_escape);
+            return;
+        case AST_IS_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.is_expr.expr, false, can_escape);
+            return;
+        case AST_AS_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.as_expr.expr, false, can_escape);
+            return;
+        case AST_COMPTIME_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.comptime_expr.expr, false, can_escape);
+            return;
+        case AST_UNSAFE_EXPR:
+            if (expr->as.unsafe_expr.operand &&
+                (expr->as.unsafe_expr.operand->type == AST_BLOCK ||
+                 expr->as.unsafe_expr.operand->type == AST_PROGRAM)) {
+                xa_os_resource_lint_scan_stmt(states, expr->as.unsafe_expr.operand, can_escape);
+            } else {
+                xa_os_resource_lint_scan_expr(states, expr->as.unsafe_expr.operand, false,
+                                              can_escape);
+            }
             return;
         case AST_MOVE_EXPR: {
             uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
@@ -1772,6 +1863,65 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         }
         case AST_MATCH_EXPR:
             xa_os_resource_lint_scan_match_expr(states, expr, can_escape);
+            return;
+        case AST_GO_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.go_expr.expr, false, can_escape);
+            return;
+        case AST_AWAIT_EXPR:
+            xa_os_resource_lint_scan_expr(states, expr->as.await_expr.expr, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.await_expr.timeout, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.await_expr.into, false, can_escape);
+            return;
+        case AST_CHANNEL_NEW:
+            xa_os_resource_lint_scan_expr(states, expr->as.channel_new.buffer_size, false,
+                                          can_escape);
+            return;
+        case AST_PARALLEL_REDUCE_EXPR:
+            xa_os_resource_lint_scan_parallel_locals(states, expr->as.parallel_reduce_expr.locals,
+                                                     expr->as.parallel_reduce_expr.local_count,
+                                                     can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count,
+                                          false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false,
+                                          false);
+            return;
+        case AST_PARALLEL_COLLECT_EXPR:
+            xa_os_resource_lint_scan_parallel_locals(states, expr->as.parallel_collect_expr.locals,
+                                                     expr->as.parallel_collect_expr.local_count,
+                                                     can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count,
+                                          false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.into, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false,
+                                          false);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body,
+                                          false, false);
+            return;
+        case AST_NEW_EXPR:
+            xa_os_resource_lint_scan_expr_array(states, expr->as.new_expr.arguments,
+                                                expr->as.new_expr.arg_count, false, can_escape);
+            return;
+        case AST_SUPER_CALL:
+            xa_os_resource_lint_scan_expr_array(states, expr->as.super_call.arguments,
+                                                expr->as.super_call.arg_count, false, can_escape);
+            return;
+        case AST_ENUM_INDEX:
+            xa_os_resource_lint_scan_expr(states, expr->as.enum_index.collection, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.enum_index.index_expr, false,
+                                          can_escape);
+            return;
+        case AST_YIELD_STMT:
+            xa_os_resource_lint_scan_expr(states, expr->as.yield_stmt.value, false, can_escape);
             return;
         default:
             return;
@@ -2111,6 +2261,22 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_note_var_alias(states, &stmt->as.var_decl);
             xa_os_resource_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
+        case AST_DESTRUCTURE_DECL:
+            xa_os_resource_lint_scan_expr(states, stmt->as.destructure_decl.initializer, false,
+                                          can_escape);
+            return;
+        case AST_DESTRUCTURE_ASSIGN:
+            xa_os_resource_lint_scan_expr(states, stmt->as.destructure_assign.value, false,
+                                          can_escape);
+            return;
+        case AST_ASSIGNMENT:
+        case AST_COMPOUND_ASSIGNMENT:
+        case AST_INC:
+        case AST_DEC:
+        case AST_MEMBER_SET:
+        case AST_INDEX_SET:
+            xa_os_resource_lint_scan_expr(states, stmt, false, can_escape);
+            return;
         case AST_PRINT_STMT:
             xa_os_resource_lint_scan_expr_array(states, stmt->as.print_stmt.exprs,
                                                 stmt->as.print_stmt.expr_count, false, can_escape);
@@ -2127,6 +2293,26 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_stmt(states, stmt->as.while_stmt.body, false);
             if (can_escape)
                 xa_os_resource_lint_mark_try_wait_poll_loop(states, stmt);
+            return;
+        case AST_FOR_STMT:
+            xa_os_resource_lint_scan_stmt(states, stmt->as.for_stmt.initializer, can_escape);
+            xa_os_resource_lint_scan_expr(states, stmt->as.for_stmt.condition, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, stmt->as.for_stmt.increment, false, false);
+            xa_os_resource_lint_scan_stmt(states, stmt->as.for_stmt.body, false);
+            return;
+        case AST_FOR_IN_STMT:
+            xa_os_resource_lint_scan_expr(states, stmt->as.for_in_stmt.collection, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_stmt(states, stmt->as.for_in_stmt.body, false);
+            return;
+        case AST_PARALLEL_FOR_STMT:
+            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.range, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.worker_count, false,
+                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.body, false, false);
+            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.final_body, false,
+                                          false);
             return;
         case AST_BLOCK:
         case AST_PROGRAM:
