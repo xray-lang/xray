@@ -1157,6 +1157,18 @@ static int ws_connect_parse_response(XrWebSocket *ws) {
     if (strncmp(response, "HTTP/1.1 101", 12) != 0)
         return -WS_ERR_HANDSHAKE;
 
+    char upgrade_val[64];
+    if (!ws_get_header_value(response, "Upgrade", upgrade_val, sizeof(upgrade_val)) ||
+        strcasecmp(upgrade_val, "websocket") != 0) {
+        return -WS_ERR_HANDSHAKE;
+    }
+
+    char connection_val[256];
+    if (!ws_get_header_value(response, "Connection", connection_val, sizeof(connection_val)) ||
+        !ws_header_list_has_token(connection_val, "upgrade")) {
+        return -WS_ERR_HANDSHAKE;
+    }
+
     // Strict exact-match of Sec-WebSocket-Accept against the trimmed header
     // value (a substring scan would accept any header echoing the digest).
     char *accept_key = compute_accept_key(ws->sec_key);

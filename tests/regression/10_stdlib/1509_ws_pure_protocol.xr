@@ -1,6 +1,38 @@
 // Pure-Xray WebSocket protocol helpers.
 
 import ws
+import net
+
+fn headerValue(headers: string, name: string) -> string? {
+    var prefix = name + ": "
+    var start = headers.indexOf(prefix)
+    if (start < 0) { return null }
+    start = start + prefix.length
+    var end = headers.indexOf("\r\n", start)
+    if (end < 0) { return null }
+    return headers.slice(start, end)
+}
+
+fn serveMissingUpgradeResponse(lst: NetListener) {
+    var maybeConn = net.accept(lst)
+    if (maybeConn == null) {
+        net.close(lst)
+        return
+    }
+    var conn = maybeConn!
+    var req = net.read(conn)
+    if (req != null) {
+        var key = headerValue(req!, "Sec-WebSocket-Key")
+        if (key != null) {
+            var response = "HTTP/1.1 101 Switching Protocols\r\n" +
+                "Connection: Upgrade\r\n" +
+                "Sec-WebSocket-Accept: " + ws.acceptKey(key!) + "\r\n\r\n"
+            net.write(conn, response)
+        }
+    }
+    net.close(conn)
+    net.close(lst)
+}
 
 @test
 fn test_accept_key_and_upgrade_response() {
@@ -54,6 +86,20 @@ fn test_connect_rejects_invalid_urls_before_network() {
     var badIpv6 = ws.connect("ws://[::1]x/", null)
     assert(badIpv6 != null)
     assert_eq(badIpv6!.error, "URL parse error")
+}
+
+@test
+fn test_connect_rejects_missing_upgrade_response_header() {
+    var maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    var port = lst.port()
+
+    go serveMissingUpgradeResponse(lst)
+
+    var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
+    assert(conn != null)
+    assert_eq(conn!.error, "Handshake failed")
 }
 
 @test
