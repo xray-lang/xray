@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_json_stringify_reject' allocates via method 'Json.stringify'
+contains=xray_no_alloc_json_stringify_reject
+not_contains=CRASH

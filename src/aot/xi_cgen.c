@@ -2886,6 +2886,25 @@ static const char *cg_no_alloc_datetime_alloc_detail(const char *name) {
     return NULL;
 }
 
+static const char *cg_no_alloc_json_static_alloc_detail(const char *name) {
+    if (!name)
+        return NULL;
+    static const struct {
+        const char *name;
+        const char *detail;
+    } allocating_json_static_funcs[] = {
+        {"parse", "Json.parse"},       {"stringify", "Json.stringify"}, {"encode", "Json.encode"},
+        {"tryParse", "Json.tryParse"}, {"keys", "Json.keys"},           {"values", "Json.values"},
+        {"entries", "Json.entries"},
+    };
+    for (size_t i = 0;
+         i < sizeof(allocating_json_static_funcs) / sizeof(allocating_json_static_funcs[0]); i++) {
+        if (strcmp(name, allocating_json_static_funcs[i].name) == 0)
+            return allocating_json_static_funcs[i].detail;
+    }
+    return NULL;
+}
+
 static bool cg_no_alloc_type_name_allocates(const char *type) {
     if (!type)
         return false;
@@ -3041,9 +3060,18 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_STRING, NULL, "translate", "string.translate"},
         {XR_KIND_INT, NULL, "toString", "int.toString"},
         {XR_KIND_INT, NULL, "toHex", "int.toHex"},
+        {XR_KIND_INT, NULL, "toBigInt", "int.toBigInt"},
         {XR_KIND_FLOAT, NULL, "toString", "float.toString"},
         {XR_KIND_BOOL, NULL, "toString", "bool.toString"},
         {XR_KIND_CHAR, NULL, "toString", "char.toString"},
+        {XR_KIND_UNKNOWN, "BigInt", "toString", "BigInt.toString"},
+        {XR_KIND_UNKNOWN, "BigInt", "abs", "BigInt.abs"},
+        {XR_KIND_JSON, NULL, "keys", "Json.keys"},
+        {XR_KIND_JSON, NULL, "values", "Json.values"},
+        {XR_KIND_JSON, NULL, "entries", "Json.entries"},
+        {XR_KIND_JSON, NULL, "iterator", "Json.iterator"},
+        {XR_KIND_JSON, NULL, "entriesIterator", "Json.entriesIterator"},
+        {XR_KIND_JSON, NULL, "toString", "Json.toString"},
         {XR_KIND_UNKNOWN, "DateTime", "toString", "DateTime.toString"},
         {XR_KIND_UNKNOWN, "DateTime", "format", "DateTime.format"},
         {XR_KIND_UNKNOWN, "DateTime", "toISOString", "DateTime.toISOString"},
@@ -3096,6 +3124,20 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
             return true;
         }
         return false;
+    }
+
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
+        const char *json_static_detail =
+            xicgen_receiver_is_builtin_global(v->args[0], XR_GLOBAL_VAR_JSON)
+                ? cg_no_alloc_json_static_alloc_detail((const char *) v->aux)
+                : NULL;
+        if (json_static_detail) {
+            if (kind_out)
+                *kind_out = "method";
+            if (detail_out)
+                *detail_out = json_static_detail;
+            return true;
+        }
     }
 
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {

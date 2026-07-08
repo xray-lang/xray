@@ -1,0 +1,7 @@
+@no_alloc
+fn xray_no_alloc_json_keys_reject(value: Json) -> int {
+    return value.keys().length
+}
+
+var obj: Json = { answer: 42 }
+print(xray_no_alloc_json_keys_reject(obj))

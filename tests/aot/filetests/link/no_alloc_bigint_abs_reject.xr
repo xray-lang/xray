@@ -1,0 +1,7 @@
+@no_alloc
+fn xray_no_alloc_bigint_abs_reject(value: BigInt) -> BigInt {
+    return value.abs()
+}
+
+var value = 7.toBigInt()
+print(xray_no_alloc_bigint_abs_reject(value).toString())
