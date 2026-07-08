@@ -615,6 +615,54 @@ static bool cg_static_fixed_struct_array_fixed_array_field_value(
     return true;
 }
 
+static bool cg_static_fixed_struct_array_nested_field_value(
+    XiCgenCtx *ctx, const XiValue *value, CgStaticFixedStructArrayInfo *out_info, int64_t *out_slot,
+    const XiModule **out_module, const XiValue **out_elem_access, const XiValue **out_elem_index,
+    int64_t *out_parent_field_idx, const XrAggregateLayout **out_nested_layout) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || (v->op != XI_AGG_GET && v->op != XI_LOAD_FIELD) || v->nargs < 1)
+        return false;
+    CgStaticFixedStructArrayInfo info;
+    int64_t slot = -1;
+    const XiModule *module = NULL;
+    const XiValue *elem_index = NULL;
+    if (!cg_freestanding_static_fixed_struct_array_index_value(ctx, v->args[0], &info, &slot,
+                                                               &module, &elem_index))
+        return false;
+    int64_t parent_field_idx = -1;
+    if (!cg_static_struct_field_access_index(v, info.layout, &parent_field_idx))
+        return false;
+    const XrAggregateFieldLayout *field = &info.layout->fields[parent_field_idx];
+    if (!field || field->native_type != XR_NATIVE_STRUCT || !field->sub_layout)
+        return false;
+    if (out_info)
+        *out_info = info;
+    if (out_slot)
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
+    if (out_elem_access)
+        *out_elem_access = cg_unwrap_identity_value(v->args[0]);
+    if (out_elem_index)
+        *out_elem_index = elem_index;
+    if (out_parent_field_idx)
+        *out_parent_field_idx = parent_field_idx;
+    if (out_nested_layout)
+        *out_nested_layout = field->sub_layout;
+    return true;
+}
+
+static void cg_emit_static_fixed_struct_array_nested_field_lvalue(
+    XiCgenCtx *ctx, FILE *out, const XiModule *module, int64_t slot, const XiValue *index,
+    const char *tmp_index, const XrAggregateLayout *parent, int64_t parent_field_idx,
+    const XrAggregateLayout *nested, int64_t nested_field_idx) {
+    char fname[128];
+    cg_emit_static_fixed_struct_array_field_lvalue_with_tmp(ctx, out, module, slot, index,
+                                                            tmp_index, parent, parent_field_idx);
+    cg_struct_field_c_name(nested, nested_field_idx, fname, sizeof(fname));
+    fprintf(out, ".%s", fname);
+}
+
 static void
 cg_emit_static_fixed_struct_array_field_oob_fallback(FILE *out,
                                                      const XrAggregateFieldLayout *field) {
@@ -629,6 +677,49 @@ cg_emit_static_fixed_struct_array_field_oob_fallback(FILE *out,
 
 static bool emit_static_fixed_struct_array_field_get_expr(XiCgenCtx *ctx, FILE *out,
                                                           const XiValue *v) {
+    CgStaticFixedStructArrayInfo nested_info;
+    int64_t nested_slot = -1;
+    const XiModule *nested_module = NULL;
+    const XiValue *nested_elem_access = NULL;
+    const XiValue *nested_elem_index = NULL;
+    int64_t nested_parent_field_idx = -1;
+    const XrAggregateLayout *nested_layout = NULL;
+    if (v && v->nargs >= 1 &&
+        cg_static_fixed_struct_array_nested_field_value(
+            ctx, v->args[0], &nested_info, &nested_slot, &nested_module, &nested_elem_access,
+            &nested_elem_index, &nested_parent_field_idx, &nested_layout) &&
+        nested_layout) {
+        int64_t nested_field_idx = -1;
+        if (!cg_static_struct_field_access_index(v, nested_layout, &nested_field_idx))
+            return false;
+        const XrAggregateFieldLayout *nested_field = &nested_layout->fields[nested_field_idx];
+        if (!cg_static_fixed_struct_array_field_result_supported(nested_field))
+            return false;
+        XrRep field_rep = cg_struct_native_rep(nested_field->native_type);
+        bool unchecked = cg_fixed_array_index_bounds_proven(nested_elem_access, nested_info.count);
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, field_rep, cg_value_plan_storage_rep(ctx, v));
+        if (!unchecked) {
+            fprintf(out, "({ int64_t _idx = ");
+            emit_value_as_rep_ctx(ctx, out, nested_elem_index, XR_REP_I64);
+            fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < %u) ? ", (unsigned) nested_info.count);
+        }
+        if (field_rep == XR_REP_F64)
+            fprintf(out, "(double)");
+        else if (field_rep == XR_REP_I64)
+            fprintf(out, "(int64_t)");
+        cg_emit_static_fixed_struct_array_nested_field_lvalue(
+            ctx, out, nested_module, nested_slot, nested_elem_index, unchecked ? NULL : "_idx",
+            nested_info.layout, nested_parent_field_idx, nested_layout, nested_field_idx);
+        if (!unchecked) {
+            fprintf(out, " : (xrt_fixed_index_oob(_idx, %u), ", (unsigned) nested_info.count);
+            cg_emit_static_fixed_struct_array_field_oob_fallback(out, nested_field);
+            fprintf(out, "); })");
+        }
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
     CgStaticFixedStructArrayInfo info;
     int64_t slot = -1;
     const XiModule *module = NULL;
@@ -667,6 +758,9 @@ static bool cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(XiCgenC
                                                                          const XiFunc *f,
                                                                          const XiValue *target,
                                                                          int depth);
+static bool cg_static_fixed_struct_array_nested_field_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                                    const XiValue *target,
+                                                                    int depth);
 
 static bool cg_static_fixed_struct_array_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                                                              const XiValue *target, int depth) {
@@ -700,6 +794,14 @@ static bool cg_static_fixed_struct_array_index_ref_safe_uses(XiCgenCtx *ctx, con
                                                                          NULL, NULL, NULL, NULL)) {
                     if (!cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(ctx, f, v,
                                                                                       depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_AGG_GET || v->op == XI_LOAD_FIELD) && a == 0 &&
+                    cg_static_fixed_struct_array_nested_field_value(ctx, v, NULL, NULL, NULL, NULL,
+                                                                    NULL, NULL, NULL)) {
+                    if (!cg_static_fixed_struct_array_nested_field_ref_safe_uses(ctx, f, v,
+                                                                                 depth + 1))
                         return false;
                     continue;
                 }
@@ -759,6 +861,59 @@ static bool cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(XiCgenC
     return true;
 }
 
+static bool cg_static_fixed_struct_array_nested_field_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                                    const XiValue *target,
+                                                                    int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    const XrAggregateLayout *nested_layout = NULL;
+    if (!cg_static_fixed_struct_array_nested_field_value(ctx, target, NULL, NULL, NULL, NULL, NULL,
+                                                         NULL, &nested_layout) ||
+        !nested_layout)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if ((v->op == XI_AGG_GET || v->op == XI_LOAD_FIELD) && a == 0) {
+                    int64_t field_idx = -1;
+                    if (!cg_static_struct_field_access_index(v, nested_layout, &field_idx))
+                        return false;
+                    const XrAggregateFieldLayout *field = &nested_layout->fields[field_idx];
+                    if (!cg_static_fixed_struct_array_field_result_supported(field))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_struct_array_nested_field_ref_safe_uses(ctx, f, v,
+                                                                                 depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static bool cg_static_fixed_struct_array_const_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                                                              const XiValue *target, int depth) {
     if (!ctx || !f || !target || depth > 8)
@@ -808,6 +963,15 @@ static bool cg_value_is_elided_static_fixed_struct_array_index_ref(XiCgenCtx *ct
     if (!cg_freestanding_static_fixed_struct_array_index_value(ctx, v, NULL, NULL, NULL, NULL))
         return false;
     return cg_static_fixed_struct_array_index_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool cg_value_is_elided_static_fixed_struct_array_nested_field_ref(XiCgenCtx *ctx,
+                                                                          const XiFunc *f,
+                                                                          const XiValue *v) {
+    if (!cg_static_fixed_struct_array_nested_field_value(ctx, v, NULL, NULL, NULL, NULL, NULL, NULL,
+                                                         NULL))
+        return false;
+    return cg_static_fixed_struct_array_nested_field_ref_safe_uses(ctx, f, v, 0);
 }
 
 static bool cg_value_is_elided_static_fixed_struct_array_const_ref(XiCgenCtx *ctx, const XiFunc *f,

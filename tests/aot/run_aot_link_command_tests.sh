@@ -1497,6 +1497,18 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_ROWS[_idx].weight" \
             "freestanding-profile/top-const-aggregate: still reads sibling struct-array scalar field directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "const struct { struct { int64_t code; uint8_t flag; } inner; int64_t base; } xray_const_freestanding_top_const_aggregate_GROUPS[2]" \
+            "freestanding-profile/top-const-aggregate: materializes struct-array nested data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_GROUPS[2] XRT_ATTR_SECTION(\"__DATA,.xray_groups\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits attrs on struct-array nested data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].inner.code" \
+            "freestanding-profile/top-const-aggregate: reads struct-array nested scalar field directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].base" \
+            "freestanding-profile/top-const-aggregate: reads struct-array nested sibling field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_str_lit(&_xstr_" \
             "freestanding-profile/top-const-aggregate: reads string const through literal header"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue f0" \
@@ -1619,6 +1631,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'xray_const__freestanding_static_data_lib_ROWS[2] XRT_ATTR_SECTION("__DATA,.xr_irow") XRT_ATTR_WEAK XRT_ATTR_USED' \
             "freestanding-profile/static-import: exporter keeps struct-array fixed-field section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'xray_const__freestanding_static_data_lib_GROUPS[2] XRT_ATTR_SECTION("__DATA,.xr_igroup") XRT_ATTR_WEAK XRT_ATTR_USED' \
+            "freestanding-profile/static-import: exporter keeps struct-array nested section/weak/used attrs"
     else
         record_fail "freestanding-profile/static-import: exporter kept C source missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
@@ -1641,6 +1656,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'extern const struct { uint8_t samples[4]; int64_t weight; } xray_const__freestanding_static_data_lib_ROWS[2]' \
             "freestanding-profile/static-import: importer declares struct-array fixed-field extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { struct { int64_t code; } inner; int64_t base; } xray_const__freestanding_static_data_lib_GROUPS[2]' \
+            "freestanding-profile/static-import: importer declares struct-array nested extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_ENTRIES[_idx].code' \
             "freestanding-profile/static-import: importer reads struct-array integer field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
@@ -1652,6 +1670,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_ROWS[_idx].weight' \
             "freestanding-profile/static-import: importer reads struct-array sibling scalar field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_GROUPS[_idx].inner.code' \
+            "freestanding-profile/static-import: importer reads struct-array nested scalar field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_GROUPS[_idx].base' \
+            "freestanding-profile/static-import: importer reads struct-array nested sibling field directly"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
             "freestanding-profile/static-import: avoids dynamic property helper"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
