@@ -887,6 +887,91 @@ else
     record_skip "freestanding-profile/kernel-shape: final ELF link (requires zig and llvm-readelf)"
 fi
 
+if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1 &&
+        command -v llvm-nm >/dev/null 2>&1; then
+    FREESTANDING_KERNEL_RISCV32_ELF_SCRIPT="$WORK/freestanding_kernel_shape_riscv32.ld"
+    printf '%s\n' \
+        'EXTERN(xray_kernel_entry)' \
+        'ENTRY(_start)' \
+        'SECTIONS {' \
+        '  . = 0x80000000;' \
+        '  _start = xray_kernel_entry;' \
+        '  .xray_multiboot ALIGN(4) : { KEEP(*("__DATA,.xray_multiboot")) }' \
+        '  .text ALIGN(4) : { KEEP(*("__TEXT,.xray_boot")) *(.text*) }' \
+        '  .rodata ALIGN(4) : { *(.rodata*) }' \
+        '  .sdata ALIGN(4) : { *(.sdata*) }' \
+        '  .data ALIGN(4) : { *(.data*) }' \
+        '  .bss ALIGN(8) : { *(.bss*) *(COMMON) }' \
+        '}' >"$FREESTANDING_KERNEL_RISCV32_ELF_SCRIPT"
+    FREESTANDING_KERNEL_RISCV32_ELF="$WORK/freestanding_kernel_shape_riscv32.elf"
+    FREESTANDING_KERNEL_RISCV32_ELF_LOG="$WORK/freestanding_kernel_shape_riscv32_elf.log"
+    FREESTANDING_KERNEL_RISCV32_ELF_HEADER="$WORK/freestanding_kernel_shape_riscv32_elf.header"
+    FREESTANDING_KERNEL_RISCV32_ELF_SECTIONS="$WORK/freestanding_kernel_shape_riscv32_elf.sections"
+    FREESTANDING_KERNEL_RISCV32_ELF_SYMBOLS="$WORK/freestanding_kernel_shape_riscv32_elf.symbols"
+    FREESTANDING_KERNEL_RISCV32_ELF_UNDEF="$WORK/freestanding_kernel_shape_riscv32_elf.undefined"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding \
+            --target riscv32imac-unknown-none-elf --toolchain zig \
+            --linker-script "$FREESTANDING_KERNEL_RISCV32_ELF_SCRIPT" \
+            --keep-c --rebuild --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_KERNEL_RISCV32_ELF" "$FREESTANDING_KERNEL_SRC" \
+            >"$FREESTANDING_KERNEL_RISCV32_ELF_LOG" 2>&1; then
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_LOG" \
+            "-Wl,-T,$FREESTANDING_KERNEL_RISCV32_ELF_SCRIPT" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF uses linker script"
+        expect_log_not_contains "$FREESTANDING_KERNEL_RISCV32_ELF_LOG" \
+            "cannot find entry symbol" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF resolves entry symbol"
+        llvm-readelf -h "$FREESTANDING_KERNEL_RISCV32_ELF" \
+            >"$FREESTANDING_KERNEL_RISCV32_ELF_HEADER" 2>&1
+        llvm-readelf -S "$FREESTANDING_KERNEL_RISCV32_ELF" \
+            >"$FREESTANDING_KERNEL_RISCV32_ELF_SECTIONS" 2>&1
+        llvm-readelf -s "$FREESTANDING_KERNEL_RISCV32_ELF" \
+            >"$FREESTANDING_KERNEL_RISCV32_ELF_SYMBOLS" 2>&1
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_HEADER" \
+            "Class:                             ELF32" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF is ELF32"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_HEADER" \
+            "Data:                              2's complement, little endian" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF is little-endian"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_HEADER" \
+            "Type:                              EXEC (Executable file)" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF is executable"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_HEADER" \
+            "Machine:                           RISC-V" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF targets RISC-V"
+        expect_log_not_contains "$FREESTANDING_KERNEL_RISCV32_ELF_HEADER" \
+            "Entry point address:               0x0" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF has nonzero entry"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_SECTIONS" ".xray_multiboot" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF keeps multiboot section"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_SECTIONS" ".text" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF keeps text section"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_SYMBOLS" "xray_kernel_entry" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF exports boot symbol"
+        expect_log_contains "$FREESTANDING_KERNEL_RISCV32_ELF_SYMBOLS" "_start" \
+            "freestanding-profile/kernel-shape: riscv32 final ELF defines start alias"
+        if llvm-nm -u "$FREESTANDING_KERNEL_RISCV32_ELF" \
+                >"$FREESTANDING_KERNEL_RISCV32_ELF_UNDEF" 2>&1; then
+            if [ ! -s "$FREESTANDING_KERNEL_RISCV32_ELF_UNDEF" ]; then
+                record_pass "freestanding-profile/kernel-shape: riscv32 final ELF has no undefined symbols"
+            else
+                record_fail "freestanding-profile/kernel-shape: riscv32 final ELF has unexpected undefined symbols"
+                sed 's/^/      /' "$FREESTANDING_KERNEL_RISCV32_ELF_UNDEF" | sed -n '1,80p'
+            fi
+        else
+            record_fail "freestanding-profile/kernel-shape: riscv32 final ELF llvm-nm failed"
+            sed 's/^/      /' "$FREESTANDING_KERNEL_RISCV32_ELF_UNDEF" | sed -n '1,80p'
+        fi
+    else
+        record_fail "freestanding-profile/kernel-shape: riscv32 final ELF link failed"
+        sed 's/^/      /' "$FREESTANDING_KERNEL_RISCV32_ELF_LOG" | sed -n '1,120p'
+    fi
+else
+    record_skip "freestanding-profile/kernel-shape: riscv32 final ELF link (requires zig, llvm-readelf and llvm-nm)"
+fi
+
 FREESTANDING_RAWPTR_NULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_null.xr"
 FREESTANDING_RAWPTR_NULL_OBJ="$WORK/freestanding_rawptr_null.o"
 FREESTANDING_RAWPTR_NULL_LOG="$WORK/freestanding_rawptr_null.log"
