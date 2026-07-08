@@ -542,6 +542,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"upgradeResponse", XLSP_SYM_FUNCTION, "fn(secKey: string, protocol?: string?, deflate?: bool): string", "", NULL, 0},
     {"clientRequest", XLSP_SYM_FUNCTION, "fn(path: string, host: string, secKey: string): string", "", NULL, 0},
     {"parseUrl", XLSP_SYM_FUNCTION, "fn(url: string): WsUrl?", "", NULL, 0},
+    {"isValidCloseCode", XLSP_SYM_FUNCTION, "fn(code: int): bool", "", NULL, 0},
+    {"parseClosePayload", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>): ClosePayload?", "", NULL, 0},
     {"maskPayload", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, key: Array<uint8>): Array<uint8>", "", NULL, 0},
     {"parseFrame", XLSP_SYM_FUNCTION, "fn(raw: Array<uint8>, expectMasked?: bool, enforceMask?: bool, allowRsv1?: bool, maxPayloadBytes?: int): ParsedFrame?", "", NULL, 0},
     {"frame", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, opcode?: int, mask?: bool): Array<uint8>", "", NULL, 0},
@@ -554,8 +556,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Native handle type", NULL, 0},
     {"ParsedFrame", XLSP_SYM_CLASS, "type ParsedFrame", "Class type", NULL, 0},
     {"WsUrl", XLSP_SYM_CLASS, "type WsUrl", "Class type", NULL, 0},
+    {"ClosePayload", XLSP_SYM_CLASS, "type ClosePayload", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 32
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 35
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
