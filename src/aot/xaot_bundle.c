@@ -2537,6 +2537,24 @@ static void print_interface_flag_bits(FILE *out, uint32_t bits) {
 #undef PRINT_BIT
 }
 
+static void print_bounds_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_BOUNDS_EV_DOM_GUARD, "dom_guard");
+    PRINT_BIT(XAOT_BOUNDS_EV_COUNTED_LOOP, "counted_loop");
+    PRINT_BIT(XAOT_BOUNDS_EV_NONNEG_INDEX, "nonneg");
+    PRINT_BIT(XAOT_BOUNDS_EV_NO_CLOBBER, "no_clobber");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static const char *span_access_kind_name(uint8_t kind) {
     switch ((XaotSpanAccessKind) kind) {
         case XAOT_SPAN_ACCESS_INDEX_GET:
@@ -3012,11 +3030,9 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             bp->access && bp->access->op == XI_INDEX_SET ? "index_set" : "index_get";
         value_ref(access_buf, sizeof(access_buf), bp->access);
         if (bp->evidence != 0) {
-            fprintf(out, "bounds %u func=%s access=%s op=%s evidence=%s%s%s", ai,
-                    safe_str(bp->func ? bp->func->name : NULL), access_buf, op_name,
-                    (bp->evidence & XAOT_BOUNDS_EV_DOM_GUARD) ? "dom_guard" : "",
-                    (bp->evidence & XAOT_BOUNDS_EV_COUNTED_LOOP) ? "counted_loop" : "",
-                    (bp->evidence & XAOT_BOUNDS_EV_NONNEG_INDEX) ? "+nonneg" : "");
+            fprintf(out, "bounds %u func=%s access=%s op=%s evidence=", ai,
+                    safe_str(bp->func ? bp->func->name : NULL), access_buf, op_name);
+            print_bounds_evidence_bits(out, bp->evidence);
         } else {
             static const char *const reason_names[] = {"none", "no_guard", "index_range",
                                                        "len_mismatch", "clobber"};

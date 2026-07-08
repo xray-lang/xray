@@ -151,6 +151,8 @@ enum {
     XAOT_BOUNDS_EV_COUNTED_LOOP = 1u << 1,
     /* Index proven >= 0 (range analysis or structural induction). */
     XAOT_BOUNDS_EV_NONNEG_INDEX = 1u << 2,
+    /* No side-effect / write-memory op can clobber the length relation before access. */
+    XAOT_BOUNDS_EV_NO_CLOBBER = 1u << 3,
 };
 
 /* Why an access stayed checked. Ordered by specificity: when both proof
