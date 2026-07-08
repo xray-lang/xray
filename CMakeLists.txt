@@ -2,7 +2,7 @@
 # Author: xingleixu@gmail.com
 # Xray Language Interpreter Build Configuration
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 
 if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
@@ -526,40 +526,40 @@ function(xray_exclude_include_fragments source_list_name)
     endif()
 endfunction()
 
-file(GLOB BASE_SRC "src/base/*.c")
+file(GLOB BASE_SRC CONFIGURE_DEPENDS "src/base/*.c")
 # Cross-platform abstraction layer. Each impl file is exclusive to
 # its platform — no body guards, only the right subtree is built.
 if(WIN32)
-    file(GLOB OS_SRC "src/os/win/*.c")
+    file(GLOB OS_SRC CONFIGURE_DEPENDS "src/os/win/*.c")
     set(AOT_RANDOM_SRC "src/os/win/random_win.c")
     set(AOT_TIME_SRC "src/os/win/time_win.c")
 else()
-    file(GLOB OS_SRC "src/os/unix/*.c")
+    file(GLOB OS_SRC CONFIGURE_DEPENDS "src/os/unix/*.c")
     set(AOT_RANDOM_SRC "src/os/unix/random_unix.c")
     set(AOT_TIME_SRC "src/os/unix/time_unix.c")
 endif()
-file(GLOB RUNTIME_TOP_SRC "src/runtime/*.c")
-file(GLOB RUNTIME_CORE_SRC "src/runtime/core/*.c")
-file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
-file(GLOB RUNTIME_MEM_SRC "src/runtime/mem/*.c")
-file(GLOB RUNTIME_OBJECT_SRC "src/runtime/object/*.c")
-file(GLOB RUNTIME_OBJECT_BUILTINS_SRC "src/runtime/object/builtins/*.c")
+file(GLOB RUNTIME_TOP_SRC CONFIGURE_DEPENDS "src/runtime/*.c")
+file(GLOB RUNTIME_CORE_SRC CONFIGURE_DEPENDS "src/runtime/core/*.c")
+file(GLOB RUNTIME_VALUE_SRC CONFIGURE_DEPENDS "src/runtime/value/*.c")
+file(GLOB RUNTIME_MEM_SRC CONFIGURE_DEPENDS "src/runtime/mem/*.c")
+file(GLOB RUNTIME_OBJECT_SRC CONFIGURE_DEPENDS "src/runtime/object/*.c")
+file(GLOB RUNTIME_OBJECT_BUILTINS_SRC CONFIGURE_DEPENDS "src/runtime/object/builtins/*.c")
 list(APPEND RUNTIME_OBJECT_SRC
     ${RUNTIME_OBJECT_BUILTINS_SRC}
     "src/runtime/object/xarray_vm.c"
     "src/runtime/object/xmap_vm.c"
 )
 list(REMOVE_DUPLICATES RUNTIME_OBJECT_SRC)
-file(GLOB RUNTIME_CLASS_SRC "src/runtime/class/*.c")
+file(GLOB RUNTIME_CLASS_SRC CONFIGURE_DEPENDS "src/runtime/class/*.c")
 list(APPEND RUNTIME_CLASS_SRC
     "src/runtime/class/xinstance_core.c"
     "src/runtime/class/xinstance_dynamic.c"
     "src/runtime/class/xinstance_destroy.c"
 )
 list(REMOVE_DUPLICATES RUNTIME_CLASS_SRC)
-file(GLOB RUNTIME_CLOSURE_SRC "src/runtime/closure/*.c")
-file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
-file(GLOB CORO_SRC "src/coro/*.c")
+file(GLOB RUNTIME_CLOSURE_SRC CONFIGURE_DEPENDS "src/runtime/closure/*.c")
+file(GLOB RUNTIME_SYMBOL_SRC CONFIGURE_DEPENDS "src/runtime/symbol/*.c")
+file(GLOB CORO_SRC CONFIGURE_DEPENDS "src/coro/*.c")
 list(APPEND CORO_SRC
     "src/coro/xaot_runtime.c"
     "src/coro/xresult_group_destroy.c"
@@ -570,31 +570,31 @@ list(APPEND CORO_SRC
     "src/coro/xwork_queue_wait.c"
 )
 list(REMOVE_DUPLICATES CORO_SRC)
-file(GLOB IO_SRC "src/io/*.c")
+file(GLOB IO_SRC CONFIGURE_DEPENDS "src/io/*.c")
 
 # Stackful coroutine context switch removed — fully stackless now
-file(GLOB FRONTEND_LEXER_SRC "src/frontend/lexer/*.c")
-file(GLOB FRONTEND_PARSER_SRC "src/frontend/parser/*.c")
-file(GLOB FRONTEND_CODEGEN_SRC "src/frontend/codegen/*.c")
-file(GLOB FRONTEND_ANALYZER_SRC "src/frontend/analyzer/*.c")
-file(GLOB FRONTEND_CANONICAL_SRC "src/frontend/canonical/*.c")
-file(GLOB FRONTEND_FORMAT_SRC "src/frontend/format/*.c")
-file(GLOB TOOLCHAIN_SRC "src/toolchain/*.c")
-file(GLOB VM_SRC "src/vm/*.c")
-file(GLOB IR_SRC "src/ir/*.c")
-file(GLOB MODULE_SRC "src/module/*.c")
-file(GLOB ANALYSIS_SRC "src/analysis/*.c")
-file(GLOB AOT_SRC "src/aot/*.c")
+file(GLOB FRONTEND_LEXER_SRC CONFIGURE_DEPENDS "src/frontend/lexer/*.c")
+file(GLOB FRONTEND_PARSER_SRC CONFIGURE_DEPENDS "src/frontend/parser/*.c")
+file(GLOB FRONTEND_CODEGEN_SRC CONFIGURE_DEPENDS "src/frontend/codegen/*.c")
+file(GLOB FRONTEND_ANALYZER_SRC CONFIGURE_DEPENDS "src/frontend/analyzer/*.c")
+file(GLOB FRONTEND_CANONICAL_SRC CONFIGURE_DEPENDS "src/frontend/canonical/*.c")
+file(GLOB FRONTEND_FORMAT_SRC CONFIGURE_DEPENDS "src/frontend/format/*.c")
+file(GLOB TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/toolchain/*.c")
+file(GLOB VM_SRC CONFIGURE_DEPENDS "src/vm/*.c")
+file(GLOB IR_SRC CONFIGURE_DEPENDS "src/ir/*.c")
+file(GLOB MODULE_SRC CONFIGURE_DEPENDS "src/module/*.c")
+file(GLOB ANALYSIS_SRC CONFIGURE_DEPENDS "src/analysis/*.c")
+file(GLOB AOT_SRC CONFIGURE_DEPENDS "src/aot/*.c")
 list(REMOVE_ITEM AOT_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
     "src/aot/xrt_gen_iter.c")
-file(GLOB API_SRC "src/api/*.c")
+file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
 file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 
 # Standard Library (Native modules) - modular conditional compilation
 # Core modules (required): prelude (built-in type registry), time, math, log,
 # gc, regex, path, datetime, encoding, base64, url
-file(GLOB STDLIB_CORE_SRC
+file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/prelude/*.c"
     "stdlib/stdlib_cache.c"
     "stdlib/_probe/*.c"
@@ -617,7 +617,7 @@ set(STDLIB_SRC ${STDLIB_CORE_SRC})
 find_package(ZLIB QUIET)
 if(XR_STDLIB_FULL)
     # Full stdlib: include all modules except those explicitly disabled
-    file(GLOB_RECURSE STDLIB_ALL_SRC "stdlib/*/*.c")
+    file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
     list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
     if(NOT XR_STDLIB_CLUSTER)
@@ -651,35 +651,35 @@ else()
     add_compile_definitions(XR_STDLIB_MODULAR=1)
     message(STATUS "Stdlib: modular build")
     if(XR_STDLIB_FILESYSTEM)
-        file(GLOB STDLIB_FS_SRC "stdlib/io/*.c" "stdlib/os/*.c")
+        file(GLOB STDLIB_FS_SRC CONFIGURE_DEPENDS "stdlib/io/*.c" "stdlib/os/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_FS_SRC})
         add_compile_definitions(XR_HAS_FILESYSTEM=1)
         message(STATUS "Stdlib: +filesystem (io, os)")
     endif()
 
     if(XR_STDLIB_NET)
-        file(GLOB STDLIB_NET_SRC "stdlib/net/*.c" "stdlib/http/*.c" "stdlib/ws/*.c")
+        file(GLOB STDLIB_NET_SRC CONFIGURE_DEPENDS "stdlib/net/*.c" "stdlib/http/*.c" "stdlib/ws/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_NET_SRC})
         add_compile_definitions(XR_HAS_NETWORK=1)
         message(STATUS "Stdlib: +network (net, http, ws)")
     endif()
 
     if(XR_STDLIB_CRYPTO)
-        file(GLOB STDLIB_CRYPTO_SRC "stdlib/crypto/*.c")
+        file(GLOB STDLIB_CRYPTO_SRC CONFIGURE_DEPENDS "stdlib/crypto/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_CRYPTO_SRC})
         add_compile_definitions(XR_HAS_CRYPTO=1)
         message(STATUS "Stdlib: +crypto")
     endif()
 
     if(XR_STDLIB_DATA)
-        file(GLOB STDLIB_DATA_SRC "stdlib/csv/*.c" "stdlib/toml/*.c" "stdlib/yaml/*.c" "stdlib/xml/*.c")
+        file(GLOB STDLIB_DATA_SRC CONFIGURE_DEPENDS "stdlib/csv/*.c" "stdlib/toml/*.c" "stdlib/yaml/*.c" "stdlib/xml/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_DATA_SRC})
         add_compile_definitions(XR_HAS_DATA_FORMATS=1)
         message(STATUS "Stdlib: +data formats (csv, toml, yaml, xml)")
     endif()
 
     if(XR_STDLIB_COMPRESS)
-        file(GLOB STDLIB_COMPRESS_SRC "stdlib/compress/*.c")
+        file(GLOB STDLIB_COMPRESS_SRC CONFIGURE_DEPENDS "stdlib/compress/*.c")
         if(NOT ZLIB_FOUND)
             list(FILTER STDLIB_COMPRESS_SRC EXCLUDE REGEX "compress_zlib\\.c$")
             message(STATUS "Stdlib: +compression (no system zlib, zlib wrapper disabled)")
@@ -691,14 +691,14 @@ else()
     endif()
 
     if(XR_STDLIB_CLUSTER)
-        file(GLOB STDLIB_CLUSTER_SRC "stdlib/cluster/*.c")
+        file(GLOB STDLIB_CLUSTER_SRC CONFIGURE_DEPENDS "stdlib/cluster/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_CLUSTER_SRC})
         add_compile_definitions(XR_HAS_CLUSTER=1)
         message(STATUS "Stdlib: +cluster (distributed Named Channel)")
     endif()
 
     if(XR_BUILD_TEST_MODULES)
-        file(GLOB STDLIB_TEST_SRC "stdlib/test_yield/*.c")
+        file(GLOB STDLIB_TEST_SRC CONFIGURE_DEPENDS "stdlib/test_yield/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_TEST_SRC})
         message(STATUS "Stdlib: +test modules")
     endif()
@@ -963,7 +963,7 @@ set(XRAY_CLI_INCLUDES
 
 # LSP optional module
 if(XR_BUILD_LSP)
-    file(GLOB LSP_SRC "src/app/lsp/*.c")
+    file(GLOB LSP_SRC CONFIGURE_DEPENDS "src/app/lsp/*.c")
     list(FILTER LSP_SRC EXCLUDE REGEX "xlsp_main\.c$")
     list(APPEND XRAY_CLI_SOURCES ${LSP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp)
@@ -975,7 +975,7 @@ endif()
 
 # DAP optional module
 if(XR_BUILD_DAP)
-    file(GLOB DAP_SRC "src/app/dap/*.c")
+    file(GLOB DAP_SRC CONFIGURE_DEPENDS "src/app/dap/*.c")
     list(FILTER DAP_SRC EXCLUDE REGEX "xdap_main\.c$")
 
     # All DAP files (including xdap_debug.c) are in DAP module, not added to xray_core
@@ -1035,7 +1035,7 @@ endif()
 
 # MCP optional module
 if(XR_BUILD_MCP)
-    file(GLOB MCP_SRC "src/app/mcp/*.c")
+    file(GLOB MCP_SRC CONFIGURE_DEPENDS "src/app/mcp/*.c")
     list(APPEND XRAY_CLI_SOURCES ${MCP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
@@ -1665,7 +1665,7 @@ message(STATUS "========================================")
 find_program(CLANG_FORMAT clang-format)
 if(CLANG_FORMAT)
     # Collect all source files
-    file(GLOB_RECURSE ALL_SOURCE_FILES
+    file(GLOB_RECURSE ALL_SOURCE_FILES CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
@@ -1701,7 +1701,7 @@ endif()
 find_program(CLANG_TIDY clang-tidy)
 if(CLANG_TIDY)
     # Core source files for static analysis (critical modules)
-    file(GLOB_RECURSE CORE_ANALYSIS_FILES
+    file(GLOB_RECURSE CORE_ANALYSIS_FILES CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/mem/*.c
