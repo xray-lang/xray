@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_string_entries_iterator_reject' allocates via method 'string.entriesIterator'
+contains=xray_no_alloc_string_entries_iterator_reject
+not_contains=CRASH
