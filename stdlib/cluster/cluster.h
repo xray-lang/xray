@@ -384,9 +384,6 @@ typedef struct XrTopicSubscription {
 //          "events.>" matches "events.user" and "events.user.login"
 XR_FUNC struct XrChannel *xr_cluster_topic_subscribe(struct XrVMRuntime *X, const char *pattern);
 
-// Unsubscribe from a topic pattern
-XR_FUNC void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern);
-
 // Publish a value to a topic. Delivers to all matching local subscriptions
 // and forwards to all connected nodes.
 XR_FUNC int xr_cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue value);
@@ -411,9 +408,6 @@ XR_FUNC void xr_cluster_topic_handle_publish(XrCluster *c, struct XrClusterNode 
 
 // Deliver to local subscribers matching the topic
 XR_FUNC void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
-
-// Check if a pattern matches a topic string
-XR_FUNC bool xr_topic_match(const char *pattern, const char *topic);
 
 /*
  * Topic trie lifecycle. xr_cluster_topics_init must be called once
