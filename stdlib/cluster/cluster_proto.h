@@ -70,14 +70,15 @@ typedef enum {
  * Cluster handshake protocol version.
  *
  *   v1 — proof = SHA256(secret || nonce); no length prefix, no MAC.
- *   v2 — proof = HMAC-SHA256(key = secret, data = nonce). Current.
+ *   v2 — proof = HMAC-SHA256(key = secret, data = nonce).
+ *   v3 — TOPIC_PUBLISH payload puts hop_limit in the fixed header.
  *
  * Versions are mutually incompatible on the wire. A peer advertising a
  * different XR_CLUSTER_HANDSHAKE_VERSION is rejected during the REQ/ACK
  * exchange; this is intentional since a mixed cluster would silently
  * fail proof validation with no useful error otherwise.
  */
-#define XR_CLUSTER_HANDSHAKE_VERSION 2
+#define XR_CLUSTER_HANDSHAKE_VERSION 3
 
 /*
  * Wall-clock deadline for the full handshake exchange (in ms).
@@ -104,8 +105,8 @@ typedef enum {
  * boundaries via the controlled-flooding forwarder (see
  * xr_cluster_topic_handle_publish in cluster_topic.c).
  *
- * A hop_limit byte is appended to every outgoing TOPIC_PUBLISH
- * payload. The originating publisher starts with
+ * Every outgoing TOPIC_PUBLISH payload starts with a hop_limit byte.
+ * The originating publisher starts with
  * XR_TOPIC_DEFAULT_HOP_LIMIT; each receiving node delivers locally
  * and, if hop_limit > 0, re-forwards with (hop_limit - 1) to every
  * connected peer EXCEPT the one the frame arrived on (split
@@ -117,16 +118,8 @@ typedef enum {
  *   2 hops — peers of peers (two-tier cluster)
  *   3 hops — three-tier (edge → region → core + one more)
  *
- * Bumping this on both sides is backward-incompatible (new nodes
- * will re-forward more aggressively). Lowering to 1 effectively
- * reverts to the pre-P17 "publisher must directly connect to every
- * subscriber" behaviour.
- *
- * The wire format sends the limit as a trailing byte so old (no-hop)
- * payloads parse unchanged on new code (missing byte → limit 0 →
- * no further forwarding). Old nodes reading new payloads ignore
- * the extra trailing byte because the decoder keys off topic_len,
- * not payload_len.
+ * Bumping this on both sides changes forwarding behaviour. Lowering to 1
+ * effectively reverts to direct-connect-only publish propagation.
  */
 #define XR_TOPIC_DEFAULT_HOP_LIMIT 3
 

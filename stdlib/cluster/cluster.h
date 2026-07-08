@@ -424,11 +424,10 @@ XR_FUNC int xr_cluster_topic_publish(struct XrVMRuntime *X, const char *topic, X
  *                split-horizon so we never echo the frame back to
  *                its sender. NULL is legal (locally-injected test
  *                frames etc.) but in production always non-NULL.
- *   hop_limit  — the hop count encoded in the frame's trailing byte.
+ *   hop_limit  — the hop count encoded in the frame's fixed header.
  *                0 means "deliver locally only, do not re-forward"
- *                (backward-compat with pre-P17 nodes that do not
- *                emit the hop byte). Non-zero causes a decrement
- *                and a re-send to every other connected peer.
+ *                Non-zero causes a decrement and a re-send to every
+ *                other connected peer.
  *
  * The value is delivered to local subscribers regardless of hop_limit.
  */
