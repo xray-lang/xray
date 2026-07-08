@@ -1,0 +1,12 @@
+fn xray_no_alloc_map_filter_keep(value: int) -> bool {
+    return value > 0
+}
+
+@no_alloc
+fn xray_no_alloc_map_filter_reject(values: Map<int, int>) -> int {
+    return values.filter(xray_no_alloc_map_filter_keep).size
+}
+
+var xray_no_alloc_map_filter_values: Map<int, int> = #{}
+xray_no_alloc_map_filter_values.set(1, 2)
+print(xray_no_alloc_map_filter_reject(xray_no_alloc_map_filter_values))
