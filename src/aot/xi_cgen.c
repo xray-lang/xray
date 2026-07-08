@@ -3095,6 +3095,8 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_UNKNOWN, "Regex", "toString", "Regex.toString"},
         {XR_KIND_UNKNOWN, "StringBuilder", "append", "StringBuilder.append"},
         {XR_KIND_UNKNOWN, "StringBuilder", "toString", "StringBuilder.toString"},
+        {XR_KIND_UNKNOWN, "Atomic", "toString", "Atomic.toString"},
+        {XR_KIND_UNKNOWN, "PanicInfo", "toString", "PanicInfo.toString"},
     };
     for (size_t i = 0; i < sizeof(allocating_methods) / sizeof(allocating_methods[0]); i++) {
         bool receiver_matches =

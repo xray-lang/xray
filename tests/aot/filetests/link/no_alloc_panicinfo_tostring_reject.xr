@@ -1,0 +1,8 @@
+var xray_no_alloc_panic_info = PanicInfo("edge")
+
+@no_alloc
+fn xray_no_alloc_panicinfo_tostring_reject(value: PanicInfo) -> string {
+    return value.toString()
+}
+
+print(xray_no_alloc_panicinfo_tostring_reject(xray_no_alloc_panic_info))
