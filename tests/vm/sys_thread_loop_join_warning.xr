@@ -1,0 +1,14 @@
+import sys
+
+fn conditionalLoopJoin(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    while (flag) {
+        print(t.join())
+        break
+    }
+    print("conditional-loop")
+}
+
+conditionalLoopJoin(false)
