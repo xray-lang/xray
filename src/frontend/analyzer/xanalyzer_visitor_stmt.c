@@ -417,6 +417,16 @@ static void xa_thread_lint_note_var_alias(XaThreadHandleLintState *states, VarDe
         xa_thread_lint_add_alias_id(state, var->symbol_id);
 }
 
+static void xa_thread_lint_note_assignment_alias(XaThreadHandleLintState *states,
+                                                 AssignmentNode *assignment) {
+    if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
+        return;
+    uint32_t src_id = xa_thread_lint_expr_symbol_id(assignment->value);
+    XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, src_id);
+    if (state)
+        xa_thread_lint_add_alias_id(state, assignment->symbol_id);
+}
+
 static AstNode *xa_lifecycle_lint_destructure_source_at(AstNode *initializer, int index) {
     initializer = xa_thread_lint_unwrap_expr(initializer);
     if (!initializer || index < 0)
@@ -578,6 +588,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             return;
 
         case AST_ASSIGNMENT:
+            xa_thread_lint_note_assignment_alias(states, &expr->as.assignment);
             xa_thread_lint_scan_expr(states, expr->as.assignment.value, false, can_escape);
             return;
         case AST_COMPOUND_ASSIGNMENT:
@@ -1585,6 +1596,16 @@ static void xa_os_resource_lint_note_var_alias(XaOsResourceLintState *states, Va
         xa_os_resource_lint_add_alias_id(state, var->symbol_id);
 }
 
+static void xa_os_resource_lint_note_assignment_alias(XaOsResourceLintState *states,
+                                                      AssignmentNode *assignment) {
+    if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
+        return;
+    uint32_t src_id = xa_thread_lint_expr_symbol_id(assignment->value);
+    XaOsResourceLintState *state = xa_os_resource_lint_find_by_symbol_id(states, src_id);
+    if (state)
+        xa_os_resource_lint_add_alias_id(state, assignment->symbol_id);
+}
+
 static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *states,
                                                          XrDestructurePattern *pattern,
                                                          AstNode *initializer) {
@@ -1847,6 +1868,7 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_expr(states, expr->as.grouping, false, can_escape);
             return;
         case AST_ASSIGNMENT:
+            xa_os_resource_lint_note_assignment_alias(states, &expr->as.assignment);
             xa_os_resource_lint_scan_expr(states, expr->as.assignment.value, false, can_escape);
             return;
         case AST_COMPOUND_ASSIGNMENT:

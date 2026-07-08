@@ -1,0 +1,12 @@
+import sys
+
+fn assignmentAliasJoin() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    var u: Thread<int>? = null
+    u = t
+    print(u!.join())
+}
+
+assignmentAliasJoin()

@@ -1,0 +1,19 @@
+import sys
+
+var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+var p2: Process? = null
+p2 = p
+if (p2 != null) {
+    print(p2!.wait())
+} else {
+    print(-1)
+}
+
+var pipe = sys.Pipe.open()
+var pipe2: Pipe? = null
+pipe2 = pipe
+if (pipe2 != null) {
+    print(pipe2!.close())
+} else {
+    print(false)
+}
