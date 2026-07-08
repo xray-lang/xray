@@ -972,8 +972,7 @@ void xr_ws_free(XrWebSocket *ws) {
 // xr_ws_connect_pump advances CONNECT -> [TLS] -> SEND -> RECV using only
 // non-blocking primitives, returning a poll event whenever it must wait. The
 // yieldable ws.connect cfunc suspends the coroutine on that event (no P handoff,
-// so no contention on the handed-off P's timer wheel). xr_ws_connect() below is
-// the blocking wrapper that block_syncs on each event for non-coroutine callers.
+// so no contention on the handed-off P's timer wheel).
 
 typedef enum {
     WS_CONN_PHASE_CONNECT = 0,  // TCP connect in flight (wait writable)
@@ -981,31 +980,6 @@ typedef enum {
     WS_CONN_PHASE_SEND,         // draining the upgrade request
     WS_CONN_PHASE_RECV,         // reading the upgrade response
 } WsConnectPhase;
-
-// Release every resource an in-flight or failed connect owns.
-static void ws_connect_cleanup(XrWebSocket *ws) {
-    if (ws->connect_buf) {
-        xr_free(ws->connect_buf);
-        ws->connect_buf = NULL;
-    }
-    ws->connect_buf_cap = 0;
-    ws->connect_len = 0;
-    ws->connect_off = 0;
-    if (ws->tls_conn) {
-        xr_tls_conn_close((XrTlsConn *) ws->tls_conn);
-        xr_tls_conn_free((XrTlsConn *) ws->tls_conn);
-        ws->tls_conn = NULL;
-    }
-    if (ws->tls_ctx) {
-        xr_tls_context_free((XrTlsContext *) ws->tls_ctx);
-        ws->tls_ctx = NULL;
-    }
-    if (ws->fd >= 0) {
-        ws_netpoll_release_fd(ws);
-        xr_closesocket(ws->fd);
-        ws->fd = -1;
-    }
-}
 
 // Build the upgrade request into ws->connect_buf. Returns 0 or -XrWsError.
 static int ws_build_handshake_request(XrWebSocket *ws) {
@@ -1334,39 +1308,6 @@ int xr_ws_connect_pump(XrWebSocket *ws) {
     }
 
     return -WS_ERR_CONNECT;
-}
-
-XrWsError xr_ws_connect(XrWebSocket *ws) {
-    if (!ws)
-        return WS_ERR_URL;
-    if (ws->state == WS_STATE_OPEN)
-        return WS_OK;
-
-    int ev = xr_ws_connect_start(ws);
-    if (ev < 0) {
-        ws_connect_cleanup(ws);
-        ws->state = WS_STATE_CLOSED;
-        return (XrWsError) (-ev);
-    }
-
-    int timeout = ws->config.connect_timeout_ms > 0 ? ws->config.connect_timeout_ms : 10000;
-    for (;;) {
-        int wr = (ev == XR_WAIT_READ) ? xr_socket_wait_readable(ws->isolate, ws->fd, timeout)
-                                      : xr_socket_wait_writable(ws->isolate, ws->fd, timeout);
-        if (wr <= 0) {
-            ws_connect_cleanup(ws);
-            ws->state = WS_STATE_CLOSED;
-            return (wr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
-        }
-        ev = xr_ws_connect_pump(ws);
-        if (ev == 0)
-            return WS_OK;
-        if (ev < 0) {
-            ws_connect_cleanup(ws);
-            ws->state = WS_STATE_CLOSED;
-            return (XrWsError) (-ev);
-        }
-    }
 }
 
 XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {

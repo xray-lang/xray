@@ -234,14 +234,11 @@ XR_FUNC void xr_ws_free(XrWebSocket *ws);
 
 /*
  * Bind the WebSocket to a XrVMRuntime for coroutine-aware I/O.
- * MUST be called before xr_ws_connect / xr_ws_send / xr_ws_recv.
+ * MUST be called before xr_ws_connect_start / xr_ws_send / xr_ws_recv.
  * Server-side connections are bound automatically in xr_ws_upgrade.
  * Passing NULL is a programming error — all WS I/O requires an isolate.
  */
 XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X);
-
-// Connect to server
-XR_FUNC XrWsError xr_ws_connect(XrWebSocket *ws);
 
 // Yieldable client connect, split into a non-blocking phase machine so the
 // connect cfunc can suspend the coroutine instead of blocking a worker thread.
@@ -250,7 +247,6 @@ XR_FUNC XrWsError xr_ws_connect(XrWebSocket *ws);
 //   xr_ws_connect_pump:  advance the handshake. Returns 0 when the connection is
 //     OPEN, a negative -XrWsError on failure, or a poll event (XR_WAIT_READ /
 //     XR_WAIT_WRITE) to wait for before calling pump again.
-// xr_ws_connect() above is the blocking wrapper around these two.
 XR_FUNC int xr_ws_connect_start(XrWebSocket *ws);
 XR_FUNC int xr_ws_connect_pump(XrWebSocket *ws);
 
