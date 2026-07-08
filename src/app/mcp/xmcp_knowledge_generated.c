@@ -1088,6 +1088,51 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RequestMessage",
+        .signature = "RequestMessage",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.body",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.consumedBytes",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.getHeader",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.getTrailer",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.getTrailers",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.head",
+        .signature = ": RequestHead",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.trailerPairs",
+        .signature = ": Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "RequestMessage.trailers",
+        .signature = ": Json",
+        .summary = "",
+    },
+    {
         .name = "ResponseHead",
         .signature = "ResponseHead",
         .summary = "",
@@ -1145,6 +1190,51 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "ResponseHead.version",
         .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage",
+        .signature = "ResponseMessage",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.body",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.consumedBytes",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.getHeader",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.getTrailer",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.getTrailers",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.head",
+        .signature = ": ResponseHead",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.trailerPairs",
+        .signature = ": Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.trailers",
+        .signature = ": Json",
         .summary = "",
     },
     {
@@ -1293,8 +1383,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "parseRequestText",
+        .signature = "(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?",
+        .summary = "",
+    },
+    {
         .name = "parseResponseHead",
         .signature = "(raw: string, maxHeaders: int = 100): ResponseHead?",
+        .summary = "",
+    },
+    {
+        .name = "parseResponseText",
+        .signature = "(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): ResponseMessage?",
         .summary = "",
     },
     {
@@ -5340,6 +5440,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestHead.method` | `: string` |  |\n"
             "| `RequestHead.target` | `: string` |  |\n"
             "| `RequestHead.version` | `: string` |  |\n"
+            "| `RequestMessage` | `RequestMessage` |  |\n"
+            "| `RequestMessage.body` | `: string` |  |\n"
+            "| `RequestMessage.consumedBytes` | `: int` |  |\n"
+            "| `RequestMessage.getHeader` | `(name: string): string?` |  |\n"
+            "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
+            "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
+            "| `RequestMessage.head` | `: RequestHead` |  |\n"
+            "| `RequestMessage.trailerPairs` | `: Array<(string, string)>` |  |\n"
+            "| `RequestMessage.trailers` | `: Json` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
             "| `ResponseHead.contentLength` | `: int` |  |\n"
@@ -5352,6 +5461,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseHead.reason` | `: string` |  |\n"
             "| `ResponseHead.status` | `: int` |  |\n"
             "| `ResponseHead.version` | `: string` |  |\n"
+            "| `ResponseMessage` | `ResponseMessage` |  |\n"
+            "| `ResponseMessage.body` | `: string` |  |\n"
+            "| `ResponseMessage.consumedBytes` | `: int` |  |\n"
+            "| `ResponseMessage.getHeader` | `(name: string): string?` |  |\n"
+            "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
+            "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
+            "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
+            "| `ResponseMessage.trailerPairs` | `: Array<(string, string)>` |  |\n"
+            "| `ResponseMessage.trailers` | `: Json` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
             "| `RouteMatch.constructor` | `(value: unknown, params: Json): ()` |  |\n"
             "| `RouteMatch.params` | `: Json` |  |\n"
@@ -5381,7 +5499,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
+            "| `http.parseRequestText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?` |  |\n"
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
+            "| `http.parseResponseText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): ResponseMessage?` |  |\n"
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
             "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"

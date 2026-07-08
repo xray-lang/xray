@@ -1,0 +1,48 @@
+// Pure-Xray complete HTTP request text parser.
+import http
+import { parseRequestText } from http
+
+var fixed = parseRequestText(
+    "POST /submit HTTP/1.1\r\nContent-Length: 5\r\nX-Trace: one\r\n\r\nhelloextra"
+)!
+print(fixed.head.method)
+print(fixed.head.target)
+print(fixed.body)
+print(fixed.consumedBytes)
+print(fixed.getHeader("x-trace")!)
+print(fixed.trailerPairs.length)
+print("POST /submit HTTP/1.1\r\nContent-Length: 5\r\nX-Trace: one\r\n\r\nhelloextra".slice(fixed.consumedBytes))
+
+var chunked = parseRequestText(
+    "POST /upload HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n" +
+    "4\r\nWiki\r\n5\r\npedia\r\n0\r\nChecksum: ok\r\nChecksum: newer\r\n\r\nleft"
+)!
+print(chunked.body)
+print(chunked.head.chunked)
+print(chunked.getTrailer("checksum")!)
+print(chunked.getTrailers("checksum").join("|"))
+print(chunked.consumedBytes)
+
+var noBody = parseRequestText("GET /next HTTP/1.1\r\nHost: example.com\r\n\r\nnext")!
+print(noBody.body == "")
+print(noBody.consumedBytes)
+
+var unicodeBody = parseRequestText("POST /utf8 HTTP/1.1\r\nContent-Length: 3\r\n\r\néxtrail")!
+print(unicodeBody.body)
+print(unicodeBody.body.byteLength)
+print(unicodeBody.consumedBytes)
+
+var unicodeChunk = parseRequestText(
+    "POST /utf8 HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n" +
+    "2\r\né\r\n0\r\n\r\n"
+)!
+print(unicodeChunk.body)
+print(unicodeChunk.body.byteLength)
+
+print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabc") == null)
+print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello", 3) == null)
+print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabc\r\n0\r\n\r\n") == null)
+print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n") == null)
+print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked, gzip\r\n\r\nhello") == null)
+print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n1\r\né\r\n0\r\n\r\n") == null)
+print(http.parseRequestText("GET / HTTP/1.1\r\n\r\n")!.body == "")
