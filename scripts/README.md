@@ -11,6 +11,7 @@
 | `scripts/run_mem_stress.sh` | memory 重测试 1205/1206/1207 burn-in | `[rounds]`；env: `XRAY_BIN`, `MEM_STRESS_ROUNDS` | 全过=0；任一失败=1；参数错=2 | rounds × ~30s |
 | `scripts/repro_win11_coro_burn.sh` | Win11 协程 4 用例 burn-in（1115/1109/1127/1128） | `[N]`；env: `XRAY_BIN` | 全过=0；任一失败=1；参数错=2 | N × 4 × ~5s |
 | `scripts/check_temp_workarounds.sh` | `DEFENSIVE-TEMP[NNN]` 标签 ↔ `tests/known_temp_workarounds.md` 双向对账 | 无 | 任一不一致=非0 | < 10s |
+| `scripts/check_stdlib_surface_uniqueness.py` | 151 R3：不同 public stdlib surface 不得绑定同一 VM/AOT helper | `--root <repo>`；可选 `--list-known` | 新重复=1；仅命中已登记债务=0 | < 1s |
 
 ## 详细说明
 
@@ -30,6 +31,10 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 
 接入 PR 门禁（参考 `.github/workflows/ci.yml` 的 `reverse-invariants` job）。本表只做完整性收录，不再展开规则。
 
+### `check_stdlib_surface_uniqueness.py`
+
+扫描 `stdlib/defs/*.def` 的 public module functions 与 native class methods，按 VM/AOT helper 分组。不同 public symbol 复用同一 helper 会失败；同一 symbol 的 overload 合法，`visibility: "internal"` helper 不进入用户表面检查。当前仅允许脚本内精确登记的历史债务，避免 147/151 后续落地时重新出现平行 API。
+
 ## 与 nightly.yml 的关系
 
 `nightly.yml` 的 `mem-stress` job 调用 `scripts/run_mem_stress.sh`，`windows-msvc-release` job 调用 `scripts/repro_win11_coro_burn.sh`：
@@ -41,6 +46,9 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 - name: Run Win11 coroutine burn-in
   shell: bash
   run: bash scripts/repro_win11_coro_burn.sh 5
+
+- name: stdlib public surface uniqueness
+  run: python3 scripts/check_stdlib_surface_uniqueness.py --root .
 ```
 
 ## 修订历史
@@ -49,3 +57,4 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 |---|---|---|
 | 2026-05-17 | 初稿；与 4 个新脚本同批；明确 `<mode>` → `[rounds]` 的务实落地决定 | Cascade + xingleixu |
 | 2026-06-16 | 移除 JIT 相关脚本（repro_jit_force_burn / run_fuzz_30min / check_codegen_* / jit_fuzz / run_jit_*）；memory stress 去 jit-force/no-jit 模式 | — |
+| 2026-07-08 | 增加 stdlib public surface uniqueness 检查，接 151 R3 单一规范表面门禁 | Codex |
