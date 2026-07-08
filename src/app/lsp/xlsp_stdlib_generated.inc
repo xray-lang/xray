@@ -525,8 +525,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"isServerRunning", XLSP_SYM_FUNCTION, "fn(): bool", "Check if the WebSocket server is running", NULL, 0},
     {"acceptKey", XLSP_SYM_FUNCTION, "fn(secKey: string): string", "", NULL, 0},
     {"randomKey", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
-    {"isUpgradeRequest", XLSP_SYM_FUNCTION, "fn(headers: string): bool", "", NULL, 0},
-    {"pickSubprotocol", XLSP_SYM_FUNCTION, "fn(headers: string, serverProtocols: Array<string>): string?", "", NULL, 0},
     {"parseUpgradeRequest", XLSP_SYM_FUNCTION, "fn(request: string, serverProtocols?: Array<string>?, allowDeflate?: bool, allowedOrigins?: Array<string>?): ParsedUpgradeRequest?", "", NULL, 0},
     {"upgradeResponse", XLSP_SYM_FUNCTION, "fn(secKey: string, protocol?: string?, deflate?: bool): string", "", NULL, 0},
     {"clientHandshakeRequest", XLSP_SYM_FUNCTION, "fn(url: WsUrl, secKey: string, protocols?: Array<string>?, deflate?: bool): string?", "", NULL, 0},
@@ -550,7 +548,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"ParsedUpgradeResponse", XLSP_SYM_CLASS, "type ParsedUpgradeResponse", "Class type", NULL, 0},
     {"ParsedUpgradeRequest", XLSP_SYM_CLASS, "type ParsedUpgradeRequest", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 38
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 36
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {

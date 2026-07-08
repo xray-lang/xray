@@ -55,17 +55,21 @@ fn test_accept_key_and_upgrade_response() {
 
 @test
 fn test_upgrade_request_and_protocol_pick() {
+    var key = "dGhlIHNhbXBsZSBub25jZQ=="
     var headers = "GET /chat HTTP/1.1\r\n" +
         "Host: example.com\r\n" +
         "Upgrade: websocket\r\n" +
         "Connection: keep-alive, Upgrade\r\n" +
-        "Sec-WebSocket-Key: key\r\n" +
+        "Sec-WebSocket-Key: " + key + "\r\n" +
         "Sec-WebSocket-Version: 13\r\n" +
         "Sec-WebSocket-Protocol: superchat, chat\r\n\r\n"
 
-    assert(ws.isUpgradeRequest(headers))
-    assert_eq(ws.pickSubprotocol(headers, ["chat", "superchat"])!, "chat")
-    assert_eq(ws.pickSubprotocol(headers, ["missing", "superchat"])!, "superchat")
+    var parsed = ws.parseUpgradeRequest(headers, ["chat", "superchat"])!
+    assert_eq(parsed.protocol!, "chat")
+    var fallback = ws.parseUpgradeRequest(headers, ["missing", "superchat"])!
+    assert_eq(fallback.protocol!, "superchat")
+    assert(ws.parseUpgradeRequest(headers.replace("Connection: keep-alive, Upgrade", "Connection: keep-alive"), ["chat"]) == null)
+    assert(ws.parseUpgradeRequest(headers.replace(key, "bad"), ["chat"]) == null)
 }
 
 @test
