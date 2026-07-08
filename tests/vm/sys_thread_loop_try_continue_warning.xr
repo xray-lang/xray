@@ -1,0 +1,20 @@
+import sys
+
+fn loopTryContinueJoin(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    while (true) {
+        try {
+            if (flag) {
+                continue
+            }
+        } catch (e) {
+            print("catch")
+        }
+        print(t.join())
+        break
+    }
+}
+
+loopTryContinueJoin(false)
