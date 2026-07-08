@@ -3115,6 +3115,7 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_BOOL, NULL, "toString", "bool.toString"},
         {XR_KIND_CHAR, NULL, "toString", "char.toString"},
         {XR_KIND_NULL, NULL, "toString", "null.toString"},
+        {XR_KIND_ENUM, NULL, "toString", "enum.toString"},
         {XR_KIND_UNKNOWN, "BigInt", "toString", "BigInt.toString"},
         {XR_KIND_UNKNOWN, "BigInt", "abs", "BigInt.abs"},
         {XR_KIND_UNKNOWN, "Range", "toString", "Range.toString"},
@@ -3253,6 +3254,19 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
                 *kind_out = "method";
             if (detail_out)
                 *detail_out = detail;
+            return true;
+        }
+    }
+
+    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && v->aux) {
+        const XiValue *receiver = v->args[0];
+        const XrType *receiver_type = receiver ? receiver->type : NULL;
+        const char *field = (const char *) v->aux;
+        if (receiver_type && receiver_type->kind == XR_KIND_ENUM && strcmp(field, "name") == 0) {
+            if (kind_out)
+                *kind_out = "property";
+            if (detail_out)
+                *detail_out = "enum.name";
             return true;
         }
     }
