@@ -502,10 +502,18 @@ enum {
 };
 
 typedef enum XaotStaticDataAction {
-    XAOT_STATIC_DATA_ACTION_MATERIALIZE = 1,
+    XAOT_STATIC_DATA_ACTION_PROVE = 1,
+    XAOT_STATIC_DATA_ACTION_MATERIALIZE,
     XAOT_STATIC_DATA_ACTION_RUNTIME_INIT,
     XAOT_STATIC_DATA_ACTION_REJECT,
 } XaotStaticDataAction;
+
+typedef enum XaotStaticDataSection {
+    XAOT_STATIC_DATA_SECTION_NONE = 0,
+    XAOT_STATIC_DATA_SECTION_EVIDENCE,
+    XAOT_STATIC_DATA_SECTION_RODATA,
+    XAOT_STATIC_DATA_SECTION_RUNTIME_INIT,
+} XaotStaticDataSection;
 
 enum {
     XAOT_STATIC_DATA_UNPROVEN_NONE = 0,
@@ -517,6 +525,10 @@ typedef struct XaotStaticDataPlan {
     uint32_t body_count;
     uint32_t evidence;
     uint32_t action;
+    uint32_t section;
+    uint32_t align;
+    uint64_t type_hash;
+    uint64_t data_hash;
     uint8_t unproven_reason;
 } XaotStaticDataPlan;
 
@@ -678,6 +690,12 @@ XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
                                                                    uint32_t capability);
 XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle);
+XR_FUNC uint32_t xaot_static_data_action_for(uint32_t profile, uint32_t static_data);
+XR_FUNC uint32_t xaot_static_data_section_for(uint32_t static_data, uint32_t action);
+XR_FUNC uint32_t xaot_static_data_align_for(uint32_t static_data, uint32_t action);
+XR_FUNC uint64_t xaot_static_data_type_hash_for(uint32_t static_data, uint32_t action);
+XR_FUNC uint64_t xaot_static_data_data_hash_for(const XgGlobalEvidence *evidence,
+                                                uint32_t static_data, uint32_t action);
 XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
                                                                     uint32_t static_data);
 XR_FUNC const XaotLinkDependencyPlan *
