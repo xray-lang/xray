@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_float_tofixed_reject' allocates via method 'float.toFixed'
+contains=xray_no_alloc_float_tofixed_reject
+not_contains=CRASH
