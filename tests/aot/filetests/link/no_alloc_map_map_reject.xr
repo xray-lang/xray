@@ -1,0 +1,12 @@
+fn xray_no_alloc_map_map_bump(value: int) -> int {
+    return value + 1
+}
+
+@no_alloc
+fn xray_no_alloc_map_map_reject(values: Map<int, int>) -> int {
+    return values.map(xray_no_alloc_map_map_bump).size
+}
+
+var xray_no_alloc_map_map_values: Map<int, int> = #{}
+xray_no_alloc_map_map_values.set(1, 2)
+print(xray_no_alloc_map_map_reject(xray_no_alloc_map_map_values))
