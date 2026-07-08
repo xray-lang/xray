@@ -408,7 +408,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
-    ASSERT_NOT_NULL(strstr(dump, "override_of=0 root=3"));
+    ASSERT_NOT_NULL(strstr(dump, "override_of=0 root=3 depth=0"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "interface-extends 0 child=123 parent=124"));
     ASSERT_NOT_NULL(strstr(dump, "interface-method 0 id=7 owner=123 name=700"));
@@ -470,6 +470,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                                     .signature_key = 901,
                                     .override_of = 1,
                                     .root_method_id = 1,
+                                    .override_depth = 1,
                                     .default_arg_contract_id = XG_NO_ID,
                                     .flags = 0};
     XgCallsiteSummary call = {.callsite_id = 7,
@@ -1803,6 +1804,7 @@ TEST(global_evidence_verifier_rederives_method_override_graph) {
          .name_id = 700,
          .signature_key = 701,
          .override_of = 1,
+         .override_depth = 1,
          .flags = 0},
     };
     XgMethodSummary stale_root[] = {
@@ -1818,6 +1820,23 @@ TEST(global_evidence_verifier_rederives_method_override_graph) {
          .signature_key = 701,
          .override_of = 1,
          .root_method_id = 2,
+         .override_depth = 1,
+         .flags = 0},
+    };
+    XgMethodSummary stale_depth[] = {
+        {.method_id = 1,
+         .owner_class_id = 1,
+         .name_id = 700,
+         .signature_key = 701,
+         .root_method_id = 1,
+         .flags = XG_METHOD_OVERRIDDEN},
+        {.method_id = 2,
+         .owner_class_id = 2,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = 1,
+         .root_method_id = 1,
+         .override_depth = 2,
          .flags = 0},
     };
     XgClassSummary unrelated_classes[] = {
@@ -1865,6 +1884,8 @@ TEST(global_evidence_verifier_rederives_method_override_graph) {
                                          "method override_of does not re-derive");
     assert_method_graph_verifier_rejects(classes, 2, stale_root, 2,
                                          "method root does not re-derive");
+    assert_method_graph_verifier_rejects(classes, 2, stale_depth, 2,
+                                         "method depth does not re-derive");
     assert_method_graph_verifier_rejects(classes, 2, missing_overridden_flag, 2,
                                          "method overridden flag does not re-derive");
     assert_method_graph_verifier_rejects(unrelated_classes, 3, unrelated_override_of, 3,
@@ -2834,7 +2855,8 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
                                    .name_id = method_name_id,
                                    .signature_key = 1102,
                                    .override_of = 1,
-                                   .root_method_id = 1};
+                                   .root_method_id = 1,
+                                   .override_depth = 1};
     XgBodySummary caller_body = {.func_id = 1,
                                  .module_id = 1,
                                  .owner_decl_id = 3,
@@ -4699,6 +4721,9 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     ASSERT_EQ_UINT(ev.methods[0].root_method_id, ev.methods[2].method_id);
     ASSERT_EQ_UINT(ev.methods[1].root_method_id, ev.methods[2].method_id);
     ASSERT_EQ_UINT(ev.methods[2].root_method_id, ev.methods[2].method_id);
+    ASSERT_EQ_UINT(ev.methods[0].override_depth, 2);
+    ASSERT_EQ_UINT(ev.methods[1].override_depth, 1);
+    ASSERT_EQ_UINT(ev.methods[2].override_depth, 0);
     ASSERT_TRUE((ev.methods[1].flags & XG_METHOD_OVERRIDDEN) != 0);
     ASSERT_TRUE((ev.methods[2].flags & XG_METHOD_OVERRIDDEN) != 0);
 

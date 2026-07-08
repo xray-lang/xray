@@ -205,6 +205,7 @@ typedef struct XgMethodSummary {
     uint32_t signature_key;
     XgMethodId override_of;
     XgMethodId root_method_id;
+    uint32_t override_depth;
     uint32_t default_arg_contract_id;
     uint32_t flags;
 } XgMethodSummary;
