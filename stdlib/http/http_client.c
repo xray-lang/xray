@@ -377,6 +377,7 @@ static char *build_request(const XrHttpRequestConfig *config, const XrHttpUrl *u
     bool has_content_length = false;
     bool has_user_agent = false;
     bool has_accept = false;
+    bool has_accept_encoding = false;
     bool has_connection = false;
     bool has_host = false;
 
@@ -421,6 +422,10 @@ static char *build_request(const XrHttpRequestConfig *config, const XrHttpUrl *u
                 if (strncasecmp(h->name, "Content-Length", 14) == 0)
                     has_content_length = true;
                 break;
+            case 15:
+                if (strncasecmp(h->name, "Accept-Encoding", 15) == 0)
+                    has_accept_encoding = true;
+                break;
             default:
                 break;
         }
@@ -454,7 +459,7 @@ static char *build_request(const XrHttpRequestConfig *config, const XrHttpUrl *u
     }
 
     // Accept-Encoding (supports gzip decompression)
-    {
+    if (!has_accept_encoding) {
         p += sprintf(p, "Accept-Encoding: gzip, deflate\r\n");
     }
 
