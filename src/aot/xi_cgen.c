@@ -2245,6 +2245,29 @@ static bool cg_emit_imported_static_fixed_array_const_decl(XiCgenCtx *ctx, FILE 
     return true;
 }
 
+static bool cg_emit_imported_static_struct_const_decl(XiCgenCtx *ctx, FILE *out,
+                                                      const XiModule *module, int64_t slot,
+                                                      const XiConstLiteral *lit) {
+    if (!ctx || !out || !module || !lit || !lit->data_weak)
+        return false;
+    const XrAggregateLayout *sl = NULL;
+    if (!cg_freestanding_static_struct_literal_in_module(ctx, module, slot, &sl, NULL))
+        return false;
+    fprintf(out, "extern const ");
+    emit_static_aggregate_decl_head(out, sl);
+    const char *prefix = module->name ? module->name : "mod";
+    for (uint16_t i = 0; sl && i < sl->field_count; i++) {
+        char fname[128];
+        cg_struct_field_c_name(sl, i, fname, sizeof(fname));
+        emit_static_struct_field_decl(out, sl, i, fname, prefix);
+        fprintf(out, "; ");
+    }
+    fprintf(out, "} ");
+    cg_emit_static_struct_name(ctx, out, module, slot);
+    fprintf(out, ";\n");
+    return true;
+}
+
 static bool cg_imported_static_const_decl_seen(const XiModule *module, int upto_slot,
                                                const XiImportRef *ref) {
     if (!module || !module->slot_imports || !ref)
@@ -2277,7 +2300,8 @@ static bool cg_emit_freestanding_imported_static_const_decls(XiCgenCtx *ctx, FIL
             continue;
         if (cg_emit_imported_static_scalar_const_decl(ctx, out, target_module, target_slot, lit) ||
             cg_emit_imported_static_fixed_array_const_decl(ctx, out, target_module, target_slot,
-                                                           lit))
+                                                           lit) ||
+            cg_emit_imported_static_struct_const_decl(ctx, out, target_module, target_slot, lit))
             emitted = true;
     }
     if (emitted)
@@ -4689,6 +4713,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
     if (cg_value_traces_to_inlined_struct(f, v) ||
         cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
         cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+        cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
@@ -5571,6 +5596,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     }
 
     if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+        cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
@@ -5585,6 +5611,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
          cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
          cg_value_is_elided_fixed_array_ref(f, v->args[0]) ||
+         cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_tuple_const_ref(ctx, f, v->args[0]) ||
@@ -6121,6 +6148,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_class_native_array_method_call_value_is_elided(ctx, f, v))
         return true;
     if (cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_const_ref(ctx, f, v) ||

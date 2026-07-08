@@ -730,6 +730,18 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        if ((f && f->module && f == f->module->init) ||
+            cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+            cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
+            cg_value_is_elided_static_struct_const_ref(ctx, f, v)) {
+            fprintf(out, "XR_NULL_VAL /* static const import: %s.%s */",
+                    import_const_module && import_const_module->name ? import_const_module->name
+                                                                     : "?",
+                    cg_module_const_slot_name(import_const_module, import_const_slot)
+                        ? cg_module_const_slot_name(import_const_module, import_const_slot)
+                        : "?");
+            return;
+        }
         fprintf(stderr,
                 "[xi_cgen] ERROR: freestanding imported aggregate const '%s.%s' must be consumed "
                 "through static field/index access\n",
@@ -5968,6 +5980,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) midx))
             return;
     }
+    if (emit_static_struct_field_get_expr(ctx, out, v))
+        return;
     if (emit_class_cached_field_load_expr(ctx, out, v))
         return;
     if (emit_class_native_receiver_field_load_expr(ctx, out, f, v))

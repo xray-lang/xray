@@ -203,7 +203,7 @@ static bool cg_static_fixed_array_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                     continue;
                 if (v->op == XI_INDEX_GET && a == 0)
                     continue;
-                if (cg_is_identity_copy_or_move(v) && a == 0) {
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
                     if (!cg_static_fixed_array_ref_safe_uses(ctx, f, v, depth + 1))
                         return false;
                     continue;
@@ -363,9 +363,10 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     int64_t static_struct_slot = -1;
     int64_t static_struct_field_idx = -1;
     const XrAggregateFieldLayout *static_struct_field = NULL;
+    const XiModule *static_struct_module = NULL;
     bool static_struct_field_read = cg_freestanding_static_struct_fixed_array_field_value(
         ctx, v->args[0], &static_struct_layout, &static_struct_slot, &static_struct_field_idx,
-        &static_struct_field);
+        &static_struct_field, &static_struct_module);
     if (static_struct_field_read &&
         (static_struct_field->elem_count != info.count ||
          cg_struct_native_rep(static_struct_field->elem_native_type) != info.rep))
@@ -383,8 +384,9 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     if (static_slot_read)
         cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
     else if (static_struct_field_read)
-        cg_emit_static_struct_field_lvalue(ctx, out, static_struct_layout, static_struct_slot,
-                                           static_struct_field_idx);
+        cg_emit_static_struct_field_lvalue_in_module(ctx, out, static_struct_module,
+                                                     static_struct_layout, static_struct_slot,
+                                                     static_struct_field_idx);
     else
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
     fprintf(out, "[");
