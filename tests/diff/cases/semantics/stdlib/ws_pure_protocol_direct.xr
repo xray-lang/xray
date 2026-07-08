@@ -17,6 +17,28 @@ var headers = "GET /chat HTTP/1.1\r\n" +
 print(ws.isUpgradeRequest(headers))
 print(ws.pickSubprotocol(headers, ["chat", "superchat"])!)
 
+var url = ws.parseUrl("wss://example.com/chat?room=1")!
+print(url.secure)
+print(url.host)
+print(url.port)
+print(url.path)
+
+var ipv6 = ws.parseUrl("ws://[::1]:8080")!
+print(ipv6.secure)
+print(ipv6.host)
+print(ipv6.port)
+print(ipv6.path)
+
+var queryOnly = ws.parseUrl("ws://example.com?token=a")!
+print(queryOnly.path)
+
+print(ws.parseUrl("http://example.com") == null)
+print(ws.parseUrl("ws://") == null)
+print(ws.parseUrl("ws://example.com:abc") == null)
+print(ws.parseUrl("ws://example.com:65536") == null)
+print(ws.parseUrl("ws://[::1") == null)
+print(ws.parseUrl("ws://example.com/#fragment") == null)
+
 var masked = maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
 print(masked[0])
 print(masked[1])
