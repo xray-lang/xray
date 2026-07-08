@@ -1053,13 +1053,24 @@ TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite) {
     XgCallsiteSummary call2 = call1;
     call2.callsite_id = 2;
     call2.owner_func_id = 10;
+    XgBodySummary body1 = {.func_id = call1.owner_func_id,
+                           .module_id = 1,
+                           .owner_decl_id = 11,
+                           .name_id = xg_name_id("ownerA"),
+                           .kind = XG_BODY_FUNCTION};
+    XgBodySummary body2 = {.func_id = call2.owner_func_id,
+                           .module_id = 1,
+                           .owner_decl_id = 12,
+                           .name_id = xg_name_id("ownerB"),
+                           .kind = XG_BODY_FUNCTION};
 
-    XiFunc *init = xi_func_new("init", &stub_int_type);
+    XiFunc *init = xi_func_new("<main>", &stub_int_type);
     ASSERT_NOT_NULL(init);
-    init->xg_body_func_id = call2.owner_func_id;
-    XiBlock *entry = xi_block_new(init);
+    XiFunc *owner = xi_func_new("ownerB", &stub_int_type);
+    ASSERT_NOT_NULL(owner);
+    XiBlock *entry = xi_block_new(owner);
     ASSERT_NOT_NULL(entry);
-    XiValue *xi_call = xi_value_new(init, entry, XI_CALL_METHOD, &stub_int_type, 2);
+    XiValue *xi_call = xi_value_new(owner, entry, XI_CALL_METHOD, &stub_int_type, 2);
     ASSERT_NOT_NULL(xi_call);
     xi_call->aux = (void *) "draw";
     xi_call->line = 42;
@@ -1069,11 +1080,16 @@ TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite) {
     module.path = "test.xr";
     module.name = "test";
     module.init = init;
+    XiFunc *funcs[1] = {owner};
+    module.functions = funcs;
+    module.nfuncs = 1;
     XiModule *modules[1] = {&module};
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body1));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body2));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call1));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call2));
 
@@ -1082,6 +1098,7 @@ TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite) {
     bundle.modules = modules;
     bundle.nmodules = 1;
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(owner->xg_body_func_id, call2.owner_func_id);
     ASSERT_EQ_UINT(xi_call->xg_callsite_id, call2.callsite_id);
     const XaotMethodDispatchPlan *plan =
         xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call);
@@ -1094,6 +1111,7 @@ TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite) {
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     xi_func_free(init);
+    xi_func_free(owner);
 }
 
 TEST(global_evidence_lowers_interface_call_to_type_switch) {
