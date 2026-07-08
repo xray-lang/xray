@@ -417,6 +417,76 @@ static void xa_thread_lint_note_var_alias(XaThreadHandleLintState *states, VarDe
         xa_thread_lint_add_alias_id(state, var->symbol_id);
 }
 
+static AstNode *xa_lifecycle_lint_destructure_source_at(AstNode *initializer, int index) {
+    initializer = xa_thread_lint_unwrap_expr(initializer);
+    if (!initializer || index < 0)
+        return NULL;
+    if (initializer->type == AST_TUPLE_LITERAL) {
+        TupleLiteralNode *tuple = &initializer->as.tuple_literal;
+        if (index < tuple->count)
+            return tuple->elements[index];
+        return NULL;
+    }
+    if (initializer->type == AST_ARRAY_LITERAL && !initializer->as.array_literal.is_repeat) {
+        ArrayLiteralNode *array = &initializer->as.array_literal;
+        if (index < array->count)
+            return array->elements[index];
+    }
+    return NULL;
+}
+
+static AstNode *xa_lifecycle_lint_object_source_for_field(AstNode *initializer,
+                                                          const char *field_name) {
+    initializer = xa_thread_lint_unwrap_expr(initializer);
+    if (!initializer || initializer->type != AST_OBJECT_LITERAL || !field_name)
+        return NULL;
+    ObjectLiteralNode *object = &initializer->as.object_literal;
+    for (int i = 0; i < object->count; i++) {
+        AstNode *key = xa_thread_lint_unwrap_expr(object->keys ? object->keys[i] : NULL);
+        if (!key || key->type != AST_LITERAL_STRING || !key->as.literal.raw_value.string_val)
+            continue;
+        if (strcmp(key->as.literal.raw_value.string_val, field_name) == 0)
+            return object->values ? object->values[i] : NULL;
+    }
+    return NULL;
+}
+
+static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *states,
+                                                    XrDestructurePattern *pattern,
+                                                    AstNode *initializer) {
+    if (!states || !pattern || !initializer)
+        return;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER: {
+            if (pattern->as.identifier.symbol_id == 0)
+                return;
+            uint32_t src_id = xa_thread_lint_expr_symbol_id(initializer);
+            XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, src_id);
+            if (state)
+                xa_thread_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
+            return;
+        }
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++) {
+                xa_thread_lint_note_destructure_aliases(
+                    states, pattern->as.array.elements[i],
+                    xa_lifecycle_lint_destructure_source_at(initializer, i));
+            }
+            return;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++) {
+                xa_thread_lint_note_destructure_aliases(
+                    states, pattern->as.object.patterns[i],
+                    xa_lifecycle_lint_object_source_for_field(initializer,
+                                                              pattern->as.object.field_names[i]));
+            }
+            return;
+        default:
+            return;
+    }
+}
+
 static void xa_thread_lint_scan_parallel_locals(XaThreadHandleLintState *states,
                                                 XrParallelLocalBinding *locals, int count,
                                                 bool can_escape) {
@@ -621,8 +691,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
                  expr->as.unsafe_expr.operand->type == AST_PROGRAM)) {
                 xa_thread_lint_scan_stmt(states, expr->as.unsafe_expr.operand, can_escape);
             } else {
-                xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false,
-                                         can_escape);
+                xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false, can_escape);
             }
             return;
         case AST_MOVE_EXPR: {
@@ -1041,10 +1110,14 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
         case AST_DESTRUCTURE_DECL:
+            xa_thread_lint_note_destructure_aliases(states, stmt->as.destructure_decl.pattern,
+                                                    stmt->as.destructure_decl.initializer);
             xa_thread_lint_scan_expr(states, stmt->as.destructure_decl.initializer, false,
                                      can_escape);
             return;
         case AST_DESTRUCTURE_ASSIGN:
+            xa_thread_lint_note_destructure_aliases(states, stmt->as.destructure_assign.pattern,
+                                                    stmt->as.destructure_assign.value);
             xa_thread_lint_scan_expr(states, stmt->as.destructure_assign.value, false, can_escape);
             return;
         case AST_ASSIGNMENT:
@@ -1512,6 +1585,42 @@ static void xa_os_resource_lint_note_var_alias(XaOsResourceLintState *states, Va
         xa_os_resource_lint_add_alias_id(state, var->symbol_id);
 }
 
+static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *states,
+                                                         XrDestructurePattern *pattern,
+                                                         AstNode *initializer) {
+    if (!states || !pattern || !initializer)
+        return;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER: {
+            if (pattern->as.identifier.symbol_id == 0)
+                return;
+            uint32_t src_id = xa_thread_lint_expr_symbol_id(initializer);
+            XaOsResourceLintState *state = xa_os_resource_lint_find_by_symbol_id(states, src_id);
+            if (state)
+                xa_os_resource_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
+            return;
+        }
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++) {
+                xa_os_resource_lint_note_destructure_aliases(
+                    states, pattern->as.array.elements[i],
+                    xa_lifecycle_lint_destructure_source_at(initializer, i));
+            }
+            return;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++) {
+                xa_os_resource_lint_note_destructure_aliases(
+                    states, pattern->as.object.patterns[i],
+                    xa_lifecycle_lint_object_source_for_field(initializer,
+                                                              pattern->as.object.field_names[i]));
+            }
+            return;
+        default:
+            return;
+    }
+}
+
 static bool xa_os_resource_lint_scan_finalizer_call(XaOsResourceLintState *states, AstNode *expr,
                                                     bool can_escape) {
     expr = xa_thread_lint_unwrap_expr(expr);
@@ -1827,8 +1936,7 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         case AST_OPTIONAL_CHAIN:
             xa_os_resource_lint_scan_expr(states, expr->as.optional_chain.object, false,
                                           can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.optional_chain.index, false,
-                                          can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.optional_chain.index, false, can_escape);
             return;
         case AST_RANGE:
             xa_os_resource_lint_scan_expr(states, expr->as.range.start, false, can_escape);
@@ -1882,14 +1990,13 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
                                                      can_escape);
             xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false,
                                           can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count,
-                                          false, can_escape);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false,
+                                          can_escape);
             xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false,
                                           can_escape);
             xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false,
                                           can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false,
-                                          false);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false, false);
             return;
         case AST_PARALLEL_COLLECT_EXPR:
             xa_os_resource_lint_scan_parallel_locals(states, expr->as.parallel_collect_expr.locals,
@@ -1903,8 +2010,8 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
                                           can_escape);
             xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false,
                                           false);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body,
-                                          false, false);
+            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body, false,
+                                          false);
             return;
         case AST_NEW_EXPR:
             xa_os_resource_lint_scan_expr_array(states, expr->as.new_expr.arguments,
@@ -2262,10 +2369,14 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
         case AST_DESTRUCTURE_DECL:
+            xa_os_resource_lint_note_destructure_aliases(states, stmt->as.destructure_decl.pattern,
+                                                         stmt->as.destructure_decl.initializer);
             xa_os_resource_lint_scan_expr(states, stmt->as.destructure_decl.initializer, false,
                                           can_escape);
             return;
         case AST_DESTRUCTURE_ASSIGN:
+            xa_os_resource_lint_note_destructure_aliases(
+                states, stmt->as.destructure_assign.pattern, stmt->as.destructure_assign.value);
             xa_os_resource_lint_scan_expr(states, stmt->as.destructure_assign.value, false,
                                           can_escape);
             return;
