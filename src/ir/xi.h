@@ -1024,6 +1024,7 @@ typedef struct XiFunc {
     const char *name;           /* function name (debug, not owned) */
     const char *source_file;    /* source path for VM/DAP debug hooks (not owned) */
     struct XrType *return_type; /* return type (from analyzer) */
+    uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
 
     /* Function parameters as SSA values (in entry block) */
     XiValue **params;

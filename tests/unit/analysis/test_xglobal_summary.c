@@ -1016,6 +1016,86 @@ TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound) {
     xi_func_free(init);
 }
 
+TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x45,
+                      .compiler_semver_hash = 0x46,
+                      .profile_hash = 0x47,
+                      .imported_summary_hash = 0x48,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    uint32_t shape_name_id = xg_name_id("Shape");
+    uint32_t draw_name_id = xg_name_id("draw");
+    XgClassSummary cls = {.class_id = 1,
+                          .module_id = 1,
+                          .decl_id = 1,
+                          .name_id = shape_name_id,
+                          .parent_class_id = XG_NO_ID,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {.method_id = 1,
+                              .owner_class_id = 1,
+                              .name_id = draw_name_id,
+                              .signature_key = 701,
+                              .override_of = XG_NO_ID,
+                              .default_arg_contract_id = XG_NO_ID};
+    XgCallsiteSummary call1 = {.callsite_id = 1,
+                               .owner_func_id = 9,
+                               .source_span_id = 42,
+                               .kind = XG_CALL_METHOD,
+                               .receiver_static_class_id = 1,
+                               .method_id = 1,
+                               .method_name_id = draw_name_id,
+                               .method_signature_key = 701,
+                               .arg_count = 1};
+    XgCallsiteSummary call2 = call1;
+    call2.callsite_id = 2;
+    call2.owner_func_id = 10;
+
+    XiFunc *init = xi_func_new("init", &stub_int_type);
+    ASSERT_NOT_NULL(init);
+    init->xg_body_func_id = call2.owner_func_id;
+    XiBlock *entry = xi_block_new(init);
+    ASSERT_NOT_NULL(entry);
+    XiValue *xi_call = xi_value_new(init, entry, XI_CALL_METHOD, &stub_int_type, 2);
+    ASSERT_NOT_NULL(xi_call);
+    xi_call->aux = (void *) "draw";
+    xi_call->line = 42;
+
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = init;
+    XiModule *modules[1] = {&module};
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call1));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call2));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(xi_call->xg_callsite_id, call2.callsite_id);
+    const XaotMethodDispatchPlan *plan =
+        xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->callsite_id, call2.callsite_id);
+
+    xi_call->xg_callsite_id = call1.callsite_id;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    xi_func_free(init);
+}
+
 TEST(global_evidence_lowers_interface_call_to_type_switch) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x81,
@@ -6048,6 +6128,7 @@ RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
 RUN_TEST(global_evidence_attaches_callsite_ids_to_xi_calls);
 RUN_TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound);
+RUN_TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite);
 RUN_TEST(global_evidence_lowers_interface_call_to_type_switch);
 RUN_TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan);
 RUN_TEST(global_evidence_lowers_unresolved_interface_target_to_itable_abi_plan);
