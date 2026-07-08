@@ -1284,7 +1284,8 @@ module sys {
   fn __processWait {
     signature: "(id: int): int"
     doc: "Wait for a process handle token and return its exit code, or -1 on failure"
-    vm: "sys_process_wait"
+    vm: "sys_process_wait_yieldable"
+    vm_binding: "yieldable"
     aot: "xrt_sys_process_wait"
     argc: 1
     arg_spec: "v"

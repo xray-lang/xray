@@ -40,6 +40,24 @@ expect_output() {
     fi
 }
 
+expect_output_workers() {
+    local name="$1"
+    local src="$2"
+    local expected="$3"
+    local workers="$4"
+    local out="$WORK/$name.out"
+    local err="$WORK/$name.err"
+
+    if "$XRAY" run --workers "$workers" "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
+        [ ! -s "$err" ]; then
+        record_pass "$name output"
+    else
+        record_fail "$name output"
+        sed 's/^/      stdout: /' "$out" | sed -n '1,40p'
+        sed 's/^/      stderr: /' "$err" | sed -n '1,80p'
+    fi
+}
+
 expect_warning() {
     local name="$1"
     local src="$2"
@@ -83,6 +101,7 @@ PROCESS_TRY_CATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_try_c
 PIPE_MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_match_warning.xr"
 DETACHED_NO_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_detached_no_warning.xr"
 SIGNAL_ON_SIGNAL_SRC="$PROJECT_DIR/tests/vm/sys_signal_on_signal.xr"
+YIELDABLE_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_yieldable_wait.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -94,6 +113,7 @@ expect_output "process_pipe_lifecycle_assignment_alias_ok" "$ASSIGNMENT_ALIAS_OK
 expect_output "process_detached_no_warning" "$DETACHED_NO_WARNING_SRC" \
     $'true\ntrue\n-1\nfalse\ndetached-orphan-ok'
 expect_output "signal_on_signal" "$SIGNAL_ON_SIGNAL_SRC" $'true\nfalse\ntrue\ntrue'
+expect_output_workers "process_yieldable_wait" "$YIELDABLE_WAIT_SRC" $'tick\n1\nwaited 7\n7' 1
 expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly"
 expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \

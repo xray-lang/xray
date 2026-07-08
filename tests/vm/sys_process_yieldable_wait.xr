@@ -1,0 +1,22 @@
+import sys
+import { Process } from sys
+
+fn waitProcess(p: Process) -> int {
+    var code = p.wait()
+    print("waited " + string(code))
+    return code
+}
+
+fn tick() -> int {
+    print("tick")
+    return 1
+}
+
+shared proc = sys.Process.spawn("sh", ["-c", "sleep 0.05; exit 7"])!
+
+var waiter = go waitProcess(proc)
+Coro.yield()
+
+var ticker = go tick()
+print(await ticker)
+print(await waiter)
