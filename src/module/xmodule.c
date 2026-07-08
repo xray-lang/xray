@@ -661,6 +661,32 @@ ModuleType xr_module_detect_type(const char *path) {
 
 /* ========== Module Loading ========== */
 
+static bool proto_has_invalid_class_descriptors(XrProto *proto) {
+    if (!proto)
+        return false;
+
+    uint32_t code_count = (uint32_t) PROTO_CODE_COUNT(proto);
+    uint32_t const_count = (uint32_t) PROTO_CONST_COUNT(proto);
+    for (uint32_t i = 0; i < code_count; i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) != OP_CLASS_CREATE_FROM_DESCRIPTOR)
+            continue;
+        uint32_t const_index = (uint32_t) GETARG_Bx(inst);
+        if (const_index >= const_count)
+            return true;
+        XrValue desc_val = PROTO_CONSTANT(proto, const_index);
+        if (!XR_IS_PTR(desc_val) || XR_TO_PTR(desc_val) == NULL)
+            return true;
+    }
+
+    uint32_t sub_count = (uint32_t) PROTO_PROTO_COUNT(proto);
+    for (uint32_t i = 0; i < sub_count; i++) {
+        if (proto_has_invalid_class_descriptors(PROTO_PROTO(proto, i)))
+            return true;
+    }
+    return false;
+}
+
 /*
 ** Load xray script extension layer
 **
@@ -699,8 +725,15 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
                            module_name, bc_error);
             return false;
         }
-        snprintf(path, sizeof(path), "<embedded stdlib>/%s/%s.xrc", module_name, module_name);
-        XR_DBG_MODULE("load_script_extension: loaded embedded bytecode for %s", module_name);
+        if (proto_has_invalid_class_descriptors(code)) {
+            xr_vm_proto_free(code);
+            code = NULL;
+            XR_DBG_MODULE("load_script_extension: embedded bytecode for %s needs source fallback",
+                          module_name);
+        } else {
+            snprintf(path, sizeof(path), "<embedded stdlib>/%s/%s.xrc", module_name, module_name);
+            XR_DBG_MODULE("load_script_extension: loaded embedded bytecode for %s", module_name);
+        }
     }
 
     // Source fallback keeps the installed/runtime layout independent while the
