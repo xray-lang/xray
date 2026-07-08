@@ -408,6 +408,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
+    ASSERT_NOT_NULL(strstr(dump, "override_of=0 root=3"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "interface-extends 0 child=123 parent=124"));
     ASSERT_NOT_NULL(strstr(dump, "interface-method 0 id=7 owner=123 name=700"));
@@ -468,6 +469,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                                     .name_id = 900,
                                     .signature_key = 901,
                                     .override_of = 1,
+                                    .root_method_id = 1,
                                     .default_arg_contract_id = XG_NO_ID,
                                     .flags = 0};
     XgCallsiteSummary call = {.callsite_id = 7,
@@ -1372,6 +1374,7 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
         classes[i].decl_kind = XG_DECL_CLASS;
         ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &classes[i]));
 
+        memset(&methods[i], 0, sizeof(methods[i]));
         methods[i].method_id = id;
         methods[i].owner_class_id = id;
         methods[i].name_id = 700;
@@ -1380,12 +1383,14 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
         methods[i].flags = 0;
         ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &methods[i]));
 
+        memset(&impls[i], 0, sizeof(impls[i]));
         impls[i].implementor_class_id = id;
         impls[i].interface_id = 77;
         impls[i].name_id = 77;
         impls[i].type_key = 770;
         ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[i]));
 
+        memset(&method_bodies[i], 0, sizeof(method_bodies[i]));
         method_bodies[i].func_id = 100 + id;
         method_bodies[i].module_id = 1;
         method_bodies[i].owner_decl_id = id;
@@ -1791,6 +1796,21 @@ TEST(global_evidence_verifier_rederives_method_override_graph) {
          .override_of = 1,
          .flags = 0},
     };
+    XgMethodSummary stale_root[] = {
+        {.method_id = 1,
+         .owner_class_id = 1,
+         .name_id = 700,
+         .signature_key = 701,
+         .root_method_id = 1,
+         .flags = XG_METHOD_OVERRIDDEN},
+        {.method_id = 2,
+         .owner_class_id = 2,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = 1,
+         .root_method_id = 2,
+         .flags = 0},
+    };
     XgClassSummary unrelated_classes[] = {
         {.class_id = 1,
          .parent_class_id = XG_NO_ID,
@@ -1834,6 +1854,8 @@ TEST(global_evidence_verifier_rederives_method_override_graph) {
 
     assert_method_graph_verifier_rejects(classes, 2, missing_override_of, 2,
                                          "method override_of does not re-derive");
+    assert_method_graph_verifier_rejects(classes, 2, stale_root, 2,
+                                         "method root does not re-derive");
     assert_method_graph_verifier_rejects(classes, 2, missing_overridden_flag, 2,
                                          "method overridden flag does not re-derive");
     assert_method_graph_verifier_rejects(unrelated_classes, 3, unrelated_override_of, 3,
@@ -2802,7 +2824,8 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
                                    .owner_class_id = 2,
                                    .name_id = method_name_id,
                                    .signature_key = 1102,
-                                   .override_of = 1};
+                                   .override_of = 1,
+                                   .root_method_id = 1};
     XgBodySummary caller_body = {.func_id = 1,
                                  .module_id = 1,
                                  .owner_decl_id = 3,
@@ -4618,7 +4641,10 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
 
 TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     setup_parser_session();
-    const char *source = "class Child extends Base {\n"
+    const char *source = "class GrandChild extends Child {\n"
+                         "    speak() -> string { return \"grand\" }\n"
+                         "}\n"
+                         "class Child extends Base {\n"
                          "    speak() -> string { return \"child\" }\n"
                          "}\n"
                          "class Base {\n"
@@ -4644,19 +4670,28 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
 
     XgGlobalEvidence ev;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(ev.nclasses, 3);
-    ASSERT_EQ_UINT(ev.nmethods, 3);
+    ASSERT_EQ_UINT(ev.nclasses, 4);
+    ASSERT_EQ_UINT(ev.nmethods, 4);
 
-    const XgClassSummary *child = &ev.classes[0];
-    const XgClassSummary *base = &ev.classes[1];
-    const XgClassSummary *solo = &ev.classes[2];
+    const XgClassSummary *grandchild = &ev.classes[0];
+    const XgClassSummary *child = &ev.classes[1];
+    const XgClassSummary *base = &ev.classes[2];
+    const XgClassSummary *solo = &ev.classes[3];
+    ASSERT_EQ_UINT(grandchild->parent_class_id, child->class_id);
     ASSERT_EQ_UINT(child->parent_class_id, base->class_id);
     ASSERT_TRUE((base->flags & XG_CLASS_HAS_SUBCLASS) != 0);
     ASSERT_TRUE((base->flags & XG_CLASS_INFERRED_FINAL) == 0);
-    ASSERT_TRUE((child->flags & XG_CLASS_INFERRED_FINAL) != 0);
+    ASSERT_TRUE((child->flags & XG_CLASS_HAS_SUBCLASS) != 0);
+    ASSERT_TRUE((child->flags & XG_CLASS_INFERRED_FINAL) == 0);
+    ASSERT_TRUE((grandchild->flags & XG_CLASS_INFERRED_FINAL) != 0);
     ASSERT_TRUE((solo->flags & XG_CLASS_INFERRED_FINAL) != 0);
     ASSERT_EQ_UINT(ev.methods[0].override_of, ev.methods[1].method_id);
+    ASSERT_EQ_UINT(ev.methods[1].override_of, ev.methods[2].method_id);
+    ASSERT_EQ_UINT(ev.methods[0].root_method_id, ev.methods[2].method_id);
+    ASSERT_EQ_UINT(ev.methods[1].root_method_id, ev.methods[2].method_id);
+    ASSERT_EQ_UINT(ev.methods[2].root_method_id, ev.methods[2].method_id);
     ASSERT_TRUE((ev.methods[1].flags & XG_METHOD_OVERRIDDEN) != 0);
+    ASSERT_TRUE((ev.methods[2].flags & XG_METHOD_OVERRIDDEN) != 0);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
