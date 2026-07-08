@@ -643,10 +643,40 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     return hash == 0 ? 1 : hash;
 }
 
+typedef const char *(*XgBitNameFn)(uint32_t bit);
+
+static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,
+                              uint32_t catalog_count, XgBitNameFn name_fn) {
+    bool first = true;
+    uint32_t known = 0;
+    fprintf(out, "[");
+    for (uint32_t i = 0; i < catalog_count; i++) {
+        uint32_t bit = catalog[i];
+        known |= bit;
+        if ((bits & bit) == 0)
+            continue;
+        fprintf(out, "%s%s", first ? "" : ",", name_fn ? name_fn(bit) : "unknown");
+        first = false;
+    }
+    if ((bits & ~known) != 0) {
+        fprintf(out, "%sunknown:0x%x", first ? "" : ",", bits & ~known);
+        first = false;
+    }
+    if (first)
+        fprintf(out, "-");
+    fprintf(out, "]");
+}
+
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     char *buf = NULL;
     size_t bufsz = 0;
     FILE *out;
+    uint32_t capability_count = 0;
+    const uint32_t *capabilities = xg_capability_catalog(&capability_count);
+    uint32_t metadata_count = 0;
+    const uint32_t *metadata = xg_metadata_catalog(&metadata_count);
+    uint32_t static_data_count = 0;
+    const uint32_t *static_data = xg_static_data_catalog(&static_data_count);
 
     if (!evidence)
         return NULL;
@@ -717,12 +747,19 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(
             out,
             "body %u func=%u module=%u decl=%u class=%u method=%u name=%u sig=%u span=%u kind=%s "
-            "hash=%016" PRIx64
-            " effect=0x%x escape=0x%x caps=0x%x callsites=%u+%u metadata=0x%x static=0x%x\n",
+            "hash=%016" PRIx64 " effect=0x%x escape=0x%x caps=0x%x",
             i, b->func_id, b->module_id, b->owner_decl_id, b->owner_class_id, b->owner_method_id,
             b->name_id, b->signature_key, b->source_span_id, xg_body_kind_name(b->kind),
-            b->body_hash, b->effect_bits, b->escape_bits, b->capability_bits, b->callsite_start,
-            b->callsite_count, b->metadata_use_bits, b->static_data_use_bits);
+            b->body_hash, b->effect_bits, b->escape_bits, b->capability_bits);
+        dump_named_bitset(out, b->capability_bits, capabilities, capability_count,
+                          xg_capability_name);
+        fprintf(out, " callsites=%u+%u metadata=0x%x", b->callsite_start, b->callsite_count,
+                b->metadata_use_bits);
+        dump_named_bitset(out, b->metadata_use_bits, metadata, metadata_count, xg_metadata_name);
+        fprintf(out, " static=0x%x", b->static_data_use_bits);
+        dump_named_bitset(out, b->static_data_use_bits, static_data, static_data_count,
+                          xg_static_data_name);
+        fprintf(out, "\n");
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
