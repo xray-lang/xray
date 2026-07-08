@@ -1246,6 +1246,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME stdlib_embedded_layout
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_stdlib_embedded_layout_tests.sh
+                $<TARGET_FILE:xray>
+                ${XRAY_PYTHON}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_embedded_layout PROPERTIES
+        LABELS "vm;aot;stdlib;embed;regression"
+        PROCESSORS 1
+        TIMEOUT 120
+    )
+
+    add_test(
         NAME stdlib_metadata_sync
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
