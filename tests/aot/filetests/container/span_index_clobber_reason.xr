@@ -1,0 +1,16 @@
+fn clobbered_sum(src: ByteSpan) -> int {
+    var total = 0
+    var i = 0
+    while (i < src.length) {
+        print(i)
+        total = total + int(src[i])
+        i = i + 1
+    }
+    return total
+}
+
+var bytes = Bytes(2)
+bytes[0] = 1
+bytes[1] = 2
+var view: ByteSpan = bytes[:]
+print(clobbered_sum(view))
