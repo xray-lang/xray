@@ -26,6 +26,10 @@ line("body", body)
 var customHost = requestText("GET", "/", { "Host": "override.test" })
 line("custom-host", customHost)
 
+var customEncoding = requestText("GET", "/", { "Accept-Encoding": "identity" }, "", "example.com")!
+print(customEncoding.includes("Accept-Encoding: identity"))
+print(customEncoding.includes("Accept-Encoding: gzip, deflate"))
+
 var emptyHeaders: Json = {}
 var stripped = requestText(
     "GET",
