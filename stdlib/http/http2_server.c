@@ -443,9 +443,6 @@ void xr_h2_server_config_init(XrH2ServerConfig *config) {
     config->host = "0.0.0.0";
     config->port = 8443;
     config->max_connections = H2_MAX_CONNS;
-    config->max_streams_per_conn = 100;
-    config->max_header_list_size = 16384;
-    config->max_frame_size = 16384;
 }
 
 XrH2Server *xr_h2_server_new(const XrH2ServerConfig *config) {

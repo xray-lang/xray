@@ -22,14 +22,11 @@
 /* ========== HTTP/2 Server Config ========== */
 
 typedef struct XrH2ServerConfig {
-    const char *host;             // Listen address
-    int port;                     // Listen port
-    const char *cert_file;        // TLS certificate file
-    const char *key_file;         // TLS private key file
-    int max_connections;          // Max connections
-    int max_streams_per_conn;     // Max streams per connection
-    size_t max_header_list_size;  // Max header list size
-    size_t max_frame_size;        // Max frame size
+    const char *host;       // Listen address
+    int port;               // Listen port
+    const char *cert_file;  // TLS certificate file
+    const char *key_file;   // TLS private key file
+    int max_connections;    // Max connections
 } XrH2ServerConfig;
 
 /* ========== HTTP/2 Request Context ========== */
