@@ -1248,20 +1248,6 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     return ok ? result : xr_null();
 }
 
-// cluster.monitor(node_name) - returns Channel that receives notification on disconnect
-// Use "*" to monitor all nodes
-static __attribute__((unused)) XrValue cluster_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
-
-    XrString *name_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = xr_cluster_monitor_node(X, name_str->data);
-    if (!ch)
-        return xr_null();
-
-    return xr_value_from_channel(ch);
-}
-
 // cluster.discover() - start LAN auto-discovery via UDP multicast
 static XrValue cluster_discover_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
