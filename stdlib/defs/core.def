@@ -1203,6 +1203,19 @@ module sys {
     visibility: "internal"
   }
 
+  fn __onSignal {
+    signature: "(signal: int, handler: fn(): ()): bool"
+    doc: "Register a VM-hosted safe-point handler for a portable process signal"
+    vm: "sys_on_signal"
+    aot: "xrt_sys_on_signal"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn __dylibOpen {
     signature: "(path: string): int"
     doc: "Open a dynamic library and return an opaque handle token, or 0 on failure"

@@ -449,6 +449,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"sleepMs", "(ms: int): ()", "Block the current OS thread for at least ms milliseconds", true, false, false},
     {"pinToCpu", "(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, false},
     {"__threadLocalId", "(): int", "Return a stable token for the current OS thread", true, false, true},
+    {"__onSignal", "(signal: int, handler: fn(): ()): bool", "Register a VM-hosted safe-point handler for a portable process signal", true, false, true},
     {"__dylibOpen", "(path: string): int", "Open a dynamic library and return an opaque handle token, or 0 on failure", true, false, true},
     {"__dylibSymbol", "(handle: int, name: string): RawPtr<uint8>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true},
     {"__dylibClose", "(handle: int): bool", "Close a dynamic library handle token", true, false, true},
@@ -462,7 +463,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__pipeWrite", "(handle: int, data: Bytes): int", "Write one chunk to a pipe endpoint", true, false, true},
     {"__pipeClose", "(handle: int): bool", "Close a pipe endpoint", true, false, true},
 };
-#define GEN_SYS_FUNCTION_COUNT 23
+#define GEN_SYS_FUNCTION_COUNT 24
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

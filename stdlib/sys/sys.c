@@ -13,14 +13,23 @@
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/mem/xsystem_heap.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xpanic_info.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/xisolate_api.h"
+#include "../../src/runtime/mem/xcoro_heap.h"
 #include "../../src/runtime/xshared.h"
 #include "../../src/runtime/xvm_call.h"
+#include "../../src/coro/xyieldable.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/vm/xvm_closure.h"
+#include "../../src/vm/xvm_coro_api.h"
+
+#include <signal.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <string.h>
 
 typedef struct XrSysMutexBody {
     xr_mutex_t mutex;
@@ -878,6 +887,157 @@ static XrValue sys_pipe_close(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_bool(false);
     return xr_bool(xr_pipe_close((XrPipeHandle) XR_TO_INT(args[0])) == 0);
+}
+
+static _Atomic int g_sys_signal_pending_term = 0;
+static _Atomic int g_sys_signal_pending_int = 0;
+static _Atomic uint64_t g_sys_signal_generation_term = 0;
+static _Atomic uint64_t g_sys_signal_generation_int = 0;
+
+typedef struct XrSysSignalDispatchCtx {
+    int sig;
+    uint64_t generation;
+    XrValue handler;
+    XrCoroHeap *owner_heap;
+} XrSysSignalDispatchCtx;
+
+static _Atomic int *sys_signal_pending_slot(int sig) {
+    if (sig == SIGTERM)
+        return &g_sys_signal_pending_term;
+    if (sig == SIGINT)
+        return &g_sys_signal_pending_int;
+    return NULL;
+}
+
+static _Atomic uint64_t *sys_signal_generation_slot(int sig) {
+    if (sig == SIGTERM)
+        return &g_sys_signal_generation_term;
+    if (sig == SIGINT)
+        return &g_sys_signal_generation_int;
+    return NULL;
+}
+
+static void sys_signal_handler(int sig) {
+    _Atomic int *slot = sys_signal_pending_slot(sig);
+    if (slot)
+        atomic_store_explicit(slot, 1, memory_order_relaxed);
+}
+
+static bool sys_signal_install_native(int sig) {
+    if (!sys_signal_pending_slot(sig))
+        return false;
+#if defined(XR_OS_WINDOWS)
+    return signal(sig, sys_signal_handler) != SIG_ERR;
+#else
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sys_signal_handler;
+    sigemptyset(&sa.sa_mask);
+    return sigaction(sig, &sa, NULL) == 0;
+#endif
+}
+
+static bool sys_signal_take_native(int sig) {
+    _Atomic int *slot = sys_signal_pending_slot(sig);
+    return slot && atomic_exchange_explicit(slot, 0, memory_order_acq_rel) != 0;
+}
+
+static void sys_signal_dispatch_ctx_free(XrSysSignalDispatchCtx *ctx) {
+    if (!ctx)
+        return;
+    xr_rc_release_value(ctx->owner_heap, ctx->handler);
+    xr_free(ctx);
+}
+
+static bool sys_signal_dispatch_generation_current(const XrSysSignalDispatchCtx *ctx) {
+    if (!ctx)
+        return false;
+    _Atomic uint64_t *slot = sys_signal_generation_slot(ctx->sig);
+    return slot && atomic_load_explicit(slot, memory_order_acquire) == ctx->generation;
+}
+
+static XrCFuncResult sys_signal_dispatch_cont(XrVMRuntime *X, int status, XrValue resume_value,
+                                              void *user_ctx, XrValue *result);
+
+static XrCFuncResult sys_signal_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
+                                             void *user_ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    return sys_signal_dispatch_cont(X, XR_RESUME_TIMEOUT, xr_null(), user_ctx, result);
+}
+
+static XrCFuncResult sys_signal_dispatch_cont(XrVMRuntime *X, int status, XrValue resume_value,
+                                              void *user_ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    XrSysSignalDispatchCtx *ctx = (XrSysSignalDispatchCtx *) user_ctx;
+    if (!ctx || !sys_signal_dispatch_generation_current(ctx)) {
+        sys_signal_dispatch_ctx_free(ctx);
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+
+    if (sys_signal_take_native(ctx->sig)) {
+        if (!sys_signal_dispatch_generation_current(ctx)) {
+            sys_signal_dispatch_ctx_free(ctx);
+            *result = xr_null();
+            return XR_CFUNC_DONE;
+        }
+        XrClosure *handler = xr_value_to_closure(ctx->handler);
+        if (!handler) {
+            sys_signal_dispatch_ctx_free(ctx);
+            *result = xr_null();
+            return XR_CFUNC_DONE;
+        }
+        return xr_call_closure(X, handler, NULL, 0, sys_signal_handler_done, ctx, result);
+    }
+
+    return xr_yield_for_timeout(X, 10, sys_signal_dispatch_cont, ctx, result);
+}
+
+static XrCFuncResult sys_signal_dispatch_init(XrVMRuntime *X, XrValue *args, int argc,
+                                              XrValue *result) {
+    if (argc < 1 || !XR_IS_INT(args[0])) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+    XrSysSignalDispatchCtx *ctx = (XrSysSignalDispatchCtx *) (intptr_t) XR_TO_INT(args[0]);
+    return sys_signal_dispatch_cont(X, XR_RESUME_TIMEOUT, xr_null(), ctx, result);
+}
+
+static XrValue sys_on_signal(XrVMRuntime *isolate, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    int64_t sig64 = XR_TO_INT(args[0]);
+    if (sig64 < 0 || sig64 > INT32_MAX)
+        return xr_bool(false);
+    int sig = (int) sig64;
+    _Atomic uint64_t *generation_slot = sys_signal_generation_slot(sig);
+    if (!generation_slot)
+        return xr_bool(false);
+
+    XrClosure *handler = xr_vm_closure_from_arg(isolate, args[1], "sys.onSignal");
+    if (!handler || !sys_signal_install_native(sig))
+        return xr_bool(false);
+
+    XrSysSignalDispatchCtx *ctx = (XrSysSignalDispatchCtx *) xr_calloc(1, sizeof(*ctx));
+    if (!ctx)
+        return xr_bool(false);
+    ctx->sig = sig;
+    ctx->handler = args[1];
+    ctx->owner_heap = xr_current_coro_heap();
+    xr_rc_retain_value(ctx->handler);
+    ctx->generation = atomic_fetch_add_explicit(generation_slot, 1, memory_order_acq_rel) + 1;
+
+    XrValue dispatch_args[1] = {xr_int((int64_t) (intptr_t) ctx)};
+    XrCoroutine *dispatcher =
+        xr_coro_create_vm_cfunc(isolate, sys_signal_dispatch_init, dispatch_args, 1, "sys.signal");
+    if (!dispatcher) {
+        sys_signal_dispatch_ctx_free(ctx);
+        return xr_bool(false);
+    }
+    xr_coro_spawn(isolate, dispatcher);
+    return xr_bool(true);
 }
 
 #define XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR 1
