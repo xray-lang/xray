@@ -15,6 +15,31 @@ const _OP_CLOSE = 8
 const _OP_PING = 9
 const _OP_PONG = 10
 
+class ParsedFrame {
+    fin: bool
+    rsv1: bool
+    opcode: int
+    masked: bool
+    payload: Array<uint8>
+    consumedBytes: int
+
+    constructor(
+        fin: bool,
+        rsv1: bool,
+        opcode: int,
+        masked: bool,
+        payload: Array<uint8>,
+        consumedBytes: int
+    ) {
+        this.fin = fin
+        this.rsv1 = rsv1
+        this.opcode = opcode
+        this.masked = masked
+        this.payload = payload
+        this.consumedBytes = consumedBytes
+    }
+}
+
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + prefix.length > s.length) { return false }
     for (var i = 0; i < prefix.length; i++) {
@@ -176,6 +201,11 @@ fn _copyInto(dst: Bytes, off: int, src: Bytes) {
     }
 }
 
+fn _validOpcode(opcode: int) -> bool {
+    return opcode == 0 || opcode == _OP_TEXT || opcode == _OP_BINARY ||
+        opcode == _OP_CLOSE || opcode == _OP_PING || opcode == _OP_PONG
+}
+
 fn maskPayload(payload: Bytes, key: Bytes) -> Bytes {
     var out = Bytes(payload.length)
     if (key.length < 4) { return out }
@@ -183,6 +213,74 @@ fn maskPayload(payload: Bytes, key: Bytes) -> Bytes {
         out[i] = (payload[i] ^ key[i % 4]) & 255
     }
     return out
+}
+
+fn parseFrame(
+    raw: Bytes,
+    expectMasked: bool = false,
+    enforceMask: bool = false,
+    allowRsv1: bool = false,
+    maxPayloadBytes: int = 67108864
+) -> ParsedFrame? {
+    if (raw.length < 2) { return null }
+
+    var first = raw[0]
+    var second = raw[1]
+    var rsv1 = (first & 64) != 0
+    var rsv23 = (first & 48) != 0
+    if (rsv23 || (rsv1 && !allowRsv1)) { return null }
+
+    var fin = (first & 128) != 0
+    var opcode = first & 15
+    if (!_validOpcode(opcode)) { return null }
+
+    var control = (opcode & 8) != 0
+    if (control && !fin) { return null }
+
+    var maskMode = ((second & 128) != 0) ? 1 : 0
+    var expectedMaskMode = expectMasked ? 1 : 0
+    if (enforceMask && maskMode != expectedMaskMode) { return null }
+
+    var payloadLen = second & 127
+    var offset = 2
+    if (control && payloadLen > 125) { return null }
+
+    if (payloadLen == 126) {
+        if (raw.length < 4) { return null }
+        payloadLen = ((raw[2] & 255) << 8) | (raw[3] & 255)
+        if (payloadLen < 126) { return null }
+        offset = 4
+    } else if (payloadLen == 127) {
+        if (raw.length < 10) { return null }
+        if ((raw[2] & 128) != 0) { return null }
+        var n = 0
+        for (var i = 0; i < 8; i++) {
+            n = (n << 8) | (raw[2 + i] & 255)
+        }
+        if (n <= 65535) { return null }
+        payloadLen = n
+        offset = 10
+    }
+
+    if (maxPayloadBytes > 0 && payloadLen > maxPayloadBytes) { return null }
+
+    var maskStart = offset
+    if (maskMode == 1) {
+        if (raw.length < offset + 4) { return null }
+        offset = offset + 4
+    }
+
+    if (raw.length < offset + payloadLen) { return null }
+    var payload = Bytes(payloadLen)
+    for (var i = 0; i < payloadLen; i++) {
+        var b = raw[offset + i] & 255
+        if (maskMode == 1) {
+            b = (b ^ raw[maskStart + (i % 4)]) & 255
+        }
+        payload[i] = b
+    }
+
+    return ParsedFrame(fin, rsv1, opcode, maskMode == 1, payload, offset + payloadLen)
 }
 
 fn frame(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true) -> Bytes {
@@ -246,6 +344,7 @@ fn pongFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
 }
 
 export {
+    ParsedFrame,
     acceptKey,
     randomKey,
     isUpgradeRequest,
@@ -253,6 +352,7 @@ export {
     upgradeResponse,
     clientRequest,
     maskPayload,
+    parseFrame,
     frame,
     textFrame,
     binaryFrame,

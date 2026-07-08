@@ -542,6 +542,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"upgradeResponse", XLSP_SYM_FUNCTION, "fn(secKey: string, protocol?: string?, deflate?: bool): string", "", NULL, 0},
     {"clientRequest", XLSP_SYM_FUNCTION, "fn(path: string, host: string, secKey: string): string", "", NULL, 0},
     {"maskPayload", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, key: Array<uint8>): Array<uint8>", "", NULL, 0},
+    {"parseFrame", XLSP_SYM_FUNCTION, "fn(raw: Array<uint8>, expectMasked?: bool, enforceMask?: bool, allowRsv1?: bool, maxPayloadBytes?: int): ParsedFrame?", "", NULL, 0},
     {"frame", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, opcode?: int, mask?: bool): Array<uint8>", "", NULL, 0},
     {"textFrame", XLSP_SYM_FUNCTION, "fn(data: string, mask?: bool): Array<uint8>", "", NULL, 0},
     {"binaryFrame", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>, mask?: bool): Array<uint8>", "", NULL, 0},
@@ -550,8 +551,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"pongFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<uint8>?, mask?: bool): Array<uint8>", "", NULL, 0},
     {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Native handle type", NULL, 0},
     {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Native handle type", NULL, 0},
+    {"ParsedFrame", XLSP_SYM_CLASS, "type ParsedFrame", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 28
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 30
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
