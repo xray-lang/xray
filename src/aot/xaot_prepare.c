@@ -2078,7 +2078,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
         uint32_t bounds_evidence =
             xaot_prepare_array_access_bounds_evidence(bundle, func, value, &bounds_reason);
         if (bounds_evidence != 0) {
-            evidence |= XAOT_SPAN_EV_RANGE_PROVEN;
+            evidence |= XAOT_SPAN_EV_RANGE_PROVEN | XAOT_SPAN_EV_NO_CLOBBER;
             drop |= XAOT_SPAN_DROP_BOUNDS;
         } else {
             reason = XAOT_SPAN_UNPROVEN_RANGE;
