@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_enum_tostring_reject' allocates via method 'enum.toString'
+contains=xray_no_alloc_enum_tostring_reject
+not_contains=CRASH

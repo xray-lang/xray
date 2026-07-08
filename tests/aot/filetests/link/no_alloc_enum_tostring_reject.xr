@@ -1,0 +1,11 @@
+enum Color {
+    Red,
+    Blue,
+}
+
+@no_alloc
+fn xray_no_alloc_enum_tostring_reject(value: Color) -> string {
+    return value.toString()
+}
+
+print(xray_no_alloc_enum_tostring_reject(Color.Red))
