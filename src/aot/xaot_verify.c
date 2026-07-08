@@ -26,6 +26,10 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
 
 static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
                                                               XgFuncId func_id);
+static bool verify_body_summary_anchor(const XaotBundle *bundle, const XiFunc *func,
+                                       XgFuncId body_func_id, uint32_t body_effect_bits,
+                                       uint32_t body_escape_bits, uint32_t body_evidence,
+                                       const char *plan_name, char *errbuf, size_t errbuf_len);
 
 static bool verify_stdlib_link_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
@@ -375,6 +379,10 @@ static bool verify_bounds_plan(const XaotBundle *bundle, const XaotBoundsPlan *p
         return set_error(errbuf, errbuf_len, "AOT bounds plan access lacks index argument");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT bounds plan func has no func plan");
+    if (!verify_body_summary_anchor(bundle, plan->func, plan->body_func_id, plan->body_effect_bits,
+                                    plan->body_escape_bits, plan->body_evidence, "bounds", errbuf,
+                                    errbuf_len))
+        return false;
     if ((plan->evidence == 0) == (plan->unproven_reason == XAOT_BOUNDS_UNPROVEN_NONE))
         return set_error(errbuf, errbuf_len, "AOT bounds plan evidence/reason are inconsistent");
     if (plan->evidence !=
@@ -395,6 +403,10 @@ static bool verify_span_access_plan(const XaotBundle *bundle, const XaotSpanAcce
         return set_error(errbuf, errbuf_len, "AOT Span access plan lacks func or value");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT Span access plan func has no func plan");
+    if (!verify_body_summary_anchor(bundle, plan->func, plan->body_func_id, plan->body_effect_bits,
+                                    plan->body_escape_bits, plan->body_evidence, "Span access",
+                                    errbuf, errbuf_len))
+        return false;
     if ((plan->eliminated_checks == 0) == (plan->unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
         return set_error(errbuf, errbuf_len, "AOT Span access plan drop/reason are inconsistent");
     if (!xaot_prepare_span_access_plan_for_value(bundle, plan->func, plan->value, &derived))
@@ -427,6 +439,10 @@ static bool verify_alias_plan(const XaotBundle *bundle, const XaotAliasPlan *pla
         return set_error(errbuf, errbuf_len, "AOT alias plan lacks evidence");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT alias plan func has no func plan");
+    if (!verify_body_summary_anchor(bundle, plan->func, plan->body_func_id, plan->body_effect_bits,
+                                    plan->body_escape_bits, plan->body_evidence, "alias", errbuf,
+                                    errbuf_len))
+        return false;
     cache_plan = xaot_bundle_find_array_cache_plan(bundle, plan->value);
     if (!cache_plan)
         return set_error(errbuf, errbuf_len, "AOT alias plan has no backing array cache plan");
@@ -568,6 +584,43 @@ static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvid
             return &ev->bodies[i];
     }
     return NULL;
+}
+
+static bool verify_body_summary_anchor(const XaotBundle *bundle, const XiFunc *func,
+                                       XgFuncId body_func_id, uint32_t body_effect_bits,
+                                       uint32_t body_escape_bits, uint32_t body_evidence,
+                                       const char *plan_name, char *errbuf, size_t errbuf_len) {
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    const XgBodySummary *body;
+
+    if (body_evidence != XAOT_PLAN_BODY_EV_BODY_SUMMARY) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s plan lacks body summary evidence", plan_name);
+        return false;
+    }
+    body = verify_find_evidence_body_by_func(ev, body_func_id);
+    if (!body) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s plan has no body summary", plan_name);
+        return false;
+    }
+    if (func && func->name && body->kind != XG_BODY_MODULE_INIT &&
+        body->name_id != xg_name_id(func->name)) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s plan body identity is stale", plan_name);
+        return false;
+    }
+    if (body_effect_bits != body->effect_bits) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s plan body effect bits are stale", plan_name);
+        return false;
+    }
+    if (body_escape_bits != body->escape_bits) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s plan body escape bits are stale", plan_name);
+        return false;
+    }
+    return true;
 }
 
 static const XgDeclSummary *verify_find_evidence_decl(const XgGlobalEvidence *ev,

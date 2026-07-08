@@ -1816,6 +1816,109 @@ TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rederives_bounds_body_summary) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x71,
+                      .compiler_semver_hash = 0x72,
+                      .profile_hash = 0x73,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = xg_name_id("bounds_helper"),
+                          .signature_key = 901,
+                          .source_span_id = 3};
+    XgBodySummary body = {.func_id = 8,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = xg_name_id("bounds_helper"),
+                          .signature_key = 901,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x818181,
+                          .effect_bits = XG_BODY_MAY_MUTATE,
+                          .escape_bits = 0,
+                          .capability_bits = 0,
+                          .metadata_use_bits = 0,
+                          .static_data_use_bits = 0};
+    XiFunc init_func;
+    XiFunc helper_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    XiValue array_value;
+    XiValue index_value;
+    XiValue access_value;
+    XiValue *access_args[2];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&helper_func, 0, sizeof(helper_func));
+    memset(&module, 0, sizeof(module));
+    memset(&array_value, 0, sizeof(array_value));
+    memset(&index_value, 0, sizeof(index_value));
+    memset(&access_value, 0, sizeof(access_value));
+    init_func.name = "init";
+    helper_func.name = "bounds_helper";
+    helper_func.parent_func = &init_func;
+    children[0] = &helper_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    array_value.type = &stub_int_type;
+    index_value.type = &stub_int_type;
+    access_args[0] = &array_value;
+    access_args[1] = &index_value;
+    access_value.op = XI_INDEX_GET;
+    access_value.type = &stub_int_type;
+    access_value.args = access_args;
+    access_value.nargs = 2;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+
+    XaotBundle good;
+    memset(&good, 0, sizeof(good));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
+    good.modules = modules;
+    good.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_bounds_plan(&good, &helper_func, &access_value, &body, 0,
+                                                XAOT_BOUNDS_UNPROVEN_NO_GUARD));
+    ASSERT_EQ_UINT(good.bounds_plans[0].body_func_id, body.func_id);
+    ASSERT_EQ_UINT(good.bounds_plans[0].body_effect_bits, body.effect_bits);
+    ASSERT_EQ_UINT(good.bounds_plans[0].body_evidence, XAOT_PLAN_BODY_EV_BODY_SUMMARY);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&good);
+
+    XaotBundle stale_effect;
+    memset(&stale_effect, 0, sizeof(stale_effect));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_effect, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_effect.modules = modules;
+    stale_effect.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_effect, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_effect, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_bounds_plan(&stale_effect, &helper_func, &access_value, &body,
+                                                0, XAOT_BOUNDS_UNPROVEN_NO_GUARD));
+    stale_effect.bounds_plans[0].body_effect_bits = 0;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_effect, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT bounds plan body effect bits are stale"));
+    xaot_bundle_free(&stale_effect);
+
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x41,
@@ -4602,6 +4705,7 @@ RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_static_data_materialization_contract);
 RUN_TEST(global_evidence_verifier_rederives_func_attr_body_summary);
+RUN_TEST(global_evidence_verifier_rederives_bounds_body_summary);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_interface_extends_rows);

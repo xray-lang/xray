@@ -2038,13 +2038,15 @@ XR_FUNC const XaotFuncAttrPlan *xaot_bundle_find_func_attr_plan(const XaotBundle
 }
 
 XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const XiFunc *func,
-                                                    const XiValue *access, uint32_t evidence,
+                                                    const XiValue *access,
+                                                    const XgBodySummary *body, uint32_t evidence,
                                                     uint8_t unproven_reason) {
     XaotBoundsPlan *plan;
 
     /* Proven entries carry evidence and no reason; unproven entries carry a
      * reason and no evidence. Anything else is a caller bug. */
-    if (!bundle || !func || !access || (evidence == 0) == (unproven_reason == 0))
+    if (!bundle || !func || !access || !body || body->func_id == XG_NO_ID ||
+        (evidence == 0) == (unproven_reason == 0))
         return NULL;
     plan = (XaotBoundsPlan *) xaot_bundle_find_bounds_plan(bundle, access);
     if (plan)
@@ -2062,6 +2064,10 @@ XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const Xi
     memset(plan, 0, sizeof(*plan));
     plan->func = func;
     plan->access = access;
+    plan->body_func_id = body->func_id;
+    plan->body_effect_bits = body->effect_bits;
+    plan->body_escape_bits = body->escape_bits;
+    plan->body_evidence = XAOT_PLAN_BODY_EV_BODY_SUMMARY;
     plan->evidence = evidence;
     plan->unproven_reason = unproven_reason;
     if (!xaot_ptr_index_put(&bundle->bounds_index, access, bundle->nbounds_plans - 1)) {
@@ -2082,14 +2088,13 @@ XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bun
     return NULL;
 }
 
-XR_FUNC XaotSpanAccessPlan *xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func,
-                                                             const XiValue *value, uint8_t kind,
-                                                             uint32_t evidence,
-                                                             uint32_t eliminated_checks,
-                                                             uint8_t unproven_reason) {
+XR_FUNC XaotSpanAccessPlan *
+xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+                                 const XgBodySummary *body, uint8_t kind, uint32_t evidence,
+                                 uint32_t eliminated_checks, uint8_t unproven_reason) {
     XaotSpanAccessPlan *plan;
 
-    if (!bundle || !func || !value || kind == 0 ||
+    if (!bundle || !func || !value || !body || body->func_id == XG_NO_ID || kind == 0 ||
         (eliminated_checks == 0) == (unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
         return NULL;
     plan = (XaotSpanAccessPlan *) xaot_bundle_find_span_access_plan(bundle, value);
@@ -2109,6 +2114,10 @@ XR_FUNC XaotSpanAccessPlan *xaot_bundle_add_span_access_plan(XaotBundle *bundle,
     memset(plan, 0, sizeof(*plan));
     plan->func = func;
     plan->value = value;
+    plan->body_func_id = body->func_id;
+    plan->body_effect_bits = body->effect_bits;
+    plan->body_escape_bits = body->escape_bits;
+    plan->body_evidence = XAOT_PLAN_BODY_EV_BODY_SUMMARY;
     plan->kind = kind;
     plan->evidence = evidence;
     plan->eliminated_checks = eliminated_checks;
@@ -2133,11 +2142,12 @@ XR_FUNC const XaotSpanAccessPlan *xaot_bundle_find_span_access_plan(const XaotBu
 }
 
 XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFunc *func,
-                                                  const XiValue *value, uint8_t kind,
-                                                  uint32_t evidence) {
+                                                  const XiValue *value, const XgBodySummary *body,
+                                                  uint8_t kind, uint32_t evidence) {
     XaotAliasPlan *plan;
 
-    if (!bundle || !func || !value || kind == 0 || evidence == 0)
+    if (!bundle || !func || !value || !body || body->func_id == XG_NO_ID || kind == 0 ||
+        evidence == 0)
         return NULL;
     plan = (XaotAliasPlan *) xaot_bundle_find_alias_plan(bundle, value);
     if (plan)
@@ -2155,6 +2165,10 @@ XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFu
     memset(plan, 0, sizeof(*plan));
     plan->func = func;
     plan->value = value;
+    plan->body_func_id = body->func_id;
+    plan->body_effect_bits = body->effect_bits;
+    plan->body_escape_bits = body->escape_bits;
+    plan->body_evidence = XAOT_PLAN_BODY_EV_BODY_SUMMARY;
     plan->kind = kind;
     plan->evidence = evidence;
     if (!xaot_ptr_index_put(&bundle->alias_index, value, bundle->nalias_plans - 1)) {
@@ -2996,7 +3010,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             bp->access && bp->access->op == XI_INDEX_SET ? "index_set" : "index_get";
         value_ref(access_buf, sizeof(access_buf), bp->access);
         if (bp->evidence != 0) {
-            fprintf(out, "bounds %u func=%s access=%s op=%s evidence=%s%s%s\n", ai,
+            fprintf(out, "bounds %u func=%s access=%s op=%s evidence=%s%s%s", ai,
                     safe_str(bp->func ? bp->func->name : NULL), access_buf, op_name,
                     (bp->evidence & XAOT_BOUNDS_EV_DOM_GUARD) ? "dom_guard" : "",
                     (bp->evidence & XAOT_BOUNDS_EV_COUNTED_LOOP) ? "counted_loop" : "",
@@ -3006,9 +3020,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                                                        "len_mismatch", "clobber"};
             const char *reason =
                 bp->unproven_reason < 5 ? reason_names[bp->unproven_reason] : "unknown";
-            fprintf(out, "bounds-unproven %u func=%s access=%s op=%s reason=%s\n", ai,
+            fprintf(out, "bounds-unproven %u func=%s access=%s op=%s reason=%s", ai,
                     safe_str(bp->func ? bp->func->name : NULL), access_buf, op_name, reason);
         }
+        fprintf(out, " body=%u effect=0x%x escape=0x%x body_evidence=0x%x\n", bp->body_func_id,
+                bp->body_effect_bits, bp->body_escape_bits, bp->body_evidence);
     }
 
     for (uint32_t ai = 0; ai < bundle->nspan_access_plans; ai++) {
@@ -3022,14 +3038,15 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             print_span_access_bits(out, sp->evidence, true);
             fprintf(out, " drop=");
             print_span_access_bits(out, sp->eliminated_checks, false);
-            fprintf(out, "\n");
         } else {
             fprintf(out, "span-access-unproven %u func=%s value=%s kind=%s evidence=", ai,
                     safe_str(sp->func ? sp->func->name : NULL), value_buf,
                     span_access_kind_name(sp->kind));
             print_span_access_bits(out, sp->evidence, true);
-            fprintf(out, " reason=%s\n", span_access_reason_name(sp->unproven_reason));
+            fprintf(out, " reason=%s", span_access_reason_name(sp->unproven_reason));
         }
+        fprintf(out, " body=%u effect=0x%x escape=0x%x body_evidence=0x%x\n", sp->body_func_id,
+                sp->body_effect_bits, sp->body_escape_bits, sp->body_evidence);
     }
 
     for (uint32_t ai = 0; ai < bundle->nalias_plans; ai++) {
@@ -3038,13 +3055,16 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         static const char *const kind_names[] = {"none", "unique_data", "unique_recv",
                                                  "unique_param"};
         value_ref(value_buf, sizeof(value_buf), ap->value);
-        fprintf(out, "alias %u func=%s value=%s kind=%s evidence=%s%s%s%s\n", ai,
-                safe_str(ap->func ? ap->func->name : NULL), value_buf,
+        fprintf(out,
+                "alias %u func=%s value=%s kind=%s evidence=%s%s%s%s body=%u effect=0x%x "
+                "escape=0x%x body_evidence=0x%x\n",
+                ai, safe_str(ap->func ? ap->func->name : NULL), value_buf,
                 ap->kind < 4 ? kind_names[ap->kind] : "unknown",
                 (ap->evidence & XAOT_ALIAS_EV_FRESH_ALLOC) ? "fresh" : "",
                 (ap->evidence & XAOT_ALIAS_EV_ALL_ACCESS_RAW) ? "+raw" : "",
                 (ap->evidence & XAOT_ALIAS_EV_USE_WHITELIST) ? "+whitelist" : "",
-                (ap->evidence & XAOT_ALIAS_EV_SOLE_CACHE) ? "+sole" : "");
+                (ap->evidence & XAOT_ALIAS_EV_SOLE_CACHE) ? "+sole" : "", ap->body_func_id,
+                ap->body_effect_bits, ap->body_escape_bits, ap->body_evidence);
     }
 
     for (uint32_t ci = 0; ci < bundle->nclosure_plans; ci++) {
