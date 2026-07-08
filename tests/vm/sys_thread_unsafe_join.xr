@@ -1,0 +1,8 @@
+import sys
+
+var t = sys.Thread.spawn(fn() -> int {
+    return 42
+})
+
+var result = unsafe { t.join() }
+print(result)
