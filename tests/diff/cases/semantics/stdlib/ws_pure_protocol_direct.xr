@@ -39,6 +39,27 @@ print(ws.parseUrl("ws://example.com:65536") == null)
 print(ws.parseUrl("ws://[::1") == null)
 print(ws.parseUrl("ws://example.com/#fragment") == null)
 
+var closePayload = ws.parseClosePayload(Bytes([3, 232, 79, 75]))!
+print(closePayload.code)
+print(closePayload.reason)
+
+var emptyClose = ws.parseClosePayload(Bytes(0))!
+print(emptyClose.code)
+print(emptyClose.reason.length)
+
+print(ws.isValidCloseCode(1000))
+print(ws.isValidCloseCode(1005))
+print(ws.isValidCloseCode(3000))
+print(ws.isValidCloseCode(5000))
+print(ws.parseClosePayload(Bytes([3])) == null)
+print(ws.parseClosePayload(Bytes([3, 238])) == null)
+print(ws.parseClosePayload(Bytes([3, 232, 192, 175])) == null)
+print(ws.parseClosePayload(Bytes([3, 232, 226, 130])) == null)
+var oversizedClose = Bytes(126)
+oversizedClose[0] = 3
+oversizedClose[1] = 232
+print(ws.parseClosePayload(oversizedClose) == null)
+
 var masked = maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
 print(masked[0])
 print(masked[1])
@@ -59,6 +80,15 @@ print(ext[0])
 print(ext[1])
 print(ext[2])
 print(ext[3])
+
+var payload300 = Bytes(300)
+payload300[299] = 90
+var ext300 = ws.frame(payload300, 2, false)
+var parsed300 = parseFrame(ext300, false)!
+print(ext300[2])
+print(ext300[3])
+print(parsed300.payload.length)
+print(parsed300.payload[299])
 
 var parsed = parseFrame(f, false)!
 print(parsed.fin)

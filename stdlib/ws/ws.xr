@@ -54,6 +54,16 @@ class WsUrl {
     }
 }
 
+class ClosePayload {
+    code: int
+    reason: string
+
+    constructor(code: int, reason: string) {
+        this.code = code
+        this.reason = reason
+    }
+}
+
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + prefix.length > s.length) { return false }
     for (var i = 0; i < prefix.length; i++) {
@@ -128,6 +138,77 @@ fn _parsePort(s: string, start: int, end: int) -> int {
     }
     if (n <= 0) { return -1 }
     return n
+}
+
+fn _isContinuationByte(b: int) -> bool {
+    return b >= 0x80 && b <= 0xBF
+}
+
+fn _validUtf8Bytes(data: Bytes, start: int, end: int) -> bool {
+    var i = start
+    while (i < end) {
+        var b = data[i] & 255
+        if (b <= 0x7F) {
+            i = i + 1
+        } else if (b >= 0xC2 && b <= 0xDF) {
+            if (i + 1 >= end || !_isContinuationByte(data[i + 1] & 255)) { return false }
+            i = i + 2
+        } else if (b == 0xE0) {
+            if (i + 2 >= end) { return false }
+            var b1 = data[i + 1] & 255
+            var b2 = data[i + 2] & 255
+            if (b1 < 0xA0 || b1 > 0xBF || !_isContinuationByte(b2)) { return false }
+            i = i + 3
+        } else if (b >= 0xE1 && b <= 0xEC) {
+            if (i + 2 >= end ||
+                !_isContinuationByte(data[i + 1] & 255) ||
+                !_isContinuationByte(data[i + 2] & 255)) { return false }
+            i = i + 3
+        } else if (b == 0xED) {
+            if (i + 2 >= end) { return false }
+            var b1 = data[i + 1] & 255
+            var b2 = data[i + 2] & 255
+            if (b1 < 0x80 || b1 > 0x9F || !_isContinuationByte(b2)) { return false }
+            i = i + 3
+        } else if (b >= 0xEE && b <= 0xEF) {
+            if (i + 2 >= end ||
+                !_isContinuationByte(data[i + 1] & 255) ||
+                !_isContinuationByte(data[i + 2] & 255)) { return false }
+            i = i + 3
+        } else if (b == 0xF0) {
+            if (i + 3 >= end) { return false }
+            var b1 = data[i + 1] & 255
+            if (b1 < 0x90 || b1 > 0xBF ||
+                !_isContinuationByte(data[i + 2] & 255) ||
+                !_isContinuationByte(data[i + 3] & 255)) { return false }
+            i = i + 4
+        } else if (b >= 0xF1 && b <= 0xF3) {
+            if (i + 3 >= end ||
+                !_isContinuationByte(data[i + 1] & 255) ||
+                !_isContinuationByte(data[i + 2] & 255) ||
+                !_isContinuationByte(data[i + 3] & 255)) { return false }
+            i = i + 4
+        } else if (b == 0xF4) {
+            if (i + 3 >= end) { return false }
+            var b1 = data[i + 1] & 255
+            if (b1 < 0x80 || b1 > 0x8F ||
+                !_isContinuationByte(data[i + 2] & 255) ||
+                !_isContinuationByte(data[i + 3] & 255)) { return false }
+            i = i + 4
+        } else {
+            return false
+        }
+    }
+    return true
+}
+
+fn _bytesToString(data: Bytes, start: int, end: int) -> string {
+    if (start >= end) { return "" }
+    var out = Bytes(end - start)
+    for (var i = start; i < end; i++) {
+        out[i - start] = data[i]
+    }
+    return out.toString()
 }
 
 fn _randomBytes(n: int) -> Bytes {
@@ -291,6 +372,25 @@ fn parseUrl(url: string) -> WsUrl? {
     return WsUrl(secure, host, port, path)
 }
 
+fn isValidCloseCode(code: int) -> bool {
+    return code == 1000 || code == 1001 || code == 1002 || code == 1003 ||
+        code == 1007 || code == 1008 || code == 1009 || code == 1010 ||
+        code == 1011 || (code >= 3000 && code <= 4999)
+}
+
+fn parseClosePayload(payload: Bytes) -> ClosePayload? {
+    if (payload.length > 125 || payload.length == 1) { return null }
+    if (payload.length == 0) { return ClosePayload(1005, "") }
+
+    var codeHi: int = payload[0] & 255
+    var codeLo: int = payload[1] & 255
+    var code = (codeHi << 8) | codeLo
+    if (!isValidCloseCode(code)) { return null }
+    if (!_validUtf8Bytes(payload, 2, payload.length)) { return null }
+
+    return ClosePayload(code, _bytesToString(payload, 2, payload.length))
+}
+
 fn _copyInto(dst: Bytes, off: int, src: Bytes) {
     for (var i = 0; i < src.length; i++) {
         dst[off + i] = src[i]
@@ -320,14 +420,14 @@ fn parseFrame(
 ) -> ParsedFrame? {
     if (raw.length < 2) { return null }
 
-    var first = raw[0]
-    var second = raw[1]
+    var first: int = raw[0] & 255
+    var second: int = raw[1] & 255
     var rsv1 = (first & 64) != 0
     var rsv23 = (first & 48) != 0
     if (rsv23 || (rsv1 && !allowRsv1)) { return null }
 
     var fin = (first & 128) != 0
-    var opcode = first & 15
+    var opcode: int = first & 15
     if (!_validOpcode(opcode)) { return null }
 
     var control = (opcode & 8) != 0
@@ -337,13 +437,15 @@ fn parseFrame(
     var expectedMaskMode = expectMasked ? 1 : 0
     if (enforceMask && maskMode != expectedMaskMode) { return null }
 
-    var payloadLen = second & 127
+    var payloadLen: int = second & 127
     var offset = 2
     if (control && payloadLen > 125) { return null }
 
     if (payloadLen == 126) {
         if (raw.length < 4) { return null }
-        payloadLen = ((raw[2] & 255) << 8) | (raw[3] & 255)
+        var lenHi: int = raw[2] & 255
+        var lenLo: int = raw[3] & 255
+        payloadLen = (lenHi << 8) | lenLo
         if (payloadLen < 126) { return null }
         offset = 4
     } else if (payloadLen == 127) {
@@ -442,6 +544,7 @@ fn pongFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
 export {
     ParsedFrame,
     WsUrl,
+    ClosePayload,
     acceptKey,
     randomKey,
     isUpgradeRequest,
@@ -449,6 +552,8 @@ export {
     upgradeResponse,
     clientRequest,
     parseUrl,
+    isValidCloseCode,
+    parseClosePayload,
     maskPayload,
     parseFrame,
     frame,
