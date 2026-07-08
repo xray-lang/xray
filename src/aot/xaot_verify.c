@@ -26,6 +26,7 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
 
 static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
                                                               XgFuncId func_id);
+static XgFuncId verify_find_method_body_func_id(const XgGlobalEvidence *ev, XgMethodId method_id);
 static bool verify_body_summary_anchor(const XaotBundle *bundle, const XiFunc *func,
                                        XgFuncId body_func_id, uint32_t body_effect_bits,
                                        uint32_t body_escape_bits, uint32_t body_evidence,
@@ -617,6 +618,21 @@ static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvid
             return &ev->bodies[i];
     }
     return NULL;
+}
+
+static XgFuncId verify_find_method_body_func_id(const XgGlobalEvidence *ev, XgMethodId method_id) {
+    XgFuncId match = XG_NO_ID;
+    if (!ev || method_id == XG_NO_ID)
+        return XG_NO_ID;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->kind != XG_BODY_METHOD || body->owner_method_id != method_id)
+            continue;
+        if (match != XG_NO_ID && match != body->func_id)
+            return XG_NO_ID;
+        match = body->func_id;
+    }
+    return match;
 }
 
 static bool verify_body_summary_anchor(const XaotBundle *bundle, const XiFunc *func,
@@ -1576,6 +1592,8 @@ static bool verify_dispatch_target_anchor_rederives(
         if (!verify_find_evidence_class(ev, target->receiver_class_id) || !target_method)
             return set_error(errbuf, errbuf_len, "AOT dispatch target is missing");
         if (target->method_owner_class_id != target_method->owner_class_id ||
+            target->method_body_func_id !=
+                verify_find_method_body_func_id(ev, target_method->method_id) ||
             target->method_name_id != target_method->name_id ||
             target->method_signature_key != target_method->signature_key ||
             target->method_root_id != target_method->root_method_id ||
@@ -1620,6 +1638,8 @@ static bool verify_dispatch_vtable_targets_rederive(
             target->method_id != target_method->method_id || target->evidence != expected_evidence)
             return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
         if (target->method_owner_class_id != target_method->owner_class_id ||
+            target->method_body_func_id !=
+                verify_find_method_body_func_id(ev, target_method->method_id) ||
             target->method_name_id != target_method->name_id ||
             target->method_signature_key != target_method->signature_key ||
             target->method_root_id != target_method->root_method_id ||
