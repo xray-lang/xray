@@ -344,8 +344,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http", "readChunk", "(resp: Json, maxBytes?: int): string?", "Read the next chunk from a streaming HTTP response", "http_read_chunk", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "closeStream", "(resp: Json): ()", "Close a streaming HTTP response", "http_close_stream", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "stopServer", "(): ()", "Stop the HTTP server", "http_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
-    {"http", "parseRequest", "(fd: int): Array<unknown>?", "Parse raw HTTP request data", "http_parse_request_fast", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"http", "sendResponse", "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd", "http_send_response_fast", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"http", "download", "(url: string, path: string): DownloadResult", "Download file from URL", "http_download", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "getContentLength", "(url: string): int", "Get content length of URL", "http_get_content_length", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", "h2_get", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},

@@ -3457,28 +3457,6 @@ module http {
     layer: "runtime"
   }
 
-  fn parseRequest {
-    signature: "(fd: int): Array<unknown>?"
-    doc: "Parse raw HTTP request data"
-    vm: "http_parse_request_fast"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn sendResponse {
-    signature: "(fd: int, body: string, status?: int): bool"
-    doc: "Send HTTP response on fd"
-    vm: "http_send_response_fast"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn download {
     signature: "(url: string, path: string): DownloadResult"
     doc: "Download file from URL"

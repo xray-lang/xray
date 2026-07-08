@@ -764,7 +764,7 @@ TEST(class_info_members) {
     xa_class_info_free(info);
 }
 
-TEST(builtin_http_fast_signatures) {
+TEST(builtin_http_old_fd_helpers_removed) {
     const XaBuiltinModule *mod = xa_builtin_get_module_info("http");
     ASSERT(mod != NULL);
 
@@ -779,10 +779,8 @@ TEST(builtin_http_fast_signatures) {
             send_resp = fn;
     }
 
-    ASSERT(parse_req != NULL);
-    ASSERT(send_resp != NULL);
-    ASSERT(strcmp(parse_req->signature, "(fd: int): Array<unknown>?") == 0);
-    ASSERT(strcmp(send_resp->signature, "(fd: int, body: string, status?: int): bool") == 0);
+    ASSERT(parse_req == NULL);
+    ASSERT(send_resp == NULL);
 }
 
 TEST(builtin_datetime_type_methods_from_defs) {
@@ -867,7 +865,7 @@ int main(void) {
     RUN_TEST(deeply_nested_types);
     RUN_TEST(union_type_dedup);
     RUN_TEST(class_info_members);
-    RUN_TEST(builtin_http_fast_signatures);
+    RUN_TEST(builtin_http_old_fd_helpers_removed);
     RUN_TEST(builtin_datetime_type_methods_from_defs);
 
     printf("\n========================================\n");
