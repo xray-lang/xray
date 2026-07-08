@@ -938,9 +938,12 @@ static void prescan_apply_const_data_attrs(XiLower *l, const VarDeclNode *var,
     if (!l || !var || !lit)
         return;
     XrAttribute *section = prescan_var_attr(var, ATTR_SECTION);
+    XrAttribute *weak = prescan_var_attr(var, ATTR_WEAK);
     XrAttribute *used = prescan_var_attr(var, ATTR_USED);
     if (section && section->str_arg && section->str_arg[0])
         lit->data_section = arena_strdup(l->func, section->str_arg);
+    if (weak)
+        lit->data_weak = true;
     if (used)
         lit->data_used = true;
 }

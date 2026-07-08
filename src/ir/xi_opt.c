@@ -577,7 +577,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
             if (v->op == XI_GET_SHARED) {
                 const XiConstLiteral *lit = shared_const_literal_slot(f, v->aux_int);
-                if (lit && rewrite_to_const_literal(v, lit)) {
+                if (lit && !lit->data_weak && rewrite_to_const_literal(v, lit)) {
                     chg.values_changed = true;
                     continue;
                 }

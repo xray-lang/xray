@@ -634,12 +634,14 @@ static bool cg_freestanding_static_tuple_value(XiCgenCtx *ctx, const XiValue *va
     return true;
 }
 
-static void cg_emit_static_struct_name(FILE *out, int64_t slot) {
-    fprintf(out, "_xctstruct_%" PRId64, slot);
+static void cg_emit_static_struct_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                       int64_t slot) {
+    cg_emit_static_const_data_name(ctx, out, module, slot, "_xctstruct");
 }
 
-static void cg_emit_static_tuple_name(FILE *out, int64_t slot) {
-    fprintf(out, "_xcttuple_%" PRId64, slot);
+static void cg_emit_static_tuple_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                      int64_t slot) {
+    cg_emit_static_const_data_name(ctx, out, module, slot, "_xcttuple");
 }
 
 static void cg_emit_static_struct_i64(FILE *out, int64_t value) {
@@ -825,7 +827,7 @@ static bool cg_emit_freestanding_static_struct_defs(XiCgenCtx *ctx, FILE *out,
             continue;
         const XrCtStructValue *st = &value->as.struct_val;
         const XiConstLiteral *lit = &module->slot_const_literals[slot];
-        fprintf(out, "static const ");
+        cg_emit_static_const_storage(out, lit);
         emit_static_aggregate_decl_head(out, sl);
         for (uint16_t i = 0; i < sl->field_count; i++) {
             char fname[128];
@@ -834,7 +836,7 @@ static bool cg_emit_freestanding_static_struct_defs(XiCgenCtx *ctx, FILE *out,
             fprintf(out, "; ");
         }
         fprintf(out, "} ");
-        cg_emit_static_struct_name(out, slot);
+        cg_emit_static_struct_name(ctx, out, module, slot);
         emit_aot_const_data_attrs(out, lit);
         fprintf(out, " = ");
         cg_emit_static_struct_initializer(ctx, out, sl, st);
@@ -858,12 +860,13 @@ static bool cg_emit_freestanding_static_tuple_defs(XiCgenCtx *ctx, FILE *out,
             continue;
         const XiConstLiteral *lit = &module->slot_const_literals[slot];
         const XrCtTupleValue *tuple = &value->as.tuple_val;
-        fprintf(out, "static const struct { ");
+        cg_emit_static_const_storage(out, lit);
+        fprintf(out, "struct { ");
         int count = cg_static_tuple_type_count(tuple_type);
         for (uint16_t i = 0; i < (uint16_t) count; i++)
             cg_emit_static_tuple_field_decl(out, tuple_type, i);
         fprintf(out, "} ");
-        cg_emit_static_tuple_name(out, slot);
+        cg_emit_static_tuple_name(ctx, out, module, slot);
         emit_aot_const_data_attrs(out, lit);
         fprintf(out, " = ");
         cg_emit_static_tuple_initializer(ctx, out, tuple_type, tuple);
@@ -875,10 +878,11 @@ static bool cg_emit_freestanding_static_tuple_defs(XiCgenCtx *ctx, FILE *out,
     return emitted;
 }
 
-static void cg_emit_static_struct_field_lvalue(FILE *out, const XrAggregateLayout *sl, int64_t slot,
+static void cg_emit_static_struct_field_lvalue(XiCgenCtx *ctx, FILE *out,
+                                               const XrAggregateLayout *sl, int64_t slot,
                                                int64_t field_idx) {
     char fname[128];
-    cg_emit_static_struct_name(out, slot);
+    cg_emit_static_struct_name(ctx, out, ctx ? ctx->module : NULL, slot);
     cg_struct_field_c_name(sl, field_idx, fname, sizeof(fname));
     fprintf(out, ".%s", fname);
 }
@@ -933,10 +937,11 @@ static bool cg_freestanding_static_tuple_object_path(XiCgenCtx *ctx, const XiVal
     return cg_freestanding_static_tuple_object_path_depth(ctx, value, out_path, 0);
 }
 
-static void cg_emit_static_tuple_path_lvalue(FILE *out, const CgStaticTuplePath *path) {
+static void cg_emit_static_tuple_path_lvalue(XiCgenCtx *ctx, FILE *out,
+                                             const CgStaticTuplePath *path) {
     if (!path)
         return;
-    cg_emit_static_tuple_name(out, path->slot);
+    cg_emit_static_tuple_name(ctx, out, ctx ? ctx->module : NULL, path->slot);
     for (uint16_t i = 0; i < path->depth; i++)
         fprintf(out, ".f%" PRId64, path->fields[i]);
 }
@@ -966,12 +971,13 @@ static bool cg_freestanding_static_struct_nested_field_value(
     return true;
 }
 
-static void cg_emit_static_struct_nested_field_lvalue(FILE *out, const XrAggregateLayout *parent,
-                                                      int64_t slot, int64_t parent_field_idx,
+static void cg_emit_static_struct_nested_field_lvalue(XiCgenCtx *ctx, FILE *out,
+                                                      const XrAggregateLayout *parent, int64_t slot,
+                                                      int64_t parent_field_idx,
                                                       const XrAggregateLayout *nested,
                                                       int64_t nested_field_idx) {
     char fname[128];
-    cg_emit_static_struct_field_lvalue(out, parent, slot, parent_field_idx);
+    cg_emit_static_struct_field_lvalue(ctx, out, parent, slot, parent_field_idx);
     cg_struct_field_c_name(nested, nested_field_idx, fname, sizeof(fname));
     fprintf(out, ".%s", fname);
 }
@@ -1014,8 +1020,9 @@ static bool emit_static_struct_field_get_expr(XiCgenCtx *ctx, FILE *out, const X
         const XrAggregateFieldLayout *field = &nested_sl->fields[v->aux_int];
         if (cg_static_struct_native_fixed_array_supported(field)) {
             fprintf(out, "xr_array_ref((void *)&");
-            cg_emit_static_struct_nested_field_lvalue(
-                out, nested_parent, nested_slot, nested_parent_field_idx, nested_sl, v->aux_int);
+            cg_emit_static_struct_nested_field_lvalue(ctx, out, nested_parent, nested_slot,
+                                                      nested_parent_field_idx, nested_sl,
+                                                      v->aux_int);
             fprintf(out, "[0], %u, %u)",
                     (unsigned) cg_static_struct_array_ref_elem_native_type(field),
                     (unsigned) field->elem_count);
@@ -1023,11 +1030,13 @@ static bool emit_static_struct_field_get_expr(XiCgenCtx *ctx, FILE *out, const X
         }
         if (field && field->native_type == XR_NATIVE_STRUCT && field->sub_layout) {
             fprintf(out, "xr_aggregate_ref((void *)&");
-            cg_emit_static_struct_nested_field_lvalue(
-                out, nested_parent, nested_slot, nested_parent_field_idx, nested_sl, v->aux_int);
+            cg_emit_static_struct_nested_field_lvalue(ctx, out, nested_parent, nested_slot,
+                                                      nested_parent_field_idx, nested_sl,
+                                                      v->aux_int);
             fprintf(out, ", (uint16_t)sizeof(");
-            cg_emit_static_struct_nested_field_lvalue(
-                out, nested_parent, nested_slot, nested_parent_field_idx, nested_sl, v->aux_int);
+            cg_emit_static_struct_nested_field_lvalue(ctx, out, nested_parent, nested_slot,
+                                                      nested_parent_field_idx, nested_sl,
+                                                      v->aux_int);
             fprintf(out, "))");
             return true;
         }
@@ -1039,7 +1048,7 @@ static bool emit_static_struct_field_get_expr(XiCgenCtx *ctx, FILE *out, const X
             fprintf(out, "(double)");
         else if (field_rep == XR_REP_I64)
             fprintf(out, "(int64_t)");
-        cg_emit_static_struct_nested_field_lvalue(out, nested_parent, nested_slot,
+        cg_emit_static_struct_nested_field_lvalue(ctx, out, nested_parent, nested_slot,
                                                   nested_parent_field_idx, nested_sl, v->aux_int);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -1054,21 +1063,21 @@ static bool emit_static_struct_field_get_expr(XiCgenCtx *ctx, FILE *out, const X
         XrRep result_rep = cg_value_plan_storage_rep(ctx, v);
         if (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR) {
             fprintf(out, "&");
-            cg_emit_static_struct_field_lvalue(out, sl, slot, v->aux_int);
+            cg_emit_static_struct_field_lvalue(ctx, out, sl, slot, v->aux_int);
             fprintf(out, "[0]");
             return true;
         }
         fprintf(out, "xr_array_ref((void *)&");
-        cg_emit_static_struct_field_lvalue(out, sl, slot, v->aux_int);
+        cg_emit_static_struct_field_lvalue(ctx, out, sl, slot, v->aux_int);
         fprintf(out, "[0], %u, %u)", (unsigned) cg_static_struct_array_ref_elem_native_type(field),
                 (unsigned) field->elem_count);
         return true;
     }
     if (field && field->native_type == XR_NATIVE_STRUCT && field->sub_layout) {
         fprintf(out, "xr_aggregate_ref((void *)&");
-        cg_emit_static_struct_field_lvalue(out, sl, slot, v->aux_int);
+        cg_emit_static_struct_field_lvalue(ctx, out, sl, slot, v->aux_int);
         fprintf(out, ", (uint16_t)sizeof(");
-        cg_emit_static_struct_field_lvalue(out, sl, slot, v->aux_int);
+        cg_emit_static_struct_field_lvalue(ctx, out, sl, slot, v->aux_int);
         fprintf(out, "))");
         return true;
     }
@@ -1080,7 +1089,7 @@ static bool emit_static_struct_field_get_expr(XiCgenCtx *ctx, FILE *out, const X
         fprintf(out, "(double)");
     else if (field_rep == XR_REP_I64)
         fprintf(out, "(int64_t)");
-    cg_emit_static_struct_field_lvalue(out, sl, slot, v->aux_int);
+    cg_emit_static_struct_field_lvalue(ctx, out, sl, slot, v->aux_int);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -1110,7 +1119,7 @@ static bool emit_static_tuple_get_expr(XiCgenCtx *ctx, FILE *out, const XiValue 
         fprintf(out, "(double)");
     else if (elem_rep == XR_REP_I64)
         fprintf(out, "(int64_t)");
-    cg_emit_static_tuple_path_lvalue(out, &receiver);
+    cg_emit_static_tuple_path_lvalue(ctx, out, &receiver);
     fprintf(out, ".f%" PRId64, v->aux_int);
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -1945,7 +1954,7 @@ static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     int64_t static_slot = -1;
     if (cg_freestanding_static_struct_value(ctx, object, &static_layout, &static_slot) &&
         cg_struct_layout_same_shape(static_layout, sl)) {
-        cg_emit_static_struct_field_lvalue(out, static_layout, static_slot, idx);
+        cg_emit_static_struct_field_lvalue(ctx, out, static_layout, static_slot, idx);
         return;
     }
     const XiValue *origin = cg_trace_struct_new(object);
@@ -2204,7 +2213,7 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
     else if (elem_rep != XR_REP_TAGGED)
         fprintf(out, "(int64_t)");
     if (static_struct_field_read)
-        cg_emit_static_struct_field_lvalue(out, static_struct_layout, static_struct_slot,
+        cg_emit_static_struct_field_lvalue(ctx, out, static_struct_layout, static_struct_slot,
                                            static_struct_field_idx);
     else
         emit_struct_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);

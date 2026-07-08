@@ -72,6 +72,18 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
                              attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
+        case ATTR_SECTION:
+            xfmt_write_str(ctx, "@section(");
+            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
+                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_write_char(ctx, ')');
+            break;
+        case ATTR_WEAK:
+            xfmt_write_str(ctx, "@weak");
+            break;
+        case ATTR_USED:
+            xfmt_write_str(ctx, "@used");
+            break;
         case ATTR_DERIVE: {
             bool first = true;
             xfmt_write_str(ctx, "@derive(");

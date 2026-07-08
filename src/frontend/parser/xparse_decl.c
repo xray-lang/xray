@@ -272,6 +272,7 @@ static bool attrs_are_const_data_attrs(XrAttribute **attrs, int count) {
             continue;
         switch (attrs[i]->kind) {
             case ATTR_SECTION:
+            case ATTR_WEAK:
             case ATTR_USED:
                 break;
             default:
@@ -426,7 +427,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         }
         if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
             xr_parser_check(parser, TK_LPAREN)) {
-            xr_parser_error(parser, "@section/@used require a single named const binding");
+            xr_parser_error(parser, "@section/@weak/@used require a single named const binding");
             return NULL;
         }
         AstNode *decl = xr_parse_single_var_declaration(parser, 1);

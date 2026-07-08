@@ -33,7 +33,8 @@ static XrAttribute *xa_var_attr(const VarDeclNode *var, AttributeKind kind) {
 }
 
 static bool xa_var_has_static_data_attr(const VarDeclNode *var) {
-    return xa_var_attr(var, ATTR_SECTION) || xa_var_attr(var, ATTR_USED);
+    return xa_var_attr(var, ATTR_SECTION) || xa_var_attr(var, ATTR_WEAK) ||
+           xa_var_attr(var, ATTR_USED);
 }
 
 static bool xa_type_has_fixed_layout_data_object(const XrType *type) {
@@ -72,7 +73,8 @@ static void xa_validate_const_static_data_attrs(XaInferContext *ctx, AstNode *no
     if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@used const data is currently only supported in freestanding profile", &loc);
+            "@section/@weak/@used const data is currently only supported in freestanding profile",
+            &loc);
         return;
     }
     XrAttribute *section = xa_var_attr(var, ATTR_SECTION);
@@ -84,20 +86,21 @@ static void xa_validate_const_static_data_attrs(XaInferContext *ctx, AstNode *no
     if (!xa_is_module_level_scope(ctx->analyzer) || node->type != AST_CONST_DECL) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@used can only annotate a module-level const data declaration", &loc);
+            "@section/@weak/@used can only annotate a module-level const data declaration", &loc);
         return;
     }
     if (!links || !links->has_ct_value) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "@section/@used const data requires a compile-time initializer",
+                                   "@section/@weak/@used const data requires a compile-time "
+                                   "initializer",
                                    &loc);
         return;
     }
     if (!xa_type_supports_const_static_data_object(var_type)) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@used const data currently requires a scalar, string, fixed-array, tuple, "
-            "struct, or union static object",
+            "@section/@weak/@used const data currently requires a scalar, string, fixed-array, "
+            "tuple, struct, or union static object",
             &loc);
     }
 }
