@@ -31,4 +31,15 @@ fn test_request_rejects_unsupported_scheme() {
     assert_eq(r.error, "URL parse error")
 }
 
+@test
+fn test_request_rejects_invalid_explicit_port() {
+    var zero = http.request({url: "http://example.com:0/path"})
+    assert(!zero.ok)
+    assert_eq(zero.error, "URL parse error")
+
+    var tooLarge = http.request({url: "http://example.com:99999/path"})
+    assert(!tooLarge.ok)
+    assert_eq(tooLarge.error, "URL parse error")
+}
+
 print("All http request options tests passed")
