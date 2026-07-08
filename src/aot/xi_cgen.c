@@ -510,6 +510,23 @@ typedef struct CgStrLit {
 
 #define CG_STRLIT_BUCKETS 1024
 
+typedef enum CgNoAllocCauseKind {
+    CG_NO_ALLOC_CAUSE_NONE = 0,
+    CG_NO_ALLOC_CAUSE_DIRECT,
+    CG_NO_ALLOC_CAUSE_CALL,
+} CgNoAllocCauseKind;
+
+typedef struct CgNoAllocSummary {
+    const XiFunc *func;
+    bool direct_alloc;
+    bool may_alloc;
+    uint8_t cause_kind;
+    const XiValue *cause_value;
+    const XiFunc *callee;
+    const char *kind;
+    const char *detail;
+} CgNoAllocSummary;
+
 /* All mutable codegen state for one C-generation session.
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
@@ -581,6 +598,10 @@ struct XiCgenCtx {
     CgStrLit **strlit_list; /* ordered by id for definition emission */
     int nstrlit;
     int strlit_cap;
+    CgNoAllocSummary *no_alloc_summaries;
+    int nno_alloc_summaries;
+    int no_alloc_summary_cap;
+    bool no_alloc_summaries_valid;
 };
 
 /* Grow the parallel shared-slot tables to at least `need` entries.  All four
@@ -677,6 +698,25 @@ static bool cg_reserve_imports(XiCgenCtx *ctx, int need) {
     memset(&ni[ctx->imports_cap], 0, (size_t) (nc - ctx->imports_cap) * sizeof(*ni));
     ctx->imports = ni;
     ctx->imports_cap = nc;
+    return true;
+}
+
+static bool cg_reserve_no_alloc_summaries(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->no_alloc_summary_cap)
+        return true;
+    int nc = ctx->no_alloc_summary_cap > 0 ? ctx->no_alloc_summary_cap : 32;
+    while (nc < need)
+        nc *= 2;
+    CgNoAllocSummary *rows =
+        (CgNoAllocSummary *) xr_realloc(ctx->no_alloc_summaries, (size_t) nc * sizeof(*rows));
+    if (!rows) {
+        ctx->error = true;
+        return false;
+    }
+    memset(&rows[ctx->no_alloc_summary_cap], 0,
+           (size_t) (nc - ctx->no_alloc_summary_cap) * sizeof(*rows));
+    ctx->no_alloc_summaries = rows;
+    ctx->no_alloc_summary_cap = nc;
     return true;
 }
 
@@ -2703,9 +2743,8 @@ static bool cg_no_alloc_builtin_name_allocates(const char *name) {
     if (!name)
         return false;
     static const char *allocating_builtins[] = {
-        "array_new",    "Bytes",    "StringBuilder", "map_new", "set_new",
-        "json_new",     "copy",     "to_shared",     "str_concat",
-        "regex_compile",
+        "array_new", "Bytes", "StringBuilder", "map_new",    "set_new",
+        "json_new",  "copy",  "to_shared",     "str_concat", "regex_compile",
     };
     for (size_t i = 0; i < sizeof(allocating_builtins) / sizeof(allocating_builtins[0]); i++) {
         if (strcmp(name, allocating_builtins[i]) == 0)
@@ -2782,9 +2821,70 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
     return false;
 }
 
-static bool cg_check_no_alloc_func(XiCgenCtx *ctx, const XiFunc *f) {
-    if (!f || !f->no_alloc)
+static void cg_no_alloc_summaries_invalidate(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    ctx->nno_alloc_summaries = 0;
+    ctx->no_alloc_summaries_valid = false;
+}
+
+static CgNoAllocSummary *cg_no_alloc_summary_for_func(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return NULL;
+    for (int i = 0; i < ctx->nno_alloc_summaries; i++) {
+        if (ctx->no_alloc_summaries[i].func == f)
+            return &ctx->no_alloc_summaries[i];
+    }
+    if (!cg_reserve_no_alloc_summaries(ctx, ctx->nno_alloc_summaries + 1))
+        return NULL;
+    CgNoAllocSummary *row = &ctx->no_alloc_summaries[ctx->nno_alloc_summaries++];
+    memset(row, 0, sizeof(*row));
+    row->func = f;
+    return row;
+}
+
+static CgNoAllocSummary *cg_no_alloc_find_summary(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return NULL;
+    for (int i = 0; i < ctx->nno_alloc_summaries; i++) {
+        if (ctx->no_alloc_summaries[i].func == f)
+            return &ctx->no_alloc_summaries[i];
+    }
+    return NULL;
+}
+
+static void cg_no_alloc_prepare_func(XiFunc *f) {
+    if (!f || f->is_extern)
+        return;
+    if (f->stage < XI_STAGE_REPPED) {
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(f, &policy);
+        xi_opt_box_elim(f);
+    }
+    if (f->stage < XI_STAGE_BACKEND)
+        xi_backend_lower(f);
+}
+
+static bool cg_no_alloc_collect_func_tree(XiCgenCtx *ctx, XiFunc *f) {
+    if (!ctx || !f)
         return true;
+    if (cg_no_alloc_find_summary(ctx, f))
+        return true;
+    cg_no_alloc_prepare_func(f);
+    if (!cg_no_alloc_summary_for_func(ctx, f))
+        return false;
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (!cg_no_alloc_collect_func_tree(ctx, f->children[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool cg_no_alloc_find_direct_alloc(XiCgenCtx *ctx, const XiFunc *f,
+                                          const XiValue **value_out, const char **kind_out,
+                                          const char **detail_out) {
+    if (!f || f->is_extern)
+        return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
@@ -2795,17 +2895,154 @@ static bool cg_check_no_alloc_func(XiCgenCtx *ctx, const XiFunc *f) {
             const char *detail = NULL;
             if (!cg_no_alloc_value_allocates(ctx, f, v, &kind, &detail))
                 continue;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: @no_alloc function '%s' allocates via %s '%s' at v%u "
-                    "line %u\n",
-                    f->name ? f->name : "?", kind ? kind : "operation",
-                    detail ? detail : xi_op_name(v->op), v->id, v->line);
-            if (ctx)
-                ctx->error = true;
-            return false;
+            if (value_out)
+                *value_out = v;
+            if (kind_out)
+                *kind_out = kind;
+            if (detail_out)
+                *detail_out = detail;
+            return true;
         }
     }
+    return false;
+}
+
+static const XiFunc *cg_no_alloc_call_target(XiCgenCtx *ctx, const XiFunc *current,
+                                             const XiValue *call) {
+    if (!ctx || !current || !call)
+        return NULL;
+    if (call->op == XI_CALL && call->nargs >= 1) {
+        CgStaticFunctionCall static_call =
+            cg_resolve_static_function_call(ctx, current, call->args[0]);
+        return static_call.is_class_constructor ? NULL : static_call.func;
+    }
+    if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) && call->nargs >= 1) {
+        const char *method = (const char *) call->aux;
+        if (method) {
+            CgStaticFunctionCall module_call =
+                cg_resolve_module_member_call(ctx, current, call, method);
+            if (module_call.func && !module_call.is_class_constructor)
+                return module_call.func;
+        }
+        const char *method_prefix = NULL;
+        return cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
+    }
+    return NULL;
+}
+
+static bool cg_no_alloc_func_calls_allocating_func(XiCgenCtx *ctx, const XiFunc *f,
+                                                   const XiValue **value_out,
+                                                   const XiFunc **callee_out) {
+    if (!ctx || !f || f->is_extern)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v ||
+                (v->op != XI_CALL && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            const XiFunc *target = cg_no_alloc_call_target(ctx, f, v);
+            CgNoAllocSummary *target_row = cg_no_alloc_find_summary(ctx, target);
+            if (!target_row || !target_row->may_alloc)
+                continue;
+            if (value_out)
+                *value_out = v;
+            if (callee_out)
+                *callee_out = target;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_no_alloc_rebuild_summaries(XiCgenCtx *ctx, const XiFunc *fallback_root) {
+    if (!ctx)
+        return false;
+    if (ctx->no_alloc_summaries_valid)
+        return true;
+
+    ctx->nno_alloc_summaries = 0;
+    if (ctx->all_modules && ctx->all_nmodules > 0) {
+        for (int i = 0; i < ctx->all_nmodules; i++) {
+            XiModule *mod = ctx->all_modules[i];
+            if (mod && mod->init && !cg_no_alloc_collect_func_tree(ctx, (XiFunc *) mod->init))
+                return false;
+        }
+    } else if (fallback_root) {
+        if (!cg_no_alloc_collect_func_tree(ctx, (XiFunc *) fallback_root))
+            return false;
+    }
+
+    for (int i = 0; i < ctx->nno_alloc_summaries; i++) {
+        CgNoAllocSummary *row = &ctx->no_alloc_summaries[i];
+        const XiValue *value = NULL;
+        const char *kind = NULL;
+        const char *detail = NULL;
+        if (cg_no_alloc_find_direct_alloc(ctx, row->func, &value, &kind, &detail)) {
+            row->direct_alloc = true;
+            row->may_alloc = true;
+            row->cause_kind = CG_NO_ALLOC_CAUSE_DIRECT;
+            row->cause_value = value;
+            row->kind = kind;
+            row->detail = detail;
+        }
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int i = 0; i < ctx->nno_alloc_summaries; i++) {
+            CgNoAllocSummary *row = &ctx->no_alloc_summaries[i];
+            if (row->may_alloc)
+                continue;
+            const XiValue *call = NULL;
+            const XiFunc *callee = NULL;
+            if (!cg_no_alloc_func_calls_allocating_func(ctx, row->func, &call, &callee))
+                continue;
+            row->may_alloc = true;
+            row->cause_kind = CG_NO_ALLOC_CAUSE_CALL;
+            row->cause_value = call;
+            row->callee = callee;
+            row->kind = "call";
+            row->detail = callee && callee->name ? callee->name : "?";
+            changed = true;
+        }
+    }
+
+    ctx->no_alloc_summaries_valid = true;
     return true;
+}
+
+static bool cg_check_no_alloc_func(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !f->no_alloc)
+        return true;
+    if (!cg_no_alloc_rebuild_summaries(ctx, f))
+        return false;
+    CgNoAllocSummary *row = cg_no_alloc_find_summary(ctx, f);
+    if (!row || !row->may_alloc)
+        return true;
+
+    const XiValue *v = row->cause_value;
+    if (row->cause_kind == CG_NO_ALLOC_CAUSE_CALL) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: @no_alloc function '%s' allocates via call '%s' at v%u "
+                "line %u\n",
+                f->name ? f->name : "?", row->detail ? row->detail : "?", v ? v->id : 0,
+                v ? v->line : 0);
+    } else {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: @no_alloc function '%s' allocates via %s '%s' at v%u "
+                "line %u\n",
+                f->name ? f->name : "?", row->kind ? row->kind : "operation",
+                row->detail ? row->detail : (v ? xi_op_name(v->op) : "?"), v ? v->id : 0,
+                v ? v->line : 0);
+    }
+    if (ctx)
+        ctx->error = true;
+    return false;
 }
 
 static bool cg_value_aliases_value(const XiValue *value, const XiValue *target) {

@@ -63,6 +63,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->cell_origins);
     xr_free(ctx->phi_repr);
     xr_free(ctx->array_data_cache_decls);
+    xr_free(ctx->no_alloc_summaries);
     xr_free(ctx);
 }
 
