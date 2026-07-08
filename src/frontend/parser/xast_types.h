@@ -248,6 +248,7 @@ typedef enum {
     ATTR_SECTION,       // @section("name") — place AOT function/C export or const data in section
     ATTR_WEAK,          // @weak — emit weak AOT C export symbol
     ATTR_USED,          // @used — force AOT function/C export or const data emission
+    ATTR_NO_ALLOC,      // @no_alloc — AOT function must not perform heap/runtime allocation
     ATTR_DERIVE,        // @derive(Inspect, Json) — compile-time generated metadata
 } AttributeKind;
 

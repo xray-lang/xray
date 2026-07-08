@@ -34,6 +34,7 @@
 #include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"
 #include "../ir/xi_own.h"
+#include "../ir/xi_escape.h"
 #include "../ir/xi_range.h"
 #include "../ir/xi_value_query.h"
 #include "../ir/xi_coro_analyze.h"
@@ -2697,6 +2698,115 @@ static bool cg_aot_compare_present_bool_map_get_const(XiCgenCtx *ctx, const XiVa
                                                       bool *out_const_value);
 
 #include "xi_cgen_dispatch_helpers.inc.c"
+
+static bool cg_no_alloc_builtin_name_allocates(const char *name) {
+    if (!name)
+        return false;
+    static const char *allocating_builtins[] = {
+        "array_new",    "Bytes",    "StringBuilder", "map_new", "set_new",
+        "json_new",     "copy",     "to_shared",     "str_concat",
+        "regex_compile",
+    };
+    for (size_t i = 0; i < sizeof(allocating_builtins) / sizeof(allocating_builtins[0]); i++) {
+        if (strcmp(name, allocating_builtins[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static const char *cg_no_alloc_mem_alloc_detail(const char *name) {
+    if (!name)
+        return NULL;
+    if (strcmp(name, "alloc") == 0)
+        return "mem.alloc";
+    if (strcmp(name, "allocZeroed") == 0)
+        return "mem.allocZeroed";
+    if (strcmp(name, "allocAligned") == 0)
+        return "mem.allocAligned";
+    if (strcmp(name, "pageAlloc") == 0)
+        return "mem.pageAlloc";
+    return NULL;
+}
+
+static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                        const char **kind_out, const char **detail_out) {
+    if (!v)
+        return false;
+
+    if (xi_op_is_heap_alloc(v->op) || v->op == XI_CLASS_CREATE) {
+        if (kind_out)
+            *kind_out = "op";
+        if (detail_out)
+            *detail_out = xi_op_name(v->op);
+        return true;
+    }
+
+    if (v->op == XI_CALL_BUILTIN) {
+        const char *name = v->aux ? (const char *) v->aux : NULL;
+        if (cg_no_alloc_builtin_name_allocates(name)) {
+            if (kind_out)
+                *kind_out = "builtin";
+            if (detail_out)
+                *detail_out = name;
+            return true;
+        }
+        return false;
+    }
+
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
+        cg_value_is_module_import_ctx(ctx, f, v->args[0], "mem")) {
+        const char *detail = cg_no_alloc_mem_alloc_detail((const char *) v->aux);
+        if (detail) {
+            if (kind_out)
+                *kind_out = "stdlib";
+            if (detail_out)
+                *detail_out = detail;
+            return true;
+        }
+    }
+
+    if (v->op == XI_CALL && v->nargs >= 1) {
+        const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v->args[0]);
+        const char *detail = (ref && ref->module_path && strcmp(ref->module_path, "mem") == 0)
+                                 ? cg_no_alloc_mem_alloc_detail(ref->member_name)
+                                 : NULL;
+        if (detail) {
+            if (kind_out)
+                *kind_out = "stdlib";
+            if (detail_out)
+                *detail_out = detail;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool cg_check_no_alloc_func(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !f->no_alloc)
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            const char *kind = NULL;
+            const char *detail = NULL;
+            if (!cg_no_alloc_value_allocates(ctx, f, v, &kind, &detail))
+                continue;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: @no_alloc function '%s' allocates via %s '%s' at v%u "
+                    "line %u\n",
+                    f->name ? f->name : "?", kind ? kind : "operation",
+                    detail ? detail : xi_op_name(v->op), v->id, v->line);
+            if (ctx)
+                ctx->error = true;
+            return false;
+        }
+    }
+    return true;
+}
 
 static bool cg_value_aliases_value(const XiValue *value, const XiValue *target) {
     return value && target && cg_unwrap_identity_value(value) == target;
@@ -6310,6 +6420,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     }
     if (f->stage < XI_STAGE_BACKEND)
         xi_backend_lower(f);
+    if (!cg_check_no_alloc_func(ctx, f))
+        return;
 
     /* Emit nested children first (forward declarations already emitted) */
     for (uint16_t i = 0; i < f->nchildren; i++) {

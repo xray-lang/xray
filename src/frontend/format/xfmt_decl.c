@@ -48,6 +48,9 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
         case ATTR_NATIVE:
             xfmt_write_str(ctx, "@native");
             break;
+        case ATTR_NO_ALLOC:
+            xfmt_write_str(ctx, "@no_alloc");
+            break;
         case ATTR_DEPRECATED:
             xfmt_write_str(ctx, "@deprecated");
             break;

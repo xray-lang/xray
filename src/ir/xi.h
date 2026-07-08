@@ -1167,6 +1167,10 @@ typedef struct XiFunc {
     bool aot_weak;
     bool aot_used;
 
+    /* AOT heap-allocation contract: functions marked @no_alloc may use fixed
+     * stack storage but must not emit runtime/heap allocation operations. */
+    bool no_alloc;
+
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;
 
