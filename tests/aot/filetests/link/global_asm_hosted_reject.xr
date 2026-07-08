@@ -1,0 +1,9 @@
+asm {
+    "nop"
+}
+
+fn answer() -> int {
+    return 42
+}
+
+print(answer())

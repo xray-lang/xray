@@ -16,6 +16,7 @@
  */
 
 #include "xfmt_internal.h"
+#include "xfmt_literal.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
 
@@ -345,6 +346,22 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_type_alias(ctx, node);
             break;
 
+        case AST_GLOBAL_ASM:
+            xfmt_write_indent(ctx);
+            xfmt_write_str(ctx, "asm {");
+            xfmt_write_newline(ctx);
+            ctx->indent_level++;
+            xfmt_write_indent(ctx);
+            xfmt_emit_string(ctx, node->as.global_asm.text,
+                             node->as.global_asm.text ? (int) strlen(node->as.global_asm.text)
+                                                      : 0);
+            xfmt_write_newline(ctx);
+            ctx->indent_level--;
+            xfmt_write_indent(ctx);
+            xfmt_write_str(ctx, "}");
+            xfmt_write_newline(ctx);
+            break;
+
         case AST_IF_STMT:
             fmt_if_stmt(ctx, node);
             break;
@@ -646,7 +663,8 @@ void xfmt_emit_program(XrFmtContext *ctx, AstNode *node) {
 
         int is_decl = (stmt->type == AST_FUNCTION_DECL || stmt->type == AST_CLASS_DECL ||
                        stmt->type == AST_STRUCT_DECL || stmt->type == AST_UNION_DECL ||
-                       stmt->type == AST_INTERFACE_DECL || stmt->type == AST_ENUM_DECL);
+                       stmt->type == AST_INTERFACE_DECL || stmt->type == AST_ENUM_DECL ||
+                       stmt->type == AST_GLOBAL_ASM);
 
         if (i > 0 && (is_decl || last_was_decl)) {
             xfmt_write_newline(ctx);

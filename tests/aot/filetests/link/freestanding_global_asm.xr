@@ -1,0 +1,10 @@
+asm {
+    ".globl xray_global_asm_marker"
+    "xray_global_asm_marker:"
+    ".byte 0"
+}
+
+@c_export("xray_global_asm_entry")
+fn global_asm_entry() -> int32 {
+    return 7
+}

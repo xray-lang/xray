@@ -587,6 +587,10 @@ XR_FUNC void xi_lower_cleanup(XiLower *l) {
     l->shared_slot_enums = NULL;
     xr_free(l->shared_slot_imports);
     l->shared_slot_imports = NULL;
+    xr_free(l->global_asm_templates);
+    l->global_asm_templates = NULL;
+    l->global_asm_count = 0;
+    l->global_asm_cap = 0;
 }
 
 /* ========== Method Symbol Resolution ========== */
@@ -1465,6 +1469,15 @@ static void build_module_metadata(XiLower *l) {
     XiModule *mod = xi_module_new(NULL, NULL, f);
     if (!mod)
         return;
+
+    if (l->global_asm_count > 0) {
+        mod->global_asm_templates =
+            (const char **) xr_calloc((size_t) l->global_asm_count, sizeof(const char *));
+        XR_CHECK(mod->global_asm_templates != NULL, "xi_lower: global asm metadata OOM");
+        for (int i = 0; i < l->global_asm_count; i++)
+            mod->global_asm_templates[i] = l->global_asm_templates[i];
+        mod->nglobal_asm = (uint16_t) l->global_asm_count;
+    }
 
     uint16_t nshared = f->nshared;
 

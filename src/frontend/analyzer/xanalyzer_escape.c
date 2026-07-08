@@ -819,6 +819,8 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             }
             break;
         }
+        case AST_GLOBAL_ASM:
+            break;
 
         case AST_METHOD_DECL: {
             MethodDeclNode *m = &node->as.method_decl;

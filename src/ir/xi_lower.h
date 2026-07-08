@@ -183,6 +183,12 @@ typedef struct XiLower {
      * top-level names through the dict as well. */
     bool repl_mode;
 
+    /* Module-level global assembly templates collected during top-level
+     * lowering and copied into XiModule metadata. Strings are AST-owned. */
+    const char **global_asm_templates;
+    int global_asm_count;
+    int global_asm_cap;
+
     /* Nesting depth of try-catch blocks.  When > 0, throw inside the
      * try body jumps to catch_targets[try_depth-1] instead of returning
      * from the function. */

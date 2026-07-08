@@ -341,6 +341,9 @@ XR_FUNC AstNode *xr_ast_export_list(XrCompilerSession *session, char **names, in
 XR_FUNC AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_path,
                                         ReexportMember *members, int count, bool is_all, int line);
 
+// Create module-level global assembly declaration node
+XR_FUNC AstNode *xr_ast_global_asm(XrCompilerSession *session, const char *text, int line);
+
 // Create ternary expression node
 XR_FUNC AstNode *xr_ast_ternary(XrCompilerSession *session, AstNode *condition, AstNode *true_expr,
                                 AstNode *false_expr, int line);

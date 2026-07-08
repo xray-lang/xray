@@ -122,6 +122,7 @@ struct AstNode {
         ThrowStmtNode throw_stmt;
         ImportStmtNode import_stmt;
         ExportStmtNode export_stmt;
+        GlobalAsmNode global_asm;
         DestructureDeclNode destructure_decl;
         DestructureAssignNode destructure_assign;
         MatchExprNode match_expr;

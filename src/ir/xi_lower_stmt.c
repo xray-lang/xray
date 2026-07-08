@@ -33,6 +33,24 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+static void xi_lower_record_global_asm(XiLower *l, AstNode *node) {
+    if (!l || !node || node->type != AST_GLOBAL_ASM)
+        return;
+    if (l->global_asm_count >= 65535) {
+        l->had_error = true;
+        return;
+    }
+    if (l->global_asm_count >= l->global_asm_cap) {
+        int new_cap = l->global_asm_cap == 0 ? 4 : l->global_asm_cap * 2;
+        l->global_asm_templates = (const char **) xr_realloc(
+            l->global_asm_templates, (size_t) new_cap * sizeof(const char *));
+        XR_CHECK(l->global_asm_templates != NULL, "xi_lower: global asm vector OOM");
+        l->global_asm_cap = new_cap;
+    }
+    l->global_asm_templates[l->global_asm_count++] =
+        node->as.global_asm.text ? node->as.global_asm.text : "";
+}
+
 static bool lower_is_comptime_block_expr(AstNode *node) {
     return node && node->type == AST_COMPTIME_EXPR && node->as.comptime_expr.expr &&
            node->as.comptime_expr.expr->type == AST_BLOCK;
@@ -4028,6 +4046,9 @@ static bool lower_module_or_type_decl_stmt(XiLower *l, AstNode *node) {
             return true;
         case AST_ENUM_DECL:
             xi_lower_enum_decl(l, node);
+            return true;
+        case AST_GLOBAL_ASM:
+            xi_lower_record_global_asm(l, node);
             return true;
         default:
             return false;

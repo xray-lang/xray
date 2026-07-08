@@ -44,7 +44,8 @@ static bool current_can_start_top_level_after_recovery(Parser *parser) {
            xr_parser_check(parser, TK_ENUM) || xr_parser_check(parser, TK_FN) ||
            xr_parser_check(parser, TK_VAR) || xr_parser_check(parser, TK_CONST) ||
            xr_parser_check(parser, TK_COMPTIME) || xr_parser_check(parser, TK_TYPE_ALIAS) ||
-           xr_parser_check(parser, TK_IMPORT) || xr_parser_check(parser, TK_EXPORT);
+           xr_parser_check(parser, TK_IMPORT) || xr_parser_check(parser, TK_EXPORT) ||
+           xr_parser_check_name(parser, "asm");
 }
 
 /* ========== Function Parsing ========== */
@@ -60,6 +61,93 @@ static const char *xr_attr_string_arg(Parser *parser) {
         memcpy(s, t.start + 1, len);
     s[len] = '\0';
     return s;
+}
+
+static bool xr_is_global_asm_start(Parser *parser) {
+    if (!xr_parser_check_name(parser, "asm"))
+        return false;
+    Scanner saved = parser->scanner;
+    Token next = xr_scanner_scan(&saved);
+    return next.type == TK_LBRACE;
+}
+
+typedef struct XrParsedGlobalAsmFragment {
+    char *text;
+    size_t len;
+} XrParsedGlobalAsmFragment;
+
+static XrParsedGlobalAsmFragment xr_decode_previous_string_literal(Parser *parser) {
+    Token t = parser->previous;
+    size_t src_len = t.length >= 2 ? (size_t) (t.length - 2) : 0;
+    const char *src = t.start + 1;
+    char *tmp = (char *) xr_malloc(src_len + 1);
+    XR_CHECK(tmp != NULL, "parser: global asm string decode OOM");
+    size_t len = xr_process_escapes(src, src_len, tmp);
+    tmp[len] = '\0';
+    char *text = ast_strdup(parser->compiler_session, tmp);
+    xr_free(tmp);
+    return (XrParsedGlobalAsmFragment) {.text = text, .len = len};
+}
+
+static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
+    int line = parser->previous.line;
+    int column = parser->previous.column;
+    if (parser->scope_depth > 0) {
+        xr_parser_error(parser, "global asm must appear at module top level");
+        return NULL;
+    }
+
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' after asm");
+
+    XrParsedGlobalAsmFragment *fragments = NULL;
+    int fragment_count = 0;
+    int fragment_capacity = 0;
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        if (!xr_parser_check(parser, TK_LITERAL_STRING)) {
+            xr_parser_error_at_current(parser, "global asm expects string literal fragments");
+            return NULL;
+        }
+        xr_parser_advance(parser);
+        XrParsedGlobalAsmFragment fragment = xr_decode_previous_string_literal(parser);
+        XR_PARSE_PUSH(parser, fragments, fragment_count, fragment_capacity, fragment);
+    }
+
+    if (fragment_count == 0) {
+        xr_parser_error(parser, "global asm block requires at least one string literal");
+        return NULL;
+    }
+
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' after global asm block");
+    Token close = parser->previous;
+
+    size_t total = 0;
+    for (int i = 0; i < fragment_count; i++) {
+        total += fragments[i].len;
+        if (i + 1 < fragment_count &&
+            (fragments[i].len == 0 || fragments[i].text[fragments[i].len - 1] != '\n')) {
+            total++;
+        }
+    }
+
+    char *text = (char *) ast_alloc(parser->compiler_session, total + 1);
+    size_t pos = 0;
+    for (int i = 0; i < fragment_count; i++) {
+        if (fragments[i].len > 0) {
+            memcpy(text + pos, fragments[i].text, fragments[i].len);
+            pos += fragments[i].len;
+        }
+        if (i + 1 < fragment_count &&
+            (fragments[i].len == 0 || fragments[i].text[fragments[i].len - 1] != '\n')) {
+            text[pos++] = '\n';
+        }
+    }
+    text[pos] = '\0';
+
+    AstNode *node = xr_ast_global_asm(parser->compiler_session, text, line);
+    node->column = column;
+    node->end_line = close.line;
+    node->end_column = close.column + 1;
+    return node;
 }
 
 static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
@@ -1535,6 +1623,11 @@ AstNode *xr_parse_declaration(Parser *parser) {
             return NULL;
         }
         return xr_parse_export_declaration(parser);
+    }
+
+    if (xr_is_global_asm_start(parser)) {
+        xr_parser_advance(parser);  // consume asm
+        return xr_parse_global_asm_declaration(parser);
     }
 
     if (xr_parser_check_name(parser, "abstract")) {
