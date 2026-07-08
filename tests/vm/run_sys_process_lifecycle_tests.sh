@@ -67,6 +67,8 @@ if [ ! -x "$XRAY" ]; then
 fi
 
 OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_ok.xr"
+PROCESS_ORPHAN_SRC="$PROJECT_DIR/tests/vm/sys_process_orphan_warning.xr"
+PIPE_ORPHAN_SRC="$PROJECT_DIR/tests/vm/sys_pipe_orphan_warning.xr"
 PROCESS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_warning.xr"
 PIPE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_warning.xr"
 PIPE_HALF_CLOSE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_half_close_warning.xr"
@@ -77,6 +79,10 @@ PIPE_MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_match_warning.x
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" $'0\n0\n0\n0\ntrue\ntrue'
+expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
+    "sys.Process.spawn returns a Process handle; call wait() explicitly"
+expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \
+    "sys.Pipe.open returns a Pipe handle; call close() explicitly"
 expect_warning "process_lifecycle_warning" "$PROCESS_WARNING_SRC" "" \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "process_lifecycle_trywait_once_warning" "$PROCESS_TRYWAIT_ONCE_WARNING_SRC" "" \
