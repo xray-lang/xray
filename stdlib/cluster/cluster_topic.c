@@ -175,65 +175,6 @@ static int trie_insert(XrTopicTrieNode *root, const char *pattern, XrTopicSubscr
 }
 
 /*
- * Remove the first subscription whose pattern matches `pattern` AND
- * whose notify_ch equals `ch` (so we do not remove someone else's
- * subscription for the same pattern). Returns the removed
- * XrTopicSubscription pointer or NULL if not found. The tree is NOT
- * pruned of empty nodes — repeated subscribe/unsubscribe cycles will
- * leak a handful of empty nodes that topics_destroy_trie reclaims at
- * cluster stop. A pub/sub service that churns millions of patterns
- * per second would want pruning; typical workloads are fine.
- */
-static XrTopicSubscription *trie_remove(XrTopicTrieNode *root, const char *pattern,
-                                        struct XrChannel *ch) {
-    XrTopicTrieNode *cur = root;
-    const char *p = pattern;
-    while (*p) {
-        const char *start = p;
-        while (*p && *p != '.')
-            p++;
-        size_t seglen = (size_t) (p - start);
-
-        if (seglen == 1 && start[0] == '>') {
-            if (*p != '\0')
-                return NULL;
-            XrTopicSubscription **pp = &cur->gt_subs;
-            while (*pp) {
-                if ((*pp)->notify_ch == ch) {
-                    XrTopicSubscription *found = *pp;
-                    *pp = found->next;
-                    return found;
-                }
-                pp = &(*pp)->next;
-            }
-            return NULL;
-        }
-
-        XrTopicTrieNode *next;
-        if (seglen == 1 && start[0] == '*') {
-            next = cur->star_child;
-        } else {
-            next = trie_child_lookup(cur, start, seglen);
-        }
-        if (!next)
-            return NULL;
-        cur = next;
-        if (*p == '.')
-            p++;
-    }
-    XrTopicSubscription **pp = &cur->exact_subs;
-    while (*pp) {
-        if ((*pp)->notify_ch == ch) {
-            XrTopicSubscription *found = *pp;
-            *pp = found->next;
-            return found;
-        }
-        pp = &(*pp)->next;
-    }
-    return NULL;
-}
-
-/*
  * Collect every subscription whose pattern matches `topic` into the
  * caller-supplied target buffer. `emit` handles bounds + dedup-free
  * append with a dynamic grow, matching the old deliver_local()
