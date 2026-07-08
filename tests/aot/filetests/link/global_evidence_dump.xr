@@ -1,0 +1,9 @@
+fn id(x: int) -> int {
+    return x
+}
+
+fn wrap() -> int {
+    return id(7)
+}
+
+print(wrap())
