@@ -491,11 +491,11 @@ static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
                                                     XgClassId implementor_class_id, uint8_t kind);
 
 static bool xaot_bundle_add_dispatch_target_case(XaotBundle *bundle, XgCallsiteId callsite_id,
-                                                 XgClassId receiver_class_id, XgMethodId method_id,
-                                                 uint32_t evidence) {
+                                                 XgClassId receiver_class_id,
+                                                 const XgMethodSummary *method, uint32_t evidence) {
     XaotDispatchTargetCase *target;
-    if (!bundle || callsite_id == XG_NO_ID || receiver_class_id == XG_NO_ID ||
-        method_id == XG_NO_ID)
+    if (!bundle || callsite_id == XG_NO_ID || receiver_class_id == XG_NO_ID || !method ||
+        method->method_id == XG_NO_ID)
         return false;
     if (!reserve_plan_array((void **) &bundle->dispatch_target_cases,
                             &bundle->dispatch_target_case_cap, bundle->ndispatch_target_cases + 1,
@@ -505,7 +505,9 @@ static bool xaot_bundle_add_dispatch_target_case(XaotBundle *bundle, XgCallsiteI
     memset(target, 0, sizeof(*target));
     target->callsite_id = callsite_id;
     target->receiver_class_id = receiver_class_id;
-    target->method_id = method_id;
+    target->method_id = method->method_id;
+    target->method_root_id = method->root_method_id;
+    target->method_override_depth = method->override_depth;
     target->evidence = evidence;
     return true;
 }
@@ -654,8 +656,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     if (kind == XAOT_DISPATCH_DIRECT && method) {
         target_start = bundle->ndispatch_target_cases + 1;
         if (!xaot_bundle_add_dispatch_target_case(bundle, call->callsite_id,
-                                                  call->receiver_static_class_id, method->method_id,
-                                                  evidence))
+                                                  call->receiver_static_class_id, method, evidence))
             return false;
         target_count = 1;
     } else if ((kind == XAOT_DISPATCH_DIRECT || kind == XAOT_DISPATCH_TYPE_SWITCH) &&
@@ -674,8 +675,8 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
                 ev, impl->implementor_class_id, call->method_name_id, call->method_signature_key);
             if (!target_method ||
                 !xaot_bundle_add_dispatch_target_case(bundle, call->callsite_id,
-                                                      impl->implementor_class_id,
-                                                      target_method->method_id, evidence) ||
+                                                      impl->implementor_class_id, target_method,
+                                                      evidence) ||
                 !xaot_bundle_add_interface_call_use_plan(bundle, call, impl->implementor_class_id,
                                                          kind))
                 return false;
@@ -693,9 +694,9 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
                 continue;
             target_method = xg_evidence_find_method_by_signature_in_hierarchy(
                 ev, candidate->class_id, call->method_name_id, call->method_signature_key);
-            if (!target_method || !xaot_bundle_add_dispatch_target_case(
-                                      bundle, call->callsite_id, candidate->class_id,
-                                      target_method->method_id, evidence))
+            if (!target_method ||
+                !xaot_bundle_add_dispatch_target_case(bundle, call->callsite_id,
+                                                      candidate->class_id, target_method, evidence))
                 return false;
             target_count++;
         }
@@ -3132,8 +3133,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     for (uint32_t ti = 0; ti < bundle->ndispatch_target_cases; ti++) {
         const XaotDispatchTargetCase *tc = &bundle->dispatch_target_cases[ti];
-        fprintf(out, "dispatch-target %u callsite=%u recv_class=%u method=%u evidence=0x%x\n", ti,
-                tc->callsite_id, tc->receiver_class_id, tc->method_id, tc->evidence);
+        fprintf(out,
+                "dispatch-target %u callsite=%u recv_class=%u method=%u root=%u depth=%u "
+                "evidence=0x%x\n",
+                ti, tc->callsite_id, tc->receiver_class_id, tc->method_id, tc->method_root_id,
+                tc->method_override_depth, tc->evidence);
     }
 
     for (uint32_t ii = 0; ii < bundle->ninterface_use_plans; ii++) {
