@@ -57,13 +57,6 @@ typedef struct {
 
 /* ========== HTTP Request Config ========== */
 
-// Request context (for cancellation and timeout)
-typedef struct XrHttpReqContext {
-    volatile bool cancelled;  // Cancel flag
-    int deadline_ms;          // Deadline (relative to request start)
-    void *user_data;          // User data
-} XrHttpReqContext;
-
 typedef struct {
     const char *url;          // Request URL
     XrHttpMethod method;      // Request method
@@ -76,7 +69,6 @@ typedef struct {
     int timeout_ms;           // Timeout (milliseconds)
     bool follow_redirects;    // Follow redirects
     int max_redirects;        // Max redirect count
-    XrHttpReqContext *ctx;    // Request context (optional)
     bool use_http2;           // Force HTTP/2
     bool keep_alive;          // Use Keep-Alive
 } XrHttpRequestConfig;
@@ -132,33 +124,6 @@ XR_FUNC void xr_http_result_free(XrHttpResult *result);
  * Get error description
  */
 XR_FUNC const char *xr_http_error_string(XrHttpError err);
-
-/* ========== Request Context API ========== */
-
-/*
- * Create request context
- */
-XR_FUNC XrHttpReqContext *xr_http_context_new(void);
-
-/*
- * Set timeout (milliseconds)
- */
-XR_FUNC void xr_http_context_set_timeout(XrHttpReqContext *ctx, int timeout_ms);
-
-/*
- * Cancel request
- */
-XR_FUNC void xr_http_context_cancel(XrHttpReqContext *ctx);
-
-/*
- * Check if cancelled
- */
-XR_FUNC bool xr_http_context_is_cancelled(XrHttpReqContext *ctx);
-
-/*
- * Free context
- */
-XR_FUNC void xr_http_context_free(XrHttpReqContext *ctx);
 
 // HTTP connection pool is managed per-Isolate via XrHttpContext.conn_pool
 // (see http.h). There is no global pool — each Isolate owns its own pool,

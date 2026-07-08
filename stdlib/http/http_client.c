@@ -969,28 +969,3 @@ cleanup:
 
     return result;
 }
-
-/* ========== Request Context Implementation ========== */
-
-XrHttpReqContext *xr_http_context_new(void) {
-    XrHttpReqContext *ctx = (XrHttpReqContext *) xr_calloc(1, sizeof(XrHttpReqContext));
-    return ctx;
-}
-
-void xr_http_context_set_timeout(XrHttpReqContext *ctx, int timeout_ms) {
-    if (ctx)
-        ctx->deadline_ms = timeout_ms;
-}
-
-void xr_http_context_cancel(XrHttpReqContext *ctx) {
-    if (ctx)
-        ctx->cancelled = true;
-}
-
-bool xr_http_context_is_cancelled(XrHttpReqContext *ctx) {
-    return ctx && ctx->cancelled;
-}
-
-void xr_http_context_free(XrHttpReqContext *ctx) {
-    xr_free(ctx);
-}
