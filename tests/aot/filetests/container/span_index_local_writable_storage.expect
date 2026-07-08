@@ -1,7 +1,7 @@
 contains=function 1 name=local_bump module=0 depth=1 abi=native boundary=none params=0 ret=int64_t/scalar/i64
-regex=span-access-unproven [0-9]+ func=local_bump value=v[0-9]+ kind=index_get evidence=recv_agg\+pod reason=range
+regex=span-access-unproven [0-9]+ func=local_bump value=v[0-9]+ kind=index_get evidence=recv_agg\+pod reason=clobber
 regex=span-access [0-9]+ func=local_bump value=v[0-9]+ kind=index_set evidence=recv_agg\+pod\+writable drop=readonly
-regex=span-access-unproven [0-9]+ func=local_bump value=v[0-9]+ kind=index_get evidence=recv_agg\+pod reason=range
+regex=span-access-unproven [0-9]+ func=local_bump value=v[0-9]+ kind=index_get evidence=recv_agg\+pod reason=clobber
 c_contains=((uint32_t*)_s.data)[
 c_contains=xrt_index_oob(_idx, _s.length)
 c_not_contains=xrt_span_is_readonly(

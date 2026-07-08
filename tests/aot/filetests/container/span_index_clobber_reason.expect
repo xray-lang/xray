@@ -1,0 +1,3 @@
+regex=bounds-unproven [0-9]+ func=clobbered_sum access=v[0-9]+ op=index_get reason=clobber
+regex=span-access-unproven [0-9]+ func=clobbered_sum value=v[0-9]+ kind=index_get evidence=recv_agg\+byte_span\+pod reason=clobber
+not_regex=span-access-unproven [0-9]+ func=clobbered_sum value=v[0-9]+ kind=index_get evidence=recv_agg\+byte_span\+pod reason=range

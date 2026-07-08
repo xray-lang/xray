@@ -2033,6 +2033,19 @@ static bool prepare_span_access_is_write(uint8_t kind) {
            kind == XAOT_SPAN_ACCESS_SPAN_COPY;
 }
 
+static uint8_t prepare_span_reason_from_bounds_reason(uint8_t bounds_reason) {
+    switch (bounds_reason) {
+        case XAOT_BOUNDS_UNPROVEN_LEN_MISMATCH:
+            return XAOT_SPAN_UNPROVEN_LENGTH_REL;
+        case XAOT_BOUNDS_UNPROVEN_CLOBBER:
+            return XAOT_SPAN_UNPROVEN_CLOBBER;
+        case XAOT_BOUNDS_UNPROVEN_INDEX_RANGE:
+        case XAOT_BOUNDS_UNPROVEN_NO_GUARD:
+        default:
+            return XAOT_SPAN_UNPROVEN_RANGE;
+    }
+}
+
 XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
                                                      const XiValue *value,
                                                      XaotSpanAccessPlan *out) {
@@ -2082,7 +2095,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             evidence |= XAOT_SPAN_EV_RANGE_PROVEN | XAOT_SPAN_EV_NO_CLOBBER;
             drop |= XAOT_SPAN_DROP_BOUNDS;
         } else {
-            reason = XAOT_SPAN_UNPROVEN_RANGE;
+            reason = prepare_span_reason_from_bounds_reason(bounds_reason);
         }
         goto done;
     }
