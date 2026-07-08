@@ -1,0 +1,9 @@
+fn id<T>(x: T) -> T {
+    return x
+}
+
+fn wrapper() -> int {
+    return id<int>(41)
+}
+
+print(wrapper())

@@ -21,5 +21,7 @@ struct XrModuleGraph;
 XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *evidence,
                                                         const struct XrModuleGraph *graph,
                                                         uint32_t profile);
+XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
+                                                         const XgGlobalEvidence *roots);
 
 #endif  // XGLOBAL_PRODUCER_H

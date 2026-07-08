@@ -2889,3 +2889,249 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
     xr_free(producer.bodies);
     return true;
 }
+
+static const XgDeclSummary *evidence_find_decl_by_id(const XgGlobalEvidence *ev, XgDeclId id) {
+    if (!ev || id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        if (ev->decls[i].decl_id == id)
+            return &ev->decls[i];
+    }
+    return NULL;
+}
+
+static const XgDeclSummary *evidence_find_matching_decl(const XgGlobalEvidence *ev,
+                                                        const XgDeclSummary *src) {
+    if (!ev || !src)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->module_id == src->module_id && decl->kind == src->kind &&
+            decl->name_id == src->name_id && decl->source_span_id == src->source_span_id)
+            return decl;
+    }
+    return NULL;
+}
+
+static const XgBodySummary *evidence_find_body_by_func_id(const XgGlobalEvidence *ev,
+                                                          XgFuncId func_id) {
+    if (!ev || func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].func_id == func_id)
+            return &ev->bodies[i];
+    }
+    return NULL;
+}
+
+static const XgBodySummary *evidence_find_matching_body(const XgGlobalEvidence *ev,
+                                                        const XgBodySummary *src,
+                                                        XgDeclId remapped_decl_id) {
+    if (!ev || !src)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->module_id != src->module_id || body->kind != src->kind ||
+            body->name_id != src->name_id || body->signature_key != src->signature_key ||
+            body->source_span_id != src->source_span_id)
+            continue;
+        if (src->owner_decl_id != XG_NO_ID && body->owner_decl_id != remapped_decl_id)
+            continue;
+        return body;
+    }
+    return NULL;
+}
+
+static const XgClassSummary *evidence_find_class_by_id(const XgGlobalEvidence *ev,
+                                                       XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].class_id == class_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
+static const XgClassSummary *evidence_find_matching_class(const XgGlobalEvidence *ev,
+                                                          const XgClassSummary *src,
+                                                          XgDeclId remapped_decl_id) {
+    if (!ev || !src)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        if (cls->module_id == src->module_id && cls->decl_kind == src->decl_kind &&
+            cls->name_id == src->name_id &&
+            (remapped_decl_id == XG_NO_ID || cls->decl_id == remapped_decl_id))
+            return cls;
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *evidence_find_method_by_id(const XgGlobalEvidence *ev,
+                                                         XgMethodId method_id) {
+    if (!ev || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        if (ev->methods[i].method_id == method_id)
+            return &ev->methods[i];
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *evidence_find_matching_method(const XgGlobalEvidence *ev,
+                                                            const XgMethodSummary *src,
+                                                            XgClassId remapped_owner_class_id) {
+    if (!ev || !src || remapped_owner_class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        const XgMethodSummary *method = &ev->methods[i];
+        if (method->owner_class_id == remapped_owner_class_id && method->name_id == src->name_id &&
+            method->signature_key == src->signature_key)
+            return method;
+    }
+    return NULL;
+}
+
+static const XgCallsiteSummary *evidence_find_callsite_by_id(const XgGlobalEvidence *ev,
+                                                             XgCallsiteId callsite_id) {
+    if (!ev || callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        if (ev->callsites[i].callsite_id == callsite_id)
+            return &ev->callsites[i];
+    }
+    return NULL;
+}
+
+static const XgCallsiteSummary *
+evidence_find_matching_callsite(const XgGlobalEvidence *ev, const XgCallsiteSummary *src,
+                                const XgBodySummary *remapped_owner_body) {
+    if (!ev || !src)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev->callsites[i];
+        if (remapped_owner_body && call->owner_func_id != remapped_owner_body->func_id)
+            continue;
+        if (call->source_span_id == src->source_span_id &&
+            call->body_ordinal == src->body_ordinal && call->arg_count == src->arg_count)
+            return call;
+    }
+    if (remapped_owner_body)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev->callsites[i];
+        if (call->source_span_id == src->source_span_id && call->arg_count == src->arg_count)
+            return call;
+    }
+    return NULL;
+}
+
+static bool evidence_has_equivalent_generic_inst(const XgGlobalEvidence *ev,
+                                                 const XgGenericInstSummary *inst) {
+    if (!ev || !inst)
+        return false;
+    for (uint32_t i = 0; i < ev->ngeneric_insts; i++) {
+        const XgGenericInstSummary *row = &ev->generic_insts[i];
+        if (row->module_id == inst->module_id && row->kind == inst->kind &&
+            row->name_id == inst->name_id && row->type_key == inst->type_key &&
+            row->type_arg_key_start == inst->type_arg_key_start &&
+            row->type_arg_count == inst->type_arg_count &&
+            row->root_callsite_id == inst->root_callsite_id)
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
+                                                         const XgGlobalEvidence *roots) {
+    if (!dst || !roots)
+        return false;
+    for (uint32_t i = 0; i < roots->ngeneric_insts; i++) {
+        const XgGenericInstSummary *src = &roots->generic_insts[i];
+        XgGenericInstSummary mapped = *src;
+        const XgDeclSummary *src_decl = evidence_find_decl_by_id(roots, src->origin_decl_id);
+        const XgDeclSummary *dst_decl = evidence_find_matching_decl(dst, src_decl);
+        const XgBodySummary *src_origin_body =
+            evidence_find_body_by_func_id(roots, src->origin_func_id);
+        const XgBodySummary *dst_origin_body = NULL;
+        const XgClassSummary *src_class = evidence_find_class_by_id(roots, src->origin_class_id);
+        const XgClassSummary *dst_class = NULL;
+        const XgMethodSummary *src_method =
+            evidence_find_method_by_id(roots, src->origin_method_id);
+        const XgMethodSummary *dst_method = NULL;
+        const XgCallsiteSummary *src_call =
+            evidence_find_callsite_by_id(roots, src->root_callsite_id);
+        const XgBodySummary *src_owner_body =
+            src_call ? evidence_find_body_by_func_id(roots, src_call->owner_func_id) : NULL;
+        const XgBodySummary *dst_owner_body = NULL;
+        const XgCallsiteSummary *dst_call = NULL;
+
+        mapped.generic_inst_id = (XgGenericInstId) (dst->ngeneric_insts + 1);
+        mapped.origin_decl_id = dst_decl ? dst_decl->decl_id : XG_NO_ID;
+
+        if (src_origin_body) {
+            XgDeclId remapped_body_decl = mapped.origin_decl_id;
+            if (src_origin_body->owner_decl_id != src->origin_decl_id) {
+                const XgDeclSummary *body_decl =
+                    evidence_find_decl_by_id(roots, src_origin_body->owner_decl_id);
+                const XgDeclSummary *mapped_body_decl = evidence_find_matching_decl(dst, body_decl);
+                remapped_body_decl = mapped_body_decl ? mapped_body_decl->decl_id : XG_NO_ID;
+            }
+            dst_origin_body = evidence_find_matching_body(dst, src_origin_body, remapped_body_decl);
+        }
+        mapped.origin_func_id = dst_origin_body ? dst_origin_body->func_id : XG_NO_ID;
+
+        if (src_class) {
+            XgDeclId remapped_class_decl = mapped.origin_decl_id;
+            if (src_class->decl_id != src->origin_decl_id) {
+                const XgDeclSummary *class_decl =
+                    evidence_find_decl_by_id(roots, src_class->decl_id);
+                const XgDeclSummary *mapped_class_decl =
+                    evidence_find_matching_decl(dst, class_decl);
+                remapped_class_decl = mapped_class_decl ? mapped_class_decl->decl_id : XG_NO_ID;
+            }
+            dst_class = evidence_find_matching_class(dst, src_class, remapped_class_decl);
+        }
+        mapped.origin_class_id = dst_class ? dst_class->class_id : XG_NO_ID;
+
+        if (src_method) {
+            XgClassId remapped_owner_class = XG_NO_ID;
+            const XgClassSummary *src_owner_class =
+                evidence_find_class_by_id(roots, src_method->owner_class_id);
+            if (src_owner_class) {
+                const XgDeclSummary *owner_decl =
+                    evidence_find_decl_by_id(roots, src_owner_class->decl_id);
+                const XgDeclSummary *mapped_owner_decl =
+                    evidence_find_matching_decl(dst, owner_decl);
+                const XgClassSummary *dst_owner_class = evidence_find_matching_class(
+                    dst, src_owner_class,
+                    mapped_owner_decl ? mapped_owner_decl->decl_id : XG_NO_ID);
+                remapped_owner_class = dst_owner_class ? dst_owner_class->class_id : XG_NO_ID;
+            }
+            dst_method = evidence_find_matching_method(dst, src_method, remapped_owner_class);
+        }
+        mapped.origin_method_id = dst_method ? dst_method->method_id : XG_NO_ID;
+
+        if (src_owner_body) {
+            const XgDeclSummary *owner_decl =
+                evidence_find_decl_by_id(roots, src_owner_body->owner_decl_id);
+            const XgDeclSummary *mapped_owner_decl = evidence_find_matching_decl(dst, owner_decl);
+            dst_owner_body = evidence_find_matching_body(
+                dst, src_owner_body, mapped_owner_decl ? mapped_owner_decl->decl_id : XG_NO_ID);
+        }
+        dst_call = evidence_find_matching_callsite(dst, src_call, dst_owner_body);
+        mapped.root_callsite_id = dst_call ? dst_call->callsite_id : XG_NO_ID;
+
+        mapped.specialized_func_id = XG_NO_ID;
+        mapped.specialized_class_id = XG_NO_ID;
+        mapped.flags &= ~(XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI |
+                          XG_GENERIC_INST_CONCRETE_STORAGE);
+
+        if (evidence_has_equivalent_generic_inst(dst, &mapped))
+            continue;
+        if (!xg_global_evidence_add_generic_inst(dst, &mapped))
+            return false;
+    }
+    return true;
+}
