@@ -309,7 +309,8 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     if (plan->body_escape_bits != body->escape_bits)
         return set_error(errbuf, errbuf_len, "AOT function attribute escape bits are stale");
     if ((body->effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
-                              XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0)
+                              XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE | XG_BODY_MAY_CALL)) !=
+        0)
         return set_error(errbuf, errbuf_len,
                          "AOT function attribute plan contradicts body summary");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
