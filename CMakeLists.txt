@@ -1412,6 +1412,19 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    add_test(
+        NAME aot_freestanding_riscv_qemu_smoke
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_riscv_qemu_smoke.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_freestanding_riscv_qemu_smoke PROPERTIES
+        LABELS "aot;freestanding;qemu;riscv;smoke"
+        PROCESSORS 1
+        SKIP_RETURN_CODE 77
+        TIMEOUT 30
+    )
+
     # Broad AOT manifest sweep: non-runtime diff cases must remain freestanding
     # and must not accidentally pull xray_rt_coro/xray_core.
     add_test(
