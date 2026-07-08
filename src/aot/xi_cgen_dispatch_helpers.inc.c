@@ -5980,6 +5980,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) midx))
             return;
     }
+    if (emit_static_tuple_get_expr(ctx, out, v))
+        return;
     if (emit_static_struct_field_get_expr(ctx, out, v))
         return;
     if (emit_class_cached_field_load_expr(ctx, out, v))

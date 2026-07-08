@@ -2245,6 +2245,24 @@ static bool cg_emit_imported_static_fixed_array_const_decl(XiCgenCtx *ctx, FILE 
     return true;
 }
 
+static bool cg_emit_imported_static_tuple_const_decl(XiCgenCtx *ctx, FILE *out,
+                                                     const XiModule *module, int64_t slot,
+                                                     const XiConstLiteral *lit) {
+    if (!ctx || !out || !module || !lit || !lit->data_weak)
+        return false;
+    XrType *tuple_type = NULL;
+    if (!cg_freestanding_static_tuple_literal_in_module(ctx, module, slot, &tuple_type, NULL))
+        return false;
+    fprintf(out, "extern const struct { ");
+    int count = cg_static_tuple_type_count(tuple_type);
+    for (uint16_t i = 0; i < (uint16_t) count; i++)
+        cg_emit_static_tuple_field_decl(out, tuple_type, i);
+    fprintf(out, "} ");
+    cg_emit_static_tuple_name(ctx, out, module, slot);
+    fprintf(out, ";\n");
+    return true;
+}
+
 static bool cg_emit_imported_static_struct_const_decl(XiCgenCtx *ctx, FILE *out,
                                                       const XiModule *module, int64_t slot,
                                                       const XiConstLiteral *lit) {
@@ -2301,6 +2319,7 @@ static bool cg_emit_freestanding_imported_static_const_decls(XiCgenCtx *ctx, FIL
         if (cg_emit_imported_static_scalar_const_decl(ctx, out, target_module, target_slot, lit) ||
             cg_emit_imported_static_fixed_array_const_decl(ctx, out, target_module, target_slot,
                                                            lit) ||
+            cg_emit_imported_static_tuple_const_decl(ctx, out, target_module, target_slot, lit) ||
             cg_emit_imported_static_struct_const_decl(ctx, out, target_module, target_slot, lit))
             emitted = true;
     }

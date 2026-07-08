@@ -37,4 +37,10 @@ struct Outer {
 @weak
 const OUTER = comptime Outer{inner: Inner{code: TABLE[3]}, base: PACKET.base}
 
-export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER }
+@weak
+const PAIR = comptime (HEADER.magic, PACKET.base)
+
+@weak
+const NESTED = comptime ((TABLE[0], HEADER.flags), (PACKET.base, TABLE[3]))
+
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED }

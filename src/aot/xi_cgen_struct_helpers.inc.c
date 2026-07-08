@@ -639,6 +639,32 @@ static XrType *cg_static_tuple_type_element(const XrType *type, int index) {
     return type->tuple.element_types[index];
 }
 
+static bool cg_static_tuple_field_access_index(const XiValue *v, int64_t *out_idx) {
+    if (!v)
+        return false;
+    int64_t idx = -1;
+    if (v->op == XI_TUPLE_GET) {
+        idx = v->aux_int;
+    } else if (v->op == XI_LOAD_FIELD && v->aux) {
+        const char *name = (const char *) v->aux;
+        if (!name[0])
+            return false;
+        idx = 0;
+        for (const char *p = name; *p; p++) {
+            if (*p < '0' || *p > '9')
+                return false;
+            idx = idx * 10 + (*p - '0');
+        }
+    } else {
+        return false;
+    }
+    if (idx < 0)
+        return false;
+    if (out_idx)
+        *out_idx = idx;
+    return true;
+}
+
 static bool cg_static_tuple_element_supported(const XrType *type, const XrCtValue *value,
                                               int depth) {
     if (!type || !value || type->is_nullable || depth > 8)
@@ -666,12 +692,13 @@ static bool cg_static_tuple_type_supported_depth(const XrType *type, const XrCtT
     return true;
 }
 
-static bool cg_freestanding_static_tuple_literal(XiCgenCtx *ctx, int64_t slot, XrType **out_type,
-                                                 const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
-        slot < 0 || slot >= ctx->module->nslots)
+static bool cg_freestanding_static_tuple_literal_in_module(XiCgenCtx *ctx, const XiModule *module,
+                                                           int64_t slot, XrType **out_type,
+                                                           const XrCtValue **out_value) {
+    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
+        slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    const XiConstLiteral *lit = &module->slot_const_literals[slot];
     if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_TUPLE || !lit->type || lit->type->kind != XR_KIND_TUPLE)
         return false;
@@ -684,15 +711,52 @@ static bool cg_freestanding_static_tuple_literal(XiCgenCtx *ctx, int64_t slot, X
     return true;
 }
 
-static bool cg_freestanding_static_tuple_value(XiCgenCtx *ctx, const XiValue *value,
-                                               XrType **out_type, int64_t *out_slot) {
+static bool cg_freestanding_static_tuple_value_ex(XiCgenCtx *ctx, const XiValue *value,
+                                                  XrType **out_type, int64_t *out_slot,
+                                                  const XiModule **out_module) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->op != XI_GET_SHARED)
+    if (out_module)
+        *out_module = NULL;
+    if (!v)
         return false;
-    if (!cg_freestanding_static_tuple_literal(ctx, v->aux_int, out_type, NULL))
+
+    const XiModule *module = ctx ? ctx->module : NULL;
+    int64_t slot = -1;
+    if (v->op == XI_GET_SHARED) {
+        slot = v->aux_int;
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit =
+            cg_import_slot_const_literal(ctx, NULL, (int) slot, &import_module, &import_slot);
+        if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+            module = import_module;
+            slot = import_slot;
+        }
+    } else if (v->op == XI_IMPORT_REF && v->aux) {
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit = cg_import_ref_target_const_literal(
+            ctx, (const XiImportRef *) v->aux, &import_module, &import_slot);
+        if (!import_lit || import_lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE)
+            return false;
+        module = import_module;
+        slot = import_slot;
+    } else {
         return false;
+    }
+
+    if (!cg_freestanding_static_tuple_literal_in_module(ctx, module, slot, out_type, NULL))
+        return false;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
+        cg_report_imported_static_const_requires_weak(ctx, module, slot);
+        ctx->error = true;
+        return false;
+    }
     if (out_slot)
-        *out_slot = v->aux_int;
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
     return true;
 }
 
@@ -918,7 +982,7 @@ static bool cg_emit_freestanding_static_tuple_defs(XiCgenCtx *ctx, FILE *out,
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
         XrType *tuple_type = NULL;
         const XrCtValue *value = NULL;
-        if (!cg_freestanding_static_tuple_literal(ctx, slot, &tuple_type, &value))
+        if (!cg_freestanding_static_tuple_literal_in_module(ctx, module, slot, &tuple_type, &value))
             continue;
         const XiConstLiteral *lit = &module->slot_const_literals[slot];
         const XrCtTupleValue *tuple = &value->as.tuple_val;
@@ -953,6 +1017,7 @@ static void cg_emit_static_struct_field_lvalue_in_module(XiCgenCtx *ctx, FILE *o
 #define CG_STATIC_TUPLE_PATH_MAX 8
 
 typedef struct {
+    const XiModule *module;
     int64_t slot;
     XrType *type;
     uint16_t depth;
@@ -978,17 +1043,21 @@ static bool cg_freestanding_static_tuple_object_path_depth(XiCgenCtx *ctx, const
     const XiValue *v = cg_unwrap_identity_value(value);
     XrType *type = NULL;
     int64_t slot = -1;
-    if (cg_freestanding_static_tuple_value(ctx, v, &type, &slot)) {
+    const XiModule *module = NULL;
+    if (cg_freestanding_static_tuple_value_ex(ctx, v, &type, &slot, &module)) {
         if (out_path)
-            *out_path = (CgStaticTuplePath) {.slot = slot, .type = type, .depth = 0};
+            *out_path =
+                (CgStaticTuplePath) {.module = module, .slot = slot, .type = type, .depth = 0};
         return true;
     }
-    if (!v || v->op != XI_TUPLE_GET || v->nargs < 1)
+    if (!v || (v->op != XI_TUPLE_GET && v->op != XI_LOAD_FIELD) || v->nargs < 1)
         return false;
     CgStaticTuplePath parent = {0};
     if (!cg_freestanding_static_tuple_object_path_depth(ctx, v->args[0], &parent, depth + 1))
         return false;
-    if (!cg_static_tuple_path_append_field(&parent, v->aux_int))
+    int64_t field_idx = -1;
+    if (!cg_static_tuple_field_access_index(v, &field_idx) ||
+        !cg_static_tuple_path_append_field(&parent, field_idx))
         return false;
     if (out_path)
         *out_path = parent;
@@ -1004,7 +1073,7 @@ static void cg_emit_static_tuple_path_lvalue(XiCgenCtx *ctx, FILE *out,
                                              const CgStaticTuplePath *path) {
     if (!path)
         return;
-    cg_emit_static_tuple_name(ctx, out, ctx ? ctx->module : NULL, path->slot);
+    cg_emit_static_tuple_name(ctx, out, path->module, path->slot);
     for (uint16_t i = 0; i < path->depth; i++)
         fprintf(out, ".f%" PRId64, path->fields[i]);
 }
@@ -1180,13 +1249,15 @@ static bool emit_static_struct_field_get_expr(XiCgenCtx *ctx, FILE *out, const X
 }
 
 static bool emit_static_tuple_get_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!v || v->op != XI_TUPLE_GET || v->nargs < 1)
+    if (!v || (v->op != XI_TUPLE_GET && v->op != XI_LOAD_FIELD) || v->nargs < 1)
         return false;
     CgStaticTuplePath receiver = {0};
-    if (!cg_freestanding_static_tuple_object_path(ctx, v->args[0], &receiver) || v->aux_int < 0 ||
-        v->aux_int >= cg_static_tuple_type_count(receiver.type))
+    int64_t field_idx = -1;
+    if (!cg_freestanding_static_tuple_object_path(ctx, v->args[0], &receiver) ||
+        !cg_static_tuple_field_access_index(v, &field_idx) || field_idx < 0 ||
+        field_idx >= cg_static_tuple_type_count(receiver.type))
         return false;
-    XrType *elem_type = cg_static_tuple_type_element(receiver.type, (int) v->aux_int);
+    XrType *elem_type = cg_static_tuple_type_element(receiver.type, (int) field_idx);
     if (elem_type && elem_type->kind == XR_KIND_TUPLE) {
         fprintf(stderr, "[xi_cgen] ERROR: freestanding static nested tuple value must be consumed "
                         "through scalar/string .N fields before runtime lowering\n");
@@ -1205,7 +1276,7 @@ static bool emit_static_tuple_get_expr(XiCgenCtx *ctx, FILE *out, const XiValue 
     else if (elem_rep == XR_REP_I64)
         fprintf(out, "(int64_t)");
     cg_emit_static_tuple_path_lvalue(ctx, out, &receiver);
-    fprintf(out, ".f%" PRId64, v->aux_int);
+    fprintf(out, ".f%" PRId64, field_idx);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -1381,7 +1452,7 @@ static bool cg_static_tuple_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f, const
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
-                if (v->op == XI_TUPLE_GET && a == 0) {
+                if ((v->op == XI_TUPLE_GET || v->op == XI_LOAD_FIELD) && a == 0) {
                     if (cg_freestanding_static_tuple_object_path(ctx, v, NULL) &&
                         !cg_static_tuple_ref_safe_uses(ctx, f, v, depth + 1))
                         return false;
