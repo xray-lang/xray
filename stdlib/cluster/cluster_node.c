@@ -790,8 +790,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     // use the per-cluster client context so the node validates the peer
     // against the operator-supplied CA instead of the global system trust
     // store — this also makes pinned-CA + mTLS deployments possible.
-    // Falls back to the legacy plain-TCP path when TLS is disabled so no
-    // existing deployments are disrupted.
+    // TLS-disabled clusters use the explicit plain-TCP transport.
     if (cluster->tls_enabled && cluster->tls_client_ctx) {
         node->conn = xr_io_connect_tls_with_ctx(cluster->isolate, cluster->tls_client_ctx,
                                                 node->host, node->port, 10000);

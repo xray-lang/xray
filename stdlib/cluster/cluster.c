@@ -207,12 +207,6 @@ static void cluster_accept_loop(void *arg) {
 
 /* ========== Cluster Lifecycle ========== */
 
-int xr_cluster_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret) {
-    // Legacy entry point: plain TCP, no TLS. Forwards to the extended
-    // implementation so both paths share one code flow.
-    return xr_cluster_start_ex(X, name, port, secret, NULL);
-}
-
 /*
  * Build the per-cluster TLS contexts from XrClusterTlsOptions.
  * Returns 0 on success. On failure any partially-allocated contexts are
@@ -917,7 +911,7 @@ static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
         secret = XR_TO_STRING(v_secret)->data;
     }
 
-    // Optional TLS block. Absent or non-object → plain TCP (legacy path).
+    // Optional TLS block. Absent or non-object means explicit plain TCP.
     XrClusterTlsOptions tls_opts;
     memset(&tls_opts, 0, sizeof(tls_opts));
     const XrClusterTlsOptions *tls_ptr = NULL;

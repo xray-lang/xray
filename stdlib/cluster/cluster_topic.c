@@ -616,8 +616,7 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
      * and deadlock.
      *
      * Budget: 256 matches per publish is plenty for typical topologies;
-     * overflow is silently dropped (at-most-once semantics, same as
-     * the legacy path).
+     * overflow is silently dropped to preserve at-most-once delivery.
      */
     enum {
         INLINE_CAP = 32,
