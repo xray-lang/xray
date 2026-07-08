@@ -179,27 +179,30 @@ class ThreadLocal<T> {
 
     get() -> T {
         var key = __threadLocalId()
-        this._lock.lock()
-        var existing = this._values.get(key)
-        this._lock.unlock()
-        if (existing != null) { return existing! }
+        {
+            this._lock.lock()
+            defer { this._lock.unlock() }
+            var existing = this._values.get(key)
+            if (existing != null) { return existing! }
+        }
 
         var init = this._init
         var value = init()
-        this._lock.lock()
-        if (!this._values.has(key)) {
-            this._values.set(key, value)
+        {
+            this._lock.lock()
+            defer { this._lock.unlock() }
+            if (!this._values.has(key)) {
+                this._values.set(key, value)
+            }
+            return this._values.get(key)!
         }
-        var current = this._values.get(key)!
-        this._lock.unlock()
-        return current
     }
 
     set(value: T) {
         var key = __threadLocalId()
         this._lock.lock()
+        defer { this._lock.unlock() }
         this._values.set(key, value)
-        this._lock.unlock()
     }
 }
 
