@@ -56,6 +56,19 @@ struct LabelBox {
 
 const LABEL_BOX = comptime LabelBox{labels: [LABEL, "bonus"], code: TABLE[2]}
 
+struct Entry {
+    code: int
+    flag: bool
+}
+
+@section("__DATA,.xray_entries")
+@weak
+@used
+const ENTRIES: [Entry; 2] = comptime [
+    Entry{code: TABLE[0], flag: true},
+    Entry{code: TABLE[2], flag: false},
+]
+
 packed struct PackedPair {
     tag: uint8
     value: uint32
@@ -179,6 +192,11 @@ fn xray_top_const_string_array_print(i: int) -> int {
 fn xray_top_const_struct_string_array_print(i: int) -> int {
     print(LABEL_BOX.labels[i])
     return LABEL_BOX.code
+}
+
+@c_export("xray_top_const_struct_array_field_runtime")
+fn xray_top_const_struct_array_field_runtime(i: int) -> int {
+    return ENTRIES[i].code + (ENTRIES[i].flag as int)
 }
 
 @c_export("xray_top_const_packed_struct_runtime")

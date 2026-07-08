@@ -732,6 +732,7 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
         if ((f && f->module && f == f->module->init) ||
             cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+            cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
             cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
             cg_value_is_elided_static_struct_const_ref(ctx, f, v)) {
             fprintf(out, "XR_NULL_VAL /* static const import: %s.%s */",
@@ -5545,6 +5546,8 @@ static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_struct_get: need struct arg");
+    if (emit_static_fixed_struct_array_field_get_expr(ctx, out, v))
+        return;
     if (emit_static_struct_field_get_expr(ctx, out, v))
         return;
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
@@ -5981,6 +5984,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             return;
     }
     if (emit_static_tuple_get_expr(ctx, out, v))
+        return;
+    if (emit_static_fixed_struct_array_field_get_expr(ctx, out, v))
         return;
     if (emit_static_struct_field_get_expr(ctx, out, v))
         return;

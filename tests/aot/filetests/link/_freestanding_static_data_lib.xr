@@ -103,4 +103,17 @@ const NAMED = comptime Named{label: LABEL, code: TABLE[1]}
 @weak
 const LABELED = comptime (LABEL, TABLE[0])
 
-export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED }
+struct Entry {
+    code: int
+    flag: bool
+}
+
+@section("__DATA,.xr_ient")
+@weak
+@used
+const ENTRIES: [Entry; 2] = comptime [
+    Entry{code: TABLE[0], flag: true},
+    Entry{code: TABLE[2], flag: false},
+]
+
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED, ENTRIES }
