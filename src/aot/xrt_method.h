@@ -185,6 +185,11 @@ static XrValue xrt_to_char(XrValue val) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_chr(XrValue val) {
+    XrValue ch = xrt_to_char(val);
+    return XR_IS_NULL(ch) ? XR_NULL_VAL : xrt_char_to_string(XR_TO_CHAR(ch));
+}
+
 static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_INT(val))
         return val;

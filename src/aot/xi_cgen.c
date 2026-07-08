@@ -2819,6 +2819,7 @@ static bool cg_no_alloc_builtin_name_allocates(const char *name) {
     static const char *allocating_builtins[] = {
         "array_new", "Bytes", "StringBuilder", "map_new",    "set_new",
         "json_new",  "copy",  "to_shared",     "str_concat", "regex_compile",
+        "chr",
     };
     for (size_t i = 0; i < sizeof(allocating_builtins) / sizeof(allocating_builtins[0]); i++) {
         if (strcmp(name, allocating_builtins[i]) == 0)

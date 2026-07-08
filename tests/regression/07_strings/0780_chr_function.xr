@@ -41,6 +41,8 @@ fn test_chr_function() {
     // @test invalid code points return null
     assert_eq(chr(-1), null)
     assert_eq(chr(-100), null)
+    assert_eq(chr(0xD800), null)
+    assert_eq(chr(0xDFFF), null)
     assert_eq(chr(0x110000), null)
 
     // Non-integer inputs are now caught at compile time (type system prevents passing
@@ -53,4 +55,3 @@ fn test_chr_function() {
     var ch2 = chr(20013)
     assert_eq(ch2.ord(), 20013)
 }
-

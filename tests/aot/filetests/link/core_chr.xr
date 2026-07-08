@@ -1,0 +1,3 @@
+print(chr(65))
+print(chr(0xD800))
+print(chr(-1))

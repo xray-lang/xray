@@ -352,7 +352,7 @@ vmcase(OP_CHR) {
     XrValue val = R(b);
     if (XR_IS_INT(val)) {
         xr_Integer cp = XR_TO_INT(val);
-        if (cp >= 0 && cp <= XR_UNICODE_MAX) {
+        if (cp >= 0 && xr_unicode_is_scalar((uint32_t) cp)) {
             char buf[4];
             int len = 0;
             if (cp < 0x80) {
