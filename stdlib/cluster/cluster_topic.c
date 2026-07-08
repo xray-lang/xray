@@ -654,13 +654,7 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
  * path (xr_cluster_topic_publish) and the forwarding path
  * (xr_cluster_topic_handle_publish). Layout:
  *
- *   [topic_len 1B] [topic ...] [value_data ...] [hop_limit 1B]
- *
- * The hop_limit byte is appended AT THE END so older nodes that
- * key their decoder off topic_len + value-segment interpret the
- * trailing byte as part of value_data and ignore it harmlessly.
- * Newer nodes detect presence of the hop byte via "1 + topic_len +
- * value_len + 1 == payload_len" and parse it out before decoding.
+ *   [hop_limit 1B] [topic_len 1B] [topic ...] [value_data ...]
  *
  * Returns 0 on success, -1 on alloc failure. On success the caller
  * owns fb and must free with xr_frame_buf_free.
@@ -678,16 +672,16 @@ static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const Xr
     }
 
     uint8_t topic_len = (uint8_t) strlen(topic);
-    uint32_t payload_len = 1 + topic_len + (uint32_t) sbuf.len + 1;
+    uint32_t payload_len = 2 + topic_len + (uint32_t) sbuf.len;
     xr_frame_buf_init(fb_out, payload_len);
     if (!fb_out->data) {
         xr_serial_buf_free(&sbuf);
         return -1;
     }
-    fb_out->data[0] = topic_len;
-    memcpy(fb_out->data + 1, topic, topic_len);
-    memcpy(fb_out->data + 1 + topic_len, sbuf.data, sbuf.len);
-    fb_out->data[1 + topic_len + sbuf.len] = hop_limit;
+    fb_out->data[0] = hop_limit;
+    fb_out->data[1] = topic_len;
+    memcpy(fb_out->data + 2, topic, topic_len);
+    memcpy(fb_out->data + 2 + topic_len, sbuf.data, sbuf.len);
     xr_serial_buf_free(&sbuf);
 
     return (int) payload_len;
@@ -729,8 +723,7 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const ch
     /*
      * Controlled flooding. If hop_limit == 0 the originator (or a
      * previous hop) has decided this frame should not propagate
-     * further, or the sender was an old pre-P17 node that didn't
-     * emit the hop byte at all — either way, stop here.
+     * further.
      *
      * Otherwise re-forward to every connected peer EXCEPT `from`
      * (split-horizon) with hop_limit - 1. This is NOT loop-free on
@@ -752,9 +745,7 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const ch
 
     uint8_t next_hop = (uint8_t) (hop_limit - 1);
 
-    // Re-serialize with the decremented hop byte. We cannot simply
-    // forward the original payload buffer because the trailing
-    // hop_limit byte needs to be updated; rebuilding is cheap
+    // Re-serialize with the decremented hop byte. Rebuilding is cheap
     // compared to the encode that would otherwise be required.
     XrFrameBuf fb;
     int payload_len = topic_build_publish_frame(c->isolate, topic, &value, next_hop, &fb);

@@ -1578,51 +1578,19 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_TOPIC_PUBLISH: {
                 /*
-                 * Wire format (see xr_cluster_topic_publish for rationale):
-                 *
-                 *   Legacy (pre-P17):
-                 *     [topic_len 1B] [topic ...] [value_data ...]
-                 *
-                 *   Current (P17, hop-limited forwarding):
-                 *     [topic_len 1B] [topic ...] [value_data ...] [hop 1B]
-                 *
-                 * Both are accepted here because the trailing hop byte was
-                 * added without bumping the frame type or version. We
-                 * detect the P17 form by requiring at least one byte
-                 * beyond the advertised topic region AND accepting any
-                 * value in [0, 255] as a legal hop count — a malformed
-                 * payload that happens to have an extra byte would at
-                 * worst cause an additional round of forwarding, bounded
-                 * by the receiver's own hop decrement.
-                 *
-                 * A cleaner future version can bump to a dedicated
-                 * TOPIC_PUBLISH_FWD frame type and deprecate the legacy
-                 * form, but backward-compat during rolling upgrade is
-                 * more valuable right now than wire-format purity.
+                 * Wire format:
+                 *   [hop 1B] [topic_len 1B] [topic ...] [value_data ...]
                  */
                 if (payload_len >= 2) {
-                    uint8_t topic_len = recv_buf[0];
-                    if (topic_len > 0 && 1 + topic_len <= payload_len) {
+                    uint8_t hop_limit = recv_buf[0];
+                    uint8_t topic_len = recv_buf[1];
+                    if (topic_len > 0 && 2 + topic_len < payload_len) {
                         char topic[XR_TOPIC_PATTERN_MAX + 1];
                         if (topic_len <= XR_TOPIC_PATTERN_MAX) {
-                            memcpy(topic, recv_buf + 1, topic_len);
+                            memcpy(topic, recv_buf + 2, topic_len);
                             topic[topic_len] = '\0';
-                            uint32_t val_offset = 1 + topic_len;
+                            uint32_t val_offset = 2 + topic_len;
                             uint32_t val_len = payload_len - val_offset;
-
-                            // Detect presence of the trailing hop byte:
-                            // the value region must be at least 1 byte
-                            // AND we cannot tell a zero-length value with
-                            // a single hop byte from an old zero-byte
-                            // payload, so we treat val_len == 0 as legacy
-                            // (no forwarding). Real publishes always have
-                            // a non-empty serialized value.
-                            uint8_t hop_limit = 0;
-                            if (val_len >= 1) {
-                                hop_limit = recv_buf[payload_len - 1];
-                                val_len -= 1;  // exclude trailing hop byte
-                            }
-
                             xr_cluster_topic_handle_publish(c, node, topic, recv_buf + val_offset,
                                                             val_len, hop_limit);
                         }
