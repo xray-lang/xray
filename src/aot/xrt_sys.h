@@ -974,19 +974,24 @@ static inline XrValue xrt_sys_cpu_count(void) {
 #endif
 }
 
+static inline void xrt_sys_signal_poll(void);
+
 static inline XrValue xrt_sys_thread_yield(void) {
 #if defined(XR_OS_WINDOWS)
     SwitchToThread();
 #else
     sched_yield();
 #endif
+    xrt_sys_signal_poll();
     return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_sys_sleep_ms(XrValue ms_value) {
     int64_t ms = xrt_sys_int_arg(ms_value);
-    if (ms <= 0)
+    if (ms <= 0) {
+        xrt_sys_signal_poll();
         return XR_NULL_VAL;
+    }
 #if defined(XR_OS_WINDOWS)
     Sleep((DWORD) ms);
 #else
@@ -996,6 +1001,7 @@ static inline XrValue xrt_sys_sleep_ms(XrValue ms_value) {
     while (nanosleep(&req, &req) == -1 && errno == EINTR) {
     }
 #endif
+    xrt_sys_signal_poll();
     return XR_NULL_VAL;
 }
 
@@ -1025,13 +1031,110 @@ static inline XrValue xrt_sys_thread_local_id(void) {
     return XR_FROM_INT((int64_t) xr_thread_current_id());
 }
 
+typedef struct xrt_sys_signal_slot {
+    _Atomic int pending;
+    XrValue handler;
+} xrt_sys_signal_slot_t;
+
+static xrt_sys_signal_slot_t xrt_sys_signal_term = {
+    .pending = ATOMIC_VAR_INIT(0),
+    .handler = {.tag = XR_TAG_NULL},
+};
+static xrt_sys_signal_slot_t xrt_sys_signal_int = {
+    .pending = ATOMIC_VAR_INIT(0),
+    .handler = {.tag = XR_TAG_NULL},
+};
+static atomic_flag xrt_sys_signal_lock = ATOMIC_FLAG_INIT;
+
+static inline xrt_sys_signal_slot_t *xrt_sys_signal_slot_for(int sig) {
+    if (sig == SIGTERM)
+        return &xrt_sys_signal_term;
+    if (sig == SIGINT)
+        return &xrt_sys_signal_int;
+    return NULL;
+}
+
+static inline void xrt_sys_signal_mutex_lock(void) {
+    while (atomic_flag_test_and_set_explicit(&xrt_sys_signal_lock, memory_order_acquire)) {
+#if defined(XR_OS_WINDOWS)
+        Sleep(0);
+#else
+        sched_yield();
+#endif
+    }
+}
+
+static inline void xrt_sys_signal_mutex_unlock(void) {
+    atomic_flag_clear_explicit(&xrt_sys_signal_lock, memory_order_release);
+}
+
+static void xrt_sys_signal_handler(int sig) {
+    xrt_sys_signal_slot_t *slot = xrt_sys_signal_slot_for(sig);
+    if (slot)
+        atomic_store_explicit(&slot->pending, 1, memory_order_relaxed);
+}
+
+static inline bool xrt_sys_signal_install_native(int sig) {
+    if (!xrt_sys_signal_slot_for(sig))
+        return false;
+#if defined(XR_OS_WINDOWS)
+    return signal(sig, xrt_sys_signal_handler) != SIG_ERR;
+#else
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = xrt_sys_signal_handler;
+    sigemptyset(&sa.sa_mask);
+    return sigaction(sig, &sa, NULL) == 0;
+#endif
+}
+
+static inline bool xrt_sys_signal_take(xrt_sys_signal_slot_t *slot) {
+    return slot && atomic_exchange_explicit(&slot->pending, 0, memory_order_acq_rel) != 0;
+}
+
+static inline void xrt_sys_signal_dispatch_slot(xrt_sys_signal_slot_t *slot) {
+    if (!slot)
+        return;
+    XrValue handler = XR_NULL_VAL;
+    xrt_sys_signal_mutex_lock();
+    if (slot->handler.tag == XR_TAG_CLOSURE && slot->handler.ptr) {
+        handler = slot->handler;
+        xrt_retain(handler);
+    }
+    xrt_sys_signal_mutex_unlock();
+
+    if (handler.tag == XR_TAG_CLOSURE && handler.ptr) {
+        (void) xrt_closure_call0(handler);
+        xrt_release(handler);
+    }
+}
+
+static inline void xrt_sys_signal_poll(void) {
+    if (xrt_sys_signal_take(&xrt_sys_signal_term))
+        xrt_sys_signal_dispatch_slot(&xrt_sys_signal_term);
+    if (xrt_sys_signal_take(&xrt_sys_signal_int))
+        xrt_sys_signal_dispatch_slot(&xrt_sys_signal_int);
+}
+
 static inline XrValue xrt_sys_on_signal(XrValue sig_value, XrValue handler_value) {
-    (void) sig_value;
-    (void) handler_value;
-    /* AOT signal dispatch needs a native safe-point dispatcher that can call
-     * closures from the AOT scheduler. Until that generic mechanism lands,
-     * report unsupported instead of installing a handler that cannot run. */
-    return XR_FROM_BOOL(false);
+    int64_t sig64 = xrt_sys_int_arg(sig_value);
+    if (sig64 < 0 || sig64 > INT_MAX)
+        return XR_FROM_BOOL(false);
+    int sig = (int) sig64;
+    xrt_sys_signal_slot_t *slot = xrt_sys_signal_slot_for(sig);
+    if (!slot || handler_value.tag != XR_TAG_CLOSURE || !handler_value.ptr)
+        return XR_FROM_BOOL(false);
+    if (!xrt_sys_signal_install_native(sig))
+        return XR_FROM_BOOL(false);
+
+    xrt_retain(handler_value);
+    xrt_sys_signal_mutex_lock();
+    XrValue old = slot->handler;
+    slot->handler = handler_value;
+    atomic_store_explicit(&slot->pending, 0, memory_order_release);
+    xrt_sys_signal_mutex_unlock();
+    xrt_release(old);
+    return XR_FROM_BOOL(true);
 }
 
 #if !defined(XR_OS_WINDOWS)

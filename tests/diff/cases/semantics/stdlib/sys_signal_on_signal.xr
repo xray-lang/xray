@@ -1,0 +1,17 @@
+import os
+import sys
+import { Signal } from sys
+
+shared hits = Atomic<int>(0)
+
+print(sys.onSignal(Signal.INT, () -> { hits.fetchAdd(1) }))
+print(sys.onSignal(Signal.KILL, () -> { hits.fetchAdd(100) }))
+print(os.kill(os.getpid(), 2))
+
+var spins = 0
+while (hits.load() == 0 && spins < 100) {
+    sys.sleepMs(10)
+    spins = spins + 1
+}
+
+print(hits.load() == 1)
