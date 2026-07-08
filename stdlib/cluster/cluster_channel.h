@@ -64,12 +64,6 @@ XR_FUNC int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_nam
  */
 XR_FUNC void xr_cluster_channel_handle_close(XrCluster *c, const char *channel_name);
 
-/*
- * Synchronize Named Channel info with a newly connected node.
- * Sends CHANNEL_SYNC frames for all locally owned channels.
- */
-XR_FUNC void xr_cluster_channel_sync_to_node(XrCluster *c, XrClusterNode *node);
-
 /* ========== Push Model (for Proxy Channel select support) ========== */
 
 /*

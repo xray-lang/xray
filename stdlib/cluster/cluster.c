@@ -1020,7 +1020,7 @@ static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrCluster *c = (XrCluster *) X->cluster;
 
-    // If cluster running, check for existing channel (e.g. Proxy from CHANNEL_SYNC)
+    // If cluster running, return the existing distributed channel registration.
     if (xr_cluster_is_running(c)) {
         XrDistChannel *existing = xr_cluster_find_channel(c, name_str->data);
         if (existing && existing->channel) {
@@ -1461,61 +1461,6 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                         xr_channel_try_send(rsp_ch, result);
                     } else {
                         xr_channel_close(rsp_ch);
-                    }
-                }
-                break;
-            }
-
-            case XR_FRAME_CHANNEL_SYNC: {
-                // Remote node telling us about their Named Channels
-                // Parse: [name_len 1B] [name] [owner_len 1B] [owner] [buf_size 4B]
-                if (payload_len < 2)
-                    break;
-                const uint8_t *p = recv_buf;
-                uint8_t name_len = *p++;
-                if (name_len > XR_CHANNEL_NAME_MAX)
-                    break;
-                char ch_name[XR_CHANNEL_NAME_MAX + 1];
-                memcpy(ch_name, p, name_len);
-                ch_name[name_len] = '\0';
-                p += name_len;
-
-                // Read buf_size from payload (after owner name)
-                uint32_t remote_buf_size = 16;  // default
-                if (p < recv_buf + payload_len) {
-                    uint8_t owner_len = *p++;
-                    p += owner_len;  // skip owner name
-                    if (p + 4 <= recv_buf + payload_len) {
-                        remote_buf_size = ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) |
-                                          ((uint32_t) p[2] << 8) | p[3];
-                        if (remote_buf_size == 0)
-                            remote_buf_size = 16;
-                    }
-                }
-
-                // Check if we already know this channel
-                if (!xr_cluster_find_channel(c, ch_name)) {
-                    // Create a proxy channel entry with local buffer for push model
-                    XrDistChannel *dc = (XrDistChannel *) xr_calloc(1, sizeof(XrDistChannel));
-                    if (dc) {
-                        strncpy(dc->name, ch_name, XR_CHANNEL_NAME_MAX);
-                        dc->is_owner = false;
-                        dc->owner_node = node;
-                        dc->cluster = c;
-                        // Create local buffered channel for receiving PUSH data
-                        dc->channel = xr_channel_new_vm(c->isolate, remote_buf_size);
-                        if (dc->channel) {
-                            dc->channel->name = dc->name;
-                            dc->channel->dist = dc;
-                        }
-
-                        uint32_t bucket = str_hash(ch_name) % XR_CLUSTER_CHANNEL_BUCKETS;
-
-                        xr_amutex_lock(&c->channels_lock);
-                        dc->next = c->channel_buckets[bucket];
-                        c->channel_buckets[bucket] = dc;
-                        c->channel_count++;
-                        xr_amutex_unlock(&c->channels_lock);
                     }
                 }
                 break;
