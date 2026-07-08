@@ -129,17 +129,4 @@ XR_FUNC XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method, con
 
 XR_FUNC bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data);
 
-// Convenience macros
-#define xr_router_get(r, path, handler, data)                                                      \
-    xr_router_add(r, XR_HTTP_METHOD_GET, path, handler, data)
-
-#define xr_router_post(r, path, handler, data)                                                     \
-    xr_router_add(r, XR_HTTP_METHOD_POST, path, handler, data)
-
-#define xr_router_put(r, path, handler, data)                                                      \
-    xr_router_add(r, XR_HTTP_METHOD_PUT, path, handler, data)
-
-#define xr_router_delete(r, path, handler, data)                                                   \
-    xr_router_add(r, XR_HTTP_METHOD_DELETE, path, handler, data)
-
 #endif
