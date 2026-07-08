@@ -605,27 +605,6 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, s
     unsigned char mask_key[4] = {0};
     size_t header_len = build_frame_header(header, opcode, len, mask, mask_key, false);
 
-    // Cork mode (server only): append frame to wbuf, no syscall.
-    if (ws->corked && !mask) {
-        size_t frame_len = header_len + len;
-        int need = ws->wbuf_len + (int) frame_len;
-        if (need > ws->wbuf_cap) {
-            int newcap = ws->wbuf_cap ? ws->wbuf_cap : 4096;
-            while (newcap < need)
-                newcap *= 2;
-            char *nb = (char *) xr_realloc(ws->wbuf, newcap);
-            if (!nb)
-                return -1;
-            ws->wbuf = nb;
-            ws->wbuf_cap = newcap;
-        }
-        memcpy(ws->wbuf + ws->wbuf_len, header, header_len);
-        if (len > 0)
-            memcpy(ws->wbuf + ws->wbuf_len + header_len, data, len);
-        ws->wbuf_len += (int) frame_len;
-        return 0;
-    }
-
     // Stage the complete frame (header + masked/plain payload), then drain.
     size_t frame_len = header_len + len;
     if (ws_send_frame_buf_ensure(ws, frame_len) < 0)
@@ -887,11 +866,6 @@ XrWebSocket *xr_ws_new(const XrWsConfig *config) {
     ws->last_pong_recv_ms = ws_now_ms();
     ws->ping_in_flight = false;
     ws->cached_pd = NULL;
-    ws->wbuf = NULL;
-    ws->wbuf_len = 0;
-    ws->wbuf_cap = 0;
-    ws->corked = false;
-
     return ws;
 }
 
@@ -947,8 +921,6 @@ void xr_ws_free(XrWebSocket *ws) {
 
     xr_free(ws->rbuf);
     ws->rbuf = NULL;
-    xr_free(ws->wbuf);
-    ws->wbuf = NULL;
     xr_free(ws->send_frame_buf);
     ws->send_frame_buf = NULL;
     xr_free(ws->connect_buf);
@@ -1369,85 +1341,6 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
     return WS_OK;
 }
 
-// Send a compressed frame: deflate payload, set RSV1 bit.
-// On compression failure this reports an error rather than falling back
-// to an uncompressed frame: the peer negotiated deflate and expects RSV1=1,
-// so sending a raw frame would be a protocol error on the wire.
-static int ws_send_frame_compressed(XrWebSocket *ws, XrWsOpcode opcode, const void *data,
-                                    size_t len) {
-    uint8_t *compressed = NULL;
-    size_t compressed_len = 0;
-    if (xr_ws_deflate_compress((const uint8_t *) data, len, &compressed, &compressed_len) != 0) {
-        return -1;
-    }
-
-    // Build header with RSV1 bit set
-    char header[WS_MAX_HEADER_SIZE];
-    unsigned char mask_key[4] = {0};
-    bool mask = !ws->is_server;
-    size_t header_len = build_frame_header(header, opcode, compressed_len, mask, mask_key, true);
-
-    int ret;
-    if (!mask) {
-        // Server: header + compressed payload
-        if (ws_send_all(ws, header, header_len) < 0 ||
-            ws_send_all(ws, compressed, compressed_len) < 0) {
-            ret = -1;
-        } else {
-            ret = 0;
-        }
-    } else {
-        // Client: mask then send
-        size_t frame_len = header_len + compressed_len;
-        char *frame = (char *) xr_malloc(frame_len);
-        if (!frame) {
-            xr_free(compressed);
-            return -1;
-        }
-        memcpy(frame, header, header_len);
-        apply_mask(compressed, (unsigned char *) (frame + header_len), compressed_len, mask_key);
-        ret = ws_send_all(ws, frame, frame_len) < 0 ? -1 : 0;
-        xr_free(frame);
-    }
-    xr_free(compressed);
-    return ret;
-}
-
-XrWsError xr_ws_send_text(XrWebSocket *ws, const char *text, size_t len) {
-    if (!ws || ws->state != WS_STATE_OPEN)
-        return WS_ERR_CLOSED;
-    if (!text)
-        return WS_ERR_SEND;
-
-    if (len == 0)
-        len = strlen(text);
-
-    int ret;
-    if (ws->deflate_enabled && len > 0) {
-        ret = ws_send_frame_compressed(ws, WS_OPCODE_TEXT, text, len);
-    } else {
-        ret = ws_send_frame_writev(ws, WS_OPCODE_TEXT, text, len);
-    }
-
-    return ret < 0 ? WS_ERR_SEND : WS_OK;
-}
-
-XrWsError xr_ws_send_binary(XrWebSocket *ws, const void *data, size_t len) {
-    if (!ws || ws->state != WS_STATE_OPEN)
-        return WS_ERR_CLOSED;
-    if (!data || len == 0)
-        return WS_ERR_SEND;
-
-    int ret;
-    if (ws->deflate_enabled) {
-        ret = ws_send_frame_compressed(ws, WS_OPCODE_BINARY, data, len);
-    } else {
-        ret = ws_send_frame_writev(ws, WS_OPCODE_BINARY, data, len);
-    }
-
-    return ret < 0 ? WS_ERR_SEND : WS_OK;
-}
-
 XrWsError xr_ws_ping(XrWebSocket *ws) {
     if (!ws || ws->state != WS_STATE_OPEN)
         return WS_ERR_CLOSED;
@@ -1458,7 +1351,7 @@ XrWsError xr_ws_ping(XrWebSocket *ws) {
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
-XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
+static XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN)
         return WS_ERR_CLOSED;
 
@@ -1466,37 +1359,6 @@ XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
     int ret = ws_send_frame_writev(ws, WS_OPCODE_PONG, data, len);
 
     return ret < 0 ? WS_ERR_SEND : WS_OK;
-}
-
-/*
- * Blocking-style recv: loops xr_ws_recv_try + xr_socket_wait_readable.
- * Yields the coroutine on EAGAIN via netpoll. The 100ms slice keeps
- * bounded latency for concurrent xr_ws_close state transitions.
- * Requires ws->isolate.
- */
-XrWsMessage *xr_ws_recv(XrWebSocket *ws) {
-    if (!ws || ws->state != WS_STATE_OPEN)
-        return NULL;
-    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for recv");
-
-    while (1) {
-        bool need_more = false;
-        XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
-
-        if (msg)
-            return msg;
-        if (ws->state != WS_STATE_OPEN)
-            return NULL;
-
-        if (!need_more)
-            continue;
-
-        int wr = xr_socket_wait_readable(ws->isolate, ws->fd, 100);
-        if (wr < 0) {
-            xr_ws_close(ws, WS_CLOSE_ABNORMAL, NULL);
-            return NULL;
-        }
-    }
 }
 
 // Fill rbuf from network, drain until EAGAIN (for edge-triggered kqueue)
@@ -2008,51 +1870,6 @@ process_frame:
     return msg;
 }
 
-void xr_ws_cork(XrWebSocket *ws) {
-    if (!ws)
-        return;
-    ws->corked = true;
-    ws->wbuf_len = 0;  // reset write position (keep allocated buffer)
-}
-
-int xr_ws_uncork(XrWebSocket *ws) {
-    if (!ws)
-        return -1;
-    ws->corked = false;
-    if (ws->wbuf_len == 0)
-        return 0;  // nothing buffered
-
-    // Single non-blocking send for all corked frames
-    int total = ws->wbuf_len;
-    ws->wbuf_len = 0;
-
-    if (ws->is_secure && ws->tls_conn) {
-        return ws_send_all(ws, ws->wbuf, total);
-    }
-
-    ssize_t n = send(ws->fd, ws->wbuf, total, 0);
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            n = 0;
-        else
-            return -1;
-    }
-    if ((int) n >= total)
-        return 0;
-
-    // Partial send: blocking flush for remainder
-    if (ws_send_all(ws, ws->wbuf + n, total - n) < 0)
-        return -1;
-    return 0;
-}
-
-int xr_ws_poll(XrWebSocket *ws, int timeout_ms) {
-    if (!ws || ws->state != WS_STATE_OPEN)
-        return -1;
-    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for poll");
-    return xr_socket_wait_readable(ws->isolate, ws->fd, timeout_ms);
-}
-
 void xr_ws_message_free(XrWsMessage *msg) {
     if (!msg)
         return;
@@ -2063,29 +1880,6 @@ void xr_ws_message_free(XrWsMessage *msg) {
     msg->_flags &= (uint8_t) ~XR_WS_MSG_DATA_INPLACE;
     if (!(msg->_flags & XR_WS_MSG_NO_FREE))
         xr_free(msg);
-}
-
-void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg) {
-    if (!msg || !msg->data)
-        return;
-    if (msg->_flags & XR_WS_MSG_DATA_INPLACE) {
-        // inplace data lives in rbuf, nothing to recycle
-        msg->data = NULL;
-        return;
-    }
-    // Return heap buffer to ws->msg_buf for reuse by next recv_try
-    if (!ws->msg_buf) {
-        ws->msg_buf = msg->data;
-        ws->msg_buf_size = msg->len + 1;
-    } else if (msg->len + 1 > ws->msg_buf_size) {
-        // Incoming buffer is larger — swap to keep the bigger one
-        xr_free(ws->msg_buf);
-        ws->msg_buf = msg->data;
-        ws->msg_buf_size = msg->len + 1;
-    } else {
-        xr_free(msg->data);
-    }
-    msg->data = NULL;
 }
 
 XrWsState xr_ws_get_state(XrWebSocket *ws) {
@@ -2541,10 +2335,6 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *r
     ws->last_pong_recv_ms = ws_now_ms();
     ws->ping_in_flight = false;
     ws->cached_pd = NULL;
-    ws->wbuf = NULL;
-    ws->wbuf_len = 0;
-    ws->wbuf_cap = 0;
-    ws->corked = false;
 
     // Set default config
     xr_ws_config_init(&ws->config);

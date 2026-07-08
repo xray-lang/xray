@@ -195,12 +195,6 @@ typedef struct XrWebSocket {
     size_t connect_len;      // request bytes to send / response bytes received
     size_t connect_off;      // request bytes already sent
 
-    // Cork write buffer (batch multiple frames into single send)
-    char *wbuf;    // heap-allocated write buffer
-    int wbuf_len;  // valid data bytes
-    int wbuf_cap;  // allocated capacity
-    bool corked;   // true if corked (writes go to wbuf)
-
     // Embedded message (avoids calloc per recv)
     XrWsMessage last_msg;
 
@@ -234,8 +228,8 @@ XR_FUNC void xr_ws_free(XrWebSocket *ws);
 
 /*
  * Bind the WebSocket to a XrVMRuntime for coroutine-aware I/O.
- * MUST be called before xr_ws_connect_start / xr_ws_send / xr_ws_recv.
- * Server-side connections are bound automatically in xr_ws_upgrade.
+ * MUST be called before xr_ws_connect_start / xr_ws_send_frame_try / xr_ws_recv_try.
+ * Server-side connections are bound automatically in xr_ws_upgrade_ex.
  * Passing NULL is a programming error — all WS I/O requires an isolate.
  */
 XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X);
@@ -253,21 +247,8 @@ XR_FUNC int xr_ws_connect_pump(XrWebSocket *ws);
 // Close connection
 XR_FUNC XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason);
 
-// Send text message
-XR_FUNC XrWsError xr_ws_send_text(XrWebSocket *ws, const char *text, size_t len);
-
-// Send binary message
-XR_FUNC XrWsError xr_ws_send_binary(XrWebSocket *ws, const void *data, size_t len);
-
 // Send Ping
 XR_FUNC XrWsError xr_ws_ping(XrWebSocket *ws);
-
-// Send Pong
-XR_FUNC XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len);
-
-// Receive message (blocking)
-// Returns: received message (caller must free), NULL on error or close
-XR_FUNC XrWsMessage *xr_ws_recv(XrWebSocket *ws);
 
 // Receive message (non-blocking, for yieldable integration)
 // Returns: received message, or NULL if:
@@ -280,24 +261,8 @@ XR_FUNC XrWsMessage *xr_ws_recv_try(XrWebSocket *ws, bool *need_more);
 // Returns: 0 = complete, -1 = error, -2 = would block (need to wait for write)
 XR_FUNC int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, size_t len);
 
-// Cork: buffer subsequent send_frame_try calls into wbuf (no syscall)
-XR_FUNC void xr_ws_cork(XrWebSocket *ws);
-
-// Uncork: flush wbuf with single send, return to direct-send mode
-// Returns: 0 = complete, -1 = error, -2 = would block
-XR_FUNC int xr_ws_uncork(XrWebSocket *ws);
-
-// Poll events (non-blocking)
-// timeout_ms: timeout in milliseconds, 0 returns immediately, -1 waits forever
-// Returns: 0 no event, 1 has event, -1 error
-XR_FUNC int xr_ws_poll(XrWebSocket *ws, int timeout_ms);
-
 // Free message
 XR_FUNC void xr_ws_message_free(XrWsMessage *msg);
-
-// Recycle message: return heap-allocated data back to ws->msg_buf for reuse
-// Avoids malloc/free per frame in echo-style hot loops
-XR_FUNC void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg);
 
 // Get state
 XR_FUNC XrWsState xr_ws_get_state(XrWebSocket *ws);
