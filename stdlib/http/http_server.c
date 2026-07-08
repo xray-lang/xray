@@ -16,143 +16,15 @@
 
 #include "../../src/base/xmalloc.h"
 #include "http_server.h"
-#include "http_router.h"
-#include "../ws/ws.h"
-#include "../../src/coro/xsocket.h"
-#include "../../src/coro/xworker.h"
-#include "../../src/coro/xcoroutine.h"
-#include "../../src/coro/xyieldable.h"  // Yieldable C function protocol
-#include "../../src/vm/xvm_coro_api.h"
 
 #include "../../src/os/os_net.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-/* ========== Pre-generated Response Headers (global shared, zero allocation) ========== */
-
-// 404 Not Found
-static const char HTTP_404_RESPONSE[] = "HTTP/1.1 404 Not Found\r\n"
-                                        "Content-Type: application/json\r\n"
-                                        "Content-Length: 24\r\n"
-                                        "Connection: keep-alive\r\n"
-                                        "\r\n"
-                                        "{\"error\": \"Not Found\"}";
-
-/* ========== Internal Helper Functions ========== */
-
-/*
- * Get HTTP status text
- */
-static const char *http_status_text(int status) {
-    switch (status) {
-        case 200:
-            return "OK";
-        case 201:
-            return "Created";
-        case 204:
-            return "No Content";
-        case 301:
-            return "Moved Permanently";
-        case 302:
-            return "Found";
-        case 304:
-            return "Not Modified";
-        case 400:
-            return "Bad Request";
-        case 401:
-            return "Unauthorized";
-        case 403:
-            return "Forbidden";
-        case 404:
-            return "Not Found";
-        case 405:
-            return "Method Not Allowed";
-        case 500:
-            return "Internal Server Error";
-        case 502:
-            return "Bad Gateway";
-        case 503:
-            return "Service Unavailable";
-        default:
-            return "Unknown";
-    }
-}
-
-/*
- * Parse HTTP request line
- */
-static int parse_request_line(char *line, XrHttpReq *req) {
-    // Format: METHOD PATH HTTP/1.x
-    char *method_end = strchr(line, ' ');
-    if (!method_end)
-        return -1;
-    *method_end = '\0';
-
-    // Parse method
-    if (strcmp(line, "GET") == 0)
-        req->method = XR_HTTP_METHOD_GET;
-    else if (strcmp(line, "POST") == 0)
-        req->method = XR_HTTP_METHOD_POST;
-    else if (strcmp(line, "PUT") == 0)
-        req->method = XR_HTTP_METHOD_PUT;
-    else if (strcmp(line, "DELETE") == 0)
-        req->method = XR_HTTP_METHOD_DELETE;
-    else if (strcmp(line, "HEAD") == 0)
-        req->method = XR_HTTP_METHOD_HEAD;
-    else if (strcmp(line, "OPTIONS") == 0)
-        req->method = XR_HTTP_METHOD_OPTIONS;
-    else if (strcmp(line, "PATCH") == 0)
-        req->method = XR_HTTP_METHOD_PATCH;
-    else
-        return -1;
-
-    // Parse path
-    char *path_start = method_end + 1;
-    char *path_end = strchr(path_start, ' ');
-    if (!path_end)
-        return -1;
-    *path_end = '\0';
-
-    // Separate query string
-    char *query = strchr(path_start, '?');
-    if (query) {
-        *query = '\0';
-        req->query = query + 1;
-    } else {
-        req->query = NULL;
-    }
-
-    req->path = path_start;
-    return 0;
-}
-
-/*
- * Check Keep-Alive
- */
-static bool check_keep_alive(const char *headers) {
-    // Simple check for Connection header
-    const char *conn = strstr(headers, "Connection:");
-    if (!conn)
-        conn = strstr(headers, "connection:");
-    if (!conn)
-        return true;  // HTTP/1.1 defaults to Keep-Alive
-
-    conn += 11;  // Skip "Connection:"
-    while (*conn == ' ')
-        conn++;
-
-    if (strncasecmp(conn, "close", 5) == 0)
-        return false;
-    return true;
-}
 
 /* ========== Server API ========== */
 
 /*
  * Create server
  */
-XrHttpServer *xr_http_server_new(XrVMRuntime *isolate) {
+XrHttpServer *xr_http_server_new(struct XrVMRuntime *isolate) {
     XrHttpServer *server = (XrHttpServer *) xr_calloc(1, sizeof(XrHttpServer));
     if (!server)
         return NULL;
@@ -194,15 +66,15 @@ void xr_http_server_free(XrHttpServer *server) {
  * Add route
  */
 void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
-                          XrClosure *handler) {
+                          struct XrClosure *handler) {
     if (!server || !server->router || !path || !handler)
         return;
 
     // Save closure to array (prevent GC collection)
     if (server->route_closure_count >= server->route_closure_capacity) {
         int new_cap = server->route_closure_capacity == 0 ? 16 : server->route_closure_capacity * 2;
-        XrClosure **new_arr =
-            (XrClosure **) xr_realloc(server->route_closures, new_cap * sizeof(XrClosure *));
+        struct XrClosure **new_arr = (struct XrClosure **) xr_realloc(
+            server->route_closures, new_cap * sizeof(struct XrClosure *));
         if (!new_arr)
             return;
         server->route_closures = new_arr;
@@ -222,217 +94,6 @@ void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, const char
     if (!server || !server->router || !path || !response)
         return;
     xr_router_add_static(server->router, method, path, response, response_len);
-}
-
-/*
- * Read and parse HTTP request
- */
-int xr_http_read_request(XrVMRuntime *X, int fd, XrHttpReq *req, char *buf, size_t buf_size) {
-    if (!req || !buf || buf_size == 0)
-        return -1;
-
-    memset(req, 0, sizeof(XrHttpReq));
-    req->fd = fd;
-    req->keep_alive = true;
-
-    // Batch read request headers (performance optimization: read multiple bytes at once)
-    size_t total = 0;
-    bool found_end = false;
-
-    while (total < buf_size - 1) {
-        // Batch read (up to buffer full)
-        size_t to_read = buf_size - 1 - total;
-        if (to_read > 4096)
-            to_read = 4096;  // Limit single read size
-
-        int n = xr_socket_read(X, fd, buf + total, to_read);
-        if (n <= 0) {
-            if (total == 0)
-                return -1;  // Connection closed
-            break;
-        }
-        total += n;
-
-        // Search for \r\n\r\n in read data
-        for (size_t i = ((size_t) total > (size_t) n + 3) ? (size_t) total - (size_t) n - 3 : 0;
-             i + 3 < (size_t) total; i++) {
-            if (buf[i] == '\r' && buf[i + 1] == '\n' && buf[i + 2] == '\r' && buf[i + 3] == '\n') {
-                found_end = true;
-                total = i + 4;  // Truncate to header end position
-                break;
-            }
-        }
-        if (found_end)
-            break;
-    }
-
-    if (!found_end)
-        return -1;
-    buf[total] = '\0';
-
-    // Parse request line
-    char *line_end = strstr(buf, "\r\n");
-    if (!line_end)
-        return -1;
-    *line_end = '\0';
-
-    if (parse_request_line(buf, req) < 0)
-        return -1;
-
-    // Check Keep-Alive
-    req->keep_alive = check_keep_alive(line_end + 2);
-
-    // Parse Content-Length and read request body
-    const char *headers = line_end + 2;
-    size_t headers_len = total - (headers - buf);
-    long long content_length = xr_http_parse_content_length(headers, headers_len);
-
-    // Malformed/conflicting Content-Length: reject, never treat as "no body".
-    if (content_length == -2)
-        return -1;
-
-    // This simple server does not decode Transfer-Encoding. A chunked body
-    // left unread on the socket would desynchronize keep-alive framing
-    // (request smuggling), so reject any request that declares one.
-    for (size_t i = 0; i + 18 <= headers_len; i++) {
-        if (strncasecmp(headers + i, "transfer-encoding:", 18) == 0) {
-            return -1;
-        }
-    }
-
-    if (content_length > 0) {
-        // Prevent memory exhaustion attack, limit max body size
-        if (content_length > 10 * 1024 * 1024) {  // 10MB
-            return -1;
-        }
-
-        // Allocate body buffer
-        req->body = (char *) xr_malloc(content_length + 1);
-        if (!req->body)
-            return -1;
-
-        // Read body
-        size_t body_read = 0;
-        while (body_read < (size_t) content_length) {
-            ssize_t n = xr_socket_read(X, fd, req->body + body_read, content_length - body_read);
-            if (n <= 0) {
-                xr_free(req->body);
-                req->body = NULL;
-                return -1;
-            }
-            body_read += n;
-        }
-        req->body[content_length] = '\0';
-        req->body_len = content_length;
-    }
-
-    return 0;
-}
-
-static int xr_http_write_status_response(XrVMRuntime *X, int fd, int status,
-                                         const char *content_type, const char *body,
-                                         size_t body_len) {
-    char header[512];
-    int header_len = snprintf(header, sizeof(header),
-                              "HTTP/1.1 %d %s\r\n"
-                              "Content-Type: %s\r\n"
-                              "Content-Length: %zu\r\n"
-                              "Connection: keep-alive\r\n"
-                              "\r\n",
-                              status, http_status_text(status), content_type, body_len);
-    if (header_len < 0 || (size_t) header_len >= sizeof(header))
-        return -1;
-
-    int n = xr_socket_write(X, fd, header, header_len);
-    if (n < 0)
-        return -1;
-
-    if (body && body_len > 0) {
-        n = xr_socket_write(X, fd, body, body_len);
-        if (n < 0)
-            return -1;
-    }
-
-    return 0;
-}
-
-static size_t json_escape_string(char *out, size_t out_cap, const char *input) {
-    if (out_cap == 0)
-        return 0;
-
-    size_t len = 0;
-    for (const unsigned char *p = (const unsigned char *) input; p && *p; p++) {
-        unsigned char ch = *p;
-        const char *esc = NULL;
-        char hex[7];
-
-        switch (ch) {
-            case '"':
-                esc = "\\\"";
-                break;
-            case '\\':
-                esc = "\\\\";
-                break;
-            case '\b':
-                esc = "\\b";
-                break;
-            case '\f':
-                esc = "\\f";
-                break;
-            case '\n':
-                esc = "\\n";
-                break;
-            case '\r':
-                esc = "\\r";
-                break;
-            case '\t':
-                esc = "\\t";
-                break;
-            default:
-                if (ch < 0x20) {
-                    snprintf(hex, sizeof(hex), "\\u%04x", ch);
-                    esc = hex;
-                }
-                break;
-        }
-
-        if (esc) {
-            size_t esc_len = strlen(esc);
-            if (len + esc_len >= out_cap)
-                break;
-            memcpy(out + len, esc, esc_len);
-            len += esc_len;
-        } else {
-            if (len + 1 >= out_cap)
-                break;
-            out[len++] = (char) ch;
-        }
-    }
-
-    out[len] = '\0';
-    return len;
-}
-
-/*
- * Send error response
- */
-int xr_http_send_error(XrVMRuntime *X, int fd, int status, const char *message) {
-    // 404 uses pre-defined response (single send)
-    if (status == 404 && (message == NULL || strcmp(message, "Not Found") == 0)) {
-        return xr_socket_write(X, fd, HTTP_404_RESPONSE, sizeof(HTTP_404_RESPONSE) - 1);
-    }
-
-    // Other errors dynamically built
-    char escaped[192];
-    json_escape_string(escaped, sizeof(escaped), message ? message : http_status_text(status));
-
-    char body[256];
-    int body_len = snprintf(body, sizeof(body), "{\"error\": \"%s\"}", escaped);
-    if (body_len < 0 || (size_t) body_len >= sizeof(body))
-        return -1;
-
-    return xr_http_write_status_response(X, fd, status, "application/json", body,
-                                         (size_t) body_len);
 }
 
 /*
@@ -497,15 +158,4 @@ void xr_http_server_stop(XrHttpServer *server) {
         xr_closesocket(server->listen_fd);
         server->listen_fd = -1;
     }
-}
-
-/*
- * Set WebSocket handler
- */
-void xr_http_server_set_ws_handler(XrHttpServer *server, XrWsConnectionHandler handler,
-                                   void *user_data) {
-    if (!server)
-        return;
-    server->ws_handler = handler;
-    server->ws_user_data = user_data;
 }
