@@ -19,6 +19,8 @@
 #include "../shared/xr_typed_ops.h"
 #include "../os/os_pipe.h"
 #include "../os/os_thread.h"
+#include <limits.h>
+#include <signal.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +37,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
-#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -1022,6 +1023,15 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 
 static inline XrValue xrt_sys_thread_local_id(void) {
     return XR_FROM_INT((int64_t) xr_thread_current_id());
+}
+
+static inline XrValue xrt_sys_on_signal(XrValue sig_value, XrValue handler_value) {
+    (void) sig_value;
+    (void) handler_value;
+    /* AOT signal dispatch needs a native safe-point dispatcher that can call
+     * closures from the AOT scheduler. Until that generic mechanism lands,
+     * report unsupported instead of installing a handler that cannot run. */
+    return XR_FROM_BOOL(false);
 }
 
 #if !defined(XR_OS_WINDOWS)

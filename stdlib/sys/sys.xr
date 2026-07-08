@@ -12,6 +12,18 @@ enum Signal {
     INT
 }
 
+fn _signalCode(signal: Signal) -> int {
+    return match (signal) {
+        Signal.TERM -> 15
+        Signal.KILL -> 9
+        Signal.INT -> 2
+    }
+}
+
+fn onSignal(signal: Signal, handler: () -> ()) -> bool {
+    return __onSignal(_signalCode(signal), handler)
+}
+
 class Pipe {
     _readHandle: int
     _writeHandle: int
@@ -224,4 +236,4 @@ class Dylib {
     }
 }
 
-export { Process, ProcessOptions, Signal, Pipe, ThreadLocal, Dylib }
+export { Process, ProcessOptions, Signal, Pipe, ThreadLocal, Dylib, onSignal }
