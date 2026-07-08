@@ -81,6 +81,17 @@ static uint32_t evidence_body_count_with_static_data(const XgGlobalEvidence *ev,
     return count;
 }
 
+static uint32_t evidence_body_count_with_escape(const XgGlobalEvidence *ev, uint32_t escape) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if ((ev->bodies[i].escape_bits & escape) != 0)
+            count++;
+    }
+    return count;
+}
+
 static uint32_t evidence_decl_count_with_flags(const XgGlobalEvidence *ev, uint32_t flags) {
     uint32_t count = 0;
     if (!ev)
@@ -380,6 +391,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
     ASSERT_NOT_NULL(strstr(dump, "effect=0x1[throw]"));
+    ASSERT_NOT_NULL(strstr(dump, "escape=0x2[field]"));
     ASSERT_NOT_NULL(strstr(dump, "caps=0x4[exception]"));
     ASSERT_NOT_NULL(strstr(dump, "metadata=0x8[tooling]"));
     ASSERT_NOT_NULL(strstr(dump, "static=0x10[runtime_init]"));
@@ -3535,6 +3547,8 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     ASSERT_TRUE(ev.callsites[0].method_id != XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
+    ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_EXTERN) != 0);
+    ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_RETURN) != 0);
 
     XiFunc init_func;
     memset(&init_func, 0, sizeof(init_func));
@@ -3809,12 +3823,54 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     ASSERT_EQ_UINT(ev.callsites[0].receiver_static_class_id, XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
+    ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_NATIVE) != 0);
+    ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_RETURN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 0);
     xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_body_escape_bits) {
+    setup_parser_session();
+    const char *source = "class Box {\n"
+                         "    value: int\n"
+                         "    constructor() { this.value = 0 }\n"
+                         "    set(v: int) { this.value = v }\n"
+                         "}\n"
+                         "fn touch(items: Array<int>) -> int {\n"
+                         "    items[0] = 1\n"
+                         "    return items[0]\n"
+                         "}\n"
+                         "fn spawnIt() {\n"
+                         "    go touch([1, 2, 3])\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_FIELD) >= 1);
+    ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_CONTAINER) >= 1);
+    ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_RETURN) >= 1);
+    ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_CORO) >= 1);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -4719,6 +4775,7 @@ RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_c
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
+RUN_TEST(global_evidence_producer_marks_body_escape_bits);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);

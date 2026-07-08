@@ -102,6 +102,7 @@ typedef struct XgBodyCollect {
     uint32_t callsite_start;
     uint32_t callsite_count;
     uint32_t effect_bits;
+    uint32_t escape_bits;
     uint32_t capability_bits;
     uint32_t metadata_use_bits;
     uint32_t static_data_use_bits;
@@ -938,6 +939,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     const AstNode *callee;
     if (body_call_is_sys_thread_spawn(&call->as.call_expr)) {
         bc->effect_bits |= XG_BODY_MAY_ALLOC;
+        bc->escape_bits |= XG_BODY_ESCAPE_CORO;
         bc->capability_bits |= XG_CAP_SYS_THREAD | XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_OBJECTS;
     }
     memset(&row, 0, sizeof(row));
@@ -961,11 +963,13 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             bc->metadata_use_bits |= XG_METADATA_TYPENAME;
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
+            bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
             row.kind = XG_CALL_EXTERN;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
         } else if (target && (target->decl_flags & XG_DECL_NATIVE)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
+            bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
             row.kind = XG_CALL_NATIVE;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
@@ -1010,6 +1014,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 row.method_signature_key = method ? method->signature_key : 0;
             } else {
                 bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
+                bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
                 row.kind = XG_CALL_NATIVE;
                 row.method_id = (XgMethodId) method_name_id;
                 row.method_name_id = method_name_id;
@@ -1331,6 +1336,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.member_set.object);
             walk_body_for_calls(bc, node->as.member_set.value);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
+            bc->escape_bits |= XG_BODY_ESCAPE_FIELD;
             break;
         case AST_INDEX_GET:
             walk_body_for_calls(bc, node->as.index_get.array);
@@ -1341,6 +1347,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.index_set.index);
             walk_body_for_calls(bc, node->as.index_set.value);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
+            bc->escape_bits |= XG_BODY_ESCAPE_CONTAINER;
             break;
         case AST_SLICE_EXPR:
             walk_body_for_calls(bc, node->as.slice_expr.source);
@@ -1350,6 +1357,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
                 walk_body_for_calls(bc, node->as.return_stmt.values[i]);
+            if (node->as.return_stmt.value_count > 0)
+                bc->escape_bits |= XG_BODY_ESCAPE_RETURN;
             break;
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -1478,6 +1487,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_GO_EXPR:
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC;
+            bc->escape_bits |= XG_BODY_ESCAPE_CORO;
             bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL | XG_CAP_OBJECTS;
             if (node->as.go_expr.spawn_kind == XR_SPAWN_THREAD)
                 bc->capability_bits |= XG_CAP_SYS_THREAD;
@@ -1521,6 +1531,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_PARALLEL_FOR_STMT: {
             uint32_t base_locals = bc->nlocals;
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
+            bc->escape_bits |= XG_BODY_ESCAPE_CORO;
             bc->capability_bits |= XG_CAP_COROUTINE;
             for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++)
                 walk_body_for_calls(bc, node->as.parallel_for_stmt.locals[i].source);
@@ -1534,6 +1545,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_PARALLEL_REDUCE_EXPR: {
             uint32_t base_locals = bc->nlocals;
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
+            bc->escape_bits |= XG_BODY_ESCAPE_CORO;
             bc->capability_bits |= XG_CAP_COROUTINE;
             for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++)
                 walk_body_for_calls(bc, node->as.parallel_reduce_expr.locals[i].source);
@@ -1548,6 +1560,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_PARALLEL_COLLECT_EXPR: {
             uint32_t base_locals = bc->nlocals;
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
+            bc->escape_bits |= XG_BODY_ESCAPE_CORO | XG_BODY_ESCAPE_CONTAINER;
             bc->capability_bits |= XG_CAP_COROUTINE;
             for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++)
                 walk_body_for_calls(bc, node->as.parallel_collect_expr.locals[i].source);
@@ -1679,6 +1692,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.kind = pending->kind;
     row.body_hash = hash_ast_shape(pending->body, XR_FNV64_OFFSET_BASIS);
     row.effect_bits = bc.effect_bits;
+    row.escape_bits = bc.escape_bits;
     row.capability_bits = bc.capability_bits;
     row.callsite_start = bc.callsite_start;
     row.callsite_count = bc.callsite_count;

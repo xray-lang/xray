@@ -330,6 +330,35 @@ XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
     return effects;
 }
 
+XR_FUNC const char *xg_body_escape_name(uint32_t escape) {
+    switch (escape) {
+        case XG_BODY_ESCAPE_RETURN:
+            return "return";
+        case XG_BODY_ESCAPE_FIELD:
+            return "field";
+        case XG_BODY_ESCAPE_CONTAINER:
+            return "container";
+        case XG_BODY_ESCAPE_CORO:
+            return "coro";
+        case XG_BODY_ESCAPE_NATIVE:
+            return "native";
+        case XG_BODY_ESCAPE_EXTERN:
+            return "extern";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const uint32_t *xg_body_escape_catalog(uint32_t *out_count) {
+    static const uint32_t escapes[] = {
+        XG_BODY_ESCAPE_RETURN, XG_BODY_ESCAPE_FIELD,  XG_BODY_ESCAPE_CONTAINER,
+        XG_BODY_ESCAPE_CORO,   XG_BODY_ESCAPE_NATIVE, XG_BODY_ESCAPE_EXTERN,
+    };
+    if (out_count)
+        *out_count = (uint32_t) (sizeof(escapes) / sizeof(escapes[0]));
+    return escapes;
+}
+
 XR_FUNC const char *xg_capability_name(uint32_t capability) {
     switch (capability) {
         case XG_CAP_COROUTINE:
@@ -702,6 +731,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     const uint32_t *capabilities = xg_capability_catalog(&capability_count);
     uint32_t effect_count = 0;
     const uint32_t *effects = xg_body_effect_catalog(&effect_count);
+    uint32_t escape_count = 0;
+    const uint32_t *escapes = xg_body_escape_catalog(&escape_count);
     uint32_t metadata_count = 0;
     const uint32_t *metadata = xg_metadata_catalog(&metadata_count);
     uint32_t static_data_count = 0;
@@ -781,7 +812,9 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             b->name_id, b->signature_key, b->source_span_id, xg_body_kind_name(b->kind),
             b->body_hash, b->effect_bits);
         dump_named_bitset(out, b->effect_bits, effects, effect_count, xg_body_effect_name);
-        fprintf(out, " escape=0x%x caps=0x%x", b->escape_bits, b->capability_bits);
+        fprintf(out, " escape=0x%x", b->escape_bits);
+        dump_named_bitset(out, b->escape_bits, escapes, escape_count, xg_body_escape_name);
+        fprintf(out, " caps=0x%x", b->capability_bits);
         dump_named_bitset(out, b->capability_bits, capabilities, capability_count,
                           xg_capability_name);
         fprintf(out, " callsites=%u+%u metadata=0x%x", b->callsite_start, b->callsite_count,
