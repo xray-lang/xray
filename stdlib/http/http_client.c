@@ -51,7 +51,7 @@ static XrConnPool *http_client_pool(XrVMRuntime *X) {
 
 /* ========== URL Parsing ========== */
 
-int xr_http_url_parse(const char *url, XrHttpUrl *out) {
+int http_url_parse(const char *url, XrHttpUrl *out) {
     if (!url || !out)
         return -1;
 
@@ -82,7 +82,7 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         }
 
         if (strcmp(out->scheme, "http") != 0 && strcmp(out->scheme, "https") != 0) {
-            xr_http_url_free(out);
+            http_url_free(out);
             return -1;
         }
 
@@ -132,7 +132,7 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         host_start = p + 1;
         const char *close = strchr(p, ']');
         if (!close) {
-            xr_http_url_free(out);
+            http_url_free(out);
             return -1;
         }
         host_end = close;
@@ -166,7 +166,7 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
     // Copy host
     int host_len = (int) (host_end - host_start);
     if (host_len == 0) {
-        xr_http_url_free(out);
+        http_url_free(out);
         return -1;
     }
 
@@ -189,11 +189,11 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         }
         if (port_start != port_end) {
             // Non-digit before authority terminator → invalid port
-            xr_http_url_free(out);
+            http_url_free(out);
             return -1;
         }
         if (port <= 0 || port > 65535) {
-            xr_http_url_free(out);
+            http_url_free(out);
             return -1;
         }
         out->port = port;
@@ -209,7 +209,7 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
     return 0;
 }
 
-void xr_http_url_free(XrHttpUrl *url) {
+void http_url_free(XrHttpUrl *url) {
     if (!url)
         return;
     if (url->scheme) {
@@ -512,16 +512,16 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
 // port all match. A redirect across origins must not carry credential headers.
 static bool http_same_origin(const char *url_a, const char *url_b) {
     XrHttpUrl a, b;
-    if (xr_http_url_parse(url_a, &a) != 0)
+    if (http_url_parse(url_a, &a) != 0)
         return false;
-    if (xr_http_url_parse(url_b, &b) != 0) {
-        xr_http_url_free(&a);
+    if (http_url_parse(url_b, &b) != 0) {
+        http_url_free(&a);
         return false;
     }
     bool same = (a.is_https == b.is_https) && (a.port == b.port) && a.host && b.host &&
                 strcasecmp(a.host, b.host) == 0;
-    xr_http_url_free(&a);
-    xr_http_url_free(&b);
+    http_url_free(&a);
+    http_url_free(&b);
     return same;
 }
 
@@ -561,20 +561,20 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                 char *new_url = NULL;
                 if (location[0] == '/' && location[1] == '/') {
                     XrHttpUrl parsed;
-                    if (xr_http_url_parse(current_url, &parsed) == 0) {
+                    if (http_url_parse(current_url, &parsed) == 0) {
                         const char *scheme = parsed.is_https ? "https" : "http";
                         size_t len = strlen(scheme) + strlen(location) + 2;
                         new_url = (char *) xr_malloc(len);
                         if (new_url) {
                             snprintf(new_url, len, "%s:%s", scheme, location);
                         }
-                        xr_http_url_free(&parsed);
+                        http_url_free(&parsed);
                     }
                     xr_free(location);
                 } else if (location[0] == '/') {
                     // Relative path: extract scheme://host
                     XrHttpUrl parsed;
-                    if (xr_http_url_parse(current_url, &parsed) == 0) {
+                    if (http_url_parse(current_url, &parsed) == 0) {
                         bool is_v6 = strchr(parsed.host, ':') != NULL;
                         bool default_port = parsed.is_https
                                                 ? parsed.port == XR_HTTP_DEFAULT_HTTPS_PORT
@@ -582,7 +582,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                         size_t len = strlen(parsed.host) + strlen(location) + 32;
                         new_url = (char *) xr_malloc(len);
                         if (!new_url) {
-                            xr_http_url_free(&parsed);
+                            http_url_free(&parsed);
                             xr_free(location);
                             break;
                         }
@@ -594,7 +594,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                                      parsed.is_https ? "https" : "http", parsed.host, parsed.port,
                                      location);
                         }
-                        xr_http_url_free(&parsed);
+                        http_url_free(&parsed);
                     }
                     xr_free(location);
                 } else if (strncmp(location, "http://", 7) == 0 ||
@@ -645,7 +645,7 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
 
     // Parse URL
     XrHttpUrl url;
-    if (xr_http_url_parse(url_str, &url) < 0) {
+    if (http_url_parse(url_str, &url) < 0) {
         result.error = XR_HTTP_ERR_URL_PARSE;
         result.error_msg = xr_strdup("Invalid URL");
         return result;
@@ -965,7 +965,7 @@ cleanup:
     if (request_buf)
         xr_free(request_buf);
     xr_netbuf_release(recv_buf);
-    xr_http_url_free(&url);
+    http_url_free(&url);
 
     return result;
 }
