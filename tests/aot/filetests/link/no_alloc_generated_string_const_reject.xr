@@ -1,0 +1,8 @@
+import os
+
+@no_alloc
+fn xray_no_alloc_os_platform_const_reject() -> string {
+    return os.platform
+}
+
+print(xray_no_alloc_os_platform_const_reject())
