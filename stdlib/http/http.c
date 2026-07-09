@@ -181,7 +181,7 @@ static XrValue result_to_json(XrVMRuntime *X, XrHttpResult *result) {
     // error
     if (result->error != XR_HTTP_OK) {
         xr_json_set_by_key(X, json, "error",
-                           xrs_string_value_c(X, xr_http_error_string(result->error)));
+                           xrs_string_value_c(X, http_client_error_string(result->error)));
     } else {
         xr_json_set_by_key(X, json, "error", xr_null());
     }
@@ -223,7 +223,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
 
     // Initialize config
     XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
+    http_client_request_config_init(&config);
     config.url = url_copy;
     char *method_name = NULL;
 
@@ -238,7 +238,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
             result.error = XR_HTTP_ERR_PARSE;
             result.error_msg = xr_strdup("Invalid HTTP method");
             XrValue ret = result_to_json(X, &result);
-            xr_http_result_free(&result);
+            http_client_result_free(&result);
             URL_COPY_END();
             return ret;
         }
@@ -332,9 +332,9 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
         config.header_count = custom_header_count;
     }
 
-    XrHttpResult result = xr_http_request(X, &config);
+    XrHttpResult result = http_client_request(X, &config);
     XrValue ret = result_to_json(X, &result);
-    xr_http_result_free(&result);
+    http_client_result_free(&result);
 
     // Cleanup
     URL_COPY_END();

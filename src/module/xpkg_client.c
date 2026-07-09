@@ -343,16 +343,16 @@ void xr_pkg_client_set_isolate(XrVMRuntime *isolate) {
 
 static XrHttpResult pkg_http_request_get(const char *url) {
     XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
+    http_client_request_config_init(&config);
     config.url = url;
     config.method = XR_HTTP_METHOD_GET;
-    return xr_http_request(tls_isolate, &config);
+    return http_client_request(tls_isolate, &config);
 }
 
 static XrHttpResult pkg_http_request_post(const char *url, const char *body, size_t body_len,
                                           const char *content_type) {
     XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
+    http_client_request_config_init(&config);
     config.url = url;
     config.method = XR_HTTP_METHOD_POST;
     config.body = body;
@@ -368,7 +368,7 @@ static XrHttpResult pkg_http_request_post(const char *url, const char *body, siz
         config.header_count = 1;
     }
 
-    return xr_http_request(tls_isolate, &config);
+    return http_client_request(tls_isolate, &config);
 }
 
 XrPkgResponse *xr_pkg_http_get(const char *url) {
@@ -396,7 +396,7 @@ XrPkgResponse *xr_pkg_http_get(const char *url) {
         if (result.error_msg) {
             resp->error = xr_strdup(result.error_msg);
         } else if (result.error != XR_HTTP_OK) {
-            resp->error = xr_strdup(xr_http_error_string(result.error));
+            resp->error = xr_strdup(http_client_error_string(result.error));
         } else if (resp->body) {
             // Try to extract error message from response
             char *msg = json_get_string(resp->body, "error");
@@ -410,7 +410,7 @@ XrPkgResponse *xr_pkg_http_get(const char *url) {
         }
     }
 
-    xr_http_result_free(&result);
+    http_client_result_free(&result);
     return resp;
 }
 
@@ -441,11 +441,11 @@ XrPkgResponse *xr_pkg_http_post(const char *url, const char *body, const char *c
         if (result.error_msg) {
             resp->error = xr_strdup(result.error_msg);
         } else if (result.error != XR_HTTP_OK) {
-            resp->error = xr_strdup(xr_http_error_string(result.error));
+            resp->error = xr_strdup(http_client_error_string(result.error));
         }
     }
 
-    xr_http_result_free(&result);
+    http_client_result_free(&result);
     return resp;
 }
 
@@ -461,16 +461,16 @@ bool xr_pkg_http_download_file(const char *url, const char *dest_path) {
     if (result.error != XR_HTTP_OK || result.status_code < 200 || result.status_code >= 300) {
         if (tls_config.verbose) {
             fprintf(stderr, "Download failed: %s\n",
-                    result.error_msg ? result.error_msg : xr_http_error_string(result.error));
+                    result.error_msg ? result.error_msg : http_client_error_string(result.error));
         }
-        xr_http_result_free(&result);
+        http_client_result_free(&result);
         return false;
     }
 
     // Write to file
     FILE *f = fopen(dest_path, "wb");
     if (!f) {
-        xr_http_result_free(&result);
+        http_client_result_free(&result);
         return false;
     }
 
@@ -479,7 +479,7 @@ bool xr_pkg_http_download_file(const char *url, const char *dest_path) {
     }
     fclose(f);
 
-    xr_http_result_free(&result);
+    http_client_result_free(&result);
     return true;
 }
 
@@ -875,7 +875,7 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
     }
 
     XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
+    http_client_request_config_init(&config);
     config.url = url;
     config.method = XR_HTTP_METHOD_POST;
     config.body = body;
@@ -884,7 +884,7 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
     config.header_count = 2;
     config.timeout_ms = tls_config.timeout_ms;
 
-    XrHttpResult result = xr_http_request(tls_isolate, &config);
+    XrHttpResult result = http_client_request(tls_isolate, &config);
     xr_free(body);
 
     bool success =
@@ -911,7 +911,7 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
         fprintf(stderr, "\n");
     }
 
-    xr_http_result_free(&result);
+    http_client_result_free(&result);
     return success;
 }
 
