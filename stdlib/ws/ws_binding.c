@@ -1041,8 +1041,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
     if (!ws_is_upgrade_request(ctx->upgrade_buf)) {
         const char *r400 = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n"
                            "Connection: close\r\n\r\n";
-        ssize_t ret = write(ctx->fd, r400, strlen(r400));
-        (void) ret;
+        (void) ws_write_all(X, ctx->fd, r400, strlen(r400));
         goto fail;
     }
 

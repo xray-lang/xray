@@ -248,6 +248,10 @@ void ws_message_free(XrWsMessage *msg);
 // Get error description for native WS results.
 const char *ws_error_string(XrWsError err);
 
+// Coroutine-aware full write used by WebSocket HTTP handshake responses.
+// Returns 0 only after all bytes are written.
+int ws_write_all(struct XrVMRuntime *X, int fd, const char *buf, size_t len);
+
 /*
  * Optional policy knobs for ws_upgrade_ex.
  *
