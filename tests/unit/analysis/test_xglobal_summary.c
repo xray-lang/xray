@@ -772,6 +772,58 @@ TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_class_a
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_body_anchor) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x1960,
+                      .compiler_semver_hash = 0x1961,
+                      .profile_hash = 0x1962,
+                      .imported_summary_hash = 0x1963,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGenericInstSummary inst = {.generic_inst_id = 1,
+                                 .module_id = 1,
+                                 .specialized_func_id = 99,
+                                 .name_id = 10,
+                                 .type_key = 11,
+                                 .type_arg_key_start = 12,
+                                 .type_arg_count = 1,
+                                 .kind = XG_GENERIC_INST_FUNCTION,
+                                 .flags = XG_GENERIC_INST_CONCRETE_TYPES |
+                                          XG_GENERIC_INST_SPECIALIZED_BODY};
+    XgGenericInstSummary duplicate = inst;
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    duplicate.generic_inst_id = 2;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &duplicate));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic inst specialized body anchor is duplicated"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_lowers_to_aot_class_plans) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x11,
@@ -6848,6 +6900,7 @@ RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_identity);
 RUN_TEST(global_evidence_verifier_rejects_monomorphized_class_without_generic_inst_anchor);
 RUN_TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_class_anchor);
+RUN_TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_body_anchor);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
 RUN_TEST(global_evidence_attaches_callsite_ids_to_xi_calls);
