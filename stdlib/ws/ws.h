@@ -267,9 +267,6 @@ XR_FUNC void xr_ws_message_free(XrWsMessage *msg);
 // Get error description
 XR_FUNC const char *xr_ws_error_string(XrWsError err);
 
-// Validate WebSocket URL syntax without touching DNS or sockets
-XR_FUNC XrWsError xr_ws_url_validate(const char *url);
-
 /* ========== WebSocket Server API ========== */
 
 /*
