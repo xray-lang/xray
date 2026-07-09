@@ -372,7 +372,7 @@ static char *build_request(const XrHttpRequestConfig *config, const XrHttpUrl *u
     // Request line
     const char *method = (config->method_name && config->method_name_len > 0)
                              ? config->method_name
-                             : xr_http_method_to_string(config->method);
+                             : http_method_to_string(config->method);
     p += sprintf(p, "%s %s HTTP/1.1\r\n", method, url->path);
 
     // Custom Headers

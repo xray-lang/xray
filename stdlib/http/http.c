@@ -244,7 +244,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
         }
         config.method_name = method_name;
         config.method_name_len = strlen(method_name);
-        config.method = xr_http_method_from_string(method_name, config.method_name_len);
+        config.method = http_method_from_string(method_name, config.method_name_len);
     }
 
     // Get body
@@ -428,7 +428,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
     if (!method_str)
         return xr_null();
 
-    XrHttpMethod method = xr_http_method_from_string(method_str, method_len);
+    XrHttpMethod method = http_method_from_string(method_str, method_len);
 
     // Get path
     size_t path_len;

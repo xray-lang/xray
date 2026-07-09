@@ -832,7 +832,7 @@ Exit:
 
 /* ========== HTTP Method Parsing ========== */
 
-XrHttpMethod xr_http_method_from_string(const char *str, size_t len) {
+XrHttpMethod http_method_from_string(const char *str, size_t len) {
     if (len < 3)
         return XR_HTTP_METHOD_UNKNOWN;
 
@@ -875,7 +875,7 @@ XrHttpMethod xr_http_method_from_string(const char *str, size_t len) {
     return XR_HTTP_METHOD_UNKNOWN;
 }
 
-const char *xr_http_method_to_string(XrHttpMethod method) {
+const char *http_method_to_string(XrHttpMethod method) {
     static const char *methods[] = {"GET",     "POST",  "PUT",     "DELETE", "HEAD",
                                     "OPTIONS", "PATCH", "CONNECT", "TRACE",  "UNKNOWN"};
     if (method < 0 || method > XR_HTTP_METHOD_UNKNOWN) {

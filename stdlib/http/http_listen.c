@@ -639,7 +639,7 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
         }
     }
 
-    XrHttpMethod method = xr_http_method_from_string(method_str, method_len);
+    XrHttpMethod method = http_method_from_string(method_str, method_len);
     XrRouteParams params;
     params.count = 0;
     void *user_data = NULL;

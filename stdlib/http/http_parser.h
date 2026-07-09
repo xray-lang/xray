@@ -196,12 +196,12 @@ XR_FUNC void xr_http_response_init(XrHttpResponse *resp);
 /*
  * HTTP method string to enum
  */
-XR_FUNC XrHttpMethod xr_http_method_from_string(const char *str, size_t len);
+XrHttpMethod http_method_from_string(const char *str, size_t len);
 
 /*
  * HTTP method enum to string
  */
-XR_FUNC const char *xr_http_method_to_string(XrHttpMethod method);
+const char *http_method_to_string(XrHttpMethod method);
 
 /* ========== HTTP Parse Helper Functions ========== */
 
