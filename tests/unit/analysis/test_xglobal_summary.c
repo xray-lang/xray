@@ -574,6 +574,75 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_identity) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x1930,
+                      .compiler_semver_hash = 0x1931,
+                      .profile_hash = 0x1932,
+                      .imported_summary_hash = 0x1933,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgClassSummary origin = {.module_id = 1,
+                             .decl_id = 1,
+                             .class_id = 1,
+                             .name_id = 10,
+                             .flags = XG_CLASS_GENERIC_SKELETON | XG_CLASS_INFERRED_FINAL,
+                             .decl_kind = XG_DECL_CLASS};
+    XgClassSummary specialized = {.module_id = 1,
+                                  .decl_id = 2,
+                                  .class_id = 2,
+                                  .name_id = 20,
+                                  .flags = XG_CLASS_MONOMORPHIZED | XG_CLASS_INFERRED_FINAL,
+                                  .generic_origin_class_id = 1,
+                                  .generic_origin_name_id = 10,
+                                  .generic_type_key = 99,
+                                  .generic_type_arg_key_start = 12,
+                                  .generic_type_arg_count = 1,
+                                  .decl_kind = XG_DECL_CLASS};
+    XgGenericInstSummary inst = {.generic_inst_id = 1,
+                                 .module_id = 1,
+                                 .origin_class_id = 1,
+                                 .specialized_class_id = 2,
+                                 .name_id = 10,
+                                 .type_key = 11,
+                                 .type_arg_key_start = 12,
+                                 .type_arg_count = 1,
+                                 .kind = XG_GENERIC_INST_CLASS,
+                                 .flags = XG_GENERIC_INST_CONCRETE_TYPES |
+                                          XG_GENERIC_INST_SPECIALIZED_ABI |
+                                          XG_GENERIC_INST_CONCRETE_STORAGE};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &origin));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &specialized));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic inst specialized class identity does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_lowers_to_aot_class_plans) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x11,
@@ -6647,6 +6716,7 @@ RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class);
+RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_identity);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
 RUN_TEST(global_evidence_attaches_callsite_ids_to_xi_calls);

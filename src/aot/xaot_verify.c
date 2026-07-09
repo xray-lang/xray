@@ -805,6 +805,23 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
         if (inst->specialized_class_id != XG_NO_ID &&
             !verify_find_evidence_class(ev, inst->specialized_class_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst specialized class is missing");
+        if (inst->specialized_class_id != XG_NO_ID) {
+            const XgClassSummary *specialized_class =
+                verify_find_evidence_class(ev, inst->specialized_class_id);
+            if ((specialized_class->flags & XG_CLASS_MONOMORPHIZED) == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst specialized class is not monomorphized");
+            if (inst->origin_class_id != XG_NO_ID &&
+                specialized_class->generic_origin_class_id != inst->origin_class_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst specialized class origin does not re-derive");
+            if (specialized_class->generic_origin_name_id != inst->name_id ||
+                specialized_class->generic_type_key != inst->type_key ||
+                specialized_class->generic_type_arg_key_start != inst->type_arg_key_start ||
+                specialized_class->generic_type_arg_count != inst->type_arg_count)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst specialized class identity does not re-derive");
+        }
         if (inst->root_callsite_id != XG_NO_ID &&
             !verify_find_evidence_callsite(ev, inst->root_callsite_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst root callsite is missing");
@@ -2276,6 +2293,19 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (cls->parent_class_id != XG_NO_ID &&
             !verify_find_evidence_class(ev, cls->parent_class_id))
             return set_error(errbuf, errbuf_len, "AOT global evidence class parent is missing");
+        if ((cls->flags & XG_CLASS_GENERIC_SKELETON) != 0 &&
+            (cls->flags & XG_CLASS_MONOMORPHIZED) != 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic class evidence is both skeleton and monomorphized");
+        if ((cls->flags & XG_CLASS_MONOMORPHIZED) != 0) {
+            if (cls->generic_origin_class_id == XG_NO_ID ||
+                !verify_find_evidence_class(ev, cls->generic_origin_class_id))
+                return set_error(errbuf, errbuf_len, "AOT monomorphized class origin is missing");
+            if (cls->generic_origin_name_id == 0 || cls->generic_type_key == 0 ||
+                cls->generic_type_arg_key_start == 0 || cls->generic_type_arg_count == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT monomorphized class generic identity is incomplete");
+        }
         actual_has_subclass = xg_verify_class_has_subclass(ev, cls->class_id);
         flag_has_subclass = (cls->flags & XG_CLASS_HAS_SUBCLASS) != 0;
         expected_inferred_final = !actual_has_subclass;
