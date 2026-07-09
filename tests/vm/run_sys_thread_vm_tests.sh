@@ -148,6 +148,7 @@ UNSAFE_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_unsafe_
 HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_chained_return_alias_join.xr"
 HELPER_FORWARD_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_forward_return_alias_join.xr"
 HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_direct_return_alias_join.xr"
+HELPER_FACTORY_RETURN_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_factory_return_join.xr"
 HELPER_FINALIZER_RETURN_ARG_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_finalizer_return_arg_join.xr"
 CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_const_alias_return_receiver_join.xr"
 TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_top_const_alias_return_receiver_join.xr"
@@ -163,6 +164,7 @@ MULTIPATH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_mu
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_move_alias_warning.xr"
 HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_control_exit_warning.xr"
+HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_factory_return_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -211,6 +213,7 @@ expect_output "unsafe_return_alias_join" "$UNSAFE_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_chained_return_alias_join" "$HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_forward_return_alias_join" "$HELPER_FORWARD_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_direct_return_alias_join" "$HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC" "42"
+expect_output "helper_factory_return_join" "$HELPER_FACTORY_RETURN_JOIN_SRC" "42"
 expect_output "helper_finalizer_return_arg_join" "$HELPER_FINALIZER_RETURN_ARG_JOIN_SRC" "42"
 expect_output "const_alias_return_receiver_join" "$CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC" "42"
 expect_output "top_const_alias_return_receiver_join" "$TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC" "42"
@@ -265,6 +268,9 @@ expect_warning "helper_control_exit_warning" "$HELPER_CONTROL_EXIT_WARNING_SRC" 
     $'try-after\nmatch-after' \
     "Thread handle 't0' from sys.Thread.spawn is not joined or detached before leaving scope" \
     "Thread handle 't1' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "helper_factory_return_warning" "$HELPER_FACTORY_RETURN_WARNING_SRC" \
+    "helper-factory-thread" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]THREAD_SPAWN[[:space:]]' "$WORK/join.dump"; then
