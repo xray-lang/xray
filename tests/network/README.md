@@ -64,16 +64,15 @@ ws.hasError(conn)               // 检查是否有错误
 ```
 
 ### HTTP 服务端
-- `http.createServer()` - 创建服务器
-- `http.route(method, path, handler)` - 添加路由
+- `http.route(method, path, handler|string|Json)` - 添加动态路由或静态响应
+- `http.ws(path, handler)` - 添加 WebSocket upgrade 路由
 - `http.listen(port)` - 监听端口
+- `http.config(options)` - 配置服务器限制和超时
+- `http.serverStats()` - 读取服务器计数
 - `http.stopServer()` - 停止服务器
 
 ### HTTP/2 服务端
-- `http.h2CreateServer(options)` - 创建 HTTP/2 服务器
-- `http.h2Listen()` - 监听
-- `http.h2Stop()` - 停止
-- `http.h2Push()` - Server Push
+- 当前不提供公开 HTTP/2 服务端 API；旧 `h2CreateServer`/`h2Listen`/`h2Stop`/`h2Push` 半成品表面已删除。
 
 ## 响应对象属性
 
@@ -89,5 +88,4 @@ resp.error     // string: 错误信息（如果有）
 
 ## 已知问题
 
-- HTTP URL 编码函数存在内存问题，需要修复
 - 网络测试依赖外部服务，可能因网络原因失败
