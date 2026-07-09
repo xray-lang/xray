@@ -65,11 +65,13 @@ void http_server_free(XrHttpServer *server) {
  * Add route
  */
 void http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
-                          struct XrClosure *handler) {
+                       struct XrClosure *handler) {
     if (!server || !server->router || !path || !handler)
         return;
 
-    // Save closure to array (prevent GC collection)
+    // Reserve a root slot before route insertion, then commit it only after
+    // the router accepts the path. This avoids rooting dead handlers for
+    // invalid or failed route registrations.
     if (server->route_closure_count >= server->route_closure_capacity) {
         int new_cap = server->route_closure_capacity == 0 ? 16 : server->route_closure_capacity * 2;
         struct XrClosure **new_arr = (struct XrClosure **) xr_realloc(
@@ -79,10 +81,11 @@ void http_server_route(XrHttpServer *server, XrHttpMethod method, const char *pa
         server->route_closures = new_arr;
         server->route_closure_capacity = new_cap;
     }
-    server->route_closures[server->route_closure_count++] = handler;
 
-    // Register to router (closure stored in user_data)
-    http_router_add(server->router, method, path, (void *) handler);
+    if (!http_router_add(server->router, method, path, (void *) handler))
+        return;
+
+    server->route_closures[server->route_closure_count++] = handler;
 }
 
 /*
