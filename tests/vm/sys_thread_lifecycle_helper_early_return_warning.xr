@@ -1,0 +1,18 @@
+import sys
+
+fn maybeJoin(t: Thread<int>, skip: bool) {
+    if (skip) {
+        return
+    }
+    print(t.join())
+}
+
+fn run() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    maybeJoin(t, true)
+    print("helper-skip")
+}
+
+run()

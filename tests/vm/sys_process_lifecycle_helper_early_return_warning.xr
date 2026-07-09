@@ -1,0 +1,21 @@
+import sys
+import { Process } from sys
+
+fn maybeWait(p: Process, skip: bool) {
+    if (skip) {
+        return
+    }
+    print(p.wait())
+}
+
+fn run() {
+    var p0 = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (p0 == null) {
+        print("spawn-failed")
+        return
+    }
+    maybeWait(p0!, true)
+    print("process-helper-skip")
+}
+
+run()
