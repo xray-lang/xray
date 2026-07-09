@@ -1,4 +1,6 @@
 status=fail
 contains=@no_alloc function 'xray_no_alloc_stringbuilder_append_reject' allocates via method 'StringBuilder.append'
 contains=xray_no_alloc_stringbuilder_append_reject
+contains=@no_alloc function 'xray_no_alloc_stringbuilder_tostring_reject' allocates via method 'StringBuilder.toString'
+contains=xray_no_alloc_stringbuilder_tostring_reject
 not_contains=CRASH
