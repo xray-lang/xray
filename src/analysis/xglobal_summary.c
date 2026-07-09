@@ -527,6 +527,21 @@ XR_FUNC const uint32_t *xg_static_data_catalog(uint32_t *out_count) {
     return static_data;
 }
 
+XR_FUNC const char *xg_evidence_cache_phase_name(uint32_t phase) {
+    switch ((XgEvidenceCachePhase) phase) {
+        case XG_EVIDENCE_CACHE_DECLARATIONS:
+            return "declarations";
+        case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
+            return "semantic_graph";
+        case XG_EVIDENCE_CACHE_BODY_SUMMARY:
+            return "body_summary";
+        case XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE:
+            return "global_evidence";
+        default:
+            return "unknown";
+    }
+}
+
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key) {
     if (!evidence)
         return;
@@ -1199,6 +1214,118 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
         hash = hash_generic_inst_summary(hash, &evidence->generic_insts[i]);
     return hash == 0 ? 1 : hash;
+}
+
+static uint64_t hash_evidence_cache_key_common(uint64_t hash, const XgGlobalEvidence *evidence,
+                                               uint32_t phase) {
+    hash = hash_u32(hash, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION);
+    hash = hash_u32(hash, phase);
+    if (!evidence)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, evidence->key.module_id);
+    hash = hash_u32(hash, evidence->key.profile);
+    hash = hash_u64(hash, evidence->key.compiler_semver_hash);
+    hash = hash_u64(hash, evidence->key.profile_hash);
+    return hash_u64(hash, evidence->key.imported_summary_hash);
+}
+
+static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *evidence,
+                                                      uint32_t phase) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    if (!evidence)
+        return hash;
+    hash = hash_evidence_cache_key_common(hash, evidence, phase);
+    switch ((XgEvidenceCachePhase) phase) {
+        case XG_EVIDENCE_CACHE_DECLARATIONS:
+            hash = hash_u32(hash, evidence->ndecls);
+            for (uint32_t i = 0; i < evidence->ndecls; i++)
+                hash = hash_decl_summary(hash, &evidence->decls[i]);
+            break;
+        case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
+            hash = hash_u32(hash, evidence->ndecls);
+            hash = hash_u32(hash, evidence->nclasses);
+            hash = hash_u32(hash, evidence->nmethods);
+            hash = hash_u32(hash, evidence->ninterface_impls);
+            hash = hash_u32(hash, evidence->ninterface_extends);
+            hash = hash_u32(hash, evidence->ninterface_methods);
+            for (uint32_t i = 0; i < evidence->ndecls; i++)
+                hash = hash_decl_summary(hash, &evidence->decls[i]);
+            for (uint32_t i = 0; i < evidence->nclasses; i++)
+                hash = hash_class_summary(hash, &evidence->classes[i]);
+            for (uint32_t i = 0; i < evidence->nmethods; i++)
+                hash = hash_method_summary(hash, &evidence->methods[i]);
+            for (uint32_t i = 0; i < evidence->ninterface_impls; i++)
+                hash = hash_interface_impl_summary(hash, &evidence->interface_impls[i]);
+            for (uint32_t i = 0; i < evidence->ninterface_extends; i++)
+                hash = hash_interface_extends_summary(hash, &evidence->interface_extends[i]);
+            for (uint32_t i = 0; i < evidence->ninterface_methods; i++)
+                hash = hash_interface_method_summary(hash, &evidence->interface_methods[i]);
+            break;
+        case XG_EVIDENCE_CACHE_BODY_SUMMARY:
+            hash = hash_u32(hash, evidence->nbodies);
+            hash = hash_u32(hash, evidence->ncallsites);
+            hash = hash_u32(hash, evidence->nlink_deps);
+            hash = hash_u32(hash, evidence->ngeneric_insts);
+            for (uint32_t i = 0; i < evidence->nbodies; i++)
+                hash = hash_body_summary(hash, &evidence->bodies[i]);
+            for (uint32_t i = 0; i < evidence->ncallsites; i++)
+                hash = hash_callsite_summary(hash, &evidence->callsites[i]);
+            for (uint32_t i = 0; i < evidence->nlink_deps; i++)
+                hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
+            for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
+                hash = hash_generic_inst_summary(hash, &evidence->generic_insts[i]);
+            break;
+        case XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE:
+            hash = xg_global_evidence_hash(evidence);
+            break;
+        default:
+            hash = hash_u32(hash, 0);
+            break;
+    }
+    return hash == 0 ? 1 : hash;
+}
+
+XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *evidence,
+                                                        uint32_t phase) {
+    XgEvidenceCacheKey key;
+    memset(&key, 0, sizeof(key));
+    key.schema_version = XG_GLOBAL_EVIDENCE_SCHEMA_VERSION;
+    key.phase = phase;
+    if (!evidence)
+        return key;
+    key.module_id = evidence->key.module_id;
+    key.profile = evidence->key.profile;
+    key.compiler_semver_hash = evidence->key.compiler_semver_hash;
+    key.profile_hash = evidence->key.profile_hash;
+    key.imported_summary_hash = evidence->key.imported_summary_hash;
+    key.content_hash = xg_global_evidence_phase_content_hash(evidence, phase);
+    return key;
+}
+
+XR_FUNC uint64_t xg_evidence_cache_key_hash(const XgEvidenceCacheKey *key) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    if (!key)
+        return hash;
+    hash = hash_u32(hash, key->schema_version);
+    hash = hash_u32(hash, key->phase);
+    hash = hash_u32(hash, key->module_id);
+    hash = hash_u32(hash, key->profile);
+    hash = hash_u64(hash, key->compiler_semver_hash);
+    hash = hash_u64(hash, key->profile_hash);
+    hash = hash_u64(hash, key->imported_summary_hash);
+    hash = hash_u64(hash, key->content_hash);
+    return hash == 0 ? 1 : hash;
+}
+
+XR_FUNC bool xg_evidence_cache_key_matches(const XgEvidenceCacheKey *cached,
+                                           const XgEvidenceCacheKey *expected) {
+    return cached && expected && cached->schema_version == expected->schema_version &&
+           cached->phase == expected->phase && cached->module_id == expected->module_id &&
+           cached->profile == expected->profile &&
+           cached->compiler_semver_hash == expected->compiler_semver_hash &&
+           cached->profile_hash == expected->profile_hash &&
+           cached->imported_summary_hash == expected->imported_summary_hash &&
+           cached->content_hash == expected->content_hash;
 }
 
 typedef const char *(*XgBitNameFn)(uint32_t bit);
