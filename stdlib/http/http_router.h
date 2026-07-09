@@ -49,13 +49,9 @@ typedef struct XrRouterNode {
     XrRouteHandler handler;  // Handler function
     void *user_data;         // User data
 
-    // Static response (optional, for zero-copy response)
-    const char *static_response;
+    // Static response body owned by this route node.
+    char *static_response;
     size_t static_response_len;
-
-    // Prebuilt complete HTTP response (including headers, for ultra-fast response)
-    char *prebuilt_response;
-    size_t prebuilt_response_len;
 
     struct XrRouterNode **children;  // Child node array
     int child_count;
@@ -113,13 +109,10 @@ XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const c
  *
  * Returns: matched handler, NULL if not found
  * params: output parameters, can be NULL
- * prebuilt_response/prebuilt_response_len: prebuilt complete HTTP response (optional)
  */
 XR_FUNC XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method, const char *path,
                                       size_t path_len, XrRouteParams *params, void **user_data,
-                                      const char **static_response, size_t *static_response_len,
-                                      const char **prebuilt_response,
-                                      size_t *prebuilt_response_len);
+                                      const char **static_response, size_t *static_response_len);
 
 /*
  * Add WebSocket upgrade route (handler receives upgraded WS connection).

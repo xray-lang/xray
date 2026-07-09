@@ -448,7 +448,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    // Copy path (needs persistence, will be owned by router)
+    // Copy path because router APIs expect a null-terminated C string.
     char *path_copy = (char *) xr_malloc(path_len + 1);
     if (!path_copy)
         return xr_null();
@@ -466,30 +466,22 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
         // Closure callback - register dynamic route
         XrClosure *closure = xr_value_to_closure(handler_arg);
         xr_http_server_route(ctx->server, method, path_copy, closure);
+        xr_free(path_copy);
     } else if (XR_IS_STRING(handler_arg)) {
-        // Static string response - copy and register
+        // Static string response - router owns its own body copy.
         size_t response_len;
         const char *response = xrs_string_arg(handler_arg, &response_len);
-        if (response && response_len > 0) {
-            // Copy response (will be owned by router)
-            char *response_copy = (char *) xr_malloc(response_len + 1);
-            if (!response_copy) {
-                xr_free(path_copy);
-                return xr_null();
-            }
-            memcpy(response_copy, response, response_len);
-            response_copy[response_len] = '\0';
-
-            xr_http_server_static(ctx->server, method, path_copy, response_copy, response_len);
-        } else {
-            xr_free(path_copy);
-        }
+        if (response)
+            xr_http_server_static(ctx->server, method, path_copy, response, response_len);
+        xr_free(path_copy);
     } else if (xr_value_is_json(handler_arg)) {
-        // Json object - serialize in C layer and register as static prebuilt
+        // Json object - serialize in C layer and register as static response body.
         size_t json_len = 0;
         char *json_str = xr_json_stringify_to_cstr(X, handler_arg, &json_len);
         if (json_str && json_len > 0) {
             xr_http_server_static(ctx->server, method, path_copy, json_str, json_len);
+            xr_free(json_str);
+            xr_free(path_copy);
         } else {
             // json_str was produced by xr_json_stringify_to_cstr which
             // allocates via xr_malloc; release through xr_free.

@@ -15,7 +15,6 @@
 #include "http_router.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 /* ========== Node Operations ========== */
 
@@ -53,8 +52,17 @@ static void node_free(XrRouterNode *node) {
 
     xr_free(node->path);
     xr_free(node->param_name);
-    xr_free(node->prebuilt_response);  // Free prebuilt response
+    xr_free(node->static_response);
     xr_free(node);
+}
+
+static void node_set_endpoint(XrRouterNode *node, XrRouteHandler handler, void *user_data,
+                              char *static_response, size_t static_response_len) {
+    xr_free(node->static_response);
+    node->handler = handler;
+    node->user_data = user_data;
+    node->static_response = static_response;
+    node->static_response_len = static_response_len;
 }
 
 static void node_add_child(XrRouterNode *parent, XrRouterNode *child) {
@@ -90,17 +98,11 @@ static XrRouterNode *find_child(XrRouterNode *node, char c) {
 /* ========== Route Insertion ========== */
 
 static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
-                         XrRouteHandler handler, void *user_data, const char *static_response,
-                         size_t static_response_len, char *prebuilt_response,
-                         size_t prebuilt_response_len) {
+                         XrRouteHandler handler, void *user_data, char *static_response,
+                         size_t static_response_len) {
     // Empty path: set current node's handler
     if (path_len == 0) {
-        node->handler = handler;
-        node->user_data = user_data;
-        node->static_response = static_response;
-        node->static_response_len = static_response_len;
-        node->prebuilt_response = prebuilt_response;
-        node->prebuilt_response_len = prebuilt_response_len;
+        node_set_endpoint(node, handler, user_data, static_response, static_response_len);
         return true;
     }
 
@@ -124,18 +126,13 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
         }
 
         if (param_end >= path_len) {
-            node->param_child->handler = handler;
-            node->param_child->user_data = user_data;
-            node->param_child->static_response = static_response;
-            node->param_child->static_response_len = static_response_len;
-            node->param_child->prebuilt_response = prebuilt_response;
-            node->param_child->prebuilt_response_len = prebuilt_response_len;
+            node_set_endpoint(node->param_child, handler, user_data, static_response,
+                              static_response_len);
             return true;
         }
 
         return insert_route(node->param_child, path + param_end, path_len - param_end, handler,
-                            user_data, static_response, static_response_len, prebuilt_response,
-                            prebuilt_response_len);
+                            user_data, static_response, static_response_len);
     }
 
     // Check wildcard route *wildcard
@@ -154,12 +151,8 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
             }
         }
 
-        node->wildcard_child->handler = handler;
-        node->wildcard_child->user_data = user_data;
-        node->wildcard_child->static_response = static_response;
-        node->wildcard_child->static_response_len = static_response_len;
-        node->wildcard_child->prebuilt_response = prebuilt_response;
-        node->wildcard_child->prebuilt_response_len = prebuilt_response_len;
+        node_set_endpoint(node->wildcard_child, handler, user_data, static_response,
+                          static_response_len);
         return true;
     }
 
@@ -188,8 +181,6 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
                 split->user_data = child->user_data;
                 split->static_response = child->static_response;
                 split->static_response_len = child->static_response_len;
-                split->prebuilt_response = child->prebuilt_response;
-                split->prebuilt_response_len = child->prebuilt_response_len;
                 split->children = child->children;
                 split->child_count = child->child_count;
                 split->child_cap = child->child_cap;
@@ -203,8 +194,6 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
                 child->user_data = NULL;
                 child->static_response = NULL;
                 child->static_response_len = 0;
-                child->prebuilt_response = NULL;
-                child->prebuilt_response_len = 0;
                 child->children = NULL;
                 child->child_count = 0;
                 child->child_cap = 0;
@@ -216,15 +205,13 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
             if (prefix_len < static_end) {
                 // Need to continue down
                 return insert_route(child, path + prefix_len, path_len - prefix_len, handler,
-                                    user_data, static_response, static_response_len,
-                                    prebuilt_response, prebuilt_response_len);
+                                    user_data, static_response, static_response_len);
             }
         }
 
         // Continue with parameter part
         return insert_route(child, path + static_end, path_len - static_end, handler, user_data,
-                            static_response, static_response_len, prebuilt_response,
-                            prebuilt_response_len);
+                            static_response, static_response_len);
     }
 
     XrRouterNode *child = find_child(node, path[0]);
@@ -232,12 +219,7 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
     if (!child) {
         // No matching child node, create new node
         child = node_new(path, path_len);
-        child->handler = handler;
-        child->user_data = user_data;
-        child->static_response = static_response;
-        child->static_response_len = static_response_len;
-        child->prebuilt_response = prebuilt_response;
-        child->prebuilt_response_len = prebuilt_response_len;
+        node_set_endpoint(child, handler, user_data, static_response, static_response_len);
         node_add_child(node, child);
         return true;
     }
@@ -248,8 +230,7 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
     if (prefix_len == child->path_len) {
         // Child node path is prefix of new path
         return insert_route(child, path + prefix_len, path_len - prefix_len, handler, user_data,
-                            static_response, static_response_len, prebuilt_response,
-                            prebuilt_response_len);
+                            static_response, static_response_len);
     }
 
     // Need to split node
@@ -258,8 +239,6 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
     split->user_data = child->user_data;
     split->static_response = child->static_response;
     split->static_response_len = child->static_response_len;
-    split->prebuilt_response = child->prebuilt_response;
-    split->prebuilt_response_len = child->prebuilt_response_len;
     split->children = child->children;
     split->child_count = child->child_count;
     split->child_cap = child->child_cap;
@@ -274,8 +253,6 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
     child->user_data = NULL;
     child->static_response = NULL;
     child->static_response_len = 0;
-    child->prebuilt_response = NULL;
-    child->prebuilt_response_len = 0;
     child->children = NULL;
     child->child_count = 0;
     child->child_cap = 0;
@@ -285,16 +262,10 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
     node_add_child(child, split);
 
     if (prefix_len == path_len) {
-        child->handler = handler;
-        child->user_data = user_data;
-        child->static_response = static_response;
-        child->static_response_len = static_response_len;
-        child->prebuilt_response = prebuilt_response;
-        child->prebuilt_response_len = prebuilt_response_len;
+        node_set_endpoint(child, handler, user_data, static_response, static_response_len);
     } else {
         return insert_route(child, path + prefix_len, path_len - prefix_len, handler, user_data,
-                            static_response, static_response_len, prebuilt_response,
-                            prebuilt_response_len);
+                            static_response, static_response_len);
     }
 
     return true;
@@ -304,25 +275,19 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
 
 static XrRouteHandler find_route(XrRouterNode *node, const char *path, size_t path_len,
                                  XrRouteParams *params, void **user_data,
-                                 const char **static_response, size_t *static_response_len,
-                                 const char **prebuilt_response, size_t *prebuilt_response_len) {
+                                 const char **static_response, size_t *static_response_len) {
     if (!node)
         return NULL;
 
     // Empty path: return current node's handler or static response
     if (path_len == 0) {
-        // Has handler or prebuilt response (static route) means match success
-        if (node->handler || node->prebuilt_response) {
+        if (node->handler || node->static_response) {
             if (user_data)
                 *user_data = node->user_data;
             if (static_response)
                 *static_response = node->static_response;
             if (static_response_len)
                 *static_response_len = node->static_response_len;
-            if (prebuilt_response)
-                *prebuilt_response = node->prebuilt_response;
-            if (prebuilt_response_len)
-                *prebuilt_response_len = node->prebuilt_response_len;
             // Static route has no handler, return special marker
             return node->handler ? node->handler : (XrRouteHandler) 1;
         }
@@ -335,8 +300,7 @@ static XrRouteHandler find_route(XrRouterNode *node, const char *path, size_t pa
         size_t prefix_len = common_prefix_len(child->path, child->path_len, path, path_len);
         if (prefix_len == child->path_len) {
             XrRouteHandler h = find_route(child, path + prefix_len, path_len - prefix_len, params,
-                                          user_data, static_response, static_response_len,
-                                          prebuilt_response, prebuilt_response_len);
+                                          user_data, static_response, static_response_len);
             if (h)
                 return h;
         }
@@ -351,8 +315,7 @@ static XrRouteHandler find_route(XrRouterNode *node, const char *path, size_t pa
         }
 
         XrRouteHandler h = find_route(node->param_child, path + value_end, path_len - value_end,
-                                      params, user_data, static_response, static_response_len,
-                                      prebuilt_response, prebuilt_response_len);
+                                      params, user_data, static_response, static_response_len);
         if (h) {
             // Add parameter
             if (params && params->count < XR_ROUTER_MAX_PARAMS) {
@@ -367,7 +330,8 @@ static XrRouteHandler find_route(XrRouterNode *node, const char *path, size_t pa
     }
 
     // Try wildcard match
-    if (node->wildcard_child && node->wildcard_child->handler) {
+    if (node->wildcard_child &&
+        (node->wildcard_child->handler || node->wildcard_child->static_response)) {
         if (params && params->count < XR_ROUTER_MAX_PARAMS) {
             XrRouteParam *p = &params->params[params->count++];
             p->key = node->wildcard_child->param_name;
@@ -381,11 +345,7 @@ static XrRouteHandler find_route(XrRouterNode *node, const char *path, size_t pa
             *static_response = node->wildcard_child->static_response;
         if (static_response_len)
             *static_response_len = node->wildcard_child->static_response_len;
-        if (prebuilt_response)
-            *prebuilt_response = node->wildcard_child->prebuilt_response;
-        if (prebuilt_response_len)
-            *prebuilt_response_len = node->wildcard_child->prebuilt_response_len;
-        return node->wildcard_child->handler;
+        return node->wildcard_child->handler ? node->wildcard_child->handler : (XrRouteHandler) 1;
     }
 
     return NULL;
@@ -426,49 +386,12 @@ bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path, XrRo
 
     // Insert route (skip leading /)
     return insert_route(router->trees[method], path + 1, strlen(path) - 1, handler, user_data, NULL,
-                        0, NULL, 0);
-}
-
-/*
- * Pre-generate complete HTTP response (including headers)
- * Avoid snprintf on every request, directly memcpy instead
- */
-static char *prebuild_http_response(const char *body, size_t body_len, size_t *out_len) {
-    // Auto-detect Content-Type
-    const char *content_type = "text/plain; charset=utf-8";
-    if (body_len > 0) {
-        if ((body_len >= 9 && strncmp(body, "<!DOCTYPE", 9) == 0) ||
-            (body_len >= 5 && strncmp(body, "<html", 5) == 0) ||
-            (body_len >= 1 && body[0] == '<')) {
-            content_type = "text/html; charset=utf-8";
-        } else if (body_len >= 1 && (body[0] == '{' || body[0] == '[')) {
-            content_type = "application/json; charset=utf-8";
-        }
-    }
-
-    // Pre-allocate large enough buffer
-    size_t header_max = 256;
-    char *buf = (char *) xr_malloc(header_max + body_len);
-    if (!buf)
-        return NULL;
-
-    // Generate complete response
-    int header_len = snprintf(buf, header_max,
-                              "HTTP/1.1 200 OK\r\n"
-                              "Content-Type: %s\r\n"
-                              "Content-Length: %zu\r\n"
-                              "Connection: keep-alive\r\n"
-                              "\r\n",
-                              content_type, body_len);
-
-    memcpy(buf + header_len, body, body_len);
-    *out_len = header_len + body_len;
-    return buf;
+                        0);
 }
 
 bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
                           const char *response, size_t response_len) {
-    if (!router || !path || !response)
+    if (!router || !path || (!response && response_len > 0))
         return false;
     if (method < 0 || method > XR_HTTP_METHOD_UNKNOWN)
         return false;
@@ -479,20 +402,23 @@ bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *pat
         router->trees[method] = node_new("/", 1);
     }
 
-    // Pre-generate complete HTTP response (including headers)
-    size_t prebuilt_len = 0;
-    char *prebuilt = prebuild_http_response(response, response_len, &prebuilt_len);
+    char *body = (char *) xr_malloc(response_len + 1);
+    if (!body)
+        return false;
+    if (response_len > 0)
+        memcpy(body, response, response_len);
+    body[response_len] = '\0';
 
-    // Insert route, save prebuilt response (static route needs no handler, directly return
-    // prebuilt_response)
-    return insert_route(router->trees[method], path + 1, strlen(path) - 1, NULL, NULL, response,
-                        response_len, prebuilt, prebuilt_len);
+    bool ok = insert_route(router->trees[method], path + 1, strlen(path) - 1, NULL, NULL, body,
+                           response_len);
+    if (!ok)
+        xr_free(body);
+    return ok;
 }
 
 XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method, const char *path,
                               size_t path_len, XrRouteParams *params, void **user_data,
-                              const char **static_response, size_t *static_response_len,
-                              const char **prebuilt_response, size_t *prebuilt_response_len) {
+                              const char **static_response, size_t *static_response_len) {
     if (!router || !path)
         return NULL;
     if (method < 0 || method > XR_HTTP_METHOD_UNKNOWN)
@@ -513,8 +439,8 @@ XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method, const char 
         path_len--;
     }
 
-    return find_route(root, path, path_len, params, user_data, static_response, static_response_len,
-                      prebuilt_response, prebuilt_response_len);
+    return find_route(root, path, path_len, params, user_data, static_response,
+                      static_response_len);
 }
 
 /*
@@ -531,5 +457,5 @@ bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data
     }
 
     return insert_route(router->trees[XR_HTTP_METHOD_GET], path + 1, strlen(path) - 1,
-                        XR_ROUTE_HANDLER_WEBSOCKET, user_data, NULL, 0, NULL, 0);
+                        XR_ROUTE_HANDLER_WEBSOCKET, user_data, NULL, 0);
 }
