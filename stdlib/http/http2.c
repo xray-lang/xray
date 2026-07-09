@@ -1020,6 +1020,7 @@ XrH2ErrorCode http2_validate_inbound_frame_header(const XrH2FrameHeader *header)
     switch (header->type) {
         case XR_H2_FRAME_DATA:
         case XR_H2_FRAME_HEADERS:
+        case XR_H2_FRAME_PRIORITY:
         case XR_H2_FRAME_RST_STREAM:
             if (header->stream_id == 0)
                 return XR_H2_PROTOCOL_ERROR;
@@ -1039,10 +1040,17 @@ XrH2ErrorCode http2_validate_inbound_frame_header(const XrH2FrameHeader *header)
             if (!(header->flags & XR_H2_FLAG_END_HEADERS))
                 return XR_H2_PROTOCOL_ERROR;
             break;
+        case XR_H2_FRAME_PRIORITY:
+            if (header->length != 5)
+                return XR_H2_FRAME_SIZE_ERROR;
+            break;
         case XR_H2_FRAME_RST_STREAM:
             if (header->length != 4)
                 return XR_H2_FRAME_SIZE_ERROR;
             break;
+        case XR_H2_FRAME_PUSH_PROMISE:
+        case XR_H2_FRAME_CONTINUATION:
+            return XR_H2_PROTOCOL_ERROR;
         case XR_H2_FRAME_PING:
             if (header->stream_id != 0)
                 return XR_H2_PROTOCOL_ERROR;
