@@ -1415,6 +1415,12 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xi_call.line = 0;
     ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
                   &good.method_dispatch_plans[0]);
+    xi_call.xg_method_id = method.method_id;
+    ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
+                  &good.method_dispatch_plans[0]);
+    xi_call.xg_method_id = 99;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.xg_method_id = method.method_id;
     xi_call.line = 99;
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
     xi_call.line = 0;
@@ -1654,6 +1660,7 @@ TEST(global_evidence_attaches_callsite_ids_to_xi_calls) {
     bundle.nmodules = 1;
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(xi_call->xg_callsite_id, call.callsite_id);
+    ASSERT_EQ_UINT(xi_call->xg_method_id, call.method_id);
     ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call),
                   &bundle.method_dispatch_plans[0]);
 
@@ -1728,6 +1735,7 @@ TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound) {
     bundle.nmodules = 1;
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(xi_call->xg_callsite_id, XG_NO_ID);
+    ASSERT_EQ_UINT(xi_call->xg_method_id, XG_NO_ID);
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call));
 
     xaot_bundle_free(&bundle);
@@ -1819,6 +1827,7 @@ TEST(global_evidence_uses_xi_body_id_to_bind_same_span_callsite) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(owner->xg_body_func_id, call2.owner_func_id);
     ASSERT_EQ_UINT(xi_call->xg_callsite_id, call2.callsite_id);
+    ASSERT_EQ_UINT(xi_call->xg_method_id, call2.method_id);
     const XaotMethodDispatchPlan *plan =
         xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call);
     ASSERT_NOT_NULL(plan);
@@ -6005,6 +6014,7 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     XiValue *xi_call = evidence_find_xi_method_call(use_func);
     ASSERT_NOT_NULL(xi_call);
     ASSERT_EQ_UINT(xi_call->xg_callsite_id, method_call->callsite_id);
+    ASSERT_EQ_UINT(xi_call->xg_method_id, method_call->method_id);
 
     xi_pipeline_result_free(&res);
     xg_global_evidence_free(&ev);

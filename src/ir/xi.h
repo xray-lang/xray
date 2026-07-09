@@ -730,6 +730,7 @@ typedef struct XiValue {
     int16_t uses;            /* use count (for DCE; -1 = not computed) */
     uint32_t line;           /* source line number (0 = unknown) */
     uint32_t xg_callsite_id; /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xg_method_id;   /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     struct XiBlock *block;   /* containing block */
 } XiValue;
 
@@ -747,6 +748,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;
+    dst->xg_method_id = src->xg_method_id;
 }
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {

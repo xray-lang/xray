@@ -152,6 +152,8 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
         if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_callsite_id != 0)
             fprintf(out, " [callsite=%u]", v->xg_callsite_id);
+        if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_method_id != 0)
+            fprintf(out, " [xg_method=%u]", v->xg_method_id);
     } else if (v->op == XI_GET_GLOBAL || v->op == XI_SET_GLOBAL) {
         const char *nm = (const char *) v->aux;
         fprintf(out, " [name=%s]", nm ? nm : "?");
