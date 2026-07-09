@@ -1,0 +1,4 @@
+args=--profile freestanding
+status=fail
+contains=RawMut.of is not supported for static const data
+not_contains=CRASH

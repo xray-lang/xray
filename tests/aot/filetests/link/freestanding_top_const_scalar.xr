@@ -1,3 +1,5 @@
+import mem
+
 @section("__DATA,.xray_magic")
 @weak
 @used
@@ -39,4 +41,9 @@ fn xray_scalar_string_print() -> int {
         return MAGIC
     }
     return 0
+}
+
+@c_export("xray_scalar_null_addr")
+fn xray_scalar_null_addr() -> int {
+    return mem.addressOf(RawPtr<int?>.of(NOTHING))
 }
