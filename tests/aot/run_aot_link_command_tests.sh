@@ -1765,7 +1765,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_TOP_VAR_STATIC_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_STATIC_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
-            "static XrValue xrt_shared[7] = {" \
+            "static XrValue xrt_shared[11] = {" \
             "freestanding-profile/top-var-static: materializes mutable slots as static data"
         expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
             "[0] = XR_FROM_INT(INT64_C(1))," \
@@ -1773,11 +1773,35 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
             "[5] = {.tag = XR_TAG_STR, .ptr = (void *) &xrt_shared_init_str_5}" \
             "freestanding-profile/top-var-static: initializes string var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "[6] = XR_FROM_INT(INT64_C(-3))," \
+            "freestanding-profile/top-var-static: initializes negative integer var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "[7] = XR_FROM_FLOAT(-0x1p-2)," \
+            "freestanding-profile/top-var-static: initializes negative float var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "[8] = XR_FROM_INT(INT64_C(-5))," \
+            "freestanding-profile/top-var-static: initializes intsize var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "[9] = XR_FROM_INT(INT64_C(8))," \
+            "freestanding-profile/top-var-static: initializes uintsize var statically"
         expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" "xrt_shared[0] =" \
             "freestanding-profile/top-var-static: keeps runtime writes to mutable storage"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
             "xrt_shared[0] = XR_FROM_INT(INT64_C(1))" \
             "freestanding-profile/top-var-static: elides module-init integer write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "xrt_shared[6] = XR_FROM_INT(INT64_C(-3))" \
+            "freestanding-profile/top-var-static: elides module-init negative integer write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "xrt_shared[7] = XR_FROM_FLOAT(-0x1p-2)" \
+            "freestanding-profile/top-var-static: elides module-init negative float write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "xrt_shared[8] = XR_FROM_INT(INT64_C(-5))" \
+            "freestanding-profile/top-var-static: elides module-init intsize write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "xrt_shared[9] = XR_FROM_INT(INT64_C(8))" \
+            "freestanding-profile/top-var-static: elides module-init uintsize write"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" "#include \"xrt.h\"" \
             "freestanding-profile/top-var-static: avoids hosted umbrella"
     else
@@ -1812,7 +1836,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_TOP_VAR_DEFAULT_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_DEFAULT_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
-            "static XrValue xrt_shared[5] = {" \
+            "static XrValue xrt_shared[7] = {" \
             "freestanding-profile/top-var-default: materializes default mutable slots as static data"
         expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
             "[0] = XR_FROM_INT(INT64_C(0))," \
@@ -1826,6 +1850,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
             "[3] = XR_NULL_VAL," \
             "freestanding-profile/top-var-default: initializes nullable var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "[4] = XR_NULL_VAL," \
+            "freestanding-profile/top-var-default: initializes nullable string var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "[5] = XR_NULL_VAL," \
+            "freestanding-profile/top-var-default: initializes nullable char var statically"
         expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" "xrt_shared[0] =" \
             "freestanding-profile/top-var-default: keeps runtime writes to mutable storage"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
@@ -1840,6 +1870,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
             "xrt_shared[3] = XR_NULL_VAL" \
             "freestanding-profile/top-var-default: elides module-init nullable default write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "xrt_shared[4] = XR_NULL_VAL" \
+            "freestanding-profile/top-var-default: elides module-init nullable string default write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "xrt_shared[5] = XR_NULL_VAL" \
+            "freestanding-profile/top-var-default: elides module-init nullable char default write"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" "#include \"xrt.h\"" \
             "freestanding-profile/top-var-default: avoids hosted umbrella"
     else
@@ -2827,7 +2863,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_top_var_reject.log" \
     "freestanding-profile: rejects top-level var declarations" \
     "freestanding profile rejects top-level var declaration" \
-    "only int/float/bool/char/string/null consteval initializers, or typed scalar/string/null nullable defaults, are supported as static mutable module storage"
+    "only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, or typed nullable scalar/string/null defaults are supported as static mutable module storage in the current freestanding slice"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_aggregate_reject.xr" \
@@ -2835,7 +2871,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_top_var_aggregate_reject.log" \
     "freestanding-profile: rejects aggregate top-level var declarations" \
     "freestanding profile rejects top-level var declaration" \
-    "only int/float/bool/char/string/null consteval initializers, or typed scalar/string/null nullable defaults, are supported as static mutable module storage"
+    "only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, or typed nullable scalar/string/null defaults are supported as static mutable module storage in the current freestanding slice"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \
