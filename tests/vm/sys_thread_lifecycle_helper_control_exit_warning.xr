@@ -1,0 +1,32 @@
+import sys
+
+fn skipJoinTry(t: Thread<int>) {
+    try {
+        return
+    } catch (e) {
+        print("catch")
+    }
+    print(t.join())
+}
+
+fn skipJoinMatch(t: Thread<int>) {
+    match (0) {
+        0 -> {
+            return
+        }
+        _ -> {}
+    }
+    print(t.join())
+}
+
+var t0 = sys.Thread.spawn(fn() -> int {
+    return 42
+})
+skipJoinTry(t0)
+print("try-after")
+
+var t1 = sys.Thread.spawn(fn() -> int {
+    return 42
+})
+skipJoinMatch(t1)
+print("match-after")

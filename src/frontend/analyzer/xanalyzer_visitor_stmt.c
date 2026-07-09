@@ -724,26 +724,7 @@ static bool xa_lifecycle_lint_node_skips_loop_tail(AstNode *node, const char *lo
 }
 
 static bool xa_lifecycle_lint_node_exits_current_scope(AstNode *node, const char *loop_label) {
-    if (!node)
-        return false;
-    if (xa_lifecycle_lint_break_targets_loop(node, loop_label) || node->type == AST_RETURN_STMT ||
-        node->type == AST_THROW_STMT)
-        return true;
-    AstNode **statements = NULL;
-    int count = 0;
-    if (xa_block_node_statements(node, &statements, &count)) {
-        for (int i = 0; i < count; i++) {
-            if (xa_lifecycle_lint_node_exits_current_scope(statements[i], loop_label))
-                return true;
-        }
-        return false;
-    }
-    if (node->type == AST_IF_STMT) {
-        return xa_lifecycle_lint_node_exits_current_scope(node->as.if_stmt.then_branch,
-                                                          loop_label) ||
-               xa_lifecycle_lint_node_exits_current_scope(node->as.if_stmt.else_branch, loop_label);
-    }
-    return false;
+    return xa_lifecycle_lint_node_skips_loop_tail(node, loop_label);
 }
 
 static bool xa_lifecycle_lint_body_has_non_tail_exit(AstNode *body) {
@@ -2398,6 +2379,32 @@ static bool xa_member_path_is_sys_resource_namespace(AstNode *expr, const char *
            strcmp(ns->as.variable.name, "sys") == 0;
 }
 
+static bool xa_symbol_is_sys_resource_class(XaInferContext *ctx, XaSymbol *sym,
+                                            const char *type_name) {
+    if (!ctx || !ctx->analyzer || !sym || !type_name ||
+        (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    const char *class_name =
+        (links && links->import_member_name) ? links->import_member_name : sym->name;
+    if (!class_name || strcmp(class_name, type_name) != 0)
+        return false;
+    if (links && links->module_name && strcmp(links->module_name, "sys") == 0)
+        return true;
+    return links && links->file_path && strstr(links->file_path, "sys/sys.xr") != NULL;
+}
+
+static bool xa_expr_is_sys_resource_type_namespace(XaInferContext *ctx, AstNode *expr,
+                                                   const char *type_name) {
+    if (xa_member_path_is_sys_resource_namespace(expr, type_name))
+        return true;
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return false;
+    XaSymbol *sym = xa_lookup_visible_symbol(ctx, expr->as.variable.name);
+    return xa_symbol_is_sys_resource_class(ctx, sym, type_name);
+}
+
 static bool xa_process_options_arg_detached_literal(AstNode **args, int arg_count) {
     if (arg_count < 6 || !args || !args[5])
         return false;
@@ -2474,7 +2481,7 @@ static bool xa_expr_is_sys_os_resource_open_call(XaInferContext *ctx, AstNode *e
         return false;
     MemberAccessNode *ma = &callee->as.member_access;
     if (ma->name && strcmp(ma->name, "spawn") == 0 &&
-        xa_member_path_is_sys_resource_namespace(ma->object, "Process")) {
+        xa_expr_is_sys_resource_type_namespace(ctx, ma->object, "Process")) {
         if (xa_process_spawn_detached_literal(ctx, expr))
             return false;
         if (kind_out)
@@ -2482,7 +2489,7 @@ static bool xa_expr_is_sys_os_resource_open_call(XaInferContext *ctx, AstNode *e
         return true;
     }
     if (ma->name && strcmp(ma->name, "open") == 0 &&
-        xa_member_path_is_sys_resource_namespace(ma->object, "Pipe")) {
+        xa_expr_is_sys_resource_type_namespace(ctx, ma->object, "Pipe")) {
         if (kind_out)
             *kind_out = XA_OS_RESOURCE_PIPE;
         return true;
