@@ -197,22 +197,21 @@ XR_FUNC int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_
 
 struct XrHttpHeader;
 
-XR_FUNC XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client);
-XR_FUNC void xr_h2_conn_free(XrH2Conn *conn);
-XR_FUNC int xr_h2_conn_init(XrH2Conn *conn);
-XR_FUNC XrH2Stream *xr_h2_stream_new(XrH2Conn *conn);
+XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client);
+void http2_conn_free(XrH2Conn *conn);
+int http2_conn_init(XrH2Conn *conn);
+XrH2Stream *http2_stream_new(XrH2Conn *conn);
 
 // Send HEADERS frame
-XR_FUNC int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
-                               const size_t *name_lens, const char **values,
-                               const size_t *value_lens, int count, bool end_stream);
+int http2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
+                       const size_t *name_lens, const char **values, const size_t *value_lens,
+                       int count, bool end_stream);
 
 // Send DATA frame
-XR_FUNC int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t len,
-                            bool end_stream);
+int http2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t len,
+                    bool end_stream);
 
 // Receive stream data (blocking)
-XR_FUNC int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data,
-                                   size_t *out_len);
+int http2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data, size_t *out_len);
 
 #endif  // XR_STDLIB_HTTP2_H

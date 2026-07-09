@@ -54,7 +54,7 @@ void http2_client_pool_destroy(XrH2Pool *pool) {
             XrH2PoolEntry *next = entry->next;
 
             if (entry->conn)
-                xr_h2_conn_free(entry->conn);
+                http2_conn_free(entry->conn);
             if (entry->tls_conn) {
                 xr_tls_conn_close(entry->tls_conn);
                 xr_tls_conn_free(entry->tls_conn);
@@ -113,7 +113,7 @@ XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int p
                 pool->hosts[idx] = entry->next;
 
             if (entry->conn)
-                xr_h2_conn_free(entry->conn);
+                http2_conn_free(entry->conn);
             if (entry->tls_conn) {
                 xr_tls_conn_close(entry->tls_conn);
                 xr_tls_conn_free(entry->tls_conn);
@@ -178,7 +178,7 @@ static void h2_pool_entry_free(XrH2PoolEntry *entry) {
         return;
 
     if (entry->conn)
-        xr_h2_conn_free(entry->conn);
+        http2_conn_free(entry->conn);
     if (entry->tls_conn) {
         xr_tls_conn_close(entry->tls_conn);
         xr_tls_conn_free(entry->tls_conn);
@@ -316,7 +316,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
     }
 
     // Create HTTP/2 connection
-    entry->conn = xr_h2_conn_new(fd, entry->tls_conn, true);
+    entry->conn = http2_conn_new(fd, entry->tls_conn, true);
     if (!entry->conn) {
         if (entry->tls_conn) {
             xr_tls_conn_close(entry->tls_conn);
@@ -331,8 +331,8 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
     }
 
     // Send connection preface and SETTINGS
-    if (xr_h2_conn_init(entry->conn) < 0) {
-        xr_h2_conn_free(entry->conn);
+    if (http2_conn_init(entry->conn) < 0) {
+        http2_conn_free(entry->conn);
         if (entry->tls_conn) {
             xr_tls_conn_close(entry->tls_conn);
             xr_tls_conn_free(entry->tls_conn);
@@ -374,7 +374,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     }
 
     // Create stream
-    XrH2Stream *stream = xr_h2_stream_new(entry->conn);
+    XrH2Stream *stream = http2_stream_new(entry->conn);
     if (!stream) {
         http2_client_pool_release(pool, entry);
         xr_http_url_free(&parsed);
@@ -428,7 +428,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
 
     // Send HEADERS frame
     bool has_body = req && req->body && req->body_len > 0;
-    if (xr_h2_send_headers(entry->conn, stream, names, name_lens, values, value_lens,
+    if (http2_send_headers(entry->conn, stream, names, name_lens, values, value_lens,
                            h2_header_count, !has_body) < 0) {
         entry->active_streams--;
         h2_pool_discard_entry(pool, entry);
@@ -438,7 +438,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
 
     // Send DATA frame
     if (has_body) {
-        if (xr_h2_send_data(entry->conn, stream, req->body, req->body_len, true) < 0) {
+        if (http2_send_data(entry->conn, stream, req->body, req->body_len, true) < 0) {
             entry->active_streams--;
             h2_pool_discard_entry(pool, entry);
             xr_http_url_free(&parsed);
@@ -455,7 +455,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
         return NULL;
     }
 
-    if (xr_h2_recv_stream_data(entry->conn, stream, &resp->body, &resp->body_len) < 0) {
+    if (http2_recv_stream_data(entry->conn, stream, &resp->body, &resp->body_len) < 0) {
         xr_free(resp);
         entry->active_streams--;
         h2_pool_discard_entry(pool, entry);

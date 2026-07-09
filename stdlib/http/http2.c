@@ -904,7 +904,7 @@ static void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header
 
 static void xr_h2_stream_hash_free(XrH2StreamHash *hash);
 
-void xr_h2_conn_free(XrH2Conn *conn) {
+void http2_conn_free(XrH2Conn *conn) {
     if (!conn)
         return;
 
@@ -955,7 +955,7 @@ static int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t
 static int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
 static int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
 
-int xr_h2_conn_init(XrH2Conn *conn) {
+int http2_conn_init(XrH2Conn *conn) {
     if (!conn)
         return -1;
 
@@ -1112,7 +1112,7 @@ static void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
 
 /* ========== Stream Management ========== */
 
-XrH2Stream *xr_h2_stream_new(XrH2Conn *conn) {
+XrH2Stream *http2_stream_new(XrH2Conn *conn) {
     if (!conn)
         return NULL;
 
@@ -1402,7 +1402,7 @@ static int xr_h2_recv(XrH2Conn *conn) {
 
 /* ========== Send Frames ========== */
 
-int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
+int http2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
                        const size_t *name_lens, const char **values, const size_t *value_lens,
                        int count, bool end_stream) {
     if (!conn || !stream)
@@ -1440,7 +1440,7 @@ int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
 }
 
 // Receive until stream closes, return response data
-int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data, size_t *out_len) {
+int http2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data, size_t *out_len) {
     if (!conn || !stream)
         return -1;
 
@@ -1465,7 +1465,7 @@ int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data, 
     return 0;
 }
 
-int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t len,
+int http2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t len,
                     bool end_stream) {
     if (!conn || !stream)
         return -1;
@@ -1537,7 +1537,7 @@ static int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t
 
 /* ========== Additional API ========== */
 
-XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
+XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
     XrH2Conn *conn = (XrH2Conn *) xr_calloc(1, sizeof(XrH2Conn));
     if (!conn)
         return NULL;
