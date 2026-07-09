@@ -224,6 +224,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nderived_eq_hash_plans = 0;
     bundle->derived_eq_hash_plan_cap = 0;
 
+    xr_free(bundle->derived_clone_plans);
+    bundle->derived_clone_plans = NULL;
+    bundle->nderived_clone_plans = 0;
+    bundle->derived_clone_plan_cap = 0;
+
     xr_free(bundle->json_shape_plans);
     bundle->json_shape_plans = NULL;
     bundle->njson_shape_plans = 0;
@@ -1643,6 +1648,75 @@ static bool xaot_bundle_add_derived_eq_hash_plans(XaotBundle *bundle,
         if (derive->derive_kind != XG_DERIVE_EQ && derive->derive_kind != XG_DERIVE_HASH)
             continue;
         if (!xaot_bundle_add_derived_eq_hash_plan(bundle, evidence, derive))
+            return false;
+    }
+    return true;
+}
+
+static uint8_t derived_clone_action_for(const XgDeriveSummary *clone) {
+    if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
+        return XAOT_DERIVED_CLONE_REJECT;
+    if (clone->method_count != 0)
+        return XAOT_DERIVED_CLONE_DIRECT_GENERATED_CALL;
+    if (clone->field_count == 0)
+        return XAOT_DERIVED_CLONE_BITWISE_COPY;
+    return XAOT_DERIVED_CLONE_FIELDWISE_COPY;
+}
+
+static uint8_t derived_clone_reason_for(const XgDeriveSummary *clone) {
+    if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
+        return XAOT_CLONE_UNPROVEN_MISSING_CLONE;
+    return XAOT_CLONE_UNPROVEN_NONE;
+}
+
+static uint32_t derived_clone_evidence_for(const XgDeriveSummary *clone) {
+    uint32_t bits = 0;
+    if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
+        return bits;
+    bits |= XAOT_CLONE_EV_CLONE_ROW;
+    if (clone->field_count != 0)
+        bits |= XAOT_CLONE_EV_FIELD_TABLE;
+    if (clone->method_count != 0)
+        bits |= XAOT_CLONE_EV_GENERATED_BODY;
+    return bits;
+}
+
+static bool xaot_bundle_add_derived_clone_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                               const XgDeriveSummary *clone) {
+    XaotDerivedClonePlan *plan;
+    if (!bundle || !evidence || !clone)
+        return false;
+    if (clone->derive_kind != XG_DERIVE_CLONE)
+        return true;
+    if (xaot_bundle_find_derived_clone_plan(bundle, clone->type_key))
+        return true;
+    if (!reserve_plan_array((void **) &bundle->derived_clone_plans, &bundle->derived_clone_plan_cap,
+                            bundle->nderived_clone_plans + 1, sizeof(XaotDerivedClonePlan), 8))
+        return false;
+    plan = &bundle->derived_clone_plans[bundle->nderived_clone_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->owner_decl_id = clone->owner_decl_id;
+    plan->type_key = clone->type_key;
+    plan->clone_derive_id = clone->derive_id;
+    plan->field_start = clone->field_start;
+    plan->field_count = clone->field_count;
+    plan->clone_body_func_id = derive_generated_body_func_id(evidence, clone);
+    plan->transfer_plan_id = XG_NO_ID;
+    plan->action = derived_clone_action_for(clone);
+    plan->evidence = derived_clone_evidence_for(clone);
+    plan->unproven_reason = derived_clone_reason_for(clone);
+    return true;
+}
+
+static bool xaot_bundle_add_derived_clone_plans(XaotBundle *bundle,
+                                                const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nderives; i++) {
+        const XgDeriveSummary *derive = &evidence->derives[i];
+        if (derive->derive_kind != XG_DERIVE_CLONE)
+            continue;
+        if (!xaot_bundle_add_derived_clone_plan(bundle, evidence, derive))
             return false;
     }
     return true;
@@ -3070,6 +3144,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT derived Eq/Hash plan";
         return false;
     }
+    if (!xaot_bundle_add_derived_clone_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT derived Clone plan";
+        return false;
+    }
     if (!xaot_bundle_add_json_shape_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT Json shape plan";
         return false;
@@ -3687,6 +3765,17 @@ XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const
     for (uint32_t i = 0; i < bundle->nderived_eq_hash_plans; i++) {
         if (bundle->derived_eq_hash_plans[i].type_key == type_key)
             return &bundle->derived_eq_hash_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const XaotBundle *bundle,
+                                                                        uint32_t type_key) {
+    if (!bundle || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nderived_clone_plans; i++) {
+        if (bundle->derived_clone_plans[i].type_key == type_key)
+            return &bundle->derived_clone_plans[i];
     }
     return NULL;
 }
@@ -4948,6 +5037,38 @@ static const char *derived_eq_hash_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *derived_clone_action_name(uint8_t action) {
+    switch ((XaotDerivedCloneAction) action) {
+        case XAOT_DERIVED_CLONE_BITWISE_COPY:
+            return "bitwise_copy";
+        case XAOT_DERIVED_CLONE_FIELDWISE_COPY:
+            return "fieldwise_copy";
+        case XAOT_DERIVED_CLONE_DEEP_COPY_PLAN:
+            return "deep_copy_plan";
+        case XAOT_DERIVED_CLONE_DIRECT_GENERATED_CALL:
+            return "direct_generated_call";
+        case XAOT_DERIVED_CLONE_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *derived_clone_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_CLONE_UNPROVEN_NONE:
+            return "none";
+        case XAOT_CLONE_UNPROVEN_MISSING_CLONE:
+            return "missing_clone";
+        case XAOT_CLONE_UNPROVEN_UNSAFE_FIELD:
+            return "unsafe_field";
+        case XAOT_CLONE_UNPROVEN_MISSING_TRANSFER_PLAN:
+            return "missing_transfer_plan";
+        default:
+            return "unknown";
+    }
+}
+
 static const char *json_shape_action_name(uint8_t action) {
     switch ((XaotJsonShapeAction) action) {
         case XAOT_JSON_SHAPE_OPEN_DYNAMIC:
@@ -6185,6 +6306,17 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 derived_eq_hash_action_name(dp->action), dp->field_start,
                 (unsigned) dp->field_count, dp->eq_body_func_id, dp->hash_body_func_id,
                 dp->evidence, derived_eq_hash_unproven_reason_name(dp->unproven_reason));
+    }
+
+    for (uint32_t di = 0; di < bundle->nderived_clone_plans; di++) {
+        const XaotDerivedClonePlan *dp = &bundle->derived_clone_plans[di];
+        fprintf(out,
+                "derived-clone-plan %u decl=%u type=%u clone=%u action=%s fields=%u+%u "
+                "body=%u transfer=%u evidence=0x%x reason=%s\n",
+                di, dp->owner_decl_id, dp->type_key, dp->clone_derive_id,
+                derived_clone_action_name(dp->action), dp->field_start, (unsigned) dp->field_count,
+                dp->clone_body_func_id, dp->transfer_plan_id, dp->evidence,
+                derived_clone_unproven_reason_name(dp->unproven_reason));
     }
 
     for (uint32_t ji = 0; ji < bundle->njson_shape_plans; ji++) {

@@ -3189,6 +3189,56 @@ static bool verify_derived_eq_hash_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static uint8_t verify_derived_clone_action_for(const XgDeriveSummary *clone) {
+    if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
+        return XAOT_DERIVED_CLONE_REJECT;
+    if (clone->method_count != 0)
+        return XAOT_DERIVED_CLONE_DIRECT_GENERATED_CALL;
+    if (clone->field_count == 0)
+        return XAOT_DERIVED_CLONE_BITWISE_COPY;
+    return XAOT_DERIVED_CLONE_FIELDWISE_COPY;
+}
+
+static uint8_t verify_derived_clone_reason_for(const XgDeriveSummary *clone) {
+    if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
+        return XAOT_CLONE_UNPROVEN_MISSING_CLONE;
+    return XAOT_CLONE_UNPROVEN_NONE;
+}
+
+static uint32_t verify_derived_clone_evidence_for(const XgDeriveSummary *clone) {
+    uint32_t evidence = 0;
+    if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
+        return evidence;
+    evidence |= XAOT_CLONE_EV_CLONE_ROW;
+    if (clone->field_count != 0)
+        evidence |= XAOT_CLONE_EV_FIELD_TABLE;
+    if (clone->method_count != 0)
+        evidence |= XAOT_CLONE_EV_GENERATED_BODY;
+    return evidence;
+}
+
+static bool verify_derived_clone_plan_rederives(const XgGlobalEvidence *ev,
+                                                const XaotDerivedClonePlan *plan,
+                                                const XgDeriveSummary *clone, char *errbuf,
+                                                size_t errbuf_len) {
+    if (!ev || !plan || !clone)
+        return set_error(errbuf, errbuf_len, "AOT derived Clone verifier has incomplete input");
+    if (plan->owner_decl_id != clone->owner_decl_id || plan->type_key != clone->type_key ||
+        plan->clone_derive_id != clone->derive_id || plan->field_start != clone->field_start ||
+        plan->field_count != clone->field_count)
+        return set_error(errbuf, errbuf_len, "AOT derived Clone plan identity does not re-derive");
+    if (plan->clone_body_func_id != verify_derive_generated_body_func_id(ev, clone))
+        return set_error(errbuf, errbuf_len, "AOT derived Clone generated body is stale");
+    if (plan->transfer_plan_id != XG_NO_ID)
+        return set_error(errbuf, errbuf_len, "AOT derived Clone transfer plan does not re-derive");
+    if (plan->action != verify_derived_clone_action_for(clone) ||
+        plan->unproven_reason != verify_derived_clone_reason_for(clone))
+        return set_error(errbuf, errbuf_len, "AOT derived Clone action does not re-derive");
+    if (plan->evidence != verify_derived_clone_evidence_for(clone))
+        return set_error(errbuf, errbuf_len, "AOT derived Clone evidence does not re-derive");
+    return true;
+}
+
 static uint8_t verify_json_shape_action_for(const XgJsonShapeSummary *shape) {
     if (!shape)
         return XAOT_JSON_SHAPE_REJECT;
@@ -4019,6 +4069,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_generic_code_size_plans = 0;
     uint32_t expected_derive_plans = 0;
     uint32_t expected_derived_eq_hash_plans = 0;
+    uint32_t expected_derived_clone_plans = 0;
     uint32_t expected_json_shape_plans = 0;
     uint32_t expected_json_access_plans = 0;
     uint32_t expected_record_shape_plans = 0;
@@ -4342,6 +4393,21 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nderived_eq_hash_plans != expected_derived_eq_hash_plans)
         return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        const XgDeriveSummary *derive = &ev->derives[i];
+        const XaotDerivedClonePlan *plan;
+        if (derive->derive_kind != XG_DERIVE_CLONE)
+            continue;
+        expected_derived_clone_plans++;
+        plan = xaot_bundle_find_derived_clone_plan(bundle, derive->type_key);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Clone derive evidence has no plan");
+        if (!verify_derived_clone_plan_rederives(ev, plan, derive, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nderived_clone_plans != expected_derived_clone_plans)
+        return set_error(errbuf, errbuf_len, "AOT derived Clone plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->njson_shapes; i++) {
         const XgJsonShapeSummary *shape = &ev->json_shapes[i];
