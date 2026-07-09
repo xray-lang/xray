@@ -9,12 +9,12 @@ fn run() {
     while (true) {
         var code = p!.tryWait()
         if (code != null) {
+            print(code!)
             break
         }
         code = null
         sys.sleepMs(1)
     }
-    print(true)
 }
 
 run()
