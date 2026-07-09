@@ -3121,6 +3121,28 @@ static uint32_t verify_generic_deepen_inst_evidence(const XgGlobalEvidence *ev,
            XAOT_GENERIC_CODESIZE_EV_GENERIC_INST;
 }
 
+static uint8_t verify_generic_code_size_action_for(const XgGenericCodeSizeSummary *size);
+
+static const XgGenericCodeSizeSummary *
+verify_generic_code_size_for_body_use(const XgGlobalEvidence *ev, XgGenericBodyUseId use_id) {
+    if (!ev || use_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ngeneric_code_sizes; i++) {
+        const XgGenericCodeSizeSummary *size = &ev->generic_code_sizes[i];
+        if (size->body_use_id == use_id)
+            return size;
+    }
+    return NULL;
+}
+
+static bool verify_generic_body_uses_code_size_share_policy(const XgGlobalEvidence *ev,
+                                                            const XgGenericBodyUseSummary *use) {
+    const XgGenericCodeSizeSummary *size =
+        use ? verify_generic_code_size_for_body_use(ev, use->use_id) : NULL;
+    return size &&
+           verify_generic_code_size_action_for(size) == XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY;
+}
+
 static uint8_t verify_generic_body_action_for(const XgGlobalEvidence *ev,
                                               const XgGenericBodyUseSummary *use) {
     const XgGenericInstSummary *inst =
@@ -3129,6 +3151,8 @@ static uint8_t verify_generic_body_action_for(const XgGlobalEvidence *ev,
         return XAOT_GENERIC_BODY_REJECT;
     if ((use->flags & XG_GENERIC_BODY_DYNAMIC_BOUNDARY) != 0)
         return XAOT_GENERIC_BODY_REJECT;
+    if (verify_generic_body_uses_code_size_share_policy(ev, use))
+        return XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
     if (use->specialized_body_func_id != XG_NO_ID ||
         (inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
         return XAOT_GENERIC_BODY_CLONE;
@@ -3145,6 +3169,8 @@ static uint8_t verify_generic_body_reason_for(const XgGlobalEvidence *ev,
         return XAOT_GENERIC_DEEPEN_UNPROVEN_MISSING_CONCRETE_TYPES;
     if ((use->flags & XG_GENERIC_BODY_DYNAMIC_BOUNDARY) != 0)
         return XAOT_GENERIC_DEEPEN_UNPROVEN_DYNAMIC_BOUNDARY;
+    if (verify_generic_body_uses_code_size_share_policy(ev, use))
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD;
     if (verify_generic_body_action_for(ev, use) == XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY)
         return XAOT_GENERIC_DEEPEN_UNPROVEN_NO_SPECIALIZED_BODY;
     return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;

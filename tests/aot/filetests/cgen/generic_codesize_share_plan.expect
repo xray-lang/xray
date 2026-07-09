@@ -1,0 +1,3 @@
+contains=xaot-plan v0
+regex=generic-body-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* owner=[1-9][0-9]* origin_body=[1-9][0-9]* specialized_body=[1-9][0-9]* root_callsite=[1-9][0-9]* type=[1-9][0-9]* type_args=[1-9][0-9]*\+1 size=[6-9][0-9]+ action=share_canonical_body evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=code_size_threshold
+regex=generic-code-size-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* body_use=[1-9][0-9]* origin=[6-9][0-9]+ specialized=[6-9][0-9]+ count=1 threshold=64 action=share_canonical_body evidence=row\+inst\+body_use\+threshold reason=code_size_threshold

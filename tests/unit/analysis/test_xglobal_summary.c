@@ -5938,6 +5938,153 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_generic_code_size_policy_shares_large_body) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x1838,
+                      .compiler_semver_hash = 0x1839,
+                      .profile_hash = 0x183a,
+                      .imported_summary_hash = 0x183b,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary origin_decl = {.module_id = 1,
+                                 .decl_id = 1,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("large"),
+                                 .signature_key = 100,
+                                 .source_span_id = 10};
+    XgDeclSummary owner_decl = {.module_id = 1,
+                                .decl_id = 2,
+                                .kind = XG_DECL_FUNC,
+                                .name_id = xg_name_id("owner"),
+                                .signature_key = 101,
+                                .source_span_id = 11};
+    XgBodySummary origin_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 1,
+                                 .name_id = xg_name_id("large"),
+                                 .signature_key = 100,
+                                 .source_span_id = 10,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0x183c};
+    XgBodySummary owner_body = {.func_id = 2,
+                                .module_id = 1,
+                                .owner_decl_id = 2,
+                                .name_id = xg_name_id("owner"),
+                                .signature_key = 101,
+                                .source_span_id = 11,
+                                .kind = XG_BODY_FUNCTION,
+                                .body_hash = 0x183d,
+                                .callsite_start = 1,
+                                .callsite_count = 1};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 2,
+                              .source_span_id = 12,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_DIRECT_FUNC,
+                              .static_target_func_id = 1,
+                              .arg_count = 1};
+    XgGenericInstSummary inst = {.generic_inst_id = 1,
+                                 .module_id = 1,
+                                 .origin_decl_id = 1,
+                                 .origin_func_id = 1,
+                                 .specialized_func_id = 2,
+                                 .root_callsite_id = 1,
+                                 .name_id = xg_name_id("large"),
+                                 .type_key = 200,
+                                 .type_arg_key_start = 201,
+                                 .type_arg_count = 1,
+                                 .source_span_id = 12,
+                                 .kind = XG_GENERIC_INST_FUNCTION,
+                                 .flags = XG_GENERIC_INST_CONCRETE_TYPES |
+                                          XG_GENERIC_INST_SPECIALIZED_BODY};
+    XgGenericBodyUseSummary body_use = {.use_id = 1,
+                                        .generic_inst_id = 1,
+                                        .module_id = 1,
+                                        .owner_func_id = 2,
+                                        .origin_body_func_id = 1,
+                                        .specialized_body_func_id = 2,
+                                        .root_callsite_id = 1,
+                                        .type_key = 200,
+                                        .type_arg_key_start = 201,
+                                        .type_arg_count = 1,
+                                        .estimated_body_size = 80,
+                                        .flags = XG_GENERIC_BODY_EXPLICIT_ROOT,
+                                        .body_use_hash = 0x183e};
+    XgGenericCodeSizeSummary code_size = {.code_size_id = 1,
+                                          .generic_inst_id = 1,
+                                          .module_id = 1,
+                                          .body_use_id = 1,
+                                          .origin_body_size_estimate = 80,
+                                          .specialized_body_size_estimate = 80,
+                                          .instantiation_count = 1,
+                                          .threshold = 64,
+                                          .flags = 0};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &origin_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &owner_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &origin_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &owner_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_body_use(&ev, &body_use));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_code_size(&ev, &code_size));
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotGenericBodyPlan *body_plan = xaot_bundle_find_generic_body_plan(&bundle, 1);
+    const XaotGenericCodeSizePlan *code_size_plan =
+        xaot_bundle_find_generic_code_size_plan(&bundle, 1);
+    ASSERT_NOT_NULL(body_plan);
+    ASSERT_NOT_NULL(code_size_plan);
+    ASSERT_EQ_UINT(body_plan->action, XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY);
+    ASSERT_EQ_UINT(body_plan->unproven_reason, XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD);
+    ASSERT_EQ_UINT(code_size_plan->action, XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY);
+    ASSERT_EQ_UINT(code_size_plan->unproven_reason,
+                   XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-body-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=share_canonical_body"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=code_size_threshold"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-code-size-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=share_canonical_body"));
+    xr_free(plan_dump);
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+
+    bundle.generic_body_plans[0].action = XAOT_GENERIC_BODY_CLONE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic body plan action does not re-derive"));
+    bundle.generic_body_plans[0].action = XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
+
+    bundle.generic_code_size_plans[0].action = XAOT_GENERIC_CODESIZE_ALLOW_CLONE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic code-size plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
     XgBuildKey key = {.source_hash = 0x17e,
                       .compiler_semver_hash = 0x271,
@@ -9823,6 +9970,7 @@ RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
+RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 TEST_MAIN_END()
