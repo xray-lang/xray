@@ -8,7 +8,7 @@
  * test_http2_huffman.c - HPACK Huffman decoder tests (RFC 7541 Appendix C)
  *
  * KEY CONCEPT:
- *   Drives the public xr_hpack_decode() API with verbatim HPACK header
+ *   Drives the internal http2_hpack_decode() helper with verbatim HPACK header
  *   blocks from RFC 7541 Appendix C.4 / C.6 to catch regressions in the
  *   Huffman decoder (RFC 7541 Section 5.2 / Appendix B).
  */
@@ -58,9 +58,9 @@ TEST(huffman_rfc7541_c_4_1) {
     static const uint8_t block[] = {0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5,
                                     0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff};
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(c.count, 4);
     ASSERT_STR_EQ(c.name[0], ":method");
@@ -71,7 +71,7 @@ TEST(huffman_rfc7541_c_4_1) {
     ASSERT_STR_EQ(c.value[2], "/");
     ASSERT_STR_EQ(c.name[3], ":authority");
     ASSERT_STR_EQ(c.value[3], "www.example.com");
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 /* ========== RFC 7541 C.4.2: Second Request with Huffman ========== */
@@ -81,21 +81,21 @@ TEST(huffman_rfc7541_c_4_2_no_cache) {
     static const uint8_t block[] = {0x82, 0x86, 0x84, 0xbe, 0x58, 0x86,
                                     0xa8, 0xeb, 0x10, 0x64, 0x9c, 0xbf};
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     // Pre-populate :authority in dynamic table via C.4.1 first so index 0xbe
     // (indexed header field 62 = first dynamic entry) resolves.
     static const uint8_t prereq[] = {0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5,
                                      0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff};
     CollectedHeaders c1 = {0};
-    xr_hpack_decode(&table, prereq, sizeof(prereq), collect_header, &c1);
+    http2_hpack_decode(&table, prereq, sizeof(prereq), collect_header, &c1);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(c.count, 5);  // 4 from prior-indexed + cache-control
     // Last header is the newly-added Huffman literal.
     ASSERT_STR_EQ(c.name[4], "cache-control");
     ASSERT_STR_EQ(c.value[4], "no-cache");
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 /* ========== RFC 7541 C.4.3: Third Request (custom-key/value Huffman) ========== */
@@ -106,14 +106,14 @@ TEST(huffman_rfc7541_c_4_3_custom) {
     static const uint8_t block[] = {0x40, 0x88, 0x25, 0xa8, 0x49, 0xe9, 0x5b, 0xa9, 0x7d, 0x7f,
                                     0x89, 0x25, 0xa8, 0x49, 0xe9, 0x5b, 0xb8, 0xe8, 0xb4, 0xbf};
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(c.count, 1);
     ASSERT_STR_EQ(c.name[0], "custom-key");
     ASSERT_STR_EQ(c.value[0], "custom-value");
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 /* ========== RFC 7541 C.6.1: Response with Huffman ========== */
@@ -133,9 +133,9 @@ TEST(huffman_rfc7541_c_6_1_response) {
         0x66, 0xe0, 0x82, 0xa6, 0x2d, 0x1b, 0xff, 0x6e, 0x91, 0x9d, 0x29, 0xad, 0x17, 0x18,
         0x63, 0xc7, 0x8f, 0x0b, 0x97, 0xc8, 0xe9, 0xae, 0x82, 0xae, 0x43, 0xd3};
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(c.count, 4);
     ASSERT_STR_EQ(c.name[0], ":status");
@@ -146,7 +146,7 @@ TEST(huffman_rfc7541_c_6_1_response) {
     ASSERT_STR_EQ(c.value[2], "Mon, 21 Oct 2013 20:13:21 GMT");
     ASSERT_STR_EQ(c.name[3], "location");
     ASSERT_STR_EQ(c.value[3], "https://www.example.com");
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 /* ========== RFC 7541 C.6.3: Third Response content-encoding=gzip ========== */
@@ -157,14 +157,14 @@ TEST(huffman_rfc7541_c_6_3_gzip) {
     //   0x5a 0x83 9bd9 ab
     static const uint8_t block[] = {0x5a, 0x83, 0x9b, 0xd9, 0xab};
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(c.count, 1);
     ASSERT_STR_EQ(c.name[0], "content-encoding");
     ASSERT_STR_EQ(c.value[0], "gzip");
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 /* ========== Huffman padding correctness ========== */
@@ -176,22 +176,22 @@ TEST(huffman_invalid_padding_rejected) {
     // Literal-new-name with Huffman length 1, data 0x00.
     static const uint8_t block[] = {0x40, 0x81, 0x00, 0x81, 0x00};
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, -1);
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 TEST(hpack_index_zero_rejected) {
     static const uint8_t block[] = {0x80};  // Indexed header field, index 0.
     XrHpackTable table;
-    xr_hpack_init(&table, 4096);
+    http2_hpack_init(&table, 4096);
     CollectedHeaders c = {0};
-    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    int rc = http2_hpack_decode(&table, block, sizeof(block), collect_header, &c);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_EQ_INT(c.count, 0);
-    xr_hpack_free(&table);
+    http2_hpack_free(&table);
 }
 
 /* ========== Main ========== */
