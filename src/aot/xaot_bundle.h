@@ -687,7 +687,7 @@ typedef struct XaotDerivedEqHashPlan {
 typedef enum XaotJsonShapeAction {
     XAOT_JSON_SHAPE_OPEN_DYNAMIC = 1,
     XAOT_JSON_SHAPE_HIDDEN_CLASS,
-    XAOT_JSON_SHAPE_RECORD_COMPAT,
+    XAOT_JSON_SHAPE_RECORD_BRIDGE,
     XAOT_JSON_SHAPE_REJECT,
 } XaotJsonShapeAction;
 
@@ -703,7 +703,7 @@ enum {
     XAOT_JSON_EV_STATIC_KEY = 1u << 1,
     XAOT_JSON_EV_RECEIVER_SHAPE = 1u << 2,
     XAOT_JSON_EV_FIELD_INDEX = 1u << 3,
-    XAOT_JSON_EV_RECORD_COMPAT = 1u << 4,
+    XAOT_JSON_EV_RECORD_BRIDGE = 1u << 4,
 };
 
 enum {
