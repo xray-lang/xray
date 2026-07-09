@@ -94,7 +94,7 @@ static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
         if (cg_import_entry_matches_ref(ctx, imp, ref, ref->member_name))
             return cg_import_entry_static_call(imp);
     }
-    return cg_no_static_function_call();
+    return cg_resolve_module_export_static_call(ctx, ref, ref->member_name);
 }
 
 static const XiImportRef *cg_import_ref_for_value(XiCgenCtx *ctx, const XiFunc *f,
