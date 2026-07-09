@@ -1,0 +1,34 @@
+# feature|status|pattern|scope|note
+# status is covered or gap. Covered rows must match at least one current file.
+class_interface_dispatch|covered|interface-abi|tests/aot/filetests/cgen|Class/interface dispatch has verified ABI and direct/type-switch filetests.
+class_vtable_dispatch|covered|class_vtable_dispatch|tests/aot/filetests/cgen|Class vtable target cases are covered by generated-C filetests.
+generic_instantiation|covered|generic-instantiation|tests/aot/filetests/cgen|Generic roots and class clone anchors have plan dump coverage.
+closure_deobjectization|covered|repr=direct_symbol|tests/aot/filetests/cgen|Non-capturing closure direct-symbol representation is covered.
+closure_noescape_stack|covered|repr=stack|tests/aot/filetests/cgen|Capturing noescape closure stack representation is covered.
+transfer_deep_copy_capability|covered|name=deep_copy|tests/aot/filetests/cgen|Transfer evidence drives deep-copy capability planning.
+transfer_backend_consumption|covered|xr_aot_chan_send_transfer|tests/aot/filetests/cgen|CGen consumes transfer plans instead of recomputing mode.
+bounds_span_elision|covered|span-access|tests/aot/filetests/container|Span and bounds plans have dump coverage.
+span_no_clobber|covered|no_clobber|tests/aot/filetests/container|Range proofs record no-clobber evidence.
+span_len_rel_no_overflow|covered|len_rel.*no_overflow|tests/aot/filetests/container|Span view conversion records length relation and overflow facts.
+function_attr_callee_effect|covered|fn-attr .*evidence=0x7|tests/aot/filetests/cgen|Closed-world callee-effect composition is visible in fn-attr plans.
+static_data_materialization|covered|static-data .*action=materialize|tests/aot/filetests/cgen|Static-data plans expose materialization actions.
+metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive metadata reachability has plan coverage.
+derived_eq_hash|covered|kind=hash|tests/aot/filetests/link|Derived Eq/Hash evidence has global evidence coverage.
+json_shape_direct_index|covered|json-access-plan .*action=direct_index|tests/aot/filetests/cgen|Json static member/key access direct-index path is covered.
+json_dynamic_fallback|covered|json-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
+map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/filetests/cgen|Map/Set static key access consumes prehashed lookup plans.
+map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
+backend_contract_dispatch|covered|verified AOT dispatch plan kind|tests/aot/filetests/cgen|Backend contract rejects unsupported verified itable plans.
+evidence_cache_manifest|covered|xg-cache-manifest v1|tests/aot/filetests/link|Global evidence cache manifest is dumped through the official evidence entry.
+value_level_sroa|gap|-|-|Value-level noescape allocation and SROA proof are still pending.
+generic_function_clone|gap|-|-|Specialized function body and ABI clone emission are still pending.
+array_t_concrete_storage|gap|-|-|Array<T> concrete storage clone is still pending.
+interface_object_storage|gap|-|-|Full interface object storage, Array<Interface>, field, return, and capture ABI are still pending.
+itable_emitter|gap|-|-|Verified itable backend emission is still pending after ABI storage lands.
+json_shape_guard|gap|-|-|Json shape-guard plus fallback emission is still pending.
+json_computed_key_guard|gap|-|-|Runtime computed-key direct/guard optimization is still pending.
+map_set_dense_small_lookup|gap|-|-|Specialized dense/small Map/Set backend lookup is still pending.
+user_hash_eq_direct_backend|gap|-|-|User-derived Hash/Eq direct-call backend consumption is still pending.
+fixed_layout_enum_scalarization|gap|-|-|Fixed-layout aggregate and enum scalarization ABI work is still pending.
+summary_payload_cache|gap|-|-|Real declaration/body summary payload cache is still pending.
+cross_package_summary_reuse|gap|-|-|Cross-package export summary reuse is still pending.
