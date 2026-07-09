@@ -790,6 +790,50 @@ def check_docs(root: Path, inventory: dict[str, Any]) -> list[str]:
             errors.append(f"missing stdlib knowledge card for source API module `{module}`")
         if docs_dir.exists() and not (docs_dir / f"{module}.md").exists():
             errors.append(f"missing generated stdlib knowledge markdown for `{module}`")
+    errors.extend(check_language_spec_stdlib_residue(root))
+    return errors
+
+
+def check_language_spec_stdlib_residue(root: Path) -> list[str]:
+    stale_patterns = (
+        (
+            "MCP knowledge fetches API signatures via `xray builtin-dump`",
+            "MCP stdlib docs must describe source-derived inventory, not builtin-dump only",
+        ),
+        (
+            "MCP knowledge 通过 `xray builtin-dump` 获取 API 签名",
+            "MCP stdlib docs must describe source-derived inventory, not builtin-dump only",
+        ),
+        (
+            "**Authoritative native module list**",
+            "stdlib module docs must not call pure-Xray migrated modules native-only",
+        ),
+        (
+            "**真实 native 模块清单**",
+            "stdlib module docs must not call pure-Xray migrated modules native-only",
+        ),
+        (
+            "`http` | HTTP / HTTPS client + server + HTTP/2 | `get` `post` `request` `Server`",
+            "LANGUAGE_SPEC still lists removed HTTP convenience/server facade APIs",
+        ),
+        (
+            "`http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `get` `post` `request` `Server`",
+            "LANGUAGE_SPEC still lists removed HTTP convenience/server facade APIs",
+        ),
+    )
+    checked_paths = (
+        root / "spec/source/sections/016-15-standard-library.md",
+        root / "LANGUAGE_SPEC.md",
+        root / "LANGUAGE_SPEC_CN.md",
+    )
+    errors: list[str] = []
+    for path in checked_paths:
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for pattern, message in stale_patterns:
+            if pattern in text:
+                errors.append(f"{rel(root, path)}: {message}: {pattern!r}")
     return errors
 
 

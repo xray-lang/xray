@@ -8,11 +8,11 @@ order: 016
 
 ## 15. 标准库概览 (Standard Library)
 
-> 真值源：标准库实现与 analyzer builtin metadata。
-> MCP knowledge 通过 `xray builtin-dump` 获取 API 签名并在生成时注入模块知识卡片。
+> 真值源：`stdlib/defs/*.def`、纯 Xray `stdlib/<module>/<module>.xr` export、`stdlib/types/*.xr` native type 声明，以及合并这些来源的 `scripts/gen_api_inventory.py`。
+> MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 native 模块清单**（25 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
+> **真实 stdlib 模块清单**（25 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
@@ -34,8 +34,8 @@ order: 016
 | 模块 | 主题 | 关键 API |
 |--|--|--|
 | `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
-| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `get` `post` `request` `Server` `urlEncode` `urlDecode` |
-| `ws` | WebSocket | 客户端/服务端连接 |
+| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
+| `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL 解析与构造 | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
 
 > DNS 查询通过 `net.lookup(host)` 完成；没有独立的 `dns` 模块。
@@ -140,11 +140,11 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 ## 15. Standard Library Overview
 
-> Source of truth: stdlib implementations and analyzer builtin metadata.
-> MCP knowledge fetches API signatures via `xray builtin-dump` and injects per-module knowledge cards at generation time.
+> Source of truth: `stdlib/defs/*.def`, pure-Xray `stdlib/<module>/<module>.xr` exports, `stdlib/types/*.xr` native type declarations, and `scripts/gen_api_inventory.py`, which merges those sources.
+> MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative native module list** (25 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
+> **Authoritative stdlib module list** (25 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
@@ -166,8 +166,8 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | Module | Topic | Key APIs |
 |--|--|--|
 | `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
-| `http` | HTTP / HTTPS client + server + HTTP/2 | `get` `post` `request` `Server` `urlEncode` `urlDecode` |
-| `ws` | WebSocket | client/server connections |
+| `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
+| `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL parsing and construction | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
 
 > DNS lookups go through `net.lookup(host)`; there is no standalone `dns` module.
