@@ -2104,10 +2104,12 @@ static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, 
 }
 
 static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
+    const ObjectLiteralNode *literal = NULL;
     const AstNode *receiver;
     const AstNode *key;
     const char *static_key;
     XgJsonShapeId shape_id;
+    int field_index = -1;
     XgJsonAccessSummary row;
     if (!bc || !node)
         return;
@@ -2120,11 +2122,21 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
     } else {
         return;
     }
-    shape_id = body_lookup_local_json_shape(bc, receiver, NULL);
-    if (shape_id == XG_NO_ID)
-        return;
     static_key = body_static_string_key(key);
-    if (static_key)
+    shape_id = body_lookup_local_json_shape(bc, receiver, &literal);
+    if (shape_id == XG_NO_ID) {
+        if (!static_key || !body_expr_is_json_without_shape(bc, receiver))
+            return;
+    } else if (static_key) {
+        const XgJsonShapeSummary *shape =
+            xg_global_evidence_find_json_shape(bc->evidence, shape_id);
+        if (!shape || shape->shape_kind == XG_JSON_SHAPE_OPEN)
+            return;
+        field_index = body_object_literal_static_field_index(literal, static_key);
+        if (field_index < 0)
+            return;
+    }
+    if (!static_key && shape_id == XG_NO_ID)
         return;
     memset(&row, 0, sizeof(row));
     row.json_access_id = (XgJsonAccessId) (bc->evidence->njson_accesses + 1);
@@ -2132,12 +2144,17 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
     row.owner_func_id = bc->owner_func_id;
     row.receiver_shape_id = shape_id;
     row.source_span_id = (uint32_t) node->line;
-    row.key_name_id = 0;
+    row.key_name_id = static_key ? hash_name32(static_key) : 0;
     row.result_type_key = 0;
-    row.field_ordinal = UINT16_MAX;
+    row.field_ordinal = field_index >= 0 ? (uint16_t) field_index : UINT16_MAX;
     row.access_kind = mutating ? XG_JSON_ACCESS_INDEX_SET : XG_JSON_ACCESS_INDEX_GET;
-    row.flags = XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
-    row.flags |= XG_JSON_ACCESS_COMPUTED_KEY;
+    row.flags = 0;
+    if (static_key)
+        row.flags |= XG_JSON_ACCESS_STATIC_KEY;
+    else
+        row.flags |= XG_JSON_ACCESS_COMPUTED_KEY;
+    if (shape_id != XG_NO_ID)
+        row.flags |= XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
     if (mutating)
         row.flags |= XG_JSON_ACCESS_MUTATING;
     (void) xg_global_evidence_add_json_access(bc->evidence, &row);

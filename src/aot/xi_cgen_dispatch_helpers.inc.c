@@ -2547,7 +2547,7 @@ static void xicgen_reject_unsupported(XiCgenCtx *ctx, FILE *out, const XiFunc *f
 }
 
 static bool xicgen_verify_json_direct_index_access(XiCgenCtx *ctx, const XiValue *v,
-                                                   uint8_t expected_kind) {
+                                                   uint8_t expected_kind, uint8_t alternate_kind) {
     const XaotBundle *bundle;
     const XaotJsonAccessPlan *plan;
     if (!v || v->xg_json_access_id == 0)
@@ -2563,7 +2563,8 @@ static bool xicgen_verify_json_direct_index_access(XiCgenCtx *ctx, const XiValue
                 v->id, v->xg_json_access_id);
         return false;
     }
-    if (plan->action != XAOT_JSON_ACCESS_DIRECT_INDEX || plan->access_kind != expected_kind ||
+    if (plan->action != XAOT_JSON_ACCESS_DIRECT_INDEX ||
+        (plan->access_kind != expected_kind && plan->access_kind != alternate_kind) ||
         plan->field_ordinal != (uint16_t) v->aux_int) {
         if (ctx)
             ctx->error = true;
@@ -2622,7 +2623,8 @@ static void xicgen_chan_recv_status(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
 static void xicgen_emit_json_set_field_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     XR_DCHECK(v->nargs >= 2, "xicgen_emit_json_set_field_expr: missing operands");
     if (v->op == XI_JSON_SET_F &&
-        (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_SET) ||
+        (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_SET,
+                                                 XG_JSON_ACCESS_INDEX_SET) ||
          !xicgen_verify_record_direct_field_access(ctx, v, XG_RECORD_ACCESS_FIELD_SET))) {
         emit_codegen_abort_expr(out);
         return;
@@ -2695,7 +2697,8 @@ static void xicgen_json_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_json_get_f: missing object");
-    if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET) ||
+    if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET,
+                                                XG_JSON_ACCESS_INDEX_GET) ||
         !xicgen_verify_record_direct_field_access(ctx, v, XG_RECORD_ACCESS_FIELD_GET)) {
         emit_codegen_abort_expr(out);
         return;
@@ -3332,7 +3335,8 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
         xicgen_emit_json_set_field_expr(ctx, out, v);
     } else if (strcmp(bn, "json_get_f") == 0) {
-        if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET) ||
+        if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET,
+                                                    XG_JSON_ACCESS_INDEX_GET) ||
             !xicgen_verify_record_direct_field_access(ctx, v, XG_RECORD_ACCESS_FIELD_GET)) {
             emit_codegen_abort_expr(out);
             return;

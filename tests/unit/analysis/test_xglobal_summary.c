@@ -7601,6 +7601,63 @@ TEST(global_evidence_producer_records_json_computed_key_access) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_json_static_key_index_access) {
+    setup_parser_session();
+    const char *source = "fn updateKey() -> Json {\n"
+                         "    var j: Json = { name: \"ada\", age: 1 }\n"
+                         "    j[\"age\"] = 2\n"
+                         "    return j[\"age\"]\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.njson_shapes, 1);
+    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+
+    bool saw_get = false;
+    bool saw_set = false;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *row = &ev.json_accesses[i];
+        ASSERT_EQ_UINT(row->receiver_shape_id, ev.json_shapes[0].json_shape_id);
+        ASSERT_EQ_UINT(row->field_ordinal, 1);
+        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_STATIC_KEY) != 0);
+        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_COMPUTED_KEY) == 0);
+        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (row->access_kind == XG_JSON_ACCESS_INDEX_GET)
+            saw_get = true;
+        if (row->access_kind == XG_JSON_ACCESS_INDEX_SET)
+            saw_set = true;
+        const XaotJsonAccessPlan *access_plan =
+            xaot_bundle_find_json_access_plan(&bundle, row->json_access_id);
+        ASSERT_NOT_NULL(access_plan);
+        ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
+    }
+    ASSERT_TRUE(saw_get);
+    ASSERT_TRUE(saw_set);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_json_open_shape_access) {
     setup_parser_session();
     const char *source = "fn readName(k: string) -> Json {\n"
@@ -8488,6 +8545,7 @@ RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_records_json_computed_key_access);
+RUN_TEST(global_evidence_producer_records_json_static_key_index_access);
 RUN_TEST(global_evidence_producer_records_json_open_shape_access);
 RUN_TEST(global_evidence_producer_records_json_unknown_shape_access);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_local_alias);
