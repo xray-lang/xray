@@ -1,5 +1,5 @@
 import mem
-import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS, PLAIN_HEADER, PLAIN_PAIR, PLAIN_BYTES, PLAIN_BITS, PLAIN_WORD, PLAIN_LABEL, PLAIN_LABELED, PLAIN_NAMED, PLAIN_NAMED_ROWS, PLAIN_LABELS } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS, PLAIN_HEADER, PLAIN_PAIR, PLAIN_BYTES, PLAIN_MATRIX, PLAIN_BITS, PLAIN_WORD, PLAIN_LABEL, PLAIN_LABELED, PLAIN_NAMED, PLAIN_NAMED_ROWS, PLAIN_LABELS, PLAIN_LABEL_MATRIX } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
@@ -19,6 +19,7 @@ fn imported_static_sum(i: int) -> int {
         (ROWS[i].samples[i] as int) + ROWS[i].weight + GROUPS[i].inner.code +
         GROUPS[i].base + PLAIN_HEADER.magic + PLAIN_HEADER.flags +
         PLAIN_PAIR.0 + PLAIN_PAIR.1 + (PLAIN_BYTES[i] as int) +
+        (PLAIN_MATRIX[i][i] as int) +
         (unsafe { PLAIN_BITS.u } as int) + (unsafe { PLAIN_WORD.b }[i] as int)
 }
 
@@ -40,6 +41,7 @@ fn imported_static_strings(i: int) -> int {
     print(PLAIN_NAMED.label)
     print(PLAIN_NAMED_ROWS[i].label)
     print(PLAIN_LABELS[i])
+    print(PLAIN_LABEL_MATRIX[i][i])
     return NAMED.code + LABELED.1 + NESTED_LABEL.0.0 + NESTED_LABEL.1.1 +
         LABELED_ROWS[i].1 + LABEL_ROWS[i].code + LABEL_GROUPS[i].inner.code +
         LABEL_GROUPS[i].base + PLAIN_LABELED.1 + PLAIN_NAMED.code + PLAIN_NAMED_ROWS[i].code
@@ -64,11 +66,13 @@ fn imported_static_addr() -> int {
         mem.addressOf(RawPtr<PlainHeader>.of(PLAIN_HEADER)) +
         mem.addressOf(RawPtr<(int, int)>.of(PLAIN_PAIR)) +
         mem.addressOf(RawPtr<[uint8; 2]>.of(PLAIN_BYTES)) +
+        mem.addressOf(RawPtr<[[uint8; 2]; 2]>.of(PLAIN_MATRIX)) +
         mem.addressOf(RawPtr<I32Bits>.of(PLAIN_BITS)) +
         mem.addressOf(RawPtr<U32Bytes>.of(PLAIN_WORD)) +
         mem.addressOf(RawPtr<string>.of(PLAIN_LABEL)) +
         mem.addressOf(RawPtr<(string, int)>.of(PLAIN_LABELED)) +
         mem.addressOf(RawPtr<Named>.of(PLAIN_NAMED)) +
         mem.addressOf(RawPtr<[Named; 2]>.of(PLAIN_NAMED_ROWS)) +
-        mem.addressOf(RawPtr<[string; 2]>.of(PLAIN_LABELS))
+        mem.addressOf(RawPtr<[string; 2]>.of(PLAIN_LABELS)) +
+        mem.addressOf(RawPtr<[[string; 2]; 2]>.of(PLAIN_LABEL_MATRIX))
 }
