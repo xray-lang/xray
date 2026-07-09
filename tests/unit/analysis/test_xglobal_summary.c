@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=8 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=9 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=8 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=8 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=8 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=8 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=9 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=9 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=9 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=9 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -7538,6 +7538,138 @@ TEST(global_evidence_records_json_shape_and_access_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_json_codec_plans) {
+    XgBuildKey key = {.source_hash = 12,
+                      .compiler_semver_hash = 23,
+                      .profile_hash = 34,
+                      .imported_summary_hash = 45,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgJsonShapeSummary shape = {.json_shape_id = 1,
+                                .module_id = 1,
+                                .owner_func_id = 7,
+                                .source_span_id = 100,
+                                .type_key = 200,
+                                .field_name_start = 300,
+                                .field_count = 2,
+                                .shape_kind = XG_JSON_SHAPE_SHAPED,
+                                .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE,
+                                .shape_hash = UINT64_C(0x5678)};
+    XgJsonCodecSummary parse = {.codec_id = 1,
+                                .module_id = 1,
+                                .owner_func_id = 7,
+                                .source_span_id = 101,
+                                .codec_kind = XG_JSON_CODEC_PARSE,
+                                .input_type_key = 10,
+                                .field_count = 0};
+    XgJsonCodecSummary decode = {.codec_id = 2,
+                                 .module_id = 1,
+                                 .owner_func_id = 7,
+                                 .source_span_id = 102,
+                                 .codec_kind = XG_JSON_CODEC_DECODE,
+                                 .input_type_key = 20,
+                                 .target_type_key = 30,
+                                 .input_shape_id = 1,
+                                 .output_shape_id = 1,
+                                 .field_count = 2,
+                                 .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE |
+                                          XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
+                                          XG_JSON_CODEC_HAS_TARGET_TYPE};
+    XgJsonCodecSummary encode = {.codec_id = 3,
+                                 .module_id = 1,
+                                 .owner_func_id = 7,
+                                 .source_span_id = 103,
+                                 .codec_kind = XG_JSON_CODEC_ENCODE,
+                                 .input_type_key = 40,
+                                 .output_shape_id = 1,
+                                 .field_count = 2,
+                                 .flags =
+                                     XG_JSON_CODEC_HAS_OUTPUT_SHAPE | XG_JSON_CODEC_USES_DERIVE};
+    XgJsonCodecSummary stringify = {.codec_id = 4,
+                                    .module_id = 1,
+                                    .owner_func_id = 7,
+                                    .source_span_id = 104,
+                                    .codec_kind = XG_JSON_CODEC_STRINGIFY,
+                                    .input_type_key = 50,
+                                    .input_shape_id = 1,
+                                    .field_count = 2,
+                                    .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE};
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &parse));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &decode));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &encode));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &stringify));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "json_codecs=4"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 0 id=1 module=1 func=7 kind=parse"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 1 id=2 module=1 func=7 kind=decode"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 2 id=3 module=1 func=7 kind=encode"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 3 id=4 module=1 func=7 kind=stringify"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_codec_plans, 4);
+    const XaotJsonCodecPlan *parse_plan = xaot_bundle_find_json_codec_plan(&bundle, 1);
+    const XaotJsonCodecPlan *decode_plan = xaot_bundle_find_json_codec_plan(&bundle, 2);
+    const XaotJsonCodecPlan *encode_plan = xaot_bundle_find_json_codec_plan(&bundle, 3);
+    const XaotJsonCodecPlan *stringify_plan = xaot_bundle_find_json_codec_plan(&bundle, 4);
+    ASSERT_NOT_NULL(parse_plan);
+    ASSERT_NOT_NULL(decode_plan);
+    ASSERT_NOT_NULL(encode_plan);
+    ASSERT_NOT_NULL(stringify_plan);
+    ASSERT_EQ_UINT(parse_plan->action, XAOT_JSON_CODEC_PARSE_DOM_BRIDGE);
+    ASSERT_EQ_UINT(decode_plan->action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+    ASSERT_EQ_UINT(encode_plan->action, XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
+    ASSERT_EQ_UINT(stringify_plan->action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
+    ASSERT_EQ_UINT(decode_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_INPUT_SHAPE |
+                                              XAOT_JSON_EV_OUTPUT_SHAPE | XAOT_JSON_EV_TARGET_TYPE);
+    ASSERT_EQ_UINT(encode_plan->evidence,
+                   XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_OUTPUT_SHAPE | XAOT_JSON_EV_DERIVE);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=parse_dom_bridge"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 1 id=2"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=decode_validate_copy"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 2 id=3"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=encode_derive_sidecar"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 3 id=4"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=stringify_dynamic_walk"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.json_codec_plans[1].action = XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json codec plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_records_record_shape_and_access_plans) {
     XgBuildKey key = {.source_hash = 31,
                       .compiler_semver_hash = 32,
@@ -8025,6 +8157,67 @@ TEST(global_evidence_producer_records_explicit_json_shape_access) {
     ASSERT_NOT_NULL(strstr(dump, "json-shape 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "json-access 0 id=1"));
     xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_records_json_codec_calls) {
+    setup_parser_session();
+    const char *source = "type User = { name: string, age: int }\n"
+                         "fn main() {\n"
+                         "    var data: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\")\n"
+                         "    var user: User = Json.decode<User>(data)\n"
+                         "    var encoded: Json = Json.encode(user)\n"
+                         "    var shaped: Json = { name: \"A\", age: 1 }\n"
+                         "    var text: string = Json.stringify(shaped)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.njson_codecs, 4);
+    ASSERT_EQ_UINT(ev.json_codecs[0].codec_kind, XG_JSON_CODEC_PARSE);
+    ASSERT_TRUE((ev.json_codecs[0].flags & XG_JSON_CODEC_STATIC_TEXT) != 0);
+    ASSERT_EQ_UINT(ev.json_codecs[1].codec_kind, XG_JSON_CODEC_DECODE);
+    ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0);
+    ASSERT_NE(ev.json_codecs[1].target_type_key, 0);
+    ASSERT_EQ_UINT(ev.json_codecs[2].codec_kind, XG_JSON_CODEC_ENCODE);
+    ASSERT_NE(ev.json_codecs[2].input_type_key, 0);
+    ASSERT_EQ_UINT(ev.json_codecs[3].codec_kind, XG_JSON_CODEC_STRINGIFY);
+    ASSERT_TRUE((ev.json_codecs[3].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 0"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=parse"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=decode"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=encode"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=stringify"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_codec_plans, 4);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[0].action, XAOT_JSON_CODEC_PARSE_DOM_BRIDGE);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[1].action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[2].action, XAOT_JSON_CODEC_ENCODE_FIELD_TABLE);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[3].action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
+
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -9125,11 +9318,13 @@ RUN_TEST(global_evidence_producer_records_derived_eq_hash_plan);
 RUN_TEST(global_evidence_producer_records_derived_clone_plan);
 RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
+RUN_TEST(global_evidence_records_json_codec_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
+RUN_TEST(global_evidence_producer_records_json_codec_calls);
 RUN_TEST(global_evidence_producer_records_json_computed_key_access);
 RUN_TEST(global_evidence_producer_records_json_static_key_index_access);
 RUN_TEST(global_evidence_producer_records_json_open_shape_access);

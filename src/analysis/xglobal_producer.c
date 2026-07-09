@@ -2234,6 +2234,88 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
     (void) xg_global_evidence_add_json_access(bc->evidence, &row);
 }
 
+static const char *body_json_static_method_name(const AstNode *callee) {
+    const MemberAccessNode *member;
+    if (!callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    member = &callee->as.member_access;
+    if (!member->name || !member->object || member->object->type != AST_VARIABLE ||
+        !member->object->as.variable.name)
+        return NULL;
+    return strcmp(member->object->as.variable.name, "Json") == 0 ? member->name : NULL;
+}
+
+static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
+    const CallExprNode *call;
+    const char *method;
+    XgJsonCodecSummary row;
+    const AstNode *arg0 = NULL;
+    if (!bc || !bc->evidence || !node || node->type != AST_CALL_EXPR)
+        return;
+    call = &node->as.call_expr;
+    method = body_json_static_method_name(call->callee);
+    if (!method)
+        return;
+
+    memset(&row, 0, sizeof(row));
+    row.codec_id = (XgJsonCodecId) (bc->evidence->njson_codecs + 1);
+    row.module_id = bc->module_id;
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = (uint32_t) node->line;
+    if (call->arg_count > 0)
+        arg0 = call->arguments[0];
+    if (arg0)
+        row.input_type_key = body_expr_type_key(bc, arg0);
+
+    if (strcmp(method, "parse") == 0) {
+        row.codec_kind = XG_JSON_CODEC_PARSE;
+        if (arg0 && arg0->type == AST_LITERAL_STRING)
+            row.flags |= XG_JSON_CODEC_STATIC_TEXT;
+    } else if (strcmp(method, "decode") == 0) {
+        row.codec_kind = XG_JSON_CODEC_DECODE;
+        if (call->type_arg_count > 0 && call->type_args && call->type_args[0]) {
+            row.target_type_key = hash_tref32(call->type_args[0]);
+            row.flags |= XG_JSON_CODEC_HAS_TARGET_TYPE;
+        }
+        if (arg0) {
+            const ObjectLiteralNode *literal = NULL;
+            row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
+            if (row.input_shape_id != XG_NO_ID) {
+                const XgJsonShapeSummary *shape =
+                    xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
+                row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
+                if (shape)
+                    row.field_count = shape->field_count;
+            }
+        }
+    } else if (strcmp(method, "encode") == 0) {
+        row.codec_kind = XG_JSON_CODEC_ENCODE;
+        if (arg0) {
+            const ObjectLiteralNode *literal = NULL;
+            row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
+            if (row.input_shape_id != XG_NO_ID)
+                row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
+        }
+    } else if (strcmp(method, "stringify") == 0) {
+        row.codec_kind = XG_JSON_CODEC_STRINGIFY;
+        if (arg0) {
+            const ObjectLiteralNode *literal = NULL;
+            row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
+            if (row.input_shape_id != XG_NO_ID) {
+                const XgJsonShapeSummary *shape =
+                    xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
+                row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
+                if (shape)
+                    row.field_count = shape->field_count;
+            }
+        }
+    } else {
+        return;
+    }
+
+    (void) xg_global_evidence_add_json_codec(bc->evidence, &row);
+}
+
 static uint32_t body_record_type_key(const ObjectLiteralNode *obj) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     static const char tag[] = "Record";
@@ -3440,6 +3522,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR:
+            body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);
             body_add_sequence_method_evidence(bc, node);
             collect_callsite(bc, node);
