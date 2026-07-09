@@ -1,0 +1,11 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_string_char_at_reject' allocates via method 'string.charAt'
+contains=@no_alloc function 'xray_no_alloc_string_byte_at_reject' allocates via method 'string.byteAt'
+contains=@no_alloc function 'xray_no_alloc_string_substring_reject' allocates via method 'string.substring'
+contains=@no_alloc function 'xray_no_alloc_string_lower_reject' allocates via method 'string.toLowerCase'
+contains=@no_alloc function 'xray_no_alloc_string_replace_all_reject' allocates via method 'string.replaceAll'
+contains=@no_alloc function 'xray_no_alloc_string_split_reject' allocates via method 'string.split'
+contains=@no_alloc function 'xray_no_alloc_string_repeat_reject' allocates via method 'string.repeat'
+contains=@no_alloc function 'xray_no_alloc_string_reverse_reject' allocates via method 'string.reverse'
+contains=@no_alloc function 'xray_no_alloc_string_pad_start_reject' allocates via method 'string.padStart'
+not_contains=CRASH

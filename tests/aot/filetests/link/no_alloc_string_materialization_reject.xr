@@ -1,0 +1,54 @@
+@no_alloc
+fn xray_no_alloc_string_char_at_reject(value: string) -> string {
+    return value.charAt(0)
+}
+
+@no_alloc
+fn xray_no_alloc_string_byte_at_reject(value: string) -> bool {
+    return value.byteAt(0) != null
+}
+
+@no_alloc
+fn xray_no_alloc_string_substring_reject(value: string) -> string {
+    return value.substring(0, 1)
+}
+
+@no_alloc
+fn xray_no_alloc_string_lower_reject(value: string) -> string {
+    return value.toLowerCase()
+}
+
+@no_alloc
+fn xray_no_alloc_string_replace_all_reject(value: string) -> string {
+    return value.replaceAll("a", "b")
+}
+
+@no_alloc
+fn xray_no_alloc_string_split_reject(value: string) -> int {
+    return value.split(",").length
+}
+
+@no_alloc
+fn xray_no_alloc_string_repeat_reject(value: string) -> string {
+    return value.repeat(2)
+}
+
+@no_alloc
+fn xray_no_alloc_string_reverse_reject(value: string) -> string {
+    return value.reverse()
+}
+
+@no_alloc
+fn xray_no_alloc_string_pad_start_reject(value: string) -> string {
+    return value.padStart(4, "0")
+}
+
+print(xray_no_alloc_string_char_at_reject("alpha"))
+print(xray_no_alloc_string_byte_at_reject("alpha"))
+print(xray_no_alloc_string_substring_reject("alpha"))
+print(xray_no_alloc_string_lower_reject("ALPHA"))
+print(xray_no_alloc_string_replace_all_reject("alpha"))
+print(xray_no_alloc_string_split_reject("a,b"))
+print(xray_no_alloc_string_repeat_reject("ha"))
+print(xray_no_alloc_string_reverse_reject("abc"))
+print(xray_no_alloc_string_pad_start_reject("7"))
