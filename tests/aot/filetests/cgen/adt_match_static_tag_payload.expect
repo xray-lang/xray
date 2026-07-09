@@ -1,4 +1,5 @@
 contains=enum 0 name=FastResult
+regex=enum-scalar-plan [0-9]+ enum=[0-9]+ action=compact_aggregate evidence=0x[0-9a-f]+ payload_cap=16
 contains=layout_id=
 contains=c_type=xrt_enum_adt_match_static_tag_payload_FastResult_
 c_contains=FastResult

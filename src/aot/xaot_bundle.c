@@ -146,6 +146,36 @@ static void xaot_enum_plan_free(XaotEnumPlan *plan) {
     memset(plan, 0, sizeof(*plan));
 }
 
+static bool xaot_enum_plan_payloads_fit_compact_aggregate(const XaotEnumPlan *plan) {
+    const XiEnumData *ed = plan ? plan->enum_data : NULL;
+    if (!plan || !ed || !ed->is_adt || plan->max_payload > XAOT_ENUM_SCALAR_PAYLOAD_CAP)
+        return false;
+    if (plan->member_count > 0 && !plan->members)
+        return false;
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        const XiEnumMemberData *member = plan->members ? &plan->members[i] : NULL;
+        if (member && member->payload_count > XAOT_ENUM_SCALAR_PAYLOAD_CAP)
+            return false;
+    }
+    return true;
+}
+
+static void xaot_enum_plan_finalize_scalarization(XaotEnumPlan *plan) {
+    if (!plan)
+        return;
+    plan->scalar_payload_cap = XAOT_ENUM_SCALAR_PAYLOAD_CAP;
+    plan->scalar_action = XAOT_ENUM_SCALAR_RUNTIME_AGGREGATE;
+    plan->scalar_evidence = 0;
+    if (plan->layout_id != 0)
+        plan->scalar_evidence |= XAOT_ENUM_SCALAR_EV_LAYOUT_ID;
+    if (!xaot_enum_plan_payloads_fit_compact_aggregate(plan))
+        return;
+    plan->scalar_action = XAOT_ENUM_SCALAR_COMPACT_AGGREGATE;
+    plan->scalar_evidence |= XAOT_ENUM_SCALAR_EV_PAYLOAD_BOUND | XAOT_ENUM_SCALAR_EV_TYPED_UNION;
+    if (plan->type_arg_count > 0)
+        plan->scalar_evidence |= XAOT_ENUM_SCALAR_EV_CONCRETE_TYPES;
+}
+
 static void xaot_class_layout_plan_free(XaotClassLayoutPlan *plan) {
     if (!plan)
         return;
@@ -4241,6 +4271,7 @@ XR_FUNC XaotEnumPlan *xaot_bundle_add_enum_plan(XaotBundle *bundle, const XiEnum
     plan->layout_id = enum_data->layout_id;
     plan->max_payload = enum_data->max_payload > 0 ? (uint16_t) enum_data->max_payload : 0;
     plan->type_arg_count = 0;
+    xaot_enum_plan_finalize_scalarization(plan);
     plan->c_type = xr_strdup(ctype);
     if (!plan->c_type) {
         bundle->nenum_plans--;
@@ -4441,6 +4472,7 @@ static XaotEnumPlan *xaot_bundle_add_concrete_enum_plan(XaotBundle *bundle,
     } else {
         plan->members = enum_data->members;
     }
+    xaot_enum_plan_finalize_scalarization(plan);
     return plan;
 }
 
@@ -6219,6 +6251,17 @@ static const char *transfer_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *enum_scalar_action_name(uint8_t action) {
+    switch ((XaotEnumScalarAction) action) {
+        case XAOT_ENUM_SCALAR_RUNTIME_AGGREGATE:
+            return "runtime_aggregate";
+        case XAOT_ENUM_SCALAR_COMPACT_AGGREGATE:
+            return "compact_aggregate";
+        default:
+            return "unknown";
+    }
+}
+
 static void print_transfer_evidence_bits(FILE *out, uint32_t bits) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -6708,6 +6751,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 ei, safe_str(ed ? ed->name : NULL), ep->module_index, ep->member_count,
                 ep->layout_id, (unsigned) ep->max_payload, (unsigned) ep->type_arg_count,
                 safe_str(ep->c_type));
+        fprintf(out,
+                "enum-scalar-plan %u enum=%u action=%s evidence=0x%x payload_cap=%u "
+                "c_type=%s\n",
+                ei, ei, enum_scalar_action_name(ep->scalar_action), ep->scalar_evidence,
+                (unsigned) ep->scalar_payload_cap, safe_str(ep->c_type));
     }
 
     for (uint32_t ai = 0; ai < bundle->narray_storage_plans; ai++) {

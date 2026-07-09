@@ -50,6 +50,19 @@ typedef struct XaotContainerTypePlan {
     XaotContainerPlan plan;
 } XaotContainerTypePlan;
 
+typedef enum XaotEnumScalarAction {
+    XAOT_ENUM_SCALAR_RUNTIME_AGGREGATE = 0,
+    XAOT_ENUM_SCALAR_COMPACT_AGGREGATE = 1,
+} XaotEnumScalarAction;
+
+enum {
+    XAOT_ENUM_SCALAR_PAYLOAD_CAP = 16,
+    XAOT_ENUM_SCALAR_EV_LAYOUT_ID = 1u << 0,
+    XAOT_ENUM_SCALAR_EV_PAYLOAD_BOUND = 1u << 1,
+    XAOT_ENUM_SCALAR_EV_TYPED_UNION = 1u << 2,
+    XAOT_ENUM_SCALAR_EV_CONCRETE_TYPES = 1u << 3,
+};
+
 typedef struct XaotEnumPlan {
     const XiEnumData *enum_data;
     const XiEnumMemberData *members;
@@ -58,8 +71,11 @@ typedef struct XaotEnumPlan {
     uint32_t module_index;
     uint32_t member_count;
     uint32_t layout_id;
+    uint32_t scalar_evidence;
     uint16_t max_payload;
+    uint16_t scalar_payload_cap;
     uint8_t type_arg_count;
+    uint8_t scalar_action;
     bool owns_members;
     const char *c_type;
 } XaotEnumPlan;

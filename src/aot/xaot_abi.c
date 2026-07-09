@@ -184,25 +184,9 @@ static bool abi_type_can_use_typed_boundary(const XaotBundle *bundle, const XrTy
            type_is_class_instance_ptr_boundary(bundle, type);
 }
 
-enum {
-    XAOT_ENUM_AGG_PAYLOAD_CAP = 16
-};
-
-static bool adt_enum_plan_can_use_compact_return(const XaotEnumPlan *plan) {
-    const XiEnumData *ed = plan ? plan->enum_data : NULL;
-    if (!plan || !ed || !ed->is_adt || plan->max_payload > XAOT_ENUM_AGG_PAYLOAD_CAP)
-        return false;
-    for (uint32_t i = 0; i < plan->member_count; i++) {
-        const XiEnumMemberData *member = plan->members ? &plan->members[i] : NULL;
-        if (member && member->payload_count > XAOT_ENUM_AGG_PAYLOAD_CAP)
-            return false;
-    }
-    return true;
-}
-
 static const XaotEnumPlan *adt_enum_plan_for_type(const XaotBundle *bundle, const XrType *type) {
     const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
-    return (plan && adt_enum_plan_can_use_compact_return(plan)) ? plan : NULL;
+    return (plan && plan->scalar_action == XAOT_ENUM_SCALAR_COMPACT_AGGREGATE) ? plan : NULL;
 }
 
 static bool type_can_use_compact_adt_return(const XaotBundle *bundle, const XrType *type) {
