@@ -1,0 +1,54 @@
+import sys
+
+fn closeReadInIf(flag: bool) {
+    var pipe = sys.Pipe.open()
+    if (flag) {
+        print(pipe!.closeRead())
+    } else {
+        print(pipe!.closeRead())
+    }
+    print(pipe!.closeWrite())
+}
+
+fn closeReadInTernary(flag: bool) {
+    var pipe = sys.Pipe.open()
+    print(flag ? pipe!.closeRead() : pipe!.closeRead())
+    print(pipe!.closeWrite())
+}
+
+fn closeReadInMatch(tag: int) {
+    var pipe = sys.Pipe.open()
+    match (tag) {
+        0 -> {
+            print(pipe!.closeRead())
+        }
+        _ -> {
+            print(pipe!.closeRead())
+        }
+    }
+    print(pipe!.closeWrite())
+}
+
+fn closeReadInLinearLoop() {
+    var pipe = sys.Pipe.open()
+    while (true) {
+        print(pipe!.closeRead())
+        break
+    }
+    print(pipe!.closeWrite())
+}
+
+fn closeReadInNonEmptyForIn() {
+    var pipe = sys.Pipe.open()
+    for (item in [1]) {
+        print(item)
+        print(pipe!.closeRead())
+    }
+    print(pipe!.closeWrite())
+}
+
+closeReadInIf(true)
+closeReadInTernary(false)
+closeReadInMatch(1)
+closeReadInLinearLoop()
+closeReadInNonEmptyForIn()
