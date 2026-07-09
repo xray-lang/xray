@@ -2875,39 +2875,49 @@ XR_FUNC char *xg_global_evidence_cache_payload_dump(const XgGlobalEvidence *evid
     return buf;
 }
 
-XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
-                                               const XgEvidenceCacheKey *expected) {
+XR_FUNC bool xg_evidence_cache_payload_parse(const char *text,
+                                             XgEvidenceCachePayloadInfo *out_info) {
     const char *cursor = text;
-    const char *body;
     char line[320];
-    XgEvidenceCacheKey parsed;
-    uint32_t phase = 0;
-    uint64_t recorded_key_hash = 0;
-    uint64_t recorded_payload_hash = 0;
-    size_t recorded_bytes = 0;
+    XgEvidenceCachePayloadInfo info;
     char trailing = '\0';
-    size_t body_len;
-    if (!text || !expected)
+    if (!text || !out_info)
         return false;
+    memset(&info, 0, sizeof(info));
     if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
                "xg-cache-payload v1 phase=%" SCNu32 " key=%" SCNx64 " payload=%" SCNx64
                " bytes=%zu %c",
-               &phase, &recorded_key_hash, &recorded_payload_hash, &recorded_bytes, &trailing) != 4)
+               &info.phase, &info.key_hash, &info.payload_hash, &info.payload_bytes,
+               &trailing) != 4)
         return false;
-    if (phase != expected->phase || recorded_key_hash != xg_evidence_cache_key_hash(expected))
+    if (!evidence_cache_phase_index(info.phase, NULL))
         return false;
     if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
         return false;
-    if (!xg_evidence_cache_key_parse(line, &parsed) ||
-        !xg_evidence_cache_key_matches(&parsed, expected))
+    if (!xg_evidence_cache_key_parse(line, &info.key))
         return false;
-    body = cursor;
-    body_len = strlen(body);
-    if (body_len != recorded_bytes)
+    if (info.key.phase != info.phase || info.key_hash != xg_evidence_cache_key_hash(&info.key))
         return false;
-    return cache_payload_hash_bytes(body, body_len) == recorded_payload_hash;
+    info.body = cursor;
+    info.body_len = strlen(cursor);
+    if (info.body_len != info.payload_bytes)
+        return false;
+    if (cache_payload_hash_bytes(info.body, info.body_len) != info.payload_hash)
+        return false;
+    *out_info = info;
+    return true;
+}
+
+XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
+                                               const XgEvidenceCacheKey *expected) {
+    XgEvidenceCachePayloadInfo info;
+    if (!expected || !xg_evidence_cache_payload_parse(text, &info))
+        return false;
+    if (info.phase != expected->phase || info.key_hash != xg_evidence_cache_key_hash(expected))
+        return false;
+    return xg_evidence_cache_key_matches(&info.key, expected);
 }
 
 typedef const char *(*XgBitNameFn)(uint32_t bit);

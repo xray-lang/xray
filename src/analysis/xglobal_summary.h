@@ -510,6 +510,16 @@ typedef struct XgEvidenceCacheManifest {
     uint32_t phase_mask;
 } XgEvidenceCacheManifest;
 
+typedef struct XgEvidenceCachePayloadInfo {
+    XgEvidenceCacheKey key;
+    const char *body; /* points into the parsed payload text */
+    size_t body_len;
+    size_t payload_bytes;
+    uint64_t key_hash;
+    uint64_t payload_hash;
+    uint32_t phase;
+} XgEvidenceCachePayloadInfo;
+
 typedef struct XgDeclSummary {
     XgModuleId module_id;
     XgDeclId decl_id;
@@ -1202,6 +1212,8 @@ XR_FUNC bool xg_evidence_cache_manifest_parse(const char *text,
                                               XgEvidenceCacheManifest *out_manifest);
 XR_FUNC char *xg_global_evidence_cache_payload_dump(const XgGlobalEvidence *evidence,
                                                     uint32_t phase);
+XR_FUNC bool xg_evidence_cache_payload_parse(const char *text,
+                                             XgEvidenceCachePayloadInfo *out_info);
 XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
                                                const XgEvidenceCacheKey *expected);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
