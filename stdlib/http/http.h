@@ -50,7 +50,6 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate);
 #include "../../src/coro/xyieldable.h"
 
 // http.listen(port) -> bool (yieldable, accept loop + conn handler spawn)
-XR_FUNC XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs,
-                                          XrValue *result);
+XrCFuncResult http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result);
 
 #endif  // XR_STDLIB_HTTP_H

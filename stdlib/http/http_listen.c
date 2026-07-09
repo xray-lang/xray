@@ -1331,7 +1331,7 @@ static XrCFuncResult http_listen_wait_cont(XrVMRuntime *X, int status, XrValue r
 }
 
 // http.listen(port) -> bool (yieldable)
-XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+XrCFuncResult http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
     if (nargs < 1 || !XR_IS_INT(args[0])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;

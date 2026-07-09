@@ -3347,7 +3347,7 @@ module http {
   fn listen {
     signature: "(port: int): bool"
     doc: "Start HTTP server accept loop"
-    vm: "xr_http_listen_impl"
+    vm: "http_listen_impl"
     vm_binding: "yieldable"
     argc: 1
     arg_spec: ""
