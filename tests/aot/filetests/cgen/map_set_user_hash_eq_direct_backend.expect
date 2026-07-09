@@ -1,2 +1,12 @@
 contains=xaot-plan v0
 regex=hash-eq-plan [0-9]+ id=[0-9]+ type=[1-9][0-9]* kind=user_method action=direct_call eq_derive=0 hash_derive=0 eq_func=[1-9][0-9]* hash_func=[1-9][0-9]* evidence=0x[0-9a-f]+ reason=none
+c_contains=xrt_map_set_user_hash_eq
+c_contains=xrt_map_has_user_hash_eq
+c_contains=xrt_map_get_user_hash_eq_owned
+c_contains=xrt_set_add_user_hash_eq
+c_contains=xrt_set_has_user_hash_eq
+c_contains=xrt_set_delete_user_hash_eq
+c_regex=static uint32_t xrt_user_hash_eq_[0-9a-f]+_hash\(XrValue value\)
+c_regex=static int xrt_user_hash_eq_[0-9a-f]+_eq\(XrValue a, XrValue b\)
+c_not_contains=(xrt_user_hash_fn_t)
+c_not_contains=(xrt_user_eq_fn_t)

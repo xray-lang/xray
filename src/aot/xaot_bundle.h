@@ -1520,6 +1520,8 @@ XR_FUNC const XaotMethodDispatchPlan *
 xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, const XiValue *call);
 XR_FUNC const XiFunc *xaot_bundle_find_method_func(const XaotBundle *bundle, XgMethodId method_id,
                                                    const char **out_module_prefix);
+XR_FUNC const XiFunc *xaot_bundle_find_body_func(const XaotBundle *bundle, XgFuncId body_func_id,
+                                                 const char **out_module_prefix);
 XR_FUNC const XiFunc *xaot_bundle_find_dispatch_target_func(const XaotBundle *bundle,
                                                             const XaotDispatchTargetCase *target,
                                                             const char **out_module_prefix);

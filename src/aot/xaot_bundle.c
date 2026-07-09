@@ -3732,8 +3732,8 @@ static bool xaot_collect_body_func_match(const XiFunc *func, XgFuncId body_func_
     return true;
 }
 
-static const XiFunc *xaot_bundle_find_body_func(const XaotBundle *bundle, XgFuncId body_func_id,
-                                                const char **out_module_prefix) {
+XR_FUNC const XiFunc *xaot_bundle_find_body_func(const XaotBundle *bundle, XgFuncId body_func_id,
+                                                 const char **out_module_prefix) {
     const XiFunc *match = NULL;
     const char *match_prefix = NULL;
     if (out_module_prefix)
