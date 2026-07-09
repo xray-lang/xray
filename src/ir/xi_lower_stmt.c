@@ -3583,6 +3583,7 @@ static XiFunc *lower_parallel_for_body_func(XiLower *parent, ParallelForStmtNode
     xi_lower_init(&child_l, parent->analyzer, parent->isolate);
     child_l.parent = parent;
     child_l.repl_mode = parent->repl_mode;
+    xi_lower_inherit_evidence(&child_l, parent);
 
     child_l.func = xi_func_new(name_buf, child_l.type_unit);
     if (!child_l.func) {

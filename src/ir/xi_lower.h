@@ -35,6 +35,7 @@
 
 struct AstNode;
 struct XaAnalyzer;
+struct XgGlobalEvidence;
 struct XrType;
 struct XrVMRuntime;
 
@@ -208,6 +209,12 @@ typedef struct XiLower {
 
     /* Error tracking */
     bool had_error;
+
+    /* Optional global evidence seed for AOT lowering.  When present, lowering
+     * writes stable body/callsite ids directly into XiFunc/XiValue metadata. */
+    const struct XgGlobalEvidence *global_evidence;
+    uint32_t xg_module_id; /* 1-based module id; 0 means unavailable */
+    uint32_t xg_next_callsite_ordinal;
 } XiLower;
 
 /* ========== API ========== */
@@ -234,6 +241,8 @@ XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node, struct XaAnalyzer
  * through the name-keyed XrGlobalDict instead of the slot-indexed
  * XrSharedArray; cross-input bindings resolve at runtime by name. */
 XR_FUNC XiFunc *xi_lower_program_ex(struct AstNode *program_node, struct XaAnalyzer *analyzer,
-                                    struct XrVMRuntime *isolate, bool repl_mode);
+                                    struct XrVMRuntime *isolate, bool repl_mode,
+                                    const struct XgGlobalEvidence *global_evidence,
+                                    uint32_t module_id);
 
 #endif  // XI_LOWER_H

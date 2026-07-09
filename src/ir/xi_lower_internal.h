@@ -95,6 +95,14 @@ static inline bool xi_top_binding_valid(XiTopBinding b) {
 
 XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMRuntime *isolate);
 XR_FUNC void xi_lower_cleanup(XiLower *l);
+XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent);
+XR_FUNC void xi_lower_bind_module_body_id(XiLower *l);
+XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, const char *name, uint32_t source_span_id);
+XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, const char *class_name,
+                                          const char *method_name, uint32_t source_span_id);
+XR_FUNC uint32_t xi_lower_next_callsite_ordinal(XiLower *l);
+XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const char *method_name,
+                                              uint32_t source_span_id, uint32_t body_ordinal);
 
 /* ========== Function Lowering (xi_lower.c) ========== */
 
@@ -120,7 +128,8 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
 XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
-                                        ClassDeclNode *cd, struct XrType *receiver_type);
+                                        ClassDeclNode *cd, struct XrType *receiver_type,
+                                        uint32_t source_span_id);
 XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
                                                      const char *method_name, bool is_static);
 

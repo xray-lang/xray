@@ -30,6 +30,7 @@
 
 struct AstNode;
 struct XaAnalyzer;
+struct XgGlobalEvidence;
 struct XrVMRuntime;
 struct XrProto;
 
@@ -75,6 +76,9 @@ typedef struct XiPipelineConfig {
                               * (the VM emitter has no XI_STACK_ALLOC handler).
                               * default: false for VM (until RC takeover), true for AOT. */
     bool run_emit;           /* emit bytecode (default: true for VM, false for AOT) */
+    bool run_canonicalize;   /* canonicalize AST before lowering (default: true). AOT driver can
+                              * canonicalize all modules first, build global evidence from that
+                              * canonical AST, then run lowering with this disabled. */
     bool dump_ir_before;     /* dump IR to stderr before optimization */
     bool dump_ir_after;      /* dump IR to stderr after optimization */
     uint64_t budget_ns;      /* optimization time budget in nanoseconds
@@ -86,6 +90,8 @@ typedef struct XiPipelineConfig {
     const char *source_file; /* Source path propagated to emitted XrProto debug info. */
     XiRepPolicy rep_policy;  /* policy for representation boundary insertion */
     XiOptDisableMask disabled_opt_passes;
+    const struct XgGlobalEvidence *global_evidence; /* optional lowering-time evidence seed */
+    uint32_t global_evidence_module_id;             /* 1-based module id in global evidence */
 } XiPipelineConfig;
 
 /* ========== Pipeline Result ========== */
