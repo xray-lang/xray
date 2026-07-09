@@ -108,6 +108,10 @@ XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const c
 XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
                                           uint32_t source_span_id, uint16_t field_ordinal,
                                           uint8_t access_kind);
+XR_FUNC bool xi_lower_json_access_requires_dynamic_lookup(XiLower *l, const char *field_name,
+                                                          uint32_t source_span_id,
+                                                          uint16_t field_ordinal,
+                                                          uint8_t access_kind);
 XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const char *field_name,
                                             uint32_t source_span_id, uint16_t field_ordinal,
                                             uint8_t access_kind);
