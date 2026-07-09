@@ -888,6 +888,124 @@ TEST(map_key_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_KEY_EVIDENCE
 }
 
+TEST(map_set_method_key_access_lowers_with_global_evidence_id) {
+#define REQUIRE_METHOD_KEY_EVIDENCE(cond, msg)                                                     \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "map_set_method_key_access_lowers_with_global_evidence_id: %s\n",      \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn touch() -> int {\n"
+                                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
+                                          "    var seen: Set<string> = #[\"ada\"]\n"
+                                          "    scores.get(\"ada\")\n"
+                                          "    scores.has(\"lin\")\n"
+                                          "    scores.delete(\"lin\")\n"
+                                          "    scores.set(\"ada\", 8)\n"
+                                          "    scores.clear()\n"
+                                          "    seen.has(\"ada\")\n"
+                                          "    seen.add(\"lin\")\n"
+                                          "    seen.delete(\"ada\")\n"
+                                          "    seen.clear()\n"
+                                          "    return 0\n"
+                                          "}\n"
+                                          "print(touch())\n",
+                                          &ev);
+    REQUIRE_METHOD_KEY_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_METHOD_KEY_EVIDENCE(ev.nkey_accesses == 9,
+                                "producer should record Map/Set method key accesses");
+    XiFunc *touch = func_tree_find_func_name(main_func, "touch");
+    REQUIRE_METHOD_KEY_EVIDENCE(touch != NULL, "target function should be present");
+
+    uint32_t bound_ids[16];
+    uint32_t bound_count = 0;
+    uint32_t internal_adds_without_key_access = 0;
+    for (uint32_t b = 0; b < touch->nblocks; b++) {
+        XiBlock *blk = touch->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_CALL_METHOD)
+                continue;
+            const char *method = (const char *) v->aux;
+            if (v->xg_key_access_id != 0) {
+                REQUIRE_METHOD_KEY_EVIDENCE(bound_count < 16, "too many bound key accesses");
+                bound_ids[bound_count++] = v->xg_key_access_id;
+            } else if (method && strcmp(method, "add") == 0) {
+                internal_adds_without_key_access++;
+            }
+        }
+    }
+    REQUIRE_METHOD_KEY_EVIDENCE(bound_count == 9,
+                                "every source Map/Set method key access should bind evidence");
+    REQUIRE_METHOD_KEY_EVIDENCE(internal_adds_without_key_access >= 1,
+                                "Set literal population should not consume method evidence");
+
+    uint32_t map_gets = 0;
+    uint32_t map_sets = 0;
+    uint32_t map_has = 0;
+    uint32_t map_deletes = 0;
+    uint32_t map_clears = 0;
+    uint32_t set_adds = 0;
+    uint32_t set_has = 0;
+    uint32_t set_deletes = 0;
+    uint32_t set_clears = 0;
+    for (uint32_t i = 0; i < bound_count; i++) {
+        const XgKeyAccessSummary *row = NULL;
+        for (uint32_t j = 0; j < ev.nkey_accesses; j++) {
+            if (ev.key_accesses[j].access_id == bound_ids[i]) {
+                row = &ev.key_accesses[j];
+                break;
+            }
+        }
+        REQUIRE_METHOD_KEY_EVIDENCE(row != NULL, "bound id should point at evidence row");
+        REQUIRE_METHOD_KEY_EVIDENCE(row->op != XG_KEY_ACCESS_INDEX_GET,
+                                    "method call should not bind index-get evidence");
+        if (row->container_kind == XG_MAP_CONTAINER_MAP) {
+            if (row->op == XG_KEY_ACCESS_GET)
+                map_gets++;
+            else if (row->op == XG_KEY_ACCESS_SET)
+                map_sets++;
+            else if (row->op == XG_KEY_ACCESS_HAS)
+                map_has++;
+            else if (row->op == XG_KEY_ACCESS_DELETE)
+                map_deletes++;
+            else if (row->op == XG_KEY_ACCESS_CLEAR)
+                map_clears++;
+        } else if (row->container_kind == XG_MAP_CONTAINER_SET) {
+            if (row->op == XG_KEY_ACCESS_ADD)
+                set_adds++;
+            else if (row->op == XG_KEY_ACCESS_HAS)
+                set_has++;
+            else if (row->op == XG_KEY_ACCESS_DELETE)
+                set_deletes++;
+            else if (row->op == XG_KEY_ACCESS_CLEAR)
+                set_clears++;
+        }
+    }
+    REQUIRE_METHOD_KEY_EVIDENCE(map_gets == 1, "Map.get evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(map_sets == 1, "Map.set evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(map_has == 1, "Map.has evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(map_deletes == 1, "Map.delete evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(map_clears == 1, "Map.clear evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(set_adds == 1, "Set.add evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(set_has == 1, "Set.has evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(set_deletes == 1, "Set.delete evidence should bind once");
+    REQUIRE_METHOD_KEY_EVIDENCE(set_clears == 1, "Set.clear evidence should bind once");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_METHOD_KEY_EVIDENCE
+}
+
 TEST(nested_function) {
     XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
                              "    return a + b\n"
@@ -2019,6 +2137,7 @@ int main(void) {
     run_object_literal();
     run_json_access_lowers_with_global_evidence_id();
     run_map_key_access_lowers_with_global_evidence_id();
+    run_map_set_method_key_access_lowers_with_global_evidence_id();
     run_nested_function();
     run_function_expr();
     run_multiple_functions();
