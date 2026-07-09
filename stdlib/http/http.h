@@ -40,7 +40,7 @@ typedef struct XrHttpContext {
 } XrHttpContext;
 
 // Get or create HTTP context for this Isolate
-XR_FUNC XrHttpContext *xr_http_get_context(XrVMRuntime *X);
+XrHttpContext *http_get_context(XrVMRuntime *X);
 
 // Load HTTP module
 XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate);

@@ -1339,7 +1339,7 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
 
     int port = (int) XR_TO_INT(args[0]);
 
-    XrHttpContext *ctx = xr_http_get_context(X);
+    XrHttpContext *ctx = http_get_context(X);
     if (!ctx) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;

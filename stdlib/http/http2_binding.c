@@ -173,7 +173,7 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    XrHttpContext *ctx = xr_http_get_context(X);
+    XrHttpContext *ctx = http_get_context(X);
     if (!ctx)
         return xr_null();
     if (!ctx->h2_client_pool) {

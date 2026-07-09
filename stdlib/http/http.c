@@ -350,7 +350,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
 /* ========== HTTP Context Management ========== */
 
 // Get HTTP context (stored in module's native_handle)
-XrHttpContext *xr_http_get_context(XrVMRuntime *X) {
+XrHttpContext *http_get_context(XrVMRuntime *X) {
     if (!X || !X->module_registry)
         return NULL;
 
@@ -408,7 +408,7 @@ static void http_context_destroy(void *handle) {
 // http.route(method, path, handler) - Register route
 // handler: function or static string
 static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
+    XrHttpContext *ctx = http_get_context(X);
     if (argc < 3 || !ctx) {
         return xr_null();
     }
@@ -491,7 +491,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
 // When a GET request with Upgrade:websocket hits this path, the connection
 // is upgraded in-place and handler(wsConn) is called.
 static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
+    XrHttpContext *ctx = http_get_context(X);
     if (argc < 2 || !ctx)
         return xr_null();
 
@@ -547,7 +547,7 @@ static XrValue http_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    XrHttpContext *ctx = xr_http_get_context(X);
+    XrHttpContext *ctx = http_get_context(X);
     if (ctx && ctx->server) {
         http_server_stop(ctx->server);
     }

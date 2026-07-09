@@ -40,7 +40,7 @@
 // XrHttpContext so each Isolate has its own, and it is freed by the HTTP
 // module native-handle destructor during Isolate teardown.
 static XrConnPool *http_client_pool(XrVMRuntime *X) {
-    XrHttpContext *ctx = xr_http_get_context(X);
+    XrHttpContext *ctx = http_get_context(X);
     if (!ctx)
         return NULL;
     if (!ctx->conn_pool) {
