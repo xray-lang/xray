@@ -1013,6 +1013,50 @@ static int http2_send_settings_ack(XrH2Conn *conn) {
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE);
 }
 
+static uint32_t h2_read_u32(const uint8_t *p) {
+    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) | ((uint32_t) p[2] << 8) |
+           (uint32_t) p[3];
+}
+
+static XrH2ErrorCode http2_validate_setting(uint16_t id, uint32_t val) {
+    switch (id) {
+        case XR_H2_SETTINGS_ENABLE_PUSH:
+            return val <= 1 ? XR_H2_NO_ERROR : XR_H2_PROTOCOL_ERROR;
+        case XR_H2_SETTINGS_INITIAL_WINDOW_SIZE:
+            return val <= 0x7FFFFFFFU ? XR_H2_NO_ERROR : XR_H2_FLOW_CONTROL_ERROR;
+        case XR_H2_SETTINGS_MAX_FRAME_SIZE:
+            return val >= XR_H2_DEFAULT_MAX_FRAME_SIZE && val <= 0xFFFFFFU ? XR_H2_NO_ERROR
+                                                                           : XR_H2_PROTOCOL_ERROR;
+        default:
+            return XR_H2_NO_ERROR;
+    }
+}
+
+XrH2ErrorCode http2_apply_settings_payload(XrH2Conn *conn, const uint8_t *payload,
+                                           uint32_t length) {
+    if (!conn || (length > 0 && !payload))
+        return XR_H2_PROTOCOL_ERROR;
+    if (length % 6 != 0)
+        return XR_H2_FRAME_SIZE_ERROR;
+
+    for (uint32_t i = 0; i < length; i += 6) {
+        uint16_t id = ((uint16_t) payload[i] << 8) | payload[i + 1];
+        uint32_t val = h2_read_u32(payload + i + 2);
+        XrH2ErrorCode err = http2_validate_setting(id, val);
+        if (err != XR_H2_NO_ERROR)
+            return err;
+    }
+
+    for (uint32_t i = 0; i < length; i += 6) {
+        uint16_t id = ((uint16_t) payload[i] << 8) | payload[i + 1];
+        uint32_t val = h2_read_u32(payload + i + 2);
+        if (id >= XR_H2_SETTINGS_HEADER_TABLE_SIZE && id <= XR_H2_SETTINGS_MAX_HEADER_LIST_SIZE)
+            conn->remote_settings[id] = val;
+    }
+
+    return XR_H2_NO_ERROR;
+}
+
 /* ========== Stream Hash Table Implementation ========== */
 
 // Hash a stream ID into a bucket index. Uses xr_hash_bytes from
@@ -1211,16 +1255,23 @@ static int http2_recv(XrH2Conn *conn) {
     int result = 0;
     switch (header.type) {
         case XR_H2_FRAME_SETTINGS:
+            if (header.stream_id != 0) {
+                http2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
+                result = -1;
+                break;
+            }
             if (header.flags & XR_H2_FLAG_ACK) {
+                if (header.length != 0) {
+                    http2_send_goaway(conn, 0, XR_H2_FRAME_SIZE_ERROR);
+                    result = -1;
+                }
                 break;
             } else {
-                // Parse SETTINGS
-                for (uint32_t i = 0; i + 6 <= header.length; i += 6) {
-                    uint16_t id = (payload[i] << 8) | payload[i + 1];
-                    uint32_t val = (payload[i + 2] << 24) | (payload[i + 3] << 16) |
-                                   (payload[i + 4] << 8) | payload[i + 5];
-                    if (id < 7)
-                        conn->remote_settings[id] = val;
+                XrH2ErrorCode err = http2_apply_settings_payload(conn, payload, header.length);
+                if (err != XR_H2_NO_ERROR) {
+                    http2_send_goaway(conn, 0, err);
+                    result = -1;
+                    break;
                 }
                 http2_send_settings_ack(conn);
             }
