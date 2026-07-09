@@ -4050,6 +4050,14 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         return false;
     }
 
+    if (v->op == XI_CALL && v->nargs >= 1 && xicgen_call_is_atomic_constructor(v->args[0])) {
+        if (kind_out)
+            *kind_out = "constructor";
+        if (detail_out)
+            *detail_out = "Atomic";
+        return true;
+    }
+
     {
         const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v);
         const char *detail = ref ? cg_no_alloc_generated_stdlib_const_alloc_detail(
