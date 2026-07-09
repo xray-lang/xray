@@ -5,4 +5,16 @@ fn xray_no_alloc_compress_gzip_reject(data: string) -> string? {
     return compress.gzip(data)
 }
 
+@no_alloc
+fn xray_no_alloc_compress_is_gzip_reject(data: string) -> bool {
+    return compress.isGzip(data)
+}
+
+@no_alloc
+fn xray_no_alloc_compress_is_zlib_reject(data: string) -> bool {
+    return compress.isZlib(data)
+}
+
 print(xray_no_alloc_compress_gzip_reject("edge") ?? "")
+print(xray_no_alloc_compress_is_gzip_reject("edge"))
+print(xray_no_alloc_compress_is_zlib_reject("edge"))
