@@ -870,7 +870,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpRequest",
         .signature = "HttpRequest",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "HttpRequest.body",
@@ -915,7 +915,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpResponse",
         .signature = "HttpResponse",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "HttpResponse.body",
@@ -1383,7 +1383,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "FileStat",
         .signature = "FileStat",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "FileStat.atime",
@@ -2210,7 +2210,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "pageAlloc",
         .signature = "(bytes: int, prot?: int): RawMut<uint8>",
-        .summary = "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
+        .summary = "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
     },
     {
         .name = "pageFree",
@@ -2253,7 +2253,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
         .name = "UdpPacket",
         .signature = "UdpPacket",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "UdpPacket.data",
@@ -2411,7 +2411,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "ExecResult",
         .signature = "ExecResult",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "ExecResult.exitCode",
@@ -3473,7 +3473,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsConn",
         .signature = "WsConn",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "WsConn.state",
@@ -3493,7 +3493,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsMessage",
         .signature = "WsMessage",
-        .summary = "Handle type",
+        .summary = "Native handle type",
     },
     {
         .name = "WsMessage.binary",
@@ -5471,7 +5471,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FormData.maxFileSize` | `: int` |  |\n"
             "| `FormData.maxTotalSize` | `: int` |  |\n"
             "| `FormData.totalSize` | `: int` |  |\n"
-            "| `http.HttpRequest` | `HttpRequest` | Handle type |\n"
+            "| `http.HttpRequest` | `HttpRequest` | Native handle type |\n"
             "| `http.HttpRequest.body` | `const string` | Handle field |\n"
             "| `http.HttpRequest.contentLength` | `const int` | Handle field |\n"
             "| `http.HttpRequest.headers` | `const Json` | Handle field |\n"
@@ -5480,7 +5480,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpRequest.path` | `const string` | Handle field |\n"
             "| `http.HttpRequest.query` | `const Json` | Handle field |\n"
             "| `http.HttpRequest.streaming` | `const bool` | Handle field |\n"
-            "| `http.HttpResponse` | `HttpResponse` | Handle type |\n"
+            "| `http.HttpResponse` | `HttpResponse` | Native handle type |\n"
             "| `http.HttpResponse.body` | `const string` | Handle field |\n"
             "| `http.HttpResponse.error` | `const string` | Handle field |\n"
             "| `http.HttpResponse.headers` | `const Json` | Handle field |\n"
@@ -5591,7 +5591,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `io.FileStat` | `FileStat` | Handle type |\n"
+            "| `io.FileStat` | `FileStat` | Native handle type |\n"
             "| `io.FileStat.atime` | `const int` | Handle field |\n"
             "| `io.FileStat.ctime` | `const int` | Handle field |\n"
             "| `io.FileStat.gid` | `const int` | Handle field |\n"
@@ -5835,7 +5835,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.move` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
             "| `mem.nontemporalStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
             "| `mem.offsetOf` | `(field: string): int` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
-            "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<uint8>` | Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
+            "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<uint8>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
             "| `mem.pageFree` | `(ptr: RawMut<uint8>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
             "| `mem.pageProtect` | `(ptr: RawMut<uint8>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
             "| `mem.prefetch` | `(ptr: RawPtr<uint8>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
@@ -5894,7 +5894,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `net.UdpPacket` | `UdpPacket` | Handle type |\n"
+            "| `net.UdpPacket` | `UdpPacket` | Native handle type |\n"
             "| `net.UdpPacket.data` | `const string` | Handle field |\n"
             "| `net.UdpPacket.host` | `const string` | Handle field |\n"
             "| `net.UdpPacket.port` | `const int` | Handle field |\n"
@@ -5943,7 +5943,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `os.ExecResult` | `ExecResult` | Handle type |\n"
+            "| `os.ExecResult` | `ExecResult` | Native handle type |\n"
             "| `os.ExecResult.exitCode` | `const int` | Handle field |\n"
             "| `os.ExecResult.stderr` | `const string` | Handle field |\n"
             "| `os.ExecResult.stdout` | `const string` | Handle field |\n"
@@ -6312,11 +6312,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
             "| `ParsedUpgradeResponse.statusCode` | `: int` |  |\n"
-            "| `ws.WsConn` | `WsConn` | Handle type |\n"
+            "| `ws.WsConn` | `WsConn` | Native handle type |\n"
             "| `ws.WsConn.state` | `string` | Handle field |\n"
             "| `ws.WsConn.url` | `string` | Handle field |\n"
             "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
-            "| `ws.WsMessage` | `WsMessage` | Handle type |\n"
+            "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
             "| `ws.WsMessage.data` | `const string \\| Array<uint8> \\| null` | Handle field |\n"
             "| `ws.WsMessage.error` | `const string?` | Handle field |\n"
