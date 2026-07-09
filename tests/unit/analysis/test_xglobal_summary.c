@@ -522,7 +522,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=11 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=12 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -739,15 +739,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=11 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=11 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=11 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=11 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=12 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=12 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=12 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=12 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -9023,7 +9023,7 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_records_bool_direct_map_set_shape) {
+TEST(global_evidence_producer_records_bool_direct_map_shape) {
     setup_parser_session();
     const char *source = "fn boolLookup(flag: bool) -> int {\n"
                          "    var scores: Map<bool, int> = #{true: 7, false: 3}\n"
@@ -9054,7 +9054,7 @@ TEST(global_evidence_producer_records_bool_direct_map_set_shape) {
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 4);
     ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0);
-    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_BOOL_DIRECT) == 0);
     ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) != 0);
     ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_SMALL) != 0);
     for (uint32_t i = 0; i < ev.nmap_entries; i++) {
@@ -9072,15 +9072,55 @@ TEST(global_evidence_producer_records_bool_direct_map_set_shape) {
     ASSERT_NOT_NULL(map_shape_plan);
     ASSERT_NOT_NULL(set_shape_plan);
     ASSERT_EQ_UINT(map_shape_plan->action, XAOT_MAP_SHAPE_BOOL_DIRECT);
-    ASSERT_EQ_UINT(set_shape_plan->action, XAOT_MAP_SHAPE_BOOL_DIRECT);
+    ASSERT_EQ_UINT(set_shape_plan->action, XAOT_MAP_SHAPE_SMALL_INLINE);
     ASSERT_TRUE((map_shape_plan->evidence & XAOT_MAP_EV_BOOL_DOMAIN) != 0);
-    ASSERT_TRUE((set_shape_plan->evidence & XAOT_MAP_EV_BOOL_DOMAIN) != 0);
+    ASSERT_TRUE((set_shape_plan->evidence & XAOT_MAP_EV_BOOL_DOMAIN) == 0);
 
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "key_i64=1"));
     ASSERT_NOT_NULL(strstr(dump, "key_i64=0"));
     xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map) {
+    setup_parser_session();
+    const char *source = "fn labels() {\n"
+                         "    var names: Map<bool, string> = #{true: \"yes\", false: \"no\"}\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 1);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_BOOL_DIRECT) == 0);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotMapShapePlan *map_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
+    ASSERT_NOT_NULL(map_shape_plan);
+    ASSERT_EQ_UINT(map_shape_plan->action, XAOT_MAP_SHAPE_SMALL_INLINE);
+    ASSERT_TRUE((map_shape_plan->evidence & XAOT_MAP_EV_BOOL_DOMAIN) == 0);
+
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -9770,7 +9810,8 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
-RUN_TEST(global_evidence_producer_records_bool_direct_map_set_shape);
+RUN_TEST(global_evidence_producer_records_bool_direct_map_shape);
+RUN_TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map);
 RUN_TEST(global_evidence_producer_propagates_map_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);

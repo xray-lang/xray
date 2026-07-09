@@ -52,7 +52,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 11,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 12,
 };
 
 typedef enum XgBuildProfile {
@@ -1032,6 +1032,8 @@ typedef struct XgGlobalEvidence {
 } XgGlobalEvidence;
 
 XR_FUNC uint32_t xg_name_id(const char *name);
+XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind);
+XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_width);
 XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
