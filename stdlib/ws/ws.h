@@ -92,7 +92,7 @@ typedef XrNetError XrWsError;
 
 typedef struct XrWsMessage {
     XrWsOpcode opcode;  // Opcode
-    char *data;         // Data (caller reads; freed by xr_ws_message_free)
+    char *data;         // Data (caller reads; freed by ws_message_free)
     size_t len;         // Length
     bool is_text;       // Is text message
     uint8_t _flags;     // Reserved — do not touch (internal ownership bits)
@@ -182,8 +182,8 @@ typedef struct XrWebSocket {
     int send_wait_event;      // XR_WAIT_WRITE, or XR_WAIT_READ for a TLS WANT_READ
     int recv_wait_event;      // XR_WAIT_READ, or XR_WAIT_WRITE for a TLS WANT_WRITE
 
-    // Yieldable client handshake progress. xr_ws_connect_start sets up
-    // DNS+socket+connect; xr_ws_connect_pump advances a CONNECT->TLS->SEND->RECV
+    // Yieldable client handshake progress. ws_connect_start sets up
+    // DNS+socket+connect; ws_connect_pump advances a CONNECT->TLS->SEND->RECV
     // phase machine that never blocks the worker: it returns 0 (open), <0
     // (-XrWsError) or a poll event (XR_WAIT_READ/WRITE) to wait for before the
     // next pump. The handshake request is built once and drained, then the
@@ -216,33 +216,6 @@ typedef struct XrWebSocket {
 } XrWebSocket;
 
 /* ========== Core API ========== */
-
-// Initialize configuration with defaults
-XR_FUNC void xr_ws_config_init(XrWsConfig *config);
-
-// Create WebSocket connection
-XR_FUNC XrWebSocket *xr_ws_new(const XrWsConfig *config);
-
-// Free WebSocket
-XR_FUNC void xr_ws_free(XrWebSocket *ws);
-
-/*
- * Bind the WebSocket to a XrVMRuntime for coroutine-aware I/O.
- * MUST be called before xr_ws_connect_start / xr_ws_send_frame_try / xr_ws_recv_try.
- * Server-side connections are bound automatically by the upgrade path.
- * Passing NULL is a programming error — all WS I/O requires an isolate.
- */
-XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X);
-
-// Yieldable client connect, split into a non-blocking phase machine so the
-// connect cfunc can suspend the coroutine instead of blocking a worker thread.
-//   xr_ws_connect_start: DNS + socket + non-blocking connect(). Returns a poll
-//     event to wait for (XR_WAIT_WRITE) on success, or a negative -XrWsError.
-//   xr_ws_connect_pump:  advance the handshake. Returns 0 when the connection is
-//     OPEN, a negative -XrWsError on failure, or a poll event (XR_WAIT_READ /
-//     XR_WAIT_WRITE) to wait for before calling pump again.
-XR_FUNC int xr_ws_connect_start(XrWebSocket *ws);
-XR_FUNC int xr_ws_connect_pump(XrWebSocket *ws);
 
 // Close connection
 XR_FUNC XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason);

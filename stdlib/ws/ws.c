@@ -821,7 +821,7 @@ static int parse_frame_header(const char *buf, size_t buf_len, bool *fin, XrWsOp
 
 /* ========== API Implementation ========== */
 
-void xr_ws_config_init(XrWsConfig *config) {
+void ws_config_init(XrWsConfig *config) {
     if (!config)
         return;
     memset(config, 0, sizeof(XrWsConfig));
@@ -831,7 +831,7 @@ void xr_ws_config_init(XrWsConfig *config) {
     config->max_message_size = 16 * 1024 * 1024;  // 16MB
 }
 
-XrWebSocket *xr_ws_new(const XrWsConfig *config) {
+XrWebSocket *ws_new(const XrWsConfig *config) {
     if (!config || !config->url)
         return NULL;
 
@@ -869,7 +869,7 @@ XrWebSocket *xr_ws_new(const XrWsConfig *config) {
     return ws;
 }
 
-void xr_ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X) {
+void ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X) {
     // Bind the WS connection to the caller's coroutine scheduler so
     // every plain-TCP / TLS I/O path that needs to suspend can resolve
     // the runtime via ws->isolate and yield.
@@ -895,7 +895,7 @@ static void ws_netpoll_release_fd(XrWebSocket *ws) {
     ws->cached_pd = NULL;
 }
 
-void xr_ws_free(XrWebSocket *ws) {
+void ws_free(XrWebSocket *ws) {
     if (!ws)
         return;
 
@@ -939,9 +939,9 @@ void xr_ws_free(XrWebSocket *ws) {
 
 /* ========== Client connect: non-blocking phase machine ========== */
 //
-// The client handshake never blocks a worker thread. xr_ws_connect_start does
+// The client handshake never blocks a worker thread. ws_connect_start does
 // the (self-handed-off) DNS lookup then arms a non-blocking connect();
-// xr_ws_connect_pump advances CONNECT -> [TLS] -> SEND -> RECV using only
+// ws_connect_pump advances CONNECT -> [TLS] -> SEND -> RECV using only
 // non-blocking primitives, returning a poll event whenever it must wait. The
 // yieldable ws.connect cfunc suspends the coroutine on that event (no P handoff,
 // so no contention on the handed-off P's timer wheel).
@@ -1143,7 +1143,7 @@ static int ws_connect_parse_response(XrWebSocket *ws) {
     return 0;
 }
 
-int xr_ws_connect_start(XrWebSocket *ws) {
+int ws_connect_start(XrWebSocket *ws) {
     if (!ws)
         return -WS_ERR_URL;
 
@@ -1201,7 +1201,7 @@ int xr_ws_connect_start(XrWebSocket *ws) {
     return XR_WAIT_WRITE;
 }
 
-int xr_ws_connect_pump(XrWebSocket *ws) {
+int ws_connect_pump(XrWebSocket *ws) {
     if (!ws)
         return -WS_ERR_URL;
 
@@ -2296,7 +2296,7 @@ XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *requ
     ws->fd = fd;
     ws->state = WS_STATE_OPEN;
     ws->sec_key = sec_key;
-    ws->protocol = picked_proto;  // transferred ownership; freed by xr_ws_free
+    ws->protocol = picked_proto;  // transferred ownership; freed by ws_free
     ws->is_server = true;         // Server-side connection: no masking on send
     ws->isolate = isolate;        // Store isolate for coroutine-aware I/O
     ws->deflate_enabled = client_deflate;
@@ -2333,7 +2333,7 @@ XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *requ
     ws->cached_pd = NULL;
 
     // Set default config
-    xr_ws_config_init(&ws->config);
+    ws_config_init(&ws->config);
 
     return ws;
 }

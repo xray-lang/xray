@@ -16,6 +16,31 @@
 // Validate WebSocket URL syntax without touching DNS or sockets.
 XrWsError ws_url_validate(const char *url);
 
+// Initialize configuration with defaults.
+void ws_config_init(XrWsConfig *config);
+
+// Create/free native WebSocket connections.
+XrWebSocket *ws_new(const XrWsConfig *config);
+void ws_free(XrWebSocket *ws);
+
+/*
+ * Bind the WebSocket to a XrVMRuntime for coroutine-aware I/O.
+ * MUST be called before ws_connect_start / xr_ws_send_frame_try / xr_ws_recv_try.
+ * Server-side connections are bound automatically by the upgrade path.
+ * Passing NULL is a programming error; all WS I/O requires an isolate.
+ */
+void ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X);
+
+// Yieldable client connect, split into a non-blocking phase machine so the
+// connect cfunc can suspend the coroutine instead of blocking a worker thread.
+//   ws_connect_start: DNS + socket + non-blocking connect(). Returns a poll
+//     event to wait for (XR_WAIT_WRITE) on success, or a negative -XrWsError.
+//   ws_connect_pump:  advance the handshake. Returns 0 when the connection is
+//     OPEN, a negative -XrWsError on failure, or a poll event (XR_WAIT_READ /
+//     XR_WAIT_WRITE) to wait for before calling pump again.
+int ws_connect_start(XrWebSocket *ws);
+int ws_connect_pump(XrWebSocket *ws);
+
 // Get error description for native WS results.
 const char *ws_error_string(XrWsError err);
 
