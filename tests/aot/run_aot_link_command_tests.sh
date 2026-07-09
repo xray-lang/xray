@@ -2830,6 +2830,14 @@ expect_freestanding_reject \
     "only int/float/bool/char/string/null consteval initializers, or typed scalar/string/null nullable defaults, are supported as static mutable module storage"
 
 expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_aggregate_reject.xr" \
+    "$WORK/freestanding_top_var_aggregate_reject" \
+    "$WORK/freestanding_top_var_aggregate_reject.log" \
+    "freestanding-profile: rejects aggregate top-level var declarations" \
+    "freestanding profile rejects top-level var declaration" \
+    "only int/float/bool/char/string/null consteval initializers, or typed scalar/string/null nullable defaults, are supported as static mutable module storage"
+
+expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \
     "$WORK/freestanding_rawptr_of_local_reject" \
     "$WORK/freestanding_rawptr_of_local_reject.log" \
