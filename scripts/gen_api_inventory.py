@@ -11,6 +11,7 @@ HTML explorer and documentation coverage checks.
 from __future__ import annotations
 
 import argparse
+import ast
 import html
 import json
 import re
@@ -288,6 +289,13 @@ def parse_exported_names(text: str) -> list[str]:
         return []
     body = re.sub(r"//.*", "", match.group("body"))
     return [part.strip() for part in split_top_level_commas(body) if part.strip()]
+
+
+def decode_c_string(raw: str) -> str:
+    try:
+        return ast.literal_eval(f'"{raw}"')
+    except (SyntaxError, ValueError):
+        return raw
 
 
 CLASS_RE = re.compile(r"(?m)^(?:@native\s*\n)?class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{")
@@ -577,6 +585,76 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                     line=line,
                     doc_surface="stdlib",
                     doc_module=handle.module,
+                )
+            )
+    return out
+
+
+def collect_runtime_intrinsic_modules(root: Path) -> list[dict[str, Any]]:
+    path = root / "src/frontend/analyzer/xanalyzer_builtins.c"
+    text = path.read_text(encoding="utf-8")
+    member_arrays: dict[str, list[dict[str, Any]]] = {}
+    member_array_re = re.compile(
+        r"static\s+const\s+XaBuiltinMember\s+"
+        r"(?P<array>g_rt_[A-Za-z0-9_]+_functions)\[\]\s*=\s*\{(?P<body>.*?)\};",
+        re.S,
+    )
+    member_re = re.compile(
+        r"\{\s*\"(?P<name>(?:\\.|[^\"\\])*)\"\s*,\s*"
+        r"\"(?P<signature>(?:\\.|[^\"\\])*)\"\s*,\s*"
+        r"\"(?P<summary>(?:\\.|[^\"\\])*)\"\s*,\s*"
+        r"(?P<is_method>true|false)\s*,\s*"
+        r"(?P<is_static>true|false)\s*,\s*"
+        r"(?P<is_internal>true|false)\s*,\s*"
+        r"(?P<is_lowered_only>true|false)\s*\}",
+        re.S,
+    )
+    for array_match in member_array_re.finditer(text):
+        symbols: list[dict[str, Any]] = []
+        body = array_match.group("body")
+        body_offset = array_match.start("body")
+        for member_match in member_re.finditer(body):
+            if member_match.group("is_internal") == "true":
+                continue
+            symbols.append(
+                {
+                    "name": decode_c_string(member_match.group("name")),
+                    "signature": decode_c_string(member_match.group("signature")),
+                    "summary": decode_c_string(member_match.group("summary")),
+                    "line": line_for_offset(text, body_offset + member_match.start()),
+                }
+            )
+        member_arrays[array_match.group("array")] = symbols
+
+    module_match = re.search(
+        r"static\s+const\s+XaBuiltinModule\s+g_rt_builtin_modules\[\]\s*=\s*\{(?P<body>.*?)\};",
+        text,
+        re.S,
+    )
+    if not module_match:
+        return []
+
+    out: list[dict[str, Any]] = []
+    for match in re.finditer(
+        r"\{\s*\"(?P<module>(?:\\.|[^\"\\])*)\"\s*,\s*"
+        r"(?P<array>g_rt_[A-Za-z0-9_]+_functions)\s*,",
+        module_match.group("body"),
+    ):
+        module = decode_c_string(match.group("module"))
+        for symbol in member_arrays.get(match.group("array"), []):
+            surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, symbol["name"])
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=module,
+                    name=symbol["name"],
+                    kind="function",
+                    signature=symbol["signature"],
+                    summary=symbol["summary"],
+                    source=rel(root, path),
+                    line=symbol["line"],
+                    doc_surface=surface,
+                    doc_module=doc_module,
                 )
             )
     return out
@@ -878,16 +956,18 @@ def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) ->
     builtin_data = load_builtin_dump(root, xray, builtin_dump)
     items: list[dict[str, Any]] = []
     def_items = collect_def_stdlib(root)
-    def_module_symbols = {
+    runtime_intrinsic_items = collect_runtime_intrinsic_modules(root)
+    source_module_symbols = {
         (entry.get("namespace", ""), entry.get("name", ""))
-        for entry in def_items
+        for entry in [*def_items, *runtime_intrinsic_items]
         if entry.get("category") == "stdlib-module"
     }
     items.extend(def_items)
+    items.extend(runtime_intrinsic_items)
     items.extend(
         entry
         for entry in collect_builtin_modules(root, builtin_data)
-        if (entry.get("namespace", ""), entry.get("name", "")) not in def_module_symbols
+        if (entry.get("namespace", ""), entry.get("name", "")) not in source_module_symbols
     )
     items.extend(collect_pure_stdlib(root))
     items.extend(collect_native_types(root))
@@ -938,6 +1018,7 @@ def check_docs(root: Path, inventory: dict[str, Any]) -> list[str]:
         if docs_dir.exists() and not (docs_dir / f"{module}.md").exists():
             errors.append(f"missing generated stdlib knowledge markdown for `{module}`")
     errors.extend(check_def_stdlib_source(root, inventory))
+    errors.extend(check_stdlib_builtin_dump_residue(inventory))
     errors.extend(check_language_spec_stdlib_residue(root))
     return errors
 
@@ -973,6 +1054,19 @@ def check_def_stdlib_source(root: Path, inventory: dict[str, Any]) -> list[str]:
             errors.append(
                 f".def API symbol must use .def source, not {source or '<missing>'}: {label}"
             )
+    return errors
+
+
+def check_stdlib_builtin_dump_residue(inventory: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for entry in inventory.get("items", []):
+        if entry.get("doc_surface") != "stdlib" or entry.get("source") != "xray builtin-dump":
+            continue
+        module = entry.get("doc_module") or entry.get("namespace")
+        name = entry.get("name", "")
+        errors.append(
+            f"stdlib API symbol must have a source declaration, not builtin-dump: {module}.{name}"
+        )
     return errors
 
 
