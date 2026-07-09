@@ -1,0 +1,8 @@
+@no_alloc
+fn xray_no_alloc_map_entries_reject(values: Map<int, int>) -> int {
+    return values.entries().length
+}
+
+var values: Map<int, int> = #{}
+values.set(1, 2)
+print(xray_no_alloc_map_entries_reject(values))

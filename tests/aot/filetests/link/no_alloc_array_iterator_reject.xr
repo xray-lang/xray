@@ -1,0 +1,8 @@
+@no_alloc
+fn xray_no_alloc_array_iterator_reject(xs: Array<int>) -> bool {
+    return xs.iterator().hasNext()
+}
+
+var xs = Array<int>(0, 0)
+xs.push(1)
+print(xray_no_alloc_array_iterator_reject(xs))
