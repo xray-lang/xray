@@ -254,7 +254,14 @@ def check_generated_symbol_names(root: Path) -> list[str]:
 
 def check_generated_stdlib_api_tables(root: Path) -> list[str]:
     text = (root / "src/app/mcp/xmcp_knowledge_generated.c").read_text(encoding="utf-8")
-    required = ['"## API\\n"', '`csv.parse`', '`http.get`']
+    required = [
+        '"## API\\n"',
+        '`cluster.topicMatches`',
+        '`csv.parseDetailed`',
+        '`http.requestText`',
+        '`http.router`',
+        '`ws.parseFrame`',
+    ]
     return [f"generated stdlib API table missing {needle}" for needle in required if needle not in text]
 
 

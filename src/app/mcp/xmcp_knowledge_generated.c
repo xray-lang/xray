@@ -1594,16 +1594,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
         .summary = "",
     },
     {
-        .name = "Json.clear",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Json.delete",
-        .signature = "(key: string): ()",
-        .summary = "",
-    },
-    {
         .name = "Json.encode",
         .signature = "(value: unknown): Json",
         .summary = "",
@@ -1625,11 +1615,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "Json.get",
-        .signature = "(key: string): Json",
-        .summary = "",
-    },
-    {
-        .name = "Json.get",
         .signature = "(obj: Json, key: string, default?: unknown): Json",
         .summary = "",
     },
@@ -1641,11 +1626,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     {
         .name = "Json.has",
         .signature = "(obj: Json, key: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "Json.isEmpty",
-        .signature = "(): bool",
         .summary = "",
     },
     {
@@ -3085,7 +3065,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Process.constructor",
-        .signature = "(id: int): ()",
+        .signature = "(id: int, detached: bool = false): ()",
         .summary = "",
     },
     {
@@ -3121,6 +3101,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
         .name = "ProcessOptions.cwd",
         .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.detached",
+        .signature = ": bool",
         .summary = "",
     },
     {
@@ -3167,6 +3152,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .name = "cpuCount",
         .signature = "(): int",
         .summary = "Return the number of CPUs available to OS-thread work",
+    },
+    {
+        .name = "onSignal",
+        .signature = "(signal: Signal, handler: (): ()) -> bool",
+        .summary = "",
     },
     {
         .name = "pinToCpu",
@@ -5670,17 +5660,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Json` | `Json` |  |\n"
-            "| `Json.clear` | `(): ()` |  |\n"
-            "| `Json.delete` | `(key: string): ()` |  |\n"
             "| `Json.encode` | `(value: unknown): Json` |  |\n"
             "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
             "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
             "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
-            "| `Json.get` | `(key: string): Json` |  |\n"
             "| `Json.get` | `(obj: Json, key: string, default?: unknown): Json` |  |\n"
             "| `Json.has` | `(key: string): bool` |  |\n"
             "| `Json.has` | `(obj: Json, key: string): bool` |  |\n"
-            "| `Json.isEmpty` | `(): bool` |  |\n"
             "| `Json.isEmpty` | `(obj: Json): bool` |  |\n"
             "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
             "| `Json.iterator` | `(): Iterator<string>` |  |\n"
@@ -6175,7 +6161,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Pipe.write` | `(data: Bytes): int` |  |\n"
             "| `Pipe.writeEnd` | `(): int` |  |\n"
             "| `Process` | `Process` |  |\n"
-            "| `Process.constructor` | `(id: int): ()` |  |\n"
+            "| `Process.constructor` | `(id: int, detached: bool = false): ()` |  |\n"
             "| `Process.id` | `: int { fn() { return this._id } }` |  |\n"
             "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
             "| `Process.spawn` | `(program: string, args: Array<string> = [], options: ProcessOptions? = null): Process?` |  |\n"
@@ -6183,6 +6169,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Process.wait` | `(): int` |  |\n"
             "| `ProcessOptions` | `ProcessOptions` |  |\n"
             "| `ProcessOptions.cwd` | `: string?` |  |\n"
+            "| `ProcessOptions.detached` | `: bool` |  |\n"
             "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n"
             "| `ProcessOptions.stderr` | `: int?` |  |\n"
             "| `ProcessOptions.stdin` | `: int?` |  |\n"
@@ -6192,6 +6179,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ThreadLocal.get` | `(): T` |  |\n"
             "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
+            "| `sys.onSignal` | `(signal: Signal, handler: (): ()) -> bool` |  |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
             "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
