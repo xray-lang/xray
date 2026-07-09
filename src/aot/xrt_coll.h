@@ -1824,6 +1824,33 @@ static inline XrValue xrt_map_get_prehashed_owned(xrt_map_t *m, XrValue key, uin
     return xrt_value_to_owned(xrt_map_get_prehashed(m, key, hash));
 }
 
+static inline int32_t xrt_map_find_entry_small(xrt_map_t *m, XrValue key) {
+    if (!m || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return -1;
+    if (m->flags & XR_MAP_FLAG_DUMMY)
+        return -1;
+    uint8_t key_tt = xrt_value_type_tag(key);
+    for (uint32_t i = 0; i < m->nentries; i++) {
+        XrMapEntry *entry = &m->entries[i];
+        if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+        if (xrt_map_key_eq(entry, key, key_tt))
+            return (int32_t) i;
+    }
+    return -1;
+}
+
+static inline XrValue xrt_map_get_small(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_get(m, key);
+    int32_t eidx = xrt_map_find_entry_small(m, key);
+    return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_map_get_small_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_get_small(m, key));
+}
+
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_has_v((xrt_boolmap_t *) m, key);
@@ -1836,6 +1863,12 @@ static inline int xrt_map_has_prehashed(xrt_map_t *m, XrValue key, uint32_t hash
     if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_has(m, key);
     return xrt_map_find_entry(m, key, hash, xrt_value_type_tag(key)) >= 0;
+}
+
+static inline int xrt_map_has_small(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_has(m, key);
+    return xrt_map_find_entry_small(m, key) >= 0;
 }
 
 static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
@@ -2336,6 +2369,28 @@ static inline int xrt_set_has_prehashed(xrt_set_t *s, XrValue value, uint32_t ha
     if (!xrt_set_is_typed(s))
         return xrt_set_find_entry(s, value, hash) >= 0;
     return xrt_set_has(s, value);
+}
+
+static inline int32_t xrt_set_find_entry_small(xrt_set_t *s, XrValue value) {
+    if (!s || xrt_set_is_typed(s))
+        return -1;
+    if (s->flags & XR_SET_FLAG_DUMMY)
+        return -1;
+    uint8_t val_tt = xrt_value_type_tag(value);
+    for (uint32_t i = 0; i < s->nentries; i++) {
+        XrSetEntry *entry = &s->entries[i];
+        if (entry->val_tt == XR_SET_ENTRY_NIL)
+            continue;
+        if (xrt_set_value_eq(entry, value, val_tt))
+            return (int32_t) i;
+    }
+    return -1;
+}
+
+static inline int xrt_set_has_small(xrt_set_t *s, XrValue value) {
+    if (xrt_set_is_typed(s))
+        return xrt_set_has(s, value);
+    return xrt_set_find_entry_small(s, value) >= 0;
 }
 
 static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
@@ -2968,6 +3023,25 @@ static inline int xrt_json_has_name(XrValue obj, const char *name) {
     uint32_t hash = xrt_hash32_value(key);
     uint8_t key_tt = xrt_value_type_tag(key);
     return xrt_map_find_entry(j->dynamic_fields, key, hash, key_tt) >= 0;
+}
+
+static inline XrValue xrt_json_decode_record(XrValue data, int64_t field_count,
+                                             const char *const *field_names) {
+    if (field_count <= 0 || !field_names)
+        return XR_NULL_VAL;
+    if (data.tag != XR_TAG_PTR || !data.ptr || data.heap_type != 0)
+        return XR_NULL_VAL;
+    xrt_json_t *src = (xrt_json_t *) data.ptr;
+    if (src->object_kind != XRT_OBJECT_JSON)
+        return XR_NULL_VAL;
+    XrValue dstv = xrt_record_new_named(field_count, field_names);
+    for (int64_t i = 0; i < field_count; i++) {
+        const char *name = field_names[i];
+        if (!name || !xrt_json_has_name(data, name))
+            return XR_NULL_VAL;
+        xrt_json_set_field(dstv, (int) i, xrt_json_get_name(data, name));
+    }
+    return dstv;
 }
 
 static inline int64_t xrt_json_static_has(XrValue obj, XrValue key) {

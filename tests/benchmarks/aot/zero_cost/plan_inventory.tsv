@@ -30,7 +30,8 @@ interface_object_storage|gap|-|-|Full interface object storage, Array<Interface>
 itable_emitter|gap|-|-|Verified itable backend emission is still pending after ABI storage lands.
 json_shape_guard|gap|-|-|Json shape-guard plus fallback emission is still pending.
 json_computed_key_guard|gap|-|-|Runtime computed-key direct/guard optimization is still pending.
-map_set_dense_small_lookup|gap|-|-|Specialized dense/small Map/Set backend lookup is still pending.
+map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/aot/filetests/cgen|Small Map/Set literal lookup consumes inline scan plans in generated C.
+map_set_dense_lookup|gap|-|-|Specialized dense enum/int Map/Set backend lookup is still pending.
 user_hash_eq_direct_backend|gap|-|-|User-derived Hash/Eq direct-call backend consumption is still pending.
 fixed_layout_enum_scalarization|gap|-|-|Fixed-layout aggregate and enum scalarization ABI work is still pending.
 summary_payload_cache|gap|-|-|Real declaration/body summary payload cache is still pending.

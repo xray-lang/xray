@@ -2544,15 +2544,6 @@ static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     xicgen_emit_print_expr(ctx, out, v);
 }
 
-static void xicgen_reject_unsupported(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                      const char *prefix) {
-    (void) f;
-    (void) prefix;
-    ctx->error = true;
-    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Xi op %s\n", xi_op_name(v->op));
-    emit_codegen_abort_expr(out);
-}
-
 static bool xicgen_verify_json_direct_index_access(XiCgenCtx *ctx, const XiValue *v,
                                                    uint8_t expected_kind, uint8_t alternate_kind) {
     const XaotBundle *bundle;
@@ -5761,6 +5752,31 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     xicgen_emit_json_new_expr(out, v);
 }
 
+static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) f;
+    (void) prefix;
+    int64_t field_count = v ? v->aux_int : 0;
+    const char **field_names = v ? (const char **) v->aux : NULL;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
+                                                     v ? cg_rep(v) : XR_REP_TAGGED);
+    if (!v || v->nargs < 1 || field_count <= 0 || !field_names) {
+        fprintf(out, "XR_NULL_VAL");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    fprintf(out, "xrt_json_decode_record(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", %" PRId64 ", (const char*[]){", field_count);
+    for (int64_t i = 0; i < field_count; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        xicgen_emit_c_string_literal(out, field_names[i] ? field_names[i] : "?");
+    }
+    fprintf(out, "})");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_struct_new: need class arg");
@@ -6523,6 +6539,10 @@ static bool xicgen_map_index_plan_is_prehashed(const XaotKeyAccessPlan *plan) {
     return plan && plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP && plan->key_prehash != 0;
 }
 
+static bool xicgen_map_index_plan_is_small_scan(const XaotKeyAccessPlan *plan) {
+    return plan && plan->action == XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
+}
+
 static void xicgen_emit_map_ptr_from_tagged(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     fprintf(out, "((xrt_map_t*)(");
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
@@ -6541,6 +6561,22 @@ static bool xicgen_emit_map_index_get_prehashed(XiCgenCtx *ctx, FILE *out, const
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) plan->key_prehash);
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool xicgen_emit_map_index_get_small_scan(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                 const XaotKeyAccessPlan *plan) {
+    if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_MAP || !xicgen_map_index_plan_is_small_scan(plan))
+        return false;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_map_get_small_owned(");
+    xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -6576,6 +6612,8 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_class_native_array_index_get_expr(ctx, out, f, v))
         return;
     if (xicgen_emit_map_index_get_prehashed(ctx, out, v, key_plan))
+        return;
+    if (xicgen_emit_map_index_get_small_scan(ctx, out, v, key_plan))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));

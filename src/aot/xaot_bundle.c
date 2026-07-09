@@ -2370,9 +2370,11 @@ static uint8_t key_access_action_for(const XgGlobalEvidence *evidence,
         shape = xg_global_evidence_find_map_shape(evidence, access->receiver_shape_id);
         if (!shape)
             return XAOT_KEY_ACCESS_REJECT;
-        if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+        bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
+                         access->op == XG_KEY_ACCESS_HAS;
+        if (lookup_op && (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
-        if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        if (lookup_op && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
             return XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
     }
     hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);
@@ -2412,7 +2414,9 @@ static uint32_t key_access_evidence_for(const XgGlobalEvidence *evidence,
     if (access->key_prehash != 0)
         bits |= XAOT_MAP_EV_PREHASH;
     shape = xg_global_evidence_find_map_shape(evidence, access->receiver_shape_id);
-    if (shape) {
+    bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
+                     access->op == XG_KEY_ACCESS_HAS;
+    if (lookup_op && shape) {
         if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             bits |= XAOT_MAP_EV_DENSE_DOMAIN;
         if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)

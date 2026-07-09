@@ -8631,6 +8631,7 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     ASSERT_EQ_UINT(ev.map_shapes[0].source, XG_MAP_SHAPE_SRC_LITERAL);
     ASSERT_EQ_UINT(ev.map_shapes[0].literal_count, 2);
     ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_LITERAL) != 0);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) != 0);
     ASSERT_EQ_UINT(ev.map_entries[0].shape_id, ev.map_shapes[0].shape_id);
     ASSERT_EQ_UINT(ev.map_entries[0].entry_ordinal, 0);
     ASSERT_TRUE((ev.map_entries[0].flags & XG_MAP_ENTRY_CONST_KEY) != 0);
@@ -8654,9 +8655,9 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     ASSERT_NOT_NULL(shape_plan);
     ASSERT_NOT_NULL(hash_eq_plan);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(shape_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
+    ASSERT_EQ_UINT(shape_plan->action, XAOT_MAP_SHAPE_SMALL_INLINE);
     ASSERT_EQ_UINT(hash_eq_plan->action, XAOT_HASH_EQ_BUILTIN_INLINE);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_INLINE_SMALL_SCAN);
 
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
@@ -8717,7 +8718,7 @@ TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     ASSERT_NOT_NULL(set_plan);
     ASSERT_NOT_NULL(get_plan);
     ASSERT_EQ_UINT(set_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
-    ASSERT_EQ_UINT(get_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+    ASSERT_EQ_UINT(get_plan->action, XAOT_KEY_ACCESS_INLINE_SMALL_SCAN);
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
