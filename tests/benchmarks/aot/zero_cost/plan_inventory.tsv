@@ -20,6 +20,7 @@ map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/
 map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
 backend_contract_dispatch|covered|verified AOT dispatch plan kind|tests/aot/filetests/cgen|Backend contract rejects unsupported verified itable plans.
 evidence_cache_manifest|covered|xg-cache-manifest v1|tests/aot/filetests/link|Global evidence cache manifest is dumped through the official evidence entry.
+runtime_hot_loop_benchmarks|covered|run_benchmark.sh|tests/benchmarks/aot/zero_cost|AOT zero-cost runtime hot-loop benchmarks are executable.
 value_level_sroa|gap|-|-|Value-level noescape allocation and SROA proof are still pending.
 generic_function_clone|gap|-|-|Specialized function body and ABI clone emission are still pending.
 array_t_concrete_storage|gap|-|-|Array<T> concrete storage clone is still pending.

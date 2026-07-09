@@ -1,0 +1,16 @@
+fn run(n: int) -> int {
+    var scores: Map<string, int> = #{}
+    scores.set("ada", 1)
+
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        if (scores.has("ada")) {
+            sum = sum + scores.get("ada")
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(20000))
