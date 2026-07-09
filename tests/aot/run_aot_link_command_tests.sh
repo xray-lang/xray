@@ -726,6 +726,51 @@ else
     sed 's/^/      /' "$FREESTANDING_EXPORT_REAL_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_INFINITE_LOOP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_infinite_loop.xr"
+FREESTANDING_INFINITE_LOOP_OBJ="$WORK/freestanding_infinite_loop.o"
+FREESTANDING_INFINITE_LOOP_LOG="$WORK/freestanding_infinite_loop.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_INFINITE_LOOP_OBJ" \
+        "$FREESTANDING_INFINITE_LOOP_SRC" >"$FREESTANDING_INFINITE_LOOP_LOG" 2>&1; then
+    FREESTANDING_INFINITE_LOOP_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_INFINITE_LOOP_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_INFINITE_LOOP_C" ]; then
+        expect_log_contains "$FREESTANDING_INFINITE_LOOP_C" \
+            "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/infinite-loop: generated C uses freestanding prelude"
+        if grep -Eq 'goto L[0-9]+;' "$FREESTANDING_INFINITE_LOOP_C"; then
+            record_pass "freestanding-profile/infinite-loop: lowers loop to local branch"
+        else
+            record_fail "freestanding-profile/infinite-loop: missing local loop branch"
+            sed 's/^/      /' "$FREESTANDING_INFINITE_LOOP_C" | sed -n '1,120p'
+        fi
+        expect_log_not_contains "$FREESTANDING_INFINITE_LOOP_C" "#include \"xrt.h\"" \
+            "freestanding-profile/infinite-loop: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/infinite-loop: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_INFINITE_LOOP_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_INFINITE_LOOP_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_INFINITE_LOOP_OBJ")"
+    if [ -z "$FREESTANDING_INFINITE_LOOP_UNDEFINED" ]; then
+        record_pass "freestanding-profile/infinite-loop: no undefined symbols"
+    else
+        record_fail "freestanding-profile/infinite-loop: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_INFINITE_LOOP_UNDEFINED" | sed 's/^/      /'
+    fi
+    if nm -g "$FREESTANDING_INFINITE_LOOP_OBJ" 2>/dev/null |
+            grep -Eq '(^|[[:space:]])_?xray_spin$'; then
+        record_pass "freestanding-profile/infinite-loop: exports spin symbol"
+    else
+        record_fail "freestanding-profile/infinite-loop: missing spin symbol"
+        nm -g "$FREESTANDING_INFINITE_LOOP_OBJ" 2>/dev/null | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/infinite-loop: object build failed"
+    sed 's/^/      /' "$FREESTANDING_INFINITE_LOOP_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_ATTR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_symbol_attrs.xr"
 FREESTANDING_ATTR_OBJ="$WORK/freestanding_symbol_attrs.o"
 FREESTANDING_ATTR_LOG="$WORK/freestanding_symbol_attrs.log"
