@@ -654,7 +654,7 @@ static void cluster_reader_loop(void *arg) {
     xr_free(ctx);
 
     if (cluster && node) {
-        xr_cluster_process_node(cluster, node);
+        cluster_process_node(cluster, node);
     }
 
     if (node)

@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   A native coroutine sends periodic announce datagrams to a multicast
  *   group and listens for announces from other nodes. On receiving a
- *   new node announce, it triggers xr_cluster_join() to establish the
+ *   new node announce, it triggers cluster_runtime_join() to establish the
  *   TCP connection with full challenge-response authentication.
  *
  * WIRE FORMAT (announce datagram):
@@ -260,7 +260,7 @@ static void discovery_coro(void *arg) {
          * the remainder of the interval).
          *
          * Each individual wait is capped at SLICE_MS so the coro
-         * observes c->running=false (set by xr_cluster_stop) within a
+         * observes c->running=false (set by cluster_runtime_stop) within a
          * bounded latency. Without this cap, a ~3 s interval would
          * delay clean cluster shutdown by up to a full interval.
          */
@@ -321,12 +321,12 @@ static void discovery_coro(void *arg) {
                 if (!should_connect(c, peer_name))
                     continue;
 
-                // Resolve sender IP → dotted-quad for xr_cluster_join.
+                // Resolve sender IP → dotted-quad for cluster_runtime_join.
                 char host[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host));
 
                 // Auto-join (TCP connect + handshake).
-                xr_cluster_join(c, host, peer_port);
+                cluster_runtime_join(c, host, peer_port);
             }
         }
     }

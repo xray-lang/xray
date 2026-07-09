@@ -100,7 +100,7 @@ void cluster_health_check_heartbeats(XrCluster *c) {
         cluster_health_mark_dead(c, dead->name);
         cluster_subscriber_remove_all_for_node(c, dead);
         cluster_monitor_fire(c, dead->name);
-        xr_cluster_remove_node(c, dead);
+        cluster_node_remove(c, dead);
         cluster_node_free(dead);
     }
 

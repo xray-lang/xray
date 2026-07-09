@@ -157,8 +157,8 @@ typedef struct XrCluster {
      * Stop-signalling pipe for coroutine-friendly interruptible sleep.
      *
      * Every long-lived cluster coroutine uses
-     * xr_cluster_sleep_interruptible(c, ms) which reads from
-     * stop_pipe[0] with a read deadline. xr_cluster_stop closes
+     * cluster_sleep_interruptible(c, ms) which reads from
+     * stop_pipe[0] with a read deadline. cluster_runtime_stop closes
      * stop_pipe[1] early, turning every outstanding read into an
      * immediate EOF. Both ends non-blocking.
      *
@@ -167,12 +167,12 @@ typedef struct XrCluster {
     int stop_pipe[2];
 
     /*
-     * Heartbeat coroutine — spawned in xr_cluster_start_ex, yields via
-     * xr_cluster_sleep_interruptible between ticks, observes running
+     * Heartbeat coroutine — spawned in cluster_runtime_start, yields via
+     * cluster_sleep_interruptible between ticks, observes running
      * (+ EOF on stop_pipe) to exit.
      *
      * heartbeat_running is flipped to false by the coroutine on exit so
-     * xr_cluster_stop can wait briefly before freeing the cluster
+     * cluster_runtime_stop can wait briefly before freeing the cluster
      * state the coroutine still references. Lives in the same style as
      * accept_coro_spawned / accept_running below.
      */
@@ -182,12 +182,12 @@ typedef struct XrCluster {
     /*
      * Inbound-accept coroutine state.
      *
-     *   accept_coro_spawned — true once xr_cluster_start_ex successfully
+     *   accept_coro_spawned — true once cluster_runtime_start successfully
      *                         spawned the accept coroutine. Prevents
-     *                         double-spawn and lets xr_cluster_stop know
+     *                         double-spawn and lets cluster_runtime_stop know
      *                         whether to wait for it at teardown.
      *   accept_running      — flipped to false by the coro on exit so
-     *                         xr_cluster_stop can spin-wait briefly and
+     *                         cluster_runtime_stop can spin-wait briefly and
      *                         avoid tearing down node state while the
      *                         accept path is still inside
      *                         cluster_node_accept.
@@ -202,7 +202,7 @@ typedef struct XrCluster {
     XrClusterDiscovery *discovery;
 
     /*
-     * Optional inter-node TLS wrap (see xr_cluster_start_ex).
+     * Optional inter-node TLS wrap (see cluster_runtime_start).
      *
      *   tls_enabled     — flip to turn on TLS for every inbound and
      *                     outbound cluster connection.
@@ -227,7 +227,7 @@ typedef struct XrCluster {
 /* ========== Cluster Lifecycle API ========== */
 
 /*
- * TLS options for xr_cluster_start_ex.
+ * TLS options for cluster_runtime_start.
  *
  *   enabled          — master switch. When false the other fields are
  *                      ignored and the cluster reverts to plain TCP.
@@ -253,7 +253,7 @@ typedef struct XrCluster {
  *
  * All string pointers are borrowed for the duration of the call; the
  * contents are copied into OpenSSL contexts that live until
- * xr_cluster_stop.
+ * cluster_runtime_stop.
  */
 typedef struct XrClusterTlsOptions {
     bool enabled;
@@ -267,29 +267,29 @@ typedef struct XrClusterTlsOptions {
  * Start a cluster with explicit TLS options. Passing `tls == NULL` starts
  * a plain TCP cluster.
  */
-XR_FUNC int xr_cluster_start_ex(struct XrVMRuntime *X, const char *name, uint16_t port,
-                                const char *secret, const XrClusterTlsOptions *tls);
+int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
+                          const char *secret, const XrClusterTlsOptions *tls);
 
 // Connect to a remote node (host:port)
-XR_FUNC int xr_cluster_join(XrCluster *c, const char *host, uint16_t port);
+int cluster_runtime_join(XrCluster *c, const char *host, uint16_t port);
 
 // Stop the cluster and close all connections
-XR_FUNC void xr_cluster_stop(XrCluster *c);
+void cluster_runtime_stop(XrCluster *c);
 
 // Check if cluster is running
-XR_FUNC bool xr_cluster_is_running(XrCluster *c);
+bool cluster_runtime_is_running(XrCluster *c);
 
 /*
  * Coroutine-friendly interruptible sleep.
  *
- * Sleeps for up to `ms` milliseconds or until xr_cluster_stop signals
+ * Sleeps for up to `ms` milliseconds or until cluster_runtime_stop signals
  * shutdown. Intended for use inside cluster-owned native coroutines
  * (heartbeat, accept retry, discovery tick) that
  * need periodic wake-up without blocking the worker thread with
  * nanosleep/usleep.
  *
  * Mechanism: reads from the cluster's stop_pipe[0] with a read
- * deadline set via xr_socket_set_read_timeout. xr_cluster_stop closes
+ * deadline set via xr_socket_set_read_timeout. cluster_runtime_stop closes
  * stop_pipe[1] early so every outstanding read returns EOF
  * immediately. Each worker's netpoll integration unblocks the
  * coroutine on deadline even if no data arrives.
@@ -303,21 +303,21 @@ XR_FUNC bool xr_cluster_is_running(XrCluster *c);
  * (pipe() failed at start_ex); the cluster is still functional in
  * that case, just not interruptible on the sleep boundary.
  */
-XR_FUNC bool xr_cluster_sleep_interruptible(XrCluster *c, int ms);
+bool cluster_sleep_interruptible(XrCluster *c, int ms);
 
 // Get self node name
-XR_FUNC const char *xr_cluster_self_name(XrCluster *c);
+const char *cluster_runtime_self_name(XrCluster *c);
 
 /* ========== Node Query API ========== */
 
 // Find a node by name (must hold nodes_lock or accept stale reads)
-XR_FUNC XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name);
+XrClusterNode *cluster_node_find(XrCluster *c, const char *name);
 
 // Add a connected node to the cluster
-XR_FUNC void xr_cluster_add_node(XrCluster *c, XrClusterNode *node);
+void cluster_node_add(XrCluster *c, XrClusterNode *node);
 
 // Remove a node from the cluster
-XR_FUNC void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node);
+void cluster_node_remove(XrCluster *c, XrClusterNode *node);
 
 /* ========== Named Channel Registry ========== */
 
@@ -341,7 +341,7 @@ XrServiceEntry *cluster_service_find(XrCluster *c, const char *name);
 /* ========== Frame Processing ========== */
 
 // Process incoming frames from a connected node (runs in a coroutine)
-XR_FUNC void xr_cluster_process_node(XrCluster *c, XrClusterNode *node);
+void cluster_process_node(XrCluster *c, XrClusterNode *node);
 
 /* ========== Health & Robustness ========== */
 
@@ -414,7 +414,7 @@ void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value)
  * after topics_lock is initialised and before any subscribe path is
  * exposed. cluster_topics_destroy closes every subscriber channel,
  * recursively frees the trie, and resets topic_root to NULL — call it
- * exactly once from xr_cluster_stop (the function tolerates a NULL
+ * exactly once from cluster_runtime_stop (the function tolerates a NULL
  * root, so double-stop is safe).
  */
 int cluster_topics_init(XrCluster *c);
