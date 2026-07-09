@@ -837,12 +837,26 @@ typedef enum XaotJsonAccessAction {
     XAOT_JSON_ACCESS_REJECT,
 } XaotJsonAccessAction;
 
+typedef enum XaotJsonCodecAction {
+    XAOT_JSON_CODEC_PARSE_DOM_BRIDGE = 1,
+    XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
+    XAOT_JSON_CODEC_DECODE_VALIDATE_COPY,
+    XAOT_JSON_CODEC_ENCODE_FIELD_TABLE,
+    XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR,
+    XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK,
+    XAOT_JSON_CODEC_REJECT,
+} XaotJsonCodecAction;
+
 enum {
     XAOT_JSON_EV_GLOBAL_ROW = 1u << 0,
     XAOT_JSON_EV_STATIC_KEY = 1u << 1,
     XAOT_JSON_EV_RECEIVER_SHAPE = 1u << 2,
     XAOT_JSON_EV_FIELD_INDEX = 1u << 3,
     XAOT_JSON_EV_RECORD_BRIDGE = 1u << 4,
+    XAOT_JSON_EV_INPUT_SHAPE = 1u << 5,
+    XAOT_JSON_EV_OUTPUT_SHAPE = 1u << 6,
+    XAOT_JSON_EV_TARGET_TYPE = 1u << 7,
+    XAOT_JSON_EV_DERIVE = 1u << 8,
 };
 
 enum {
@@ -852,6 +866,8 @@ enum {
     XAOT_JSON_UNPROVEN_STALE_SHAPE = 3,
     XAOT_JSON_UNPROVEN_INVALID_KIND = 4,
     XAOT_JSON_UNPROVEN_OPEN_SHAPE = 5,
+    XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE = 6,
+    XAOT_JSON_UNPROVEN_UNSUPPORTED_CODEC = 7,
 };
 
 typedef struct XaotJsonShapePlan {
@@ -881,6 +897,22 @@ typedef struct XaotJsonAccessPlan {
     uint32_t evidence;
     uint8_t unproven_reason;
 } XaotJsonAccessPlan;
+
+typedef struct XaotJsonCodecPlan {
+    XgJsonCodecId codec_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint8_t codec_kind;
+    uint8_t action;
+    uint32_t input_type_key;
+    uint32_t target_type_key;
+    XgJsonShapeId input_shape_id;
+    XgJsonShapeId output_shape_id;
+    uint16_t field_count;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotJsonCodecPlan;
 
 typedef enum XaotRecordShapeAction {
     XAOT_RECORD_SHAPE_SEALED_RECORD = 1,
@@ -1413,6 +1445,9 @@ typedef struct XaotBundle {
     XaotJsonAccessPlan *json_access_plans;
     uint32_t njson_access_plans;
     uint32_t json_access_plan_cap;
+    XaotJsonCodecPlan *json_codec_plans;
+    uint32_t njson_codec_plans;
+    uint32_t json_codec_plan_cap;
     XaotRecordShapePlan *record_shape_plans;
     uint32_t nrecord_shape_plans;
     uint32_t record_shape_plan_cap;
@@ -1513,6 +1548,8 @@ XR_FUNC const XaotJsonShapePlan *xaot_bundle_find_json_shape_plan(const XaotBund
                                                                   XgJsonShapeId json_shape_id);
 XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBundle *bundle,
                                                                     XgJsonAccessId json_access_id);
+XR_FUNC const XaotJsonCodecPlan *xaot_bundle_find_json_codec_plan(const XaotBundle *bundle,
+                                                                  XgJsonCodecId codec_id);
 XR_FUNC const XaotRecordShapePlan *
 xaot_bundle_find_record_shape_plan(const XaotBundle *bundle, XgRecordShapeId record_shape_id);
 XR_FUNC const XaotRecordAccessPlan *

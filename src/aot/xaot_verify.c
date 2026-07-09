@@ -1140,6 +1140,18 @@ static bool verify_json_access_kind_valid(uint8_t kind) {
     }
 }
 
+static bool verify_json_codec_row_kind_valid(uint8_t kind) {
+    switch ((XgJsonCodecKind) kind) {
+        case XG_JSON_CODEC_PARSE:
+        case XG_JSON_CODEC_DECODE:
+        case XG_JSON_CODEC_ENCODE:
+        case XG_JSON_CODEC_STRINGIFY:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence Json verifier has no evidence");
@@ -1173,6 +1185,29 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
         if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) == 0 && access->key_name_id != 0 &&
             access->field_ordinal >= shape->field_count)
             return set_error(errbuf, errbuf_len, "AOT Json access field ordinal is stale");
+    }
+    for (uint32_t i = 0; i < ev->njson_codecs; i++) {
+        const XgJsonCodecSummary *codec = &ev->json_codecs[i];
+        if (codec->codec_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Json codec evidence has no id");
+        if (!verify_json_codec_row_kind_valid(codec->codec_kind))
+            return set_error(errbuf, errbuf_len, "AOT Json codec evidence has invalid kind");
+        for (uint32_t j = i + 1; j < ev->njson_codecs; j++) {
+            if (ev->json_codecs[j].codec_id == codec->codec_id)
+                return set_error(errbuf, errbuf_len, "AOT Json codec evidence id is duplicated");
+        }
+        if ((codec->flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0 &&
+            codec->input_shape_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Json codec input shape evidence is missing");
+        if ((codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0 &&
+            codec->output_shape_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Json codec output shape evidence is missing");
+        if (codec->input_shape_id != XG_NO_ID &&
+            !xg_global_evidence_find_json_shape(ev, codec->input_shape_id))
+            return set_error(errbuf, errbuf_len, "AOT Json codec references missing input shape");
+        if (codec->output_shape_id != XG_NO_ID &&
+            !xg_global_evidence_find_json_shape(ev, codec->output_shape_id))
+            return set_error(errbuf, errbuf_len, "AOT Json codec references missing output shape");
     }
     return true;
 }
@@ -3364,6 +3399,87 @@ static bool verify_json_access_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static bool verify_json_codec_kind_valid(uint8_t kind) {
+    switch ((XgJsonCodecKind) kind) {
+        case XG_JSON_CODEC_PARSE:
+        case XG_JSON_CODEC_DECODE:
+        case XG_JSON_CODEC_ENCODE:
+        case XG_JSON_CODEC_STRINGIFY:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t verify_json_codec_action_for(const XgJsonCodecSummary *codec) {
+    if (!codec || !verify_json_codec_kind_valid(codec->codec_kind))
+        return XAOT_JSON_CODEC_REJECT;
+    switch ((XgJsonCodecKind) codec->codec_kind) {
+        case XG_JSON_CODEC_PARSE:
+            return (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0
+                       ? XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT
+                       : XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
+        case XG_JSON_CODEC_DECODE:
+            return (codec->target_type_key != 0 &&
+                    (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0)
+                       ? XAOT_JSON_CODEC_DECODE_VALIDATE_COPY
+                       : XAOT_JSON_CODEC_REJECT;
+        case XG_JSON_CODEC_ENCODE:
+            return (codec->flags & XG_JSON_CODEC_USES_DERIVE) != 0
+                       ? XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR
+                       : XAOT_JSON_CODEC_ENCODE_FIELD_TABLE;
+        case XG_JSON_CODEC_STRINGIFY:
+            return XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK;
+        default:
+            return XAOT_JSON_CODEC_REJECT;
+    }
+}
+
+static uint8_t verify_json_codec_reason_for(const XgJsonCodecSummary *codec) {
+    if (!codec || !verify_json_codec_kind_valid(codec->codec_kind))
+        return XAOT_JSON_UNPROVEN_INVALID_KIND;
+    if (codec->codec_kind == XG_JSON_CODEC_DECODE &&
+        (codec->target_type_key == 0 || (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) == 0))
+        return XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE;
+    return XAOT_JSON_UNPROVEN_NONE;
+}
+
+static uint32_t verify_json_codec_evidence_for(const XgJsonCodecSummary *codec) {
+    uint32_t evidence = XAOT_JSON_EV_GLOBAL_ROW;
+    if (!codec)
+        return evidence;
+    if ((codec->flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0)
+        evidence |= XAOT_JSON_EV_INPUT_SHAPE;
+    if ((codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0)
+        evidence |= XAOT_JSON_EV_OUTPUT_SHAPE;
+    if ((codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 && codec->target_type_key != 0)
+        evidence |= XAOT_JSON_EV_TARGET_TYPE;
+    if ((codec->flags & XG_JSON_CODEC_USES_DERIVE) != 0)
+        evidence |= XAOT_JSON_EV_DERIVE;
+    return evidence;
+}
+
+static bool verify_json_codec_plan_rederives(const XaotJsonCodecPlan *plan,
+                                             const XgJsonCodecSummary *codec, char *errbuf,
+                                             size_t errbuf_len) {
+    if (!plan || !codec)
+        return set_error(errbuf, errbuf_len, "AOT Json codec verifier has incomplete input");
+    if (plan->codec_id != codec->codec_id || plan->module_id != codec->module_id ||
+        plan->owner_func_id != codec->owner_func_id ||
+        plan->source_span_id != codec->source_span_id || plan->codec_kind != codec->codec_kind ||
+        plan->input_type_key != codec->input_type_key ||
+        plan->target_type_key != codec->target_type_key ||
+        plan->input_shape_id != codec->input_shape_id ||
+        plan->output_shape_id != codec->output_shape_id || plan->field_count != codec->field_count)
+        return set_error(errbuf, errbuf_len, "AOT Json codec plan identity does not re-derive");
+    if (plan->action != verify_json_codec_action_for(codec) ||
+        plan->unproven_reason != verify_json_codec_reason_for(codec))
+        return set_error(errbuf, errbuf_len, "AOT Json codec plan action does not re-derive");
+    if (plan->evidence != verify_json_codec_evidence_for(codec))
+        return set_error(errbuf, errbuf_len, "AOT Json codec plan evidence does not re-derive");
+    return true;
+}
+
 static uint8_t verify_record_shape_action_for(const XgRecordShapeSummary *shape) {
     if (!shape)
         return XAOT_RECORD_SHAPE_REJECT;
@@ -4072,6 +4188,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_derived_clone_plans = 0;
     uint32_t expected_json_shape_plans = 0;
     uint32_t expected_json_access_plans = 0;
+    uint32_t expected_json_codec_plans = 0;
     uint32_t expected_record_shape_plans = 0;
     uint32_t expected_record_access_plans = 0;
     uint32_t expected_map_shape_plans = 0;
@@ -4434,6 +4551,19 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->njson_access_plans != expected_json_access_plans)
         return set_error(errbuf, errbuf_len, "AOT Json access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->njson_codecs; i++) {
+        const XgJsonCodecSummary *codec = &ev->json_codecs[i];
+        const XaotJsonCodecPlan *plan;
+        expected_json_codec_plans++;
+        plan = xaot_bundle_find_json_codec_plan(bundle, codec->codec_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Json codec evidence has no codec plan");
+        if (!verify_json_codec_plan_rederives(plan, codec, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->njson_codec_plans != expected_json_codec_plans)
+        return set_error(errbuf, errbuf_len, "AOT Json codec plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->nrecord_shapes; i++) {
         const XgRecordShapeSummary *shape = &ev->record_shapes[i];

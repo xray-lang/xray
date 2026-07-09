@@ -238,6 +238,10 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->json_access_plans = NULL;
     bundle->njson_access_plans = 0;
     bundle->json_access_plan_cap = 0;
+    xr_free(bundle->json_codec_plans);
+    bundle->json_codec_plans = NULL;
+    bundle->njson_codec_plans = 0;
+    bundle->json_codec_plan_cap = 0;
 
     xr_free(bundle->record_shape_plans);
     bundle->record_shape_plans = NULL;
@@ -1895,6 +1899,101 @@ static bool xaot_bundle_add_json_access_plans(XaotBundle *bundle,
     return true;
 }
 
+static bool json_codec_kind_valid(uint8_t kind) {
+    switch ((XgJsonCodecKind) kind) {
+        case XG_JSON_CODEC_PARSE:
+        case XG_JSON_CODEC_DECODE:
+        case XG_JSON_CODEC_ENCODE:
+        case XG_JSON_CODEC_STRINGIFY:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t json_codec_action_for(const XgJsonCodecSummary *codec) {
+    if (!codec || !json_codec_kind_valid(codec->codec_kind))
+        return XAOT_JSON_CODEC_REJECT;
+    switch ((XgJsonCodecKind) codec->codec_kind) {
+        case XG_JSON_CODEC_PARSE:
+            return (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0
+                       ? XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT
+                       : XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
+        case XG_JSON_CODEC_DECODE:
+            return (codec->target_type_key != 0 &&
+                    (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0)
+                       ? XAOT_JSON_CODEC_DECODE_VALIDATE_COPY
+                       : XAOT_JSON_CODEC_REJECT;
+        case XG_JSON_CODEC_ENCODE:
+            return (codec->flags & XG_JSON_CODEC_USES_DERIVE) != 0
+                       ? XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR
+                       : XAOT_JSON_CODEC_ENCODE_FIELD_TABLE;
+        case XG_JSON_CODEC_STRINGIFY:
+            return XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK;
+        default:
+            return XAOT_JSON_CODEC_REJECT;
+    }
+}
+
+static uint8_t json_codec_reason_for(const XgJsonCodecSummary *codec) {
+    if (!codec || !json_codec_kind_valid(codec->codec_kind))
+        return XAOT_JSON_UNPROVEN_INVALID_KIND;
+    if (codec->codec_kind == XG_JSON_CODEC_DECODE &&
+        (codec->target_type_key == 0 || (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) == 0))
+        return XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE;
+    return XAOT_JSON_UNPROVEN_NONE;
+}
+
+static uint32_t json_codec_evidence_for(const XgJsonCodecSummary *codec) {
+    uint32_t evidence = XAOT_JSON_EV_GLOBAL_ROW;
+    if (!codec)
+        return evidence;
+    if ((codec->flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0)
+        evidence |= XAOT_JSON_EV_INPUT_SHAPE;
+    if ((codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0)
+        evidence |= XAOT_JSON_EV_OUTPUT_SHAPE;
+    if ((codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 && codec->target_type_key != 0)
+        evidence |= XAOT_JSON_EV_TARGET_TYPE;
+    if ((codec->flags & XG_JSON_CODEC_USES_DERIVE) != 0)
+        evidence |= XAOT_JSON_EV_DERIVE;
+    return evidence;
+}
+
+static bool xaot_bundle_add_json_codec_plan(XaotBundle *bundle, const XgJsonCodecSummary *codec) {
+    XaotJsonCodecPlan *plan;
+    if (!bundle || !codec)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->json_codec_plans, &bundle->json_codec_plan_cap,
+                            bundle->njson_codec_plans + 1, sizeof(XaotJsonCodecPlan), 8))
+        return false;
+    plan = &bundle->json_codec_plans[bundle->njson_codec_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->codec_id = codec->codec_id;
+    plan->module_id = codec->module_id;
+    plan->owner_func_id = codec->owner_func_id;
+    plan->source_span_id = codec->source_span_id;
+    plan->codec_kind = codec->codec_kind;
+    plan->action = json_codec_action_for(codec);
+    plan->input_type_key = codec->input_type_key;
+    plan->target_type_key = codec->target_type_key;
+    plan->input_shape_id = codec->input_shape_id;
+    plan->output_shape_id = codec->output_shape_id;
+    plan->field_count = codec->field_count;
+    plan->evidence = json_codec_evidence_for(codec);
+    plan->unproven_reason = json_codec_reason_for(codec);
+    return true;
+}
+
+static bool xaot_bundle_add_json_codec_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
+        if (!xaot_bundle_add_json_codec_plan(bundle, &evidence->json_codecs[i]))
+            return false;
+    }
+    return true;
+}
+
 static bool record_shape_kind_valid(uint8_t kind) {
     switch ((XgRecordShapeKind) kind) {
         case XG_RECORD_SHAPE_LITERAL:
@@ -3156,6 +3255,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT Json access plan";
         return false;
     }
+    if (!xaot_bundle_add_json_codec_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT Json codec plan";
+        return false;
+    }
     if (!xaot_bundle_add_record_shape_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT Record shape plan";
         return false;
@@ -3798,6 +3901,17 @@ XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBu
     for (uint32_t i = 0; i < bundle->njson_access_plans; i++) {
         if (bundle->json_access_plans[i].json_access_id == json_access_id)
             return &bundle->json_access_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotJsonCodecPlan *xaot_bundle_find_json_codec_plan(const XaotBundle *bundle,
+                                                                  XgJsonCodecId codec_id) {
+    if (!bundle || codec_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->njson_codec_plans; i++) {
+        if (bundle->json_codec_plans[i].codec_id == codec_id)
+            return &bundle->json_codec_plans[i];
     }
     return NULL;
 }
@@ -5099,6 +5213,27 @@ static const char *json_access_action_name(uint8_t action) {
     }
 }
 
+static const char *json_codec_action_name(uint8_t action) {
+    switch ((XaotJsonCodecAction) action) {
+        case XAOT_JSON_CODEC_PARSE_DOM_BRIDGE:
+            return "parse_dom_bridge";
+        case XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT:
+            return "parse_runtime_direct";
+        case XAOT_JSON_CODEC_DECODE_VALIDATE_COPY:
+            return "decode_validate_copy";
+        case XAOT_JSON_CODEC_ENCODE_FIELD_TABLE:
+            return "encode_field_table";
+        case XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR:
+            return "encode_derive_sidecar";
+        case XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK:
+            return "stringify_dynamic_walk";
+        case XAOT_JSON_CODEC_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
 static const char *json_unproven_reason_name(uint8_t reason) {
     switch (reason) {
         case XAOT_JSON_UNPROVEN_NONE:
@@ -5113,6 +5248,10 @@ static const char *json_unproven_reason_name(uint8_t reason) {
             return "invalid_kind";
         case XAOT_JSON_UNPROVEN_OPEN_SHAPE:
             return "open_shape";
+        case XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE:
+            return "missing_target_type";
+        case XAOT_JSON_UNPROVEN_UNSUPPORTED_CODEC:
+            return "unsupported_codec";
         default:
             return "unknown";
     }
@@ -6338,6 +6477,19 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 ji, jp->json_access_id, jp->module_id, jp->owner_func_id, jp->receiver_shape_id,
                 xg_json_access_kind_name(jp->access_kind), json_access_action_name(jp->action),
                 jp->key_name_id, jp->result_type_key, (unsigned) jp->field_ordinal, jp->evidence,
+                json_unproven_reason_name(jp->unproven_reason));
+    }
+
+    for (uint32_t ji = 0; ji < bundle->njson_codec_plans; ji++) {
+        const XaotJsonCodecPlan *jp = &bundle->json_codec_plans[ji];
+        fprintf(out,
+                "json-codec-plan %u id=%u module=%u func=%u span=%u kind=%s action=%s "
+                "input_type=%u target_type=%u input_shape=%u output_shape=%u fields=%u "
+                "evidence=0x%x reason=%s\n",
+                ji, jp->codec_id, jp->module_id, jp->owner_func_id, jp->source_span_id,
+                xg_json_codec_kind_name(jp->codec_kind), json_codec_action_name(jp->action),
+                jp->input_type_key, jp->target_type_key, jp->input_shape_id, jp->output_shape_id,
+                (unsigned) jp->field_count, jp->evidence,
                 json_unproven_reason_name(jp->unproven_reason));
     }
 
