@@ -6595,6 +6595,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     if (sym->is_readonly_binding && var_type)
         var_type = xr_type_make_const(ctx->analyzer->isolate, var_type);
 
+    if (var->initializer && xa_is_module_level_scope(ctx->analyzer) &&
+        xa_type_contains_span_view(var_type)) {
+        const char *context = node->type == AST_SHARED_DECL
+                                  ? "store Span view in shared binding"
+                                  : "store Span view in module-level binding";
+        xa_check_span_value_escape(ctx, var->initializer, var_type, context);
+    }
+
     char freestanding_var_context[160];
     snprintf(freestanding_var_context, sizeof(freestanding_var_context), "variable '%s'",
              var->name ? var->name : "?");

@@ -1,0 +1,3 @@
+shared bytes = Bytes(4)
+shared view: ByteSpan = bytes[:]
+print(view.length)
