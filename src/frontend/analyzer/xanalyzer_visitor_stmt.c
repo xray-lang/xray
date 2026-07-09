@@ -3651,8 +3651,7 @@ static bool xa_os_resource_lint_try_wait_null_check(XaOsResourceLintState *state
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || strcmp(ma->name, "tryWait") != 0)
         return false;
-    uint32_t receiver_id = xa_thread_lint_expr_symbol_id(ma->object);
-    XaOsResourceLintState *state = xa_os_resource_lint_find_by_symbol_id(states, receiver_id);
+    XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, ma->object);
     if (!state || state->kind != XA_OS_RESOURCE_PROCESS)
         return false;
     if (state_out)

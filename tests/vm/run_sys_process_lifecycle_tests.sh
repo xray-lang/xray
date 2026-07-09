@@ -123,6 +123,7 @@ PIPE_FN_VALUE_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_fn_value_close
 PROCESS_TOP_CONST_FN_VALUE_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_top_const_fn_value_wait.xr"
 PIPE_TOP_CONST_FN_VALUE_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_top_const_fn_value_close.xr"
 PROCESS_HELPER_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_return_alias_wait.xr"
+PROCESS_HELPER_RETURN_ALIAS_TRYWAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_return_alias_trywait.xr"
 PIPE_HELPER_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_return_alias_close.xr"
 NESTED_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_nested_helper_return_alias_ok.xr"
 TERNARY_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_ternary_helper_return_alias_ok.xr"
@@ -183,6 +184,7 @@ expect_output "process_top_const_fn_value_wait" "$PROCESS_TOP_CONST_FN_VALUE_WAI
 expect_output "pipe_top_const_fn_value_close" "$PIPE_TOP_CONST_FN_VALUE_CLOSE_SRC" \
     $'true\ntrue\npipe-top-fn-value'
 expect_output "process_helper_return_alias_wait" "$PROCESS_HELPER_RETURN_ALIAS_WAIT_SRC" "0"
+expect_output "process_helper_return_alias_trywait" "$PROCESS_HELPER_RETURN_ALIAS_TRYWAIT_SRC" "true"
 expect_output "pipe_helper_return_alias_close" "$PIPE_HELPER_RETURN_ALIAS_CLOSE_SRC" "true"
 expect_output "process_pipe_nested_helper_return_alias_ok" \
     "$NESTED_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
