@@ -13,7 +13,7 @@
 
 #include "xrt_value.h"
 #include "../os/os_time.h"
-#include "../shared/xr_datetime_core.h"
+#include "../shared/xr_time_offset.h"
 #include <time.h>
 
 static inline XrValue xrt_time_now(void) {
@@ -37,12 +37,12 @@ static inline XrValue xrt_time_clock(void) {
 }
 
 static inline XrValue xrt_time_local_offset(void) {
-    return XR_FROM_INT((int64_t) xr_datetime_core_local_offset_at(time(NULL)));
+    return XR_FROM_INT((int64_t) xr_time_utc_offset_at(time(NULL)));
 }
 
 static inline XrValue xrt_time_local_offset_at(XrValue timestamp) {
     int64_t ts = XR_IS_INT(timestamp) ? XR_TO_INT(timestamp) : 0;
-    return XR_FROM_INT((int64_t) xr_datetime_core_local_offset_at((time_t) ts));
+    return XR_FROM_INT((int64_t) xr_time_utc_offset_at((time_t) ts));
 }
 
 #endif  // XRT_TIME_H

@@ -254,7 +254,6 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 # ============================================================================
 
 add_xray_unit_test(test_array_core stdlib/test_array_core.c)
-add_xray_unit_test(test_datetime_core stdlib/test_datetime_core.c)
 add_xray_unit_test(test_math_core stdlib/test_math_core.c)
 add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
 add_xray_unit_test(test_range_core stdlib/test_range_core.c)
