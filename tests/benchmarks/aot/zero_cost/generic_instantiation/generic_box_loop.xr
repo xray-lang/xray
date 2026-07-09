@@ -1,0 +1,28 @@
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+
+    get() -> T {
+        return this.value
+    }
+}
+
+fn id<T>(x: T) -> T {
+    return x
+}
+
+fn run(n: int) -> int {
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        var box = Box<int>((i % 17) + 1)
+        sum = sum + id<int>(box.get())
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(30000))
