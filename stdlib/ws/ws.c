@@ -1825,8 +1825,8 @@ process_frame:
         size_t max_out = ws->config.max_message_size;
         if (max_out == 0)
             max_out = WS_DEFAULT_MAX_MESSAGE_SIZE;
-        if (xr_ws_deflate_decompress((const uint8_t *) msg->data, msg->len, max_out, &decompressed,
-                                     &decompressed_len) == 0) {
+        if (ws_deflate_decompress((const uint8_t *) msg->data, msg->len, max_out, &decompressed,
+                                  &decompressed_len) == 0) {
             if (!(msg->_flags & XR_WS_MSG_DATA_INPLACE))
                 xr_free(msg->data);
             msg->data = (char *) decompressed;
