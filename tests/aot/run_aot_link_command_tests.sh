@@ -786,6 +786,126 @@ else
     sed 's/^/      /' "$FREESTANDING_ATTR_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_GLOBAL_ASM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_global_asm.xr"
+FREESTANDING_GLOBAL_ASM_OBJ="$WORK/freestanding_global_asm.o"
+FREESTANDING_GLOBAL_ASM_LOG="$WORK/freestanding_global_asm.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_GLOBAL_ASM_OBJ" \
+        "$FREESTANDING_GLOBAL_ASM_SRC" >"$FREESTANDING_GLOBAL_ASM_LOG" 2>&1; then
+    FREESTANDING_GLOBAL_ASM_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_GLOBAL_ASM_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_GLOBAL_ASM_C" ]; then
+        expect_log_contains "$FREESTANDING_GLOBAL_ASM_C" "__asm__(" \
+            "freestanding-profile/global-asm: emits top-level asm"
+        expect_log_contains "$FREESTANDING_GLOBAL_ASM_C" "xray_global_asm_marker" \
+            "freestanding-profile/global-asm: keeps asm marker symbol"
+        expect_log_not_contains "$FREESTANDING_GLOBAL_ASM_C" "#include \"xrt.h\"" \
+            "freestanding-profile/global-asm: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/global-asm: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_GLOBAL_ASM_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_GLOBAL_ASM_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_GLOBAL_ASM_OBJ")"
+    if [ -z "$FREESTANDING_GLOBAL_ASM_UNDEFINED" ]; then
+        record_pass "freestanding-profile/global-asm: no undefined symbols"
+    else
+        record_fail "freestanding-profile/global-asm: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_GLOBAL_ASM_UNDEFINED" | sed 's/^/      /'
+    fi
+    if nm -g "$FREESTANDING_GLOBAL_ASM_OBJ" 2>/dev/null |
+            grep -Eq '(^|[[:space:]])_?xray_global_asm_marker$'; then
+        record_pass "freestanding-profile/global-asm: object exports asm marker"
+    else
+        record_fail "freestanding-profile/global-asm: missing asm marker"
+        nm -g "$FREESTANDING_GLOBAL_ASM_OBJ" 2>/dev/null | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/global-asm: object build failed"
+    sed 's/^/      /' "$FREESTANDING_GLOBAL_ASM_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_NAKED_ASM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_naked_extern_global_asm.xr"
+FREESTANDING_NAKED_ASM_OBJ="$WORK/freestanding_naked_extern_global_asm.o"
+FREESTANDING_NAKED_ASM_LOG="$WORK/freestanding_naked_extern_global_asm.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_NAKED_ASM_OBJ" \
+        "$FREESTANDING_NAKED_ASM_SRC" >"$FREESTANDING_NAKED_ASM_LOG" 2>&1; then
+    FREESTANDING_NAKED_ASM_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_NAKED_ASM_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_NAKED_ASM_C" ]; then
+        expect_log_contains "$FREESTANDING_NAKED_ASM_C" "XRT_ATTR_NAKED" \
+            "freestanding-profile/naked-asm: emits naked extern declaration"
+        expect_log_contains "$FREESTANDING_NAKED_ASM_C" "__asm__(" \
+            "freestanding-profile/naked-asm: emits provider asm"
+        expect_log_not_contains "$FREESTANDING_NAKED_ASM_C" "#include \"xrt.h\"" \
+            "freestanding-profile/naked-asm: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/naked-asm: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_NAKED_ASM_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_NAKED_ASM_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_NAKED_ASM_OBJ")"
+    if [ -z "$FREESTANDING_NAKED_ASM_UNDEFINED" ]; then
+        record_pass "freestanding-profile/naked-asm: no undefined symbols"
+    else
+        record_fail "freestanding-profile/naked-asm: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_NAKED_ASM_UNDEFINED" | sed 's/^/      /'
+    fi
+    if nm -g "$FREESTANDING_NAKED_ASM_OBJ" 2>/dev/null |
+            grep -Eq '(^|[[:space:]])_?xray_naked_stub$'; then
+        record_pass "freestanding-profile/naked-asm: object exports naked stub"
+    else
+        record_fail "freestanding-profile/naked-asm: missing naked stub"
+        nm -g "$FREESTANDING_NAKED_ASM_OBJ" 2>/dev/null | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/naked-asm: object build failed"
+    sed 's/^/      /' "$FREESTANDING_NAKED_ASM_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_INTERRUPT_ASM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_interrupt_extern_global_asm.xr"
+FREESTANDING_INTERRUPT_ASM_OBJ="$WORK/freestanding_interrupt_extern_global_asm.o"
+FREESTANDING_INTERRUPT_ASM_LOG="$WORK/freestanding_interrupt_extern_global_asm.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_INTERRUPT_ASM_OBJ" \
+        "$FREESTANDING_INTERRUPT_ASM_SRC" >"$FREESTANDING_INTERRUPT_ASM_LOG" 2>&1; then
+    FREESTANDING_INTERRUPT_ASM_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_INTERRUPT_ASM_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_INTERRUPT_ASM_C" ]; then
+        expect_log_contains "$FREESTANDING_INTERRUPT_ASM_C" "XRT_ATTR_INTERRUPT(\"irq\")" \
+            "freestanding-profile/interrupt-asm: emits interrupt extern declaration"
+        expect_log_contains "$FREESTANDING_INTERRUPT_ASM_C" "__asm__(" \
+            "freestanding-profile/interrupt-asm: emits provider asm"
+        expect_log_not_contains "$FREESTANDING_INTERRUPT_ASM_C" "#include \"xrt.h\"" \
+            "freestanding-profile/interrupt-asm: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/interrupt-asm: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_INTERRUPT_ASM_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_INTERRUPT_ASM_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_INTERRUPT_ASM_OBJ")"
+    if [ -z "$FREESTANDING_INTERRUPT_ASM_UNDEFINED" ]; then
+        record_pass "freestanding-profile/interrupt-asm: no undefined symbols"
+    else
+        record_fail "freestanding-profile/interrupt-asm: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_INTERRUPT_ASM_UNDEFINED" | sed 's/^/      /'
+    fi
+    if nm -g "$FREESTANDING_INTERRUPT_ASM_OBJ" 2>/dev/null |
+            grep -Eq '(^|[[:space:]])_?xray_timer_irq$'; then
+        record_pass "freestanding-profile/interrupt-asm: object exports irq stub"
+    else
+        record_fail "freestanding-profile/interrupt-asm: missing irq stub"
+        nm -g "$FREESTANDING_INTERRUPT_ASM_OBJ" 2>/dev/null | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/interrupt-asm: object build failed"
+    sed 's/^/      /' "$FREESTANDING_INTERRUPT_ASM_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_KERNEL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_kernel_shape.xr"
 FREESTANDING_KERNEL_OBJ="$WORK/freestanding_kernel_shape.o"
 FREESTANDING_KERNEL_LOG="$WORK/freestanding_kernel_shape.log"
