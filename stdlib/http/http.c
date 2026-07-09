@@ -41,6 +41,7 @@
 #include "../../src/runtime/closure/xclosure.h"
 #include "../../src/runtime/mem/xfixed_heap.h"
 #include "../../src/base/xmalloc.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,15 +57,6 @@ extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
 extern XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc);
-
-/* ========== Server Config and Connection Limits ========== */
-
-// Server config defaults
-#include <stdatomic.h>
-
-#define HTTP_DEFAULT_MAX_CONNS 10000
-#define HTTP_DEFAULT_IDLE_TIMEOUT_MS 60000
-#define HTTP_DEFAULT_READ_TIMEOUT_MS 30000
 
 /* ========== URL Copy Optimization ========== */
 
@@ -377,11 +369,6 @@ XrHttpContext *xr_http_get_context(XrVMRuntime *X) {
     if (!ctx) {
         // First access, create context
         ctx = (XrHttpContext *) xr_calloc(1, sizeof(XrHttpContext));
-        // Initialize per-isolate server config defaults
-        atomic_init(&ctx->max_conns, HTTP_DEFAULT_MAX_CONNS);
-        atomic_init(&ctx->max_requests_per_conn, 0);
-        atomic_init(&ctx->idle_timeout_ms, HTTP_DEFAULT_IDLE_TIMEOUT_MS);
-        atomic_init(&ctx->read_timeout_ms, HTTP_DEFAULT_READ_TIMEOUT_MS);
         atomic_init(&ctx->current_conns, 0);
 
         mod->native_handle = ctx;

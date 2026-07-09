@@ -145,12 +145,11 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"request", "(options: Json): HttpResponse", "Generic HTTP request", true, false, false, false},
     {"route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", true, false, false, false},
     {"listen", "(port: int): bool", "Start HTTP server accept loop", true, false, false, false},
-    {"config", "(opts: Json): ()", "Configure HTTP server limits and timeouts", true, false, false, false},
     {"ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", true, false, false, false},
     {"stopServer", "(): ()", "Stop the HTTP server", true, false, false, false},
     {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 7
+#define GEN_HTTP_FUNCTION_COUNT 6
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {

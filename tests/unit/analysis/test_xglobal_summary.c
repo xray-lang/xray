@@ -7591,6 +7591,102 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_map_set_method_key_access) {
+    setup_parser_session();
+    const char *source = "fn touch() -> int {\n"
+                         "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
+                         "    var seen: Set<string> = #[\"ada\"]\n"
+                         "    scores.get(\"ada\")\n"
+                         "    scores.has(\"lin\")\n"
+                         "    scores.delete(\"lin\")\n"
+                         "    scores.set(\"ada\", 8)\n"
+                         "    seen.has(\"ada\")\n"
+                         "    seen.add(\"lin\")\n"
+                         "    seen.delete(\"ada\")\n"
+                         "    seen.clear()\n"
+                         "    scores.clear()\n"
+                         "    return 0\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 3);
+    ASSERT_EQ_UINT(ev.nhash_eqs, 1);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 9);
+
+    uint32_t map_gets = 0;
+    uint32_t map_sets = 0;
+    uint32_t map_has = 0;
+    uint32_t map_deletes = 0;
+    uint32_t map_clears = 0;
+    uint32_t set_adds = 0;
+    uint32_t set_has = 0;
+    uint32_t set_deletes = 0;
+    uint32_t set_clears = 0;
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XgKeyAccessSummary *row = &ev.key_accesses[i];
+        ASSERT_TRUE(row->receiver_shape_id != XG_NO_ID);
+        ASSERT_TRUE(row->key_type_key != 0);
+        ASSERT_TRUE(row->key_prehash != 0 || row->op == XG_KEY_ACCESS_CLEAR);
+        if (row->container_kind == XG_MAP_CONTAINER_MAP) {
+            if (row->op == XG_KEY_ACCESS_GET)
+                map_gets++;
+            else if (row->op == XG_KEY_ACCESS_SET)
+                map_sets++;
+            else if (row->op == XG_KEY_ACCESS_HAS)
+                map_has++;
+            else if (row->op == XG_KEY_ACCESS_DELETE)
+                map_deletes++;
+            else if (row->op == XG_KEY_ACCESS_CLEAR)
+                map_clears++;
+        } else if (row->container_kind == XG_MAP_CONTAINER_SET) {
+            if (row->op == XG_KEY_ACCESS_ADD)
+                set_adds++;
+            else if (row->op == XG_KEY_ACCESS_HAS)
+                set_has++;
+            else if (row->op == XG_KEY_ACCESS_DELETE)
+                set_deletes++;
+            else if (row->op == XG_KEY_ACCESS_CLEAR)
+                set_clears++;
+        }
+        if (row->op == XG_KEY_ACCESS_SET || row->op == XG_KEY_ACCESS_DELETE ||
+            row->op == XG_KEY_ACCESS_ADD || row->op == XG_KEY_ACCESS_CLEAR)
+            ASSERT_TRUE((row->flags & XG_KEY_ACCESS_MUTATING) != 0);
+    }
+    ASSERT_EQ_UINT(map_gets, 1);
+    ASSERT_EQ_UINT(map_sets, 1);
+    ASSERT_EQ_UINT(map_has, 1);
+    ASSERT_EQ_UINT(map_deletes, 1);
+    ASSERT_EQ_UINT(map_clears, 1);
+    ASSERT_EQ_UINT(set_adds, 1);
+    ASSERT_EQ_UINT(set_has, 1);
+    ASSERT_EQ_UINT(set_deletes, 1);
+    ASSERT_EQ_UINT(set_clears, 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nkey_access_plans, ev.nkey_accesses);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
     const char *source = "fn useTable() -> int {\n"
@@ -8049,6 +8145,7 @@ RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
+RUN_TEST(global_evidence_producer_records_map_set_method_key_access);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);

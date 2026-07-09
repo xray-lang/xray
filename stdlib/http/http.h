@@ -30,12 +30,8 @@ typedef struct XrHttpContext {
     struct XrHttpServer *server;
     XrVMRuntime *server_isolate;
 
-    /* === Server Config (per-isolate) === */
-    _Atomic int max_conns;              // Max connections (0 = unlimited)
-    _Atomic int max_requests_per_conn;  // Max requests per connection (0 = unlimited)
-    _Atomic int idle_timeout_ms;        // Idle timeout (ms)
-    _Atomic int read_timeout_ms;        // Read timeout (ms)
-    _Atomic int current_conns;          // Current connection count
+    /* === Server Runtime State === */
+    _Atomic int current_conns;  // Current connection count
 
     /* === Connection Pools (per-isolate) === */
     XrConnPool *conn_pool;     // TCP/TLS connection pool (net layer)
@@ -59,8 +55,5 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate);
 // http.listen(port) -> bool (yieldable, accept loop + conn handler spawn)
 XR_FUNC XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs,
                                           XrValue *result);
-
-// http.config(opts) -> void
-XR_FUNC XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc);
 
 #endif  // XR_STDLIB_HTTP_H

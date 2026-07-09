@@ -3371,17 +3371,6 @@ module http {
     layer: "runtime"
   }
 
-  fn config {
-    signature: "(opts: Json): ()"
-    doc: "Configure HTTP server limits and timeouts"
-    vm: "xr_http_config_impl"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn ws {
     signature: "(path: string, handler: fn(conn: WsConn): ()): ()"
     doc: "Register WebSocket upgrade route on HTTP server"
