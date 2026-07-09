@@ -60,6 +60,10 @@ typedef struct CallExprNode {
     AstNode *callee;
     AstNode **arguments;
     int arg_count;
+    int supplied_arg_count;
+    int default_arg_count;
+    int default_arg_param_count;
+    int required_arg_count;
     XrTypeRef **type_args;
     int type_arg_count;
 } CallExprNode;

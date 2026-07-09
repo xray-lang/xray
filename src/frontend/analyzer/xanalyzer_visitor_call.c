@@ -2353,6 +2353,12 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
         return false;
 
     bool can_complete = true;
+    int supplied_arg_count = call->arg_count;
+    int required_arg_count = 0;
+    for (int i = 0; i < param_count; i++) {
+        if (!links->param_defaults[i])
+            required_arg_count++;
+    }
     for (int i = 0; i < call->arg_count; i++) {
         if (call->arguments[i] && call->arguments[i]->type == AST_SPREAD_EXPR) {
             can_complete = false;
@@ -2385,7 +2391,34 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
     }
     call->arguments = new_args;
     call->arg_count = param_count;
+    call->supplied_arg_count = supplied_arg_count;
+    call->default_arg_count = param_count - supplied_arg_count;
+    call->default_arg_param_count = param_count;
+    call->required_arg_count = required_arg_count;
     return true;
+}
+
+static void xa_mark_call_default_arg_contract(CallExprNode *call, XaSymbolLinks *links,
+                                              int param_count) {
+    if (!call || !links || !links->param_defaults || links->param_count != param_count ||
+        param_count <= 0)
+        return;
+    int required_arg_count = 0;
+    bool has_default = false;
+    for (int i = 0; i < param_count; i++) {
+        if (links->param_defaults[i])
+            has_default = true;
+        else
+            required_arg_count++;
+    }
+    if (!has_default)
+        return;
+    if (call->supplied_arg_count < 0 || call->supplied_arg_count > call->arg_count)
+        call->supplied_arg_count = call->arg_count;
+    call->default_arg_param_count = param_count;
+    call->required_arg_count = required_arg_count;
+    call->default_arg_count =
+        param_count > call->supplied_arg_count ? param_count - call->supplied_arg_count : 0;
 }
 
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
@@ -2870,8 +2903,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
 
-    if (class_ctor_links && class_ctor_links->param_defaults)
-        xa_complete_call_default_args(ctx, call, class_ctor_links, class_ctor_links->param_count);
+    if (class_ctor_links && class_ctor_links->param_defaults) {
+        if (call->arg_count < class_ctor_links->param_count) {
+            xa_complete_call_default_args(ctx, call, class_ctor_links,
+                                          class_ctor_links->param_count);
+        } else if (call->arg_count == class_ctor_links->param_count) {
+            xa_mark_call_default_arg_contract(call, class_ctor_links,
+                                              class_ctor_links->param_count);
+        }
+    }
 
     /* Resolve symbol_ids in non-lambda arguments before any early-return path.
      * Skip AST_FUNCTION_EXPR args: they require expected_type context from
@@ -3080,8 +3120,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // omitted). Indirect/function-value calls carry no default expressions and
     // therefore must pass every argument.
     if (fn_links && fn_links->param_defaults && !is_variadic &&
-        fn_links->param_count == param_count && call->arg_count < param_count) {
-        xa_complete_call_default_args(ctx, call, fn_links, param_count);
+        fn_links->param_count == param_count) {
+        if (call->arg_count < param_count) {
+            xa_complete_call_default_args(ctx, call, fn_links, param_count);
+        } else if (call->arg_count == param_count) {
+            xa_mark_call_default_arg_contract(call, fn_links, param_count);
+        }
     }
 
     /* Spread expansion: walk arguments once, building a flat per-slot

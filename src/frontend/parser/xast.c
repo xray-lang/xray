@@ -675,6 +675,7 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
     AstNode *node = alloc_node(session, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
+    node->as.call_expr.supplied_arg_count = arg_count;
 
     // Copy parameter list
     if (arg_count > 0) {
@@ -702,6 +703,7 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
     AstNode *node = alloc_node(session, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
+    node->as.call_expr.supplied_arg_count = arg_count;
 
     // Copy parameter list
     if (arg_count > 0) {

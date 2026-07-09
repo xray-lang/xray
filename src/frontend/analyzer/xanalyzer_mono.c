@@ -544,6 +544,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.call_expr.callee =
                 xr_ast_clone_ctx(node->as.call_expr.callee, map, mc, clone_ctx);
             n->as.call_expr.arg_count = node->as.call_expr.arg_count;
+            n->as.call_expr.supplied_arg_count = node->as.call_expr.supplied_arg_count;
+            n->as.call_expr.default_arg_count = node->as.call_expr.default_arg_count;
+            n->as.call_expr.default_arg_param_count = node->as.call_expr.default_arg_param_count;
+            n->as.call_expr.required_arg_count = node->as.call_expr.required_arg_count;
             n->as.call_expr.arguments = clone_node_array(
                 node->as.call_expr.arguments, node->as.call_expr.arg_count, map, mc, clone_ctx);
             n->as.call_expr.type_args = clone_tref_array(
