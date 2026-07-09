@@ -1,0 +1,10 @@
+@no_alloc
+fn xray_no_alloc_array_concat_reject(left: Array<int>, right: Array<int>) -> int {
+    return left.concat(right).length
+}
+
+var xs = Array<int>(0, 0)
+var ys = Array<int>(0, 0)
+xs.push(1)
+ys.push(2)
+print(xray_no_alloc_array_concat_reject(xs, ys))
