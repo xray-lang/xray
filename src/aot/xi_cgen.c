@@ -7267,6 +7267,8 @@ static bool cg_func_has_native_receiver_boxed_use_in_bundle(XiCgenCtx *ctx, cons
 
 static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
                                         bool typed_abi, bool native_receiver) {
+    if (xicgen_func_is_itable_target(ctx, f))
+        return true;
     if (!typed_abi && !native_receiver)
         return false;
 
@@ -7923,7 +7925,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     if (native_receiver && boxed_adapter) {
         ctx->stats.boxed_adapters++;
         emit_class_native_boxed_adapter(ctx, out, prefix, f);
-    } else if (typed_abi && boxed_adapter) {
+    } else if (boxed_adapter) {
         ctx->stats.boxed_adapters++;
         if (!emit_class_native_typed_boxed_adapter(ctx, out, prefix, f)) {
             fprintf(out, "%sXrValue ", cg_linkage(ctx));

@@ -98,11 +98,16 @@ static void test_target_case_contract(void) {
 static void test_itable_requires_interface_abi_plan(void) {
     XaotInterfaceAbiPlan abi = {0};
     XaotBundle bundle = {0};
+    XaotDispatchTargetCase target = {0};
     XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
     XaotMethodDispatchPlan plan = {0};
 
     plan.kind = XAOT_DISPATCH_ITABLE;
     plan.receiver_static_interface_id = 5;
+    plan.target_start = 1;
+    plan.target_count = 1;
+    bundle.dispatch_target_cases = &target;
+    bundle.ndispatch_target_cases = 1;
 
     ASSERT_TRUE(!xaot_backend_contract_check_mandatory_dispatch(
         &bundle, &plan, XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE, &issue));
@@ -121,6 +126,12 @@ static void test_itable_requires_interface_abi_plan(void) {
     ASSERT_TRUE(xaot_backend_contract_check_mandatory_dispatch(
         &bundle, &plan, XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE, &issue));
     ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+
+    plan.target_start = 0;
+    plan.target_count = 0;
+    ASSERT_TRUE(!xaot_backend_contract_check_mandatory_dispatch(
+        &bundle, &plan, XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MISSING_TARGET_CASES);
 
     passed++;
 }

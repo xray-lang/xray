@@ -2163,7 +2163,8 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
     ASSERT_NOT_NULL(dispatch);
     ASSERT_EQ_UINT(dispatch->kind, XAOT_DISPATCH_ITABLE);
     ASSERT_EQ_UINT(dispatch->dispatch_slot, 0);
-    ASSERT_EQ_UINT(dispatch->target_count, 0);
+    ASSERT_EQ_UINT(dispatch->target_count, IMPLEMENTOR_COUNT);
+    ASSERT_TRUE(dispatch->target_start > 0);
     ASSERT_EQ_UINT(dispatch->unproven_reason, XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET);
 
     abi = xaot_bundle_find_interface_abi_plan(&bundle, 77);
@@ -2185,7 +2186,7 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
     ASSERT_EQ_UINT(spec->action, XAOT_SPECIALIZATION_FALLBACK);
     ASSERT_EQ_UINT(spec->dispatch_kind, XAOT_DISPATCH_ITABLE);
     ASSERT_EQ_UINT(spec->implementor_count, IMPLEMENTOR_COUNT);
-    ASSERT_EQ_UINT(spec->target_count, 0);
+    ASSERT_EQ_UINT(spec->target_count, IMPLEMENTOR_COUNT);
     ASSERT_EQ_UINT(spec->single_implementor_class_id, XG_NO_ID);
     ASSERT_EQ_UINT(spec->unproven_reason, XAOT_SPECIALIZATION_UNPROVEN_LARGE_SET);
 
@@ -2198,8 +2199,8 @@ TEST(global_evidence_lowers_large_interface_set_to_itable_abi_plan) {
         strstr(dump, "data=boxed_value type=native_type_id itable=dispatch_slot tag=none"));
     ASSERT_NOT_NULL(strstr(dump, "generic-specialization 0 callsite=1 owner=9 interface=77"));
     ASSERT_NOT_NULL(strstr(dump, "action=fallback dispatch=itable"));
-    ASSERT_NOT_NULL(strstr(dump, "implementors=5 single=0 targets=0"));
-    ASSERT_NOT_NULL(strstr(dump, "evidence=callsite+dispatch+implementors"));
+    ASSERT_NOT_NULL(strstr(dump, "implementors=5 single=0 targets=5"));
+    ASSERT_NOT_NULL(strstr(dump, "evidence=callsite+dispatch+implementors+targets"));
     ASSERT_NOT_NULL(strstr(dump, "reason=large_set"));
     xr_free(dump);
 

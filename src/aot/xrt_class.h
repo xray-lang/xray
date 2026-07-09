@@ -15,7 +15,8 @@
  *   Field access is via C struct members (compile-time offsets).
  *   Method dispatch:
  *     - Known type -> direct C call (most cases)
- *     - Polymorphic -> vtable[slot_index] indirect call
+ *     - Polymorphic class -> vtable[slot_index] indirect call
+ *     - Polymorphic interface -> itable[interface_id][slot_index] indirect call
  *     - instanceof -> walk parent chain in type table
  *
  * GENERATED CODE PATTERN:
@@ -56,6 +57,12 @@ typedef void (*XrtDestructor)(void *obj);
 typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
 typedef struct {
+    uint32_t interface_id;
+    XrtMethodFn *methods;
+    uint16_t method_count;
+} XrtInterfaceMethodTable;
+
+typedef struct {
     const char *name;
     uint16_t offset;
     uint8_t native_type;
@@ -67,6 +74,8 @@ typedef struct {
     uint16_t generic_origin;  // type_id of skeleton class; 0 = not monomorphized
     XrtMethodFn *vtable;      // virtual method table (NULL if no virtuals)
     int vtable_size;
+    const XrtInterfaceMethodTable *itable;
+    uint16_t itable_size;
     XrtDestructor destructor;  // NULL for classes without custom dtor
     uint32_t instance_size;    // byte size of instance fields
 } XrtTypeInfo;
@@ -152,6 +161,8 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     ti->generic_origin = 0;
     ti->vtable = vtable;
     ti->vtable_size = vtable_size;
+    ti->itable = NULL;
+    ti->itable_size = 0;
     ti->destructor = dtor;
     ti->instance_size = inst_size;
     ni->name = NULL;
@@ -162,6 +173,15 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     di->inspect_fields = NULL;
     di->inspect_field_count = 0;
     return id;
+}
+
+static inline void xrt_type_set_itable(uint16_t type_id, const XrtInterfaceMethodTable *itable,
+                                       uint16_t itable_size) {
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return;
+    XrtTypeInfo *ti = &xrt_type_table[type_id];
+    ti->itable = itable;
+    ti->itable_size = itable ? itable_size : 0;
 }
 
 static inline void xrt_type_set_name(uint16_t type_id, const char *name, const char *display) {
@@ -350,6 +370,31 @@ static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
         cur = xrt_type_table[cur].parent_id;
     }
     return 0;
+}
+
+static inline XrtMethodFn xrt_itable_method(XrValue val, uint32_t interface_id, uint32_t slot) {
+    if (interface_id == 0 || val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr) {
+        fprintf(stderr, "xrt_itable_method: receiver is not an interface object\n");
+        abort();
+    }
+    XrObjHeader *h = XRT_ARC_HDR(val.ptr);
+    uint16_t cur = h->type;
+    while (cur != 0 && cur < xrt_type_count) {
+        const XrtTypeInfo *ti = &xrt_type_table[cur];
+        for (uint16_t i = 0; i < ti->itable_size; i++) {
+            const XrtInterfaceMethodTable *entry = &ti->itable[i];
+            if (entry->interface_id != interface_id)
+                continue;
+            if (slot >= entry->method_count || !entry->methods || !entry->methods[slot]) {
+                fprintf(stderr, "xrt_itable_method: interface slot is not implemented\n");
+                abort();
+            }
+            return entry->methods[slot];
+        }
+        cur = ti->parent_id;
+    }
+    fprintf(stderr, "xrt_itable_method: receiver type does not implement interface\n");
+    abort();
 }
 
 #endif  // XRT_CLASS_H

@@ -3804,6 +3804,171 @@ static const XgClassSummary *xicgen_dispatch_evidence_class(const XaotBundle *bu
     return NULL;
 }
 
+static bool xicgen_class_data_name_matches_id(const XiClassData *class_data, uint32_t name_id);
+
+static const XgGlobalEvidence *xicgen_global_evidence(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    return bundle ? bundle->global_evidence_plan.evidence : NULL;
+}
+
+static const XgMethodSummary *xicgen_evidence_method(const XgGlobalEvidence *ev,
+                                                     XgMethodId method_id) {
+    if (!ev || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        if (ev->methods[i].method_id == method_id)
+            return &ev->methods[i];
+    }
+    return NULL;
+}
+
+static const XgBodySummary *xicgen_evidence_body_for_func(const XgGlobalEvidence *ev,
+                                                          const XiFunc *func) {
+    if (!ev || !func || func->xg_body_func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].func_id == (XgFuncId) func->xg_body_func_id)
+            return &ev->bodies[i];
+    }
+    return NULL;
+}
+
+static bool xicgen_evidence_interface_extends_reaches(const XgGlobalEvidence *ev,
+                                                      XgInterfaceId from, XgInterfaceId target,
+                                                      uint32_t depth) {
+    if (!ev || from == XG_NO_ID || target == XG_NO_ID || depth > 64)
+        return false;
+    for (uint32_t i = 0; i < ev->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &ev->interface_extends[i];
+        if (edge->child_interface_id != from)
+            continue;
+        if (edge->parent_interface_id == target)
+            return true;
+        if (xicgen_evidence_interface_extends_reaches(ev, edge->parent_interface_id, target,
+                                                      depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool xicgen_evidence_interface_impl_matches(const XgGlobalEvidence *ev,
+                                                   XgInterfaceId implementor_interface,
+                                                   XgInterfaceId receiver_interface) {
+    return implementor_interface == receiver_interface ||
+           xicgen_evidence_interface_extends_reaches(ev, implementor_interface, receiver_interface,
+                                                     0);
+}
+
+static bool xicgen_evidence_class_implements_interface(const XgGlobalEvidence *ev,
+                                                       XgClassId class_id,
+                                                       XgInterfaceId interface_id) {
+    if (!ev || class_id == XG_NO_ID || interface_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (impl->implementor_class_id == class_id &&
+            xicgen_evidence_interface_impl_matches(ev, impl->interface_id, interface_id))
+            return true;
+    }
+    return false;
+}
+
+static const XgInterfaceMethodSummary *
+xicgen_evidence_interface_method_for_slot(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+                                          uint32_t slot) {
+    if (!ev || interface_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
+        if (method->ordinal == slot && (method->owner_interface_id == interface_id ||
+                                        xicgen_evidence_interface_extends_reaches(
+                                            ev, interface_id, method->owner_interface_id, 0)))
+            return method;
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *
+xicgen_evidence_find_method_by_signature_in_class(const XgGlobalEvidence *ev,
+                                                  const XgClassSummary *cls, uint32_t name_id,
+                                                  uint32_t signature_key) {
+    if (!ev || !cls || cls->method_start == 0 || name_id == 0 || signature_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t idx = cls->method_start - 1 + i;
+        if (idx >= ev->nmethods)
+            return NULL;
+        const XgMethodSummary *method = &ev->methods[idx];
+        if (method->owner_class_id == cls->class_id && method->name_id == name_id &&
+            method->signature_key == signature_key)
+            return method;
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *xicgen_evidence_find_method_by_signature_in_hierarchy(
+    const XgGlobalEvidence *ev, XgClassId class_id, uint32_t name_id, uint32_t signature_key) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (;;) {
+        const XgClassSummary *cur = NULL;
+        for (uint32_t i = 0; i < ev->nclasses; i++) {
+            if (ev->classes[i].class_id == class_id) {
+                cur = &ev->classes[i];
+                break;
+            }
+        }
+        if (!cur)
+            return NULL;
+        const XgMethodSummary *method =
+            xicgen_evidence_find_method_by_signature_in_class(ev, cur, name_id, signature_key);
+        if (method)
+            return method;
+        if (cur->parent_class_id == XG_NO_ID || cur->parent_class_id == class_id)
+            return NULL;
+        class_id = cur->parent_class_id;
+    }
+}
+
+static bool xicgen_class_data_name_matches_id(const XiClassData *class_data, uint32_t name_id);
+
+static XgClassId xicgen_class_id_for_data(XiCgenCtx *ctx, const XiClassData *cd) {
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    if (!ev || !cd)
+        return XG_NO_ID;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (xicgen_class_data_name_matches_id(cd, ev->classes[i].name_id))
+            return ev->classes[i].class_id;
+    }
+    return XG_NO_ID;
+}
+
+static bool xicgen_func_is_itable_target(XiCgenCtx *ctx, const XiFunc *func) {
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    const XgBodySummary *body = xicgen_evidence_body_for_func(ev, func);
+    const XgMethodSummary *method = body ? xicgen_evidence_method(ev, body->owner_method_id) : NULL;
+    if (!ev || !body || body->kind != XG_BODY_METHOD || !method ||
+        method->owner_class_id == XG_NO_ID)
+        return false;
+
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    for (uint32_t i = 0; bundle && i < bundle->nmethod_dispatch_plans; i++) {
+        const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
+        if (plan->kind != XAOT_DISPATCH_ITABLE || plan->receiver_static_interface_id == XG_NO_ID ||
+            plan->dispatch_slot == UINT32_MAX)
+            continue;
+        const XgInterfaceMethodSummary *iface_method = xicgen_evidence_interface_method_for_slot(
+            ev, plan->receiver_static_interface_id, plan->dispatch_slot);
+        if (!iface_method || iface_method->name_id != method->name_id ||
+            iface_method->signature_key != method->signature_key)
+            continue;
+        if (xicgen_evidence_class_implements_interface(ev, method->owner_class_id,
+                                                       plan->receiver_static_interface_id))
+            return true;
+    }
+    return false;
+}
+
 static bool xicgen_class_data_name_matches_id(const XiClassData *class_data, uint32_t name_id) {
     if (!class_data || name_id == 0)
         return false;
@@ -3947,6 +4112,57 @@ static bool xicgen_emit_planned_type_switch_method(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "XR_NULL_VAL; })");
     else
         fprintf(out, "_xr_ts_result_%u; })", v->id);
+    return true;
+}
+
+static bool xicgen_emit_planned_itable_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                              const XiValue *v, const char *prefix,
+                                              const XaotMethodDispatchPlan *dispatch_plan) {
+    const XaotBundle *bundle;
+    bool void_like;
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    (void) f;
+    (void) prefix;
+    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_ITABLE)
+        return false;
+    if (dispatch_plan->receiver_static_interface_id == XG_NO_ID)
+        return false;
+    bundle = cg_ctx_aot_bundle(ctx);
+    if (!xaot_backend_contract_check_mandatory_dispatch(
+            bundle, dispatch_plan, XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE, &issue)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT itable dispatch plan at line %u is not "
+                "emittable: %s\n",
+                (unsigned) v->line, xaot_backend_contract_issue_name(issue));
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
+    void_like = cg_is_void_like(v);
+    fprintf(out, "({ XrValue _xr_it_recv_%u = ", v->id);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "; XrtMethodFn _xr_it_fn_%u = xrt_itable_method(_xr_it_recv_%u, %uu, %uu); ",
+            v->id, v->id, (unsigned) dispatch_plan->receiver_static_interface_id,
+            (unsigned) dispatch_plan->dispatch_slot);
+    fprintf(out, "XrValue _xr_it_raw_%u = ((XrValue (*)(xrt_closure_t *", v->id);
+    for (uint16_t a = 0; a < v->nargs; a++)
+        fprintf(out, ", XrValue");
+    fprintf(out, "))_xr_it_fn_%u)(NULL, _xr_it_recv_%u", v->id, v->id);
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
+    }
+    fprintf(out, "); ");
+    if (void_like) {
+        fprintf(out, "(void)_xr_it_raw_%u; ", v->id);
+        fprintf(out, "XR_NULL_VAL; })");
+    } else {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "_xr_it_raw_%u", v->id);
+        emit_conversion_suffix(out, conv_suffix);
+        fprintf(out, "; })");
+    }
     return true;
 }
 
@@ -5730,6 +5946,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (xicgen_emit_planned_type_switch_method(ctx, out, f, v, prefix, dispatch_plan))
         return;
+    if (xicgen_emit_planned_itable_method(ctx, out, f, v, prefix, dispatch_plan))
+        return;
     if (!dispatch_plan && xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
         return;
     if (!is_super && !dispatch_plan && xicgen_emit_static_method(ctx, out, f, v, prefix))
@@ -5739,7 +5957,7 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         (void) xaot_backend_contract_check_mandatory_dispatch(
             cg_ctx_aot_bundle(ctx), dispatch_plan,
             XAOT_BACKEND_DISPATCH_SUPPORT_DIRECT | XAOT_BACKEND_DISPATCH_SUPPORT_VTABLE |
-                XAOT_BACKEND_DISPATCH_SUPPORT_TYPE_SWITCH |
+                XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE | XAOT_BACKEND_DISPATCH_SUPPORT_TYPE_SWITCH |
                 XAOT_BACKEND_DISPATCH_SUPPORT_RUNTIME_HELPER,
             &issue);
         ctx->error = true;
@@ -5751,6 +5969,108 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     }
     xicgen_emit_runtime_method(ctx, out, f, v, method, nargs, dispatch_plan);
+}
+
+static bool xicgen_interface_abi_requires_itable(const XaotInterfaceAbiPlan *abi) {
+    return abi && (abi->flags & XAOT_INTERFACE_ABI_NEEDS_ITABLE) != 0 &&
+           abi->itable_source == XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT &&
+           abi->method_slot_count > 0;
+}
+
+static const XiFunc *xicgen_find_itable_target_func(XiCgenCtx *ctx, XgClassId class_id,
+                                                    XgInterfaceId interface_id, uint32_t slot,
+                                                    const char **out_prefix) {
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    const XgInterfaceMethodSummary *iface_method =
+        xicgen_evidence_interface_method_for_slot(ev, interface_id, slot);
+    if (out_prefix)
+        *out_prefix = NULL;
+    if (!iface_method)
+        return NULL;
+    const XgMethodSummary *method = xicgen_evidence_find_method_by_signature_in_hierarchy(
+        ev, class_id, iface_method->name_id, iface_method->signature_key);
+    if (!method)
+        return NULL;
+    XgFuncId body_func_id = XG_NO_ID;
+    for (uint32_t i = 0; ev && i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->kind != XG_BODY_METHOD || body->owner_method_id != method->method_id)
+            continue;
+        if (body_func_id != XG_NO_ID && body_func_id != body->func_id)
+            return NULL;
+        body_func_id = body->func_id;
+    }
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (body_func_id != XG_NO_ID)
+        return xaot_bundle_find_body_func(bundle, body_func_id, out_prefix);
+    return xaot_bundle_find_method_func(bundle, method->method_id, out_prefix);
+}
+
+static uint32_t xicgen_count_class_itable_entries(XiCgenCtx *ctx, const XiClassData *cd,
+                                                  XgClassId class_id) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    uint32_t count = 0;
+    if (!bundle || !ev || !cd || class_id == XG_NO_ID)
+        return 0;
+    for (uint32_t i = 0; i < bundle->ninterface_abi_plans; i++) {
+        const XaotInterfaceAbiPlan *abi = &bundle->interface_abi_plans[i];
+        if (xicgen_interface_abi_requires_itable(abi) &&
+            xicgen_evidence_class_implements_interface(ev, class_id, abi->interface_id))
+            count++;
+    }
+    return count;
+}
+
+static void xicgen_emit_class_itable_init(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                          const char *prefix, const char *type_id_expr) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    XgClassId class_id = xicgen_class_id_for_data(ctx, cd);
+    uint32_t entry_count = xicgen_count_class_itable_entries(ctx, cd, class_id);
+    if (!bundle || !ev || !cd || class_id == XG_NO_ID || entry_count == 0)
+        return;
+
+    for (uint32_t i = 0; i < bundle->ninterface_abi_plans; i++) {
+        const XaotInterfaceAbiPlan *abi = &bundle->interface_abi_plans[i];
+        if (!xicgen_interface_abi_requires_itable(abi) ||
+            !xicgen_evidence_class_implements_interface(ev, class_id, abi->interface_id))
+            continue;
+        fprintf(out, "static XrtMethodFn _xr_it_methods_%u_%u[] = {", (unsigned) class_id,
+                (unsigned) abi->interface_id);
+        for (uint32_t slot = 0; slot < abi->method_slot_count; slot++) {
+            const char *target_prefix = NULL;
+            const XiFunc *target = xicgen_find_itable_target_func(ctx, class_id, abi->interface_id,
+                                                                  slot, &target_prefix);
+            if (!target || cg_func_needs_aot_coro(target)) {
+                ctx->error = true;
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: verified AOT itable target for class %u interface %u "
+                        "slot %u was not emitted\n",
+                        (unsigned) class_id, (unsigned) abi->interface_id, (unsigned) slot);
+                fprintf(out, "%sNULL", slot > 0 ? ", " : "");
+                continue;
+            }
+            fprintf(out, "%s(XrtMethodFn)", slot > 0 ? ", " : "");
+            emit_typed_abi_fname(ctx, out, target_prefix ? target_prefix : prefix, target);
+        }
+        fprintf(out, "}; ");
+    }
+
+    fprintf(out, "static const XrtInterfaceMethodTable _xr_itable_%u[] = {", (unsigned) class_id);
+    uint32_t emitted = 0;
+    for (uint32_t i = 0; i < bundle->ninterface_abi_plans; i++) {
+        const XaotInterfaceAbiPlan *abi = &bundle->interface_abi_plans[i];
+        if (!xicgen_interface_abi_requires_itable(abi) ||
+            !xicgen_evidence_class_implements_interface(ev, class_id, abi->interface_id))
+            continue;
+        fprintf(out, "%s{%uu, _xr_it_methods_%u_%u, %uu}", emitted > 0 ? ", " : "",
+                (unsigned) abi->interface_id, (unsigned) class_id, (unsigned) abi->interface_id,
+                (unsigned) abi->method_slot_count);
+        emitted++;
+    }
+    fprintf(out, "}; xrt_type_set_itable(%s, _xr_itable_%u, %uu); ", type_id_expr,
+            (unsigned) class_id, (unsigned) emitted);
 }
 
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -5782,6 +6102,7 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     fprintf(out, "uint16_t _tid = ");
     emit_class_native_type_register_expr(ctx, out, cd, prefix);
     fprintf(out, "; ");
+    xicgen_emit_class_itable_init(ctx, out, cd, prefix, "_tid");
     if (emit_type_names) {
         fprintf(out, "xrt_type_set_name(_tid, \"%s\", NULL); ", name);
     }

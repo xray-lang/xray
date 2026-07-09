@@ -1,7 +1,0 @@
-status=fail
-contains=verified AOT dispatch plan kind
-contains=for method 'area'
-contains=was not emitted
-contains=AOT C code generation failed
-not_contains=cannot use runtime method helper
-not_contains=xrt_method_
