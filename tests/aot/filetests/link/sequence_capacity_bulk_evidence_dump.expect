@@ -17,5 +17,7 @@ contains=op=string_to_bytes
 contains=op=bytes_to_string
 contains=sequence-access-plan
 contains=capacity-plan
+regex=capacity-plan [0-9]+ .*action=reserve_once
 contains=bulk-plan
 contains=encoding-plan
+regex=encoding-plan [0-9]+ .*action=validate_once
