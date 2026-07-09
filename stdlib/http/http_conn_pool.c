@@ -5,18 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * conn_pool.c - HTTP connection pool implementation
+ * http_conn_pool.c - HTTP connection pool implementation
  *
  * KEY CONCEPT:
- *   Hash-based connection pool with LRU-style idle connection management.
+ *   Hash-based HTTP connection pool with LRU-style idle connection management.
  *   Thread-safe via global mutex.
  */
 
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_time.h"
-#include "conn_pool.h"
+#include "http_conn_pool.h"
 #include "../../src/io/xdns.h"
-#include "io.h"
+#include "../net/io.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xworker.h"     // For XrRuntime
@@ -105,13 +105,13 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
 // Forward declaration: create_connection's TLS error path calls
 // close_connection, which is defined later in the file. Without this
 // declaration, builds with -DENABLE_TLS=ON fail.
-static void close_connection(struct XrVMRuntime *X, XrPooledConn *conn);
+static void close_connection(struct XrVMRuntime *X, XrHttpPooledConn *conn);
 
 // Create new connection with DNS resolution and optional TLS. Made fd
 // non-blocking from creation so all subsequent pooled_conn_read/write calls
 // can go through xr_socket_read/write and yield the coroutine cleanly.
-static XrPooledConn *create_connection(struct XrVMRuntime *X, XrConnPool *pool, const char *host,
-                                       uint16_t port, bool is_https) {
+static XrHttpPooledConn *create_connection(struct XrVMRuntime *X, XrHttpConnPool *pool,
+                                           const char *host, uint16_t port, bool is_https) {
 #ifndef XR_ENABLE_TLS
     // When TLS is compiled out the pool handle is only needed for the
     // tls_ctx lookup below; silence -Wunused-parameter without touching
@@ -171,14 +171,14 @@ static XrPooledConn *create_connection(struct XrVMRuntime *X, XrConnPool *pool, 
         return NULL;
 
     // Create pooled connection
-    XrPooledConn *conn = (XrPooledConn *) xr_calloc(1, sizeof(XrPooledConn));
+    XrHttpPooledConn *conn = (XrHttpPooledConn *) xr_calloc(1, sizeof(XrHttpPooledConn));
     if (!conn) {
         xr_closesocket(fd);
         return NULL;
     }
 
     conn->fd = fd;
-    conn->state = XR_CONN_IN_USE;
+    conn->state = XR_HTTP_CONN_IN_USE;
     conn->created_ms = now_ms();
     conn->last_used_ms = conn->created_ms;
     conn->is_https = is_https;
@@ -254,7 +254,7 @@ static XrPooledConn *create_connection(struct XrVMRuntime *X, XrConnPool *pool, 
 // Close connection and cleanup TLS. Also deregisters the fd from the
 // runtime's netpoll (if the fd ever went through coro_tcp_connect or
 // xr_socket_read/write) so that no stale pollDesc survives the close.
-static void close_connection(struct XrVMRuntime *X, XrPooledConn *conn) {
+static void close_connection(struct XrVMRuntime *X, XrHttpPooledConn *conn) {
     if (!conn)
         return;
 
@@ -281,33 +281,33 @@ static void close_connection(struct XrVMRuntime *X, XrPooledConn *conn) {
         conn->fd = -1;
     }
 
-    conn->state = XR_CONN_CLOSED;
+    conn->state = XR_HTTP_CONN_CLOSED;
 }
 
 /* ========== Connection Pool API ========== */
 
-XrConnPool *xr_conn_pool_new(void) {
-    XrConnPool *pool = (XrConnPool *) xr_calloc(1, sizeof(XrConnPool));
+XrHttpConnPool *http_conn_pool_new(void) {
+    XrHttpConnPool *pool = (XrHttpConnPool *) xr_calloc(1, sizeof(XrHttpConnPool));
     if (!pool)
         return NULL;
 
     xr_mutex_init(&pool->lock);
     pool->initialized = true;
-    pool->idle_timeout_ms = (uint64_t) XR_POOL_MAX_IDLE_TIME * 1000;
+    pool->idle_timeout_ms = (uint64_t) XR_HTTP_POOL_MAX_IDLE_TIME * 1000;
     return pool;
 }
 
-void xr_conn_pool_init(XrConnPool *pool) {
+void http_conn_pool_init(XrHttpConnPool *pool) {
     if (!pool || pool->initialized)
         return;
 
-    memset(pool, 0, sizeof(XrConnPool));
+    memset(pool, 0, sizeof(XrHttpConnPool));
     xr_mutex_init(&pool->lock);
     pool->initialized = true;
-    pool->idle_timeout_ms = (uint64_t) XR_POOL_MAX_IDLE_TIME * 1000;
+    pool->idle_timeout_ms = (uint64_t) XR_HTTP_POOL_MAX_IDLE_TIME * 1000;
 }
 
-void xr_conn_pool_destroy(XrConnPool *pool) {
+void http_conn_pool_destroy(XrHttpConnPool *pool) {
     if (!pool || !pool->initialized)
         return;
 
@@ -316,14 +316,14 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
     // Close all connections. No isolate available at destroy time —
     // pool destruction happens during isolate teardown when netpoll
     // ownership has already been released, so a NULL X here is safe.
-    for (int i = 0; i < XR_POOL_MAX_HOSTS; i++) {
-        XrHostPool *hp = pool->buckets[i];
+    for (int i = 0; i < XR_HTTP_POOL_MAX_HOSTS; i++) {
+        XrHttpHostPool *hp = pool->buckets[i];
         while (hp) {
-            XrHostPool *next_hp = hp->next;
+            XrHttpHostPool *next_hp = hp->next;
 
-            XrPooledConn *conn = hp->conns;
+            XrHttpPooledConn *conn = hp->conns;
             while (conn) {
-                XrPooledConn *next_conn = conn->next;
+                XrHttpPooledConn *next_conn = conn->next;
                 close_connection(NULL, conn);
                 xr_free(conn);
                 conn = next_conn;
@@ -349,35 +349,35 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
     xr_mutex_destroy(&pool->lock);
 }
 
-XrPooledConn *xr_conn_pool_get(struct XrVMRuntime *X, XrConnPool *pool, const char *host,
-                               uint16_t port, bool is_https) {
+XrHttpPooledConn *http_conn_pool_get(struct XrVMRuntime *X, XrHttpConnPool *pool, const char *host,
+                                     uint16_t port, bool is_https) {
     if (!pool || !pool->initialized || !host)
         return NULL;
 
-    char key[XR_POOL_HOST_KEY_LEN];
+    char key[XR_HTTP_POOL_HOST_KEY_LEN];
     make_host_key(key, sizeof(key), host, port, is_https);
-    uint32_t bucket = hash_string(key) % XR_POOL_MAX_HOSTS;
+    uint32_t bucket = hash_string(key) % XR_HTTP_POOL_MAX_HOSTS;
 
     xr_mutex_lock(&pool->lock);
 
     // Find host pool
-    XrHostPool *hp = pool->buckets[bucket];
+    XrHttpHostPool *hp = pool->buckets[bucket];
     while (hp && strcmp(hp->key, key) != 0) {
         hp = hp->next;
     }
 
-    XrPooledConn *result = NULL;
+    XrHttpPooledConn *result = NULL;
 
     if (hp) {
         /* Get first idle connection (no liveness check — lazy detection).
          * Skipping recv(MSG_PEEK) saves ~1μs per request. If the peer
          * has closed, the caller will get an error on first read/write
          * and can retry with a fresh connection. */
-        XrPooledConn **pp = &hp->conns;
+        XrHttpPooledConn **pp = &hp->conns;
         uint64_t now = now_ms();
         while (*pp) {
-            XrPooledConn *conn = *pp;
-            if (conn->state == XR_CONN_IDLE) {
+            XrHttpPooledConn *conn = *pp;
+            if (conn->state == XR_HTTP_CONN_IDLE) {
                 // Skip obviously expired (monotonic, no syscall)
                 if (now - conn->last_used_ms > pool->idle_timeout_ms) {
                     *pp = conn->next;
@@ -390,7 +390,7 @@ XrPooledConn *xr_conn_pool_get(struct XrVMRuntime *X, XrConnPool *pool, const ch
                 }
                 *pp = conn->next;
                 conn->next = NULL;
-                conn->state = XR_CONN_IN_USE;
+                conn->state = XR_HTTP_CONN_IN_USE;
                 conn->last_used_ms = now;
                 hp->conn_count--;
                 hp->idle_count--;
@@ -412,8 +412,8 @@ XrPooledConn *xr_conn_pool_get(struct XrVMRuntime *X, XrConnPool *pool, const ch
     return result;
 }
 
-void xr_conn_pool_put(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *conn, const char *host,
-                      uint16_t port, bool is_https, bool keep_alive) {
+void http_conn_pool_put(struct XrVMRuntime *X, XrHttpConnPool *pool, XrHttpPooledConn *conn,
+                        const char *host, uint16_t port, bool is_https, bool keep_alive) {
     if (!pool || !pool->initialized || !conn)
         return;
 
@@ -424,21 +424,21 @@ void xr_conn_pool_put(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *con
         return;
     }
 
-    char key[XR_POOL_HOST_KEY_LEN];
+    char key[XR_HTTP_POOL_HOST_KEY_LEN];
     make_host_key(key, sizeof(key), host, port, is_https);
-    uint32_t bucket = hash_string(key) % XR_POOL_MAX_HOSTS;
+    uint32_t bucket = hash_string(key) % XR_HTTP_POOL_MAX_HOSTS;
 
     xr_mutex_lock(&pool->lock);
 
     // Find or create host pool
-    XrHostPool *hp = pool->buckets[bucket];
+    XrHttpHostPool *hp = pool->buckets[bucket];
     while (hp && strcmp(hp->key, key) != 0) {
         hp = hp->next;
     }
 
     if (!hp) {
         // Create new host pool
-        hp = (XrHostPool *) xr_calloc(1, sizeof(XrHostPool));
+        hp = (XrHttpHostPool *) xr_calloc(1, sizeof(XrHttpHostPool));
         if (!hp) {
             xr_mutex_unlock(&pool->lock);
             close_connection(X, conn);
@@ -456,7 +456,7 @@ void xr_conn_pool_put(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *con
     }
 
     // Check connection limit
-    if (hp->idle_count >= XR_POOL_MAX_CONNS_PER_HOST) {
+    if (hp->idle_count >= XR_HTTP_POOL_MAX_CONNS_PER_HOST) {
         xr_mutex_unlock(&pool->lock);
         close_connection(X, conn);
         xr_free(conn);
@@ -464,7 +464,7 @@ void xr_conn_pool_put(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *con
     }
 
     // Return connection to pool
-    conn->state = XR_CONN_IDLE;
+    conn->state = XR_HTTP_CONN_IDLE;
     conn->last_used_ms = now_ms();
     conn->next = hp->conns;
     hp->conns = conn;
@@ -475,7 +475,7 @@ void xr_conn_pool_put(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *con
     xr_mutex_unlock(&pool->lock);
 }
 
-void xr_conn_pool_close(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *conn) {
+void http_conn_pool_close(struct XrVMRuntime *X, XrHttpConnPool *pool, XrHttpPooledConn *conn) {
     (void) pool;
     if (!conn)
         return;
@@ -483,7 +483,7 @@ void xr_conn_pool_close(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *c
     xr_free(conn);
 }
 
-int xr_conn_pool_evict_idle(struct XrVMRuntime *X, XrConnPool *pool) {
+int http_conn_pool_evict_idle(struct XrVMRuntime *X, XrHttpConnPool *pool) {
     if (!pool || !pool->initialized)
         return 0;
 
@@ -492,13 +492,13 @@ int xr_conn_pool_evict_idle(struct XrVMRuntime *X, XrConnPool *pool) {
 
     xr_mutex_lock(&pool->lock);
 
-    for (int i = 0; i < XR_POOL_MAX_HOSTS; i++) {
-        XrHostPool *hp = pool->buckets[i];
+    for (int i = 0; i < XR_HTTP_POOL_MAX_HOSTS; i++) {
+        XrHttpHostPool *hp = pool->buckets[i];
         while (hp) {
-            XrPooledConn **pp = &hp->conns;
+            XrHttpPooledConn **pp = &hp->conns;
             while (*pp) {
-                XrPooledConn *conn = *pp;
-                if (conn->state == XR_CONN_IDLE &&
+                XrHttpPooledConn *conn = *pp;
+                if (conn->state == XR_HTTP_CONN_IDLE &&
                     now - conn->last_used_ms > pool->idle_timeout_ms) {
                     *pp = conn->next;
                     close_connection(X, conn);
@@ -519,11 +519,11 @@ int xr_conn_pool_evict_idle(struct XrVMRuntime *X, XrConnPool *pool) {
     return evicted;
 }
 
-void xr_conn_pool_cleanup(struct XrVMRuntime *X, XrConnPool *pool) {
-    xr_conn_pool_evict_idle(X, pool);
+void http_conn_pool_cleanup(struct XrVMRuntime *X, XrHttpConnPool *pool) {
+    http_conn_pool_evict_idle(X, pool);
 }
 
-void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
+void http_conn_pool_stats(XrHttpConnPool *pool, int *total, int *idle) {
     if (!pool || !pool->initialized) {
         if (total)
             *total = 0;
@@ -535,8 +535,8 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
     xr_mutex_lock(&pool->lock);
 
     int t = 0, i = 0;
-    for (int b = 0; b < XR_POOL_MAX_HOSTS; b++) {
-        XrHostPool *hp = pool->buckets[b];
+    for (int b = 0; b < XR_HTTP_POOL_MAX_HOSTS; b++) {
+        XrHttpHostPool *hp = pool->buckets[b];
         while (hp) {
             t += hp->conn_count;
             i += hp->idle_count;
@@ -554,7 +554,7 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
 
 /* ========== Connection Read/Write Helpers ========== */
 
-int xr_pooled_conn_read(struct XrVMRuntime *X, XrPooledConn *conn, void *buf, size_t len) {
+int http_pooled_conn_read(struct XrVMRuntime *X, XrHttpPooledConn *conn, void *buf, size_t len) {
     if (!conn || conn->fd < 0 || !buf || len == 0)
         return -1;
 
@@ -577,7 +577,8 @@ int xr_pooled_conn_read(struct XrVMRuntime *X, XrPooledConn *conn, void *buf, si
     return (int) recv(conn->fd, buf, len, 0);
 }
 
-int xr_pooled_conn_write(struct XrVMRuntime *X, XrPooledConn *conn, const void *buf, size_t len) {
+int http_pooled_conn_write(struct XrVMRuntime *X, XrHttpPooledConn *conn, const void *buf,
+                           size_t len) {
     if (!conn || conn->fd < 0 || !buf || len == 0)
         return -1;
 

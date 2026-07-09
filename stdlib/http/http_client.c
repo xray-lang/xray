@@ -8,7 +8,7 @@
  * http_client.c - HTTP client implementation
  *
  * KEY CONCEPT:
- *   - Coroutine-friendly HTTP client backed by conn_pool (non-blocking I/O)
+ *   - Coroutine-friendly HTTP client backed by http_conn_pool (non-blocking I/O)
  *   - URL parsing (RFC 3986, IPv6 literal support)
  *   - Timeout control
  */
@@ -23,7 +23,7 @@
 #include "../../src/io/xdns.h"
 #include "../net/io.h"
 #include "http_buffer.h"
-#include "../net/conn_pool.h"
+#include "http_conn_pool.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,7 +31,7 @@
 
 /* ========== Per-Isolate Connection Pool ========== */
 
-// Return the connection pool owned by this Isolate's XrHttpContext, lazily
+// Return the HTTP connection pool owned by this Isolate's XrHttpContext, lazily
 // constructing it on first use. Returns NULL if the context cannot be
 // resolved or pool allocation fails.
 //
@@ -39,14 +39,14 @@
 // Isolates and caused cross-Isolate fd/TLS reuse. We now store the pool on
 // XrHttpContext so each Isolate has its own, and it is freed by the HTTP
 // module native-handle destructor during Isolate teardown.
-static XrConnPool *http_client_pool(XrVMRuntime *X) {
+static XrHttpConnPool *http_client_pool(XrVMRuntime *X) {
     XrHttpContext *ctx = http_get_context(X);
     if (!ctx)
         return NULL;
-    if (!ctx->conn_pool) {
-        ctx->conn_pool = xr_conn_pool_new();
+    if (!ctx->http_conn_pool) {
+        ctx->http_conn_pool = http_conn_pool_new();
     }
-    return ctx->conn_pool;
+    return ctx->http_conn_pool;
 }
 
 /* ========== URL Parsing ========== */
@@ -655,11 +655,11 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
     (void) timeout_ms;
     char *request_buf = NULL;
     XrHttpBuffer *recv_buf = NULL;
-    XrPooledConn *pooled = NULL;
-    XrConnPool *pool = NULL;
+    XrHttpPooledConn *pooled = NULL;
+    XrHttpConnPool *pool = NULL;
     bool conn_ok = false;  // Whether connection can be returned to pool
 
-    // Resolve this Isolate's connection pool (lazy-init on first request).
+    // Resolve this Isolate's HTTP connection pool (lazy-init on first request).
     pool = http_client_pool(X);
     if (!pool) {
         result.error = XR_HTTP_ERR_MEMORY;
@@ -668,7 +668,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
     }
 
     // Try to get pooled connection (handles DNS, connect, TLS internally)
-    pooled = xr_conn_pool_get(X, pool, url.host, (uint16_t) url.port, url.is_https);
+    pooled = http_conn_pool_get(X, pool, url.host, (uint16_t) url.port, url.is_https);
     if (!pooled) {
         result.error = XR_HTTP_ERR_CONNECT;
         result.error_msg = xr_strdup("Connection failed");
@@ -688,7 +688,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
         // Send request via pooled connection (handles TCP/TLS transparently)
         size_t sent = 0;
         while (sent < request_len) {
-            int n = xr_pooled_conn_write(X, pooled, request_buf + sent, request_len - sent);
+            int n = http_pooled_conn_write(X, pooled, request_buf + sent, request_len - sent);
             if (n <= 0) {
                 result.error = XR_HTTP_ERR_SEND;
                 result.error_msg = xr_strdup("Send failed");
@@ -728,8 +728,8 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
 
         // Receive data via pooled connection
         size_t avail = http_buffer_available(recv_buf);
-        int n = xr_pooled_conn_read(X, pooled, recv_buf->bytes + recv_buf->size,
-                                    avail > 0 ? avail - 1 : 0);
+        int n = http_pooled_conn_read(X, pooled, recv_buf->bytes + recv_buf->size,
+                                      avail > 0 ? avail - 1 : 0);
         if (n < 0) {
             result.error = XR_HTTP_ERR_RECV;
             result.error_msg = xr_strdup("Receive failed");
@@ -957,9 +957,9 @@ cleanup:
     // successful http_client_pool() resolution.
     if (pooled) {
         if (result.error == XR_HTTP_OK && conn_ok) {
-            xr_conn_pool_put(X, pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
+            http_conn_pool_put(X, pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
         } else {
-            xr_conn_pool_close(X, pool, pooled);
+            http_conn_pool_close(X, pool, pooled);
         }
     }
     if (request_buf)

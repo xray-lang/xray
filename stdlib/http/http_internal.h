@@ -14,7 +14,7 @@
 #include "http.h"
 #include "http_client_internal.h"
 #include "http_parser_internal.h"
-#include "../net/conn_pool.h"
+#include "http_conn_pool.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include <stdbool.h>
@@ -286,7 +286,7 @@ typedef struct XrHttpContext {
     _Atomic int current_conns;
 
     /* === Connection Pools (per-isolate) === */
-    XrConnPool *conn_pool;
+    XrHttpConnPool *http_conn_pool;
     XrH2Pool *h2_client_pool;
 
 } XrHttpContext;

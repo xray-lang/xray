@@ -75,7 +75,7 @@ XR_FUNC bool xr_dns_resolve(struct XrVMRuntime *X, const char *hostname, XrSockA
 
 /* Resolve every known address for a hostname (returned in IPv6/IPv4
  * interleaved order — see file header). Used by failover paths in
- * conn_pool.c and Happy Eyeballs callers. Returns the count written
+ * http_conn_pool.c and Happy Eyeballs callers. Returns the count written
  * into addrs[] (0 on resolution failure). */
 XR_FUNC int xr_dns_resolve_all(struct XrVMRuntime *X, const char *hostname, XrSockAddr *addrs,
                                int max_addrs, XrAddrFamily family);
