@@ -100,6 +100,7 @@ PROCESS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_warning.xr"
 PIPE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_warning.xr"
 PIPE_HALF_CLOSE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_half_close_warning.xr"
 PROCESS_TRYWAIT_ONCE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_trywait_once_warning.xr"
+PROCESS_TRYWAIT_LOCAL_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_trywait_local_alias_ok.xr"
 PROCESS_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_continue_warning.xr"
 PROCESS_MATCH_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_match_continue_warning.xr"
 CONTROL_FLOW_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_control_flow_ok.xr"
@@ -168,6 +169,7 @@ expect_output "process_pipe_lifecycle_destructure_alias_ok" "$DESTRUCTURE_ALIAS_
 expect_output "process_pipe_lifecycle_destructure_helper_return_alias_ok" \
     "$DESTRUCTURE_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_lifecycle_assignment_alias_ok" "$ASSIGNMENT_ALIAS_OK_SRC" $'0\ntrue'
+expect_output "process_trywait_local_alias_ok" "$PROCESS_TRYWAIT_LOCAL_ALIAS_OK_SRC" "true"
 expect_output "process_detached_no_warning" "$DETACHED_NO_WARNING_SRC" \
     $'true\ntrue\n-1\nfalse\ndetached-orphan-ok'
 expect_output "signal_on_signal" "$SIGNAL_ON_SIGNAL_SRC" $'true\nfalse\ntrue\ntrue'
