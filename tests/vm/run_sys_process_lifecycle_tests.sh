@@ -140,6 +140,7 @@ PIPE_TOP_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_l
 REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_reassigned_alias_warning.xr"
 DESTRUCTURE_REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_reassigned_alias_warning.xr"
 BRANCH_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_branch_alias_warning.xr"
+BRANCH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_branch_alias_merge_warning.xr"
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_warning.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
@@ -248,6 +249,10 @@ expect_warning "process_pipe_destructure_reassigned_alias_warning" \
 expect_warning "process_pipe_branch_alias_warning" "$BRANCH_ALIAS_WARNING_SRC" $'0\ntrue' \
     "Process handle 'processLeaked' from sys.Process.spawn is not waited before leaving scope" \
     "Pipe handle 'pipeLeaked' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_branch_alias_merge_warning" "$BRANCH_ALIAS_MERGE_WARNING_SRC" \
+    $'0\ntrue' \
+    "Process handle 'processOther' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'pipeOther' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC" "true" \
