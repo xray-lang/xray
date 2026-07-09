@@ -8271,14 +8271,21 @@ TEST(global_evidence_records_options_bag_plans) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&bundle);
 
+    XaotBundle stale_action_bundle;
     ev.options_bags[0].action = XG_OPTIONS_DEFAULT_FILL_TABLE;
-    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(&stale_action_bundle, 0, sizeof(stale_action_bundle));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&stale_action_bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_action_bundle.modules = modules;
+    stale_action_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_action_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_action_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT options evidence action does not re-derive"));
 
-    xaot_bundle_free(&bundle);
+    xaot_bundle_free(&stale_action_bundle);
     xg_global_evidence_free(&ev);
 }
 
