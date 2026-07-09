@@ -54,6 +54,13 @@ const GROUPS: [Outer; 2] = comptime [
 @used
 const PAIR = comptime (HEADER.magic, TABLE[2], WEIGHTS[1])
 const LABEL = comptime "score"
+@section("__DATA,.xray_lmat")
+@weak
+@used
+const LABEL_MATRIX: [[string; 2]; 2] = comptime [
+    ["level", LABEL],
+    ["bonus", "done"],
+]
 const LABELED = comptime (LABEL, TABLE[0])
 const NESTED = comptime ((TABLE[0], LABEL), (WEIGHTS[2], TABLE[3]))
 const LABELS: [string; 2] = comptime ["level", LABEL]
@@ -220,6 +227,12 @@ fn xray_top_const_struct_string_print() -> int {
 fn xray_top_const_string_array_print(i: int) -> int {
     print(LABELS[i])
     return i
+}
+
+@c_export("xray_top_const_string_matrix_print")
+fn xray_top_const_string_matrix_print(row: int, col: int) -> int {
+    print(LABEL_MATRIX[row][col])
+    return row + col
 }
 
 @c_export("xray_top_const_struct_string_array_print")

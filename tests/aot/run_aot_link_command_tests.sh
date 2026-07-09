@@ -1418,6 +1418,15 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_MATRIX[_outer_idx][_idx]" \
             "freestanding-profile/top-const-aggregate: reads fixed-array matrix directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "const XrValue xray_const_freestanding_top_const_aggregate_LABEL_MATRIX[2][2]" \
+            "freestanding-profile/top-const-aggregate: materializes string fixed-array matrix as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_MATRIX[2][2] XRT_ATTR_SECTION(\"__DATA,.xray_lmat\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits attrs on string fixed-array matrix data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_MATRIX[_outer_idx][_idx]" \
+            "freestanding-profile/top-const-aggregate: reads string fixed-array matrix directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const struct" \
             "freestanding-profile/top-const-aggregate: materializes scalar struct as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xctstruct_" \
@@ -1584,6 +1593,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_TOP_CONST_AGG_OBJ" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_MATRIX" \
+            "$FREESTANDING_TOP_CONST_AGG_NM"; then
+        record_pass "freestanding-profile/top-const-aggregate: weak string fixed-array matrix data symbol is external"
+    else
+        record_fail "freestanding-profile/top-const-aggregate: weak string fixed-array matrix data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_TOP_CONST_AGG_OBJ" \
             "xray_const_freestanding_top_const_aggregate_HEADER" \
             "$FREESTANDING_TOP_CONST_AGG_NM"; then
         record_pass "freestanding-profile/top-const-aggregate: weak struct data symbol is external"
@@ -1643,6 +1660,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'xray_const__freestanding_static_data_lib_MATRIX[2][4] XRT_ATTR_SECTION("__DATA,.xr_imatrix") XRT_ATTR_WEAK XRT_ATTR_USED' \
             "freestanding-profile/static-import: exporter keeps fixed-array matrix section/weak/used attrs"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'xray_const__freestanding_static_data_lib_LABEL_MATRIX[2][2] XRT_ATTR_SECTION("__DATA,.xr_ilmat") XRT_ATTR_WEAK XRT_ATTR_USED' \
+            "freestanding-profile/static-import: exporter keeps string fixed-array matrix section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             "const struct __attribute__((packed, aligned(16)))" \
             "freestanding-profile/static-import: exporter preserves packed/aligned struct layout"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
@@ -1667,6 +1687,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'extern const uint8_t xray_const__freestanding_static_data_lib_MATRIX[2][4]' \
             "freestanding-profile/static-import: importer declares fixed-array matrix extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const XrValue xray_const__freestanding_static_data_lib_LABEL_MATRIX[2][2]' \
+            "freestanding-profile/static-import: importer declares string fixed-array matrix extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_HEADER' \
             "freestanding-profile/static-import: importer declares struct extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
@@ -1684,6 +1707,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_MATRIX[_outer_idx][_idx]' \
             "freestanding-profile/static-import: importer reads fixed-array matrix directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_LABEL_MATRIX[_outer_idx][_idx]' \
+            "freestanding-profile/static-import: importer reads string fixed-array matrix directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_ENTRIES[_idx].code' \
             "freestanding-profile/static-import: importer reads struct-array integer field directly"
@@ -1746,6 +1772,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_LABEL_MATRIX" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak string fixed-array matrix data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak string fixed-array matrix data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
             "xray_const__freestanding_static_data_lib_HEADER" \
             "$FREESTANDING_STATIC_IMPORT_NM"; then
         record_pass "freestanding-profile/static-import: weak struct data symbol is external"
@@ -1766,6 +1800,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         if grep -Fq "sectname .xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq "sectname .xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq "sectname .xr_imatrix" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq "sectname .xr_ilmat" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq "sectname .xr_ient" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
             record_pass "freestanding-profile/static-import: object contains imported data sections"
         else
@@ -1776,6 +1811,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         if grep -Fq ".xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq ".xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq ".xr_imatrix" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq ".xr_ilmat" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq ".xr_ient" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
             record_pass "freestanding-profile/static-import: object contains imported data sections"
         else
