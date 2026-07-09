@@ -1406,7 +1406,7 @@ static XrValue ws_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
  * Performs the full handshake (101 response) and returns a conn object
  * identical to what ws._acceptWs() returns.
  */
-XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_headers) {
+XrValue ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_headers) {
     /* Extract request path from "METHOD /path HTTP/1.1" before the upgrade
      * consumes/mutates the buffer; pass through to wrap so conn.url exists
      * for handlers routed via http.route + ws upgrade. */

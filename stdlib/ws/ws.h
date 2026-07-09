@@ -32,7 +32,7 @@ struct XrModule;
  * Used by HTTP server to upgrade in-place when a WS route matches.
  * Returns xr_null() on failure.
  */
-XR_FUNC XrValue xr_ws_upgrade_and_wrap(struct XrVMRuntime *X, int fd, const char *request_headers);
+XrValue ws_upgrade_and_wrap(struct XrVMRuntime *X, int fd, const char *request_headers);
 
 /* ========== Module API ========== */
 
