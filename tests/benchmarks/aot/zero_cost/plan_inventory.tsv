@@ -32,6 +32,7 @@ value_level_sroa|covered|allocation-plan .*action=stack|tests/aot/filetests/cgen
 generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
 array_t_concrete_storage|covered|generic-storage-plan .*kind=array action=typed_inline|tests/aot/filetests/link|Array<T> POD lane storage produces a verified typed-inline generic storage plan.
 generic_code_size_policy|covered|generic-code-size-plan .*action=allow_clone|tests/aot/filetests/cgen|Generic clone decisions include a verified static code-size policy plan.
+generic_constraint_direct_call|covered|generic_constraint_direct_call_area|tests/aot/filetests/cgen|Concrete generic interface-constraint calls specialize to direct class method calls without interface helpers.
 interface_object_storage|covered|interface-abi .*iface_object.*itable.*boxed_receiver|tests/aot/filetests/cgen|Interface object ABI is covered by boxed receiver storage with verified itable metadata.
 itable_emitter|covered|xrt_itable_method|tests/aot/filetests/cgen|Verified itable backend emission is covered by generated C lookup and installed class itables.
 interface_object_use_evidence|covered|interface-object-use|tests/unit/analysis|Interface object value/array/field/return/capture/param uses have schema, dump, hash, and cache payload evidence.

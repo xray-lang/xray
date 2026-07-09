@@ -1167,12 +1167,12 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
 
     if (sym->kind == XA_SYM_ENUM)
         return links->type;
+    if (links->type && links->type->kind == XR_KIND_INTERFACE)
+        return links->type;
     if (links->class_info)
         return xr_type_new_instance(analyzer->isolate, links->class_info);
     if (!links->type)
         return NULL;
-    if (links->type->kind == XR_KIND_INTERFACE)
-        return links->type;
     if (links->type->kind == XR_KIND_INSTANCE)
         return links->type;
     if (links->type->kind == XR_KIND_CLASS) {
