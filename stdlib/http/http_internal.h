@@ -280,7 +280,6 @@ typedef struct XrHttpServer {
 typedef struct XrHttpContext {
     /* === Server === */
     struct XrHttpServer *server;
-    XrVMRuntime *server_isolate;
 
     /* === Server Runtime State === */
     _Atomic int current_conns;
