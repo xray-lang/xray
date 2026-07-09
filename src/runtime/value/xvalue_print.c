@@ -30,7 +30,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "../xstdlib_bridge.h"
 #include "../../shared/xr_float_fmt.h"
 #include "xvalue_format.h"
 
@@ -334,15 +333,7 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
                     dump_tuple((XrTuple *) gc, ctx);
                     return;
                 }
-                if (ctx->isolate && xr_value_is_datetime(ctx->isolate, value)) {
-                    void *dt = xr_instance_native_body(inst);
-                    char buf[64];
-                    int n = xr_datetime_format(dt, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
-                    if (n > 0)
-                        printf("%s", buf);
-                    else
-                        printf("<DateTime>");
-                } else if (ctx->isolate && inst->klass) {
+                if (ctx->isolate && inst->klass) {
                     const char *name = xr_class_display_name(inst->klass);
                     if (name && strcmp(name, "DateTime") == 0) {
                         XrString *str = xr_value_to_string(ctx->isolate, value);

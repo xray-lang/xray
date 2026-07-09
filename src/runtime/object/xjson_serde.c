@@ -39,15 +39,7 @@
 #include "xjson.h"
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
-#include "../xstdlib_bridge.h"
 #include "../value/xtype_names.h"
-
-/* Forward-declare XrDateTime — definition lives in stdlib/datetime/datetime.h
- * but this L2 module must not depend on stdlib. We only need the pointer type
- * and one formatting function (implemented in stdlib/datetime/datetime.c,
- * linked into the same binary). */
-typedef struct XrDateTime XrDateTime;
-XR_FUNC int xr_datetime_to_iso_string(XrDateTime *dt, char *buf, size_t buf_size);
 
 static bool json_value_is_named_datetime(XrValue val, XrInstance **out_inst) {
     if (!xr_value_is_instance(val))
@@ -575,19 +567,6 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             stringify_string(w, name, strlen(name));
         else
             writer_str(w, "null");
-    } else if (xr_value_is_datetime(w->isolate, val)) {
-        // DateTime: serialize as ISO 8601 string. Body lives at the
-        // native-body offset inside the XrInstance, accessed via
-        // xr_instance_native_body (cast through void* keeps this
-        // module decoupled from stdlib/datetime headers).
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
-        XrDateTime *dt = (XrDateTime *) xr_instance_native_body(inst);
-        char buf[64];
-        int n = xr_datetime_to_iso_string(dt, buf, sizeof(buf));
-        if (n > 0)
-            stringify_string(w, buf, (size_t) n);
-        else
-            writer_str(w, "null");
     } else if (json_value_is_named_datetime(val, NULL)) {
         XrInstance *dt_inst = xr_value_to_instance(val);
         XrString *iso = NULL;
@@ -770,12 +749,6 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         if (!name)
             name = "";
         *out = xr_string_value(xr_string_intern(e->isolate, name, strlen(name), 0));
-    } else if (xr_value_is_datetime(e->isolate, val)) {
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
-        XrDateTime *dt = (XrDateTime *) xr_instance_native_body(inst);
-        char buf[64];
-        int n = xr_datetime_to_iso_string(dt, buf, sizeof(buf));
-        *out = n > 0 ? xr_string_value(xr_string_new(e->isolate, buf, (size_t) n)) : xr_null();
     } else if (json_value_is_named_datetime(val, NULL)) {
         XrInstance *dt_inst = xr_value_to_instance(val);
         XrString *iso = NULL;

@@ -29,16 +29,6 @@ struct XrVMRuntime;
 struct XrRegex;
 struct XrChannel;
 
-/* ========== DateTime Bridge ========== */
-
-// Format a DateTime object. Uses void* to avoid stdlib/datetime dependency.
-XR_FUNC int xr_datetime_format(void *dt, const char *pattern, char *buf, size_t buf_size);
-
-// Returns true iff v is a DateTime instance. Implemented in
-// stdlib/datetime/datetime.c; declared here so the VM and the runtime
-// formatter can probe without including stdlib headers.
-XR_FUNC bool xr_value_is_datetime(struct XrVMRuntime *X, XrValue v);
-
 /* ========== Regex Bridge ========== */
 
 // Get pattern string from regex object
@@ -60,8 +50,7 @@ XR_FUNC void xr_regex_register_class(struct XrVMRuntime *isolate);
  *
  * Lives in stdlib/regex but is forward-declared here so the VM
  * dispatch loop can reach it without pulling stdlib headers into
- * src/vm — the same pattern xr_datetime_format / xr_value_to_regex
- * already use.
+ * src/vm — the same bridge pattern xr_value_to_regex already uses.
  */
 XR_FUNC XrValue xr_regex_compile_literal(struct XrVMRuntime *isolate, XrValue pattern,
                                          XrValue flags);

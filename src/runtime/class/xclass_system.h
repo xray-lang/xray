@@ -66,7 +66,6 @@ typedef struct XrayCoreClasses {
 
     // Native-body migrated types
     XrClass *rangeClass;
-    XrClass *dateTimeClass;
     XrClass *iteratorClass;
     XrClass *regexClass;
     XrClass *regexMatchClass;
