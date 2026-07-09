@@ -149,6 +149,42 @@ static bool xa_freestanding_top_const_fixed_array_element_allowed(const XrCtValu
     return xa_freestanding_top_const_aggregate_scalar_allowed(value);
 }
 
+static bool xa_freestanding_top_const_string_fixed_array_allowed(const XrCtValue *value) {
+    if (!value || value->kind != XR_CT_FIXED_ARRAY)
+        return false;
+    const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+    if (array->count <= 0 || !array->elements)
+        return false;
+    for (int i = 0; i < array->count; i++) {
+        if (array->elements[i].kind != XR_CT_STRING)
+            return false;
+    }
+    return true;
+}
+
+static bool xa_freestanding_top_const_root_fixed_array_element_allowed(const XrCtValue *value) {
+    if (!value)
+        return false;
+    if (value->kind == XR_CT_STRING)
+        return true;
+    if (xa_freestanding_top_const_string_fixed_array_allowed(value))
+        return true;
+    return xa_freestanding_top_const_aggregate_scalar_allowed(value);
+}
+
+static bool xa_freestanding_top_const_root_fixed_array_allowed(const XrCtValue *value) {
+    if (!value || value->kind != XR_CT_FIXED_ARRAY)
+        return false;
+    const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+    if (array->count <= 0 || !array->elements)
+        return false;
+    for (int i = 0; i < array->count; i++) {
+        if (!xa_freestanding_top_const_root_fixed_array_element_allowed(&array->elements[i]))
+            return false;
+    }
+    return true;
+}
+
 static bool xa_freestanding_top_const_struct_field_allowed(const XrCtValue *value) {
     if (!value)
         return false;
@@ -212,7 +248,7 @@ static bool xa_freestanding_top_const_ct_value_allowed(const XrCtValue *value) {
         case XR_CT_NULL:
             return true;
         case XR_CT_FIXED_ARRAY:
-            return xa_freestanding_top_const_aggregate_value_allowed(value, true);
+            return xa_freestanding_top_const_root_fixed_array_allowed(value);
         case XR_CT_TUPLE:
         case XR_CT_STRUCT_VALUE:
             return xa_freestanding_top_const_aggregate_value_allowed(value, false);

@@ -201,7 +201,8 @@ static bool cg_static_fixed_matrix_info_from_type(const XrType *type,
         row_type->fixed_array.length > UINT16_MAX)
         return false;
     CgFixedArrayLaneInfo lane;
-    if (!cg_fixed_array_lane_info_from_type(row_type, &lane) || lane.rep == XR_REP_TAGGED)
+    if (!cg_fixed_array_lane_info_from_type(row_type, &lane) ||
+        (lane.rep == XR_REP_TAGGED && lane.native_type != XR_NATIVE_STRING))
         return false;
     if (out)
         *out = (CgStaticFixedMatrixInfo) {

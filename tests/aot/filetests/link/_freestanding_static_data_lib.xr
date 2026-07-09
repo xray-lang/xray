@@ -105,6 +105,14 @@ const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
 @weak
 const LABEL = comptime "score"
 
+@section("__DATA,.xr_ilmat")
+@weak
+@used
+const LABEL_MATRIX: [[string; 2]; 2] = comptime [
+    ["level", LABEL],
+    ["bonus", "done"],
+]
+
 @weak
 const LABELS: [string; 2] = comptime ["level", LABEL]
 
@@ -145,4 +153,4 @@ const ROWS: [Row; 2] = comptime [
     Row{samples: [1, 3, 5, 7], weight: TABLE[1]},
 ]
 
-export { MAGIC, TABLE, BYTES, MATRIX, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED, ENTRIES, ROWS }
+export { MAGIC, TABLE, BYTES, MATRIX, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, ENTRIES, ROWS }
