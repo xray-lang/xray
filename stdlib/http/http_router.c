@@ -12,7 +12,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
-#include "http_router.h"
+#include "http_internal.h"
 #include <stdlib.h>
 #include <string.h>
 
