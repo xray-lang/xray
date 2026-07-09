@@ -1,0 +1,13 @@
+enum FsMode {
+    Boot,
+    Run
+
+    fn code() -> int {
+        return this.ordinal
+    }
+}
+
+@c_export("xray_enum_method_reject")
+fn xray_enum_method_reject() -> int {
+    return FsMode.Boot.ordinal
+}
