@@ -12,33 +12,33 @@ const URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 // `padding` is true (standard) and omit it otherwise (URL-safe default).
 fn encodeAlpha(data: Bytes, alpha: string, padding: bool) -> string {
     var n = data.length
-    var out = ""
+    var out = StringBuilder()
     var i = 0
     while (i + 3 <= n) {
         var b0 = data[i]
         var b1 = data[i + 1]
         var b2 = data[i + 2]
-        out = out + alpha.charAt(b0 >> 2)
-        out = out + alpha.charAt(((b0 & 3) << 4) | (b1 >> 4))
-        out = out + alpha.charAt(((b1 & 15) << 2) | (b2 >> 6))
-        out = out + alpha.charAt(b2 & 63)
+        out.append(alpha.charAt(b0 >> 2))
+        out.append(alpha.charAt(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(alpha.charAt(((b1 & 15) << 2) | (b2 >> 6)))
+        out.append(alpha.charAt(b2 & 63))
         i = i + 3
     }
     var rem = n - i
     if (rem == 1) {
         var b0 = data[i]
-        out = out + alpha.charAt(b0 >> 2)
-        out = out + alpha.charAt((b0 & 3) << 4)
-        if (padding) { out = out + "==" }
+        out.append(alpha.charAt(b0 >> 2))
+        out.append(alpha.charAt((b0 & 3) << 4))
+        if (padding) { out.append("==") }
     } else if (rem == 2) {
         var b0 = data[i]
         var b1 = data[i + 1]
-        out = out + alpha.charAt(b0 >> 2)
-        out = out + alpha.charAt(((b0 & 3) << 4) | (b1 >> 4))
-        out = out + alpha.charAt((b1 & 15) << 2)
-        if (padding) { out = out + "=" }
+        out.append(alpha.charAt(b0 >> 2))
+        out.append(alpha.charAt(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(alpha.charAt((b1 & 15) << 2))
+        if (padding) { out.append("=") }
     }
-    return out
+    return out.toString()
 }
 
 // Map a base64 character's byte value to its 6-bit value, or -1 if it is not a
