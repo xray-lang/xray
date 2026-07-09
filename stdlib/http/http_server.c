@@ -96,54 +96,6 @@ void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, const char
 }
 
 /*
- * Try to find a prebuilt response for raw HTTP data.
- * Quick-parses method+path, does route lookup, returns prebuilt pointer.
- * Does NOT perform I/O - caller writes via coroutine-safe path.
- */
-bool xr_http_try_prebuilt(XrRouter *router, const char *raw_data, size_t data_len,
-                          const char **out_resp, size_t *out_len) {
-    if (!router || !raw_data || data_len < 14)
-        return false;
-
-    // Quick parse method (only GET for prebuilt fast path)
-    const char *p = raw_data;
-    const char *end = raw_data + data_len;
-    XrHttpMethod method;
-
-    if (p[0] == 'G' && p[1] == 'E' && p[2] == 'T' && p[3] == ' ') {
-        method = XR_HTTP_METHOD_GET;
-        p += 4;
-    } else {
-        return false;
-    }
-
-    // Quick parse path (stop at space or '?')
-    const char *path = p;
-    while (p < end && *p != ' ' && *p != '?')
-        p++;
-    size_t path_len = p - path;
-    if (path_len == 0)
-        return false;
-
-    // Route lookup (stack-only, zero GC allocation)
-    XrRouteParams params;
-    params.count = 0;
-    void *user_data = NULL;
-    const char *static_resp = NULL, *prebuilt_resp = NULL;
-    size_t static_len = 0, prebuilt_len = 0;
-
-    xr_router_find(router, method, path, path_len, &params, &user_data, &static_resp, &static_len,
-                   &prebuilt_resp, &prebuilt_len);
-
-    if (!prebuilt_resp || prebuilt_len == 0 || params.count > 0)
-        return false;
-
-    *out_resp = prebuilt_resp;
-    *out_len = prebuilt_len;
-    return true;
-}
-
-/*
  * Stop server
  */
 void xr_http_server_stop(XrHttpServer *server) {

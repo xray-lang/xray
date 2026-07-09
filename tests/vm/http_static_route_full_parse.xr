@@ -1,0 +1,43 @@
+import http
+import net
+import time
+
+const PORT = 9196
+
+fn serveStaticRoutes(port: int) {
+    http.route("GET", "/plain", "hello static")
+    http.listen(port)
+}
+
+fn waitForServer(port: int) -> bool {
+    for (var i = 0; i < 50; i = i + 1) {
+        var conn = net.dial("127.0.0.1", port)
+        if (conn != null) {
+            net.close(conn!)
+            return true
+        }
+        time.sleep(20)
+    }
+    return false
+}
+
+@test
+fn test_http_static_routes_after_full_parse() {
+    var probe = net.listen(PORT, 1)
+    if (probe == null) {
+        return
+    }
+    net.close(probe!)
+
+    go serveStaticRoutes(PORT)
+    assert(waitForServer(PORT))
+
+    var plain = http.request({url: "http://127.0.0.1:" + string(PORT) + "/plain"})
+    assert(plain.ok)
+    assert_eq(plain.status, 200)
+    assert_eq(plain.body, "hello static")
+
+    http.stopServer()
+}
+
+print("HTTP static route full-parse test passed")
