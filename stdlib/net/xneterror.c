@@ -36,7 +36,7 @@ static const char *error_strings[] = {
     [XR_NERR_MEMORY] = "Memory allocation failed",
 };
 
-const char *xr_net_error_string(XrNetError err) {
+const char *net_error_string(XrNetError err) {
     if (err >= 0 && err < XR_NERR__COUNT) {
         return error_strings[err];
     }

@@ -1899,7 +1899,7 @@ void ws_message_free(XrWsMessage *msg) {
 }
 
 const char *ws_error_string(XrWsError err) {
-    return xr_net_error_string(err);
+    return net_error_string(err);
 }
 
 /* ========== WebSocket Server Implementation ========== */

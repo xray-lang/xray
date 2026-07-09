@@ -17,13 +17,11 @@
  *     XrWsError / XrTlsError with overlapping semantics
  *   - Errors propagate naturally: a TLS handshake failure from tls.c
  *     can be returned directly by http_client.c without translation
- *   - xr_net_error_string() provides human-readable messages for all codes
+ *   - net_error_string() provides human-readable messages for all codes
  */
 
 #ifndef XR_STDLIB_NETERROR_H
 #define XR_STDLIB_NETERROR_H
-
-#include "../../src/base/xdefs.h"
 
 typedef enum {
     // Success
@@ -71,6 +69,6 @@ typedef enum {
 } XrNetError;
 
 // Human-readable error string (never NULL).
-XR_FUNC const char *xr_net_error_string(XrNetError err);
+const char *net_error_string(XrNetError err);
 
 #endif  // XR_STDLIB_NETERROR_H
