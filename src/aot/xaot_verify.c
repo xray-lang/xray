@@ -3947,6 +3947,104 @@ static bool verify_record_access_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static bool verify_options_action_valid(uint8_t action) {
+    switch ((XgOptionsAction) action) {
+        case XG_OPTIONS_DEFAULT_ELIDED:
+        case XG_OPTIONS_DEFAULT_FILL_TABLE:
+        case XG_OPTIONS_REQUIRED_CHECK:
+        case XG_OPTIONS_CALLSITE_SPECIALIZED:
+        case XG_OPTIONS_REJECT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t verify_options_action_for(const XgGlobalEvidence *ev,
+                                         const XgOptionsBagSummary *options) {
+    if (!ev || !options || !verify_options_action_valid(options->action))
+        return XAOT_OPTIONS_REJECT;
+    if (!xg_global_evidence_find_callsite(ev, options->callsite_id))
+        return XAOT_OPTIONS_REJECT;
+    if (!xg_global_evidence_find_record_shape(ev, options->param_shape_id))
+        return XAOT_OPTIONS_REJECT;
+    if (options->supplied_shape_id != XG_NO_ID &&
+        !xg_global_evidence_find_record_shape(ev, options->supplied_shape_id))
+        return XAOT_OPTIONS_REJECT;
+    if ((options->flags & XG_OPTIONS_MISSING_REQUIRED) != 0)
+        return XAOT_OPTIONS_REQUIRED_CHECK;
+    if ((options->flags & XG_OPTIONS_ALL_SUPPLIED) != 0 &&
+        (options->flags & XG_OPTIONS_NEEDS_DEFAULTS) == 0)
+        return XAOT_OPTIONS_DEFAULT_ELIDED;
+    if ((options->flags & XG_OPTIONS_NEEDS_DEFAULTS) != 0)
+        return XAOT_OPTIONS_DEFAULT_FILL_TABLE;
+    if ((options->flags & XG_OPTIONS_CALLSITE_PROVEN) != 0)
+        return XAOT_OPTIONS_CALLSITE_SPECIALIZED;
+    return XAOT_OPTIONS_REJECT;
+}
+
+static uint8_t verify_options_reason_for(const XgGlobalEvidence *ev,
+                                         const XgOptionsBagSummary *options) {
+    if (!ev || !options || !verify_options_action_valid(options->action))
+        return XAOT_OPTIONS_UNPROVEN_INVALID_ACTION;
+    if (!xg_global_evidence_find_callsite(ev, options->callsite_id))
+        return XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE;
+    if (!xg_global_evidence_find_record_shape(ev, options->param_shape_id))
+        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+    if (options->supplied_shape_id != XG_NO_ID &&
+        !xg_global_evidence_find_record_shape(ev, options->supplied_shape_id))
+        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+    return XAOT_OPTIONS_UNPROVEN_NONE;
+}
+
+static uint32_t verify_options_evidence_for(const XgGlobalEvidence *ev,
+                                            const XgOptionsBagSummary *options) {
+    uint32_t evidence = XAOT_OPTIONS_EV_GLOBAL_ROW;
+    if (!ev || !options)
+        return evidence;
+    if (xg_global_evidence_find_callsite(ev, options->callsite_id))
+        evidence |= XAOT_OPTIONS_EV_CALLSITE;
+    if (xg_global_evidence_find_record_shape(ev, options->param_shape_id))
+        evidence |= XAOT_OPTIONS_EV_PARAM_SHAPE;
+    if (options->supplied_shape_id != XG_NO_ID &&
+        xg_global_evidence_find_record_shape(ev, options->supplied_shape_id))
+        evidence |= XAOT_OPTIONS_EV_SUPPLIED_SHAPE;
+    if (options->default_field_mask_id != 0)
+        evidence |= XAOT_OPTIONS_EV_DEFAULT_MASK;
+    if (options->required_field_mask_id != 0)
+        evidence |= XAOT_OPTIONS_EV_REQUIRED_MASK;
+    return evidence;
+}
+
+static bool verify_options_plan_rederives(const XgGlobalEvidence *ev, const XaotOptionsPlan *plan,
+                                          const XgOptionsBagSummary *options, char *errbuf,
+                                          size_t errbuf_len) {
+    uint8_t expected_action;
+    if (!ev || !plan || !options)
+        return set_error(errbuf, errbuf_len, "AOT options verifier has incomplete input");
+    if (plan->options_id != options->options_id || plan->module_id != options->module_id ||
+        plan->owner_func_id != options->owner_func_id ||
+        plan->callsite_id != options->callsite_id ||
+        plan->param_shape_id != options->param_shape_id ||
+        plan->supplied_shape_id != options->supplied_shape_id ||
+        plan->supplied_field_mask_id != options->supplied_field_mask_id ||
+        plan->default_field_mask_id != options->default_field_mask_id ||
+        plan->required_field_mask_id != options->required_field_mask_id ||
+        plan->supplied_count != options->supplied_count ||
+        plan->default_count != options->default_count ||
+        plan->required_count != options->required_count)
+        return set_error(errbuf, errbuf_len, "AOT options plan identity does not re-derive");
+    expected_action = verify_options_action_for(ev, options);
+    if (options->action != expected_action)
+        return set_error(errbuf, errbuf_len, "AOT options evidence action does not re-derive");
+    if (plan->action != expected_action ||
+        plan->unproven_reason != verify_options_reason_for(ev, options))
+        return set_error(errbuf, errbuf_len, "AOT options plan action does not re-derive");
+    if (plan->evidence != verify_options_evidence_for(ev, options))
+        return set_error(errbuf, errbuf_len, "AOT options plan evidence does not re-derive");
+    return true;
+}
+
 static uint8_t verify_map_shape_action_for(const XgMapShapeSummary *shape) {
     if (!shape || !verify_map_container_kind_valid(shape->container_kind) ||
         !verify_map_shape_source_valid(shape->source))
@@ -4552,6 +4650,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_json_codec_plans = 0;
     uint32_t expected_record_shape_plans = 0;
     uint32_t expected_record_access_plans = 0;
+    uint32_t expected_options_plans = 0;
     uint32_t expected_map_shape_plans = 0;
     uint32_t expected_key_access_plans = 0;
     uint32_t expected_hash_eq_plans = 0;
@@ -5005,6 +5104,19 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nrecord_access_plans != expected_record_access_plans)
         return set_error(errbuf, errbuf_len, "AOT Record access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->noptions_bags; i++) {
+        const XgOptionsBagSummary *options = &ev->options_bags[i];
+        const XaotOptionsPlan *plan;
+        expected_options_plans++;
+        plan = xaot_bundle_find_options_plan(bundle, options->options_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT options evidence has no options plan");
+        if (!verify_options_plan_rederives(ev, plan, options, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->noptions_plans != expected_options_plans)
+        return set_error(errbuf, errbuf_len, "AOT options plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->nmap_shapes; i++) {
         const XgMapShapeSummary *shape = &ev->map_shapes[i];
