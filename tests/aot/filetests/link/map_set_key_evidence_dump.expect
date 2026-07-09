@@ -14,8 +14,9 @@ contains=op=add
 contains=op=clear
 contains=container=set
 contains=map-shape-plan
-contains=action=prealloc_hash
+contains=action=small_inline
 contains=hash-eq-plan
 contains=action=builtin_inline
 contains=key-access-plan
 contains=action=prehashed_lookup
+contains=action=inline_small_scan

@@ -1347,6 +1347,20 @@ static bool verify_map_rows(const XgGlobalEvidence *ev, char *errbuf, size_t err
                     return set_error(errbuf, errbuf_len,
                                      "AOT Map/Set entry ordinal does not re-derive");
             }
+            if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0) {
+                for (uint32_t ei = 0; ei < shape->entry_count; ei++) {
+                    const XgMapEntrySummary *entry = &ev->map_entries[start - 1 + ei];
+                    if ((entry->flags & XG_MAP_ENTRY_INT_KEY) == 0)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT dense Map/Set shape has non-integer key evidence");
+                    if (entry->key_i64 != (int64_t) ei)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT dense Map/Set shape key domain does not re-derive");
+                    if ((entry->flags & XG_MAP_ENTRY_DUPLICATE_KEY) != 0)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT dense Map/Set shape has duplicate key evidence");
+                }
+            }
         }
         for (uint32_t j = i + 1; j < ev->nmap_shapes; j++) {
             if (ev->map_shapes[j].shape_id == shape->shape_id)
@@ -3339,7 +3353,7 @@ static uint8_t verify_json_access_action_for(const XgGlobalEvidence *ev,
     if (!shape || access->field_ordinal >= shape->field_count)
         return XAOT_JSON_ACCESS_REJECT;
     if (shape->shape_kind == XG_JSON_SHAPE_OPEN)
-        return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+        return XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX;
     return (access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
                ? XAOT_JSON_ACCESS_DIRECT_INDEX
                : XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX;
@@ -3357,8 +3371,6 @@ static uint8_t verify_json_access_reason_for(const XgGlobalEvidence *ev,
     shape = xg_global_evidence_find_json_shape(ev, access->receiver_shape_id);
     if (!shape || access->field_ordinal >= shape->field_count)
         return XAOT_JSON_UNPROVEN_STALE_SHAPE;
-    if (shape->shape_kind == XG_JSON_SHAPE_OPEN)
-        return XAOT_JSON_UNPROVEN_OPEN_SHAPE;
     return XAOT_JSON_UNPROVEN_NONE;
 }
 

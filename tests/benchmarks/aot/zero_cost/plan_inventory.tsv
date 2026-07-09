@@ -28,10 +28,10 @@ generic_function_clone|gap|-|-|Specialized function body and ABI clone emission 
 array_t_concrete_storage|gap|-|-|Array<T> concrete storage clone is still pending.
 interface_object_storage|gap|-|-|Full interface object storage, Array<Interface>, field, return, and capture ABI are still pending.
 itable_emitter|gap|-|-|Verified itable backend emission is still pending after ABI storage lands.
-json_shape_guard|gap|-|-|Json shape-guard plus fallback emission is still pending.
+json_shape_guard|covered|json-access-plan .*action=shape_guard_index|tests/aot/filetests/cgen|Json open-shape static-key access emits shape guard plus fallback helpers.
 json_computed_key_guard|gap|-|-|Runtime computed-key direct/guard optimization is still pending.
 map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/aot/filetests/cgen|Small Map/Set literal lookup consumes inline scan plans in generated C.
-map_set_dense_lookup|gap|-|-|Specialized dense enum/int Map/Set backend lookup is still pending.
+map_set_dense_lookup|covered|key-access-plan .*action=direct_dense_index|tests/aot/filetests/cgen|Dense ordinal int Map/Set literal lookup consumes direct dense-index plans in generated C.
 user_hash_eq_direct_backend|gap|-|-|User-derived Hash/Eq direct-call backend consumption is still pending.
 fixed_layout_enum_scalarization|gap|-|-|Fixed-layout aggregate and enum scalarization ABI work is still pending.
 summary_payload_cache|gap|-|-|Real declaration/body summary payload cache is still pending.

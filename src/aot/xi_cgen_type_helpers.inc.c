@@ -330,8 +330,8 @@ static bool cg_key_access_plan_action_has_backend(XiCgenCtx *ctx, const XaotKeyA
         case XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP:
         case XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP:
         case XAOT_KEY_ACCESS_INLINE_SMALL_SCAN:
-            return true;
         case XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX:
+            return true;
         case XAOT_KEY_ACCESS_REJECT:
         default:
             cg_ctx_set_error(ctx);

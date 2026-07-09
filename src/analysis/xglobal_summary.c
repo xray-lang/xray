@@ -490,6 +490,7 @@ static uint64_t hash_map_entry_summary(uint64_t hash, const XgMapEntrySummary *r
     hash = hash_u32(hash, row->entry_ordinal);
     hash = hash_u32(hash, row->key_const_id);
     hash = hash_u32(hash, row->value_const_id);
+    hash = hash_u64(hash, (uint64_t) row->key_i64);
     hash = hash_u64(hash, row->prehash);
     return hash_u32(hash, row->flags);
 }
@@ -3276,9 +3277,9 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgMapEntrySummary *e = &evidence->map_entries[i];
         fprintf(out,
                 "map-entry %u id=%u shape=%u ord=%u key_const=%u value_const=%u "
-                "prehash=%016" PRIx64 " flags=0x%x\n",
+                "key_i64=%" PRId64 " prehash=%016" PRIx64 " flags=0x%x\n",
                 i, e->entry_id, e->shape_id, e->entry_ordinal, e->key_const_id, e->value_const_id,
-                e->prehash, e->flags);
+                e->key_i64, e->prehash, e->flags);
     }
     for (uint32_t i = 0; i < evidence->nkey_accesses; i++) {
         const XgKeyAccessSummary *a = &evidence->key_accesses[i];

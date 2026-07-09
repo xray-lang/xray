@@ -1851,6 +1851,42 @@ static inline XrValue xrt_map_get_small_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get_small(m, key));
 }
 
+static inline int64_t xrt_map_find_dense_i64_slot(xrt_map_t *m, XrValue key) {
+    if (!m || !XR_IS_INT(key) || key.i < 0)
+        return -1;
+    int64_t ordinal = key.i;
+    if (xrt_map_is_typed(m)) {
+        if (m->key_type == XR_ELEM_F32 || m->key_type == XR_ELEM_F64)
+            return -1;
+        if (ordinal >= m->order_len)
+            return -1;
+        int64_t slot = m->order[ordinal];
+        if (slot < 0 || slot >= m->cap || !xrt_map_slot_is_full(m, slot))
+            return -1;
+        if (xrt_map_key_bits_i64(xrt_map_slot_key_raw(m, slot), m->key_type) !=
+            xrt_map_key_bits_i64(key.i, m->key_type))
+            return -1;
+        return slot;
+    }
+    if (m->flags & XR_MAP_FLAG_DUMMY)
+        return -1;
+    if ((uint64_t) ordinal >= (uint64_t) m->nentries)
+        return -1;
+    XrMapEntry *entry = &m->entries[ordinal];
+    if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+        return -1;
+    return xrt_map_key_eq(entry, key, xrt_value_type_tag(key)) ? ordinal : -1;
+}
+
+static inline XrValue xrt_map_get_dense_i64(xrt_map_t *m, XrValue key) {
+    int64_t slot = xrt_map_find_dense_i64_slot(m, key);
+    return slot >= 0 ? xrt_map_slot_value(m, slot) : xrt_map_get(m, key);
+}
+
+static inline XrValue xrt_map_get_dense_i64_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_get_dense_i64(m, key));
+}
+
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_has_v((xrt_boolmap_t *) m, key);
@@ -1869,6 +1905,11 @@ static inline int xrt_map_has_small(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_has(m, key);
     return xrt_map_find_entry_small(m, key) >= 0;
+}
+
+static inline int xrt_map_has_dense_i64(xrt_map_t *m, XrValue key) {
+    int64_t slot = xrt_map_find_dense_i64_slot(m, key);
+    return slot >= 0 ? 1 : xrt_map_has(m, key);
 }
 
 static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
@@ -2391,6 +2432,38 @@ static inline int xrt_set_has_small(xrt_set_t *s, XrValue value) {
     if (xrt_set_is_typed(s))
         return xrt_set_has(s, value);
     return xrt_set_find_entry_small(s, value) >= 0;
+}
+
+static inline int64_t xrt_set_find_dense_i64_slot(xrt_set_t *s, XrValue value) {
+    if (!s || !XR_IS_INT(value) || value.i < 0)
+        return -1;
+    int64_t ordinal = value.i;
+    if (xrt_set_is_typed(s)) {
+        if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64)
+            return -1;
+        if (ordinal >= s->order_len)
+            return -1;
+        int64_t slot = s->order[ordinal];
+        if (slot < 0 || slot >= s->cap || !xrt_set_slot_is_full(s, slot))
+            return -1;
+        if (xrt_set_item_bits_i64(xrt_set_slot_raw_i64(s, slot), s->elem_type) !=
+            xrt_set_item_bits_i64(value.i, s->elem_type))
+            return -1;
+        return slot;
+    }
+    if (s->flags & XR_SET_FLAG_DUMMY)
+        return -1;
+    if ((uint64_t) ordinal >= (uint64_t) s->nentries)
+        return -1;
+    XrSetEntry *entry = &s->entries[ordinal];
+    if (entry->val_tt == XR_SET_ENTRY_NIL)
+        return -1;
+    return xrt_set_value_eq(entry, value, xrt_value_type_tag(value)) ? ordinal : -1;
+}
+
+static inline int xrt_set_has_dense_i64(xrt_set_t *s, XrValue value) {
+    int64_t slot = xrt_set_find_dense_i64_slot(s, value);
+    return slot >= 0 ? 1 : xrt_set_has(s, value);
 }
 
 static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
@@ -3011,6 +3084,23 @@ static inline XrValue xrt_json_get_name_owned(XrValue obj, const char *name) {
     return xrt_value_to_owned(xrt_json_get_name(obj, name));
 }
 
+static inline int xrt_json_shape_guard_matches(XrValue obj, int field_idx, const char *name) {
+    if (obj.tag != XR_TAG_PTR || !obj.ptr || !name || field_idx < 0)
+        return 0;
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    if (j->object_kind != XRT_OBJECT_JSON && j->object_kind != XRT_OBJECT_RECORD)
+        return 0;
+    if (field_idx >= j->field_count || !j->field_names || !j->field_names[field_idx])
+        return 0;
+    return strcmp(j->field_names[field_idx], name) == 0;
+}
+
+static inline XrValue xrt_json_get_shape_guard_owned(XrValue obj, int field_idx, const char *name) {
+    if (xrt_json_shape_guard_matches(obj, field_idx, name))
+        return xrt_value_to_owned(xrt_json_get_field(obj, field_idx));
+    return xrt_json_get_name_owned(obj, name);
+}
+
 static inline int xrt_json_has_name(XrValue obj, const char *name) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
         return 0;
@@ -3082,6 +3172,15 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
     }
     xrt_map_set(j->dynamic_fields, xr_box_str(name), val);
     return val;
+}
+
+static inline XrValue xrt_json_set_shape_guard(XrValue obj, int field_idx, const char *name,
+                                               XrValue val) {
+    if (xrt_json_shape_guard_matches(obj, field_idx, name)) {
+        xrt_json_set_field(obj, field_idx, val);
+        return val;
+    }
+    return xrt_json_set_name(obj, name, val);
 }
 
 static inline XrValue xrt_json_encode_value(XrValue val, int depth);

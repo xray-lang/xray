@@ -745,7 +745,7 @@ XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const cha
     uint32_t key_name_id;
     if (!l || !access || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
         (access->op != XI_JSON_GET_F && access->op != XI_JSON_SET_F && access->op != XI_INDEX_GET &&
-         access->op != XI_INDEX_SET))
+         access->op != XI_INDEX_SET && access->op != XI_LOAD_FIELD && access->op != XI_STORE_FIELD))
         return;
     key_name_id = field_name ? xg_name_id(field_name) : 0;
     if (key_name_id == 0 && access_kind != XG_JSON_ACCESS_INDEX_GET &&
@@ -760,7 +760,8 @@ XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const cha
             continue;
         bool field_matches = row->field_ordinal == field_ordinal;
         if (!field_matches && field_ordinal == UINT16_MAX &&
-            (access->op == XI_INDEX_GET || access->op == XI_INDEX_SET))
+            (access->op == XI_INDEX_GET || access->op == XI_INDEX_SET ||
+             access->op == XI_LOAD_FIELD || access->op == XI_STORE_FIELD))
             field_matches = xi_lower_json_access_row_requires_dynamic_lookup(ev, row);
         if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
             !field_matches || row->access_kind != access_kind)
