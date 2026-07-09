@@ -1417,7 +1417,10 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             return false;
         if (!target->fixed_array.element_type || !source->fixed_array.element_type)
             return true;
-        return xr_type_equals(target->fixed_array.element_type, source->fixed_array.element_type);
+        return xr_type_assignable(target->fixed_array.element_type,
+                                  source->fixed_array.element_type) &&
+               xr_type_assignable(source->fixed_array.element_type,
+                                  target->fixed_array.element_type);
     }
 
     // Tuple covariance: same arity, element-wise assignable. Tuples
@@ -1466,7 +1469,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         XrType *se = source->container.element_type;
         if (!te || !se || XR_TYPE_IS_UNKNOWN(te) || XR_TYPE_IS_UNKNOWN(se))
             return true;
-        return xr_type_equals(te, se);
+        return xr_type_assignable(te, se) && xr_type_assignable(se, te);
     }
 
     // Task type compatibility: both are INSTANCE with class_name="Task"

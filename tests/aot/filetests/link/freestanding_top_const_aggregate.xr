@@ -446,8 +446,14 @@ fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
 @c_export("xray_top_const_static_addr")
 fn xray_top_const_static_addr() -> int {
     return mem.addressOf(RawPtr<[int; 4]>.of(TABLE)) +
+        mem.addressOf(RawPtr<[[uint8; 4]; 2]>.of(MATRIX)) +
+        mem.addressOf(RawPtr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
         mem.addressOf(RawPtr<Header>.of(HEADER)) +
+        mem.addressOf(RawPtr<[Outer; 2]>.of(GROUPS)) +
         mem.addressOf(RawPtr<string>.of(LABEL)) +
+        mem.addressOf(RawPtr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
         mem.addressOf(RawPtr<(int, int, float)>.of(PAIR)) +
+        mem.addressOf(RawPtr<[(string, int); 2]>.of(LABELED_ROWS)) +
+        mem.addressOf(RawPtr<[Entry; 2]>.of(ENTRIES)) +
         mem.addressOf(RawPtr<I32Bits>.of(BITS))
 }
