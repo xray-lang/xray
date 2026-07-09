@@ -118,6 +118,7 @@ NESTED_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_n
 TERNARY_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_ternary_helper_return_alias_ok.xr"
 NULLISH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_nullish_helper_return_alias_ok.xr"
 MATCH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_match_helper_return_alias_ok.xr"
+HELPER_MATCH_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_match_return_alias_ok.xr"
 UNSAFE_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_helper_return_alias_ok.xr"
 UNSAFE_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_return_alias_ok.xr"
 PROCESS_HELPER_CHAINED_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_chained_return_alias_wait.xr"
@@ -168,6 +169,8 @@ expect_output "process_pipe_nullish_helper_return_alias_ok" \
     "$NULLISH_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_match_helper_return_alias_ok" \
     "$MATCH_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
+expect_output "process_pipe_helper_match_return_alias_ok" \
+    "$HELPER_MATCH_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_unsafe_helper_return_alias_ok" \
     "$UNSAFE_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_unsafe_return_alias_ok" \

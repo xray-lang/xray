@@ -1,0 +1,17 @@
+import sys
+
+fn passThread(t: Thread<int>) -> Thread<int> {
+    return t
+}
+
+fn chooseThread(t: Thread<int>, tag: int) -> Thread<int> {
+    return match (tag) {
+        0 -> passThread(t),
+        _ -> passThread(t)
+    }
+}
+
+var t = sys.Thread.spawn(fn() -> int {
+    return 42
+})
+print(chooseThread(t, 1).join())
