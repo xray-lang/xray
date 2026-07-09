@@ -5708,7 +5708,9 @@ static bool evidence_add_generic_function_deepen_rows(XgGlobalEvidence *dst,
     code_size.specialized_body_size_estimate = specialized_size;
     code_size.instantiation_count = 1;
     code_size.threshold = 64;
-    code_size.flags = XG_GENERIC_CODESIZE_ALLOW_CLONE;
+    if ((uint64_t) specialized_size * (uint64_t) code_size.instantiation_count <=
+        (uint64_t) code_size.threshold)
+        code_size.flags = XG_GENERIC_CODESIZE_ALLOW_CLONE;
     return xg_global_evidence_add_generic_code_size(dst, &code_size) != NULL;
 }
 
