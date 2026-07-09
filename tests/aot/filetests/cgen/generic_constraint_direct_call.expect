@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+regex=generic-instantiation [0-9]+ id=[1-9][0-9]* module=[1-9][0-9]* kind=function .*action=specialized_body
+regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=direct .*recv_class=[1-9][0-9]* recv_iface=0 .*targets=[0-9]+\+1
+c_regex=static XRT_FN_PURE int64_t generic_constraint_direct_call_score_Circle_[0-9]+\(xrt_closure_t \*_cl, xrt_native_generic_constraint_direct_call_Circle \*p0\)
+c_regex=int64_t v[0-9]+ = generic_constraint_direct_call_area_[0-9]+\(NULL, \(\(xrt_native_generic_constraint_direct_call_Circle\*\)v[0-9]+\)\);
+c_not_contains=xrt_method_
+c_not_contains=xrt_interface_call

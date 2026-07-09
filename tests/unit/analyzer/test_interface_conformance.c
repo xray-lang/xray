@@ -178,6 +178,46 @@ static void test_unknown_interface_is_not_audited(void) {
     ASSERT(n == 0);
 }
 
+static void test_user_interface_constraint_accepts_implementor(void) {
+    const char *src = "interface Shape {\n"
+                      "    area() -> int\n"
+                      "}\n"
+                      "class Circle implements Shape {\n"
+                      "    r: int\n"
+                      "    constructor(r: int) { this.r = r }\n"
+                      "    area() -> int { return this.r * this.r }\n"
+                      "}\n"
+                      "fn score<T: Shape>(shape: T) -> int {\n"
+                      "    return shape.area()\n"
+                      "}\n"
+                      "fn main() -> int {\n"
+                      "    return score<Circle>(Circle(7))\n"
+                      "}\n";
+    int total = 0;
+    int n = count_diagnostics(src, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, &total);
+    ASSERT(n == 0);
+}
+
+static void test_user_interface_constraint_rejects_non_implementor(void) {
+    const char *src = "interface Shape {\n"
+                      "    area() -> int\n"
+                      "}\n"
+                      "class Circle {\n"
+                      "    r: int\n"
+                      "    constructor(r: int) { this.r = r }\n"
+                      "    area() -> int { return this.r * this.r }\n"
+                      "}\n"
+                      "fn score<T: Shape>(shape: T) -> int {\n"
+                      "    return shape.area()\n"
+                      "}\n"
+                      "fn main() -> int {\n"
+                      "    return score<Circle>(Circle(7))\n"
+                      "}\n";
+    int total = 0;
+    int n = count_diagnostics(src, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, &total);
+    ASSERT(n == 1);
+}
+
 // ============================================================================
 // Built-in interfaces with type arguments
 // ============================================================================
@@ -248,6 +288,8 @@ int main(void) {
     RUN_TEST(class_missing_property_reports_error);
     RUN_TEST(class_property_as_getter_accepted);
     RUN_TEST(unknown_interface_is_not_audited);
+    RUN_TEST(user_interface_constraint_accepts_implementor);
+    RUN_TEST(user_interface_constraint_rejects_non_implementor);
 
     printf("\nParameterised built-in interface constraints:\n");
     RUN_TEST(iterable_int_satisfied_by_array_int);
