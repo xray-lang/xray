@@ -1092,6 +1092,133 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
     return true;
 }
 
+static bool verify_map_container_kind_valid(uint8_t kind) {
+    return kind == XG_MAP_CONTAINER_MAP || kind == XG_MAP_CONTAINER_SET;
+}
+
+static bool verify_map_shape_source_valid(uint8_t source) {
+    switch ((XgMapShapeSource) source) {
+        case XG_MAP_SHAPE_SRC_LITERAL:
+        case XG_MAP_SHAPE_SRC_CONSTRUCTOR:
+        case XG_MAP_SHAPE_SRC_FROM_ARRAY:
+        case XG_MAP_SHAPE_SRC_STATIC:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_key_access_op_valid(uint8_t op) {
+    switch ((XgKeyAccessOp) op) {
+        case XG_KEY_ACCESS_GET:
+        case XG_KEY_ACCESS_INDEX_GET:
+        case XG_KEY_ACCESS_SET:
+        case XG_KEY_ACCESS_HAS:
+        case XG_KEY_ACCESS_DELETE:
+        case XG_KEY_ACCESS_ADD:
+        case XG_KEY_ACCESS_CLEAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_hash_eq_kind_valid(uint8_t kind) {
+    switch ((XgHashEqKind) kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+        case XG_HASH_EQ_DERIVE:
+        case XG_HASH_EQ_USER_METHOD:
+        case XG_HASH_EQ_MISSING:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_map_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence Map/Set verifier has no evidence");
+    for (uint32_t i = 0; i < ev->nmap_shapes; i++) {
+        const XgMapShapeSummary *shape = &ev->map_shapes[i];
+        if (shape->shape_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Map/Set shape evidence has no id");
+        if (!verify_map_container_kind_valid(shape->container_kind) ||
+            !verify_map_shape_source_valid(shape->source))
+            return set_error(errbuf, errbuf_len, "AOT Map/Set shape evidence has invalid kind");
+        if (shape->key_type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT Map/Set shape evidence has no key type");
+        if (shape->container_kind == XG_MAP_CONTAINER_MAP && shape->value_type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT Map shape evidence has no value type");
+        if (shape->entry_count == 0 && shape->entry_start != 0)
+            return set_error(errbuf, errbuf_len, "AOT Map/Set shape empty entry range is stale");
+        if (shape->entry_count != 0) {
+            uint32_t start = shape->entry_start;
+            uint32_t end = start + shape->entry_count - 1;
+            if (start == 0 || end < start || end > ev->nmap_entries)
+                return set_error(errbuf, errbuf_len, "AOT Map/Set shape entry range is stale");
+            for (uint32_t ei = 0; ei < shape->entry_count; ei++) {
+                const XgMapEntrySummary *entry = &ev->map_entries[start - 1 + ei];
+                if (entry->shape_id != shape->shape_id)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT Map/Set entry range owner does not re-derive");
+                if (entry->entry_ordinal != ei)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT Map/Set entry ordinal does not re-derive");
+            }
+        }
+        for (uint32_t j = i + 1; j < ev->nmap_shapes; j++) {
+            if (ev->map_shapes[j].shape_id == shape->shape_id)
+                return set_error(errbuf, errbuf_len, "AOT Map/Set shape evidence id is duplicated");
+        }
+    }
+    for (uint32_t i = 0; i < ev->nmap_entries; i++) {
+        const XgMapEntrySummary *entry = &ev->map_entries[i];
+        if (entry->entry_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Map/Set entry evidence has no id");
+        if (!xg_global_evidence_find_map_shape(ev, entry->shape_id))
+            return set_error(errbuf, errbuf_len, "AOT Map/Set entry references missing shape");
+        for (uint32_t j = i + 1; j < ev->nmap_entries; j++) {
+            if (ev->map_entries[j].entry_id == entry->entry_id)
+                return set_error(errbuf, errbuf_len, "AOT Map/Set entry evidence id is duplicated");
+        }
+    }
+    for (uint32_t i = 0; i < ev->nkey_accesses; i++) {
+        const XgKeyAccessSummary *access = &ev->key_accesses[i];
+        if (access->access_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT key access evidence has no id");
+        if (!verify_map_container_kind_valid(access->container_kind) ||
+            !verify_key_access_op_valid(access->op))
+            return set_error(errbuf, errbuf_len, "AOT key access evidence has invalid kind");
+        if (access->key_type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT key access evidence has no key type");
+        if (access->receiver_shape_id != XG_NO_ID &&
+            !xg_global_evidence_find_map_shape(ev, access->receiver_shape_id))
+            return set_error(errbuf, errbuf_len, "AOT key access references missing shape");
+        for (uint32_t j = i + 1; j < ev->nkey_accesses; j++) {
+            if (ev->key_accesses[j].access_id == access->access_id)
+                return set_error(errbuf, errbuf_len, "AOT key access evidence id is duplicated");
+        }
+    }
+    for (uint32_t i = 0; i < ev->nhash_eqs; i++) {
+        const XgHashEqSummary *hash_eq = &ev->hash_eqs[i];
+        if (hash_eq->hash_eq_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Hash/Eq evidence has no id");
+        if (hash_eq->type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT Hash/Eq evidence has no type");
+        if (!verify_hash_eq_kind_valid(hash_eq->kind))
+            return set_error(errbuf, errbuf_len, "AOT Hash/Eq evidence has invalid kind");
+        for (uint32_t j = i + 1; j < ev->nhash_eqs; j++) {
+            if (ev->hash_eqs[j].hash_eq_id == hash_eq->hash_eq_id)
+                return set_error(errbuf, errbuf_len, "AOT Hash/Eq evidence id is duplicated");
+            if (ev->hash_eqs[j].type_key == hash_eq->type_key)
+                return set_error(errbuf, errbuf_len, "AOT Hash/Eq evidence type is duplicated");
+        }
+    }
+    return true;
+}
+
 static bool verify_class_method_range_contains(const XgGlobalEvidence *ev,
                                                const XgClassSummary *cls,
                                                const XgMethodSummary *method) {
@@ -2816,6 +2943,208 @@ static bool verify_json_access_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static uint8_t verify_map_shape_action_for(const XgMapShapeSummary *shape) {
+    if (!shape || !verify_map_container_kind_valid(shape->container_kind) ||
+        !verify_map_shape_source_valid(shape->source))
+        return XAOT_MAP_SHAPE_REJECT;
+    if ((shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
+        (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY))
+        return XAOT_MAP_SHAPE_READONLY_STATIC_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_DENSE_ENUM) != 0)
+        return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
+        return XAOT_MAP_SHAPE_DENSE_INT_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        return XAOT_MAP_SHAPE_SMALL_INLINE;
+    if ((shape->flags & XG_MAP_SHAPE_LITERAL) != 0 || shape->source == XG_MAP_SHAPE_SRC_LITERAL)
+        return XAOT_MAP_SHAPE_PREALLOC_HASH;
+    return XAOT_MAP_SHAPE_RUNTIME_HASH;
+}
+
+static uint8_t verify_map_shape_reason_for(const XgMapShapeSummary *shape) {
+    return shape && verify_map_container_kind_valid(shape->container_kind) &&
+                   verify_map_shape_source_valid(shape->source)
+               ? XAOT_MAP_UNPROVEN_NONE
+               : XAOT_MAP_UNPROVEN_INVALID_KIND;
+}
+
+static uint32_t verify_map_shape_evidence_for(const XgMapShapeSummary *shape) {
+    uint32_t evidence = XAOT_MAP_EV_GLOBAL_ROW;
+    if (!shape)
+        return evidence;
+    if ((shape->flags & XG_MAP_SHAPE_LITERAL) != 0 || shape->source == XG_MAP_SHAPE_SRC_LITERAL)
+        evidence |= XAOT_MAP_EV_LITERAL;
+    if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+        evidence |= XAOT_MAP_EV_DENSE_DOMAIN;
+    if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        evidence |= XAOT_MAP_EV_SMALL;
+    return evidence;
+}
+
+static bool verify_map_shape_plan_rederives(const XaotMapShapePlan *plan,
+                                            const XgMapShapeSummary *shape, char *errbuf,
+                                            size_t errbuf_len) {
+    if (!plan || !shape)
+        return set_error(errbuf, errbuf_len, "AOT Map/Set shape verifier has incomplete input");
+    if (plan->shape_id != shape->shape_id || plan->module_id != shape->module_id ||
+        plan->owner_func_id != shape->owner_func_id ||
+        plan->container_kind != shape->container_kind || plan->source != shape->source ||
+        plan->key_type_key != shape->key_type_key ||
+        plan->value_type_key != shape->value_type_key || plan->entry_start != shape->entry_start ||
+        plan->entry_count != shape->entry_count || plan->literal_count != shape->literal_count ||
+        plan->shape_hash != shape->shape_hash)
+        return set_error(errbuf, errbuf_len, "AOT Map/Set shape plan identity does not re-derive");
+    if (plan->action != verify_map_shape_action_for(shape) ||
+        plan->unproven_reason != verify_map_shape_reason_for(shape))
+        return set_error(errbuf, errbuf_len, "AOT Map/Set shape plan action does not re-derive");
+    if (plan->evidence != verify_map_shape_evidence_for(shape))
+        return set_error(errbuf, errbuf_len, "AOT Map/Set shape plan evidence does not re-derive");
+    return true;
+}
+
+static uint8_t verify_hash_eq_action_for(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq || !verify_hash_eq_kind_valid(hash_eq->kind) || hash_eq->type_key == 0)
+        return XAOT_HASH_EQ_DYNAMIC_REJECT;
+    switch ((XgHashEqKind) hash_eq->kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+            return XAOT_HASH_EQ_BUILTIN_INLINE;
+        case XG_HASH_EQ_DERIVE:
+            return hash_eq->eq_derive_id != XG_NO_ID && hash_eq->hash_derive_id != XG_NO_ID
+                       ? XAOT_HASH_EQ_DERIVE_INLINE
+                       : XAOT_HASH_EQ_DYNAMIC_REJECT;
+        case XG_HASH_EQ_USER_METHOD:
+            return hash_eq->eq_func_id != XG_NO_ID && hash_eq->hash_func_id != XG_NO_ID
+                       ? XAOT_HASH_EQ_DIRECT_CALL
+                       : XAOT_HASH_EQ_DYNAMIC_REJECT;
+        case XG_HASH_EQ_MISSING:
+        default:
+            return XAOT_HASH_EQ_DYNAMIC_REJECT;
+    }
+}
+
+static uint8_t verify_hash_eq_reason_for(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq || !verify_hash_eq_kind_valid(hash_eq->kind) || hash_eq->type_key == 0)
+        return XAOT_MAP_UNPROVEN_INVALID_KIND;
+    return verify_hash_eq_action_for(hash_eq) == XAOT_HASH_EQ_DYNAMIC_REJECT
+               ? XAOT_MAP_UNPROVEN_UNHASHABLE
+               : XAOT_MAP_UNPROVEN_NONE;
+}
+
+static uint32_t verify_hash_eq_evidence_for(const XgHashEqSummary *hash_eq) {
+    uint32_t evidence = XAOT_MAP_EV_GLOBAL_ROW;
+    if (hash_eq && verify_hash_eq_action_for(hash_eq) != XAOT_HASH_EQ_DYNAMIC_REJECT)
+        evidence |= XAOT_MAP_EV_HASH_EQ;
+    return evidence;
+}
+
+static bool verify_hash_eq_plan_rederives(const XaotHashEqPlan *plan,
+                                          const XgHashEqSummary *hash_eq, char *errbuf,
+                                          size_t errbuf_len) {
+    if (!plan || !hash_eq)
+        return set_error(errbuf, errbuf_len, "AOT Hash/Eq verifier has incomplete input");
+    if (plan->hash_eq_id != hash_eq->hash_eq_id || plan->type_key != hash_eq->type_key ||
+        plan->kind != hash_eq->kind || plan->eq_derive_id != hash_eq->eq_derive_id ||
+        plan->hash_derive_id != hash_eq->hash_derive_id ||
+        plan->eq_func_id != hash_eq->eq_func_id || plan->hash_func_id != hash_eq->hash_func_id)
+        return set_error(errbuf, errbuf_len, "AOT Hash/Eq plan identity does not re-derive");
+    if (plan->action != verify_hash_eq_action_for(hash_eq) ||
+        plan->unproven_reason != verify_hash_eq_reason_for(hash_eq))
+        return set_error(errbuf, errbuf_len, "AOT Hash/Eq plan action does not re-derive");
+    if (plan->evidence != verify_hash_eq_evidence_for(hash_eq))
+        return set_error(errbuf, errbuf_len, "AOT Hash/Eq plan evidence does not re-derive");
+    return true;
+}
+
+static uint8_t verify_key_access_action_for(const XgGlobalEvidence *ev,
+                                            const XgKeyAccessSummary *access) {
+    const XgMapShapeSummary *shape = NULL;
+    const XgHashEqSummary *hash_eq = NULL;
+    if (!access || !verify_map_container_kind_valid(access->container_kind) ||
+        !verify_key_access_op_valid(access->op))
+        return XAOT_KEY_ACCESS_REJECT;
+    if (access->receiver_shape_id != XG_NO_ID) {
+        shape = xg_global_evidence_find_map_shape(ev, access->receiver_shape_id);
+        if (!shape)
+            return XAOT_KEY_ACCESS_REJECT;
+        if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+            return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
+        if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+            return XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
+    }
+    hash_eq = xg_global_evidence_find_hash_eq(ev, access->key_type_key);
+    if (!hash_eq || verify_hash_eq_action_for(hash_eq) == XAOT_HASH_EQ_DYNAMIC_REJECT)
+        return XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP;
+    return (access->flags & XG_KEY_ACCESS_CONST_KEY) != 0 && access->key_const_id != 0
+               ? XAOT_KEY_ACCESS_PREHASHED_LOOKUP
+               : XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP;
+}
+
+static uint8_t verify_key_access_reason_for(const XgGlobalEvidence *ev,
+                                            const XgKeyAccessSummary *access) {
+    const XgHashEqSummary *hash_eq;
+    if (!access || !verify_map_container_kind_valid(access->container_kind) ||
+        !verify_key_access_op_valid(access->op))
+        return XAOT_MAP_UNPROVEN_INVALID_KIND;
+    if (access->receiver_shape_id != XG_NO_ID &&
+        !xg_global_evidence_find_map_shape(ev, access->receiver_shape_id))
+        return XAOT_MAP_UNPROVEN_MISSING_SHAPE;
+    hash_eq = xg_global_evidence_find_hash_eq(ev, access->key_type_key);
+    if (!hash_eq)
+        return XAOT_MAP_UNPROVEN_MISSING_HASH_EQ;
+    if (verify_hash_eq_action_for(hash_eq) == XAOT_HASH_EQ_DYNAMIC_REJECT)
+        return XAOT_MAP_UNPROVEN_UNHASHABLE;
+    return XAOT_MAP_UNPROVEN_NONE;
+}
+
+static uint32_t verify_key_access_evidence_for(const XgGlobalEvidence *ev,
+                                               const XgKeyAccessSummary *access) {
+    const XgMapShapeSummary *shape;
+    const XgHashEqSummary *hash_eq;
+    uint32_t bits = XAOT_MAP_EV_GLOBAL_ROW;
+    if (!access)
+        return bits;
+    if ((access->flags & XG_KEY_ACCESS_CONST_KEY) != 0 && access->key_const_id != 0)
+        bits |= XAOT_MAP_EV_CONST_KEY;
+    if (access->key_prehash != 0)
+        bits |= XAOT_MAP_EV_PREHASH;
+    shape = xg_global_evidence_find_map_shape(ev, access->receiver_shape_id);
+    if (shape) {
+        if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+            bits |= XAOT_MAP_EV_DENSE_DOMAIN;
+        if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+            bits |= XAOT_MAP_EV_SMALL;
+    }
+    hash_eq = xg_global_evidence_find_hash_eq(ev, access->key_type_key);
+    if (hash_eq && verify_hash_eq_action_for(hash_eq) != XAOT_HASH_EQ_DYNAMIC_REJECT)
+        bits |= XAOT_MAP_EV_HASH_EQ;
+    return bits;
+}
+
+static bool verify_key_access_plan_rederives(const XgGlobalEvidence *ev,
+                                             const XaotKeyAccessPlan *plan,
+                                             const XgKeyAccessSummary *access, char *errbuf,
+                                             size_t errbuf_len) {
+    if (!ev || !plan || !access)
+        return set_error(errbuf, errbuf_len, "AOT key access verifier has incomplete input");
+    if (plan->access_id != access->access_id || plan->owner_func_id != access->owner_func_id ||
+        plan->source_span_id != access->source_span_id ||
+        plan->body_ordinal != access->body_ordinal ||
+        plan->container_kind != access->container_kind || plan->op != access->op ||
+        plan->receiver_shape_id != access->receiver_shape_id ||
+        plan->receiver_type_key != access->receiver_type_key ||
+        plan->key_type_key != access->key_type_key ||
+        plan->value_type_key != access->value_type_key ||
+        plan->key_const_id != access->key_const_id || plan->key_prehash != access->key_prehash)
+        return set_error(errbuf, errbuf_len, "AOT key access plan identity does not re-derive");
+    if (plan->action != verify_key_access_action_for(ev, access) ||
+        plan->unproven_reason != verify_key_access_reason_for(ev, access))
+        return set_error(errbuf, errbuf_len, "AOT key access plan action does not re-derive");
+    if (plan->evidence != verify_key_access_evidence_for(ev, access))
+        return set_error(errbuf, errbuf_len, "AOT key access plan evidence does not re-derive");
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -2834,6 +3163,9 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_derived_eq_hash_plans = 0;
     uint32_t expected_json_shape_plans = 0;
     uint32_t expected_json_access_plans = 0;
+    uint32_t expected_map_shape_plans = 0;
+    uint32_t expected_key_access_plans = 0;
+    uint32_t expected_hash_eq_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -2858,6 +3190,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (!verify_derive_rows(ev, errbuf, errbuf_len))
         return false;
     if (!verify_json_rows(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_map_rows(ev, errbuf, errbuf_len))
         return false;
 
     for (uint32_t di = 0; di < ev->ndecls; di++) {
@@ -3124,6 +3458,45 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->njson_access_plans != expected_json_access_plans)
         return set_error(errbuf, errbuf_len, "AOT Json access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nmap_shapes; i++) {
+        const XgMapShapeSummary *shape = &ev->map_shapes[i];
+        const XaotMapShapePlan *plan;
+        expected_map_shape_plans++;
+        plan = xaot_bundle_find_map_shape_plan(bundle, shape->shape_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Map/Set shape evidence has no shape plan");
+        if (!verify_map_shape_plan_rederives(plan, shape, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nmap_shape_plans != expected_map_shape_plans)
+        return set_error(errbuf, errbuf_len, "AOT Map/Set shape plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nhash_eqs; i++) {
+        const XgHashEqSummary *hash_eq = &ev->hash_eqs[i];
+        const XaotHashEqPlan *plan;
+        expected_hash_eq_plans++;
+        plan = xaot_bundle_find_hash_eq_plan(bundle, hash_eq->type_key);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Hash/Eq evidence has no plan");
+        if (!verify_hash_eq_plan_rederives(plan, hash_eq, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nhash_eq_plans != expected_hash_eq_plans)
+        return set_error(errbuf, errbuf_len, "AOT Hash/Eq plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nkey_accesses; i++) {
+        const XgKeyAccessSummary *access = &ev->key_accesses[i];
+        const XaotKeyAccessPlan *plan;
+        expected_key_access_plans++;
+        plan = xaot_bundle_find_key_access_plan(bundle, access->access_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT key access evidence has no plan");
+        if (!verify_key_access_plan_rederives(ev, plan, access, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nkey_access_plans != expected_key_access_plans)
+        return set_error(errbuf, errbuf_len, "AOT key access plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];
