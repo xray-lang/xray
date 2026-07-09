@@ -5,19 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * url.h - URL module loader and C-level percent encoding helpers
+ * url.h - pure-Xray URL module loader
  */
 
 #ifndef XR_STDLIB_URL_H
 #define XR_STDLIB_URL_H
 
 #include "../../src/base/xdefs.h"
-#include <stddef.h>
-
-XR_FUNC int xr_url_encode(const char *str, size_t len, char *buf, size_t buf_size);
-XR_FUNC int xr_url_decode(const char *str, size_t len, char *buf, size_t buf_size);
-XR_FUNC int xr_url_encode_form(const char *str, size_t len, char *buf, size_t buf_size);
-XR_FUNC int xr_url_decode_form(const char *str, size_t len, char *buf, size_t buf_size);
 
 struct XrVMRuntime;
 struct XrModule;
