@@ -133,6 +133,7 @@ NULLISH_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle
 MATCH_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_match_helper_return_alias_join.xr"
 HELPER_MATCH_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_match_return_alias_join.xr"
 MOVE_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_move_alias_join.xr"
+HELPER_ARG_ALIAS_WRAPPERS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_arg_alias_wrappers_join.xr"
 UNSAFE_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_unsafe_helper_return_alias_join.xr"
 UNSAFE_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_unsafe_return_alias_join.xr"
 HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_chained_return_alias_join.xr"
@@ -184,6 +185,7 @@ expect_output "nullish_helper_return_alias_join" "$NULLISH_HELPER_RETURN_ALIAS_J
 expect_output "match_helper_return_alias_join" "$MATCH_HELPER_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_match_return_alias_join" "$HELPER_MATCH_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "move_alias_join" "$MOVE_ALIAS_JOIN_SRC" "42"
+expect_output "helper_arg_alias_wrappers_join" "$HELPER_ARG_ALIAS_WRAPPERS_JOIN_SRC" $'42\n42'
 expect_output "unsafe_helper_return_alias_join" "$UNSAFE_HELPER_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "unsafe_return_alias_join" "$UNSAFE_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_chained_return_alias_join" "$HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC" "42"

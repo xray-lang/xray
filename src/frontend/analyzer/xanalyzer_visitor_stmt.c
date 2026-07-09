@@ -895,6 +895,8 @@ static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleL
     }
     if (expr->type == AST_MOVE_EXPR)
         return xa_thread_lint_find_alias_source(states, expr->as.move_expr.expr);
+    if (expr->type == AST_AS_EXPR)
+        return xa_thread_lint_find_alias_source(states, expr->as.as_expr.expr);
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
         if (!operand)
@@ -1086,10 +1088,7 @@ xa_thread_lint_find_returned_call_arg(XaThreadHandleLintState *states, AstNode *
         summary->return_param_index >= call->arg_count)
         return NULL;
     AstNode *arg = call->arguments[summary->return_param_index];
-    XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, arg);
-    if (!state)
-        state = xa_thread_lint_find_returned_call_arg(states, arg);
-    return state;
+    return xa_thread_lint_find_alias_source(states, arg);
 }
 
 static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
@@ -2727,6 +2726,8 @@ static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
     }
     if (expr->type == AST_MOVE_EXPR)
         return xa_os_resource_lint_find_alias_source(states, expr->as.move_expr.expr);
+    if (expr->type == AST_AS_EXPR)
+        return xa_os_resource_lint_find_alias_source(states, expr->as.as_expr.expr);
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
         if (!operand)
@@ -2896,9 +2897,7 @@ xa_os_resource_lint_find_returned_call_arg(XaOsResourceLintState *states, AstNod
     if (!param->is_resource)
         return NULL;
     AstNode *arg = call->arguments[summary->return_param_index];
-    XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, arg);
-    if (!state)
-        state = xa_os_resource_lint_find_returned_call_arg(states, arg);
+    XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, arg);
     return state && state->kind == param->kind ? state : NULL;
 }
 

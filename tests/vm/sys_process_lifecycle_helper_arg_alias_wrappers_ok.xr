@@ -1,0 +1,57 @@
+import sys
+import { Pipe, Process } from sys
+
+fn passProcess(p: Process) -> Process {
+    return p
+}
+
+fn passPipe(p: Pipe) -> Pipe {
+    return p
+}
+
+fn waitCastAlias() {
+    var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (spawned == null) {
+        print("spawn-failed")
+        return
+    }
+    var process = passProcess(spawned!) as Process
+    print(process.wait())
+}
+
+fn closeCastAlias() {
+    var opened = sys.Pipe.open()
+    if (opened == null) {
+        print(false)
+        return
+    }
+    var pipe = passPipe(opened!) as Pipe
+    print(pipe.close())
+}
+
+fn waitMovedArgAlias() {
+    var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (spawned == null) {
+        print("spawn-failed")
+        return
+    }
+    var process0 = spawned!
+    var process = passProcess(move process0)
+    print(process.wait())
+}
+
+fn closeMovedArgAlias() {
+    var opened = sys.Pipe.open()
+    if (opened == null) {
+        print(false)
+        return
+    }
+    var pipe0 = opened!
+    var pipe = passPipe(move pipe0)
+    print(pipe.close())
+}
+
+waitCastAlias()
+closeCastAlias()
+waitMovedArgAlias()
+closeMovedArgAlias()
