@@ -153,7 +153,7 @@ XI_METHOD_SYM(ADD_OVERFLOWS,  226, ADD_OVERFLOWS,  "addOverflows")
 XI_METHOD_SYM(SUB_OVERFLOWS,  227, SUB_OVERFLOWS,  "subOverflows")
 XI_METHOD_SYM(MUL_OVERFLOWS,  228, MUL_OVERFLOWS,  "mulOverflows")
 XI_METHOD_SYM(AS_SPAN,        229, AS_SPAN,        "asSpan")
-XI_METHOD_SYM(PTR_UNCHECKED,  230, PTR_UNCHECKED,  "ptrUnchecked")
+XI_METHOD_SYM(PTR,            230, PTR,            "ptr")
 XI_METHOD_SYM(APPEND_FROM,    231, APPEND_FROM,    "appendFrom")
 
 /* --- DateTime methods --- */

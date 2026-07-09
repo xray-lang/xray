@@ -2595,8 +2595,8 @@ module mem {
     argc: 0
   }
 
-  class_method Buffer.ptrUnchecked {
-    vm: "mem_buffer_ptr_unchecked"
+  class_method Buffer.ptr {
+    vm: "mem_buffer_ptr"
     argc: 0
   }
 
@@ -2942,10 +2942,10 @@ module mem {
     doc: "Borrow this buffer as a mutable ByteSpan value"
   }
 
-  type_method Buffer.ptrUnchecked {
+  type_method Buffer.ptr {
     signature: "(): RawMut<uint8>"
     receiver: "Buffer"
-    doc: "Return the underlying raw pointer; unsafe escape hatch"
+    doc: "Return the underlying raw pointer; requires unsafe at the call site"
   }
 
   type_method Buffer.resize {

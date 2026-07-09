@@ -280,7 +280,7 @@ static const char *xr_builtin_symbol_names[] = {
     "subOverflows",
     "mulOverflows",
     "asSpan",
-    "ptrUnchecked",
+    "ptr",
     "appendFrom",
 };
 

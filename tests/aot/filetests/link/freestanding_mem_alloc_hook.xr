@@ -13,7 +13,7 @@ fn xray_alloc_hook_score(n: int) -> int {
     if (!aligned.resize(64)) {
         return -1
     }
-    var p = unsafe { aligned.ptrUnchecked() }
+    var p = unsafe { aligned.ptr() }
     mem.set(p, 3, 64)
 
     return n + a.length() + z.length() + aligned.length() + int(s[0]) + int(zs[0])

@@ -472,7 +472,7 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"sys", "OsOnce", "call", "(body: fn(): ()): ()", "Run the closure exactly once"},
     {"mem", "Buffer", "length", "(): int", "Return the buffer length in bytes"},
     {"mem", "Buffer", "asSpan", "(): ByteSpan", "Borrow this buffer as a mutable ByteSpan value"},
-    {"mem", "Buffer", "ptrUnchecked", "(): RawMut<uint8>", "Return the underlying raw pointer; unsafe escape hatch"},
+    {"mem", "Buffer", "ptr", "(): RawMut<uint8>", "Return the underlying raw pointer; requires unsafe at the call site"},
     {"mem", "Buffer", "resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
@@ -522,7 +522,7 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
     {"mem", "Buffer", "get:length", "mem_buffer_length", 1, "0"},
     {"mem", "Buffer", "length", "mem_buffer_length", 0, "0"},
     {"mem", "Buffer", "asSpan", "mem_buffer_as_span", 0, "0"},
-    {"mem", "Buffer", "ptrUnchecked", "mem_buffer_ptr_unchecked", 0, "0"},
+    {"mem", "Buffer", "ptr", "mem_buffer_ptr", 0, "0"},
     {"mem", "Buffer", "resize", "mem_buffer_resize", 1, "0"},
     {"net", "NetConn", "fd", "conn_method_fd", 0, "0"},
     {"net", "NetConn", "close", "conn_method_close", 0, "0"},

@@ -157,7 +157,7 @@ static void xr_stdlib_vm_register_buffer_class_generated(XrVMRuntime *X) {
     xr_class_builder_add_method(builder, "get:length", mem_buffer_length, 1, 0);
     xr_class_builder_add_method(builder, "length", mem_buffer_length, 0, 0);
     xr_class_builder_add_method(builder, "asSpan", mem_buffer_as_span, 0, 0);
-    xr_class_builder_add_method(builder, "ptrUnchecked", mem_buffer_ptr_unchecked, 0, 0);
+    xr_class_builder_add_method(builder, "ptr", mem_buffer_ptr, 0, 0);
     xr_class_builder_add_method(builder, "resize", mem_buffer_resize, 1, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "xr_stdlib_vm_register_buffer_class_generated: finalize failed");
