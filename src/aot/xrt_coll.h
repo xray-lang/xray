@@ -1896,6 +1896,40 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     xr_swiss_indices_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
 }
 
+static inline void xrt_map_clear(xrt_map_t *m) {
+    if (!m)
+        return;
+    if (xrt_map_is_boolmap(m)) {
+        xrt_boolmap_clear((xrt_boolmap_t *) m);
+        return;
+    }
+    if (xrt_map_is_typed(m)) {
+        memset(m->ctrl, (int) XRT_CTRL_EMPTY, (size_t) m->cap + XRT_GROUP);
+        m->growth_left = m->cap - m->cap / 8;
+        m->len = 0;
+        m->order_len = 0;
+        return;
+    }
+    if (m->flags & XR_MAP_FLAG_DUMMY)
+        return;
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            if (m->entries[i].key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            xrt_release(m->entries[i].key);
+            xrt_release(m->entries[i].value);
+            m->entries[i].key = XR_NULL_VAL;
+            m->entries[i].value = XR_NULL_VAL;
+            m->entries[i].key_tt = XR_MAP_ENTRY_NIL_KEY;
+        }
+    }
+    memset(m->ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) m->indices_size + XR_SWISS_GROUP);
+    for (uint32_t i = 0; i < m->indices_size; i++)
+        m->indices[i] = XR_MAP_IX_EMPTY;
+    m->nentries = 0;
+    m->count = 0;
+}
+
 /* =========================================================================
  * Set runtime.
  *

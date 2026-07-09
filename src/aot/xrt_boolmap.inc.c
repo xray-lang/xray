@@ -118,6 +118,17 @@ static inline int64_t xrt_boolmap_len(const xrt_boolmap_t *b) {
     return b->order_len;
 }
 
+static inline void xrt_boolmap_clear(xrt_boolmap_t *b) {
+    if (!b)
+        return;
+    b->present = 0;
+    b->order[0] = 0;
+    b->order[1] = 0;
+    b->order_len = 0;
+    b->v[0].i = 0;
+    b->v[1].i = 0;
+}
+
 /* ---- codegen hot-path helpers (single representation, no dispatch branch) --
  * Signatures mirror xrt_map_find_bool_typed / xrt_map_get_*_value_typed so the
  * C backend can emit them in the same find->slot->value shape. The receiver is

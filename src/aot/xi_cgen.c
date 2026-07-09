@@ -351,6 +351,7 @@ static bool cg_phi_has_storage(const XiPhi *phi) {
 }
 
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
+static void cg_ctx_set_error(XiCgenCtx *ctx);
 
 static const XaotSpanAccessPlan *cg_span_access_plan(XiCgenCtx *ctx, const XiValue *value,
                                                      uint8_t kind) {
@@ -615,6 +616,11 @@ struct XiCgenCtx {
     int nno_alloc_detail_strings;
     int no_alloc_detail_cap;
 };
+
+static void cg_ctx_set_error(XiCgenCtx *ctx) {
+    if (ctx)
+        ctx->error = true;
+}
 
 static const XiImportRef *cg_shared_slot_import_ref_ctx(const XiCgenCtx *ctx, const XiFunc *f,
                                                         int slot) {

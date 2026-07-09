@@ -250,6 +250,111 @@ static bool cg_map_type_is_boolmap_ctx(XiCgenCtx *ctx, const XrType *type) {
     return cg_map_type_direct_info_ctx(ctx, type, &info) && cg_map_info_is_boolmap(&info);
 }
 
+static bool cg_key_access_method_op(uint8_t container_kind, const char *method, uint16_t nargs,
+                                    uint8_t *out_op) {
+    uint8_t op = 0;
+    if (!method)
+        return false;
+    if (container_kind == XG_MAP_CONTAINER_MAP) {
+        if (nargs == 1 && strcmp(method, "get") == 0)
+            op = XG_KEY_ACCESS_GET;
+        else if (nargs == 1 && strcmp(method, "has") == 0)
+            op = XG_KEY_ACCESS_HAS;
+        else if (nargs == 1 && strcmp(method, "delete") == 0)
+            op = XG_KEY_ACCESS_DELETE;
+        else if (nargs == 2 && strcmp(method, "set") == 0)
+            op = XG_KEY_ACCESS_SET;
+        else if (nargs == 0 && strcmp(method, "clear") == 0)
+            op = XG_KEY_ACCESS_CLEAR;
+    } else if (container_kind == XG_MAP_CONTAINER_SET) {
+        if (nargs == 1 && strcmp(method, "has") == 0)
+            op = XG_KEY_ACCESS_HAS;
+        else if (nargs == 1 && strcmp(method, "add") == 0)
+            op = XG_KEY_ACCESS_ADD;
+        else if (nargs == 1 && strcmp(method, "delete") == 0)
+            op = XG_KEY_ACCESS_DELETE;
+        else if (nargs == 0 && strcmp(method, "clear") == 0)
+            op = XG_KEY_ACCESS_CLEAR;
+    }
+    if (op == 0)
+        return false;
+    if (out_op)
+        *out_op = op;
+    return true;
+}
+
+static const XaotKeyAccessPlan *cg_verified_key_access_plan(XiCgenCtx *ctx, const XiValue *v,
+                                                            uint8_t expected_container,
+                                                            uint8_t expected_op, const char *site) {
+    if (!v || v->xg_key_access_id == 0)
+        return NULL;
+    const XaotKeyAccessPlan *plan =
+        xaot_bundle_find_key_access_plan(cg_ctx_aot_bundle(ctx), v->xg_key_access_id);
+    if (!plan) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: missing verified key-access plan for %s Xi value v%u "
+                "(key_access=%u)\n",
+                site ? site : "Map/Set", v->id, v->xg_key_access_id);
+        return NULL;
+    }
+    if (plan->container_kind != expected_container || plan->op != expected_op ||
+        (plan->source_span_id != 0 && v->line > 0 && plan->source_span_id != (uint32_t) v->line)) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: stale key-access plan for %s Xi value v%u "
+                "(key_access=%u container=%u op=%u span=%u action=%u)\n",
+                site ? site : "Map/Set", v->id, v->xg_key_access_id,
+                (unsigned) plan->container_kind, (unsigned) plan->op,
+                (unsigned) plan->source_span_id, (unsigned) plan->action);
+        return NULL;
+    }
+    if (plan->action == XAOT_KEY_ACCESS_REJECT) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: rejected key-access plan for %s Xi value v%u "
+                "(key_access=%u reason=%u)\n",
+                site ? site : "Map/Set", v->id, v->xg_key_access_id,
+                (unsigned) plan->unproven_reason);
+        return NULL;
+    }
+    return plan;
+}
+
+static bool cg_key_access_plan_action_has_backend(XiCgenCtx *ctx, const XaotKeyAccessPlan *plan,
+                                                  const XiValue *v, const char *site) {
+    if (!plan)
+        return true;
+    switch ((XaotKeyAccessAction) plan->action) {
+        case XAOT_KEY_ACCESS_PREHASHED_LOOKUP:
+        case XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP:
+        case XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP:
+            return true;
+        case XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX:
+        case XAOT_KEY_ACCESS_INLINE_SMALL_SCAN:
+        case XAOT_KEY_ACCESS_REJECT:
+        default:
+            cg_ctx_set_error(ctx);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: key-access plan action %u for %s Xi value v%u "
+                    "(key_access=%u) has no CGen backend emitter yet\n",
+                    (unsigned) plan->action, site ? site : "Map/Set", v ? v->id : 0,
+                    v ? v->xg_key_access_id : 0);
+            return false;
+    }
+}
+
+static bool cg_key_access_plan_action_allows_hash_helper(XiCgenCtx *ctx,
+                                                         const XaotKeyAccessPlan *plan,
+                                                         const XiValue *v, const char *site) {
+    if (!cg_key_access_plan_action_has_backend(ctx, plan, v, site))
+        return false;
+    if (!plan)
+        return true;
+    return plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP ||
+           plan->action == XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP;
+}
+
 static bool emit_typed_map_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v, int64_t cap) {
     CgMapElemInfo info;
     const XaotContainerTypePlan *plan =

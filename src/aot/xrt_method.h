@@ -464,6 +464,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_BOOL(xrt_map_len(m) == 0);
         if (!xrt_map_is_boolmap(m) && (m->flags & XR_MAP_FLAG_WEAK))
             return XR_NULL_VAL;
+        if (sym == XRT_SYM_CLEAR) {
+            xrt_map_clear(m);
+            return XR_NULL_VAL;
+        }
         if (sym == XRT_SYM_KEYS)
             return xrt_map_keys(m);
         if (sym == XRT_SYM_VALUES)

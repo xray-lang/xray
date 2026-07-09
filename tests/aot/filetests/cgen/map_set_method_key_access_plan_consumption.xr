@@ -1,0 +1,23 @@
+fn methodPlan() -> int {
+    var scores: Map<int, int> = #{}
+    scores.set(1, 10)
+    var hasOne = scores.has(1)
+    var one = scores.get(1)
+    scores.delete(1)
+    scores.clear()
+
+    var seen: Set<int> = #[]
+    seen.add(2)
+    var sawTwo = seen.has(2)
+    seen.delete(2)
+    seen.clear()
+
+    if (hasOne) {
+        if (sawTwo) {
+            return one
+        }
+    }
+    return 0
+}
+
+print(methodPlan())
