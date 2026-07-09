@@ -811,6 +811,83 @@ TEST(json_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_JSON_EVIDENCE
 }
 
+TEST(map_key_access_lowers_with_global_evidence_id) {
+#define REQUIRE_KEY_EVIDENCE(cond, msg)                                                            \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "map_key_access_lowers_with_global_evidence_id: %s\n", msg);           \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn updateScore() -> int {\n"
+                                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
+                                          "    scores[\"ada\"] = 8\n"
+                                          "    return scores[\"ada\"]\n"
+                                          "}\n"
+                                          "print(updateScore())\n",
+                                          &ev);
+    REQUIRE_KEY_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_KEY_EVIDENCE(ev.nkey_accesses == 2, "producer should record Map set and get");
+    XiFunc *update = func_tree_find_func_name(main_func, "updateScore");
+    REQUIRE_KEY_EVIDENCE(update != NULL, "target function should be present");
+
+    uint32_t get_id = 0;
+    uint32_t set_id = 0;
+    uint32_t tagged_index_ops = 0;
+    for (uint32_t b = 0; b < update->nblocks; b++) {
+        XiBlock *blk = update->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || (v->op != XI_INDEX_GET && v->op != XI_INDEX_SET))
+                continue;
+            tagged_index_ops++;
+            if (v->xg_key_access_id == 0)
+                continue;
+            if (v->op == XI_INDEX_GET)
+                get_id = v->xg_key_access_id;
+            else
+                set_id = v->xg_key_access_id;
+        }
+    }
+    REQUIRE_KEY_EVIDENCE(tagged_index_ops >= 4,
+                         "literal initialization plus source accesses should lower to index ops");
+    REQUIRE_KEY_EVIDENCE(get_id != 0, "Map index get should bind key-access evidence");
+    REQUIRE_KEY_EVIDENCE(set_id != 0, "Map index set should bind key-access evidence");
+    REQUIRE_KEY_EVIDENCE(get_id != set_id, "Map get/set should use distinct access rows");
+
+    int matched_get = 0;
+    int matched_set = 0;
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XgKeyAccessSummary *row = &ev.key_accesses[i];
+        if (row->access_id == get_id) {
+            REQUIRE_KEY_EVIDENCE(row->op == XG_KEY_ACCESS_INDEX_GET,
+                                 "bound get id should point at index_get row");
+            REQUIRE_KEY_EVIDENCE((row->flags & XG_KEY_ACCESS_CONST_KEY) != 0,
+                                 "bound get row should preserve const-key evidence");
+            matched_get = 1;
+        }
+        if (row->access_id == set_id) {
+            REQUIRE_KEY_EVIDENCE(row->op == XG_KEY_ACCESS_SET,
+                                 "bound set id should point at set row");
+            REQUIRE_KEY_EVIDENCE((row->flags & XG_KEY_ACCESS_MUTATING) != 0,
+                                 "bound set row should preserve mutating evidence");
+            matched_set = 1;
+        }
+    }
+    REQUIRE_KEY_EVIDENCE(matched_get && matched_set, "bound ids should re-derive from evidence");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_KEY_EVIDENCE
+}
+
 TEST(nested_function) {
     XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
                              "    return a + b\n"
@@ -1941,6 +2018,7 @@ int main(void) {
     run_try_catch_defer();
     run_object_literal();
     run_json_access_lowers_with_global_evidence_id();
+    run_map_key_access_lowers_with_global_evidence_id();
     run_nested_function();
     run_function_expr();
     run_multiple_functions();

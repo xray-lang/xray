@@ -1806,6 +1806,8 @@ static XiValue *lower_unsafe_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
+    uint32_t key_access_ordinal =
+        xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, XG_KEY_ACCESS_INDEX_GET);
     XiValue *obj = xi_lower_expr(l, ig->array);
     XiValue *idx = xi_lower_expr(l, ig->index);
     if (!obj || !idx)
@@ -1839,6 +1841,8 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->args[0] = obj;
     v->args[1] = idx;
     v->line = (uint32_t) node->line;
+    xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, key_access_ordinal,
+                                XG_KEY_ACCESS_INDEX_GET);
 
     /* Insert XI_WIDEN after reading from a sub-width typed array */
     uint16_t widen_op = xi_widen_op_for_elem(elem_type);
@@ -1858,6 +1862,8 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
 
 static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     IndexSetNode *is_node = &node->as.index_set;
+    uint32_t key_access_ordinal =
+        xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, XG_KEY_ACCESS_SET);
     XiValue *obj = xi_lower_expr(l, is_node->array);
     XiValue *idx = xi_lower_expr(l, is_node->index);
     XiValue *val = xi_lower_expr(l, is_node->value);
@@ -1906,6 +1912,7 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     v->args[2] = val;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+    xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, key_access_ordinal, XG_KEY_ACCESS_SET);
     return v;
 }
 
@@ -3602,11 +3609,25 @@ static XrType *xi_raw_pointer_type_namespace(XiLower *l, AstNode *object) {
     return xr_type_new_pointer(l->isolate, pointee, is_mut);
 }
 
+static XiTopBinding xi_lower_find_current_or_parent_top_binding(XiLower *l, uint32_t symbol_id,
+                                                                const char *name) {
+    XiTopBinding b = xi_lower_find_top_binding(l, symbol_id, name);
+    if (xi_top_binding_valid(b) || !l || !l->is_program)
+        return b;
+    int var_id = xi_lower_var_find(l, symbol_id, name);
+    if (var_id >= 0 && l->shared_map[var_id] >= 0) {
+        b.slot = l->shared_map[var_id];
+        b.name = l->vars[var_id].name;
+        b.type = l->vars[var_id].type;
+    }
+    return b;
+}
+
 static XiValue *lower_raw_pointer_static_call(XiLower *l, AstNode *node, CallExprNode *call) {
     if (!l || !node || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return NULL;
     MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "null") != 0 || call->arg_count != 0)
+    if (!ma->name)
         return NULL;
     XrType *ptr_type = xi_raw_pointer_type_namespace(l, ma->object);
     if (!ptr_type)
@@ -3614,9 +3635,30 @@ static XiValue *lower_raw_pointer_static_call(XiLower *l, AstNode *node, CallExp
     XrType *result_type = xi_lower_node_type(l, node);
     if (!result_type || xi_lower_type_is_unknown(result_type))
         result_type = ptr_type;
-    XiValue *v = xi_const_int(l->func, l->cur_block, 0, result_type);
-    if (v)
+    if (strcmp(ma->name, "null") == 0) {
+        if (call->arg_count != 0)
+            return NULL;
+        XiValue *v = xi_const_int(l->func, l->cur_block, 0, result_type);
+        if (v)
+            v->line = (uint32_t) node->line;
+        return v;
+    }
+    if (strcmp(ma->name, "of") != 0 || ptr_type->ptr_is_mut || call->arg_count != 1 ||
+        call->type_arg_count != 0 || !call->arguments || !call->arguments[0] ||
+        call->arguments[0]->type != AST_VARIABLE)
+        return NULL;
+
+    AstNode *arg = call->arguments[0];
+    XiTopBinding tb = xi_lower_find_current_or_parent_top_binding(l, arg->as.variable.symbol_id,
+                                                                  arg->as.variable.name);
+    if (!xi_top_binding_valid(tb))
+        return NULL;
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_STATIC_ADDR, result_type, 0);
+    if (v) {
+        v->aux_int = tb.slot;
         v->line = (uint32_t) node->line;
+    }
     return v;
 }
 

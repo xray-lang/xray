@@ -7531,6 +7531,66 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
+    setup_parser_session();
+    const char *source = "fn makeEmpty() -> int {\n"
+                         "    var scores: Map<string, int> = #{}\n"
+                         "    var seen: Set<uint8> = #[]\n"
+                         "    return 0\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 0);
+    ASSERT_EQ_UINT(ev.nhash_eqs, 2);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 0);
+    ASSERT_EQ_UINT(ev.map_shapes[0].container_kind, XG_MAP_CONTAINER_MAP);
+    ASSERT_EQ_UINT(ev.map_shapes[0].literal_count, 0);
+    ASSERT_TRUE(ev.map_shapes[0].key_type_key != 0);
+    ASSERT_TRUE(ev.map_shapes[0].value_type_key != 0);
+    ASSERT_EQ_UINT(ev.map_shapes[1].container_kind, XG_MAP_CONTAINER_SET);
+    ASSERT_EQ_UINT(ev.map_shapes[1].literal_count, 0);
+    ASSERT_TRUE(ev.map_shapes[1].key_type_key != 0);
+    ASSERT_EQ_UINT(ev.map_shapes[1].value_type_key, 0);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_BUILTIN);
+    ASSERT_EQ_UINT(ev.hash_eqs[1].kind, XG_HASH_EQ_BUILTIN);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nmap_shape_plans, 2);
+    ASSERT_EQ_UINT(bundle.nhash_eq_plans, 2);
+    ASSERT_EQ_UINT(bundle.nkey_access_plans, 0);
+    const XaotMapShapePlan *map_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
+    const XaotMapShapePlan *set_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[1].shape_id);
+    ASSERT_NOT_NULL(map_plan);
+    ASSERT_NOT_NULL(set_plan);
+    ASSERT_EQ_UINT(map_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
+    ASSERT_EQ_UINT(set_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
+    ASSERT_NOT_NULL(xaot_bundle_find_hash_eq_plan(&bundle, ev.map_shapes[0].key_type_key));
+    ASSERT_NOT_NULL(xaot_bundle_find_hash_eq_plan(&bundle, ev.map_shapes[1].key_type_key));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
     const char *source = "fn useTable() -> int {\n"
@@ -7987,6 +8047,8 @@ RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
+RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
+RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);

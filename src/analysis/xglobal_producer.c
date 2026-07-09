@@ -267,6 +267,15 @@ static uint32_t hash_synthetic_tref32(uint8_t kind, const char *name, XrTypeRef 
     return hash_folded32(h);
 }
 
+static uint32_t hash_synthetic_width_tref32(uint8_t kind, uint8_t native_width) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, kind);
+    h = fold_u64(h, native_width);
+    h = fold_u64(h, 0);
+    h = fold_u64(h, 0);
+    return hash_folded32(h);
+}
+
 static uint32_t hash_named_type_key32(const char *name, XrTypeRef **type_args, int type_arg_count) {
     if (!name || !name[0])
         return 0;
@@ -1878,6 +1887,35 @@ static bool body_type_ref_is_json(const XrTypeRef *type) {
     return type && type->kind == XR_TREF_NAMED && type->name && strcmp(type->name, "Json") == 0;
 }
 
+static bool body_type_ref_map_parts(const XrTypeRef *type, uint8_t *out_container_kind,
+                                    uint32_t *out_key_type_key, uint32_t *out_value_type_key) {
+    if (out_container_kind)
+        *out_container_kind = 0;
+    if (out_key_type_key)
+        *out_key_type_key = 0;
+    if (out_value_type_key)
+        *out_value_type_key = 0;
+    if (!type || type->kind != XR_TREF_GENERIC || !type->name || !type->children)
+        return false;
+    if (strcmp(type->name, "Map") == 0 && type->nchildren >= 2) {
+        if (out_container_kind)
+            *out_container_kind = XG_MAP_CONTAINER_MAP;
+        if (out_key_type_key)
+            *out_key_type_key = hash_tref32(type->children[0]);
+        if (out_value_type_key)
+            *out_value_type_key = hash_tref32(type->children[1]);
+        return true;
+    }
+    if (strcmp(type->name, "Set") == 0 && type->nchildren >= 1) {
+        if (out_container_kind)
+            *out_container_kind = XG_MAP_CONTAINER_SET;
+        if (out_key_type_key)
+            *out_key_type_key = hash_tref32(type->children[0]);
+        return true;
+    }
+    return false;
+}
+
 static const ObjectLiteralNode *body_static_object_literal(const AstNode *node) {
     if (!node)
         return NULL;
@@ -2091,13 +2129,29 @@ static uint64_t body_map_shape_hash(uint8_t container_kind, uint32_t key_type_ke
 }
 
 static bool body_map_key_type_has_builtin_hash_eq(uint32_t key_type_key) {
-    static const uint32_t builtin_kinds[] = {
+    static const uint8_t builtin_kinds[] = {
         XR_TREF_INT, XR_TREF_FLOAT, XR_TREF_STRING, XR_TREF_CHAR, XR_TREF_BOOL,
+    };
+    static const uint8_t int_widths[] = {
+        XR_TREF_NW_I64, XR_TREF_NW_I8,  XR_TREF_NW_I16, XR_TREF_NW_I32,   XR_TREF_NW_U8,
+        XR_TREF_NW_U16, XR_TREF_NW_U32, XR_TREF_NW_U64, XR_TREF_NW_ISIZE, XR_TREF_NW_USIZE,
+    };
+    static const uint8_t float_widths[] = {
+        XR_TREF_NW_F64,
+        XR_TREF_NW_F32,
     };
     if (key_type_key == 0)
         return false;
     for (uint32_t i = 0; i < sizeof(builtin_kinds) / sizeof(builtin_kinds[0]); i++) {
         if (key_type_key == hash_synthetic_tref32((uint8_t) builtin_kinds[i], NULL, NULL, 0))
+            return true;
+    }
+    for (uint32_t i = 0; i < sizeof(int_widths) / sizeof(int_widths[0]); i++) {
+        if (key_type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, int_widths[i]))
+            return true;
+    }
+    for (uint32_t i = 0; i < sizeof(float_widths) / sizeof(float_widths[0]); i++) {
+        if (key_type_key == hash_synthetic_width_tref32(XR_TREF_FLOAT_WIDTH, float_widths[i]))
             return true;
     }
     return false;
@@ -2118,11 +2172,13 @@ static void body_ensure_builtin_hash_eq(XgBodyCollect *bc, uint32_t key_type_key
 }
 
 static XgMapShapeId
-body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node, uint32_t source_span_id,
+body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
+                               const XrTypeRef *type_annotation, uint32_t source_span_id,
                                uint32_t *out_receiver_type_key, uint32_t *out_key_type_key,
                                uint32_t *out_value_type_key, uint8_t *out_container_kind) {
     XgMapShapeSummary shape;
     uint8_t container_kind;
+    uint8_t annotated_container_kind = 0;
     int count;
     AstNode **keys;
     AstNode **values;
@@ -2144,6 +2200,12 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node, uint32_t 
         (node->type != AST_MAP_LITERAL && node->type != AST_SET_LITERAL))
         return XG_NO_ID;
     container_kind = node->type == AST_SET_LITERAL ? XG_MAP_CONTAINER_SET : XG_MAP_CONTAINER_MAP;
+    (void) body_type_ref_map_parts(type_annotation, &annotated_container_kind, &key_type_key,
+                                   &value_type_key);
+    if (annotated_container_kind != 0 && annotated_container_kind != container_kind) {
+        key_type_key = 0;
+        value_type_key = 0;
+    }
     count = node->type == AST_SET_LITERAL ? node->as.set_literal.count : node->as.map_literal.count;
     keys =
         node->type == AST_SET_LITERAL ? node->as.set_literal.elements : node->as.map_literal.keys;
@@ -2780,9 +2842,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
                 map_shape_id = body_add_map_shape_for_literal(
-                    bc, node->as.var_decl.initializer, (uint32_t) node->line,
-                    &map_receiver_type_key, &map_key_type_key, &map_value_type_key,
-                    &map_container_kind);
+                    bc, node->as.var_decl.initializer, node->as.var_decl.type_annotation,
+                    (uint32_t) node->line, &map_receiver_type_key, &map_key_type_key,
+                    &map_value_type_key, &map_container_kind);
                 if (type_key == 0 && map_receiver_type_key != 0)
                     type_key = map_receiver_type_key;
             }
