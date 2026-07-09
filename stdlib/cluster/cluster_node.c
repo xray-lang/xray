@@ -13,7 +13,6 @@
  *   Provides frame-level send/recv over the connection.
  */
 
-#include "cluster_node.h"
 #include "cluster_internal.h"
 #include "../crypto/crypto.h"
 #include "../../src/coro/xchannel.h"

@@ -37,7 +37,6 @@
  */
 
 #include "cluster_internal.h"
-#include "cluster_node.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xhash.h"

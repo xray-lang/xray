@@ -26,7 +26,6 @@
  */
 
 #include "cluster_internal.h"
-#include "cluster_node.h"
 #include "../net/io.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xcoroutine.h"

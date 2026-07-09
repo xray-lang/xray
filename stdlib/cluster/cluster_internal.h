@@ -23,12 +23,12 @@
 #define XR_CLUSTER_INTERNAL_H
 
 #include "cluster.h"
-#include "cluster_node.h"
 #include "cluster_proto.h"
 #include "../../src/base/xdefs.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
+#include "../net/io.h"
 #include "../net/tls.h"
 
 #include <stddef.h>
@@ -43,6 +43,116 @@ struct XrVMRuntime;
 struct XrChannel;
 typedef struct XrCluster XrCluster;
 typedef struct XrClusterDiscovery XrClusterDiscovery;
+
+/* ========== Node State ========== */
+
+typedef enum {
+    XR_NODE_IDLE,
+    XR_NODE_CONNECTING,
+    XR_NODE_HANDSHAKING,
+    XR_NODE_CONNECTED,
+    XR_NODE_CLOSING
+} XrNodeState;
+
+typedef struct XrOutFrame {
+    uint8_t *data;
+    uint32_t len;
+    bool owned;
+    struct XrOutFrame *next;
+} XrOutFrame;
+
+typedef struct XrOutputQueue {
+    XrOutFrame *head;
+    XrOutFrame *tail;
+    int64_t total_bytes;
+    int frame_count;
+    int64_t high_watermark;
+    int64_t low_watermark;
+    _Atomic(bool) is_full;
+    int notify_pipe[2];
+    XrAdaptiveMutex lock;
+} XrOutputQueue;
+
+typedef struct XrNodeMetrics {
+    _Atomic(uint64_t) frames_sent;
+    _Atomic(uint64_t) frames_recv;
+    _Atomic(uint64_t) bytes_sent;
+    _Atomic(uint64_t) bytes_recv;
+    _Atomic(uint64_t) send_errors;
+    _Atomic(uint64_t) slow_consumer_events;
+    int64_t last_rtt_ms;
+} XrNodeMetrics;
+
+#define XR_PHI_WINDOW_SIZE 100
+
+typedef struct XrPhiDetector {
+    double intervals[XR_PHI_WINDOW_SIZE];
+    int sample_count;
+    int write_idx;
+    double mean;
+    double variance;
+    double sum;
+    double sum_sq;
+    int64_t last_heartbeat_ts;
+} XrPhiDetector;
+
+typedef struct XrPendingRequest {
+    uint64_t request_id;
+    struct XrChannel *response_ch;
+    struct XrPendingRequest *next;
+} XrPendingRequest;
+
+#define XR_PENDING_BUCKETS 32
+#define XR_MAX_PENDING_REQUESTS 256
+
+typedef struct XrClusterNode {
+    char name[XR_NODE_NAME_MAX + 1];
+    char host[256];
+    uint16_t port;
+    XrNodeState state;
+    XrIOConn *conn;
+    int64_t last_heartbeat_sent;
+    int64_t last_heartbeat_recv;
+    uint32_t flags;
+    uint32_t missed_heartbeats;
+
+    XrPendingRequest *pending_buckets[XR_PENDING_BUCKETS];
+    int pending_count;
+    XrAdaptiveMutex pending_lock;
+
+    struct XrVMRuntime *isolate;
+
+    XrOutputQueue outq;
+    _Atomic(bool) writer_running;
+    _Atomic(bool) writer_exited;
+    _Atomic(bool) reader_running;
+
+    XrNodeMetrics metrics;
+    XrPhiDetector phi;
+
+    struct XrClusterNode *next;
+} XrClusterNode;
+
+XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port);
+void cluster_node_free(XrClusterNode *node);
+int cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
+XrClusterNode *cluster_node_accept(struct XrCluster *cluster, XrIOConn *conn);
+int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
+int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
+                            uint32_t payload_len);
+int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
+                            uint32_t buf_size, uint32_t *payload_len_out);
+int cluster_node_send_ping(XrClusterNode *node);
+void cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntime *X);
+void cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node);
+void cluster_phi_init(XrPhiDetector *det);
+void cluster_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
+double cluster_phi_value(XrPhiDetector *det, int64_t now_ms);
+bool cluster_node_is_slow(XrClusterNode *node);
+struct XrChannel *cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
+                                           struct XrVMRuntime *X, int max_pending);
+struct XrChannel *cluster_node_take_pending(XrClusterNode *node, uint64_t request_id);
+int64_t cluster_now_ms(void);
 
 /* ========== Channel Subscriber (for select push model) ========== */
 
