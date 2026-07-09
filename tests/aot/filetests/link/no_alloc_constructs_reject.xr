@@ -23,6 +23,11 @@ fn xray_no_alloc_copy_builtin_reject(values: Array<int>) -> Array<int> {
     return copy(values)
 }
 
+@no_alloc
+fn xray_no_alloc_atomic_constructor_reject() -> Atomic<int> {
+    return Atomic(1)
+}
+
 var xray_no_alloc_copy_source: Array<int> = [1, 2, 3]
 
 print(xray_no_alloc_bytes_constructor_reject().length)
@@ -30,3 +35,4 @@ print(xray_no_alloc_map_literal_reject().length)
 print(xray_no_alloc_set_literal_reject().length)
 print(Json.size(xray_no_alloc_json_literal_reject()))
 print(xray_no_alloc_copy_builtin_reject(xray_no_alloc_copy_source).length)
+print(xray_no_alloc_atomic_constructor_reject().load(Ordering.Relaxed))

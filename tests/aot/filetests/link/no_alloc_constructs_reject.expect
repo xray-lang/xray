@@ -4,4 +4,5 @@ contains=@no_alloc function 'xray_no_alloc_map_literal_reject' allocates via op 
 contains=@no_alloc function 'xray_no_alloc_set_literal_reject' allocates via op 'SET_NEW'
 contains=@no_alloc function 'xray_no_alloc_json_literal_reject' allocates via op 'JSON_NEW'
 contains=@no_alloc function 'xray_no_alloc_copy_builtin_reject' allocates via builtin 'copy'
+contains=@no_alloc function 'xray_no_alloc_atomic_constructor_reject' allocates via constructor 'Atomic'
 not_contains=CRASH
