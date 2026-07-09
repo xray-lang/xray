@@ -171,6 +171,22 @@ union U32Bytes {
 const BITS = comptime I32Bits{i: -1}
 const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
 
+@section("__DATA,.xray_bit_rows")
+@weak
+@used
+const BIT_ROWS: [I32Bits; 2] = comptime [
+    I32Bits{i: -1},
+    I32Bits{u: 42},
+]
+
+@section("__DATA,.xray_word_rows")
+@weak
+@used
+const WORD_ROWS: [U32Bytes; 2] = comptime [
+    U32Bytes{u: 0x01020304},
+    U32Bytes{b: [8, 7, 6, 5]},
+]
+
 @c_export("xray_top_const_aggregate")
 fn xray_top_const_aggregate() -> int {
     const first = comptime TABLE[0]
@@ -336,4 +352,9 @@ fn xray_top_const_union_u32_runtime() -> int {
 @c_export("xray_top_const_union_byte_runtime")
 fn xray_top_const_union_byte_runtime(i: int) -> int {
     return unsafe { WORD_BYTES.b }[i] as int
+}
+
+@c_export("xray_top_const_union_array_runtime")
+fn xray_top_const_union_array_runtime(i: int) -> int {
+    return (unsafe { BIT_ROWS[i].u } as int) + (unsafe { WORD_ROWS[i].b }[i] as int)
 }
