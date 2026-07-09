@@ -179,10 +179,7 @@ static XrHttpPooledConn *create_connection(struct XrVMRuntime *X, XrHttpConnPool
 
     conn->fd = fd;
     conn->state = XR_HTTP_CONN_IN_USE;
-    conn->created_ms = now_ms();
-    conn->last_used_ms = conn->created_ms;
-    conn->is_https = is_https;
-    conn->tls_conn = NULL;
+    conn->last_used_ms = now_ms();
 
 #ifdef XR_ENABLE_TLS
     // HTTPS: TLS handshake (coroutine-friendly).
