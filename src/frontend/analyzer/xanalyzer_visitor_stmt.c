@@ -411,6 +411,7 @@ struct XaThreadHandleLintFnSummary {
     const char *name;
     uint32_t symbol_id;
     bool *param_finalized;
+    int return_param_index;
     int param_count;
     struct XaThreadHandleLintFnSummary *next;
 };
@@ -535,6 +536,27 @@ static bool xa_thread_lint_snapshot_closed(XaThreadHandleLintSnapshot *snapshot)
 static AstNode *xa_thread_lint_unwrap_expr(AstNode *expr) {
     while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP))
         expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.unary.operand;
+    return expr;
+}
+
+static AstNode *xa_lifecycle_lint_tail_return_expr(AstNode *body) {
+    AstNode **statements = NULL;
+    int count = 0;
+    if (xa_block_node_statements(body, &statements, &count)) {
+        if (count <= 0)
+            return NULL;
+        body = statements[count - 1];
+    }
+    if (!body || body->type != AST_RETURN_STMT)
+        return NULL;
+    ReturnStmtNode *ret = &body->as.return_stmt;
+    return ret->value_count == 1 && ret->values ? ret->values[0] : NULL;
+}
+
+static AstNode *xa_lifecycle_lint_returned_handle_expr(AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (expr && expr->type == AST_MOVE_EXPR)
+        return xa_thread_lint_unwrap_expr(expr->as.move_expr.expr);
     return expr;
 }
 
@@ -776,6 +798,8 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
                                      bool return_value, bool can_escape);
 static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
                                      bool can_escape);
+static XaThreadHandleLintState *
+xa_thread_lint_find_returned_call_arg(XaThreadHandleLintState *states, AstNode *expr);
 static void xa_thread_lint_scan_ternary_expr(XaThreadHandleLintState *states, AstNode *expr,
                                              bool return_value, bool can_escape);
 static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstNode *expr,
@@ -797,6 +821,8 @@ static void xa_thread_lint_note_var_alias(XaThreadHandleLintState *states, VarDe
     if (var->storage_mode != XR_STORAGE_NORMAL)
         return;
     XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, var->initializer);
+    if (!state)
+        state = xa_thread_lint_find_returned_call_arg(states, var->initializer);
     if (state)
         xa_thread_lint_add_alias_id(state, var->symbol_id);
 }
@@ -806,6 +832,8 @@ static void xa_thread_lint_note_assignment_alias(XaThreadHandleLintState *states
     if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
         return;
     XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, assignment->value);
+    if (!state)
+        state = xa_thread_lint_find_returned_call_arg(states, assignment->value);
     if (state)
         xa_thread_lint_add_alias_id(state, assignment->symbol_id);
 }
@@ -954,6 +982,21 @@ static bool xa_thread_lint_scan_helper_finalizer_call(XaThreadHandleLintState *s
     return applied;
 }
 
+static XaThreadHandleLintState *
+xa_thread_lint_find_returned_call_arg(XaThreadHandleLintState *states, AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!states || !expr || expr->type != AST_CALL_EXPR)
+        return NULL;
+    CallExprNode *call = &expr->as.call_expr;
+    XaThreadHandleLintFnSummary *summary =
+        xa_thread_lint_find_fn_summary(states->ctx, states->fn_summaries, call->callee);
+    if (!summary || summary->return_param_index < 0 ||
+        summary->return_param_index >= summary->param_count ||
+        summary->return_param_index >= call->arg_count)
+        return NULL;
+    return xa_thread_lint_find_by_expr(states, call->arguments[summary->return_param_index]);
+}
+
 static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
                                      bool return_value, bool can_escape) {
     expr = xa_thread_lint_unwrap_expr(expr);
@@ -962,6 +1005,11 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
 
     if (return_value && can_escape) {
         XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, expr);
+        if (state) {
+            state->transferred = true;
+            return;
+        }
+        state = xa_thread_lint_find_returned_call_arg(states, expr);
         if (state) {
             state->transferred = true;
             return;
@@ -1810,6 +1858,7 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
         return NULL;
     summary->name = summary_name;
     summary->symbol_id = summary_symbol_id;
+    summary->return_param_index = -1;
     summary->param_count = fn->param_count;
     summary->param_finalized = xr_calloc((size_t) fn->param_count, sizeof(bool));
     XaThreadHandleLintState **by_index =
@@ -1848,18 +1897,27 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
     }
 
     xa_thread_lint_scan_stmt(states, fn->body, true);
+    AstNode *return_expr =
+        xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
+    XaThreadHandleLintState *returned_state =
+        return_expr ? xa_thread_lint_find_by_expr(states, return_expr) : NULL;
     bool any_finalized = false;
+    bool returns_param = false;
     for (int i = 0; i < fn->param_count; i++) {
         XaThreadHandleLintState *state = by_index[i];
         if (!state)
             continue;
+        if (state == returned_state) {
+            summary->return_param_index = i;
+            returns_param = true;
+        }
         summary->param_finalized[i] = state->finalized && !state->transferred;
         any_finalized = any_finalized || summary->param_finalized[i];
     }
 
     xa_thread_lint_free_states(states);
     xr_free(by_index);
-    if (!any_finalized) {
+    if (!any_finalized && !returns_param) {
         xa_thread_lint_free_fn_summaries(summary);
         return NULL;
     }
@@ -2094,6 +2152,7 @@ struct XaOsResourceLintFnSummary {
     const char *name;
     uint32_t symbol_id;
     XaOsResourceParamSummary *params;
+    int return_param_index;
     int param_count;
     struct XaOsResourceLintFnSummary *next;
 };
@@ -2445,6 +2504,8 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
                                           bool return_value, bool can_escape);
 static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode *stmt,
                                           bool can_escape);
+static XaOsResourceLintState *
+xa_os_resource_lint_find_returned_call_arg(XaOsResourceLintState *states, AstNode *expr);
 static void xa_os_resource_lint_scan_ternary_expr(XaOsResourceLintState *states, AstNode *expr,
                                                   bool return_value, bool can_escape);
 static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *states, AstNode *stmt,
@@ -2476,6 +2537,8 @@ static void xa_os_resource_lint_note_var_alias(XaOsResourceLintState *states, Va
         var->storage_mode != XR_STORAGE_NORMAL)
         return;
     XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, var->initializer);
+    if (!state)
+        state = xa_os_resource_lint_find_returned_call_arg(states, var->initializer);
     if (state)
         xa_os_resource_lint_add_alias_id(state, var->symbol_id);
 }
@@ -2485,6 +2548,8 @@ static void xa_os_resource_lint_note_assignment_alias(XaOsResourceLintState *sta
     if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
         return;
     XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, assignment->value);
+    if (!state)
+        state = xa_os_resource_lint_find_returned_call_arg(states, assignment->value);
     if (state)
         xa_os_resource_lint_add_alias_id(state, assignment->symbol_id);
 }
@@ -2605,6 +2670,26 @@ static bool xa_os_resource_lint_scan_helper_finalizer_call(XaOsResourceLintState
         applied = true;
     }
     return applied;
+}
+
+static XaOsResourceLintState *
+xa_os_resource_lint_find_returned_call_arg(XaOsResourceLintState *states, AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!states || !expr || expr->type != AST_CALL_EXPR)
+        return NULL;
+    CallExprNode *call = &expr->as.call_expr;
+    XaOsResourceLintFnSummary *summary =
+        xa_os_resource_lint_find_fn_summary(states->ctx, states->fn_summaries, call->callee);
+    if (!summary || !summary->params || summary->return_param_index < 0 ||
+        summary->return_param_index >= summary->param_count ||
+        summary->return_param_index >= call->arg_count)
+        return NULL;
+    XaOsResourceParamSummary *param = &summary->params[summary->return_param_index];
+    if (!param->is_resource)
+        return NULL;
+    XaOsResourceLintState *state =
+        xa_os_resource_lint_find_by_expr(states, call->arguments[summary->return_param_index]);
+    return state && state->kind == param->kind ? state : NULL;
 }
 
 static bool xa_os_resource_lint_try_wait_null_check(XaOsResourceLintState *states, AstNode *expr,
@@ -2805,6 +2890,11 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
 
     if (return_value && can_escape) {
         XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, expr);
+        if (state) {
+            state->transferred = true;
+            return;
+        }
+        state = xa_os_resource_lint_find_returned_call_arg(states, expr);
         if (state) {
             state->transferred = true;
             return;
@@ -3497,6 +3587,7 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
         return NULL;
     summary->name = summary_name;
     summary->symbol_id = summary_symbol_id;
+    summary->return_param_index = -1;
     summary->param_count = fn->param_count;
     summary->params = xr_calloc((size_t) fn->param_count, sizeof(XaOsResourceParamSummary));
     XaOsResourceLintState **by_index =
@@ -3537,7 +3628,12 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
     }
 
     xa_os_resource_lint_scan_stmt(states, fn->body, true);
+    AstNode *return_expr =
+        xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
+    XaOsResourceLintState *returned_state =
+        return_expr ? xa_os_resource_lint_find_by_expr(states, return_expr) : NULL;
     bool any_finalized = false;
+    bool returns_param = false;
     for (int i = 0; i < fn->param_count; i++) {
         XaOsResourceLintState *state = by_index[i];
         if (!state)
@@ -3545,6 +3641,10 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
         XaOsResourceParamSummary *param = &summary->params[i];
         param->is_resource = true;
         param->kind = state->kind;
+        if (state == returned_state) {
+            summary->return_param_index = i;
+            returns_param = true;
+        }
         param->finalized = state->finalized && !state->transferred;
         param->pipe_read_closed = state->pipe_read_closed && !state->transferred;
         param->pipe_write_closed = state->pipe_write_closed && !state->transferred;
@@ -3555,7 +3655,7 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
 
     xa_os_resource_lint_free_states(states);
     xr_free(by_index);
-    if (!any_finalized) {
+    if (!any_finalized && !returns_param) {
         xa_os_resource_lint_free_fn_summaries(summary);
         return NULL;
     }
