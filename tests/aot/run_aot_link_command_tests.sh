@@ -1697,6 +1697,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'xray_const__freestanding_static_data_lib_GROUPS[2] XRT_ATTR_SECTION("__DATA,.xr_igroup") XRT_ATTR_WEAK XRT_ATTR_USED' \
             "freestanding-profile/static-import: exporter keeps struct-array nested section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[2] XRT_ATTR_SECTION("__DATA,.xr_ilgrp") XRT_ATTR_WEAK XRT_ATTR_USED' \
+            "freestanding-profile/static-import: exporter keeps struct-array nested string section/weak/used attrs"
     else
         record_fail "freestanding-profile/static-import: exporter kept C source missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
@@ -1733,6 +1736,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct { struct { int64_t code; } inner; int64_t base; } xray_const__freestanding_static_data_lib_GROUPS[2]' \
             "freestanding-profile/static-import: importer declares struct-array nested extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { struct { XrValue label; int64_t code; } inner; int64_t base; } xray_const__freestanding_static_data_lib_LABEL_GROUPS[2]' \
+            "freestanding-profile/static-import: importer declares struct-array nested string extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_MATRIX[_outer_idx][_idx]' \
             "freestanding-profile/static-import: importer reads fixed-array matrix directly"
@@ -1772,6 +1778,15 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_GROUPS[_idx].base' \
             "freestanding-profile/static-import: importer reads struct-array nested sibling field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].inner.label' \
+            "freestanding-profile/static-import: importer reads struct-array nested string field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].inner.code' \
+            "freestanding-profile/static-import: importer reads struct-array nested string sibling scalar directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].base' \
+            "freestanding-profile/static-import: importer reads struct-array nested string base field directly"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
             "freestanding-profile/static-import: avoids dynamic property helper"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
@@ -1855,6 +1870,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_fail "freestanding-profile/static-import: weak struct-array data symbol missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_LABEL_GROUPS" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak struct-array nested string data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak struct-array nested string data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
     FREESTANDING_STATIC_IMPORT_SECTIONS="$WORK/freestanding_static_data_import.sections"
     if otool -l "$FREESTANDING_STATIC_IMPORT_OBJ" >"$FREESTANDING_STATIC_IMPORT_SECTIONS" 2>/dev/null; then
         if grep -Fq "sectname .xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
@@ -1862,7 +1885,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
            grep -Fq "sectname .xr_imatrix" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq "sectname .xr_ilmat" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
            grep -Fq "sectname .xr_ilcube" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
-           grep -Fq "sectname .xr_ient" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
+           grep -Fq "sectname .xr_ient" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq "sectname .xr_ilgrp" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
             record_pass "freestanding-profile/static-import: object contains imported data sections"
         else
             record_fail "freestanding-profile/static-import: object missing imported data sections"

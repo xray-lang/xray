@@ -249,4 +249,22 @@ const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
 ]
 
-export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS }
+struct LabelInner {
+    label: string
+    code: int
+}
+
+struct LabelGroup {
+    inner: LabelInner
+    base: int
+}
+
+@section("__DATA,.xr_ilgrp")
+@weak
+@used
+const LABEL_GROUPS: [LabelGroup; 2] = comptime [
+    LabelGroup{inner: LabelInner{label: LABEL, code: TABLE[0]}, base: TABLE[1]},
+    LabelGroup{inner: LabelInner{label: "done", code: TABLE[2]}, base: TABLE[3]},
+]
+
+export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS }
