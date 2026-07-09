@@ -38,7 +38,7 @@
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xarena.h"
 #include "../../src/base/xmalloc.h"
-#include "../net/xnetbuf.h"
+#include "http_buffer.h"
 #include "../ws/ws_internal.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
@@ -515,7 +515,7 @@ typedef struct HttpConnCtx {
     char *response_data;
 
     // Chunked decoder
-    XrNetBuffer *chunk_buf;
+    XrHttpBuffer *chunk_buf;
     XrChunkedDecoder decoder;
 
     // Large body read
@@ -537,7 +537,7 @@ static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
     xr_free(ctx->read_buf);
     xr_free(ctx->response_data);
     if (ctx->chunk_buf)
-        xr_netbuf_release(ctx->chunk_buf);
+        http_buffer_release(ctx->chunk_buf);
     {
         XrRuntime *rt = ctx->runtime;
         if (rt) {
@@ -807,17 +807,17 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
 
         // Read body if needed, then call handler
         if (is_chunked && parsed > 0) {
-            ctx->chunk_buf = xr_netbuf_acquire(8192);
+            ctx->chunk_buf = http_buffer_acquire(8192);
             if (!ctx->chunk_buf) {
                 return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
                                              http_conn_cleanup_cont, result);
             }
             int body_in_buf = ctx->buf_used - parsed;
             if (body_in_buf > 0) {
-                char *wp = xr_netbuf_reserve(ctx->chunk_buf, body_in_buf);
+                char *wp = http_buffer_reserve(ctx->chunk_buf, body_in_buf);
                 if (wp) {
                     memcpy(wp, ctx->read_buf + parsed, body_in_buf);
-                    xr_netbuf_advance(ctx->chunk_buf, body_in_buf);
+                    http_buffer_advance(ctx->chunk_buf, body_in_buf);
                 }
             }
             memset(&ctx->decoder, 0, sizeof(ctx->decoder));
@@ -944,12 +944,12 @@ static XrCFuncResult http_conn_read_chunked(XrVMRuntime *X, int status, XrValue 
         if (ctx->chunk_buf->size > (size_t) MAX_BODY_SIZE)
             goto chunk_error;
 
-        char *wp = xr_netbuf_reserve(ctx->chunk_buf, 4096);
+        char *wp = http_buffer_reserve(ctx->chunk_buf, 4096);
         if (!wp)
             goto chunk_error;
         ssize_t n = xr_socket_recv((xr_socket_t) ctx->fd, wp, 4096);
         if (n > 0) {
-            xr_netbuf_advance(ctx->chunk_buf, n);
+            http_buffer_advance(ctx->chunk_buf, n);
             continue;
         }
         if (n == 0)
@@ -966,7 +966,7 @@ chunk_done:
         xr_json_set_by_key(X, ctx->req_json, "body",
                            make_string_val(X, ctx->chunk_buf->bytes, ctx->chunk_buf->size));
     }
-    xr_netbuf_release(ctx->chunk_buf);
+    http_buffer_release(ctx->chunk_buf);
     ctx->chunk_buf = NULL;
     {
         XrValue req_val = xr_json_value(ctx->req_json);
@@ -975,7 +975,7 @@ chunk_done:
 
 chunk_error:
     if (ctx->chunk_buf) {
-        xr_netbuf_release(ctx->chunk_buf);
+        http_buffer_release(ctx->chunk_buf);
         ctx->chunk_buf = NULL;
     }
     return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1, http_conn_cleanup_cont,

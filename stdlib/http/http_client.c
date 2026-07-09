@@ -22,7 +22,7 @@
 #include "../compress/compress.h"
 #include "../../src/io/xdns.h"
 #include "../net/io.h"
-#include "../net/xnetbuf.h"
+#include "http_buffer.h"
 #include "../net/conn_pool.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
@@ -506,7 +506,7 @@ static bool http_response_allows_body(int status) {
 
 // Internal request function (single request, no redirect handling)
 static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
-                                             const char *url_str, bool strip_auth);
+                                          const char *url_str, bool strip_auth);
 
 // Two URLs share an origin iff scheme (https-ness), host (case-insensitive) and
 // port all match. A redirect across origins must not carry credential headers.
@@ -639,7 +639,7 @@ XrHttpResult http_client_request(XrVMRuntime *X, const XrHttpRequestConfig *conf
 
 // Internal request function implementation
 static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
-                                             const char *url_str, bool strip_auth) {
+                                          const char *url_str, bool strip_auth) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
 
@@ -654,7 +654,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
     int timeout_ms = config->timeout_ms > 0 ? config->timeout_ms : XR_HTTP_DEFAULT_TIMEOUT;
     (void) timeout_ms;
     char *request_buf = NULL;
-    XrNetBuffer *recv_buf = NULL;
+    XrHttpBuffer *recv_buf = NULL;
     XrPooledConn *pooled = NULL;
     XrConnPool *pool = NULL;
     bool conn_ok = false;  // Whether connection can be returned to pool
@@ -699,7 +699,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
     }
 
     // Receive response
-    recv_buf = xr_netbuf_acquire(XR_HTTP_RECV_BUFFER_SIZE);
+    recv_buf = http_buffer_acquire(XR_HTTP_RECV_BUFFER_SIZE);
     if (!recv_buf) {
         result.error = XR_HTTP_ERR_MEMORY;
         result.error_msg = xr_strdup("Memory allocation failed");
@@ -713,13 +713,13 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
 
     while (1) {
         // Ensure buffer has room for more data
-        if (xr_netbuf_available(recv_buf) < XR_HTTP_RECV_BUFFER_SIZE) {
+        if (http_buffer_available(recv_buf) < XR_HTTP_RECV_BUFFER_SIZE) {
             if (recv_buf->capacity > 100 * 1024 * 1024) {  // 100MB limit
                 result.error = XR_HTTP_ERR_TOO_LARGE;
                 result.error_msg = xr_strdup("Response too large");
                 goto cleanup;
             }
-            if (!xr_netbuf_reserve(recv_buf, XR_HTTP_RECV_BUFFER_SIZE)) {
+            if (!http_buffer_reserve(recv_buf, XR_HTTP_RECV_BUFFER_SIZE)) {
                 result.error = XR_HTTP_ERR_MEMORY;
                 result.error_msg = xr_strdup("Memory allocation failed");
                 goto cleanup;
@@ -727,7 +727,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
         }
 
         // Receive data via pooled connection
-        size_t avail = xr_netbuf_available(recv_buf);
+        size_t avail = http_buffer_available(recv_buf);
         int n = xr_pooled_conn_read(X, pooled, recv_buf->bytes + recv_buf->size,
                                     avail > 0 ? avail - 1 : 0);
         if (n < 0) {
@@ -741,7 +741,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
             break;
         }
 
-        xr_netbuf_advance(recv_buf, n);
+        http_buffer_advance(recv_buf, n);
         recv_buf->bytes[recv_buf->size] = '\0';
 
         // Try to parse response
@@ -964,7 +964,7 @@ cleanup:
     }
     if (request_buf)
         xr_free(request_buf);
-    xr_netbuf_release(recv_buf);
+    http_buffer_release(recv_buf);
     http_url_free(&url);
 
     return result;

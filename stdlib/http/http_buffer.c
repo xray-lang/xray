@@ -5,25 +5,25 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xnetbuf.c - Self-growing network buffer implementation
+ * http_buffer.c - Self-growing HTTP buffer implementation
  *
  * KEY CONCEPT:
  *   Exponential-growth buffer with consume/reserve pattern.
- *   TLS-level recycle pool eliminates lock contention.
+ *   Thread-local recycle pool eliminates lock contention.
  */
 
 #include "../../src/base/xmalloc.h"
-#include "xnetbuf.h"
+#include "http_buffer.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
 /* ========== Buffer Core ========== */
 
-bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity) {
+bool http_buffer_init(XrHttpBuffer *buf, size_t initial_capacity) {
     assert(buf);
     if (initial_capacity == 0)
-        initial_capacity = XR_NETBUF_DEFAULT_CAP;
+        initial_capacity = XR_HTTP_BUFFER_DEFAULT_CAP;
 
     char *mem = (char *) xr_malloc(initial_capacity);
     if (!mem) {
@@ -38,7 +38,7 @@ bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity) {
     return true;
 }
 
-void xr_netbuf_free(XrNetBuffer *buf) {
+void http_buffer_free(XrHttpBuffer *buf) {
     if (!buf)
         return;
     xr_free(buf->_base);
@@ -48,10 +48,10 @@ void xr_netbuf_free(XrNetBuffer *buf) {
     buf->capacity = 0;
 }
 
-char *xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
+char *http_buffer_reserve(XrHttpBuffer *buf, size_t min_avail) {
     assert(buf && buf->_base);
 
-    size_t consumed = xr_netbuf_consumed(buf);
+    size_t consumed = http_buffer_consumed(buf);
     size_t tail_avail = buf->capacity - consumed - buf->size;
 
     if (tail_avail >= min_avail) {
@@ -60,7 +60,7 @@ char *xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
 
     // Try compact first: if consumed > half capacity, memmove is worthwhile
     if (consumed > 0 && consumed >= buf->capacity / 2) {
-        xr_netbuf_compact(buf);
+        http_buffer_compact(buf);
         tail_avail = buf->capacity - buf->size;
         if (tail_avail >= min_avail) {
             return buf->bytes + buf->size;
@@ -90,12 +90,12 @@ char *xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
     return buf->bytes + buf->size;
 }
 
-void xr_netbuf_advance(XrNetBuffer *buf, size_t n) {
+void http_buffer_advance(XrHttpBuffer *buf, size_t n) {
     assert(buf);
     buf->size += n;
 }
 
-void xr_netbuf_consume(XrNetBuffer *buf, size_t n) {
+void http_buffer_consume(XrHttpBuffer *buf, size_t n) {
     assert(buf);
     assert(n <= buf->size);
 
@@ -106,14 +106,14 @@ void xr_netbuf_consume(XrNetBuffer *buf, size_t n) {
     if (buf->size == 0) {
         // Empty: just reset pointers
         buf->bytes = buf->_base;
-    } else if (xr_netbuf_consumed(buf) > buf->capacity / 2) {
-        xr_netbuf_compact(buf);
+    } else if (http_buffer_consumed(buf) > buf->capacity / 2) {
+        http_buffer_compact(buf);
     }
 }
 
-void xr_netbuf_compact(XrNetBuffer *buf) {
+void http_buffer_compact(XrHttpBuffer *buf) {
     assert(buf);
-    size_t consumed = xr_netbuf_consumed(buf);
+    size_t consumed = http_buffer_consumed(buf);
     if (consumed == 0)
         return;
 
@@ -123,40 +123,40 @@ void xr_netbuf_compact(XrNetBuffer *buf) {
     buf->bytes = buf->_base;
 }
 
-void xr_netbuf_reset(XrNetBuffer *buf) {
+void http_buffer_reset(XrHttpBuffer *buf) {
     assert(buf);
     buf->bytes = buf->_base;
     buf->size = 0;
 }
 
-/* ========== TLS-Level Recycle Pool ========== */
+/* ========== Thread-Local Recycle Pool ========== */
 
 /*
- * Simple per-thread free list of XrNetBuffer structs.
- * No mutex, no atomic — pure TLS.
+ * Simple per-thread free list of XrHttpBuffer structs.
+ * No mutex, no atomic: pure TLS.
  */
 typedef struct {
-    XrNetBuffer *slots[XR_NETBUF_MAX_RECYCLE];
+    XrHttpBuffer *slots[XR_HTTP_BUFFER_MAX_RECYCLE];
     int count;
-} XrNetBufPool;
+} XrHttpBufferPool;
 
-static _Thread_local XrNetBufPool tls_pool = {.count = 0};
+static _Thread_local XrHttpBufferPool tls_pool = {.count = 0};
 
-XrNetBuffer *xr_netbuf_acquire(size_t initial_capacity) {
+XrHttpBuffer *http_buffer_acquire(size_t initial_capacity) {
     if (initial_capacity == 0)
-        initial_capacity = XR_NETBUF_DEFAULT_CAP;
+        initial_capacity = XR_HTTP_BUFFER_DEFAULT_CAP;
 
     // Try TLS pool first
     if (tls_pool.count > 0) {
-        XrNetBuffer *buf = tls_pool.slots[--tls_pool.count];
+        XrHttpBuffer *buf = tls_pool.slots[--tls_pool.count];
         // If existing allocation is sufficient, reuse it
         if (buf->capacity >= initial_capacity) {
-            xr_netbuf_reset(buf);
+            http_buffer_reset(buf);
             return buf;
         }
         // Otherwise free the undersized allocation and reallocate
-        xr_netbuf_free(buf);
-        if (!xr_netbuf_init(buf, initial_capacity)) {
+        http_buffer_free(buf);
+        if (!http_buffer_init(buf, initial_capacity)) {
             xr_free(buf);
             return NULL;
         }
@@ -164,36 +164,37 @@ XrNetBuffer *xr_netbuf_acquire(size_t initial_capacity) {
     }
 
     // Allocate new
-    XrNetBuffer *buf = (XrNetBuffer *) xr_malloc(sizeof(XrNetBuffer));
+    XrHttpBuffer *buf = (XrHttpBuffer *) xr_malloc(sizeof(XrHttpBuffer));
     if (!buf)
         return NULL;
 
-    if (!xr_netbuf_init(buf, initial_capacity)) {
+    if (!http_buffer_init(buf, initial_capacity)) {
         xr_free(buf);
         return NULL;
     }
     return buf;
 }
 
-void xr_netbuf_release(XrNetBuffer *buf) {
+void http_buffer_release(XrHttpBuffer *buf) {
     if (!buf)
         return;
 
     // Return to TLS pool if room and not oversized
-    if (tls_pool.count < XR_NETBUF_MAX_RECYCLE && buf->capacity <= XR_NETBUF_RECYCLE_MAXCAP) {
-        xr_netbuf_reset(buf);
+    if (tls_pool.count < XR_HTTP_BUFFER_MAX_RECYCLE &&
+        buf->capacity <= XR_HTTP_BUFFER_RECYCLE_MAXCAP) {
+        http_buffer_reset(buf);
         tls_pool.slots[tls_pool.count++] = buf;
         return;
     }
 
     // Pool full or oversized: free
-    xr_netbuf_free(buf);
+    http_buffer_free(buf);
     xr_free(buf);
 }
 
-void xr_netbuf_pool_cleanup(void) {
+void http_buffer_pool_cleanup(void) {
     for (int i = 0; i < tls_pool.count; i++) {
-        xr_netbuf_free(tls_pool.slots[i]);
+        http_buffer_free(tls_pool.slots[i]);
         xr_free(tls_pool.slots[i]);
         tls_pool.slots[i] = NULL;
     }
