@@ -2113,6 +2113,8 @@ static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
         XG_EVIDENCE_CACHE_BODY_SUMMARY,
         XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
     };
+    uint32_t hits = 0;
+    uint32_t misses = 0;
 
     if (!cache_dir || !manifest)
         return;
@@ -2128,6 +2130,10 @@ static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
             continue;
         if (!force_rebuild && xaot_read_evidence_cache_manifest(path, &cached))
             hit = xg_evidence_cache_manifest_phase_matches(&cached, expected);
+        if (hit)
+            hits++;
+        else
+            misses++;
         if (verbose) {
             printf("[xi-native] evidence cache %s: %s (%016llx)%s\n",
                    xg_evidence_cache_phase_name(phase), hit ? "hit" : "miss",
@@ -2137,6 +2143,9 @@ static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
         if (!dry_run)
             xaot_write_evidence_cache_manifest(path, manifest);
     }
+    if (verbose)
+        printf("[xi-native] evidence cache summary: hits=%u misses=%u%s\n", hits, misses,
+               force_rebuild ? " rebuild" : "");
 }
 
 /* Compile one module's generated C to an object file, reusing a cached object
