@@ -12,6 +12,7 @@
  *   function bindings (cluster.start, cluster.join, cluster.stop, etc.)
  */
 
+#include "cluster.h"
 #include "cluster_internal.h"
 #include "../common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe

@@ -22,8 +22,6 @@
 #ifndef XR_CLUSTER_INTERNAL_H
 #define XR_CLUSTER_INTERNAL_H
 
-#include "cluster.h"
-#include "../../src/base/xdefs.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
@@ -157,8 +155,7 @@ int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
                                        const XrFrameHandshakeAck *ack);
 int cluster_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
                                         const XrFrameHandshakeDone *done);
-int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type,
-                                   int64_t timestamp);
+int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, int64_t timestamp);
 int cluster_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *channel_name,
                                       const uint8_t *value_data, uint32_t value_len);
 int cluster_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *channel_name);
@@ -168,8 +165,7 @@ int cluster_frame_encode_service_call(uint8_t *buf, size_t buf_size, uint64_t re
 int cluster_frame_encode_service_reply(uint8_t *buf, size_t buf_size, uint64_t request_id,
                                        bool is_error, const uint8_t *result_data,
                                        uint32_t result_len);
-int cluster_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size,
-                                           const char *channel_name);
+int cluster_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size, const char *channel_name);
 int cluster_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
                                              const char *channel_name);
 int cluster_frame_encode_channel_push(uint8_t *buf, size_t buf_size, const char *channel_name,
@@ -664,12 +660,12 @@ void cluster_channel_unregister(XrCluster *c, const char *name);
 void cluster_channel_install_hooks(struct XrVMRuntime *X);
 void cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
 
-int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
-                                const uint8_t *value_data, uint32_t value_len);
+int cluster_channel_handle_send(XrCluster *c, const char *channel_name, const uint8_t *value_data,
+                                uint32_t value_len);
 void cluster_channel_handle_close(XrCluster *c, const char *channel_name);
 void cluster_channel_push_to_subscribers(XrCluster *c, const char *name);
-int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
-                                const uint8_t *value_data, uint32_t value_len);
+int cluster_channel_handle_push(XrCluster *c, const char *channel_name, const uint8_t *value_data,
+                                uint32_t value_len);
 void cluster_channel_subscribe(struct XrChannel *ch);
 void cluster_channel_unsubscribe(struct XrChannel *ch);
 
@@ -746,8 +742,7 @@ int cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue valu
  * The value is delivered to local subscribers regardless of hop_limit.
  */
 void cluster_topic_handle_publish(XrCluster *c, struct XrClusterNode *from, const char *topic,
-                                  const uint8_t *value_data, uint32_t value_len,
-                                  uint8_t hop_limit);
+                                  const uint8_t *value_data, uint32_t value_len, uint8_t hop_limit);
 
 // Deliver to local subscribers matching the topic
 void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
