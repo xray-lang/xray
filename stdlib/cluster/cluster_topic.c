@@ -391,7 +391,7 @@ struct XrChannel *cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
-            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_SUBSCRIBE, payload, 1 + name_len);
+            cluster_node_send_frame(node, XR_FRAME_TOPIC_SUBSCRIBE, payload, 1 + name_len);
         }
         node = node->next;
     }
@@ -496,7 +496,7 @@ static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const ui
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node != exclude && node->state == XR_NODE_CONNECTED) {
-            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH, payload, payload_len);
+            cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH, payload, payload_len);
         }
         node = node->next;
     }

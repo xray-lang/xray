@@ -101,7 +101,7 @@ void cluster_health_check_heartbeats(XrCluster *c) {
         cluster_subscriber_remove_all_for_node(c, dead);
         cluster_monitor_fire(c, dead->name);
         xr_cluster_remove_node(c, dead);
-        xr_cluster_node_free(dead);
+        cluster_node_free(dead);
     }
 
     if (to_remove != inline_slots)
@@ -116,7 +116,7 @@ void cluster_health_send_heartbeats(XrCluster *c) {
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED && node->conn) {
-            xr_cluster_node_send_ping(node);
+            cluster_node_send_ping(node);
         }
         node = node->next;
     }

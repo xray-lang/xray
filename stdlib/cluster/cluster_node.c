@@ -121,7 +121,7 @@ static void cluster_outq_init(XrOutputQueue *q) {
 
 /*
  * Close the writer-facing side of the notify pipe early. Used by
- * xr_cluster_node_free to wake any coroutine yielded on
+ * cluster_node_free to wake any coroutine yielded on
  * xr_socket_read(notify_pipe[0]) with a clean EOF before we tear
  * down the rest of the node state. Calling this multiple times is
  * safe — it guards on the fd being >= 0.
@@ -298,7 +298,7 @@ double cluster_phi_value(XrPhiDetector *det, int64_t now_ms) {
 
 /* ========== Node Lifecycle ========== */
 
-XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t port) {
+XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port) {
     XrClusterNode *node = (XrClusterNode *) xr_calloc(1, sizeof(XrClusterNode));
     if (!node)
         return NULL;
@@ -327,7 +327,7 @@ XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t 
     return node;
 }
 
-void xr_cluster_node_free(XrClusterNode *node) {
+void cluster_node_free(XrClusterNode *node) {
     if (!node)
         return;
 
@@ -373,7 +373,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
     cluster_outq_destroy(&node->outq);
 
     // Free pending requests across every bucket chain. No lock needed
-    // here: xr_cluster_node_free runs only after readers and writers
+    // here: cluster_node_free runs only after readers and writers
     // have observed the stopped state and exited, so the table is quiesced.
     for (int i = 0; i < XR_PENDING_BUCKETS; i++) {
         XrPendingRequest *pr = node->pending_buckets[i];
@@ -402,7 +402,7 @@ static void cluster_node_close(XrClusterNode *node) {
 /* ========== Frame Send/Recv ========== */
 
 // Enqueue pre-built frame data for async writing
-int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len) {
+int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len) {
     if (!node || node->state == XR_NODE_CLOSING)
         return -1;
     return cluster_outq_push(&node->outq, data, len);
@@ -410,7 +410,7 @@ int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t l
 
 // Async send — encode frame and enqueue for writer coroutine
 // Uses zero-copy for large frames (>4KB) to avoid extra memcpy
-int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
+int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
                                uint32_t payload_len) {
     if (!node || !node->conn || node->state == XR_NODE_CLOSING)
         return -1;
@@ -423,7 +423,7 @@ int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const ui
         int wrote = xr_frame_write(stack_buf, frame_type, payload, payload_len);
         if (wrote < 0)
             return -1;
-        return xr_cluster_node_enqueue(node, stack_buf, (uint32_t) wrote);
+        return cluster_node_enqueue(node, stack_buf, (uint32_t) wrote);
     } else {
         // Large frame: encode to heap, transfer ownership (zero-copy)
         uint8_t *frame = (uint8_t *) xr_malloc(frame_size);
@@ -443,7 +443,7 @@ int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const ui
     }
 }
 
-int xr_cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
+int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
                                uint32_t buf_size, uint32_t *payload_len_out) {
     if (!node || !node->conn)
         return -1;
@@ -482,7 +482,7 @@ static void cluster_node_writer_loop(void *arg) {
         return;
 
     /*
-     * node->isolate was recorded in xr_cluster_node_start_writer.
+     * node->isolate was recorded in cluster_node_start_writer.
      * The drain helpers receive it explicitly; nothing thread-local
      * to bind here anymore.
      */
@@ -589,7 +589,7 @@ static void cluster_node_writer_loop(void *arg) {
     }
 
     /*
-     * Announce exit to xr_cluster_node_free so its teardown wait on
+     * Announce exit to cluster_node_free so its teardown wait on
      * writer_exited can proceed to cluster_outq_destroy. Must be the very
      * last statement in this function — once the flag is set, the
      * caller may close notify_pipe[0] at any time and any further
@@ -598,7 +598,7 @@ static void cluster_node_writer_loop(void *arg) {
     atomic_store(&node->writer_exited, true);
 }
 
-void xr_cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
+void cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
     if (!node || !X)
         return;
     if (atomic_load(&node->writer_running))
@@ -661,7 +661,7 @@ static void cluster_reader_loop(void *arg) {
         atomic_store(&node->reader_running, false);
 }
 
-void xr_cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node) {
+void cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node) {
     if (!cluster || !node || !cluster->isolate)
         return;
     if (atomic_load(&node->reader_running))
@@ -694,7 +694,7 @@ bool cluster_node_is_slow(XrClusterNode *node) {
 
 /* ========== Heartbeat ========== */
 
-int xr_cluster_node_send_ping(XrClusterNode *node) {
+int cluster_node_send_ping(XrClusterNode *node) {
     int64_t now = cluster_now_ms();
     uint8_t frame[32];
     int len = xr_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, now);
@@ -702,7 +702,7 @@ int xr_cluster_node_send_ping(XrClusterNode *node) {
         return -1;
 
     // Enqueue heartbeat via output queue (async)
-    int rc = xr_cluster_node_enqueue(node, frame, (uint32_t) len);
+    int rc = cluster_node_enqueue(node, frame, (uint32_t) len);
     if (rc == 0) {
         node->last_heartbeat_sent = now;
         return 0;
@@ -733,7 +733,7 @@ static void cluster_handshake_set_deadline(XrCluster *cluster, XrIOConn *conn, i
 
 /* ========== Client-Side Handshake ========== */
 
-int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
+int cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     if (!cluster || !node)
         return -1;
 
@@ -787,7 +787,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     uint8_t recv_buf[512];
     uint8_t frame_type;
     uint32_t payload_len;
-    if (xr_cluster_node_recv_frame(node, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
+    if (cluster_node_recv_frame(node, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
             0 ||
         frame_type != XR_FRAME_HANDSHAKE_ACK) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
@@ -855,7 +855,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
 /* ========== Server-Side Handshake ========== */
 
-XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
+XrClusterNode *cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     if (!cluster || !conn)
         return NULL;
 
@@ -881,7 +881,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     temp.conn = conn;
     temp.state = XR_NODE_HANDSHAKING;
 
-    if (xr_cluster_node_recv_frame(&temp, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
+    if (cluster_node_recv_frame(&temp, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
             0 ||
         frame_type != XR_FRAME_HANDSHAKE_REQ) {
         cluster_handshake_set_deadline(cluster, conn, 0);
@@ -912,7 +912,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     }
 
     // Step 3: Receive HANDSHAKE_DONE
-    if (xr_cluster_node_recv_frame(&temp, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
+    if (cluster_node_recv_frame(&temp, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
             0 ||
         frame_type != XR_FRAME_HANDSHAKE_DONE) {
         cluster_handshake_set_deadline(cluster, conn, 0);
@@ -938,7 +938,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     }
 
     // Create node
-    XrClusterNode *node = xr_cluster_node_new(req.name, NULL, 0);
+    XrClusterNode *node = cluster_node_new(req.name, NULL, 0);
     if (!node) {
         xr_secure_wipe(expected_proof, sizeof(expected_proof));
         xr_secure_wipe(&req, sizeof(req));

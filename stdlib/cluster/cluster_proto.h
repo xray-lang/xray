@@ -84,7 +84,7 @@ typedef enum {
  * xr_socket_set_read_timeout / xr_socket_set_write_timeout on the
  * conn's fd. Without it a malicious or simply slow peer could connect
  * and then sit silent, pinning:
- *   - the caller of xr_cluster_node_connect on the client side, and
+ *   - the caller of cluster_node_connect on the client side, and
  *   - the entire cluster_accept_loop on the server side (which
  *     processes one handshake inline per accepted socket).
  *

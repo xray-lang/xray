@@ -148,7 +148,7 @@ typedef struct XrClusterNode {
 
     /*
      * Isolate pointer — set when the node is attached to a cluster
-     * (xr_cluster_node_start_writer, xr_cluster_node_start_reader). The
+     * (cluster_node_start_writer, cluster_node_start_reader). The
      * writer coroutine needs it to drive xr_socket_read on the
      * notify_pipe so it can suspend via netpoll instead of pinning a
      * worker in a raw read(2). NULL until writer start-up; never
@@ -161,7 +161,7 @@ typedef struct XrClusterNode {
     _Atomic(bool) writer_running;  // writer loop control
     /*
      * Flipped true by the writer coroutine as its very last action
-     * before returning, so xr_cluster_node_free can spin-wait until
+     * before returning, so cluster_node_free can spin-wait until
      * the writer has stopped dereferencing node->outq before queue
      * teardown closes the read end of notify_pipe, a fd the writer may
      * still have registered with netpoll. Starts false for fresh nodes
@@ -186,42 +186,42 @@ struct XrCluster;
 /* ========== Node Management API ========== */
 
 // Create a new node entry (not yet connected)
-XR_FUNC XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t port);
+XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port);
 
 // Free a node and its resources
-XR_FUNC void xr_cluster_node_free(XrClusterNode *node);
+void cluster_node_free(XrClusterNode *node);
 
 // Connect to a remote node (TCP + handshake)
 // Returns 0 on success, -1 on error. Coroutine-friendly (may yield).
-XR_FUNC int xr_cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
+int cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
 
 // Accept an incoming connection and perform server-side handshake
 // Returns a new XrClusterNode on success, NULL on error.
-XR_FUNC XrClusterNode *xr_cluster_node_accept(struct XrCluster *cluster, XrIOConn *conn);
+XrClusterNode *cluster_node_accept(struct XrCluster *cluster, XrIOConn *conn);
 
 // Enqueue a pre-built frame for async writing. Thread-safe.
 // Returns 0 on success, -1 if queue full (backpressure).
-XR_FUNC int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
+int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
 
 // Send a frame via output queue (encode + enqueue).
 // Returns 0 on success, -1 on error/backpressure.
-XR_FUNC int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type,
-                                       const uint8_t *payload, uint32_t payload_len);
+int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
+                            uint32_t payload_len);
 
 // Read a single frame from a node connection
 // Returns frame type, writes payload into provided buffer.
 // Returns -1 on error/disconnect.
-XR_FUNC int xr_cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
-                                       uint32_t buf_size, uint32_t *payload_len_out);
+int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
+                            uint32_t buf_size, uint32_t *payload_len_out);
 
 // Send heartbeat ping
-XR_FUNC int xr_cluster_node_send_ping(XrClusterNode *node);
+int cluster_node_send_ping(XrClusterNode *node);
 
 /* ========== Writer Coroutine ========== */
 
 // Start the dedicated writer coroutine for a connected node.
 // Must be called after handshake completes.
-XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntime *X);
+void cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntime *X);
 
 /* ========== Reader Coroutine ========== */
 
@@ -232,7 +232,7 @@ XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntim
 //
 // Safe to call twice — the second call is a no-op if the reader is
 // already running for this node.
-XR_FUNC void xr_cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node);
+void cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node);
 
 /* ========== Phi Accrual Failure Detector ========== */
 

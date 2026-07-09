@@ -163,7 +163,7 @@ XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const cha
     uint8_t buf[256];
     int len = xr_frame_encode_coro_monitor(buf, sizeof(buf), XR_FRAME_CORO_MONITOR, coro_name);
     if (len > 0) {
-        xr_cluster_node_enqueue(node, buf, (uint32_t) len);
+        cluster_node_enqueue(node, buf, (uint32_t) len);
     }
 
     return ch;
@@ -198,7 +198,7 @@ static void coro_monitor_fwd_loop(void *arg) {
         uint8_t buf[256];
         int len = xr_frame_encode_coro_exit(buf, sizeof(buf), ctx->coro_name, reason);
         if (len > 0) {
-            xr_cluster_node_enqueue(ctx->node, buf, (uint32_t) len);
+            cluster_node_enqueue(ctx->node, buf, (uint32_t) len);
         }
     }
 
@@ -223,7 +223,7 @@ void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node,
         uint8_t buf[256];
         int len = xr_frame_encode_coro_exit(buf, sizeof(buf), coro_name, "noproc");
         if (len > 0) {
-            xr_cluster_node_enqueue(node, buf, (uint32_t) len);
+            cluster_node_enqueue(node, buf, (uint32_t) len);
         }
         return;
     }
