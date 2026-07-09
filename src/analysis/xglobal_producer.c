@@ -119,6 +119,7 @@ typedef struct XgBodyCollect {
     uint32_t name_local_cap;
     uint32_t callsite_start;
     uint32_t callsite_count;
+    uint32_t key_access_count;
     uint32_t effect_bits;
     uint32_t escape_bits;
     uint32_t capability_bits;
@@ -2164,6 +2165,11 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node, uint32_t 
             value_type_key = vt;
         const_ids[i] = body_const_expr_id(keys ? keys[i] : NULL);
     }
+    if (key_type_key == 0 || (container_kind == XG_MAP_CONTAINER_MAP && value_type_key == 0)) {
+        if (const_ids_heap)
+            xr_free(const_ids);
+        return XG_NO_ID;
+    }
     receiver_type_key = body_map_receiver_type_key(container_kind, key_type_key, value_type_key);
     memset(&shape, 0, sizeof(shape));
     shape.shape_id = (XgMapShapeId) (bc->evidence->nmap_shapes + 1);
@@ -2174,7 +2180,7 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node, uint32_t 
     shape.source = XG_MAP_SHAPE_SRC_LITERAL;
     shape.key_type_key = key_type_key;
     shape.value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
-    shape.entry_start = (uint32_t) (bc->evidence->nmap_entries + 1);
+    shape.entry_start = count > 0 ? (uint32_t) (bc->evidence->nmap_entries + 1) : 0;
     shape.entry_count = (uint16_t) (count < UINT16_MAX ? count : UINT16_MAX);
     shape.literal_count = (uint32_t) (count > 0 ? count : 0);
     shape.flags = XG_MAP_SHAPE_LITERAL;
