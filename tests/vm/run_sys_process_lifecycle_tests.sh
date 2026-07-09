@@ -113,6 +113,8 @@ PROCESS_TOP_CONST_FN_VALUE_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle
 PIPE_TOP_CONST_FN_VALUE_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_top_const_fn_value_close.xr"
 PROCESS_HELPER_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_return_alias_wait.xr"
 PIPE_HELPER_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_return_alias_close.xr"
+PROCESS_HELPER_CHAINED_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_chained_return_alias_wait.xr"
+PIPE_HELPER_CHAINED_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_chained_return_alias_close.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
@@ -139,6 +141,10 @@ expect_output "pipe_top_const_fn_value_close" "$PIPE_TOP_CONST_FN_VALUE_CLOSE_SR
     $'true\ntrue\npipe-top-fn-value'
 expect_output "process_helper_return_alias_wait" "$PROCESS_HELPER_RETURN_ALIAS_WAIT_SRC" "0"
 expect_output "pipe_helper_return_alias_close" "$PIPE_HELPER_RETURN_ALIAS_CLOSE_SRC" "true"
+expect_output "process_helper_chained_return_alias_wait" \
+    "$PROCESS_HELPER_CHAINED_RETURN_ALIAS_WAIT_SRC" "0"
+expect_output "pipe_helper_chained_return_alias_close" \
+    "$PIPE_HELPER_CHAINED_RETURN_ALIAS_CLOSE_SRC" "true"
 expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly"
 expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \

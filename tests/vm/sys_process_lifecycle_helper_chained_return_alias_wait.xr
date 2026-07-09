@@ -1,0 +1,22 @@
+import sys
+import { Process } from sys
+
+fn passProcess(p: Process) -> Process {
+    return p
+}
+
+fn wrapProcess(p: Process) -> Process {
+    return passProcess(p)
+}
+
+fn run() {
+    var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (spawned == null) {
+        print("spawn-failed")
+        return
+    }
+    var process = wrapProcess(spawned!)
+    print(process.wait())
+}
+
+run()
