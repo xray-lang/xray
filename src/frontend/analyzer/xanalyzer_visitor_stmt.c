@@ -913,6 +913,8 @@ static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *sta
             if (pattern->as.identifier.symbol_id == 0)
                 return;
             XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, initializer);
+            if (!state)
+                state = xa_thread_lint_find_returned_call_arg(states, initializer);
             if (state)
                 xa_thread_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
             return;
@@ -2669,6 +2671,8 @@ static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *
             if (pattern->as.identifier.symbol_id == 0)
                 return;
             XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, initializer);
+            if (!state)
+                state = xa_os_resource_lint_find_returned_call_arg(states, initializer);
             if (state)
                 xa_os_resource_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
             return;

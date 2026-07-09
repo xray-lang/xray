@@ -96,6 +96,7 @@ PROCESS_MATCH_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_
 CONTROL_FLOW_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_control_flow_ok.xr"
 EXPR_CONTAINERS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_expr_containers_ok.xr"
 DESTRUCTURE_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_alias_ok.xr"
+DESTRUCTURE_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_helper_return_alias_ok.xr"
 ASSIGNMENT_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_assignment_alias_ok.xr"
 PROCESS_TRY_CATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_try_catch_warning.xr"
 PIPE_MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_match_warning.xr"
@@ -133,6 +134,8 @@ expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
 expect_output "process_pipe_lifecycle_expr_containers_ok" "$EXPR_CONTAINERS_OK_SRC" \
     $'0\ntrue\ncode 0\n2\n0\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_destructure_alias_ok" "$DESTRUCTURE_ALIAS_OK_SRC" $'0\ntrue'
+expect_output "process_pipe_lifecycle_destructure_helper_return_alias_ok" \
+    "$DESTRUCTURE_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_lifecycle_assignment_alias_ok" "$ASSIGNMENT_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_detached_no_warning" "$DETACHED_NO_WARNING_SRC" \
     $'true\ntrue\n-1\nfalse\ndetached-orphan-ok'
