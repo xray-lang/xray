@@ -5389,6 +5389,24 @@ XR_FUNC bool xa_type_contains_span_view(XrType *type) {
             if (xa_type_contains_span_view(type->tuple.element_types[i]))
                 return true;
         }
+        return false;
+    }
+    if (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || type->kind == XR_KIND_SET ||
+        type->kind == XR_KIND_CHANNEL) {
+        return xa_type_contains_span_view(type->container.element_type);
+    }
+    if (XR_TYPE_IS_MAP(type)) {
+        return xa_type_contains_span_view(type->map.key_type) ||
+               xa_type_contains_span_view(type->map.value_type);
+    }
+    if (type->kind == XR_KIND_FIXED_ARRAY) {
+        return xa_type_contains_span_view(type->fixed_array.element_type);
+    }
+    if (XR_TYPE_HAS_OBJECT_SHAPE(type) && type->object.field_types) {
+        for (int i = 0; i < type->object.field_count; i++) {
+            if (xa_type_contains_span_view(type->object.field_types[i]))
+                return true;
+        }
     }
     return false;
 }

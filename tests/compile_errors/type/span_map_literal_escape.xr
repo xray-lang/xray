@@ -1,0 +1,8 @@
+fn bad() {
+    var owner = [1, 2, 3]
+    var view: Span<int> = owner[0:2]
+    var views: Map<int, Span<int>> = #{1: view}
+    print(views.has(1))
+}
+
+bad()

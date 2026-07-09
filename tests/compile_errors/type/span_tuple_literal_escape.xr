@@ -1,0 +1,8 @@
+fn bad() {
+    var owner = [1, 2, 3]
+    var view: Span<int> = owner[0:2]
+    var pair = (view, 1)
+    print(pair.1)
+}
+
+bad()
