@@ -113,6 +113,46 @@ XR_FUNC uint32_t xi_compute_rpo(XiFunc *f) {
         }
     }
 
+    /* Some lowering paths materialize exceptional blocks only through their
+     * predecessor list. Treat any unnumbered block with a numbered predecessor
+     * as reachable, then continue through its normal successors. This keeps
+     * RPO/dominators consistent with the CFG's pred side without requiring
+     * every exceptional edge to leave a XI_TRY marker behind. */
+    bool progressed = true;
+    while (progressed) {
+        progressed = false;
+        for (uint32_t b = 0; b < f->nblocks; b++) {
+            XiBlock *seed = f->blocks[b];
+            if (!seed || seed->rpo != 0)
+                continue;
+            bool reachable_pred = false;
+            for (uint16_t p = 0; p < seed->npreds; p++) {
+                if (seed->preds[p] && seed->preds[p]->rpo != 0) {
+                    reachable_pred = true;
+                    break;
+                }
+            }
+            if (!reachable_pred)
+                continue;
+            XiBlock *queue[64];
+            int qhead = 0, qtail = 0;
+            seed->rpo = ++reachable;
+            queue[qtail++] = seed;
+            progressed = true;
+            while (qhead < qtail && qtail < 64) {
+                XiBlock *cur = queue[qhead++];
+                for (int s = 0; s < 2; s++) {
+                    XiBlock *succ = cur->succs[s];
+                    if (succ && succ->rpo == 0) {
+                        succ->rpo = ++reachable;
+                        queue[qtail++] = succ;
+                        progressed = true;
+                    }
+                }
+            }
+        }
+    }
+
     /* Clear visited flags */
     for (uint32_t b = 0; b < f->nblocks; b++)
         f->blocks[b]->visited = false;
