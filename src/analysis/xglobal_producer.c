@@ -88,6 +88,7 @@ typedef struct XgLocalType {
     const char *name;
     XgClassId class_id;
     XgInterfaceId interface_id;
+    uint32_t type_key;
     bool inferred;
 } XgLocalType;
 
@@ -214,6 +215,11 @@ static uint32_t hash_tref32(const XrTypeRef *t) {
     return folded ? folded : 1;
 }
 
+static uint32_t hash_folded32(uint64_t h) {
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
 static uint32_t hash_tref_list32(XrTypeRef **type_args, int type_arg_count) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!type_args || type_arg_count <= 0)
@@ -221,8 +227,7 @@ static uint32_t hash_tref_list32(XrTypeRef **type_args, int type_arg_count) {
     h = fold_u64(h, (uint64_t) type_arg_count);
     for (int i = 0; i < type_arg_count; i++)
         h = hash_tref(h, type_args[i]);
-    uint32_t folded = (uint32_t) (h ^ (h >> 32));
-    return folded ? folded : 1;
+    return hash_folded32(h);
 }
 
 static uint32_t hash_name_list32(const char **names, int name_count) {
@@ -236,8 +241,29 @@ static uint32_t hash_name_list32(const char **names, int name_count) {
         else
             h = fold_u64(h, 0);
     }
-    uint32_t folded = (uint32_t) (h ^ (h >> 32));
-    return folded ? folded : 1;
+    return hash_folded32(h);
+}
+
+static uint32_t hash_synthetic_tref32(uint8_t kind, const char *name, XrTypeRef **children,
+                                      int child_count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, kind);
+    h = fold_u64(h, 0);
+    h = fold_u64(h, 0);
+    h = fold_u64(h, 0);
+    if (name)
+        h = fold_bytes(h, name, strlen(name));
+    for (int i = 0; i < child_count; i++)
+        h = hash_tref(h, children ? children[i] : NULL);
+    return hash_folded32(h);
+}
+
+static uint32_t hash_named_type_key32(const char *name, XrTypeRef **type_args, int type_arg_count) {
+    if (!name || !name[0])
+        return 0;
+    if (type_args && type_arg_count > 0)
+        return hash_synthetic_tref32(XR_TREF_GENERIC, name, type_args, type_arg_count);
+    return hash_synthetic_tref32(XR_TREF_NAMED, name, NULL, 0);
 }
 
 static uint32_t hash_generic_inst_type_key(const char *name, XrTypeRef **type_args,
@@ -249,8 +275,7 @@ static uint32_t hash_generic_inst_type_key(const char *name, XrTypeRef **type_ar
     h = fold_u64(h, (uint64_t) type_arg_count);
     for (int i = 0; i < type_arg_count; i++)
         h = hash_tref(h, type_args ? type_args[i] : NULL);
-    uint32_t folded = (uint32_t) (h ^ (h >> 32));
-    return folded ? folded : 1;
+    return hash_folded32(h);
 }
 
 static uint32_t hash_generic_inst_name_type_key(const char *name, const char **type_arg_names,
@@ -266,8 +291,7 @@ static uint32_t hash_generic_inst_name_type_key(const char *name, const char **t
         else
             h = fold_u64(h, 0);
     }
-    uint32_t folded = (uint32_t) (h ^ (h >> 32));
-    return folded ? folded : 1;
+    return hash_folded32(h);
 }
 
 static uint32_t hash_method_signature_parts(XrTypeRef **param_types, int param_count,
@@ -937,13 +961,14 @@ static bool body_push_name_local(XgBodyCollect *bc, const char *name, uint32_t s
 }
 
 static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
-                            XgClassId class_id, XgInterfaceId interface_id, bool inferred) {
+                            XgClassId class_id, XgInterfaceId interface_id, uint32_t type_key,
+                            bool inferred) {
     XgLocalType *row;
     if (!bc)
         return true;
     if (!body_push_name_local(bc, name, symbol_id))
         return false;
-    if (!name || (class_id == XG_NO_ID && interface_id == XG_NO_ID))
+    if (!name || (class_id == XG_NO_ID && interface_id == XG_NO_ID && type_key == 0))
         return true;
     if (!body_reserve_locals(bc, bc->nlocals + 1))
         return false;
@@ -951,6 +976,7 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->name = name;
     row->class_id = class_id;
     row->interface_id = interface_id;
+    row->type_key = type_key;
     row->inferred = inferred;
     return true;
 }
@@ -1014,18 +1040,19 @@ static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) 
 }
 
 static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
-                              XgClassId class_id, XgInterfaceId interface_id) {
+                              XgClassId class_id, XgInterfaceId interface_id, uint32_t type_key) {
     XgLocalType *row = body_find_local(bc, name);
-    if (class_id == XG_NO_ID && interface_id == XG_NO_ID)
+    if (class_id == XG_NO_ID && interface_id == XG_NO_ID && type_key == 0)
         return;
     if (!row) {
-        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, true);
+        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, type_key, true);
         return;
     }
     if (!row->inferred)
         return;
     row->class_id = class_id;
     row->interface_id = interface_id;
+    row->type_key = type_key;
 }
 
 typedef struct XgCaptureScan {
@@ -1602,6 +1629,105 @@ static XgInterfaceId body_first_constraint_interface(XgBodyCollect *bc, XrTypeRe
     return XG_NO_ID;
 }
 
+static uint32_t body_class_type_key(XgBodyCollect *bc, XgClassId class_id) {
+    XgClassNameRow *row;
+    if (!bc || class_id == XG_NO_ID)
+        return 0;
+    row = producer_lookup_class_row_by_id(bc->producer, class_id);
+    return row ? hash_named_type_key32(row->name, NULL, 0) : 0;
+}
+
+static uint32_t body_interface_type_key(XgBodyCollect *bc, XgInterfaceId interface_id) {
+    XgInterfaceNameRow *row;
+    if (!bc || interface_id == XG_NO_ID)
+        return 0;
+    row = producer_lookup_interface_row_by_id(bc->producer, interface_id);
+    return row ? hash_named_type_key32(row->name, NULL, 0) : 0;
+}
+
+static uint32_t body_unknown_arg_type_key(const AstNode *expr) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    static const char tag[] = "xg_arg_unknown_type";
+    h = fold_bytes(h, tag, sizeof(tag) - 1);
+    h = fold_u64(h, expr ? (uint64_t) expr->type : 0);
+    return hash_folded32(h);
+}
+
+static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
+    if (!bc || !expr)
+        return 0;
+    switch (expr->type) {
+        case AST_LITERAL_INT:
+            return hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0);
+        case AST_LITERAL_FLOAT:
+            return hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0);
+        case AST_LITERAL_STRING:
+            return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
+        case AST_LITERAL_CHAR:
+            return hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0);
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+            return hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0);
+        case AST_LITERAL_NULL:
+            return hash_synthetic_tref32(XR_TREF_NULL, NULL, NULL, 0);
+        case AST_LITERAL_BIGINT:
+            return hash_named_type_key32("BigInt", NULL, 0);
+        case AST_LITERAL_REGEX:
+            return hash_named_type_key32("Regex", NULL, 0);
+        case AST_VARIABLE: {
+            XgLocalType *row = body_find_local(bc, expr->as.variable.name);
+            if (!row)
+                return 0;
+            if (row->type_key != 0)
+                return row->type_key;
+            if (row->class_id != XG_NO_ID)
+                return body_class_type_key(bc, row->class_id);
+            if (row->interface_id != XG_NO_ID)
+                return body_interface_type_key(bc, row->interface_id);
+            return 0;
+        }
+        case AST_THIS_EXPR:
+            return body_class_type_key(bc, bc->current_class_id);
+        case AST_AS_EXPR:
+            return hash_tref32(expr->as.as_expr.type);
+        case AST_GROUPING:
+            return body_expr_type_key(bc, expr->as.grouping);
+        case AST_COMPTIME_EXPR:
+            return body_expr_type_key(bc, expr->as.comptime_expr.expr);
+        case AST_MOVE_EXPR:
+            return body_expr_type_key(bc, expr->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return body_expr_type_key(bc, expr->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return body_expr_type_key(bc, expr->as.unary.operand);
+        case AST_NEW_EXPR:
+            return hash_named_type_key32(expr->as.new_expr.class_name, expr->as.new_expr.type_args,
+                                         expr->as.new_expr.type_arg_count);
+        case AST_STRUCT_LITERAL:
+            return hash_named_type_key32(expr->as.struct_literal.struct_name,
+                                         expr->as.struct_literal.type_args,
+                                         expr->as.struct_literal.type_arg_count);
+        default:
+            break;
+    }
+    return 0;
+}
+
+static uint32_t body_call_arg_type_key_start(XgBodyCollect *bc, AstNode **arguments,
+                                             int arg_count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    if (!arguments || arg_count <= 0)
+        return 0;
+    h = fold_u64(h, (uint64_t) arg_count);
+    for (int i = 0; i < arg_count; i++) {
+        uint32_t key = body_expr_type_key(bc, arguments[i]);
+        if (key == 0)
+            key = body_unknown_arg_type_key(arguments[i]);
+        h = fold_u64(h, key);
+    }
+    return hash_folded32(h);
+}
+
 static void body_add_generic_inst(XgBodyCollect *bc, uint8_t kind, const char *name,
                                   XrTypeRef **type_args, int type_arg_count,
                                   XgCallsiteId root_callsite_id, uint32_t source_span_id,
@@ -1655,6 +1781,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     row.arg_count =
         (uint16_t) (call->as.call_expr.arg_count < UINT16_MAX ? call->as.call_expr.arg_count
                                                               : UINT16_MAX);
+    row.arg_type_key_start = body_call_arg_type_key_start(bc, call->as.call_expr.arguments,
+                                                          call->as.call_expr.arg_count);
     callee = call->as.call_expr.callee;
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
@@ -1783,6 +1911,8 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     row.arg_count =
         (uint16_t) (call->as.super_call.arg_count < UINT16_MAX ? call->as.super_call.arg_count
                                                                : UINT16_MAX);
+    row.arg_type_key_start = body_call_arg_type_key_start(bc, call->as.super_call.arguments,
+                                                          call->as.super_call.arg_count);
     if (bc->callsite_count == 0)
         bc->callsite_start = row.callsite_id;
     if (xg_global_evidence_add_callsite(bc->evidence, &row))
@@ -2040,6 +2170,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL: {
+            uint32_t type_key = node->as.var_decl.type_annotation
+                                    ? hash_tref32(node->as.var_decl.type_annotation)
+                                    : 0;
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             XgInterfaceId interface_id = producer_lookup_interface_from_tref(
@@ -2051,20 +2184,23 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (class_id == XG_NO_ID && interface_id == XG_NO_ID) {
                 class_id = body_resolve_expr_class(bc, node->as.var_decl.initializer);
                 interface_id = body_resolve_expr_interface(bc, node->as.var_decl.initializer);
-                inferred = class_id != XG_NO_ID || interface_id != XG_NO_ID;
+                type_key = body_expr_type_key(bc, node->as.var_decl.initializer);
+                inferred = class_id != XG_NO_ID || interface_id != XG_NO_ID || type_key != 0;
             }
             (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
-                                   class_id, interface_id, inferred);
+                                   class_id, interface_id, type_key, inferred);
             break;
         }
         case AST_ASSIGNMENT: {
             XgClassId class_id;
             XgInterfaceId interface_id;
+            uint32_t type_key;
             walk_body_for_calls(bc, node->as.assignment.value);
             class_id = body_resolve_expr_class(bc, node->as.assignment.value);
             interface_id = body_resolve_expr_interface(bc, node->as.assignment.value);
+            type_key = body_expr_type_key(bc, node->as.assignment.value);
             body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
-                              interface_id);
+                              interface_id, type_key);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }
@@ -2414,6 +2550,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 producer_lookup_class_from_tref(bc->producer, node->as.for_in_stmt.item_type);
             XgInterfaceId item_interface =
                 producer_lookup_interface_from_tref(bc->producer, node->as.for_in_stmt.item_type);
+            uint32_t item_type_key =
+                node->as.for_in_stmt.item_type ? hash_tref32(node->as.for_in_stmt.item_type) : 0;
             bc->capability_bits |= body_capabilities_for_type_ref(node->as.for_in_stmt.item_type);
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
@@ -2421,7 +2559,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                         node->as.for_in_stmt.value_symbol_id);
             (void) body_push_local(bc, node->as.for_in_stmt.item_name,
                                    node->as.for_in_stmt.item_symbol_id, item_class, item_interface,
-                                   false);
+                                   item_type_key, false);
             walk_body_for_calls(bc, node->as.for_in_stmt.body);
             bc->nlocals = base_locals;
             bc->nname_locals = base_name_locals;
@@ -2463,10 +2601,12 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
             bc->producer, method->param_types ? method->param_types[i] : NULL);
         XgInterfaceId interface_id = producer_lookup_interface_from_tref(
             bc->producer, method->param_types ? method->param_types[i] : NULL);
+        uint32_t type_key =
+            method->param_types && method->param_types[i] ? hash_tref32(method->param_types[i]) : 0;
         bc->capability_bits |=
             body_capabilities_for_type_ref(method->param_types ? method->param_types[i] : NULL);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
-                               interface_id, false);
+                               interface_id, type_key, false);
     }
 }
 
@@ -2479,9 +2619,10 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             producer_lookup_class_from_tref(bc->producer, param ? param->type : NULL);
         XgInterfaceId interface_id =
             producer_lookup_interface_from_tref(bc->producer, param ? param->type : NULL);
+        uint32_t type_key = param && param->type ? hash_tref32(param->type) : 0;
         bc->capability_bits |= body_capabilities_for_type_ref(param ? param->type : NULL);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
-                               class_id, interface_id, false);
+                               class_id, interface_id, type_key, false);
     }
 }
 

@@ -5988,6 +5988,84 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
+    setup_parser_session();
+    const char *source = "class Sink {\n"
+                         "    pushInt(v: int) -> int { return v }\n"
+                         "    pushString(v: string) -> int { return 1 }\n"
+                         "}\n"
+                         "fn use(s: Sink, x: int, y: string) -> int {\n"
+                         "    var z: int = 2\n"
+                         "    s.pushInt(x)\n"
+                         "    s.pushString(y)\n"
+                         "    s.pushInt(z)\n"
+                         "    return 0\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+
+    uint32_t push_int_name = xg_name_id("pushInt");
+    uint32_t push_string_name = xg_name_id("pushString");
+    uint32_t int_arg_key = 0;
+    uint32_t string_arg_key = 0;
+    uint32_t push_int_calls = 0;
+    uint32_t push_string_calls = 0;
+    for (uint32_t i = 0; i < ev.ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev.callsites[i];
+        if (call->kind != XG_CALL_METHOD)
+            continue;
+        ASSERT_EQ_UINT(call->arg_count, 1);
+        ASSERT_TRUE(call->arg_type_key_start != 0);
+        if (call->method_name_id == push_int_name) {
+            push_int_calls++;
+            if (int_arg_key == 0)
+                int_arg_key = call->arg_type_key_start;
+            ASSERT_EQ_UINT(call->arg_type_key_start, int_arg_key);
+        } else if (call->method_name_id == push_string_name) {
+            push_string_calls++;
+            string_arg_key = call->arg_type_key_start;
+        }
+    }
+    ASSERT_EQ_UINT(push_int_calls, 2);
+    ASSERT_EQ_UINT(push_string_calls, 1);
+    ASSERT_TRUE(int_arg_key != 0);
+    ASSERT_TRUE(string_arg_key != 0);
+    ASSERT_TRUE(int_arg_key != string_arg_key);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 3);
+    for (uint32_t i = 0; i < bundle.nmethod_dispatch_plans; i++) {
+        const XaotMethodDispatchPlan *plan = &bundle.method_dispatch_plans[i];
+        ASSERT_EQ_UINT(plan->arg_count, 1);
+        ASSERT_TRUE(plan->arg_type_key_start != 0);
+        if (plan->method_name_id == push_int_name)
+            ASSERT_EQ_UINT(plan->arg_type_key_start, int_arg_key);
+        else if (plan->method_name_id == push_string_name)
+            ASSERT_EQ_UINT(plan->arg_type_key_start, string_arg_key);
+    }
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) {
     setup_parser_session();
     const char *source = "fn clampScore(x: int) -> int {\n"
@@ -7177,6 +7255,7 @@ RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
+RUN_TEST(global_evidence_producer_fills_callsite_argument_type_keys);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_read_mem_effect);
 RUN_TEST(global_evidence_producer_marks_call_effect);
