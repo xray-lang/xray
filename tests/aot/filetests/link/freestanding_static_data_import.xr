@@ -1,4 +1,4 @@
-import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
@@ -10,6 +10,10 @@ fn imported_static_sum(i: int) -> int {
         NESTED.0.0 + NESTED.0.1 + NESTED.1.0 + NESTED.1.1 +
         (unsafe { BITS.u } as int) + (unsafe { WORD_BYTES.b }[i] as int) +
         (unsafe { BIT_ROWS[i].u } as int) + (unsafe { WORD_ROWS[i].b }[i] as int) +
+        (unsafe { BIT_HOLDER.bits.u } as int) + (unsafe { BIT_GROUPS[i].bits.u } as int) +
+        (unsafe { WORD_HOLDER.word.b }[i] as int) +
+        (unsafe { WORD_GROUPS[i].word.b }[i] as int) +
+        BIT_HOLDER.base + BIT_GROUPS[i].base + WORD_HOLDER.base + WORD_GROUPS[i].base +
         (MATRIX[i][i] as int) + CUBE[i][i][i] + ENTRIES[i].code + (ENTRIES[i].flag as int) +
         (ROWS[i].samples[i] as int) + ROWS[i].weight + GROUPS[i].inner.code +
         GROUPS[i].base
