@@ -1,0 +1,6 @@
+fn readKey(k: string) -> Json {
+    var j: Json = { name: "ada", age: 1 }
+    return j[k]
+}
+
+print(readKey("name"))
