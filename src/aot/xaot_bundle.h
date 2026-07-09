@@ -646,6 +646,64 @@ typedef struct XaotDerivePlan {
     uint8_t unproven_reason;
 } XaotDerivePlan;
 
+typedef enum XaotJsonShapeAction {
+    XAOT_JSON_SHAPE_OPEN_DYNAMIC = 1,
+    XAOT_JSON_SHAPE_HIDDEN_CLASS,
+    XAOT_JSON_SHAPE_RECORD_COMPAT,
+    XAOT_JSON_SHAPE_REJECT,
+} XaotJsonShapeAction;
+
+typedef enum XaotJsonAccessAction {
+    XAOT_JSON_ACCESS_DIRECT_INDEX = 1,
+    XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX,
+    XAOT_JSON_ACCESS_DYNAMIC_LOOKUP,
+    XAOT_JSON_ACCESS_REJECT,
+} XaotJsonAccessAction;
+
+enum {
+    XAOT_JSON_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_JSON_EV_STATIC_KEY = 1u << 1,
+    XAOT_JSON_EV_RECEIVER_SHAPE = 1u << 2,
+    XAOT_JSON_EV_FIELD_INDEX = 1u << 3,
+    XAOT_JSON_EV_RECORD_COMPAT = 1u << 4,
+};
+
+enum {
+    XAOT_JSON_UNPROVEN_NONE = 0,
+    XAOT_JSON_UNPROVEN_COMPUTED_KEY = 1,
+    XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN = 2,
+    XAOT_JSON_UNPROVEN_STALE_SHAPE = 3,
+    XAOT_JSON_UNPROVEN_INVALID_KIND = 4,
+};
+
+typedef struct XaotJsonShapePlan {
+    XgJsonShapeId json_shape_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint32_t type_key;
+    uint32_t field_name_start;
+    uint16_t field_count;
+    uint8_t shape_kind;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+    uint64_t shape_hash;
+} XaotJsonShapePlan;
+
+typedef struct XaotJsonAccessPlan {
+    XgJsonAccessId json_access_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgJsonShapeId receiver_shape_id;
+    uint32_t key_name_id;
+    uint32_t result_type_key;
+    uint16_t field_ordinal;
+    uint8_t access_kind;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotJsonAccessPlan;
+
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
     XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
@@ -841,6 +899,12 @@ typedef struct XaotBundle {
     XaotDerivePlan *derive_plans;
     uint32_t nderive_plans;
     uint32_t derive_plan_cap;
+    XaotJsonShapePlan *json_shape_plans;
+    uint32_t njson_shape_plans;
+    uint32_t json_shape_plan_cap;
+    XaotJsonAccessPlan *json_access_plans;
+    uint32_t njson_access_plans;
+    uint32_t json_access_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -900,6 +964,10 @@ xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
                                             XgGenericInstId generic_inst_id);
 XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
                                                            XgDeriveId derive_id);
+XR_FUNC const XaotJsonShapePlan *
+xaot_bundle_find_json_shape_plan(const XaotBundle *bundle, XgJsonShapeId json_shape_id);
+XR_FUNC const XaotJsonAccessPlan *
+xaot_bundle_find_json_access_plan(const XaotBundle *bundle, XgJsonAccessId json_access_id);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,

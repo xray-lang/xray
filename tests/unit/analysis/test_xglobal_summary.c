@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=3 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=4 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=3 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=3 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=3 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=3 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -7073,6 +7073,112 @@ TEST(global_evidence_verifier_rejects_missing_derive_rows) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_json_shape_and_access_plans) {
+    XgBuildKey key = {.source_hash = 11,
+                      .compiler_semver_hash = 22,
+                      .profile_hash = 33,
+                      .imported_summary_hash = 44,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgJsonShapeSummary shape = {.json_shape_id = 1,
+                                .module_id = 1,
+                                .owner_func_id = 7,
+                                .source_span_id = 100,
+                                .type_key = 200,
+                                .field_name_start = 300,
+                                .field_count = 2,
+                                .shape_kind = XG_JSON_SHAPE_SHAPED,
+                                .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE,
+                                .shape_hash = UINT64_C(0x1234)};
+    XgJsonAccessSummary direct = {.json_access_id = 1,
+                                  .module_id = 1,
+                                  .owner_func_id = 7,
+                                  .receiver_shape_id = 1,
+                                  .source_span_id = 101,
+                                  .key_name_id = xg_name_id("name"),
+                                  .result_type_key = 201,
+                                  .field_ordinal = 1,
+                                  .access_kind = XG_JSON_ACCESS_FIELD_GET,
+                                  .flags = XG_JSON_ACCESS_STATIC_KEY |
+                                           XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN};
+    XgJsonAccessSummary dynamic = {.json_access_id = 2,
+                                   .module_id = 1,
+                                   .owner_func_id = 7,
+                                   .receiver_shape_id = XG_NO_ID,
+                                   .source_span_id = 102,
+                                   .key_name_id = 0,
+                                   .result_type_key = 202,
+                                   .field_ordinal = UINT16_MAX,
+                                   .access_kind = XG_JSON_ACCESS_INDEX_GET,
+                                   .flags = XG_JSON_ACCESS_COMPUTED_KEY};
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_access(&ev, &direct));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_access(&ev, &dynamic));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "json-shape 0 id=1 module=1 func=7 type=200 kind=shaped"));
+    ASSERT_NOT_NULL(strstr(dump, "json-access 0 id=1 module=1 func=7 shape=1 kind=field_get"));
+    ASSERT_NOT_NULL(strstr(dump, "json-access 1 id=2 module=1 func=7 shape=0 kind=index_get"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_shape_plans, 1);
+    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
+    const XaotJsonShapePlan *shape_plan = xaot_bundle_find_json_shape_plan(&bundle, 1);
+    const XaotJsonAccessPlan *direct_plan = xaot_bundle_find_json_access_plan(&bundle, 1);
+    const XaotJsonAccessPlan *dynamic_plan = xaot_bundle_find_json_access_plan(&bundle, 2);
+    ASSERT_NOT_NULL(shape_plan);
+    ASSERT_NOT_NULL(direct_plan);
+    ASSERT_NOT_NULL(dynamic_plan);
+    ASSERT_EQ_UINT(shape_plan->action, XAOT_JSON_SHAPE_HIDDEN_CLASS);
+    ASSERT_EQ_UINT(direct_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(direct_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_STATIC_KEY |
+                                              XAOT_JSON_EV_RECEIVER_SHAPE |
+                                              XAOT_JSON_EV_FIELD_INDEX);
+    ASSERT_EQ_UINT(dynamic_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(dynamic_plan->unproven_reason, XAOT_JSON_UNPROVEN_COMPUTED_KEY);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-shape-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "kind=shaped action=hidden_class"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-access-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=direct_index"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "json-access-plan 1 id=2"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=dynamic_lookup"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.json_access_plans[0].action = XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json access plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
     const char *source = "fn useTable() -> int {\n"
@@ -7524,6 +7630,7 @@ RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_records_derive_rows);
 RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
+RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
