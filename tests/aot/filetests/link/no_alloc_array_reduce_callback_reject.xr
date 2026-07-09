@@ -1,0 +1,13 @@
+fn xray_no_alloc_array_reduce_allocating_callback(acc: int, value: int) -> int {
+    var scratch: Array<int> = []
+    scratch.push(value)
+    return acc + value + scratch.length
+}
+
+@no_alloc
+fn xray_no_alloc_array_reduce_callback_reject(values: Array<int>) -> int {
+    return values.reduce(xray_no_alloc_array_reduce_allocating_callback, 0)
+}
+
+var xray_no_alloc_array_reduce_values: Array<int> = [1, 2, 3]
+print(xray_no_alloc_array_reduce_callback_reject(xray_no_alloc_array_reduce_values))
