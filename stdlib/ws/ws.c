@@ -881,7 +881,6 @@ XrWebSocket *ws_new(const XrWsConfig *config) {
     ws->last_ping_sent_ms = 0;
     ws->last_pong_recv_ms = ws_now_ms();
     ws->ping_in_flight = false;
-    ws->cached_pd = NULL;
     return ws;
 }
 
@@ -908,7 +907,6 @@ static void ws_netpoll_release_fd(XrWebSocket *ws) {
     XrPollDesc *pd = xr_fdmap_get(&rt->netpoll, ws->fd);
     if (pd && !atomic_load(&pd->closing))
         xr_netpoll_close(&rt->netpoll, pd);
-    ws->cached_pd = NULL;
 }
 
 void ws_free(XrWebSocket *ws) {
@@ -948,7 +946,6 @@ void ws_free(XrWebSocket *ws) {
     xr_free(ws->sec_key);
     xr_free(ws->msg_buf);
     xr_free(ws->frag_buf);
-    xr_free(ws->close_reason);
     xr_free((void *) ws->config.url);
     xr_free(ws);
 }
@@ -1327,11 +1324,6 @@ XrWsError ws_conn_close(XrWebSocket *ws, int code, const char *reason) {
         bool mask = !ws->is_server;
 
         send_close_frame(ws, close_data, close_len, mask);
-
-        ws->close_code = code;
-        if (reason) {
-            ws->close_reason = xr_strdup(reason);
-        }
     }
 
     // Close TLS connection first
@@ -1509,7 +1501,6 @@ parse_header:;
             char cd[2] = {(WS_CLOSE_PROTOCOL_ERROR >> 8) & 0xFF, WS_CLOSE_PROTOCOL_ERROR & 0xFF};
             send_close_frame(ws, cd, 2, !ws->is_server);
         }
-        ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
@@ -1526,14 +1517,12 @@ parse_header:;
             char cd[2] = {(WS_CLOSE_PROTOCOL_ERROR >> 8) & 0xFF, WS_CLOSE_PROTOCOL_ERROR & 0xFF};
             send_close_frame(ws, cd, 2, false);
         }
-        ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
 
     // RFC 6455 Section 5.1: client MUST close if server frame is masked
     if (!ws->is_server && masked) {
-        ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
@@ -1547,7 +1536,6 @@ parse_header:;
             char cd[2] = {(WS_CLOSE_TOO_LARGE >> 8) & 0xFF, WS_CLOSE_TOO_LARGE & 0xFF};
             send_close_frame(ws, cd, 2, !ws->is_server);
         }
-        ws->close_code = WS_CLOSE_TOO_LARGE;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
@@ -1679,7 +1667,6 @@ process_frame:
                               WS_CLOSE_PROTOCOL_ERROR & 0xFF};
                 send_close_frame(ws, cd, 2, !ws->is_server);
             }
-            ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
             ws->state = WS_STATE_CLOSED;
             return NULL;
         }
@@ -1695,7 +1682,6 @@ process_frame:
                                   WS_CLOSE_PROTOCOL_ERROR & 0xFF};
                     send_close_frame(ws, cd, 2, !ws->is_server);
                 }
-                ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
                 ws->state = WS_STATE_CLOSED;
                 return NULL;
             }
@@ -1707,7 +1693,6 @@ process_frame:
                                   WS_CLOSE_PROTOCOL_ERROR & 0xFF};
                     send_close_frame(ws, cd, 2, !ws->is_server);
                 }
-                ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
                 ws->state = WS_STATE_CLOSED;
                 return NULL;
             }
@@ -1721,7 +1706,6 @@ process_frame:
                 send_close_frame(ws, NULL, 0, mask);
             }
         }
-        ws->close_code = code;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
@@ -1757,7 +1741,6 @@ process_frame:
             char cd[2] = {(WS_CLOSE_PROTOCOL_ERROR >> 8) & 0xFF, WS_CLOSE_PROTOCOL_ERROR & 0xFF};
             send_close_frame(ws, cd, 2, !ws->is_server);
         }
-        ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
@@ -1768,7 +1751,6 @@ process_frame:
             char cd[2] = {(WS_CLOSE_PROTOCOL_ERROR >> 8) & 0xFF, WS_CLOSE_PROTOCOL_ERROR & 0xFF};
             send_close_frame(ws, cd, 2, !ws->is_server);
         }
-        ws->close_code = WS_CLOSE_PROTOCOL_ERROR;
         ws->state = WS_STATE_CLOSED;
         return NULL;
     }
@@ -1785,7 +1767,6 @@ process_frame:
                 char cd[2] = {(WS_CLOSE_TOO_LARGE >> 8) & 0xFF, WS_CLOSE_TOO_LARGE & 0xFF};
                 send_close_frame(ws, cd, 2, !ws->is_server);
             }
-            ws->close_code = WS_CLOSE_TOO_LARGE;
             ws->state = WS_STATE_CLOSED;
             return NULL;
         }
@@ -1859,7 +1840,6 @@ process_frame:
                 char cd[2] = {(WS_CLOSE_TOO_LARGE >> 8) & 0xFF, WS_CLOSE_TOO_LARGE & 0xFF};
                 send_close_frame(ws, cd, 2, !ws->is_server);
             }
-            ws->close_code = WS_CLOSE_TOO_LARGE;
             ws->state = WS_STATE_CLOSED;
             return NULL;
         }
@@ -1876,7 +1856,6 @@ process_frame:
                 char cd[2] = {(WS_CLOSE_INVALID_DATA >> 8) & 0xFF, WS_CLOSE_INVALID_DATA & 0xFF};
                 send_close_frame(ws, cd, 2, !ws->is_server);
             }
-            ws->close_code = WS_CLOSE_INVALID_DATA;
             ws->state = WS_STATE_CLOSED;
             return NULL;
         }
@@ -2344,7 +2323,6 @@ XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *requ
     ws->last_ping_sent_ms = 0;
     ws->last_pong_recv_ms = ws_now_ms();
     ws->ping_in_flight = false;
-    ws->cached_pd = NULL;
 
     // Set default config
     ws_config_init(&ws->config);
