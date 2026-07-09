@@ -330,6 +330,40 @@ TEST(global_evidence_hash_is_content_stable) {
     xg_global_evidence_free(&b);
 }
 
+TEST(global_evidence_records_interface_object_use_rows) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x41,
+                      .compiler_semver_hash = 0x42,
+                      .profile_hash = 0x43,
+                      .imported_summary_hash = 0x44,
+                      .module_id = 7,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgInterfaceObjectUseSummary use = {.use_id = 1,
+                                       .interface_id = 77,
+                                       .owner_func_id = 11,
+                                       .source_span_id = 5,
+                                       .body_ordinal = 2,
+                                       .type_key = 900,
+                                       .reason = XG_INTERFACE_OBJECT_USE_VALUE |
+                                                 XG_INTERFACE_OBJECT_USE_FIELD,
+                                       .flags = 0x3};
+    char *dump;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_object_use(&ev, &use));
+    ASSERT_EQ_UINT(ev.ninterface_object_uses, 1);
+    ASSERT_NE(xg_global_evidence_hash(&ev), 0);
+
+    dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "interface_object_uses=1"));
+    ASSERT_NOT_NULL(strstr(dump, "interface-object-use 0 id=1 interface=77"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=0x5"));
+    ASSERT_NOT_NULL(strstr(dump, "[value,field]"));
+    xr_free(dump);
+    xg_global_evidence_free(&ev);
+}
+
 static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
     XgDeclSummary decl = {.module_id = key.module_id,
                           .decl_id = 1,
@@ -488,7 +522,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=10 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=11 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +739,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=10 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=10 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=10 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=10 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=11 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=11 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=11 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=11 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=11 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -9466,6 +9500,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_hash_is_content_stable);
+RUN_TEST(global_evidence_records_interface_object_use_rows);
 RUN_TEST(global_evidence_cache_keys_are_phase_specific);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_rows);
