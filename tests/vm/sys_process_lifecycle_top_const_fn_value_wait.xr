@@ -1,0 +1,19 @@
+import sys
+import { Process } from sys
+
+const waitProcess = fn(p: Process) -> int {
+    var code = p.wait()
+    print("top-fn-value waited " + string(code))
+    return code
+}
+
+fn run() {
+    var p0 = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (p0 == null) {
+        print("spawn-failed")
+        return
+    }
+    print(waitProcess(p0!))
+}
+
+run()
