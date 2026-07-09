@@ -143,19 +143,18 @@ typedef struct {
  *   num_headers- In/Out: Header array capacity / actual count
  *   last_len   - Last parse position (for incremental parsing), 0 for first call
  */
-XR_FUNC int xr_http_parse_request_ex(const char *buf, size_t len, const char **method,
-                                     size_t *method_len, const char **path, size_t *path_len,
-                                     int *minor_ver, XrHttpHeader *headers, size_t *num_headers,
-                                     size_t last_len);
+int http_parse_request_ex(const char *buf, size_t len, const char **method, size_t *method_len,
+                          const char **path, size_t *path_len, int *minor_ver,
+                          XrHttpHeader *headers, size_t *num_headers, size_t last_len);
 
 /*
  * Parse HTTP response (one-shot header parsing)
  *
- * Returns same as xr_http_parse_request_ex
+ * Returns same as http_parse_request_ex
  */
-XR_FUNC int xr_http_parse_response_ex(const char *buf, size_t len, int *minor_ver, int *status,
-                                      const char **msg, size_t *msg_len, XrHttpHeader *headers,
-                                      size_t *num_headers, size_t last_len);
+int http_parse_response_ex(const char *buf, size_t len, int *minor_ver, int *status,
+                           const char **msg, size_t *msg_len, XrHttpHeader *headers,
+                           size_t *num_headers, size_t last_len);
 
 /*
  * Decode chunked encoding
@@ -172,26 +171,26 @@ XR_FUNC int xr_http_parse_response_ex(const char *buf, size_t len, int *minor_ve
  *   buf     - Data buffer (will be modified in-place)
  *   bufsz   - In/Out: input is buffer size, output is decoded data size
  */
-XR_FUNC ssize_t xr_http_decode_chunked(XrChunkedDecoder *decoder, char *buf, size_t *bufsz);
+ssize_t http_decode_chunked(XrChunkedDecoder *decoder, char *buf, size_t *bufsz);
 
 /* ========== Simplified API ========== */
 
 /*
  * Initialize parser
  */
-XR_FUNC void xr_http_parser_init(XrHttpParser *parser);
+void http_parser_init(XrHttpParser *parser);
 
 /*
  * Parse HTTP response (auto-fill XrHttpResponse struct)
- * Uses xr_http_parse_response_ex internally, and handles special headers
+ * Uses http_parse_response_ex internally, and handles special headers
  */
-XR_FUNC XrHttpParseResult xr_http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
-                                                 const char *data, size_t len);
+XrHttpParseResult http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
+                                      const char *data, size_t len);
 
 /*
  * Initialize response struct
  */
-XR_FUNC void xr_http_response_init(XrHttpResponse *resp);
+void http_response_init(XrHttpResponse *resp);
 
 /*
  * HTTP method string to enum
@@ -209,7 +208,7 @@ const char *http_method_to_string(XrHttpMethod method);
  * Find HTTP header end position (\r\n\r\n)
  * Returns: position after header end (body start), NULL if not found
  */
-static inline const char *xr_http_find_header_end(const char *buf, size_t len) {
+static inline const char *http_find_header_end(const char *buf, size_t len) {
     for (size_t i = 0; i + 3 < len; i++) {
         if (buf[i] == '\r' && buf[i + 1] == '\n' && buf[i + 2] == '\r' && buf[i + 3] == '\n') {
             return buf + i + 4;
@@ -222,7 +221,7 @@ static inline const char *xr_http_find_header_end(const char *buf, size_t len) {
  * Parse HTTP status code
  * Returns: status code, -1 on parse failure
  */
-static inline int xr_http_parse_status_code(const char *response) {
+static inline int http_parse_status_code(const char *response) {
     if (!response)
         return -1;
     const char *p = response;
