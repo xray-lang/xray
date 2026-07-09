@@ -899,6 +899,11 @@
   :vm-bytecode (driver xi_emit_array_data_ptr)
   :aot-c (driver xicgen_array_data_ptr))
 
+(lower xi.static.addr
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_static_addr))
+
 (lower xi.ptr.load
   :match ()
   :required-targets (vm-bytecode aot-c)

@@ -7432,6 +7432,134 @@ static const char *cg_ffi_ptr_le_store_helper(uint8_t code) {
 
 /* Unsafe Array<T>/Span<T> data pointer borrow. VM/tagged values keep the address
  * as an integer; AOT hot code carries RawPtr/RawMut as a non-owning C pointer. */
+static const XiConstLiteral *xicgen_static_addr_resolve_literal(XiCgenCtx *ctx, const XiFunc *f,
+                                                                int64_t slot,
+                                                                const XiModule **out_module,
+                                                                int64_t *out_slot) {
+    if (out_module)
+        *out_module = NULL;
+    if (out_slot)
+        *out_slot = -1;
+    if (!ctx || !ctx->module || slot < 0 || slot >= ctx->module->nslots)
+        return NULL;
+
+    const XiModule *module = ctx->module;
+    int64_t target_slot = slot;
+    const XiConstLiteral *lit = NULL;
+    const XiModule *import_module = NULL;
+    int64_t import_slot = -1;
+    if (slot <= INT_MAX)
+        lit = cg_import_slot_const_literal(ctx, f, (int) slot, &import_module, &import_slot);
+    if (lit && import_module && import_slot >= 0) {
+        module = import_module;
+        target_slot = import_slot;
+    } else {
+        lit = cg_module_const_literal(module, target_slot);
+    }
+    if (!lit || lit->kind == XI_CONST_LITERAL_NONE)
+        return NULL;
+    if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
+        cg_report_imported_static_const_requires_weak(ctx, module, target_slot);
+        ctx->error = true;
+        return NULL;
+    }
+    if (out_module)
+        *out_module = module;
+    if (out_slot)
+        *out_slot = target_slot;
+    return lit;
+}
+
+static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                                int64_t slot, const XiConstLiteral *lit) {
+    const XiConstLiteral *static_lit = NULL;
+    if (cg_freestanding_static_scalar_const_literal_in_module(ctx, module, slot, &static_lit)) {
+        switch (static_lit->kind) {
+            case XI_CONST_LITERAL_INT:
+            case XI_CONST_LITERAL_FLOAT:
+            case XI_CONST_LITERAL_BOOL:
+            case XI_CONST_LITERAL_CHAR:
+                cg_emit_static_scalar_const_name(ctx, out, module, slot);
+                return true;
+            case XI_CONST_LITERAL_STRING:
+                cg_emit_static_string_const_name(ctx, out, module, slot);
+                return true;
+            case XI_CONST_LITERAL_NULL:
+                cg_emit_static_value_const_name(ctx, out, module, slot);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    CgFixedArrayLaneInfo fixed_array_info;
+    if (cg_freestanding_static_fixed_array_literal_in_module(ctx, module, slot, &fixed_array_info,
+                                                             NULL)) {
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        return true;
+    }
+    CgStaticFixedMatrixInfo matrix_info;
+    if (cg_freestanding_static_fixed_matrix_literal_in_module(ctx, module, slot, &matrix_info,
+                                                              NULL)) {
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        return true;
+    }
+    CgStaticFixedCubeInfo cube_info;
+    if (cg_freestanding_static_fixed_cube_literal_in_module(ctx, module, slot, &cube_info, NULL)) {
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        return true;
+    }
+    CgStaticFixedStructArrayInfo struct_array_info;
+    if (cg_freestanding_static_fixed_struct_array_literal_in_module(ctx, module, slot,
+                                                                    &struct_array_info, NULL)) {
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        return true;
+    }
+    CgStaticFixedTupleArrayInfo tuple_array_info;
+    if (cg_freestanding_static_fixed_tuple_array_literal_in_module(ctx, module, slot,
+                                                                   &tuple_array_info, NULL)) {
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        return true;
+    }
+    XrType *tuple_type = NULL;
+    if (cg_freestanding_static_tuple_literal_in_module(ctx, module, slot, &tuple_type, NULL)) {
+        cg_emit_static_tuple_name(ctx, out, module, slot);
+        return true;
+    }
+    const XrAggregateLayout *layout = NULL;
+    if (cg_freestanding_static_struct_literal_in_module(ctx, module, slot, &layout, NULL)) {
+        cg_emit_static_struct_name(ctx, out, module, slot);
+        return true;
+    }
+
+    fprintf(stderr,
+            "[xi_cgen] ERROR: RawPtr.of requires a materialized freestanding static const "
+            "object; '%s.%s' is not addressable\n",
+            module && module->name ? module->name : "?",
+            cg_module_const_slot_name(module, slot) ? cg_module_const_slot_name(module, slot)
+                                                    : "?");
+    (void) lit;
+    if (ctx)
+        ctx->error = true;
+    return false;
+}
+
+static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) prefix;
+    const XiModule *module = NULL;
+    int64_t slot = -1;
+    const XiConstLiteral *lit =
+        xicgen_static_addr_resolve_literal(ctx, f, v ? v->aux_int : -1, &module, &slot);
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_RAWPTR,
+                                                     cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "(void *)(&");
+    if (!lit || !xicgen_emit_static_addr_symbol_name(ctx, out, module, slot, lit))
+        fprintf(out, "((char *)0)[0]");
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     if (!v || v->nargs < 1) {

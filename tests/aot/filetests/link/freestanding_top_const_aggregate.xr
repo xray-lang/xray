@@ -1,3 +1,5 @@
+import mem
+
 @section("__DATA,.xray_table")
 @weak
 @used
@@ -439,4 +441,10 @@ fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
     return (unsafe { BIT_GROUPS[row].bits.u } as int) +
         (unsafe { WORD_GROUPS[row].word.b }[col] as int) +
         BIT_GROUPS[row].base + WORD_GROUPS[row].base
+}
+
+@c_export("xray_top_const_static_addr")
+fn xray_top_const_static_addr() -> int {
+    return mem.addressOf(RawPtr<[int; 4]>.of(TABLE)) +
+        mem.addressOf(RawPtr<Header>.of(HEADER))
 }

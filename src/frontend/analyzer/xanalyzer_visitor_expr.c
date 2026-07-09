@@ -641,11 +641,26 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
             .line = node ? node->line : (object ? object->line : 0),
             .column = node ? node->column : (object ? object->column : 0),
         };
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-            "RawPtr.of/RawMut.of is not supported yet; use mem.fromAddress for absolute "
-            "addresses or owner dataPtrUnchecked/ptrUnchecked escape hatches",
-            &loc);
+        if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                "RawPtr.of is only supported in freestanding AOT profile for static const data",
+                &loc);
+            return xr_type_new_unknown(ctx->analyzer->isolate);
+        }
+        if (ptr_type->ptr_is_mut) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                "RawMut.of is not supported for static const data; use RawPtr.of for read-only "
+                "addresses",
+                &loc);
+            return xr_type_new_unknown(ctx->analyzer->isolate);
+        }
+        XrType *pointee = ptr_type->container.element_type;
+        if (!pointee)
+            pointee = xr_type_new_unknown(ctx->analyzer->isolate);
+        XrType *params[1] = {pointee};
+        return xr_type_new_function(ctx->analyzer->isolate, params, 1, ptr_type, false);
     }
     return xr_type_new_unknown(ctx->analyzer->isolate);
 }

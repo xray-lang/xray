@@ -129,6 +129,7 @@
     X(BYTES_COPY_FROM, "xi.bytes.copy.from", xicgen_bytes_copy_from) \
     X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from) \
     X(ARRAY_DATA_PTR, "xi.array.data.ptr", xicgen_array_data_ptr) \
+    X(STATIC_ADDR, "xi.static.addr", xicgen_static_addr) \
     X(PTR_LOAD, "xi.ptr.load", xicgen_ptr_load) \
     X(PTR_STORE, "xi.ptr.store", xicgen_ptr_store) \
     X(PTR_COPY_NONOVERLAP, "xi.ptr.copy.nonoverlap", xicgen_ptr_copy_nonoverlap)

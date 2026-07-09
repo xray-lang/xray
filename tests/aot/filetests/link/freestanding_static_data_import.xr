@@ -1,3 +1,4 @@
+import mem
 import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
@@ -35,4 +36,11 @@ fn imported_static_strings(i: int) -> int {
     return NAMED.code + LABELED.1 + NESTED_LABEL.0.0 + NESTED_LABEL.1.1 +
         LABELED_ROWS[i].1 + LABEL_ROWS[i].code + LABEL_GROUPS[i].inner.code +
         LABEL_GROUPS[i].base
+}
+
+@c_export("xray_imported_static_addr")
+fn imported_static_addr() -> int {
+    return mem.addressOf(RawPtr<int>.of(MAGIC)) +
+        mem.addressOf(RawPtr<[int; 4]>.of(TABLE)) +
+        mem.addressOf(RawPtr<[uint8; 4]>.of(BYTES))
 }
