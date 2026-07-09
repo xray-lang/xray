@@ -228,7 +228,7 @@ void http_url_free(XrHttpUrl *url) {
 
 /* ========== Request Config Initialization ========== */
 
-void xr_http_request_config_init(XrHttpRequestConfig *config) {
+void http_client_request_config_init(XrHttpRequestConfig *config) {
     memset(config, 0, sizeof(XrHttpRequestConfig));
     config->method = XR_HTTP_METHOD_GET;
     config->timeout_ms = XR_HTTP_DEFAULT_TIMEOUT;
@@ -238,7 +238,7 @@ void xr_http_request_config_init(XrHttpRequestConfig *config) {
 
 /* ========== Error Description ========== */
 
-const char *xr_http_error_string(XrHttpError err) {
+const char *http_client_error_string(XrHttpError err) {
     return xr_net_error_string(err);
 }
 
@@ -294,7 +294,7 @@ static int copy_headers_compact(XrHttpResult *result, const XrHttpHeader *src, s
 
 /* ========== Result Cleanup ========== */
 
-void xr_http_result_free(XrHttpResult *result) {
+void http_client_result_free(XrHttpResult *result) {
     if (!result)
         return;
     if (result->status_text) {
@@ -527,7 +527,7 @@ static bool http_same_origin(const char *url_a, const char *url_b) {
 
 /* ========== Main Request Function ========== */
 
-XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) {
+XrHttpResult http_client_request(XrVMRuntime *X, const XrHttpRequestConfig *config) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
 
@@ -611,7 +611,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                         strip_auth = true;
 
                     // Free current result, continue redirect
-                    xr_http_result_free(&result);
+                    http_client_result_free(&result);
                     xr_free(current_url);
                     current_url = new_url;
                     redirect_count++;

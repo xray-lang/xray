@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * http_client.h - HTTP client implementation
+ * http_client.h - HTTP client native boundary
  *
  * KEY CONCEPT:
- *   Synchronous HTTP requests (GET/POST/PUT/DELETE), URL parsing,
- *   connection pooling, and timeout control.
+ *   Internal HTTP/1.x client data-plane used by http.request and xpkg.
+ *   User-facing protocol helpers live in stdlib/http/http.xr.
  */
 
 #ifndef XR_STDLIB_HTTP_CLIENT_H
@@ -87,7 +87,7 @@ typedef struct {
     char *error_msg;        // Error message
 } XrHttpResult;
 
-/* ========== API Functions ========== */
+/* ========== Internal Client API ========== */
 
 /*
  * Parse URL
@@ -104,26 +104,26 @@ void http_url_free(XrHttpUrl *url);
 /*
  * Initialize request config
  */
-XR_FUNC void xr_http_request_config_init(XrHttpRequestConfig *config);
+void http_client_request_config_init(XrHttpRequestConfig *config);
 
 /*
  * Execute HTTP request
  *
  * @param X       Isolate instance (for per-isolate connection pools)
  * @param config  Request config
- * @return        XrHttpResult (caller must call xr_http_result_free to free)
+ * @return        XrHttpResult (caller must call http_client_result_free to free)
  */
-XR_FUNC XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config);
+XrHttpResult http_client_request(XrVMRuntime *X, const XrHttpRequestConfig *config);
 
 /*
  * Free response result
  */
-XR_FUNC void xr_http_result_free(XrHttpResult *result);
+void http_client_result_free(XrHttpResult *result);
 
 /*
  * Get error description
  */
-XR_FUNC const char *xr_http_error_string(XrHttpError err);
+const char *http_client_error_string(XrHttpError err);
 
 // HTTP connection pool is managed per-Isolate via XrHttpContext.conn_pool
 // (see http.h). There is no global pool — each Isolate owns its own pool,
