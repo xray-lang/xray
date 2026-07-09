@@ -184,9 +184,6 @@ typedef struct XrH2Pool XrH2Pool;
 
 typedef struct XrH2Request {
     const char *method;
-    const char *path;
-    const char *authority;
-    const char *scheme;
     XrHttpHeader *headers;
     int header_count;
     const char *body;
@@ -195,12 +192,8 @@ typedef struct XrH2Request {
 
 typedef struct XrH2Response {
     int status;
-    XrHttpHeader *headers;
-    int header_count;
     char *body;
     size_t body_len;
-    XrH2ErrorCode error;
-    char *error_msg;
 } XrH2Response;
 
 XrH2Pool *http2_client_pool_create(void);
