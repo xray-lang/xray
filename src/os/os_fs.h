@@ -42,12 +42,12 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
-#include "../shared/xr_path_core.h"
+#include "../shared/xr_path_limit.h"
 
 // Cross-platform maximum path length. Shared with freestanding AOT helpers so
 // VM and AOT stack path buffers follow one platform policy.
 #ifndef XR_PATH_MAX
-#define XR_PATH_MAX XR_PATH_CORE_MAX_PATH
+#define XR_PATH_MAX XR_PATH_LIMIT_MAX_PATH
 #endif
 
 #ifdef __cplusplus
