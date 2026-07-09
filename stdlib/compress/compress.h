@@ -20,25 +20,9 @@
  * DESIGN NOTE — this module is the CANONICAL compression entry point.
  * ====================================================================
  *
- * Three separate compression layers exist for historical reasons:
- *
- *   1. stdlib/compress/         — this module. Full-featured gzip +
- *                                 deflate + zlib + CRC32 + Adler32,
- *                                 both caller-buffer and
- *                                 xr_malloc-backed allocating APIs,
- *                                 exposed as the `compress` xray
- *                                 module.
- *
- *   2. stdlib/http/http_compress — HTTP-specific gzip/deflate with
- *                                  Content-Encoding auto-detect and
- *                                  a compressor object pool.
- *
- *   3. stdlib/ws/ws_deflate     — RFC 7692 permessage-deflate with
- *                                  Z_SYNC_FLUSH trailer handling.
- *
- * Consolidation: expose a stateful stream API here, then reduce
- * http_compress and ws_deflate to thin wrappers. New features
- * should go HERE — the other two layers are maintenance-only.
+ * This module is the only stdlib compression implementation. HTTP content
+ * encoding and WS permessage-deflate reuse the helpers below directly instead
+ * of growing module-local zlib wrappers.
  */
 
 #ifndef XR_STDLIB_COMPRESS_H

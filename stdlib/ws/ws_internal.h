@@ -247,13 +247,6 @@ XrWsMessage *ws_conn_recv_try(XrWebSocket *ws, bool *need_more);
 // Returns: 0 = complete, -1 = error, -2 = would block (need to wait for write).
 int ws_conn_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, size_t len);
 
-/*
- * Decompress a negotiated permessage-deflate payload for the native receive
- * path. max_out is a hard zip-bomb guard. Caller owns *out on success.
- */
-int ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
-                          size_t *out_len);
-
 // Free message.
 void ws_message_free(XrWsMessage *msg);
 

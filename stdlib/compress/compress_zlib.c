@@ -19,8 +19,8 @@
  * WHY A SEPARATE FILE:
  *   compress.c implements RFC 1951 deflate from scratch in pure C
  *   (no external dependency). This file complements it with zlib-
- *   backed streaming for callers (ws_deflate, http_compress) that
- *   need Z_SYNC_FLUSH or gzip framing — capabilities the from-
+ *   backed streaming for HTTP and WS callers that need Z_SYNC_FLUSH
+ *   or gzip framing — capabilities the from-
  *   scratch implementation does not (yet) expose. Both files are
  *   compiled into the same `compress` module.
  */
@@ -474,7 +474,7 @@ XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len, void **out
     return 0;
 }
 
-/* ========== Content-Encoding detection (moved from http_compress) ========== */
+/* ========== Content-Encoding detection ========== */
 
 XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding) {
     if (!encoding)
