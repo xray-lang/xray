@@ -87,7 +87,7 @@ static int cluster_proof_equal(const uint8_t *a, const uint8_t *b) {
 
 /* ========== Output Queue ========== */
 
-void xr_outq_init(XrOutputQueue *q) {
+static void cluster_outq_init(XrOutputQueue *q) {
     q->head = NULL;
     q->tail = NULL;
     q->total_bytes = 0;
@@ -124,19 +124,19 @@ void xr_outq_init(XrOutputQueue *q) {
  * down the rest of the node state. Calling this multiple times is
  * safe — it guards on the fd being >= 0.
  *
- * This is split out from xr_outq_destroy specifically because the
+ * This is split out from cluster_outq_destroy specifically because the
  * destroy path wants to close the *read* end only after the writer
  * coroutine has exited; closing the read end while netpoll still
  * has the fd registered is a use-after-close on the PollDesc.
  */
-void xr_outq_close_write_end(XrOutputQueue *q) {
+static void cluster_outq_close_write_end(XrOutputQueue *q) {
     if (q->notify_pipe[1] >= 0) {
         close(q->notify_pipe[1]);
         q->notify_pipe[1] = -1;
     }
 }
 
-void xr_outq_destroy(XrOutputQueue *q) {
+static void cluster_outq_destroy(XrOutputQueue *q) {
     XrOutFrame *f = q->head;
     while (f) {
         XrOutFrame *next = f->next;
@@ -149,7 +149,7 @@ void xr_outq_destroy(XrOutputQueue *q) {
     q->total_bytes = 0;
     q->frame_count = 0;
     // Close both ends. Write end may already be -1 from an earlier
-    // xr_outq_close_write_end during writer teardown; close is
+    // cluster_outq_close_write_end during writer teardown; close is
     // idempotent against our own -1 guard.
     if (q->notify_pipe[1] >= 0)
         close(q->notify_pipe[1]);
@@ -182,7 +182,7 @@ static void outq_enqueue_locked(XrOutputQueue *q, XrOutFrame *f) {
     }
 }
 
-int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
+static int cluster_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
     if (atomic_load(&q->is_full))
         return -1;
 
@@ -207,7 +207,7 @@ int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
 }
 
 // Zero-copy push: takes ownership of the data pointer (caller must have malloc'd it)
-int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
+static int cluster_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
     if (atomic_load(&q->is_full))
         return -1;
 
@@ -226,7 +226,7 @@ int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
     return 0;
 }
 
-XrOutFrame *xr_outq_pop_all(XrOutputQueue *q) {
+static XrOutFrame *cluster_outq_pop_all(XrOutputQueue *q) {
     xr_amutex_lock(&q->lock);
     XrOutFrame *batch = q->head;
     q->head = NULL;
@@ -240,7 +240,7 @@ XrOutFrame *xr_outq_pop_all(XrOutputQueue *q) {
 
 /* ========== Phi Accrual Failure Detector ========== */
 
-void xr_phi_init(XrPhiDetector *det) {
+void cluster_phi_init(XrPhiDetector *det) {
     memset(det, 0, sizeof(XrPhiDetector));
     det->mean = 5000.0;  // assume 5s heartbeat interval initially
     det->variance = 100.0;
@@ -248,7 +248,7 @@ void xr_phi_init(XrPhiDetector *det) {
     det->sum_sq = 0.0;
 }
 
-void xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms) {
+void cluster_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms) {
     if (det->last_heartbeat_ts > 0) {
         double interval = (double) (now_ms - det->last_heartbeat_ts);
 
@@ -275,7 +275,7 @@ void xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms) {
     det->last_heartbeat_ts = now_ms;
 }
 
-double xr_phi_value(XrPhiDetector *det, int64_t now_ms) {
+double cluster_phi_value(XrPhiDetector *det, int64_t now_ms) {
     if (det->last_heartbeat_ts == 0 || det->sample_count < 2)
         return 0.0;
 
@@ -317,10 +317,10 @@ XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t 
     memset(node->pending_buckets, 0, sizeof(node->pending_buckets));
     node->pending_count = 0;
     xr_amutex_init(&node->pending_lock);
-    xr_outq_init(&node->outq);
+    cluster_outq_init(&node->outq);
     atomic_store(&node->writer_running, false);
     atomic_store(&node->writer_exited, false);
-    xr_phi_init(&node->phi);
+    cluster_phi_init(&node->phi);
     node->next = NULL;
     return node;
 }
@@ -336,7 +336,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
      *   1. Clear writer_running so any writer iteration after the
      *      next wake observes the stop signal.
      *   2. Close the write end of notify_pipe (via the dedicated
-     *      xr_outq_close_write_end helper). xr_socket_read on the
+     *      cluster_outq_close_write_end helper). xr_socket_read on the
      *      read end then returns 0 (EOF), wakes the coroutine, the
      *      loop breaks, and the writer sets writer_exited.
      *   3. Close the peer socket. Any in-flight send fails cleanly;
@@ -346,7 +346,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
      *      free path from cluster_join), writer_exited
      *      stays false but writer_running is already false, so the
      *      wait is a no-op aside from the bounded timeout.
-     *   5. xr_outq_destroy — safe now because the writer has stopped
+     *   5. cluster_outq_destroy — safe now because the writer has stopped
      *      dereferencing notify_pipe[0]; closing pipe[0] here will
      *      not race the netpoll PollDesc for that fd.
      *   6. Free pending requests and the node struct.
@@ -358,7 +358,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
      * any stuck reader with EBADF.
      */
     atomic_store(&node->writer_running, false);
-    xr_outq_close_write_end(&node->outq);
+    cluster_outq_close_write_end(&node->outq);
     xr_cluster_node_close(node);
 
     if (node->isolate) {
@@ -368,7 +368,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
         }
     }
 
-    xr_outq_destroy(&node->outq);
+    cluster_outq_destroy(&node->outq);
 
     // Free pending requests across every bucket chain. No lock needed
     // here: xr_cluster_node_free runs only after readers and writers
@@ -403,7 +403,7 @@ void xr_cluster_node_close(XrClusterNode *node) {
 int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len) {
     if (!node || node->state == XR_NODE_CLOSING)
         return -1;
-    return xr_outq_push(&node->outq, data, len);
+    return cluster_outq_push(&node->outq, data, len);
 }
 
 // Async send — encode frame and enqueue for writer coroutine
@@ -432,7 +432,7 @@ int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const ui
             xr_free(frame);
             return -1;
         }
-        int rc = xr_outq_push_nocopy(&node->outq, frame, (uint32_t) wrote);
+        int rc = cluster_outq_push_nocopy(&node->outq, frame, (uint32_t) wrote);
         if (rc != 0) {
             xr_free(frame);
             return -1;
@@ -487,7 +487,7 @@ void xr_cluster_node_writer_loop(void *arg) {
 
     while (atomic_load(&node->writer_running) && node->state == XR_NODE_CONNECTED && node->conn) {
         // Pop all queued frames in one lock acquisition
-        XrOutFrame *batch = xr_outq_pop_all(&node->outq);
+        XrOutFrame *batch = cluster_outq_pop_all(&node->outq);
         if (!batch) {
             /*
              * Drain the notify pipe. xr_socket_read on a non-blocking
@@ -588,7 +588,7 @@ void xr_cluster_node_writer_loop(void *arg) {
 
     /*
      * Announce exit to xr_cluster_node_free so its teardown wait on
-     * writer_exited can proceed to xr_outq_destroy. Must be the very
+     * writer_exited can proceed to cluster_outq_destroy. Must be the very
      * last statement in this function — once the flag is set, the
      * caller may close notify_pipe[0] at any time and any further
      * dereference of node->outq would be a use-after-close.

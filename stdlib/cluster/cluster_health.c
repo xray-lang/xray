@@ -52,7 +52,7 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
         if (node->state == XR_NODE_CONNECTED) {
             // Use Phi Accrual detector if enough samples, else fallback
             if (node->phi.sample_count >= 3) {
-                double phi = xr_phi_value(&node->phi, now);
+                double phi = cluster_phi_value(&node->phi, now);
                 if (phi > XR_PHI_THRESHOLD)
                     is_dead = true;
             } else {
