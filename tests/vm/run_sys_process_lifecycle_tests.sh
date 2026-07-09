@@ -132,6 +132,7 @@ NULLISH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_
 MATCH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_match_helper_return_alias_ok.xr"
 HELPER_MATCH_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_match_return_alias_ok.xr"
 MOVE_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_ok.xr"
+DESTRUCTURE_FACTORY_RETURN_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_factory_return_ok.xr"
 HELPER_ARG_ALIAS_WRAPPERS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_arg_alias_wrappers_ok.xr"
 UNSAFE_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_helper_return_alias_ok.xr"
 UNSAFE_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_return_alias_ok.xr"
@@ -161,6 +162,7 @@ PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifec
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
 HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_return_warning.xr"
 HELPER_FACTORY_DISCARD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_discard_warning.xr"
+DESTRUCTURE_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_factory_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -202,6 +204,8 @@ expect_output "process_pipe_match_helper_return_alias_ok" \
 expect_output "process_pipe_helper_match_return_alias_ok" \
     "$HELPER_MATCH_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_move_alias_ok" "$MOVE_ALIAS_OK_SRC" $'0\ntrue'
+expect_output "process_pipe_destructure_factory_return_ok" "$DESTRUCTURE_FACTORY_RETURN_OK_SRC" \
+    $'0\ntrue'
 expect_output "process_pipe_helper_arg_alias_wrappers_ok" \
     "$HELPER_ARG_ALIAS_WRAPPERS_OK_SRC" $'0\ntrue\n0\ntrue'
 expect_output "process_pipe_unsafe_helper_return_alias_ok" \
@@ -298,6 +302,11 @@ expect_warning "process_pipe_helper_factory_discard_warning" \
     "$HELPER_FACTORY_DISCARD_WARNING_SRC" "helper-factory-discard-process-pipe" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly" \
     "sys.Pipe.open returns a Pipe handle; call close() explicitly"
+expect_warning "process_pipe_destructure_factory_return_warning" \
+    "$DESTRUCTURE_FACTORY_RETURN_WARNING_SRC" \
+    $'destructure-factory-process\ndestructure-factory-pipe' \
+    "Process handle 'p' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 
 printf '\nPassed: %d\nFailed: %d\n' "$PASS" "$FAIL"
 
