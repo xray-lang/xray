@@ -1,0 +1,15 @@
+import sys
+import { Pipe } from sys
+
+fn run() {
+    const closePipe = fn(p: Pipe) {
+        print(p.closeRead())
+        print(p.closeWrite())
+    }
+
+    var pipe = sys.Pipe.open()
+    closePipe(pipe!)
+    print("pipe-fn-value")
+}
+
+run()

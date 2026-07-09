@@ -107,6 +107,8 @@ PROCESS_DEFER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_defer_wait.x
 PIPE_DEFER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_defer_close.xr"
 PROCESS_HELPER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_wait.xr"
 PIPE_HELPER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_close.xr"
+PROCESS_FN_VALUE_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_fn_value_wait.xr"
+PIPE_FN_VALUE_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_fn_value_close.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
@@ -125,6 +127,8 @@ expect_output "process_defer_wait" "$PROCESS_DEFER_WAIT_SRC" $'process-defer\n0'
 expect_output "pipe_defer_close" "$PIPE_DEFER_CLOSE_SRC" $'pipe-defer\ntrue\ntrue'
 expect_output "process_helper_wait" "$PROCESS_HELPER_WAIT_SRC" $'helper waited 0\n0'
 expect_output "pipe_helper_close" "$PIPE_HELPER_CLOSE_SRC" $'true\ntrue\npipe-helper'
+expect_output "process_fn_value_wait" "$PROCESS_FN_VALUE_WAIT_SRC" $'fn-value waited 0\n0'
+expect_output "pipe_fn_value_close" "$PIPE_FN_VALUE_CLOSE_SRC" $'true\ntrue\npipe-fn-value'
 expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly"
 expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \
