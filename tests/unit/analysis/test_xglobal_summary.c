@@ -7461,6 +7461,76 @@ TEST(global_evidence_producer_records_explicit_json_shape_access) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_map_literal_and_key_access) {
+    setup_parser_session();
+    const char *source = "fn readScore() -> int {\n"
+                         "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
+                         "    return scores[\"ada\"]\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 1);
+    ASSERT_EQ_UINT(ev.nmap_entries, 2);
+    ASSERT_EQ_UINT(ev.nhash_eqs, 1);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 1);
+    ASSERT_EQ_UINT(ev.map_shapes[0].container_kind, XG_MAP_CONTAINER_MAP);
+    ASSERT_EQ_UINT(ev.map_shapes[0].source, XG_MAP_SHAPE_SRC_LITERAL);
+    ASSERT_EQ_UINT(ev.map_shapes[0].literal_count, 2);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_LITERAL) != 0);
+    ASSERT_EQ_UINT(ev.map_entries[0].shape_id, ev.map_shapes[0].shape_id);
+    ASSERT_EQ_UINT(ev.map_entries[0].entry_ordinal, 0);
+    ASSERT_TRUE((ev.map_entries[0].flags & XG_MAP_ENTRY_CONST_KEY) != 0);
+    ASSERT_TRUE(ev.map_entries[0].prehash != 0);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].type_key, ev.map_shapes[0].key_type_key);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_BUILTIN);
+    ASSERT_EQ_UINT(ev.key_accesses[0].receiver_shape_id, ev.map_shapes[0].shape_id);
+    ASSERT_EQ_UINT(ev.key_accesses[0].op, XG_KEY_ACCESS_INDEX_GET);
+    ASSERT_TRUE((ev.key_accesses[0].flags & XG_KEY_ACCESS_CONST_KEY) != 0);
+    ASSERT_TRUE(ev.key_accesses[0].key_prehash != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotMapShapePlan *shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
+    const XaotHashEqPlan *hash_eq_plan =
+        xaot_bundle_find_hash_eq_plan(&bundle, ev.hash_eqs[0].type_key);
+    const XaotKeyAccessPlan *access_plan =
+        xaot_bundle_find_key_access_plan(&bundle, ev.key_accesses[0].access_id);
+    ASSERT_NOT_NULL(shape_plan);
+    ASSERT_NOT_NULL(hash_eq_plan);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(shape_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
+    ASSERT_EQ_UINT(hash_eq_plan->action, XAOT_HASH_EQ_BUILTIN_INLINE);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "map-shape 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "map-entry 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "hash-eq 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "key-access 0 id=1"));
+    xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
     const char *source = "fn useTable() -> int {\n"
