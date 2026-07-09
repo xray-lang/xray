@@ -684,7 +684,7 @@ void xr_cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node
 
 /* ========== Slow Consumer Detection ========== */
 
-bool xr_cluster_node_is_slow(XrClusterNode *node) {
+bool cluster_node_is_slow(XrClusterNode *node) {
     if (!node)
         return false;
     return atomic_load(&node->outq.is_full);
@@ -964,8 +964,8 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
 
 /* ========== Pending Request API ========== */
 
-XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id, XrVMRuntime *X,
-                                       int max_pending) {
+XrChannel *cluster_node_add_pending(XrClusterNode *node, uint64_t request_id, XrVMRuntime *X,
+                                    int max_pending) {
     XR_DCHECK(node != NULL, "node must not be NULL");
     XR_DCHECK(X != NULL, "isolate must not be NULL");
     if (!node || !X)
@@ -1010,7 +1010,7 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
     return ch;
 }
 
-XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id) {
+XrChannel *cluster_node_take_pending(XrClusterNode *node, uint64_t request_id) {
     if (!node)
         return NULL;
 
