@@ -16,7 +16,10 @@ metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive
 derived_eq_hash|covered|kind=hash|tests/aot/filetests/link|Derived Eq/Hash evidence has global evidence coverage.
 json_shape_direct_index|covered|json-access-plan .*action=direct_index|tests/aot/filetests/cgen|Json static member/key access direct-index path is covered.
 json_dynamic_fallback|covered|json-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
+json_decode_plan|covered|json-codec-plan .*kind=decode action=decode_validate_copy|tests/aot/filetests/cgen|Json.decode<Record> consumes a verified codec plan instead of assembling shape checks ad hoc.
+json_encode_field_table|covered|json-codec-plan .*kind=encode action=encode_field_table|tests/aot/filetests/cgen|Json.encode consumes verified field-table codec evidence.
 record_json_bridge|covered|XG_JSON_SHAPE_RECORD_BRIDGE|tests/unit/analysis|Record type aliases produce Json bridge shape and codec evidence.
+record_access_direct|covered|record-access-plan .*action=direct_field|tests/aot/filetests/cgen|Record field access consumes a verified direct-field plan.
 map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/filetests/cgen|Map/Set static key access consumes prehashed lookup plans.
 map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
 backend_contract_dispatch|covered|XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE|tests/unit/aot|Backend contract accepts verified itable plans only with complete target cases and ABI evidence.
@@ -26,6 +29,7 @@ runtime_hot_loop_benchmarks|covered|run_benchmark.sh|tests/benchmarks/aot/zero_c
 value_level_sroa|covered|allocation-plan .*action=stack|tests/aot/filetests/cgen|Value-level noescape stack allocation is emitted as a verified allocation plan.
 generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
 array_t_concrete_storage|covered|generic-storage-plan .*kind=array action=typed_inline|tests/aot/filetests/link|Array<T> POD lane storage produces a verified typed-inline generic storage plan.
+generic_code_size_policy|covered|generic-code-size-plan .*action=allow_clone|tests/aot/filetests/cgen|Generic clone decisions include a verified static code-size policy plan.
 interface_object_storage|covered|interface-abi .*iface_object.*itable.*boxed_receiver|tests/aot/filetests/cgen|Interface object ABI is covered by boxed receiver storage with verified itable metadata.
 itable_emitter|covered|xrt_itable_method|tests/aot/filetests/cgen|Verified itable backend emission is covered by generated C lookup and installed class itables.
 json_shape_guard|covered|json-access-plan .*action=shape_guard_index|tests/aot/filetests/cgen|Json open-shape static-key access emits shape guard plus fallback helpers.
@@ -34,5 +38,10 @@ map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/ao
 map_set_dense_lookup|covered|key-access-plan .*action=direct_dense_index|tests/aot/filetests/cgen|Dense ordinal int Map/Set literal lookup consumes direct dense-index plans in generated C.
 user_hash_eq_direct_backend|covered|map_set_user_hash_eq_direct_backend_hash_|tests/aot/filetests/cgen|User Hash/Eq direct-call backend consumption passes verified target function pointers to Map/Set helpers.
 fixed_layout_enum_scalarization|covered|enum-scalar-plan .*action=compact_aggregate|tests/aot/filetests/cgen|Enum compact aggregate scalarization ABI is a XaotEnumPlan decision consumed by ABI and prepare.
+derive_clone_plan|covered|derive-plan .*kind=clone action=field_table_sidecar|tests/aot/filetests/cgen|Clone derive emits a verified field-table sidecar plan without pulling reflection metadata.
+sequence_access_plan|covered|sequence-access-plan|tests/aot/filetests/link|Sequence access summaries lower into verified sequence access plans.
+sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array/Bytes/StringBuilder capacity operations lower into verified capacity plans.
+sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evidence lowers into verified bulk operation plans.
+sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/Bytes encoding evidence lowers into verified encoding plans.
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, and body summary payloads materialize back into validated summary rows.
 cross_package_summary_reuse|covered|cache_payload_reuses_cross_package_export_summaries|tests/unit/analysis|Materialized import payloads append cross-package summary rows and update imported-summary cache keys.
