@@ -14,7 +14,7 @@
  *
  * WHY THIS DESIGN:
  *   - Eliminates VM overhead for accept loop and connection management
- *   - Prebuilt routes never touch the VM (zero allocation fast path)
+ *   - Static routes bypass user closures after parsed route dispatch
  *   - Dynamic routes call user closures via xr_stackful_call_closure
  *   - Natural blocking loops instead of continuation state machines
  */
@@ -212,7 +212,7 @@ static bool response_header_is_reserved(const XrHttpHeader *h) {
 
 /*
  * Build HTTP response header into caller-provided buf[1024].
- * Fast path for 200+text/plain and 200+json uses prebuilt prefix + memcpy.
+ * Fast path for 200+text/plain and 200+json uses fixed prefix + memcpy.
  * Extra headers (if non-NULL) are appended after Content-Type before
  * Connection: keep-alive. Returns header length written into buf.
  */
@@ -221,7 +221,7 @@ static int build_response_header(char *buf, int status, const char *content_type
     const char *prefix = NULL;
     size_t prefix_len = 0;
 
-    // Fast path: prebuilt prefix for the two most common combos (no extra headers)
+    // Fast path: fixed prefix for the two most common combos (no extra headers)
     if (status == 200 && extra_count == 0) {
         if (!content_type || strncmp(content_type, "text/plain", 10) == 0) {
             prefix = hdr_200_text;
