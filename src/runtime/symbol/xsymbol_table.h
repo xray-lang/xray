@@ -287,7 +287,6 @@ enum {
     // Newly added builtins append here to keep existing symbol ids stable.
     SYMBOL_RECVOR,
     SYMBOL_DIFF,
-    SYMBOL_PUSH_UNCHECKED,
     SYMBOL_LOCK,
     SYMBOL_UNLOCK,
     SYMBOL_TRYLOCK,
