@@ -1,0 +1,6 @@
+@no_alloc
+fn xray_no_alloc_bigint_literal_reject() -> BigInt {
+    return 123n
+}
+
+print(xray_no_alloc_bigint_literal_reject().toString())
