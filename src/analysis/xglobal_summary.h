@@ -1220,6 +1220,8 @@ XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
                                                const XgEvidenceCacheKey *expected);
 XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
                                                    XgGlobalEvidence *out_evidence);
+XR_FUNC bool xg_global_evidence_reuse_import_summary(XgGlobalEvidence *evidence,
+                                                     const char *payload_text);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H
