@@ -3513,17 +3513,46 @@ else
         "freestanding-profile/no-alloc: rejects indirect allocator use"
 fi
 
-FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_reject.xr"
-FREESTANDING_MEM_PAGE_LOG="$WORK/freestanding_mem_page_reject.log"
-if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_page_reject" \
+FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_hook.xr"
+FREESTANDING_MEM_PAGE_OBJ="$WORK/freestanding_mem_page_hook.o"
+FREESTANDING_MEM_PAGE_LOG="$WORK/freestanding_mem_page_hook.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MEM_PAGE_OBJ" \
         "$FREESTANDING_MEM_PAGE_SRC" >"$FREESTANDING_MEM_PAGE_LOG" 2>&1; then
-    record_fail "freestanding-profile/mem: rejects page allocator member"
-    sed 's/^/      /' "$FREESTANDING_MEM_PAGE_LOG" | sed -n '1,120p'
+    FREESTANDING_MEM_PAGE_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_MEM_PAGE_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MEM_PAGE_C" ]; then
+        expect_log_contains "$FREESTANDING_MEM_PAGE_C" "xrt_mem_page_alloc_default(" \
+            "freestanding-profile/mem: default page alloc lowers through hook-backed helper"
+        expect_log_contains "$FREESTANDING_MEM_PAGE_C" "xrt_mem_page_alloc(" \
+            "freestanding-profile/mem: protected page alloc lowers through hook-backed helper"
+        expect_log_contains "$FREESTANDING_MEM_PAGE_C" "xrt_mem_page_protect(" \
+            "freestanding-profile/mem: page protect lowers through hook-backed helper"
+        expect_log_contains "$FREESTANDING_MEM_PAGE_C" "xrt_mem_page_free(" \
+            "freestanding-profile/mem: page free lowers through hook-backed helper"
+        expect_log_not_contains "$FREESTANDING_MEM_PAGE_C" "mmap" \
+            "freestanding-profile/mem: page hooks avoid hosted mmap"
+        expect_log_not_contains "$FREESTANDING_MEM_PAGE_C" "VirtualAlloc" \
+            "freestanding-profile/mem: page hooks avoid hosted VirtualAlloc"
+        expect_log_not_contains "$FREESTANDING_MEM_PAGE_C" "#include \"xrt_mem.h\"" \
+            "freestanding-profile/mem: page hooks avoid hosted mem header"
+    else
+        record_fail "freestanding-profile/mem: page hook kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MEM_PAGE_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MEM_PAGE_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_MEM_PAGE_OBJ")"
+    FREESTANDING_MEM_PAGE_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_MEM_PAGE_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(xr_hook_page_alloc|xr_hook_page_protect|xr_hook_page_free|xr_hook_panic|memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_MEM_PAGE_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/mem: page hooks undefined symbols stay hook/memcpy-only"
+    else
+        record_fail "freestanding-profile/mem: page hooks unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_MEM_PAGE_UNEXPECTED" | sed 's/^/      /'
+    fi
 else
-    expect_log_contains "$FREESTANDING_MEM_PAGE_LOG" \
-        "freestanding profile rejects mem.pageAlloc" \
-        "freestanding-profile/mem: rejects page allocator member"
+    record_fail "freestanding-profile/mem: page hook object build failed"
+    sed 's/^/      /' "$FREESTANDING_MEM_PAGE_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_NON_NATIVE_LOG="$WORK/freestanding_non_native.log"

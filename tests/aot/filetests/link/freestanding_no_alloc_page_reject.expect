@@ -1,0 +1,5 @@
+args=--profile freestanding
+status=fail
+contains=@no_alloc function 'xray_no_alloc_page_reject' allocates via stdlib 'mem.pageAlloc'
+contains=xray_no_alloc_page_reject
+not_contains=CRASH

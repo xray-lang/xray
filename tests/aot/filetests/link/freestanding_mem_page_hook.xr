@@ -1,0 +1,23 @@
+import mem
+
+@c_export("xray_page_hook_score")
+fn xray_page_hook_score(n: int) -> int {
+    var size = n
+    if (size <= 0) {
+        size = 4096
+    }
+
+    var rw = mem.pageAlloc(size)
+    var rw_addr = mem.addressOf(rw)
+    var rw_freed = mem.pageFree(rw, size)
+
+    var p = mem.pageAlloc(size, mem.PROT_READ | mem.PROT_WRITE)
+    var p_addr = mem.addressOf(p)
+    var protect_ok = mem.pageProtect(p, size, mem.PROT_READ)
+    var freed = mem.pageFree(p, size)
+
+    if (!rw_freed || !protect_ok || !freed) {
+        return -1
+    }
+    return rw_addr + p_addr
+}
