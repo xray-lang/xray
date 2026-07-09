@@ -67,7 +67,6 @@ typedef struct XrHttpHostPool {
 typedef struct XrHttpConnPool {
     XrHttpHostPool *buckets[XR_HTTP_POOL_MAX_HOSTS];  // Hash buckets
     xr_mutex_t lock;                                  // Global lock
-    int total_conns;
     bool initialized;
     XrTlsContext *tls_ctx;     // Shared TLS context
     uint64_t idle_timeout_ms;  // Idle timeout (default 60000ms)
@@ -75,7 +74,6 @@ typedef struct XrHttpConnPool {
 
 /* ========== Connection Pool API ========== */
 
-void http_conn_pool_init(XrHttpConnPool *pool);
 void http_conn_pool_destroy(XrHttpConnPool *pool);
 
 // Get connection from pool, creates new one if none available. Requires
@@ -93,9 +91,6 @@ void http_conn_pool_close(struct XrVMRuntime *X, XrHttpConnPool *pool, XrHttpPoo
 /* Evict idle connections older than pool->idle_timeout_ms.
  * Designed to be called from a timer wheel callback. */
 int http_conn_pool_evict_idle(struct XrVMRuntime *X, XrHttpConnPool *pool);
-
-void http_conn_pool_cleanup(struct XrVMRuntime *X, XrHttpConnPool *pool);
-void http_conn_pool_stats(XrHttpConnPool *pool, int *total, int *idle);
 
 /* ========== Per-Isolate Pool Creation ========== */
 
