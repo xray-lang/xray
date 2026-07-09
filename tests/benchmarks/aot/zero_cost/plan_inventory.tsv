@@ -24,7 +24,7 @@ evidence_cache_manifest|covered|xg-cache-manifest v1|tests/aot/filetests/link|Gl
 evidence_cache_payload_sidecar|covered|xg-cache-payload v1|tests/aot/run_aot_incremental_cache.sh|Evidence cache writes phase payload sidecars and requires payload validation for hits.
 runtime_hot_loop_benchmarks|covered|run_benchmark.sh|tests/benchmarks/aot/zero_cost|AOT zero-cost runtime hot-loop benchmarks are executable.
 value_level_sroa|gap|-|-|Value-level noescape allocation and SROA proof are still pending.
-generic_function_clone|gap|-|-|Specialized function body and ABI clone emission are still pending.
+generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
 array_t_concrete_storage|gap|-|-|Array<T> concrete storage clone is still pending.
 interface_object_storage|gap|-|-|Full interface object storage, Array<Interface>, field, return, and capture ABI are still pending.
 itable_emitter|gap|-|-|Verified itable backend emission is still pending after ABI storage lands.
