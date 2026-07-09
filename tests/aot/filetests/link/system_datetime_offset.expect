@@ -10,3 +10,5 @@ not_contains="stdlib_objects": ["datetime"]
 c_contains=datetime_offset_exp(
 c_contains=xrt_time_local_offset(
 c_contains=xrt_time_local_offset_at(
+c_not_contains=xrt_datetime
+c_not_contains=XR_TAG_DATETIME

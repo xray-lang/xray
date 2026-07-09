@@ -17,4 +17,6 @@ c_contains=xrt_getprop(
 c_contains=xrt_method_0(
 c_contains=xrt_method_1(
 c_contains=xrt_method_2(
+c_not_contains=xrt_datetime
+c_not_contains=XR_TAG_DATETIME
 c_not_contains=xr_load_module_datetime

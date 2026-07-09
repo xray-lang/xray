@@ -154,7 +154,6 @@ typedef struct XrValue {
 #define XR_TAG_ENUM 24
 #define XR_TAG_ITERATOR 25
 #define XR_TAG_REGEX 26
-#define XR_TAG_DATETIME 27
 #define XR_TAG_SYS_MUTEX 28
 #define XR_TAG_SYS_RWLOCK 29
 #define XR_TAG_SYS_CONDVAR 30

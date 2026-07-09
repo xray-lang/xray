@@ -284,8 +284,8 @@ static inline int xrt_arc_value_has_header(XrValue v) {
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
-           v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_DATETIME ||
-           v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
+           v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX ||
+           v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
            v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||
            v.tag == XR_TAG_BUFFER;
 }
