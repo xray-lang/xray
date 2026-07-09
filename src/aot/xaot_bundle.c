@@ -1129,7 +1129,7 @@ static bool xaot_bundle_add_metadata_plans(XaotBundle *bundle, const XgGlobalEvi
                 body_count++;
         }
         for (uint32_t di = 0; di < evidence->ndecls; di++) {
-            if (bit == XG_METADATA_DERIVE && (evidence->decls[di].flags & XG_DECL_DERIVE) != 0)
+            if (bit == XG_METADATA_DERIVE && evidence->decls[di].derive_flags != 0)
                 decl_count++;
         }
         if (!xaot_bundle_add_metadata_plan(bundle, bit, body_count, decl_count))

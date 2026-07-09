@@ -1,0 +1,11 @@
+@derive(Eq, Hash)
+class Key {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+var key = Key(7)
+print(key.value)

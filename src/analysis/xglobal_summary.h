@@ -32,7 +32,7 @@ typedef uint32_t XgGenericInstId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 1,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 2,
 };
 
 typedef enum XgBuildProfile {
@@ -229,6 +229,7 @@ typedef struct XgDeclSummary {
     uint32_t type_key;
     uint32_t signature_key;
     uint32_t source_span_id;
+    uint32_t derive_flags;
 } XgDeclSummary;
 
 typedef struct XgClassSummary {

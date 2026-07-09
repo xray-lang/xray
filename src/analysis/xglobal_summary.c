@@ -84,7 +84,8 @@ static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     hash = hash_u32(hash, row->name_id);
     hash = hash_u32(hash, row->type_key);
     hash = hash_u32(hash, row->signature_key);
-    return hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->source_span_id);
+    return hash_u32(hash, row->derive_flags);
 }
 
 static uint64_t hash_class_summary(uint64_t hash, const XgClassSummary *row) {
@@ -1608,9 +1609,11 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
-        fprintf(out, "decl %u id=%u module=%u kind=%s flags=0x%x name=%u type=%u sig=%u span=%u\n",
+        fprintf(out,
+                "decl %u id=%u module=%u kind=%s flags=0x%x name=%u type=%u sig=%u span=%u "
+                "derive=0x%x\n",
                 i, d->decl_id, d->module_id, xg_decl_kind_name(d->kind), d->flags, d->name_id,
-                d->type_key, d->signature_key, d->source_span_id);
+                d->type_key, d->signature_key, d->source_span_id, d->derive_flags);
     }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *c = &evidence->classes[i];

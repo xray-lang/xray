@@ -2775,6 +2775,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         decl.flags |= XG_DECL_FINAL;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
+    decl.derive_flags = derive_flags;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
     for (int i = 0; i < cls->method_count; i++) {
@@ -2919,6 +2920,7 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     decl.source_span_id = (uint32_t) node->line;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
+    decl.derive_flags = derive_flags;
     return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
 }
 

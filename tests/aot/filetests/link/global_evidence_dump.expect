@@ -3,10 +3,10 @@ contains=xaot-plan v0
 contains=xglobal-evidence v1 profile=native_release
 contains=build-key module=1
 contains=xg-cache-manifest v1 phases=0xf
-contains=xg-cache-key v1 schema=1 phase=1 module=1
-contains=xg-cache-key v1 schema=1 phase=2 module=1
-contains=xg-cache-key v1 schema=1 phase=3 module=1
-contains=xg-cache-key v1 schema=1 phase=4 module=1
+contains=xg-cache-key v1 schema=2 phase=1 module=1
+contains=xg-cache-key v1 schema=2 phase=2 module=1
+contains=xg-cache-key v1 schema=2 phase=3 module=1
+contains=xg-cache-key v1 schema=2 phase=4 module=1
 contains=counts decls=2 classes=0 methods=0
 regex=body [0-9]+ func=[0-9]+ module=1 decl=[0-9]+ class=0 method=0 .*kind=function
 regex=callsite [0-9]+ id=[0-9]+ owner=[0-9]+ span=[0-9]+ kind=direct_func
