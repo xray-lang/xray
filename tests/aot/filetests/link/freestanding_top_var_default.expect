@@ -10,12 +10,16 @@ c_contains=[0] = XR_FROM_INT(INT64_C(0)),
 c_contains=[1] = XR_FROM_FLOAT(0x0p+0),
 c_contains=[2] = XR_FALSE_VAL,
 c_contains=[3] = XR_NULL_VAL,
+c_contains=[4] = XR_NULL_VAL,
+c_contains=[5] = XR_NULL_VAL,
 c_contains=xray_top_var_default
 c_contains=xrt_shared[0] =
 c_not_contains=xrt_shared[0] = XR_FROM_INT(INT64_C(0))
 c_not_contains=xrt_shared[1] = XR_FROM_FLOAT(0x0p+0)
 c_not_contains=xrt_shared[2] = XR_FALSE_VAL
 c_not_contains=xrt_shared[3] = XR_NULL_VAL
+c_not_contains=xrt_shared[4] = XR_NULL_VAL
+c_not_contains=xrt_shared[5] = XR_NULL_VAL
 c_not_contains=#include "xrt.h"
 not_contains=xray_rt_coro
 not_contains=xray_core

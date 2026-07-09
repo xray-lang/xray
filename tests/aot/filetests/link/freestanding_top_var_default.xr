@@ -2,11 +2,14 @@ var COUNTER: int
 var SCALE: float
 var ENABLED: bool
 var MAYBE: int?
+var MAYBE_LABEL: string?
+var MAYBE_CHAR: char?
 
 @c_export("xray_top_var_default")
 fn xray_top_var_default() -> int {
     COUNTER = COUNTER + 7
-    if (SCALE == 0.0 && ENABLED == false && MAYBE == null) {
+    if (SCALE == 0.0 && ENABLED == false && MAYBE == null && MAYBE_LABEL == null &&
+        MAYBE_CHAR == null) {
         return COUNTER
     }
     return 0
