@@ -644,17 +644,17 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
     const char *static_resp = NULL;
     size_t static_len = 0;
 
-    XrRouteHandler found_handler = xr_router_find(ctx->router, method, path_str, pure_path_len,
-                                                  &params, &user_data, &static_resp, &static_len);
+    XrRouteKind route_kind = xr_router_find(ctx->router, method, path_str, pure_path_len, &params,
+                                            &user_data, &static_resp, &static_len);
 
-    if (static_resp) {
+    if (route_kind == XR_ROUTE_STATIC && static_resp) {
         HttpRawResponse r =
             format_response_arena(&ctx->req_arena, 200, NULL, static_resp, static_len);
         return http_conn_start_write(X, ctx, r.data, r.len, http_conn_loop, result);
     }
 
     // WebSocket upgrade route
-    if (found_handler == XR_ROUTE_HANDLER_WEBSOCKET && user_data) {
+    if (route_kind == XR_ROUTE_WEBSOCKET && user_data) {
         char *hdr_copy = xr_arena_strndup(&ctx->req_arena, ctx->read_buf, ctx->buf_used);
         if (!hdr_copy) {
             return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
@@ -669,7 +669,7 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
         return xr_call_closure(X, ws_handler, &ws_conn, 1, http_conn_ws_handler_done, ctx, result);
     }
 
-    if (user_data) {
+    if (route_kind == XR_ROUTE_DYNAMIC && user_data) {
         ctx->handler = (XrClosure *) user_data;
         XrCoroutine *coro = xr_current_coro(X);
 

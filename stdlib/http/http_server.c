@@ -82,7 +82,7 @@ void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char 
     server->route_closures[server->route_closure_count++] = handler;
 
     // Register to router (closure stored in user_data)
-    xr_router_add(server->router, method, path, (XrRouteHandler) 1, (void *) handler);
+    xr_router_add(server->router, method, path, (void *) handler);
 }
 
 /*
