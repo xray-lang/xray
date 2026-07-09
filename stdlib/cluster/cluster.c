@@ -1507,7 +1507,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                             topic[topic_len] = '\0';
                             uint32_t val_offset = 2 + topic_len;
                             uint32_t val_len = payload_len - val_offset;
-                            xr_cluster_topic_handle_publish(c, node, topic, recv_buf + val_offset,
+                            cluster_topic_handle_publish(c, node, topic, recv_buf + val_offset,
                                                             val_len, hop_limit);
                         }
                     }
@@ -1557,7 +1557,7 @@ static XrValue cluster_publish_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     XrString *topic_str = XR_TO_STRING(args[0]);
-    int rc = xr_cluster_topic_publish(X, topic_str->data, args[1]);
+    int rc = cluster_topic_publish(X, topic_str->data, args[1]);
     return xr_bool(rc == 0);
 }
 
@@ -1567,7 +1567,7 @@ static XrValue cluster_subscribe_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     XrString *pattern_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = xr_cluster_topic_subscribe(X, pattern_str->data);
+    XrChannel *ch = cluster_topic_subscribe(X, pattern_str->data);
     if (!ch)
         return xr_null();
     return xr_value_from_channel(ch);

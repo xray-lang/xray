@@ -346,7 +346,7 @@ void cluster_topics_destroy(XrCluster *c) {
 
 /* ========== Subscribe ========== */
 
-struct XrChannel *xr_cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
+struct XrChannel *cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !pattern || !c->topic_root)
         return NULL;
@@ -402,7 +402,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrVMRuntime *X, const char *pattern
 
 /* ========== Deliver & Publish ========== */
 
-void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value) {
+void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value) {
     if (!c || !topic || !c->topic_root)
         return;
 
@@ -449,8 +449,8 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
 
 /*
  * Build the wire-format payload shared by both the local publish
- * path (xr_cluster_topic_publish) and the forwarding path
- * (xr_cluster_topic_handle_publish). Layout:
+ * path (cluster_topic_publish) and the forwarding path
+ * (cluster_topic_handle_publish). Layout:
  *
  *   [hop_limit 1B] [topic_len 1B] [topic ...] [value_data ...]
  *
@@ -503,7 +503,7 @@ static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const ui
     xr_amutex_unlock(&c->nodes_lock);
 }
 
-void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char *topic,
+void cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char *topic,
                                      const uint8_t *value_data, uint32_t value_len,
                                      uint8_t hop_limit) {
     if (!c || !topic)
@@ -516,7 +516,7 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const ch
 
     // Deliver to every matching local subscription — this happens
     // regardless of hop_limit because we are the intended recipient.
-    xr_cluster_topic_deliver_local(c, topic, value);
+    cluster_topic_deliver_local(c, topic, value);
 
     /*
      * Controlled flooding. If hop_limit == 0 the originator (or a
@@ -554,13 +554,13 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const ch
     xr_frame_buf_free(&fb);
 }
 
-int xr_cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
+int cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !topic)
         return -1;
 
     // Deliver to local subscribers first
-    xr_cluster_topic_deliver_local(c, topic, value);
+    cluster_topic_deliver_local(c, topic, value);
 
     /*
      * Build wire frame with the cluster-wide default hop limit. Each

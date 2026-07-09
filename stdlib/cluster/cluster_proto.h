@@ -100,7 +100,7 @@ typedef enum {
 /*
  * Default hop-limit for TOPIC_PUBLISH frames that cross node
  * boundaries via the controlled-flooding forwarder (see
- * xr_cluster_topic_handle_publish in cluster_topic.c).
+ * cluster_topic_handle_publish in cluster_topic.c).
  *
  * Every outgoing TOPIC_PUBLISH payload starts with a hop_limit byte.
  * The originating publisher starts with

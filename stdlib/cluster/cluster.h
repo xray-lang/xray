@@ -382,11 +382,11 @@ typedef struct XrTopicSubscription {
 // Supports wildcard: "*" matches one segment, ">" matches remaining segments.
 // Example: "events.*" matches "events.user" but not "events.user.login"
 //          "events.>" matches "events.user" and "events.user.login"
-XR_FUNC struct XrChannel *xr_cluster_topic_subscribe(struct XrVMRuntime *X, const char *pattern);
+struct XrChannel *cluster_topic_subscribe(struct XrVMRuntime *X, const char *pattern);
 
 // Publish a value to a topic. Delivers to all matching local subscriptions
 // and forwards to all connected nodes.
-XR_FUNC int xr_cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue value);
+int cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue value);
 
 /*
  * Handle incoming TOPIC_PUBLISH frame from a remote node.
@@ -402,12 +402,12 @@ XR_FUNC int xr_cluster_topic_publish(struct XrVMRuntime *X, const char *topic, X
  *
  * The value is delivered to local subscribers regardless of hop_limit.
  */
-XR_FUNC void xr_cluster_topic_handle_publish(XrCluster *c, struct XrClusterNode *from,
-                                             const char *topic, const uint8_t *value_data,
-                                             uint32_t value_len, uint8_t hop_limit);
+void cluster_topic_handle_publish(XrCluster *c, struct XrClusterNode *from, const char *topic,
+                                  const uint8_t *value_data, uint32_t value_len,
+                                  uint8_t hop_limit);
 
 // Deliver to local subscribers matching the topic
-XR_FUNC void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
+void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
 
 /*
  * Topic trie lifecycle. cluster_topics_init must be called once
