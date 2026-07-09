@@ -1153,7 +1153,6 @@ static int ws_connect_parse_response(XrWebSocket *ws) {
     if (ws_get_header_value(response, "Sec-WebSocket-Extensions", ext_val, sizeof(ext_val))) {
         if (ws_header_list_has_token(ext_val, "permessage-deflate")) {
             ws->deflate_enabled = true;
-            ws->deflate_no_context = true;  // we requested no_context_takeover
         }
     }
     return 0;
@@ -2316,7 +2315,6 @@ XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *requ
     ws->is_server = true;         // Server-side connection: no masking on send
     ws->isolate = isolate;        // Store isolate for coroutine-aware I/O
     ws->deflate_enabled = client_deflate;
-    ws->deflate_no_context = true;
 
     // Socket should already be non-blocking from the accept, but ensure it
     // (Required for coroutine-aware I/O with netpoll)

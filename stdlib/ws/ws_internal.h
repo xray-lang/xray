@@ -194,8 +194,7 @@ typedef struct XrWebSocket {
     bool ping_in_flight;         // true if waiting for pong
 
     // permessage-deflate (RFC 7692)
-    bool deflate_enabled;     // Extension negotiated successfully
-    bool deflate_no_context;  // no_context_takeover (per-message independent)
+    bool deflate_enabled;  // Extension negotiated successfully
 
     // Cached PollDesc (avoids fdmap lookup on every yield)
     void *cached_pd;
