@@ -37,10 +37,6 @@ typedef struct XrHttpContext {
     _Atomic int read_timeout_ms;        // Read timeout (ms)
     _Atomic int current_conns;          // Current connection count
 
-    /* === Server Stats (atomic, lock-free) === */
-    _Atomic uint64_t total_requests;        // Total requests served
-    _Atomic uint64_t total_conns_accepted;  // Total connections accepted
-
     /* === Connection Pools (per-isolate) === */
     XrConnPool *conn_pool;     // TCP/TLS connection pool (net layer)
     XrH2Pool *h2_client_pool;  // HTTP/2 client connection pool
@@ -66,8 +62,5 @@ XR_FUNC XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nar
 
 // http.config(opts) -> void
 XR_FUNC XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc);
-
-// http.serverStats() -> Json { currentConns, totalRequests, totalConns }
-XR_FUNC XrValue xr_http_server_stats(XrVMRuntime *X, XrValue *args, int argc);
 
 #endif  // XR_STDLIB_HTTP_H

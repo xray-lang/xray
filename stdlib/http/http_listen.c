@@ -1299,8 +1299,6 @@ static XrCFuncResult http_listen_cont(XrVMRuntime *X, int status, XrValue resume
             atomic_fetch_add(&ctx->current_conns, 1);
         }
 
-        atomic_fetch_add(&ctx->total_conns_accepted, 1);
-
         // Spawn stackless connection coroutine
         XrValue conn_args[2] = {xr_int(client_fd), XR_FROM_PTR(ctx)};
         XrCoroutine *coro = xr_coro_create_vm_cfunc(X, http_conn_init, conn_args, 2, "http.conn");
@@ -1386,7 +1384,7 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
 }
 
 /* ======================================================================
- * Config and server stats helpers (exported as module functions)
+ * Config helper (exported as module function)
  * ====================================================================== */
 
 // http.config(opts) -> void
@@ -1421,21 +1419,4 @@ XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc) {
         atomic_store(&ctx->read_timeout_ms, (int) XR_TO_INT(v));
 
     return xr_null();
-}
-
-// http.serverStats() -> Json { currentConns, totalRequests, totalConns }
-XrValue xr_http_server_stats(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx)
-        return xr_null();
-
-    XrJson *j = xr_json_new(xr_current_coro(X));
-    xr_json_set_by_key(X, j, "currentConns", XR_FROM_INT(atomic_load(&ctx->current_conns)));
-    xr_json_set_by_key(X, j, "totalRequests",
-                       XR_FROM_INT((int64_t) atomic_load(&ctx->total_requests)));
-    xr_json_set_by_key(X, j, "totalConns",
-                       XR_FROM_INT((int64_t) atomic_load(&ctx->total_conns_accepted)));
-    return xr_json_value(j);
 }

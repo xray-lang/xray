@@ -68,7 +68,6 @@ ws.hasError(conn)               // 检查是否有错误
 - `http.ws(path, handler)` - 添加 WebSocket upgrade 路由
 - `http.listen(port)` - 监听端口
 - `http.config(options)` - 配置服务器限制和超时
-- `http.serverStats()` - 读取服务器计数
 - `http.stopServer()` - 停止服务器
 
 ### HTTP/2 服务端
