@@ -3960,16 +3960,39 @@ static bool verify_options_action_valid(uint8_t action) {
     }
 }
 
+static uint8_t verify_options_row_unproven_reason(const XgGlobalEvidence *ev,
+                                                  const XgOptionsBagSummary *options) {
+    const XgCallsiteSummary *callsite;
+    const XgRecordShapeSummary *param_shape;
+    const XgRecordShapeSummary *supplied_shape = NULL;
+    if (!ev || !options || !verify_options_action_valid(options->action))
+        return XAOT_OPTIONS_UNPROVEN_INVALID_ACTION;
+    callsite = xg_global_evidence_find_callsite(ev, options->callsite_id);
+    if (!callsite)
+        return XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE;
+    if (callsite->owner_func_id != options->owner_func_id)
+        return XAOT_OPTIONS_UNPROVEN_OWNER_MISMATCH;
+    param_shape = xg_global_evidence_find_record_shape(ev, options->param_shape_id);
+    if (!param_shape || param_shape->module_id != options->module_id ||
+        param_shape->shape_kind != XG_RECORD_SHAPE_OPTIONS)
+        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+    if (options->supplied_count > param_shape->field_count ||
+        options->default_count > param_shape->field_count ||
+        options->required_count > param_shape->field_count)
+        return XAOT_OPTIONS_UNPROVEN_COUNT_MISMATCH;
+    if (options->supplied_shape_id != XG_NO_ID) {
+        supplied_shape = xg_global_evidence_find_record_shape(ev, options->supplied_shape_id);
+        if (!supplied_shape || supplied_shape->module_id != options->module_id)
+            return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+        if (options->supplied_count > supplied_shape->field_count)
+            return XAOT_OPTIONS_UNPROVEN_COUNT_MISMATCH;
+    }
+    return XAOT_OPTIONS_UNPROVEN_NONE;
+}
+
 static uint8_t verify_options_action_for(const XgGlobalEvidence *ev,
                                          const XgOptionsBagSummary *options) {
-    if (!ev || !options || !verify_options_action_valid(options->action))
-        return XAOT_OPTIONS_REJECT;
-    if (!xg_global_evidence_find_callsite(ev, options->callsite_id))
-        return XAOT_OPTIONS_REJECT;
-    if (!xg_global_evidence_find_record_shape(ev, options->param_shape_id))
-        return XAOT_OPTIONS_REJECT;
-    if (options->supplied_shape_id != XG_NO_ID &&
-        !xg_global_evidence_find_record_shape(ev, options->supplied_shape_id))
+    if (verify_options_row_unproven_reason(ev, options) != XAOT_OPTIONS_UNPROVEN_NONE)
         return XAOT_OPTIONS_REJECT;
     if ((options->flags & XG_OPTIONS_MISSING_REQUIRED) != 0)
         return XAOT_OPTIONS_REQUIRED_CHECK;
@@ -3985,16 +4008,7 @@ static uint8_t verify_options_action_for(const XgGlobalEvidence *ev,
 
 static uint8_t verify_options_reason_for(const XgGlobalEvidence *ev,
                                          const XgOptionsBagSummary *options) {
-    if (!ev || !options || !verify_options_action_valid(options->action))
-        return XAOT_OPTIONS_UNPROVEN_INVALID_ACTION;
-    if (!xg_global_evidence_find_callsite(ev, options->callsite_id))
-        return XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE;
-    if (!xg_global_evidence_find_record_shape(ev, options->param_shape_id))
-        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
-    if (options->supplied_shape_id != XG_NO_ID &&
-        !xg_global_evidence_find_record_shape(ev, options->supplied_shape_id))
-        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
-    return XAOT_OPTIONS_UNPROVEN_NONE;
+    return verify_options_row_unproven_reason(ev, options);
 }
 
 static uint32_t verify_options_evidence_for(const XgGlobalEvidence *ev,
@@ -5108,6 +5122,12 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     for (uint32_t i = 0; i < ev->noptions_bags; i++) {
         const XgOptionsBagSummary *options = &ev->options_bags[i];
         const XaotOptionsPlan *plan;
+        if (options->options_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT options evidence has no id");
+        for (uint32_t j = i + 1; j < ev->noptions_bags; j++) {
+            if (ev->options_bags[j].options_id == options->options_id)
+                return set_error(errbuf, errbuf_len, "AOT options evidence id is duplicated");
+        }
         expected_options_plans++;
         plan = xaot_bundle_find_options_plan(bundle, options->options_id);
         if (!plan)

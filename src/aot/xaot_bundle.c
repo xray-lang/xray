@@ -2316,16 +2316,39 @@ static bool options_action_valid(uint8_t action) {
     }
 }
 
+static uint8_t options_row_unproven_reason(const XgGlobalEvidence *evidence,
+                                           const XgOptionsBagSummary *options) {
+    const XgCallsiteSummary *callsite;
+    const XgRecordShapeSummary *param_shape;
+    const XgRecordShapeSummary *supplied_shape = NULL;
+    if (!evidence || !options || !options_action_valid(options->action))
+        return XAOT_OPTIONS_UNPROVEN_INVALID_ACTION;
+    callsite = xg_global_evidence_find_callsite(evidence, options->callsite_id);
+    if (!callsite)
+        return XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE;
+    if (callsite->owner_func_id != options->owner_func_id)
+        return XAOT_OPTIONS_UNPROVEN_OWNER_MISMATCH;
+    param_shape = xg_global_evidence_find_record_shape(evidence, options->param_shape_id);
+    if (!param_shape || param_shape->module_id != options->module_id ||
+        param_shape->shape_kind != XG_RECORD_SHAPE_OPTIONS)
+        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+    if (options->supplied_count > param_shape->field_count ||
+        options->default_count > param_shape->field_count ||
+        options->required_count > param_shape->field_count)
+        return XAOT_OPTIONS_UNPROVEN_COUNT_MISMATCH;
+    if (options->supplied_shape_id != XG_NO_ID) {
+        supplied_shape = xg_global_evidence_find_record_shape(evidence, options->supplied_shape_id);
+        if (!supplied_shape || supplied_shape->module_id != options->module_id)
+            return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+        if (options->supplied_count > supplied_shape->field_count)
+            return XAOT_OPTIONS_UNPROVEN_COUNT_MISMATCH;
+    }
+    return XAOT_OPTIONS_UNPROVEN_NONE;
+}
+
 static uint8_t options_action_for(const XgGlobalEvidence *evidence,
                                   const XgOptionsBagSummary *options) {
-    if (!evidence || !options || !options_action_valid(options->action))
-        return XAOT_OPTIONS_REJECT;
-    if (!xg_global_evidence_find_callsite(evidence, options->callsite_id))
-        return XAOT_OPTIONS_REJECT;
-    if (!xg_global_evidence_find_record_shape(evidence, options->param_shape_id))
-        return XAOT_OPTIONS_REJECT;
-    if (options->supplied_shape_id != XG_NO_ID &&
-        !xg_global_evidence_find_record_shape(evidence, options->supplied_shape_id))
+    if (options_row_unproven_reason(evidence, options) != XAOT_OPTIONS_UNPROVEN_NONE)
         return XAOT_OPTIONS_REJECT;
     if ((options->flags & XG_OPTIONS_MISSING_REQUIRED) != 0)
         return XAOT_OPTIONS_REQUIRED_CHECK;
@@ -2341,16 +2364,7 @@ static uint8_t options_action_for(const XgGlobalEvidence *evidence,
 
 static uint8_t options_reason_for(const XgGlobalEvidence *evidence,
                                   const XgOptionsBagSummary *options) {
-    if (!evidence || !options || !options_action_valid(options->action))
-        return XAOT_OPTIONS_UNPROVEN_INVALID_ACTION;
-    if (!xg_global_evidence_find_callsite(evidence, options->callsite_id))
-        return XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE;
-    if (!xg_global_evidence_find_record_shape(evidence, options->param_shape_id))
-        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
-    if (options->supplied_shape_id != XG_NO_ID &&
-        !xg_global_evidence_find_record_shape(evidence, options->supplied_shape_id))
-        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
-    return XAOT_OPTIONS_UNPROVEN_NONE;
+    return options_row_unproven_reason(evidence, options);
 }
 
 static uint32_t options_evidence_for(const XgGlobalEvidence *evidence,
@@ -5676,6 +5690,10 @@ static const char *options_unproven_reason_name(uint8_t reason) {
             return "missing_callsite";
         case XAOT_OPTIONS_UNPROVEN_STALE_SHAPE:
             return "stale_shape";
+        case XAOT_OPTIONS_UNPROVEN_OWNER_MISMATCH:
+            return "owner_mismatch";
+        case XAOT_OPTIONS_UNPROVEN_COUNT_MISMATCH:
+            return "count_mismatch";
         default:
             return "unknown";
     }
