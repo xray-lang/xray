@@ -151,15 +151,40 @@ static bool xa_freestanding_top_const_fixed_array_element_allowed(const XrCtValu
     return xa_freestanding_top_const_aggregate_scalar_allowed(value);
 }
 
+static bool xa_freestanding_top_const_string_fixed_array_allowed_depth(const XrCtValue *value,
+                                                                       int remaining_dims) {
+    if (!value || remaining_dims <= 0 || value->kind != XR_CT_FIXED_ARRAY)
+        return false;
+    const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+    if (array->count <= 0 || !array->elements)
+        return false;
+    for (int i = 0; i < array->count; i++) {
+        if (array->elements[i].kind == XR_CT_STRING)
+            continue;
+        if (remaining_dims > 1 && xa_freestanding_top_const_string_fixed_array_allowed_depth(
+                                      &array->elements[i], remaining_dims - 1))
+            continue;
+        return false;
+    }
+    return true;
+}
+
 static bool xa_freestanding_top_const_string_fixed_array_allowed(const XrCtValue *value) {
+    return xa_freestanding_top_const_string_fixed_array_allowed_depth(value, 2);
+}
+
+static bool xa_freestanding_top_const_root_string_fixed_array_allowed(const XrCtValue *value) {
     if (!value || value->kind != XR_CT_FIXED_ARRAY)
         return false;
     const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
     if (array->count <= 0 || !array->elements)
         return false;
     for (int i = 0; i < array->count; i++) {
-        if (array->elements[i].kind != XR_CT_STRING)
-            return false;
+        if (array->elements[i].kind == XR_CT_STRING)
+            continue;
+        if (xa_freestanding_top_const_string_fixed_array_allowed(&array->elements[i]))
+            continue;
+        return false;
     }
     return true;
 }
@@ -179,6 +204,8 @@ static bool xa_freestanding_top_const_root_fixed_array_element_allowed(const XrC
 static bool xa_freestanding_top_const_root_fixed_array_allowed(const XrCtValue *value) {
     if (!value || value->kind != XR_CT_FIXED_ARRAY)
         return false;
+    if (xa_freestanding_top_const_root_string_fixed_array_allowed(value))
+        return true;
     const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
     if (array->count <= 0 || !array->elements)
         return false;
@@ -5330,9 +5357,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             node->type == AST_CONST_DECL ? "top-level const declaration"
                                          : "top-level var declaration",
             node->type == AST_CONST_DECL
-                ? "only int/float/bool/char/string/null consteval scalars and recursively scalar "
-                  "fixed-array/tuple/struct initializers are allowed as erased or static data "
-                  "objects in the current freestanding slice"
+                ? "only int/float/bool/char/string/null consteval scalars, static string "
+                  "fixed-array lanes, and recursively scalar fixed-array/tuple/struct "
+                  "initializers are allowed as erased or static data objects in the current "
+                  "freestanding slice"
                 : "module storage still requires constructor initialization; move mutable state "
                   "inside functions until freestanding global storage has explicit static "
                   "object lowering");
