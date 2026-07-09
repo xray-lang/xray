@@ -940,9 +940,8 @@ static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
         } else {
             n = (int) write(conn->fd, p + total, len - total);
         }
-        if (n <= 0) {
-            return total > 0 ? (int) total : n;
-        }
+        if (n <= 0)
+            return -1;
         total += (size_t) n;
     }
     return (int) total;
