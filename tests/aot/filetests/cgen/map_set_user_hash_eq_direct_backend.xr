@@ -1,0 +1,27 @@
+class Token implements Hashable {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    operator==(other: Token) -> bool {
+        return this.value == other.value
+    }
+
+    hash() -> int {
+        return this.value
+    }
+}
+
+fn userHashEqPlan() -> int {
+    var token = Token(7)
+    var values: Map<Token, int> = #{}
+    values.set(token, 99)
+    if (values.has(token)) {
+        return values.get(token)
+    }
+    return 0
+}
+
+print(userHashEqPlan())
