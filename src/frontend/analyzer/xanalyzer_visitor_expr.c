@@ -830,6 +830,37 @@ XaSymbol *xa_lookup_visible_symbol(XaInferContext *ctx, const char *name) {
     return NULL;
 }
 
+static XaScope *xa_current_function_scope(XaInferContext *ctx) {
+    if (!ctx || !ctx->analyzer)
+        return NULL;
+    for (XaScope *scope = ctx->analyzer->current_scope; scope; scope = scope->parent) {
+        if (scope->kind == XA_SCOPE_FUNCTION)
+            return scope;
+    }
+    return NULL;
+}
+
+static bool xa_symbol_is_outer_function_capture(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !sym || !sym->scope)
+        return false;
+    if (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER)
+        return false;
+    if (sym->is_builtin || sym->is_imported || sym->scope->kind == XA_SCOPE_GLOBAL)
+        return false;
+
+    XaScope *current_fn = xa_current_function_scope(ctx);
+    if (!current_fn)
+        return false;
+    return !xa_scope_is_descendant(sym->scope, current_fn);
+}
+
+static void xa_check_span_view_closure_capture(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
+                                               XrType *type) {
+    if (!xa_symbol_is_outer_function_capture(ctx, sym) || !xa_type_contains_span_view(type))
+        return;
+    xa_check_span_value_escape(ctx, node, type, "capture Span view in closure");
+}
+
 // Check if an AST node is a typeof() call, return the argument variable name
 const char *get_typeof_arg_name(AstNode *node) {
     if (!node || node->type != AST_CALL_EXPR)
@@ -961,11 +992,14 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
                                                          ctx->flow->current_flow, ctx->cache);
         // Never means unreachable flow path — fall back to declared type
         if (narrowed && narrowed != declared_type && !XR_TYPE_IS_NEVER(narrowed)) {
+            xa_check_span_view_closure_capture(ctx, node, sym, narrowed);
             // Side table is the canonical type store.
             xa_analyzer_set_node_type(ctx->analyzer, node, narrowed);
             return narrowed;
         }
     }
+
+    xa_check_span_view_closure_capture(ctx, node, sym, declared_type);
 
     // Store the declared type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, declared_type);

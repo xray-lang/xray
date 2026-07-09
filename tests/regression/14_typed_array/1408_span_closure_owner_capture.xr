@@ -1,0 +1,13 @@
+@test
+fn test_closure_captures_owner_and_uses_local_span() {
+    fn make_reader(owner: Array<int>) -> () -> int {
+        return fn() -> int {
+            var view: Span<int> = owner[0:2]
+            return view.length + view[0]
+        }
+    }
+
+    var values = [5, 6, 7]
+    var read = make_reader(values)
+    assert_eq(read(), 7)
+}
