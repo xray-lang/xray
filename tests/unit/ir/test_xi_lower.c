@@ -8,6 +8,8 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_lower.h"
+#include "../../../src/analysis/xglobal_producer.h"
+#include "../../../src/analysis/xglobal_summary.h"
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
@@ -16,6 +18,7 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/module/xmodule_graph.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
 
@@ -93,6 +96,79 @@ static XiFunc *lower_source(const char *source) {
     xr_program_destroy(program);
 
     return func;
+}
+
+static XiFunc *lower_source_with_global_evidence(const char *source, XgGlobalEvidence *out_ev) {
+    assert(g_iso != NULL);
+    assert(out_ev != NULL);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+
+    AstNode *program = xr_parse(session, source);
+    if (!program) {
+        fprintf(stderr, "  PARSE FAILED for: %s\n", source);
+        return NULL;
+    }
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = program;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+    if (!xg_global_evidence_build_from_module_graph(out_ev, &graph, XG_BUILD_NATIVE_RELEASE)) {
+        fprintf(stderr, "  GLOBAL EVIDENCE FAILED for: %s\n", source);
+        xr_program_destroy(program);
+        return NULL;
+    }
+
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    if (!analyzer) {
+        fprintf(stderr, "  ANALYZER ALLOC FAILED\n");
+        xg_global_evidence_free(out_ev);
+        xr_program_destroy(program);
+        return NULL;
+    }
+    xa_analyzer_analyze(analyzer, "test.xr", program);
+
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope =
+        program->type == AST_PROGRAM && program->as.program.arena &&
+        xr_compiler_session_push_arena(session, program->as.program.arena, "test.xr", &canon_scope);
+    xr_canon_program(program, analyzer, session);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
+
+    XiFunc *func = xi_lower_program_ex(program, analyzer, g_iso, false, out_ev, 1);
+    if (!func) {
+        fprintf(stderr, "  LOWER FAILED for: %s\n", source);
+        xa_analyzer_free(analyzer);
+        xg_global_evidence_free(out_ev);
+        xr_program_destroy(program);
+        return NULL;
+    }
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+    return func;
+}
+
+static XiFunc *func_tree_find_func_name(XiFunc *f, const char *name) {
+    if (!f || !name)
+        return NULL;
+    if (f->name && strcmp(f->name, name) == 0)
+        return f;
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        XiFunc *child = func_tree_find_func_name(f->children[i], name);
+        if (child)
+            return child;
+    }
+    return NULL;
 }
 
 static int func_tree_has_op(XiFunc *f, uint16_t op) {
@@ -657,6 +733,82 @@ TEST(object_literal) {
     }
     assert(found_alloc && "should have JSON_NEW for object literal");
     xi_func_free(f);
+}
+
+TEST(json_access_lowers_with_global_evidence_id) {
+#define REQUIRE_JSON_EVIDENCE(cond, msg)                                                           \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "json_access_lowers_with_global_evidence_id: %s\n", msg);              \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn updateAge() -> int {\n"
+                                          "    var j: Json = { name: \"ada\", age: 1 }\n"
+                                          "    j.age = 2\n"
+                                          "    return j.age\n"
+                                          "}\n"
+                                          "print(updateAge())\n",
+                                          &ev);
+    REQUIRE_JSON_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_JSON_EVIDENCE(ev.njson_accesses == 2, "producer should record Json get and set");
+    XiFunc *update = func_tree_find_func_name(main_func, "updateAge");
+    REQUIRE_JSON_EVIDENCE(update != NULL, "target function should be present");
+
+    uint32_t get_id = 0;
+    uint32_t set_id = 0;
+    for (uint32_t b = 0; b < update->nblocks; b++) {
+        XiBlock *blk = update->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->op == XI_JSON_GET_F) {
+                REQUIRE_JSON_EVIDENCE(v->xg_json_access_id != 0,
+                                      "Json field get should bind global access evidence");
+                get_id = v->xg_json_access_id;
+            } else if (v->op == XI_JSON_SET_F) {
+                REQUIRE_JSON_EVIDENCE(v->xg_json_access_id != 0,
+                                      "Json field set should bind global access evidence");
+                set_id = v->xg_json_access_id;
+            }
+        }
+    }
+    REQUIRE_JSON_EVIDENCE(get_id != 0, "Json field get should be found");
+    REQUIRE_JSON_EVIDENCE(set_id != 0, "Json field set should be found");
+    REQUIRE_JSON_EVIDENCE(get_id != set_id, "Json get/set should use distinct access rows");
+
+    int matched_get = 0;
+    int matched_set = 0;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *row = &ev.json_accesses[i];
+        if (row->json_access_id == get_id) {
+            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_JSON_ACCESS_FIELD_GET,
+                                  "bound get id should point at field_get row");
+            REQUIRE_JSON_EVIDENCE(row->field_ordinal == 1,
+                                  "bound get id should preserve field ordinal");
+            matched_get = 1;
+        }
+        if (row->json_access_id == set_id) {
+            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_JSON_ACCESS_FIELD_SET,
+                                  "bound set id should point at field_set row");
+            REQUIRE_JSON_EVIDENCE(row->field_ordinal == 1,
+                                  "bound set id should preserve field ordinal");
+            matched_set = 1;
+        }
+    }
+    REQUIRE_JSON_EVIDENCE(matched_get && matched_set, "bound ids should re-derive from evidence");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_JSON_EVIDENCE
 }
 
 TEST(nested_function) {
@@ -1788,6 +1940,7 @@ int main(void) {
     run_try_catch();
     run_try_catch_defer();
     run_object_literal();
+    run_json_access_lowers_with_global_evidence_id();
     run_nested_function();
     run_function_expr();
     run_multiple_functions();

@@ -23,6 +23,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/parser/xtype_ref.h"
+#include "../analysis/xglobal_summary.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_selection.h"
@@ -1473,6 +1474,8 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         v->args[0] = obj;
         v->aux_int = fidx;
         v->line = (uint32_t) node->line;
+        xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, (uint16_t) fidx,
+                                     XG_JSON_ACCESS_FIELD_GET);
         return v;
     }
 
@@ -1556,6 +1559,8 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         v->aux_int = fidx;
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
+        xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, (uint16_t) fidx,
+                                     XG_JSON_ACCESS_FIELD_SET);
         return v;
     }
 
