@@ -7881,6 +7881,63 @@ TEST(global_evidence_records_map_set_key_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
+    setup_parser_session();
+    const char *source =
+        "class Token implements Hashable {\n"
+        "    value: int\n"
+        "    constructor(value: int) { this.value = value }\n"
+        "    operator==(other: Token) -> bool { return this.value == other.value }\n"
+        "    hash() -> int { return this.value }\n"
+        "}\n"
+        "fn userHashEqPlan() -> int {\n"
+        "    var token = Token(7)\n"
+        "    var values: Map<Token, int> = #{}\n"
+        "    values.set(token, 99)\n"
+        "    if (values.has(token)) { return values.get(token) }\n"
+        "    return 0\n"
+        "}\n"
+        "print(userHashEqPlan())\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nhash_eqs, 1);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_USER_METHOD);
+    ASSERT_NE(ev.hash_eqs[0].eq_func_id, XG_NO_ID);
+    ASSERT_NE(ev.hash_eqs[0].hash_func_id, XG_NO_ID);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nhash_eq_plans, 1);
+    ASSERT_EQ_UINT(bundle.hash_eq_plans[0].action, XAOT_HASH_EQ_DIRECT_CALL);
+    ASSERT_EQ_UINT(bundle.hash_eq_plans[0].eq_func_id, ev.hash_eqs[0].eq_func_id);
+    ASSERT_EQ_UINT(bundle.hash_eq_plans[0].hash_func_id, ev.hash_eqs[0].hash_func_id);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "kind=user_method action=direct_call"));
+    xr_free(plan_dump);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     XgBuildKey key = {.source_hash = 31,
                       .compiler_semver_hash = 32,
@@ -9411,6 +9468,7 @@ RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_json_codec_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
+RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);
 RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);

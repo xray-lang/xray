@@ -1,0 +1,2 @@
+contains=xaot-plan v0
+regex=hash-eq-plan [0-9]+ id=[0-9]+ type=[1-9][0-9]* kind=user_method action=direct_call eq_derive=0 hash_derive=0 eq_func=[1-9][0-9]* hash_func=[1-9][0-9]* evidence=0x[0-9a-f]+ reason=none

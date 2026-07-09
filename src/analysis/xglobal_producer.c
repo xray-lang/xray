@@ -2830,6 +2830,114 @@ static void body_ensure_builtin_hash_eq(XgBodyCollect *bc, uint32_t key_type_key
     (void) xg_global_evidence_add_hash_eq(bc->evidence, &row);
 }
 
+static bool body_type_ref_is_named(const XrTypeRef *type, const char *name) {
+    return type && type->kind == XR_TREF_NAMED && type->name && name &&
+           strcmp(type->name, name) == 0;
+}
+
+static bool body_type_ref_is_int(const XrTypeRef *type) {
+    return type && type->kind == XR_TREF_INT;
+}
+
+static bool body_type_ref_is_bool(const XrTypeRef *type) {
+    return type && type->kind == XR_TREF_BOOL;
+}
+
+static const XgClassSummary *body_find_class_by_type_key(XgBodyCollect *bc, uint32_t type_key,
+                                                         const char **out_name) {
+    if (out_name)
+        *out_name = NULL;
+    if (!bc || !bc->producer || !bc->evidence || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bc->producer->nclasses; i++) {
+        const XgClassNameRow *row = &bc->producer->classes[i];
+        if (!row->name || row->summary_index >= bc->evidence->nclasses)
+            continue;
+        if (hash_named_type_key32(row->name, NULL, 0) != type_key)
+            continue;
+        if (out_name)
+            *out_name = row->name;
+        return &bc->evidence->classes[row->summary_index];
+    }
+    return NULL;
+}
+
+static bool body_class_implements_hashable(XgBodyCollect *bc, const XgClassSummary *cls) {
+    uint32_t hashable_id = hash_name32("Hashable");
+    if (!bc || !bc->evidence || !cls)
+        return false;
+    for (uint32_t i = 0; i < bc->evidence->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &bc->evidence->interface_impls[i];
+        if (impl->implementor_class_id == cls->class_id &&
+            (impl->name_id == hashable_id || impl->interface_id == (XgInterfaceId) hashable_id))
+            return true;
+    }
+    return false;
+}
+
+static const XgPendingBody *producer_find_method_body(const XgProducer *p, XgMethodId method_id) {
+    if (!p || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < p->nbodies; i++) {
+        if (p->bodies[i].owner_method_id == method_id)
+            return &p->bodies[i];
+    }
+    return NULL;
+}
+
+static bool body_hash_method_valid(const MethodDeclNode *method) {
+    return method && !method->is_static && !method->is_private && !method->is_constructor &&
+           method->param_count == 0 && body_type_ref_is_int(method->return_type);
+}
+
+static bool body_eq_method_valid(const MethodDeclNode *method, const char *type_name) {
+    return method && !method->is_static && !method->is_private && !method->is_constructor &&
+           method->is_operator && method->param_count == 1 &&
+           body_type_ref_is_named(method->param_types ? method->param_types[0] : NULL, type_name) &&
+           body_type_ref_is_bool(method->return_type);
+}
+
+static void body_ensure_user_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+    const char *type_name = NULL;
+    const XgClassSummary *cls = body_find_class_by_type_key(bc, key_type_key, &type_name);
+    XgMethodSummary *eq_method;
+    XgMethodSummary *hash_method;
+    const XgPendingBody *eq_body;
+    const XgPendingBody *hash_body;
+    XgHashEqSummary row;
+    if (!bc || !bc->producer || !bc->evidence || !cls || !type_name)
+        return;
+    if (xg_global_evidence_find_hash_eq(bc->evidence, key_type_key))
+        return;
+    if (!body_class_implements_hashable(bc, cls))
+        return;
+    eq_method = producer_find_method_by_name_in_hierarchy(bc->producer, cls->class_id,
+                                                          hash_name32("=="), false);
+    hash_method = producer_find_method_by_name_in_hierarchy(bc->producer, cls->class_id,
+                                                            hash_name32("hash"), false);
+    eq_body = producer_find_method_body(bc->producer, eq_method ? eq_method->method_id : XG_NO_ID);
+    hash_body =
+        producer_find_method_body(bc->producer, hash_method ? hash_method->method_id : XG_NO_ID);
+    if (!eq_body || !hash_body || !body_eq_method_valid(eq_body->method, type_name) ||
+        !body_hash_method_valid(hash_body->method))
+        return;
+    memset(&row, 0, sizeof(row));
+    row.hash_eq_id = (XgHashEqId) (bc->evidence->nhash_eqs + 1);
+    row.type_key = key_type_key;
+    row.kind = XG_HASH_EQ_USER_METHOD;
+    row.eq_func_id = eq_body->func_id;
+    row.hash_func_id = hash_body->func_id;
+    row.flags = XG_HASH_EQ_NO_ALLOC | XG_HASH_EQ_NO_THROW | XG_HASH_EQ_PURE;
+    if ((cls->flags & (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL)) != 0)
+        row.flags |= XG_HASH_EQ_FINAL;
+    (void) xg_global_evidence_add_hash_eq(bc->evidence, &row);
+}
+
+static void body_ensure_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+    body_ensure_builtin_hash_eq(bc, key_type_key);
+    body_ensure_user_hash_eq(bc, key_type_key);
+}
+
 static XgMapShapeId
 body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
                                const XrTypeRef *type_annotation, uint32_t source_span_id,
@@ -2944,7 +3052,7 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
         }
         (void) xg_global_evidence_add_map_entry(bc->evidence, &entry);
     }
-    body_ensure_builtin_hash_eq(bc, key_type_key);
+    body_ensure_hash_eq(bc, key_type_key);
     if (out_receiver_type_key)
         *out_receiver_type_key = receiver_type_key;
     if (out_key_type_key)
