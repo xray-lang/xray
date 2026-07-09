@@ -423,6 +423,13 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     XgEvidenceCacheKey changed_profile =
         xg_global_evidence_cache_key(&profile_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
     XgEvidenceCacheKey stale_schema = base_decl;
+    XgEvidenceCacheKey parsed;
+    XgEvidenceCacheKey parsed_stale;
+    char encoded[256];
+    char encoded_newline[320];
+    char stale_encoded[256];
+    char tampered[256];
+    char tiny[16];
 
     ASSERT_TRUE(
         strcmp(xg_evidence_cache_phase_name(XG_EVIDENCE_CACHE_DECLARATIONS), "declarations") == 0);
@@ -436,6 +443,18 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_EQ_UINT(base_decl.schema_version, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION);
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
+    ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=1 phase=1"));
+    ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
+    ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
+    snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
+    ASSERT_TRUE(xg_evidence_cache_key_parse(encoded_newline, &parsed));
+    ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
+    ASSERT_TRUE(!xg_evidence_cache_key_format(&base_decl, tiny, sizeof(tiny)));
+    ASSERT_TRUE(!xg_evidence_cache_key_parse("bad-cache-key", &parsed));
+    snprintf(tampered, sizeof(tampered), "%s", encoded);
+    tampered[strlen(tampered) - 1] = tampered[strlen(tampered) - 1] == '0' ? '1' : '0';
+    ASSERT_TRUE(!xg_evidence_cache_key_parse(tampered, &parsed));
 
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &body_decl));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_semantic, &body_semantic));
@@ -449,6 +468,9 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
 
     stale_schema.schema_version++;
     ASSERT_TRUE(!xg_evidence_cache_key_matches(&stale_schema, &base_decl));
+    ASSERT_TRUE(xg_evidence_cache_key_format(&stale_schema, stale_encoded, sizeof(stale_encoded)));
+    ASSERT_TRUE(xg_evidence_cache_key_parse(stale_encoded, &parsed_stale));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&parsed_stale, &base_decl));
 
     xg_global_evidence_free(&base);
     xg_global_evidence_free(&body_changed);

@@ -12,6 +12,7 @@
 #define XGLOBAL_SUMMARY_H
 
 #include "../base/xdefs.h"
+#include <stddef.h>
 #include <stdint.h>
 
 typedef uint32_t XgModuleId;
@@ -463,6 +464,8 @@ XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *
 XR_FUNC uint64_t xg_evidence_cache_key_hash(const XgEvidenceCacheKey *key);
 XR_FUNC bool xg_evidence_cache_key_matches(const XgEvidenceCacheKey *cached,
                                            const XgEvidenceCacheKey *expected);
+XR_FUNC bool xg_evidence_cache_key_format(const XgEvidenceCacheKey *key, char *buf, size_t buf_len);
+XR_FUNC bool xg_evidence_cache_key_parse(const char *text, XgEvidenceCacheKey *out_key);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H
