@@ -602,6 +602,12 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, " content="));
+    ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));

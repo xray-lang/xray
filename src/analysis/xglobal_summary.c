@@ -1352,6 +1352,17 @@ static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,
     fprintf(out, "]");
 }
 
+static void dump_cache_key(FILE *out, const XgGlobalEvidence *evidence, uint32_t phase) {
+    XgEvidenceCacheKey key = xg_global_evidence_cache_key(evidence, phase);
+    fprintf(out,
+            "cache-key phase=%s schema=%u module=%u profile=%s compiler=%016" PRIx64
+            " profile_hash=%016" PRIx64 " imports=%016" PRIx64 " content=%016" PRIx64
+            " key=%016" PRIx64 "\n",
+            xg_evidence_cache_phase_name(phase), key.schema_version, key.module_id,
+            xg_build_profile_name(key.profile), key.compiler_semver_hash, key.profile_hash,
+            key.imported_summary_hash, key.content_hash, xg_evidence_cache_key_hash(&key));
+}
+
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     char *buf = NULL;
     size_t bufsz = 0;
@@ -1381,6 +1392,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             " imports=%016" PRIx64 "\n",
             evidence->key.module_id, evidence->key.source_hash, evidence->key.compiler_semver_hash,
             evidence->key.profile_hash, evidence->key.imported_summary_hash);
+    dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_DECLARATIONS);
+    dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     fprintf(out,
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
             "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u\n",
