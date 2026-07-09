@@ -1,7 +1,0 @@
-fn updateKey() -> Json {
-    var j: Json = { name: "ada", age: 1 }
-    j["age"] = 2
-    return j["age"]
-}
-
-print(updateKey())

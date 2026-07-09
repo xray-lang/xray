@@ -23,30 +23,12 @@ fn xray_no_alloc_regex_replace_reject(text: string) -> string {
 }
 
 @no_alloc
-fn xray_no_alloc_regex_replace_all_reject(text: string) -> string {
-    return xray_no_alloc_regex_extra_digits.replaceAll(text, "n")
-}
-
-@no_alloc
 fn xray_no_alloc_regex_split_reject(text: string) -> int {
     return xray_no_alloc_regex_extra_digits.split(text).length
-}
-
-@no_alloc
-fn xray_no_alloc_regex_pattern_reject() -> string {
-    return xray_no_alloc_regex_extra_digits.pattern()
-}
-
-@no_alloc
-fn xray_no_alloc_regex_tostring_reject() -> string {
-    return xray_no_alloc_regex_extra_digits.toString()
 }
 
 print(xray_no_alloc_regex_find_reject("abc123"))
 print(xray_no_alloc_regex_find_group_reject("abc123"))
 print(xray_no_alloc_regex_find_all_reject("a1b2"))
 print(xray_no_alloc_regex_replace_reject("abc123"))
-print(xray_no_alloc_regex_replace_all_reject("a1b2"))
 print(xray_no_alloc_regex_split_reject("a1b2"))
-print(xray_no_alloc_regex_pattern_reject())
-print(xray_no_alloc_regex_tostring_reject())

@@ -4103,9 +4103,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         /* FFI raw pointer methods: deref()/offset(i), LE typed load/store, isNull(). */
         if (recv->type && XR_TYPE_IS_POINTER(recv->type) && ma->name) {
-            if (strcmp(ma->name, "loadLEUnchecked") == 0 && n == 1 &&
-                xi_pointer_pointee_is_u8(recv->type) && call->type_arg_count == 1 &&
-                call->type_args && call->type_args[0]) {
+            if (strcmp(ma->name, "loadLE") == 0 && n == 1 && xi_pointer_pointee_is_u8(recv->type) &&
+                call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
                 XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
                 uint8_t code = xr_ffi_type_from_xrtype(target, false);
                 if (code == XR_FFI_T_U16 || code == XR_FFI_T_U32 || code == XR_FFI_T_U64) {
@@ -4125,7 +4124,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     return v;
                 }
             }
-            if (strcmp(ma->name, "storeLEUnchecked") == 0 && n == 2 &&
+            if (strcmp(ma->name, "storeLE") == 0 && n == 2 &&
                 xi_pointer_pointee_is_u8(recv->type) && call->type_arg_count == 1 &&
                 call->type_args && call->type_args[0]) {
                 XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
@@ -4163,7 +4162,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     return NULL;
                 return v;
             }
-            if (strcmp(ma->name, "copyFromNonOverlappingUnchecked") == 0 && n == 2) {
+            if (strcmp(ma->name, "copyFromNonOverlapping") == 0 && n == 2) {
                 XiValue *byte_count = arg_vals[1];
                 int64_t size = xi_pointer_pointee_size(recv->type);
                 if (size != 1) {

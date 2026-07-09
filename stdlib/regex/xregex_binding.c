@@ -560,22 +560,6 @@ static XrValue regex_is_valid(XrVMRuntime *isolate, XrValue *args, int argc) {
  * Support re.test(text) syntax
  * ======================================================================== */
 
-// re.pattern getter
-static XrValue re_method_pattern(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
-    (void) args;
-    (void) nargs;
-
-    XrRegex *re = unwrap_regex(isolate, self);
-    if (!re)
-        return xr_null();
-
-    const char *pattern = xr_regex_pattern(re);
-    if (!pattern)
-        return xr_null();
-
-    return xr_string_value(xr_string_intern(isolate, pattern, strlen(pattern), 0));
-}
-
 // Thin wrappers: prepend self into a temporary args array so the module
 // functions (which expect args[0]=regex) can be reused unchanged.
 
@@ -594,10 +578,6 @@ static XrValue re_m_find_all(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
 static XrValue re_m_replace(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_replace(X, tmp, n + 1);
-}
-static XrValue re_m_replace_all(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
-    XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
-    return regex_replace_all(X, tmp, n + 1);
 }
 static XrValue re_m_split(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
@@ -678,20 +658,6 @@ static XrNativeBodyDesc g_regex_body_desc = {
     .deep_copy = NULL,
     .to_shared = NULL,
 };
-
-/* ========================================================================
- * Class Registration
- *
- * Builds the Regex XrClass with native body descriptor and installs
- * instance methods (test, find, etc.) so OP_INVOKE resolves them
- * through the unified XrClass dispatch.
- * ======================================================================== */
-
-static XrValue re_m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    return xr_string_value(xr_value_to_string(iso, self));
-}
 
 #define XR_STDLIB_VM_BIND_CLASS_REGEX 1
 #define XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH 1

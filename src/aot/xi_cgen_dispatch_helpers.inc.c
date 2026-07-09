@@ -7819,7 +7819,7 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 }
 
-/* memcpy(dst, src, byte_count) for RawMut<T>.copyFromNonOverlappingUnchecked. */
+/* memcpy(dst, src, byte_count) for RawMut<T>.copyFromNonOverlapping. */
 static void xicgen_ptr_copy_nonoverlap(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *prefix) {
     (void) f;
