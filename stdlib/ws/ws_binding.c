@@ -366,7 +366,7 @@ static XrCFuncResult ws_connect_finish_err(XrVMRuntime *X, WsConnectState *state
     XrJson *r = xr_json_new(xr_current_coro(X));
     if (ctx) {
         xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, xr_ws_error_string(err)));
+        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, ws_error_string(err)));
         xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
     }
     *result = xr_json_value(r);
@@ -461,7 +461,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     if (url_err != WS_OK) {
         XrJson *r = xr_json_new(xr_current_coro(X));
         xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, xr_ws_error_string(url_err)));
+        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, ws_error_string(url_err)));
         xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
         *result = xr_json_value(r);
         xr_free(url_copy);
@@ -1118,7 +1118,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
         return xr_yield_for_io(X, ctx->fd, XR_WAIT_READ, 5000, ws_conn_upgrade_cont, ctx, result);
     }
 
-    if (!xr_ws_is_upgrade_request(ctx->upgrade_buf)) {
+    if (!ws_is_upgrade_request(ctx->upgrade_buf)) {
         const char *r400 = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n"
                            "Connection: close\r\n\r\n";
         ssize_t ret = write(ctx->fd, r400, strlen(r400));
@@ -1145,7 +1145,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
                 }
             }
         }
-        XrWebSocket *ws = xr_ws_upgrade_ex(X, ctx->fd, ctx->upgrade_buf, NULL);
+        XrWebSocket *ws = ws_upgrade_ex(X, ctx->fd, ctx->upgrade_buf, NULL);
         XrValue conn_val = ws_wrap_server_conn(X, ws, url_str, url_len);
         xr_free(ctx->upgrade_buf);
         ctx->upgrade_buf = NULL;
@@ -1422,7 +1422,7 @@ XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_heade
             }
         }
     }
-    XrWebSocket *ws = xr_ws_upgrade_ex(X, fd, request_headers, NULL);
+    XrWebSocket *ws = ws_upgrade_ex(X, fd, request_headers, NULL);
     if (!ws)
         return xr_null();
     return ws_wrap_server_conn(X, ws, url_str, url_len);
