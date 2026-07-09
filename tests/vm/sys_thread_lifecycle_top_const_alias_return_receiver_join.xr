@@ -1,0 +1,16 @@
+import sys
+
+fn passThread(t: Thread<int>) -> Thread<int> {
+    return t
+}
+
+const aliasThread = passThread
+
+fn run() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    print(aliasThread(t).join())
+}
+
+run()

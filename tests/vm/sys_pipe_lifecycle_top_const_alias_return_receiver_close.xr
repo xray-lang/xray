@@ -1,0 +1,19 @@
+import sys
+import { Pipe } from sys
+
+fn passPipe(p: Pipe) -> Pipe {
+    return p
+}
+
+const aliasPipe = passPipe
+
+fn run() {
+    var opened = sys.Pipe.open()
+    if (opened == null) {
+        print(false)
+        return
+    }
+    print(aliasPipe(opened!).close())
+}
+
+run()

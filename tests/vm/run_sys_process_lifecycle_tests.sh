@@ -121,6 +121,8 @@ PROCESS_HELPER_DIRECT_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_l
 PIPE_HELPER_DIRECT_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_direct_return_alias_close.xr"
 PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_const_alias_return_receiver_wait.xr"
 PIPE_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_const_alias_return_receiver_close.xr"
+PROCESS_TOP_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_top_const_alias_return_receiver_wait.xr"
+PIPE_TOP_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_top_const_alias_return_receiver_close.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
@@ -163,6 +165,10 @@ expect_output "process_const_alias_return_receiver_wait" \
     "$PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC" "0"
 expect_output "pipe_const_alias_return_receiver_close" \
     "$PIPE_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC" "true"
+expect_output "process_top_const_alias_return_receiver_wait" \
+    "$PROCESS_TOP_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC" "0"
+expect_output "pipe_top_const_alias_return_receiver_close" \
+    "$PIPE_TOP_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC" "true"
 expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly"
 expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \
