@@ -63,11 +63,13 @@ expect_warning() {
     local src="$2"
     local expected="$3"
     local needle="$4"
+    local needle2="${5:-}"
     local out="$WORK/$name.out"
     local err="$WORK/$name.err"
 
     if "$XRAY" run "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
-        grep -Fq "$needle" "$err"; then
+        grep -Fq "$needle" "$err" &&
+        { [ -z "$needle2" ] || grep -Fq "$needle2" "$err"; }; then
         record_pass "$name warning"
     else
         record_fail "$name warning"
@@ -137,6 +139,7 @@ PROCESS_TOP_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_proc
 PIPE_TOP_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_top_const_alias_return_receiver_close.xr"
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_warning.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
+HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -223,6 +226,10 @@ expect_warning "process_lifecycle_try_catch_warning" "$PROCESS_TRY_CATCH_WARNING
 expect_warning "process_helper_early_return_warning" "$PROCESS_HELPER_EARLY_RETURN_WARNING_SRC" \
     "process-helper-skip" \
     "Process handle 'p0' from sys.Process.spawn is not waited before leaving scope"
+expect_warning "process_pipe_helper_control_exit_warning" "$HELPER_CONTROL_EXIT_WARNING_SRC" \
+    $'process-after\npipe-after' \
+    "Process handle 'spawned' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'opened' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "process_pipe_move_alias_warning" "$MOVE_ALIAS_WARNING_SRC" \
     $'process-moved\npipe-moved' \
     "Process handle 'spawned' from sys.Process.spawn is not waited before leaving scope" \

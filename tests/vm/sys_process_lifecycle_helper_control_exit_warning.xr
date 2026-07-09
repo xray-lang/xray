@@ -1,0 +1,37 @@
+import sys
+import { Pipe, Process } from sys
+
+fn skipWaitTry(p: Process) {
+    try {
+        return
+    } catch (e) {
+        print("catch")
+    }
+    print(p.wait())
+}
+
+fn skipCloseMatch(pipe: Pipe) {
+    match (0) {
+        0 -> {
+            return
+        }
+        _ -> {}
+    }
+    print(pipe.close())
+}
+
+var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+if (spawned == null) {
+    print("spawn-failed")
+} else {
+    skipWaitTry(spawned!)
+    print("process-after")
+}
+
+var opened = sys.Pipe.open()
+if (opened == null) {
+    print(false)
+} else {
+    skipCloseMatch(opened!)
+    print("pipe-after")
+}
