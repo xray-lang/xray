@@ -869,6 +869,13 @@ static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleL
             xa_thread_lint_find_alias_source(states, expr->as.ternary.false_expr);
         return true_state && true_state == false_state ? true_state : NULL;
     }
+    if (expr->type == AST_NULLISH_COALESCE) {
+        XaThreadHandleLintState *left_state =
+            xa_thread_lint_find_alias_source(states, expr->as.binary.left);
+        XaThreadHandleLintState *right_state =
+            xa_thread_lint_find_alias_source(states, expr->as.binary.right);
+        return left_state && left_state == right_state ? left_state : NULL;
+    }
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
         if (!operand)
@@ -2682,6 +2689,13 @@ static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
         XaOsResourceLintState *false_state =
             xa_os_resource_lint_find_alias_source(states, expr->as.ternary.false_expr);
         return true_state && true_state == false_state ? true_state : NULL;
+    }
+    if (expr->type == AST_NULLISH_COALESCE) {
+        XaOsResourceLintState *left_state =
+            xa_os_resource_lint_find_alias_source(states, expr->as.binary.left);
+        XaOsResourceLintState *right_state =
+            xa_os_resource_lint_find_alias_source(states, expr->as.binary.right);
+        return left_state && left_state == right_state ? left_state : NULL;
     }
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);

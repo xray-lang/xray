@@ -1,0 +1,19 @@
+import sys
+
+fn maybeThread(t: Thread<int>) -> Thread<int>? {
+    return t
+}
+
+fn passThread(t: Thread<int>) -> Thread<int> {
+    return t
+}
+
+fn run() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    var joined = maybeThread(t) ?? passThread(t)
+    print(joined.join())
+}
+
+run()
