@@ -794,7 +794,7 @@ XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name) {
 
 /* ========== Subscriber Management (for select push model) ========== */
 
-void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node) {
+void cluster_subscriber_add(XrCluster *c, const char *channel_name, XrClusterNode *node) {
     if (!c || !channel_name || !node)
         return;
 
@@ -822,7 +822,7 @@ void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrCluster
     xr_amutex_unlock(&c->channels_lock);
 }
 
-void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node) {
+void cluster_subscriber_remove(XrCluster *c, const char *channel_name, XrClusterNode *node) {
     if (!c || !channel_name || !node)
         return;
 
@@ -847,7 +847,7 @@ void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClus
     xr_amutex_unlock(&c->channels_lock);
 }
 
-void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *node) {
+void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node) {
     if (!c || !node)
         return;
 
@@ -1469,7 +1469,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
             case XR_FRAME_CHANNEL_SUBSCRIBE: {
                 XrFrameChannelSubscribe sub;
                 if (xr_frame_decode_channel_subscribe(recv_buf, payload_len, &sub) == 0) {
-                    xr_cluster_add_subscriber(c, sub.channel_name, node);
+                    cluster_subscriber_add(c, sub.channel_name, node);
                 }
                 break;
             }
@@ -1478,7 +1478,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 char unsub_name[XR_CHANNEL_NAME_MAX + 1];
                 if (xr_frame_decode_channel_unsubscribe(recv_buf, payload_len, unsub_name,
                                                         sizeof(unsub_name)) == 0) {
-                    xr_cluster_remove_subscriber(c, unsub_name, node);
+                    cluster_subscriber_remove(c, unsub_name, node);
                 }
                 break;
             }
@@ -1545,7 +1545,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
     // Node disconnected — cleanup subscribers before monitors
     xr_free(recv_buf);
-    xr_cluster_remove_all_subscribers_for_node(c, node);
+    cluster_subscriber_remove_all_for_node(c, node);
     cluster_monitor_fire(c, node->name);
     xr_cluster_remove_node(c, node);
     xr_cluster_node_free(node);

@@ -445,10 +445,9 @@ void cluster_monitor_handle_coro_request(XrCluster *c, struct XrClusterNode *nod
 
 /* ========== Subscriber Management (for select push model) ========== */
 
-XR_FUNC void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node);
-XR_FUNC void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name,
-                                          XrClusterNode *node);
-XR_FUNC void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *node);
+void cluster_subscriber_add(XrCluster *c, const char *channel_name, XrClusterNode *node);
+void cluster_subscriber_remove(XrCluster *c, const char *channel_name, XrClusterNode *node);
+void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node);
 
 /* ========== Module Registration ========== */
 
