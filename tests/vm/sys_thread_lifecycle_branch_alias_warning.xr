@@ -1,0 +1,17 @@
+import sys
+
+fn branchAliasRebind(flag: bool) {
+    var leaked = sys.Thread.spawn(fn() -> int {
+        return 1
+    })
+    var joined = sys.Thread.spawn(fn() -> int {
+        return 2
+    })
+    var handle = joined
+    if (flag) {
+        handle = leaked
+    }
+    print(handle.join())
+}
+
+branchAliasRebind(false)
