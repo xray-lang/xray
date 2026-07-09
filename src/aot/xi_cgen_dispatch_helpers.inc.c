@@ -6313,13 +6313,15 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, ")");
 }
 
-/* Object spread merge: `xrt_json_merge(dst, src)`. */
+/* Object spread merge: sealed Records use the Record helper; Json stays dynamic. */
 static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_json_merge: need dst and src");
-    fprintf(out, "xrt_json_merge(");
+    const bool dst_is_record = v->args[0] && v->args[0]->type &&
+                               v->args[0]->type->kind == XR_KIND_RECORD;
+    fprintf(out, "%s(", dst_is_record ? "xrt_record_merge" : "xrt_json_merge");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
