@@ -1,5 +1,5 @@
 import mem
-import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
@@ -46,5 +46,6 @@ fn imported_static_addr() -> int {
         mem.addressOf(RawPtr<string>.of(LABEL)) +
         mem.addressOf(RawPtr<Header>.of(HEADER)) +
         mem.addressOf(RawPtr<I32Bits>.of(BITS)) +
-        mem.addressOf(RawPtr<[uint8; 2]>.of(ADDR_ONLY_BYTES))
+        mem.addressOf(RawPtr<[uint8; 2]>.of(ADDR_ONLY_BYTES)) +
+        mem.addressOf(RawPtr<int?>.of(MAYBE_NONE))
 }
