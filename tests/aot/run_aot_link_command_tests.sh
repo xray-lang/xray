@@ -1368,6 +1368,52 @@ else
     sed 's/^/      /' "$FREESTANDING_MATH_CONST_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_MATH_INT_CORE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_int_core.xr"
+FREESTANDING_MATH_INT_CORE_OBJ="$WORK/freestanding_math_int_core.o"
+FREESTANDING_MATH_INT_CORE_LOG="$WORK/freestanding_math_int_core.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MATH_INT_CORE_OBJ" \
+        "$FREESTANDING_MATH_INT_CORE_SRC" >"$FREESTANDING_MATH_INT_CORE_LOG" 2>&1; then
+    FREESTANDING_MATH_INT_CORE_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_MATH_INT_CORE_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MATH_INT_CORE_C" ]; then
+        expect_log_contains "$FREESTANDING_MATH_INT_CORE_C" \
+            "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/math-int-core: generated C uses freestanding prelude"
+        expect_log_not_contains "$FREESTANDING_MATH_INT_CORE_C" "#include <math.h>" \
+            "freestanding-profile/math-int-core: avoids libm header"
+        expect_log_not_contains "$FREESTANDING_MATH_INT_CORE_C" "xrt_math_" \
+            "freestanding-profile/math-int-core: avoids hosted math helper"
+        expect_log_not_contains "$FREESTANDING_MATH_INT_CORE_C" "fmin(" \
+            "freestanding-profile/math-int-core: keeps int min in local lowering"
+        expect_log_not_contains "$FREESTANDING_MATH_INT_CORE_C" "fmax(" \
+            "freestanding-profile/math-int-core: keeps int max in local lowering"
+        expect_log_not_contains "$FREESTANDING_MATH_INT_CORE_C" "isnan(" \
+            "freestanding-profile/math-int-core: avoids float clamp/libm semantics"
+        expect_log_not_contains "$FREESTANDING_MATH_INT_CORE_C" "#include \"xrt.h\"" \
+            "freestanding-profile/math-int-core: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/math-int-core: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MATH_INT_CORE_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MATH_INT_CORE_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_MATH_INT_CORE_OBJ")"
+    FREESTANDING_MATH_INT_CORE_UNEXPECTED="$(printf '%s\n' \
+        "$FREESTANDING_MATH_INT_CORE_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic)$' || true)"
+    if [ -z "$FREESTANDING_MATH_INT_CORE_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/math-int-core: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/math-int-core: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_MATH_INT_CORE_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/math-int-core: object build failed"
+    sed 's/^/      /' "$FREESTANDING_MATH_INT_CORE_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_MATH_ALLOWLIST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_allowlist.xr"
 FREESTANDING_MATH_ALLOWLIST_OBJ="$WORK/freestanding_math_allowlist.o"
 FREESTANDING_MATH_ALLOWLIST_LOG="$WORK/freestanding_math_allowlist.log"
