@@ -16,6 +16,10 @@
 #include <stdint.h>
 #include "../net/xneterror.h"
 
+#ifndef XR_VALUE_DEFINED
+typedef struct XrValue XrValue;
+#endif
+
 /* ========== WebSocket Opcodes ========== */
 
 typedef enum {
@@ -287,6 +291,12 @@ typedef struct XrWsUpgradeOptions {
  */
 XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *request_headers,
                            const XrWsUpgradeOptions *opts);
+
+/*
+ * Upgrade an already accepted HTTP connection to WebSocket and wrap it as the
+ * script-visible connection Json used by ws.send/ws.recv.
+ */
+XrValue ws_upgrade_and_wrap(struct XrVMRuntime *X, int fd, const char *request_headers);
 
 // Check if HTTP request is a WebSocket upgrade request.
 bool ws_is_upgrade_request(const char *request_headers);
