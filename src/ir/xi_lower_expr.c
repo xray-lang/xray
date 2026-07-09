@@ -3719,6 +3719,36 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
     return v;
 }
 
+static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, const char *method,
+                                               int arg_count, uint8_t *out_op) {
+    if (out_op)
+        *out_op = 0;
+    if (!receiver_type || !method || !out_op)
+        return false;
+    if (XR_TYPE_IS_MAP(receiver_type)) {
+        if (arg_count == 1 && strcmp(method, "get") == 0)
+            *out_op = XG_KEY_ACCESS_GET;
+        else if (arg_count == 1 && strcmp(method, "has") == 0)
+            *out_op = XG_KEY_ACCESS_HAS;
+        else if (arg_count == 1 && strcmp(method, "delete") == 0)
+            *out_op = XG_KEY_ACCESS_DELETE;
+        else if (arg_count == 2 && strcmp(method, "set") == 0)
+            *out_op = XG_KEY_ACCESS_SET;
+        else if (arg_count == 0 && strcmp(method, "clear") == 0)
+            *out_op = XG_KEY_ACCESS_CLEAR;
+    } else if (XR_TYPE_IS_SET(receiver_type)) {
+        if (arg_count == 1 && strcmp(method, "has") == 0)
+            *out_op = XG_KEY_ACCESS_HAS;
+        else if (arg_count == 1 && strcmp(method, "add") == 0)
+            *out_op = XG_KEY_ACCESS_ADD;
+        else if (arg_count == 1 && strcmp(method, "delete") == 0)
+            *out_op = XG_KEY_ACCESS_DELETE;
+        else if (arg_count == 0 && strcmp(method, "clear") == 0)
+            *out_op = XG_KEY_ACCESS_CLEAR;
+    }
+    return *out_op != 0;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     uint32_t body_ordinal = xi_lower_next_callsite_ordinal(l);
@@ -3815,6 +3845,15 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *addr_of = lower_mem_address_of_rawptr_call(l, node, call, ma->name);
             if (addr_of)
                 return addr_of;
+        }
+
+        uint8_t method_key_access_op = 0;
+        uint32_t method_key_access_ordinal = UINT32_MAX;
+        if (ma->object && ma->object->type == AST_VARIABLE &&
+            lower_map_set_method_key_access_op(xi_lower_node_type(l, ma->object), ma->name,
+                                               call->arg_count, &method_key_access_op)) {
+            method_key_access_ordinal =
+                xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, method_key_access_op);
         }
 
         XiValue *recv = xi_lower_expr(l, ma->object);
@@ -4339,6 +4378,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;
         xi_lower_bind_method_callsite_id(l, v, ma->name, (uint32_t) node->line, body_ordinal);
+        xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
+                                    method_key_access_op);
 
         xi_lower_insert_err_check(l, node);
         return v;

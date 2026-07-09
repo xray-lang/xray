@@ -681,7 +681,6 @@ XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_sp
                                                   uint8_t access_op) {
     const XgGlobalEvidence *ev;
     uint32_t ordinal;
-    uint32_t index_ordinal = 0;
     if (!l || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID)
         return UINT32_MAX;
     ev = l->global_evidence;
@@ -690,9 +689,7 @@ XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_sp
         const XgKeyAccessSummary *row = &ev->key_accesses[i];
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id)
             continue;
-        if (row->op != XG_KEY_ACCESS_INDEX_GET && row->op != XG_KEY_ACCESS_SET)
-            continue;
-        if (index_ordinal++ != ordinal)
+        if (row->body_ordinal != ordinal)
             continue;
         if (row->source_span_id == source_span_id && row->op == access_op) {
             l->xg_next_key_access_ordinal++;
@@ -773,7 +770,8 @@ XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t s
     const XgKeyAccessSummary *match = NULL;
     if (!l || !access || body_ordinal == UINT32_MAX || !l->global_evidence || !l->func ||
         l->func->xg_body_func_id == XG_NO_ID ||
-        (access->op != XI_INDEX_GET && access->op != XI_INDEX_SET))
+        (access->op != XI_INDEX_GET && access->op != XI_INDEX_SET && access->op != XI_CALL_METHOD &&
+         access->op != XI_CALL_METHOD_DIRECT))
         return;
     ev = l->global_evidence;
     for (uint32_t i = 0; i < ev->nkey_accesses; i++) {
