@@ -1,0 +1,4 @@
+import mem
+
+var b = mem.alloc(8)
+unsafe { b.ptrUnchecked() }

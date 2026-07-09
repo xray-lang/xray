@@ -1,1 +1,1 @@
-Buffer.ptrUnchecked() must be inside an unsafe block
+Buffer.ptr() must be inside an unsafe block

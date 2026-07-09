@@ -54,7 +54,7 @@ static inline int xrt_buffer_is(XrValue v) {
     return v.tag == XR_TAG_BUFFER && v.ptr != NULL;
 }
 
-static inline xrt_buffer_object_t *xrt_buffer_ptr(XrValue v) {
+static inline xrt_buffer_object_t *xrt_buffer_obj_ptr(XrValue v) {
     return xrt_buffer_is(v) ? (xrt_buffer_object_t *) v.ptr : NULL;
 }
 
@@ -104,7 +104,7 @@ static inline XrValue xrt_buffer_new(int64_t length, int zeroed, size_t align) {
 }
 
 static inline xr_span_t xrt_buffer_as_span(XrValue value) {
-    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     if (!buf)
         return xrt_span_empty();
     xr_span_t out = {0};
@@ -119,13 +119,13 @@ static inline xr_span_t xrt_buffer_as_span(XrValue value) {
     return out;
 }
 
-static inline XrValue xrt_buffer_ptr_unchecked(XrValue value) {
-    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+static inline XrValue xrt_buffer_data_ptr(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     return xr_mkptr(buf ? buf->data : NULL, XR_TAG_PTR);
 }
 
 static inline XrValue xrt_buffer_resize(XrValue value, XrValue size_value) {
-    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     int64_t new_len = xrt_mem_int_arg(size_value);
     if (!buf || new_len < 0)
         return XR_FALSE_VAL;
@@ -156,13 +156,13 @@ static inline XrValue xrt_buffer_resize(XrValue value, XrValue size_value) {
 }
 
 static inline XrValue xrt_buffer_method_0(XrValue recv, int sym) {
-    xrt_buffer_object_t *buf = xrt_buffer_ptr(recv);
+    xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(recv);
     if (!buf)
         return XR_NULL_VAL;
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
         return XR_FROM_INT(buf->length);
-    if (sym == XRT_SYM_PTR_UNCHECKED)
-        return xrt_buffer_ptr_unchecked(recv);
+    if (sym == XRT_SYM_PTR)
+        return xrt_buffer_data_ptr(recv);
     return XR_NULL_VAL;
 }
 

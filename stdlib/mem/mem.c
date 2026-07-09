@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   `mem.alloc*` returns a managed Buffer handle whose native body owns the
- *   allocated byte block and releases it on drop. Low-level callers can still
- *   cross into the raw pointer world through Buffer.ptrUnchecked().
+ *   allocated byte block and releases it on drop. Low-level callers can cross
+ *   into the raw pointer world through unsafe Buffer.ptr().
  *
  *   The module also carries raw-memory capabilities: memory fence, cache
  *   performance hints (prefetch/flush/invalidate/non-temporal store),
@@ -261,8 +261,7 @@ static XrValue mem_buffer_length(XrVMRuntime *isolate, XrValue self, XrValue *ar
     return xr_int(buf ? buf->length : 0);
 }
 
-static XrValue mem_buffer_ptr_unchecked(XrVMRuntime *isolate, XrValue self, XrValue *args,
-                                        int argc) {
+static XrValue mem_buffer_ptr(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
     (void) args;
     (void) argc;

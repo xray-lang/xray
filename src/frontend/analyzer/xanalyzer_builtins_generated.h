@@ -19,7 +19,7 @@
 static const XaBuiltinMember g_gen_buffer_members[] = {
     {"length", "(): int", "Return the buffer length in bytes", true, false, false, false},
     {"asSpan", "(): ByteSpan", "Borrow this buffer as a mutable ByteSpan value", true, false, false, false},
-    {"ptrUnchecked", "(): RawMut<uint8>", "Return the underlying raw pointer; unsafe escape hatch", true, false, false, false},
+    {"ptr", "(): RawMut<uint8>", "Return the underlying raw pointer; requires unsafe at the call site", true, false, false, false},
     {"resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure", true, false, false, false},
 };
 #define GEN_BUFFER_MEMBER_COUNT 4

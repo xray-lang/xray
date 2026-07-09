@@ -2,5 +2,5 @@ import mem
 
 fn raw() -> RawMut<uint8> {
     var b = mem.alloc(8)
-    return b.ptrUnchecked()
+    return b.ptr()
 }
