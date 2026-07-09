@@ -591,6 +591,15 @@ static AstNode *xa_lifecycle_lint_returned_handle_expr(AstNode *expr) {
     return expr;
 }
 
+static AstNode *xa_lifecycle_lint_single_expr_block_value(AstNode *body) {
+    AstNode **statements = NULL;
+    int count = 0;
+    if (!xa_block_node_statements(body, &statements, &count) || count != 1 || !statements ||
+        !statements[0] || statements[0]->type != AST_EXPR_STMT)
+        return NULL;
+    return statements[0]->as.expr_stmt;
+}
+
 static bool xa_lifecycle_lint_expr_is_true(AstNode *expr) {
     expr = xa_thread_lint_unwrap_expr(expr);
     return expr && expr->type == AST_LITERAL_TRUE;
@@ -859,6 +868,14 @@ static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleL
         XaThreadHandleLintState *false_state =
             xa_thread_lint_find_alias_source(states, expr->as.ternary.false_expr);
         return true_state && true_state == false_state ? true_state : NULL;
+    }
+    if (expr->type == AST_UNSAFE_EXPR) {
+        AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
+        if (!operand)
+            return NULL;
+        if (operand->type == AST_BLOCK || operand->type == AST_PROGRAM)
+            operand = xa_lifecycle_lint_single_expr_block_value(operand);
+        return xa_thread_lint_find_alias_source(states, operand);
     }
     XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, expr);
     if (!state)
@@ -2670,6 +2687,14 @@ static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
         XaOsResourceLintState *false_state =
             xa_os_resource_lint_find_alias_source(states, expr->as.ternary.false_expr);
         return true_state && true_state == false_state ? true_state : NULL;
+    }
+    if (expr->type == AST_UNSAFE_EXPR) {
+        AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
+        if (!operand)
+            return NULL;
+        if (operand->type == AST_BLOCK || operand->type == AST_PROGRAM)
+            operand = xa_lifecycle_lint_single_expr_block_value(operand);
+        return xa_os_resource_lint_find_alias_source(states, operand);
     }
     XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, expr);
     if (!state)
