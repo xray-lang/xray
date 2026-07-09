@@ -160,6 +160,7 @@ MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_w
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
 HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_return_warning.xr"
+HELPER_FACTORY_DISCARD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_discard_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -293,6 +294,10 @@ expect_warning "process_pipe_helper_factory_return_warning" "$HELPER_FACTORY_RET
     $'helper-factory-process\nhelper-factory-pipe' \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_helper_factory_discard_warning" \
+    "$HELPER_FACTORY_DISCARD_WARNING_SRC" "helper-factory-discard-process-pipe" \
+    "sys.Process.spawn returns a Process handle; call wait() explicitly" \
+    "sys.Pipe.open returns a Pipe handle; call close() explicitly"
 
 printf '\nPassed: %d\nFailed: %d\n' "$PASS" "$FAIL"
 

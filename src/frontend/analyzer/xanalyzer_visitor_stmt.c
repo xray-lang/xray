@@ -2739,6 +2739,22 @@ static void xa_warn_unused_sys_thread_spawn_decl(XaInferContext *ctx, AstNode *s
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg, &loc);
 }
 
+static void xa_warn_discarded_sys_thread_factory_expr(XaInferContext *ctx, AstNode *stmt,
+                                                      XaThreadHandleLintFnSummary *fn_summaries) {
+    if (!ctx || !ctx->analyzer || !stmt || stmt->type != AST_EXPR_STMT)
+        return;
+    AstNode *expr = stmt->as.expr_stmt;
+    if (!xa_thread_lint_expr_returns_new_handle(ctx, fn_summaries, expr))
+        return;
+    const char *msg =
+        "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly";
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = expr ? expr->line : stmt->line,
+                      .column = expr ? expr->column : stmt->column};
+    if (!xa_warning_already_reported(ctx->analyzer, &loc, msg))
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg, &loc);
+}
+
 static void xa_warn_sys_thread_lifecycle_in_sequence(XaInferContext *ctx, AstNode **statements,
                                                      int count, int error_count_before) {
     if (!ctx || !statements || count <= 0)
@@ -2749,8 +2765,10 @@ static void xa_warn_sys_thread_lifecycle_in_sequence(XaInferContext *ctx, AstNod
     XaThreadHandleLintFnSummary *fn_summaries =
         xa_thread_lint_collect_visible_fn_summaries(ctx, statements, count);
 
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; i++) {
         xa_warn_unused_sys_thread_spawn_decl(ctx, statements[i], fn_summaries);
+        xa_warn_discarded_sys_thread_factory_expr(ctx, statements[i], fn_summaries);
+    }
 
     XaThreadHandleLintState *states =
         xa_thread_lint_collect_spawn_states(ctx, statements, count, fn_summaries);
@@ -5204,6 +5222,25 @@ static void xa_warn_unused_os_resource_decl(XaInferContext *ctx, AstNode *stmt,
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg, &loc);
 }
 
+static void xa_warn_discarded_os_resource_factory_expr(XaInferContext *ctx, AstNode *stmt,
+                                                       XaOsResourceLintFnSummary *fn_summaries) {
+    if (!ctx || !ctx->analyzer || !stmt || stmt->type != AST_EXPR_STMT)
+        return;
+    AstNode *expr = stmt->as.expr_stmt;
+    XaOsResourceKind kind = XA_OS_RESOURCE_PROCESS;
+    if (!xa_os_resource_lint_expr_returns_new_resource(ctx, fn_summaries, expr, &kind))
+        return;
+    char msg[192];
+    snprintf(msg, sizeof(msg), "%s returns a %s handle; call %s() explicitly",
+             xa_os_resource_open_name(kind), xa_os_resource_type_name(kind),
+             xa_os_resource_close_method(kind));
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = expr ? expr->line : stmt->line,
+                      .column = expr ? expr->column : stmt->column};
+    if (!xa_warning_already_reported(ctx->analyzer, &loc, msg))
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg, &loc);
+}
+
 static void xa_warn_os_resource_lifecycle_in_sequence(XaInferContext *ctx, AstNode **statements,
                                                       int count, int error_count_before) {
     if (!ctx || !statements || count <= 0)
@@ -5214,8 +5251,10 @@ static void xa_warn_os_resource_lifecycle_in_sequence(XaInferContext *ctx, AstNo
     XaOsResourceLintFnSummary *fn_summaries =
         xa_os_resource_lint_collect_visible_fn_summaries(ctx, statements, count);
 
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; i++) {
         xa_warn_unused_os_resource_decl(ctx, statements[i], fn_summaries);
+        xa_warn_discarded_os_resource_factory_expr(ctx, statements[i], fn_summaries);
+    }
 
     XaOsResourceLintState *states =
         xa_os_resource_lint_collect_states(ctx, statements, count, fn_summaries);

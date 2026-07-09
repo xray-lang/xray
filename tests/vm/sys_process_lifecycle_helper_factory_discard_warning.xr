@@ -1,0 +1,14 @@
+import sys
+import { Pipe, Process } from sys
+
+fn makeProcess() -> Process? {
+    return sys.Process.spawn("sh", ["-c", "exit 0"])
+}
+
+fn makePipe() -> Pipe? {
+    return sys.Pipe.open()
+}
+
+makeProcess()
+makePipe()
+print("helper-factory-discard-process-pipe")
