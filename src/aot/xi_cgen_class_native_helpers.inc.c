@@ -249,9 +249,12 @@ static void emit_class_native_inspect_fields_name(FILE *out, const char *prefix,
 static void emit_class_native_type_derive_init(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                                const char *prefix, const char *type_id_expr) {
     (void) ctx;
-    if (!cd || cd->derive_flags == 0)
+    if (!cd)
         return;
-    fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) cd->derive_flags);
+    uint32_t sidecar_flags = cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON);
+    if (sidecar_flags == 0)
+        return;
+    fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) sidecar_flags);
     if (cg_class_native_has_inspect_sidecar(cd) && cd->instance_layout->field_count > 0) {
         emit_class_native_inspect_fields_name(out, prefix, cd);
         fprintf(out, ", %u", (unsigned) cd->instance_layout->field_count);

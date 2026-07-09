@@ -159,6 +159,14 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
         *bit_out = XR_DERIVE_JSON;
         return true;
     }
+    if (token.length == 2 && memcmp(token.start, "Eq", 2) == 0) {
+        *bit_out = XR_DERIVE_EQ;
+        return true;
+    }
+    if (token.length == 4 && memcmp(token.start, "Hash", 4) == 0) {
+        *bit_out = XR_DERIVE_HASH;
+        return true;
+    }
     return false;
 }
 
@@ -294,7 +302,8 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         attr->kind = ATTR_DERIVE;
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
         if (xr_parser_check(parser, TK_RPAREN)) {
-            xr_parser_error(parser, "@derive requires at least one target: Inspect or Json");
+            xr_parser_error(parser,
+                            "@derive requires at least one target: Inspect, Json, Eq, or Hash");
         } else {
             uint32_t seen_flags = 0;
             do {
@@ -309,7 +318,9 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
                 if (!xr_derive_target_bit(target, &bit)) {
                     char msg[160];
                     snprintf(msg, sizeof(msg),
-                             "unknown derive target '%s'; expected Inspect or Json", name_buf);
+                             "unknown derive target '%s'; expected Inspect, Json, "
+                             "Eq, or Hash",
+                             name_buf);
                     xr_parser_error(parser, msg);
                 } else if ((seen_flags & bit) != 0) {
                     char msg[160];
@@ -346,6 +357,11 @@ static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
             flags |= attrs[i]->derive_flags;
     }
     return flags;
+}
+
+static void validate_decl_derive_contract(Parser *parser, uint32_t derive_flags) {
+    if ((derive_flags & XR_DERIVE_HASH) != 0 && (derive_flags & XR_DERIVE_EQ) == 0)
+        xr_parser_error_at_previous(parser, "@derive(Hash) requires Eq in the same @derive(...)");
 }
 
 static bool attrs_has_symbol_layout_attr(XrAttribute **attrs, int count) {
@@ -462,6 +478,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         cls->as.class_decl.is_native = is_native;
         cls->as.class_decl.attributes = attributes;
         cls->as.class_decl.attr_count = attr_count;
+        validate_decl_derive_contract(parser, derive_flags);
         return cls;
     }
 
@@ -489,6 +506,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         st->as.class_decl.is_native = is_native;
         st->as.class_decl.attributes = attributes;
         st->as.class_decl.attr_count = attr_count;
+        validate_decl_derive_contract(parser, derive_flags);
         return st;
     }
 
@@ -532,6 +550,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         en->as.enum_decl.attributes = attributes;
         en->as.enum_decl.attr_count = attr_count;
+        validate_decl_derive_contract(parser, derive_flags);
         return en;
     }
 

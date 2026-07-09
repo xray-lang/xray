@@ -1,0 +1,1 @@
+@derive(Hash) requires Eq in the same @derive(...)
