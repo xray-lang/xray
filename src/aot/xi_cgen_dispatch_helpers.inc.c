@@ -5390,7 +5390,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (dispatch_plan && (dispatch_plan->kind == XAOT_DISPATCH_DIRECT ||
                           dispatch_plan->kind == XAOT_DISPATCH_VTABLE ||
-                          dispatch_plan->kind == XAOT_DISPATCH_TYPE_SWITCH)) {
+                          dispatch_plan->kind == XAOT_DISPATCH_TYPE_SWITCH ||
+                          dispatch_plan->kind == XAOT_DISPATCH_ITABLE)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: verified AOT dispatch plan kind %u for method '%s' at line %u "
