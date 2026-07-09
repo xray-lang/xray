@@ -239,6 +239,55 @@ static uint64_t hash_generic_inst_summary(uint64_t hash, const XgGenericInstSumm
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_generic_body_use_summary(uint64_t hash, const XgGenericBodyUseSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->use_id);
+    hash = hash_u32(hash, row->generic_inst_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->origin_body_func_id);
+    hash = hash_u32(hash, row->specialized_body_func_id);
+    hash = hash_u32(hash, row->root_callsite_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u32(hash, row->type_arg_key_start);
+    hash = hash_u32(hash, row->type_arg_count);
+    hash = hash_u32(hash, row->estimated_body_size);
+    hash = hash_u32(hash, row->flags);
+    return hash_u64(hash, row->body_use_hash);
+}
+
+static uint64_t hash_generic_storage_summary(uint64_t hash, const XgGenericStorageSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->storage_id);
+    hash = hash_u32(hash, row->generic_inst_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u8(hash, row->storage_kind);
+    hash = hash_u32(hash, row->origin_type_key);
+    hash = hash_u32(hash, row->specialized_type_key);
+    hash = hash_u32(hash, row->elem_type_key);
+    hash = hash_u32(hash, row->key_type_key);
+    hash = hash_u32(hash, row->value_type_key);
+    hash = hash_u32(hash, row->container_plan_id);
+    hash = hash_u32(hash, row->flags);
+    return hash_u64(hash, row->storage_hash);
+}
+
+static uint64_t hash_generic_code_size_summary(uint64_t hash, const XgGenericCodeSizeSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->code_size_id);
+    hash = hash_u32(hash, row->generic_inst_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->body_use_id);
+    hash = hash_u32(hash, row->origin_body_size_estimate);
+    hash = hash_u32(hash, row->specialized_body_size_estimate);
+    hash = hash_u32(hash, row->instantiation_count);
+    hash = hash_u32(hash, row->threshold);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_derive_summary(uint64_t hash, const XgDeriveSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -504,6 +553,23 @@ XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind) {
             return "class";
         case XG_GENERIC_INST_CONTAINER:
             return "container";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_generic_storage_kind_name(uint8_t kind) {
+    switch ((XgGenericStorageKind) kind) {
+        case XG_GENERIC_STORAGE_ARRAY:
+            return "array";
+        case XG_GENERIC_STORAGE_MAP:
+            return "map";
+        case XG_GENERIC_STORAGE_SET:
+            return "set";
+        case XG_GENERIC_STORAGE_CLASS:
+            return "class";
+        case XG_GENERIC_STORAGE_STRUCT:
+            return "struct";
         default:
             return "unknown";
     }
@@ -880,6 +946,9 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->callsites);
     xr_free(evidence->link_deps);
     xr_free(evidence->generic_insts);
+    xr_free(evidence->generic_body_uses);
+    xr_free(evidence->generic_storages);
+    xr_free(evidence->generic_code_sizes);
     xr_free(evidence->derives);
     xr_free(evidence->derived_fields);
     xr_free(evidence->derived_methods);
@@ -950,6 +1019,27 @@ XR_FUNC bool xg_global_evidence_reserve_generic_insts(XgGlobalEvidence *evidence
     return evidence &&
            reserve_array((void **) &evidence->generic_insts, &evidence->generic_inst_cap, capacity,
                          sizeof(XgGenericInstSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_generic_body_uses(XgGlobalEvidence *evidence,
+                                                          uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->generic_body_uses, &evidence->generic_body_use_cap,
+                         capacity, sizeof(XgGenericBodyUseSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_generic_storages(XgGlobalEvidence *evidence,
+                                                         uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->generic_storages, &evidence->generic_storage_cap,
+                         capacity, sizeof(XgGenericStorageSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_generic_code_sizes(XgGlobalEvidence *evidence,
+                                                           uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->generic_code_sizes, &evidence->generic_code_size_cap,
+                         capacity, sizeof(XgGenericCodeSizeSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_derives(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1134,6 +1224,42 @@ xg_global_evidence_add_generic_inst(XgGlobalEvidence *evidence,
     return row;
 }
 
+XR_FUNC XgGenericBodyUseSummary *
+xg_global_evidence_add_generic_body_use(XgGlobalEvidence *evidence,
+                                        const XgGenericBodyUseSummary *summary) {
+    XgGenericBodyUseSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_generic_body_uses(evidence, evidence->ngeneric_body_uses + 1))
+        return NULL;
+    row = &evidence->generic_body_uses[evidence->ngeneric_body_uses++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgGenericStorageSummary *
+xg_global_evidence_add_generic_storage(XgGlobalEvidence *evidence,
+                                       const XgGenericStorageSummary *summary) {
+    XgGenericStorageSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_generic_storages(evidence, evidence->ngeneric_storages + 1))
+        return NULL;
+    row = &evidence->generic_storages[evidence->ngeneric_storages++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgGenericCodeSizeSummary *
+xg_global_evidence_add_generic_code_size(XgGlobalEvidence *evidence,
+                                         const XgGenericCodeSizeSummary *summary) {
+    XgGenericCodeSizeSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_generic_code_sizes(evidence, evidence->ngeneric_code_sizes + 1))
+        return NULL;
+    row = &evidence->generic_code_sizes[evidence->ngeneric_code_sizes++];
+    *row = *summary;
+    return row;
+}
+
 XR_FUNC XgDeriveSummary *xg_global_evidence_add_derive(XgGlobalEvidence *evidence,
                                                        const XgDeriveSummary *summary) {
     XgDeriveSummary *row;
@@ -1278,6 +1404,42 @@ xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
         if (evidence->generic_insts[i].generic_inst_id == generic_inst_id)
             return &evidence->generic_insts[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgGenericBodyUseSummary *
+xg_global_evidence_find_generic_body_use(const XgGlobalEvidence *evidence,
+                                         XgGenericBodyUseId use_id) {
+    if (!evidence || use_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
+        if (evidence->generic_body_uses[i].use_id == use_id)
+            return &evidence->generic_body_uses[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgGenericStorageSummary *
+xg_global_evidence_find_generic_storage(const XgGlobalEvidence *evidence,
+                                        XgGenericStorageId storage_id) {
+    if (!evidence || storage_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
+        if (evidence->generic_storages[i].storage_id == storage_id)
+            return &evidence->generic_storages[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgGenericCodeSizeSummary *
+xg_global_evidence_find_generic_code_size(const XgGlobalEvidence *evidence,
+                                          XgGenericCodeSizeId code_size_id) {
+    if (!evidence || code_size_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++) {
+        if (evidence->generic_code_sizes[i].code_size_id == code_size_id)
+            return &evidence->generic_code_sizes[i];
     }
     return NULL;
 }
@@ -1757,6 +1919,9 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
     hash = hash_mix(hash, &evidence->nlink_deps, sizeof(evidence->nlink_deps));
     hash = hash_mix(hash, &evidence->ngeneric_insts, sizeof(evidence->ngeneric_insts));
+    hash = hash_mix(hash, &evidence->ngeneric_body_uses, sizeof(evidence->ngeneric_body_uses));
+    hash = hash_mix(hash, &evidence->ngeneric_storages, sizeof(evidence->ngeneric_storages));
+    hash = hash_mix(hash, &evidence->ngeneric_code_sizes, sizeof(evidence->ngeneric_code_sizes));
     hash = hash_mix(hash, &evidence->nderives, sizeof(evidence->nderives));
     hash = hash_mix(hash, &evidence->nderived_fields, sizeof(evidence->nderived_fields));
     hash = hash_mix(hash, &evidence->nderived_methods, sizeof(evidence->nderived_methods));
@@ -1788,6 +1953,12 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
         hash = hash_generic_inst_summary(hash, &evidence->generic_insts[i]);
+    for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++)
+        hash = hash_generic_body_use_summary(hash, &evidence->generic_body_uses[i]);
+    for (uint32_t i = 0; i < evidence->ngeneric_storages; i++)
+        hash = hash_generic_storage_summary(hash, &evidence->generic_storages[i]);
+    for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++)
+        hash = hash_generic_code_size_summary(hash, &evidence->generic_code_sizes[i]);
     for (uint32_t i = 0; i < evidence->nderives; i++)
         hash = hash_derive_summary(hash, &evidence->derives[i]);
     for (uint32_t i = 0; i < evidence->nderived_fields; i++)
@@ -2208,16 +2379,18 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     fprintf(out,
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
             "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u "
-            "derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
+            "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u derives=%u "
+            "derived_fields=%u derived_methods=%u json_shapes=%u "
             "json_accesses=%u record_shapes=%u record_accesses=%u map_shapes=%u map_entries=%u "
             "key_accesses=%u hash_eqs=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods, evidence->nbodies,
             evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts,
-            evidence->nderives, evidence->nderived_fields, evidence->nderived_methods,
-            evidence->njson_shapes, evidence->njson_accesses, evidence->nrecord_shapes,
-            evidence->nrecord_accesses, evidence->nmap_shapes, evidence->nmap_entries,
-            evidence->nkey_accesses, evidence->nhash_eqs);
+            evidence->ngeneric_body_uses, evidence->ngeneric_storages,
+            evidence->ngeneric_code_sizes, evidence->nderives, evidence->nderived_fields,
+            evidence->nderived_methods, evidence->njson_shapes, evidence->njson_accesses,
+            evidence->nrecord_shapes, evidence->nrecord_accesses, evidence->nmap_shapes,
+            evidence->nmap_entries, evidence->nkey_accesses, evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -2323,6 +2496,38 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 inst->root_callsite_id, inst->constraint_interface_id, inst->name_id,
                 inst->type_key, inst->type_arg_key_start, (unsigned) inst->type_arg_count,
                 inst->source_span_id, inst->flags);
+    }
+    for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
+        const XgGenericBodyUseSummary *use = &evidence->generic_body_uses[i];
+        fprintf(out,
+                "generic-body-use %u id=%u inst=%u module=%u owner=%u origin_body=%u "
+                "specialized_body=%u root_callsite=%u type=%u type_args=%u+%u size=%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                i, use->use_id, use->generic_inst_id, use->module_id, use->owner_func_id,
+                use->origin_body_func_id, use->specialized_body_func_id, use->root_callsite_id,
+                use->type_key, use->type_arg_key_start, (unsigned) use->type_arg_count,
+                use->estimated_body_size, use->flags, use->body_use_hash);
+    }
+    for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
+        const XgGenericStorageSummary *storage = &evidence->generic_storages[i];
+        fprintf(out,
+                "generic-storage %u id=%u inst=%u module=%u kind=%s origin_type=%u "
+                "specialized_type=%u elem_type=%u key_type=%u value_type=%u container_plan=%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                i, storage->storage_id, storage->generic_inst_id, storage->module_id,
+                xg_generic_storage_kind_name(storage->storage_kind), storage->origin_type_key,
+                storage->specialized_type_key, storage->elem_type_key, storage->key_type_key,
+                storage->value_type_key, storage->container_plan_id, storage->flags,
+                storage->storage_hash);
+    }
+    for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++) {
+        const XgGenericCodeSizeSummary *size = &evidence->generic_code_sizes[i];
+        fprintf(out,
+                "generic-code-size %u id=%u inst=%u module=%u body_use=%u origin=%u "
+                "specialized=%u count=%u threshold=%u flags=0x%x\n",
+                i, size->code_size_id, size->generic_inst_id, size->module_id, size->body_use_id,
+                size->origin_body_size_estimate, size->specialized_body_size_estimate,
+                size->instantiation_count, size->threshold, size->flags);
     }
     for (uint32_t i = 0; i < evidence->nderives; i++) {
         const XgDeriveSummary *d = &evidence->derives[i];
