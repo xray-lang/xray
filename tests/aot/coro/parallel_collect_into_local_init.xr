@@ -10,7 +10,7 @@ fn main() {
         local table = Array<int>(1, wid)
         collect into (values, marks) {
         unsafe {
-            buf.pushUnchecked(i)
+            buf.push(i)
             table.setUnchecked(0, table.getUnchecked(0) + 1)
         }
         acc = acc + 1

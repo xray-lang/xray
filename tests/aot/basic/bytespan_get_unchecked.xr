@@ -6,9 +6,9 @@ fn pair(src: ByteSpan) -> int {
 
 var bytes = Bytes.withCapacity(4)
 unsafe {
-    bytes.pushUnchecked(3)
-    bytes.pushUnchecked(7)
-    bytes.pushUnchecked(11)
+    bytes.push(3)
+    bytes.push(7)
+    bytes.push(11)
 }
 var view: ByteSpan = bytes[:]
 print(pair(view))

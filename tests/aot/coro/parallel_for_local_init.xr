@@ -15,7 +15,7 @@ fn main() {
         local buf = Bytes.withCapacity(4)
         local table = makeLane(wid) {
         unsafe {
-            buf.pushUnchecked(i)
+            buf.push(i)
             table.setUnchecked(0, table.getUnchecked(0) + 1)
         }
         acc = acc + 1

@@ -716,10 +716,10 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
 static bool xa_summary_method_stores_argument(const char *method_name, int slot) {
     if (!method_name || slot < 0)
         return false;
-    if ((strcmp(method_name, "push") == 0 || strcmp(method_name, "pushUnchecked") == 0 ||
-         strcmp(method_name, "unshift") == 0 || strcmp(method_name, "fill") == 0 ||
-         strcmp(method_name, "add") == 0 || strcmp(method_name, "send") == 0 ||
-         strcmp(method_name, "trySend") == 0 || strcmp(method_name, "sendTimeout") == 0) &&
+    if ((strcmp(method_name, "push") == 0 || strcmp(method_name, "unshift") == 0 ||
+         strcmp(method_name, "fill") == 0 || strcmp(method_name, "add") == 0 ||
+         strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
+         strcmp(method_name, "sendTimeout") == 0) &&
         slot == 0)
         return true;
     if (strcmp(method_name, "setUnchecked") == 0 && slot == 1)

@@ -795,10 +795,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             xrt_array_push(recv, arg0);
             return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
         }
-        if (sym == XRT_SYM_PUSH_UNCHECKED) {
-            xrt_array_push_unchecked(recv, arg0);
-            return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
-        }
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
         if (sym == XRT_SYM_APPEND_FROM)

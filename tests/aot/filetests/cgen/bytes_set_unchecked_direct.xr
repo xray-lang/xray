@@ -9,10 +9,10 @@ fn patchHeader(out: Bytes) {
 
 var out = Bytes.withCapacity(4)
 unsafe {
-    out.pushUnchecked(0)
-    out.pushUnchecked(0)
-    out.pushUnchecked(0)
-    out.pushUnchecked(0)
+    out.push(0)
+    out.push(0)
+    out.push(0)
+    out.push(0)
 }
 patchHeader(out)
 print(out[0] + out[1] + out[2] + out[3])

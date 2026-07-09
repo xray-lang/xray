@@ -95,34 +95,6 @@ static XrValue m_push(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     return self;
 }
 
-static XrValue m_push_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrArray *arr = array_self(self);
-    if (argc < 1)
-        return self;
-    if (xr_array_is_slice(arr)) {
-        XrValue exc =
-            xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s", XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!array_accepts_value(iso, arr, args[0]))
-        return self;
-    if (arr->length >= arr->capacity) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-                                         "Array.pushUnchecked capacity exceeded");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (arr->elem_type == XR_ELEM_ANY) {
-        ((XrValue *) arr->data)[arr->length++] = args[0];
-        XR_ARRAY_MARK_REFS(arr, args[0]);
-    } else {
-        xr_array_set_element(arr, arr->length++, args[0]);
-    }
-    XR_ARRAY_MARK_MUTATED(arr);
-    return self;
-}
-
 static XrValue m_pop(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
@@ -517,7 +489,6 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod array_methods[] = {
         /* Mutation */
         {"push", m_push, 1},
-        {"pushUnchecked", m_push_unchecked, 1},
         {"pop", m_pop, 0},
         {"shift", m_shift, 0},
         {"unshift", m_unshift, 1},

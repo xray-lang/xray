@@ -15,7 +15,7 @@ fn main() {
         local buf = Bytes.withCapacity(4)
         local table = makeLane(wid) {
         unsafe {
-            buf.pushUnchecked(wid)
+            buf.push(wid)
         }
         acc = acc + buf.length + table.length
         var i = begin
@@ -45,7 +45,7 @@ fn main() {
         init 0
         combine (a: int, b: int) -> a + b {
         unsafe {
-            buf.pushUnchecked(wid)
+            buf.push(wid)
         }
         acc = acc + buf.length + table.length
         var i = begin
