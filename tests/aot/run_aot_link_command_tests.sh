@@ -2462,6 +2462,57 @@ else
     sed 's/^/      /' "$FREESTANDING_ENUM_STATIC_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_PRELUDE_ENUM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_prelude_enum_static.xr"
+FREESTANDING_PRELUDE_ENUM_OBJ="$WORK/freestanding_prelude_enum_static.o"
+FREESTANDING_PRELUDE_ENUM_LOG="$WORK/freestanding_prelude_enum_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_PRELUDE_ENUM_OBJ" \
+        "$FREESTANDING_PRELUDE_ENUM_SRC" >"$FREESTANDING_PRELUDE_ENUM_LOG" 2>&1; then
+    FREESTANDING_PRELUDE_ENUM_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_PRELUDE_ENUM_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_PRELUDE_ENUM_C" ]; then
+        expect_log_contains "$FREESTANDING_PRELUDE_ENUM_C" "freestanding prelude enum namespace" \
+            "freestanding-profile/prelude-enum: uses no-op namespace token"
+        expect_log_contains "$FREESTANDING_PRELUDE_ENUM_C" "int64_t" \
+            "freestanding-profile/prelude-enum: lowers variants to native ordinal"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "_ev_Endian" \
+            "freestanding-profile/prelude-enum: avoids Endian namespace object"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "XR_TAG_ENUM" \
+            "freestanding-profile/prelude-enum: avoids tagged enum values"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "xrt_enum_box_ordinal" \
+            "freestanding-profile/prelude-enum: avoids boxed enum ordinal helper"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "xrt_map_new" \
+            "freestanding-profile/prelude-enum: avoids enum namespace map allocation"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "xrt_map_set" \
+            "freestanding-profile/prelude-enum: avoids enum namespace map initialization"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "xrt_getprop_name" \
+            "freestanding-profile/prelude-enum: avoids dynamic enum property lookup"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "xr_box_str" \
+            "freestanding-profile/prelude-enum: avoids enum name string boxing"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "#include \"xrt.h\"" \
+            "freestanding-profile/prelude-enum: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/prelude-enum: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_PRELUDE_ENUM_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_PRELUDE_ENUM_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_PRELUDE_ENUM_OBJ")"
+    FREESTANDING_PRELUDE_ENUM_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_PRELUDE_ENUM_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_PRELUDE_ENUM_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/prelude-enum: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/prelude-enum: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_PRELUDE_ENUM_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/prelude-enum: object build failed"
+    sed 's/^/      /' "$FREESTANDING_PRELUDE_ENUM_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_ENUM_ERR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_error_channel.xr"
 FREESTANDING_ENUM_ERR_OBJ="$WORK/freestanding_enum_error_channel.o"
 FREESTANDING_ENUM_ERR_LOG="$WORK/freestanding_enum_error_channel.log"
