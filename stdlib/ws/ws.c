@@ -1882,7 +1882,7 @@ void xr_ws_message_free(XrWsMessage *msg) {
         xr_free(msg);
 }
 
-const char *xr_ws_error_string(XrWsError err) {
+const char *ws_error_string(XrWsError err) {
     return xr_net_error_string(err);
 }
 
@@ -1998,7 +1998,7 @@ static bool ws_valid_sec_key_value(const char *key) {
     return ok;
 }
 
-bool xr_ws_is_upgrade_request(const char *request_headers) {
+bool ws_is_upgrade_request(const char *request_headers) {
     if (!request_headers)
         return false;
 
@@ -2230,13 +2230,13 @@ static char *ws_pick_subprotocol(const char *request_headers, const char **serve
     return NULL;
 }
 
-XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *request_headers,
-                              const XrWsUpgradeOptions *opts) {
+XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *request_headers,
+                           const XrWsUpgradeOptions *opts) {
     if (fd < 0 || !request_headers)
         return NULL;
 
     // Check if upgrade request
-    if (!xr_ws_is_upgrade_request(request_headers))
+    if (!ws_is_upgrade_request(request_headers))
         return NULL;
 
     // Origin allowlist check (W-18). Cross-origin browser attacks are the
