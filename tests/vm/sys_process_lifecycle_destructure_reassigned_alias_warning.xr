@@ -1,0 +1,14 @@
+import sys
+import { Pipe } from sys
+
+var processFirst = sys.Process.spawn("sh", ["-c", "exit 0"])
+var processSecond = sys.Process.spawn("sh", ["-c", "exit 0"])
+var processHandle = processFirst!
+(processHandle,) = (processSecond!,)
+print(processHandle.wait())
+
+var pipeFirst = Pipe.open()
+var pipeSecond = Pipe.open()
+var pipeHandle = pipeFirst!
+(pipeHandle,) = (pipeSecond!,)
+print(pipeHandle.close())

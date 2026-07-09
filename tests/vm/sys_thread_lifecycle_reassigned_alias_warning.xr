@@ -1,0 +1,28 @@
+import sys
+
+fn assignmentRebind() {
+    var original = sys.Thread.spawn(fn() -> int {
+        return 1
+    })
+    var replacement = sys.Thread.spawn(fn() -> int {
+        return 2
+    })
+    var handle = original
+    handle = replacement
+    print(handle.join())
+}
+
+fn destructureRebind() {
+    var first = sys.Thread.spawn(fn() -> int {
+        return 3
+    })
+    var second = sys.Thread.spawn(fn() -> int {
+        return 4
+    })
+    var handle = first
+    (handle,) = (second,)
+    print(handle.join())
+}
+
+assignmentRebind()
+destructureRebind()

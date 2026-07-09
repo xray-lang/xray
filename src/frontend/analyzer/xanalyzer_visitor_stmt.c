@@ -518,6 +518,29 @@ static void xa_thread_lint_add_alias_name(XaThreadHandleLintState *state, const 
     state->aliases = alias;
 }
 
+static bool xa_thread_lint_alias_has_symbol_id(XaThreadHandleLintAlias *alias,
+                                               uint32_t symbol_id) {
+    return alias && symbol_id != 0 &&
+           (alias->symbol_id == symbol_id || (alias->sym && alias->sym->id == symbol_id));
+}
+
+static void xa_thread_lint_remove_alias_id(XaThreadHandleLintState *states, uint32_t symbol_id) {
+    if (symbol_id == 0)
+        return;
+    for (XaThreadHandleLintState *s = states; s; s = s->next) {
+        XaThreadHandleLintAlias **link = &s->aliases;
+        while (*link) {
+            XaThreadHandleLintAlias *alias = *link;
+            if (xa_thread_lint_alias_has_symbol_id(alias, symbol_id)) {
+                *link = alias->next;
+                xr_free(alias);
+                continue;
+            }
+            link = &alias->next;
+        }
+    }
+}
+
 static XaThreadHandleLintState *xa_thread_lint_find_by_symbol_id(XaThreadHandleLintState *states,
                                                                  uint32_t symbol_id) {
     if (symbol_id == 0)
@@ -907,6 +930,7 @@ static void xa_thread_lint_note_assignment_alias(XaThreadHandleLintState *states
     if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
         return;
     XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, assignment->value);
+    xa_thread_lint_remove_alias_id(states, assignment->symbol_id);
     if (state)
         xa_thread_lint_add_alias_id(state, assignment->symbol_id);
 }
@@ -947,7 +971,8 @@ static AstNode *xa_lifecycle_lint_object_source_for_field(AstNode *initializer,
 
 static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *states,
                                                     XrDestructurePattern *pattern,
-                                                    AstNode *initializer) {
+                                                    AstNode *initializer,
+                                                    bool invalidate_targets) {
     if (!states || !pattern || !initializer)
         return;
     switch (pattern->type) {
@@ -955,6 +980,8 @@ static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *sta
             if (pattern->as.identifier.symbol_id == 0)
                 return;
             XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, initializer);
+            if (invalidate_targets)
+                xa_thread_lint_remove_alias_id(states, pattern->as.identifier.symbol_id);
             if (state)
                 xa_thread_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
             return;
@@ -964,7 +991,7 @@ static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *sta
             for (int i = 0; i < pattern->as.array.element_count; i++) {
                 xa_thread_lint_note_destructure_aliases(
                     states, pattern->as.array.elements[i],
-                    xa_lifecycle_lint_destructure_source_at(initializer, i));
+                    xa_lifecycle_lint_destructure_source_at(initializer, i), invalidate_targets);
             }
             return;
         case PATTERN_OBJECT:
@@ -972,7 +999,8 @@ static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *sta
                 xa_thread_lint_note_destructure_aliases(
                     states, pattern->as.object.patterns[i],
                     xa_lifecycle_lint_object_source_for_field(initializer,
-                                                              pattern->as.object.field_names[i]));
+                                                              pattern->as.object.field_names[i]),
+                    invalidate_targets);
             }
             return;
         default:
@@ -1757,13 +1785,13 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             return;
         case AST_DESTRUCTURE_DECL:
             xa_thread_lint_note_destructure_aliases(states, stmt->as.destructure_decl.pattern,
-                                                    stmt->as.destructure_decl.initializer);
+                                                    stmt->as.destructure_decl.initializer, false);
             xa_thread_lint_scan_expr(states, stmt->as.destructure_decl.initializer, false,
                                      can_escape);
             return;
         case AST_DESTRUCTURE_ASSIGN:
             xa_thread_lint_note_destructure_aliases(states, stmt->as.destructure_assign.pattern,
-                                                    stmt->as.destructure_assign.value);
+                                                    stmt->as.destructure_assign.value, true);
             xa_thread_lint_scan_expr(states, stmt->as.destructure_assign.value, false, can_escape);
             return;
         case AST_ASSIGNMENT:
@@ -2559,6 +2587,30 @@ static void xa_os_resource_lint_add_alias_name(XaOsResourceLintState *state, con
     state->aliases = alias;
 }
 
+static bool xa_os_resource_lint_alias_has_symbol_id(XaOsResourceAlias *alias,
+                                                    uint32_t symbol_id) {
+    return alias && symbol_id != 0 &&
+           (alias->symbol_id == symbol_id || (alias->sym && alias->sym->id == symbol_id));
+}
+
+static void xa_os_resource_lint_remove_alias_id(XaOsResourceLintState *states,
+                                                uint32_t symbol_id) {
+    if (symbol_id == 0)
+        return;
+    for (XaOsResourceLintState *s = states; s; s = s->next) {
+        XaOsResourceAlias **link = &s->aliases;
+        while (*link) {
+            XaOsResourceAlias *alias = *link;
+            if (xa_os_resource_lint_alias_has_symbol_id(alias, symbol_id)) {
+                *link = alias->next;
+                xr_free(alias);
+                continue;
+            }
+            link = &alias->next;
+        }
+    }
+}
+
 static XaOsResourceLintState *xa_os_resource_lint_find_by_symbol_id(XaOsResourceLintState *states,
                                                                     uint32_t symbol_id) {
     if (symbol_id == 0)
@@ -2764,13 +2816,15 @@ static void xa_os_resource_lint_note_assignment_alias(XaOsResourceLintState *sta
         return;
     XaOsResourceLintState *state =
         xa_os_resource_lint_find_alias_source(states, assignment->value);
+    xa_os_resource_lint_remove_alias_id(states, assignment->symbol_id);
     if (state)
         xa_os_resource_lint_add_alias_id(state, assignment->symbol_id);
 }
 
 static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *states,
                                                          XrDestructurePattern *pattern,
-                                                         AstNode *initializer) {
+                                                         AstNode *initializer,
+                                                         bool invalidate_targets) {
     if (!states || !pattern || !initializer)
         return;
     switch (pattern->type) {
@@ -2779,6 +2833,8 @@ static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *
                 return;
             XaOsResourceLintState *state =
                 xa_os_resource_lint_find_alias_source(states, initializer);
+            if (invalidate_targets)
+                xa_os_resource_lint_remove_alias_id(states, pattern->as.identifier.symbol_id);
             if (state)
                 xa_os_resource_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
             return;
@@ -2788,7 +2844,7 @@ static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *
             for (int i = 0; i < pattern->as.array.element_count; i++) {
                 xa_os_resource_lint_note_destructure_aliases(
                     states, pattern->as.array.elements[i],
-                    xa_lifecycle_lint_destructure_source_at(initializer, i));
+                    xa_lifecycle_lint_destructure_source_at(initializer, i), invalidate_targets);
             }
             return;
         case PATTERN_OBJECT:
@@ -2796,7 +2852,8 @@ static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *
                 xa_os_resource_lint_note_destructure_aliases(
                     states, pattern->as.object.patterns[i],
                     xa_lifecycle_lint_object_source_for_field(initializer,
-                                                              pattern->as.object.field_names[i]));
+                                                              pattern->as.object.field_names[i]),
+                    invalidate_targets);
             }
             return;
         default:
@@ -3682,13 +3739,15 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             return;
         case AST_DESTRUCTURE_DECL:
             xa_os_resource_lint_note_destructure_aliases(states, stmt->as.destructure_decl.pattern,
-                                                         stmt->as.destructure_decl.initializer);
+                                                         stmt->as.destructure_decl.initializer,
+                                                         false);
             xa_os_resource_lint_scan_expr(states, stmt->as.destructure_decl.initializer, false,
                                           can_escape);
             return;
         case AST_DESTRUCTURE_ASSIGN:
             xa_os_resource_lint_note_destructure_aliases(
-                states, stmt->as.destructure_assign.pattern, stmt->as.destructure_assign.value);
+                states, stmt->as.destructure_assign.pattern, stmt->as.destructure_assign.value,
+                true);
             xa_os_resource_lint_scan_expr(states, stmt->as.destructure_assign.value, false,
                                           can_escape);
             return;
