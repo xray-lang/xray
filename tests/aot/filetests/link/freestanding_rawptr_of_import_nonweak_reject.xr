@@ -1,0 +1,7 @@
+import mem
+import { OFFSET } from "./_freestanding_static_data_lib"
+
+@c_export("xray_rawptr_of_import_nonweak_reject")
+fn rawptrOfImportNonWeakReject() -> int {
+    return mem.addressOf(RawPtr<int>.of(OFFSET))
+}

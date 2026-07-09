@@ -1,0 +1,4 @@
+args=--profile freestanding
+status=fail
+contains=requires @weak for cross-module data access
+not_contains=CRASH
