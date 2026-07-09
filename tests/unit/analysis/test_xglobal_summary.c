@@ -7179,6 +7179,57 @@ TEST(global_evidence_records_json_shape_and_access_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_producer_records_explicit_json_shape_access) {
+    setup_parser_session();
+    const char *source = "fn readName() -> string {\n"
+                         "    var j: Json = { name: \"ada\", age: 1 }\n"
+                         "    return j.name\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.njson_shapes, 1);
+    ASSERT_EQ_UINT(ev.njson_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_shapes[0].shape_kind, XG_JSON_SHAPE_SHAPED);
+    ASSERT_EQ_UINT(ev.json_shapes[0].field_count, 2);
+    ASSERT_TRUE((ev.json_shapes[0].flags & XG_JSON_SHAPE_STATIC_KEYS) != 0);
+    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
+    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 0);
+    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotJsonAccessPlan *access_plan =
+        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "json-shape 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "json-access 0 id=1"));
+    xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
     const char *source = "fn useTable() -> int {\n"
@@ -7631,6 +7682,7 @@ RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_records_derive_rows);
 RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
+RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
