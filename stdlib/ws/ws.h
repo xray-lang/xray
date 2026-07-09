@@ -264,9 +264,6 @@ XR_FUNC int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void 
 // Free message
 XR_FUNC void xr_ws_message_free(XrWsMessage *msg);
 
-// Get state
-XR_FUNC XrWsState xr_ws_get_state(XrWebSocket *ws);
-
 // Get error description
 XR_FUNC const char *xr_ws_error_string(XrWsError err);
 

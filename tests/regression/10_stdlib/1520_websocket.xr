@@ -9,7 +9,6 @@ fn test_ws_apis_exist() {
     assert(typename(ws.recv) == "function")
     assert(typename(ws.close) == "function")
     assert(typename(ws.ping) == "function")
-    assert(typename(ws.state) == "function")
 }
 
 @test

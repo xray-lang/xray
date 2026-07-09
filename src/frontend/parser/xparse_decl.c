@@ -21,22 +21,6 @@
 #include "xtype_scope.h"
 #include "../xdiag_fmt.h"
 
-/* ========== Local Cleanup Helpers ========== */
-
-// All parser allocations go through the parse arena; these helpers are
-// retained for API compatibility but are now no-ops. Arena destroy at
-// parse end releases every buffer allocated here.
-static inline void free_generic_params(XrGenericParam **type_params, int count) {
-    (void) type_params;
-    (void) count;
-}
-
-static inline void free_param_nodes(XrCompilerSession *X, XrParamNode **params, int count) {
-    (void) X;
-    (void) params;
-    (void) count;
-}
-
 static bool current_can_start_top_level_after_recovery(Parser *parser) {
     return xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_CLASS) ||
            xr_parser_check(parser, TK_STRUCT) || xr_parser_check(parser, TK_UNION) ||
@@ -902,13 +886,10 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     return func_decl;
 
 fail:
-    // Release everything the parser still owns locally. type_params and
-    // params have not yet been transferred to the AST on this path.
+    // Local parser allocations are arena-owned and released at parse end.
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
     }
-    free_generic_params(type_params, type_param_count);
-    free_param_nodes(parser->compiler_session, params, param_count);
     return NULL;
 }
 
@@ -1153,7 +1134,6 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     bool has_computed = false;
     int count = 0;
     int capacity = 0;
-    bool is_map = false;  // Legacy branch marker; object literals are not Maps.
 
     do {
         // Expand capacity
@@ -1287,10 +1267,6 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     // Expect closing brace
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
 
-    // `{ ... }` always produces a Json/Object literal;
-    // the legacy `is_map` branch is unreachable but the local is kept to
-    // minimise diff churn against historical compiles.
-    (void) is_map;
     AstNode *result = xr_ast_object_literal(parser->compiler_session, keys, values,
                                             has_computed ? computed : NULL, count, line);
 

@@ -111,15 +111,6 @@ static inline bool xr_range_contains(XrRange *r, int64_t value) {
     }
 }
 
-/* ========== XrValue Conversion (legacy compatibility — will be removed) ========== */
-
-static inline XrRange *xr_value_to_range(XrValue v) {
-    /* After migration the ptr IS an XrInstance; callers that still use
-     * this helper get the instance pointer, not the body. They must be
-     * migrated to xr_value_get_range_body(). */
-    return (XrRange *) XR_TO_PTR(v);
-}
-
 /* ========== Conversion ========== */
 
 // Materialize range into an Array, or raise a catchable panic if the range

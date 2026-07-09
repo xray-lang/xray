@@ -486,12 +486,10 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
     {"recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", true, false, false, false},
     {"close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", true, false, false, false},
     {"ping", "(conn: WsConn): bool", "Send a ping frame", true, false, false, false},
-    {"state", "(conn: WsConn): string", "Get connection state", true, false, false, false},
-    {"isOpen", "(conn: WsConn): bool", "Check if connection is open", true, false, false, false},
     {"serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", true, false, false, false},
     {"stopServer", "(): ()", "Stop the WebSocket server", true, false, false, false},
 };
-#define GEN_WS_FUNCTION_COUNT 9
+#define GEN_WS_FUNCTION_COUNT 7
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {

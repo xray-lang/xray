@@ -16,7 +16,7 @@ var testResults = ""
 // Start echo server in background coroutine
 go fn() {
     ws.serve(9102, fn(conn) {
-        while (ws.isOpen(conn)) {
+        while (true) {
             var msg = ws.recv(conn, null)
             if (msg == null || msg.error) {
                 break

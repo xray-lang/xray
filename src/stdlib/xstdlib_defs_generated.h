@@ -358,8 +358,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"ws", "close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", "ws_close", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"ws", "ping", "(conn: WsConn): bool", "Send a ping frame", "ws_ping", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"ws", "state", "(conn: WsConn): string", "Get connection state", "ws_state", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"ws", "isOpen", "(conn: WsConn): bool", "Check if connection is open", "ws_is_open", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
 };

@@ -40,7 +40,7 @@ for (server in servers) {
         print("  Error: " + conn.error)
     } else {
         print("  Connected!")
-        print("  State: " + ws.state(conn))
+        print("  State: " + conn.state)
         ws.close(conn, null, null)
         print("  Closed")
     }

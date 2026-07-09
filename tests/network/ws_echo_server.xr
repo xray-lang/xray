@@ -31,7 +31,7 @@ ws.serve(8765, fn(conn) {
     var connId = connectionCount
     
     // Echo loop - minimal overhead for max performance
-    while (ws.isOpen(conn)) {
+    while (true) {
         var msg = ws.recv(conn, null)
         if (msg == null || msg.error) {
             break

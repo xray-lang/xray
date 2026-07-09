@@ -1,0 +1,3 @@
+import ws
+
+ws.isOpen({_wsId: 0, url: "ws://localhost", state: "open"})

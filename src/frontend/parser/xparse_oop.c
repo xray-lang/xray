@@ -114,18 +114,6 @@ static AstNode *reject_removed_member_modifier(Parser *parser, bool *is_method_o
     return NULL;
 }
 
-/* ========== Local Cleanup Helpers ========== */
-
-// All parser allocations now go through the parse arena; individual frees
-// are no-ops. Arena destroy at parse end (or on error via
-// xr_parse_discard_arena) releases every string, param, and array
-// allocated during parsing.
-
-static inline void oop_free_generic_params(XrGenericParam **type_params, int count) {
-    (void) type_params;
-    (void) count;
-}
-
 /* ========== Class Declaration Parsing ========== */
 
 // Parse class declaration
@@ -223,13 +211,11 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         xr_parser_error_at_current(
             parser,
             "use 'extends' instead of ':' for class inheritance, e.g. class Dog extends Animal");
-        // Release every local heap state we own: AST is not built on this
-        // path so ownership is not transferred. Also restore type_scope so
-        // the rest of the file continues to parse in the outer scope.
+        // Restore type_scope so the rest of the file continues to parse in the outer scope.
+        // Local parser allocations are arena-owned and released at parse end.
         if (type_param_count > 0) {
             parser->type_scope = saved_scope;
         }
-        oop_free_generic_params(type_params, type_param_count);
         // interfaces[] entries are arena-owned XrTypeRefs; nothing to free.
         (void) interfaces;
         (void) interface_count;

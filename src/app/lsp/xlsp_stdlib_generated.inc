@@ -508,8 +508,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"recv", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", NULL, 0},
     {"close", XLSP_SYM_FUNCTION, "fn(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", NULL, 0},
     {"ping", XLSP_SYM_FUNCTION, "fn(conn: WsConn): bool", "Send a ping frame", NULL, 0},
-    {"state", XLSP_SYM_FUNCTION, "fn(conn: WsConn): string", "Get connection state", NULL, 0},
-    {"isOpen", XLSP_SYM_FUNCTION, "fn(conn: WsConn): bool", "Check if connection is open", NULL, 0},
     {"serve", XLSP_SYM_FUNCTION, "fn(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", NULL, 0},
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the WebSocket server", NULL, 0},
     {"acceptKey", XLSP_SYM_FUNCTION, "fn(secKey: string): string", "", NULL, 0},
@@ -537,7 +535,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"ParsedUpgradeResponse", XLSP_SYM_CLASS, "type ParsedUpgradeResponse", "Class type", NULL, 0},
     {"ParsedUpgradeRequest", XLSP_SYM_CLASS, "type ParsedUpgradeRequest", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 33
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 31
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
