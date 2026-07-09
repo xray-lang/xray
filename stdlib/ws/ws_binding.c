@@ -46,48 +46,6 @@ struct XrCoroutine;
 extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name);
 
-// Profiling counters (compile-time toggle)
-#define WS_PROFILE 0
-#if WS_PROFILE
-#include "../../src/os/os_time.h"
-static _Atomic uint64_t ws_prof_recv_fast = 0;  // recv fast path hits (no yield)
-static _Atomic uint64_t ws_prof_recv_slow = 0;  // recv slow path (yield to kqueue)
-static _Atomic uint64_t ws_prof_send_fast = 0;  // send completed immediately
-static _Atomic uint64_t ws_prof_send_slow = 0;  // send needed yield
-static _Atomic uint64_t ws_prof_recv_ns = 0;    // total ns in recv C function
-static _Atomic uint64_t ws_prof_send_ns = 0;    // total ns in send C function
-static _Atomic uint64_t ws_prof_alloc_ns = 0;   // total ns in make_recv_result
-
-static inline uint64_t ws_now_ns(void) {
-    return xr_time_monotonic_ns();
-}
-
-static void ws_prof_dump(void) {
-    uint64_t rf = atomic_load(&ws_prof_recv_fast);
-    uint64_t rs = atomic_load(&ws_prof_recv_slow);
-    uint64_t sf = atomic_load(&ws_prof_send_fast);
-    uint64_t ss = atomic_load(&ws_prof_send_slow);
-    uint64_t an = atomic_load(&ws_prof_alloc_ns);
-    uint64_t total = rf + rs;
-    if (total == 0)
-        return;
-    fprintf(stderr, "\n=== WS Profiling ===\n");
-    fprintf(stderr, "recv: fast=%llu slow=%llu (fast%%=%.1f%%)\n", (unsigned long long) rf,
-            (unsigned long long) rs, total ? 100.0 * rf / total : 0.0);
-    fprintf(stderr, "send: fast=%llu slow=%llu (fast%%=%.1f%%)\n", (unsigned long long) sf,
-            (unsigned long long) ss, (sf + ss) ? 100.0 * sf / (sf + ss) : 0.0);
-    fprintf(stderr, "alloc: total=%.1fms avg=%.0fns/msg\n", an / 1e6, rf ? (double) an / rf : 0.0);
-    fprintf(stderr, "====================\n");
-}
-
-#include <signal.h>
-static void ws_prof_signal(int sig) {
-    (void) sig;
-    ws_prof_dump();
-}
-static int ws_prof_registered = 0;
-#endif
-
 /* ========== Helper Functions ========== */
 
 // Non-interned string for WS message data (avoids rwlock + hash table lookup)
@@ -623,9 +581,6 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     int ret = ws_conn_send_frame_try(ws, opcode, msg, msg_len);
 
     if (ret == 0) {
-#if WS_PROFILE
-        ws_prof_send_fast++;
-#endif
         *result = xr_bool(true);
         return XR_CFUNC_DONE;
     }
@@ -635,10 +590,6 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-
-#if WS_PROFILE
-    ws_prof_send_slow++;
-#endif
 
     // Would block - need to yield. Copy data since original may be invalid after yield
     WsSendState *state = (WsSendState *) xr_malloc(sizeof(WsSendState));
@@ -826,14 +777,7 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
         XrWsMessage *msg = ws_conn_recv_try(ws, &need_more);
 
         if (msg) {
-#if WS_PROFILE
-            uint64_t t0 = ws_now_ns();
-#endif
             *result = make_recv_result(X, ctx, ws, msg);
-#if WS_PROFILE
-            ws_prof_alloc_ns += ws_now_ns() - t0;
-            ws_prof_recv_fast++;
-#endif
             return XR_CFUNC_DONE;
         }
 
@@ -846,9 +790,6 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
         return XR_CFUNC_DONE;
     }
 
-#if WS_PROFILE
-    ws_prof_recv_slow++;
-#endif
     int64_t timeout_ms = -1;
     if (argc >= 2 && XR_IS_INT(args[1])) {
         timeout_ms = XR_TO_INT(args[1]);
@@ -1418,13 +1359,6 @@ XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
     mod->native_handle_destroy = ws_context_destroy;
-
-#if WS_PROFILE
-    if (!ws_prof_registered) {
-        signal(SIGUSR1, ws_prof_signal);
-        ws_prof_registered = 1;
-    }
-#endif
 
     xr_stdlib_vm_bind_ws_generated(isolate, mod);
     mod->requires_script = true;
