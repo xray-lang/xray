@@ -63,13 +63,20 @@ expect_warning() {
     local src="$2"
     local expected="$3"
     local needle="$4"
-    local needle2="${5:-}"
     local out="$WORK/$name.out"
     local err="$WORK/$name.err"
+    shift 3
+    local missing=0
 
-    if "$XRAY" run "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
-        grep -Fq "$needle" "$err" &&
-        { [ -z "$needle2" ] || grep -Fq "$needle2" "$err"; }; then
+    "$XRAY" run "$src" >"$out" 2>"$err"
+    local run_status=$?
+    for needle in "$@"; do
+        if [ -n "$needle" ] && ! grep -Fq "$needle" "$err"; then
+            missing=1
+        fi
+    done
+
+    if [ "$run_status" -eq 0 ] && [ "$(cat "$out")" = "$expected" ] && [ "$missing" -eq 0 ]; then
         record_pass "$name warning"
     else
         record_fail "$name warning"
@@ -145,6 +152,7 @@ TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifec
 REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_reassigned_alias_warning.xr"
 BRANCH_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_branch_alias_warning.xr"
 BRANCH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_branch_alias_merge_warning.xr"
+MULTIPATH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_multipath_alias_merge_warning.xr"
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_move_alias_warning.xr"
 HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_control_exit_warning.xr"
@@ -230,6 +238,10 @@ expect_warning "branch_alias_warning" "$BRANCH_ALIAS_WARNING_SRC" "2" \
     "Thread handle 'leaked' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "branch_alias_merge_warning" "$BRANCH_ALIAS_MERGE_WARNING_SRC" "7" \
     "Thread handle 'other' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "multipath_alias_merge_warning" "$MULTIPATH_ALIAS_MERGE_WARNING_SRC" $'1\n3\n5' \
+    "Thread handle 'oldTry' from sys.Thread.spawn is not joined or detached before leaving scope" \
+    "Thread handle 'oldMatch' from sys.Thread.spawn is not joined or detached before leaving scope" \
+    "Thread handle 'oldSelect' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "helper_early_return_warning" "$HELPER_EARLY_RETURN_WARNING_SRC" "helper-skip" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "helper_control_exit_warning" "$HELPER_CONTROL_EXIT_WARNING_SRC" \

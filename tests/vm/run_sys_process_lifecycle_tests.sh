@@ -63,13 +63,20 @@ expect_warning() {
     local src="$2"
     local expected="$3"
     local needle="$4"
-    local needle2="${5:-}"
     local out="$WORK/$name.out"
     local err="$WORK/$name.err"
+    shift 3
+    local missing=0
 
-    if "$XRAY" run "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
-        grep -Fq "$needle" "$err" &&
-        { [ -z "$needle2" ] || grep -Fq "$needle2" "$err"; }; then
+    "$XRAY" run "$src" >"$out" 2>"$err"
+    local run_status=$?
+    for needle in "$@"; do
+        if [ -n "$needle" ] && ! grep -Fq "$needle" "$err"; then
+            missing=1
+        fi
+    done
+
+    if [ "$run_status" -eq 0 ] && [ "$(cat "$out")" = "$expected" ] && [ "$missing" -eq 0 ]; then
         record_pass "$name warning"
     else
         record_fail "$name warning"
@@ -141,6 +148,7 @@ REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_reassi
 DESTRUCTURE_REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_reassigned_alias_warning.xr"
 BRANCH_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_branch_alias_warning.xr"
 BRANCH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_branch_alias_merge_warning.xr"
+MULTIPATH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_multipath_alias_merge_warning.xr"
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_warning.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
@@ -253,6 +261,12 @@ expect_warning "process_pipe_branch_alias_merge_warning" "$BRANCH_ALIAS_MERGE_WA
     $'0\ntrue' \
     "Process handle 'processOther' from sys.Process.spawn is not waited before leaving scope" \
     "Pipe handle 'pipeOther' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_multipath_alias_merge_warning" \
+    "$MULTIPATH_ALIAS_MERGE_WARNING_SRC" $'0\n0\n0\ntrue' \
+    "Process handle 'oldTry' from sys.Process.spawn is not waited before leaving scope" \
+    "Process handle 'oldMatch' from sys.Process.spawn is not waited before leaving scope" \
+    "Process handle 'oldSelect' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'oldPipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC" "true" \
