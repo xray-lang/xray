@@ -100,6 +100,10 @@ show_cache_lines() {
     sed 's/^/      /' "$1" | grep -E 'compiling|cache hit' || true
 }
 
+show_evidence_cache_lines() {
+    sed 's/^/      /' "$1" | grep -E 'evidence cache' || true
+}
+
 # build_log <cache_dir> <entry_file> <out_binary> <log_file> [extra args...]
 # Exercises the explicit --cache-dir flag (precedence over $XRAY_CACHE_DIR).
 build_log() {
@@ -146,6 +150,17 @@ expect_output() {
         record_pass "$name: output '$want'"
     else
         record_fail "$name: output '$got' != '$want'"
+    fi
+}
+
+expect_evidence_summary() {
+    local log="$1" hits="$2" misses="$3" name="$4" suffix="${5:-}"
+    local pattern="evidence cache summary: hits=$hits misses=$misses$suffix"
+    if grep -q "$pattern" "$log"; then
+        record_pass "$name: $pattern"
+    else
+        record_fail "$name: expected $pattern"
+        show_evidence_cache_lines "$log"
     fi
 }
 
@@ -218,6 +233,38 @@ XR_EOF
     expect_state "$dir/log5" mathlib compiling "rebuild"
     expect_state "$dir/log5" app compiling "rebuild"
     expect_output "$dir/app5" "$(printf '70\n10')" "rebuild"
+}
+
+run_evidence_manifest_cache() {
+    local dir="$WORK/evidence"
+    local cache="$dir/.cache"
+    local app="$dir/evidence.xr"
+
+    mkdir -p "$dir"
+    echo "--- evidence-manifest-cache ---"
+
+    cat >"$app" <<'XR_EOF'
+fn id(x: int) -> int {
+    return x
+}
+
+print(id(7))
+XR_EOF
+
+    require_build "evidence-cold" "$dir/log1" \
+        build_log "$cache" "$app" "$dir/ev1" "$dir/log1" || return 1
+    expect_evidence_summary "$dir/log1" 0 4 "evidence-cold"
+    expect_output "$dir/ev1" "7" "evidence-cold"
+
+    require_build "evidence-warm" "$dir/log2" \
+        build_log "$cache" "$app" "$dir/ev2" "$dir/log2" || return 1
+    expect_evidence_summary "$dir/log2" 4 0 "evidence-warm"
+    expect_output "$dir/ev2" "7" "evidence-warm"
+
+    require_build "evidence-rebuild" "$dir/log3" \
+        build_log "$cache" "$app" "$dir/ev3" "$dir/log3" --rebuild || return 1
+    expect_evidence_summary "$dir/log3" 0 4 "evidence-rebuild" " rebuild"
+    expect_output "$dir/ev3" "7" "evidence-rebuild"
 }
 
 run_class_symbols() {
@@ -312,6 +359,7 @@ XR_EOF
 run_group_by_id() {
     case "$1" in
         basic) run_basic_modules ;;
+        evidence) run_evidence_manifest_cache ;;
         class) run_class_symbols ;;
         lto) run_lto_cache ;;
         *) record_fail "unknown scenario: $1"; return 1 ;;
@@ -347,7 +395,7 @@ run_groups_parallel() {
 
     pids=""
     logs=""
-    for scenario in basic class lto; do
+    for scenario in basic evidence class lto; do
         IFS= read -r -n 1 token <&9
         log="$WORK/logs/${idx}_${scenario}.log"
         (
@@ -375,7 +423,7 @@ echo "Jobs:   $JOBS"
 echo ""
 
 if [ "$JOBS" -le 1 ]; then
-    for scenario in basic class lto; do
+    for scenario in basic evidence class lto; do
         run_group_by_id "$scenario"
     done
 else
