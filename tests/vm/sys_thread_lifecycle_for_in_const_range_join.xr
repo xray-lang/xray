@@ -1,0 +1,14 @@
+import sys
+
+fn run() {
+    const count = 2
+    const end = count - 1
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    for (i in 0..end) {
+        print(t.join())
+    }
+}
+
+run()

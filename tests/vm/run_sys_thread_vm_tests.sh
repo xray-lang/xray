@@ -153,6 +153,7 @@ CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle
 TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_top_const_alias_return_receiver_join.xr"
 FOR_IN_LITERAL_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_literal_join.xr"
 FOR_IN_CONST_LITERAL_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_const_literal_join.xr"
+FOR_IN_CONST_RANGE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_const_range_join.xr"
 FOR_IN_SPREAD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_spread_warning.xr"
 FOR_IN_CONST_SPREAD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_const_spread_warning.xr"
 REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_reassigned_alias_warning.xr"
@@ -215,6 +216,7 @@ expect_output "const_alias_return_receiver_join" "$CONST_ALIAS_RETURN_RECEIVER_J
 expect_output "top_const_alias_return_receiver_join" "$TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC" "42"
 expect_output "for_in_literal_join" "$FOR_IN_LITERAL_JOIN_SRC" "42"
 expect_output "for_in_const_literal_join" "$FOR_IN_CONST_LITERAL_JOIN_SRC" "42"
+expect_output "for_in_const_range_join" "$FOR_IN_CONST_RANGE_JOIN_SRC" "42"
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \
