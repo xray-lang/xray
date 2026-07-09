@@ -3,11 +3,12 @@
 #
 # Build:
 #   cmake -B build-fuzz -DENABLE_FUZZING=ON -DCMAKE_C_COMPILER=clang
-#   cmake --build build-fuzz --target fuzz_lexer fuzz_parser
+#   cmake --build build-fuzz --target fuzz_lexer fuzz_parser fuzz_stdlib_data
 #
 # Run:
 #   ./build-fuzz/tests/fuzz/fuzz_lexer tests/fuzz/corpus/lexer -max_len=4096
 #   ./build-fuzz/tests/fuzz/fuzz_parser tests/fuzz/corpus/parser -max_len=4096
+#   ./build-fuzz/tests/fuzz/fuzz_stdlib_data tests/fuzz/corpus/stdlib_data -max_len=4096
 
 # Check if fuzzing is enabled and compiler supports it
 if(NOT ENABLE_FUZZING)
@@ -69,6 +70,22 @@ target_compile_options(fuzz_parser PRIVATE ${FUZZ_COMPILE_OPTIONS})
 target_link_options(fuzz_parser PRIVATE ${FUZZ_LINK_OPTIONS})
 
 # ============================================================================
+# Stdlib Data Parser Fuzzer (CSV/TOML/XML/YAML pure-Xray parsers)
+# ============================================================================
+
+add_executable(fuzz_stdlib_data
+    fuzz_stdlib_data.c
+)
+
+target_include_directories(fuzz_stdlib_data PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+
+target_link_libraries(fuzz_stdlib_data PRIVATE xray_core)
+target_compile_options(fuzz_stdlib_data PRIVATE ${FUZZ_COMPILE_OPTIONS})
+target_link_options(fuzz_stdlib_data PRIVATE ${FUZZ_LINK_OPTIONS})
+
+# ============================================================================
 # Standalone test versions (for debugging without libFuzzer)
 # ============================================================================
 
@@ -94,14 +111,28 @@ target_include_directories(fuzz_parser_standalone PRIVATE
 target_link_libraries(fuzz_parser_standalone PRIVATE xray_core)
 target_compile_definitions(fuzz_parser_standalone PRIVATE FUZZ_STANDALONE)
 
+add_executable(fuzz_stdlib_data_standalone
+    fuzz_stdlib_data.c
+)
+
+target_include_directories(fuzz_stdlib_data_standalone PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+
+target_link_libraries(fuzz_stdlib_data_standalone PRIVATE xray_core)
+target_compile_definitions(fuzz_stdlib_data_standalone PRIVATE FUZZ_STANDALONE)
+
 # ============================================================================
 # Create corpus directories
 # ============================================================================
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/lexer)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/parser)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/stdlib_data)
 
 message(STATUS "  fuzz_lexer           - Lexer fuzzer")
 message(STATUS "  fuzz_parser          - Parser fuzzer")
+message(STATUS "  fuzz_stdlib_data     - Stdlib CSV/TOML/XML/YAML parser fuzzer")
 message(STATUS "  fuzz_lexer_standalone  - Lexer test (no libFuzzer)")
 message(STATUS "  fuzz_parser_standalone - Parser test (no libFuzzer)")
+message(STATUS "  fuzz_stdlib_data_standalone - Stdlib data parser test (no libFuzzer)")
