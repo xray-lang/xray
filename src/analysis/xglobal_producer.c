@@ -3108,6 +3108,21 @@ static bool body_map_key_type_is_dense_int(uint32_t key_type_key) {
     return false;
 }
 
+static bool body_map_key_type_is_bool(uint32_t key_type_key) {
+    return key_type_key == hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0);
+}
+
+static bool body_map_literal_has_bool_domain(AstNode **keys, int count, uint32_t key_type_key) {
+    if (!keys || count <= 0 || !body_map_key_type_is_bool(key_type_key))
+        return false;
+    for (int i = 0; i < count; i++) {
+        const AstNode *key = keys[i];
+        if (!key || (key->type != AST_LITERAL_TRUE && key->type != AST_LITERAL_FALSE))
+            return false;
+    }
+    return true;
+}
+
 static bool body_map_literal_has_dense_i64_domain(AstNode **keys, int count,
                                                   uint32_t key_type_key) {
     if (!keys || count <= 0 || !body_map_key_type_is_dense_int(key_type_key))
@@ -3372,6 +3387,8 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     shape.flags = XG_MAP_SHAPE_LITERAL;
     if (count > 0 && count <= XG_SMALL_MAP_LITERAL_MAX)
         shape.flags |= XG_MAP_SHAPE_SMALL;
+    if (body_map_literal_has_bool_domain(keys, count, key_type_key))
+        shape.flags |= XG_MAP_SHAPE_BOOL_DIRECT;
     if (body_map_literal_has_dense_i64_domain(keys, count, key_type_key))
         shape.flags |= XG_MAP_SHAPE_DENSE_INT;
     shape.shape_hash =
@@ -3398,6 +3415,11 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
             !keys[i]->as.literal.int_overflows_i64) {
             entry.key_i64 = keys[i]->as.literal.raw_value.int_val;
             entry.flags |= XG_MAP_ENTRY_INT_KEY;
+        }
+        if (keys && keys[i] &&
+            (keys[i]->type == AST_LITERAL_TRUE || keys[i]->type == AST_LITERAL_FALSE)) {
+            entry.key_i64 = keys[i]->as.literal.raw_value.bool_val ? 1 : 0;
+            entry.flags |= XG_MAP_ENTRY_BOOL_KEY;
         }
         if (value_const_id != 0)
             entry.flags |= XG_MAP_ENTRY_CONST_VALUE;

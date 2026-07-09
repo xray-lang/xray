@@ -2329,6 +2329,8 @@ static uint8_t map_shape_action_for(const XgMapShapeSummary *shape) {
         return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
     if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
         return XAOT_MAP_SHAPE_DENSE_INT_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+        return XAOT_MAP_SHAPE_BOOL_DIRECT;
     if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
         return XAOT_MAP_SHAPE_SMALL_INLINE;
     if ((shape->flags & XG_MAP_SHAPE_LITERAL) != 0 || shape->source == XG_MAP_SHAPE_SRC_LITERAL)
@@ -2353,6 +2355,8 @@ static uint32_t map_shape_evidence_for(const XgMapShapeSummary *shape) {
         evidence |= XAOT_MAP_EV_DENSE_DOMAIN;
     if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
         evidence |= XAOT_MAP_EV_SMALL;
+    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+        evidence |= XAOT_MAP_EV_BOOL_DOMAIN;
     return evidence;
 }
 
@@ -2474,6 +2478,9 @@ static uint8_t key_access_action_for(const XgGlobalEvidence *evidence,
             return XAOT_KEY_ACCESS_REJECT;
         bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
                          access->op == XG_KEY_ACCESS_HAS;
+        if (lookup_op && access->container_kind == XG_MAP_CONTAINER_MAP &&
+            (shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+            return XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
         if (lookup_op && (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
         if (lookup_op && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
@@ -2523,6 +2530,8 @@ static uint32_t key_access_evidence_for(const XgGlobalEvidence *evidence,
             bits |= XAOT_MAP_EV_DENSE_DOMAIN;
         if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
             bits |= XAOT_MAP_EV_SMALL;
+        if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+            bits |= XAOT_MAP_EV_BOOL_DOMAIN;
     }
     hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);
     if (hash_eq && hash_eq_action_for(hash_eq) != XAOT_HASH_EQ_DYNAMIC_REJECT)
@@ -5486,6 +5495,8 @@ static const char *map_shape_action_name(uint8_t action) {
             return "dense_enum_table";
         case XAOT_MAP_SHAPE_DENSE_INT_TABLE:
             return "dense_int_table";
+        case XAOT_MAP_SHAPE_BOOL_DIRECT:
+            return "bool_direct";
         case XAOT_MAP_SHAPE_READONLY_STATIC_TABLE:
             return "readonly_static_table";
         case XAOT_MAP_SHAPE_REJECT:
@@ -5499,6 +5510,8 @@ static const char *key_access_action_name(uint8_t action) {
     switch ((XaotKeyAccessAction) action) {
         case XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX:
             return "direct_dense_index";
+        case XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP:
+            return "bool_direct_lookup";
         case XAOT_KEY_ACCESS_PREHASHED_LOOKUP:
             return "prehashed_lookup";
         case XAOT_KEY_ACCESS_INLINE_SMALL_SCAN:
