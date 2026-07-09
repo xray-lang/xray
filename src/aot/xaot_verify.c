@@ -3759,9 +3759,7 @@ static uint8_t verify_json_codec_action_for(const XgJsonCodecSummary *codec) {
         return XAOT_JSON_CODEC_REJECT;
     switch ((XgJsonCodecKind) codec->codec_kind) {
         case XG_JSON_CODEC_PARSE:
-            return (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0
-                       ? XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT
-                       : XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
+            return XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT;
         case XG_JSON_CODEC_DECODE:
             return (codec->target_type_key != 0 &&
                     (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0)

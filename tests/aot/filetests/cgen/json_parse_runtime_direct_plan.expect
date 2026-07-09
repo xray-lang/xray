@@ -1,0 +1,4 @@
+contains=xaot-plan v0
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ span=[0-9]+ kind=parse action=parse_runtime_direct input_type=[1-9][0-9]* target_type=0 input_shape=0 output_shape=0 fields=0 evidence=0x1 reason=none
+not_contains=parse_dom_bridge
+c_contains=xrt_json_parse(
