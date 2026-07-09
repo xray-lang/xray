@@ -81,9 +81,9 @@ vmcase(OP_CHAN_NEW_NAMED) {
     // Check for existing Named Channel (e.g. Proxy from CHANNEL_SYNC)
 #ifdef XR_HAS_CLUSTER
     if (XR_IS_STRING(R(c))) {
-        if (xr_cluster_vm_is_running(isolate)) {
+        if (cluster_bridge_is_running(isolate)) {
             XrChannel *existing_ch =
-                xr_cluster_find_channel_local(isolate, XR_TO_STRING(R(c))->data);
+                cluster_bridge_find_channel_local(isolate, XR_TO_STRING(R(c))->data);
             if (existing_ch) {
                 R(a) = xr_value_from_channel(existing_ch);
                 vmbreak;
@@ -101,8 +101,8 @@ vmcase(OP_CHAN_NEW_NAMED) {
     if (XR_IS_STRING(R(c))) {
         XrString *name_str = XR_TO_STRING(R(c));
 #ifdef XR_HAS_CLUSTER
-        if (xr_cluster_vm_is_running(isolate)) {
-            xr_cluster_register_channel_local(isolate, name_str->data, ch);
+        if (cluster_bridge_is_running(isolate)) {
+            cluster_bridge_register_channel_local(isolate, name_str->data, ch);
         }
 #else
         (void) name_str;
