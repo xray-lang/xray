@@ -1,3 +1,4 @@
 contains=xaot-plan v0
+regex=record-shape-plan [0-9]+ .*kind=spread action=spread_result
 c_regex=xrt_record_merge\(v[0-9]+, v[0-9]+\)
 c_not_regex=xrt_json_merge\(v[0-9]+, v[0-9]+\)
