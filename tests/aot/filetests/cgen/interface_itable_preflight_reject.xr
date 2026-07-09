@@ -1,0 +1,54 @@
+interface Shape {
+    area() -> int
+}
+
+class A implements Shape {
+    constructor() {
+    }
+
+    area() -> int {
+        return 1
+    }
+}
+
+class B implements Shape {
+    constructor() {
+    }
+
+    area() -> int {
+        return 2
+    }
+}
+
+class C implements Shape {
+    constructor() {
+    }
+
+    area() -> int {
+        return 3
+    }
+}
+
+class D implements Shape {
+    constructor() {
+    }
+
+    area() -> int {
+        return 4
+    }
+}
+
+class E implements Shape {
+    constructor() {
+    }
+
+    area() -> int {
+        return 5
+    }
+}
+
+fn score(shape: Shape) -> int {
+    return shape.area()
+}
+
+print(score(A()))
