@@ -1,0 +1,16 @@
+import sys
+import { Pipe } from sys
+
+var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+if (spawned != null) {
+    var ready = spawned!
+    var process = move ready
+    print(process.wait())
+}
+
+var opened = Pipe.open()
+if (opened != null) {
+    var ready = opened!
+    var pipe = move ready
+    print(pipe.close())
+}

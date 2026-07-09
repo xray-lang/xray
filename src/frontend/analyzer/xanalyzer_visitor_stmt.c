@@ -893,6 +893,8 @@ static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleL
         }
         return matched_state;
     }
+    if (expr->type == AST_MOVE_EXPR)
+        return xa_thread_lint_find_alias_source(states, expr->as.move_expr.expr);
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
         if (!operand)
@@ -1016,9 +1018,7 @@ static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *sta
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || (strcmp(ma->name, "join") != 0 && strcmp(ma->name, "detach") != 0))
         return false;
-    XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, ma->object);
-    if (!state)
-        state = xa_thread_lint_find_returned_call_arg(states, ma->object);
+    XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, ma->object);
     if (!state)
         return false;
     if (can_escape)
@@ -1063,9 +1063,8 @@ static bool xa_thread_lint_scan_helper_finalizer_call(XaThreadHandleLintState *s
     for (int i = 0; i < n; i++) {
         if (!summary->param_finalized[i])
             continue;
-        XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, call->arguments[i]);
-        if (!state)
-            state = xa_thread_lint_find_returned_call_arg(states, call->arguments[i]);
+        XaThreadHandleLintState *state =
+            xa_thread_lint_find_alias_source(states, call->arguments[i]);
         if (!state)
             continue;
         state->finalized = true;
@@ -1272,10 +1271,6 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             }
             return;
         case AST_MOVE_EXPR: {
-            uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
-            XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, sym_id);
-            if (state && can_escape)
-                state->transferred = true;
             xa_thread_lint_scan_expr(states, expr->as.move_expr.expr, false, can_escape);
             return;
         }
@@ -2730,6 +2725,8 @@ static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
         }
         return matched_state;
     }
+    if (expr->type == AST_MOVE_EXPR)
+        return xa_os_resource_lint_find_alias_source(states, expr->as.move_expr.expr);
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
         if (!operand)
@@ -2809,9 +2806,7 @@ static bool xa_os_resource_lint_scan_finalizer_call(XaOsResourceLintState *state
     if (!callee || callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &callee->as.member_access;
-    XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, ma->object);
-    if (!state)
-        state = xa_os_resource_lint_find_returned_call_arg(states, ma->object);
+    XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, ma->object);
     if (!state || !ma->name)
         return false;
     if (strcmp(ma->name, xa_os_resource_close_method(state->kind)) == 0) {
@@ -2866,9 +2861,8 @@ static bool xa_os_resource_lint_scan_helper_finalizer_call(XaOsResourceLintState
         XaOsResourceParamSummary *param = &summary->params[i];
         if (!param->is_resource)
             continue;
-        XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, call->arguments[i]);
-        if (!state)
-            state = xa_os_resource_lint_find_returned_call_arg(states, call->arguments[i]);
+        XaOsResourceLintState *state =
+            xa_os_resource_lint_find_alias_source(states, call->arguments[i]);
         if (!state || state->kind != param->kind)
             continue;
         if (param->finalized)
@@ -3278,10 +3272,6 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
             }
             return;
         case AST_MOVE_EXPR: {
-            uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
-            XaOsResourceLintState *state = xa_os_resource_lint_find_by_symbol_id(states, sym_id);
-            if (state && can_escape)
-                state->transferred = true;
             xa_os_resource_lint_scan_expr(states, expr->as.move_expr.expr, false, can_escape);
             return;
         }

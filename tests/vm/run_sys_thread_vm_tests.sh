@@ -132,6 +132,7 @@ TERNARY_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle
 NULLISH_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_nullish_helper_return_alias_join.xr"
 MATCH_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_match_helper_return_alias_join.xr"
 HELPER_MATCH_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_match_return_alias_join.xr"
+MOVE_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_move_alias_join.xr"
 UNSAFE_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_unsafe_helper_return_alias_join.xr"
 UNSAFE_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_unsafe_return_alias_join.xr"
 HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_chained_return_alias_join.xr"
@@ -140,6 +141,7 @@ HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_
 HELPER_FINALIZER_RETURN_ARG_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_finalizer_return_arg_join.xr"
 CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_const_alias_return_receiver_join.xr"
 TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_top_const_alias_return_receiver_join.xr"
+MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_move_alias_warning.xr"
 HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_early_return_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
@@ -181,6 +183,7 @@ expect_output "ternary_helper_return_alias_join" "$TERNARY_HELPER_RETURN_ALIAS_J
 expect_output "nullish_helper_return_alias_join" "$NULLISH_HELPER_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "match_helper_return_alias_join" "$MATCH_HELPER_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_match_return_alias_join" "$HELPER_MATCH_RETURN_ALIAS_JOIN_SRC" "42"
+expect_output "move_alias_join" "$MOVE_ALIAS_JOIN_SRC" "42"
 expect_output "unsafe_helper_return_alias_join" "$UNSAFE_HELPER_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "unsafe_return_alias_join" "$UNSAFE_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_chained_return_alias_join" "$HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC" "42"
@@ -211,6 +214,8 @@ expect_warning "loop_join_warning" "$LOOP_JOIN_WARNING_SRC" "conditional-loop" \
 expect_warning "loop_continue_warning" "$LOOP_CONTINUE_WARNING_SRC" "42" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "loop_try_continue_warning" "$LOOP_TRY_CONTINUE_WARNING_SRC" "42" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "move_alias_warning" "$MOVE_ALIAS_WARNING_SRC" "moved" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "helper_early_return_warning" "$HELPER_EARLY_RETURN_WARNING_SRC" "helper-skip" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"

@@ -119,6 +119,7 @@ TERNARY_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_
 NULLISH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_nullish_helper_return_alias_ok.xr"
 MATCH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_match_helper_return_alias_ok.xr"
 HELPER_MATCH_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_match_return_alias_ok.xr"
+MOVE_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_ok.xr"
 UNSAFE_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_helper_return_alias_ok.xr"
 UNSAFE_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_return_alias_ok.xr"
 PROCESS_HELPER_CHAINED_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_chained_return_alias_wait.xr"
@@ -133,6 +134,7 @@ PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_
 PIPE_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_const_alias_return_receiver_close.xr"
 PROCESS_TOP_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_top_const_alias_return_receiver_wait.xr"
 PIPE_TOP_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_top_const_alias_return_receiver_close.xr"
+MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_warning.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
@@ -171,6 +173,7 @@ expect_output "process_pipe_match_helper_return_alias_ok" \
     "$MATCH_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_helper_match_return_alias_ok" \
     "$HELPER_MATCH_RETURN_ALIAS_OK_SRC" $'0\ntrue'
+expect_output "process_pipe_move_alias_ok" "$MOVE_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_unsafe_helper_return_alias_ok" \
     "$UNSAFE_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_unsafe_return_alias_ok" \
@@ -217,6 +220,10 @@ expect_warning "process_lifecycle_try_catch_warning" "$PROCESS_TRY_CATCH_WARNING
 expect_warning "process_helper_early_return_warning" "$PROCESS_HELPER_EARLY_RETURN_WARNING_SRC" \
     "process-helper-skip" \
     "Process handle 'p0' from sys.Process.spawn is not waited before leaving scope"
+expect_warning "process_pipe_move_alias_warning" "$MOVE_ALIAS_WARNING_SRC" \
+    $'process-moved\npipe-moved' \
+    "Process handle 'spawned' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'opened' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC" "true" \
