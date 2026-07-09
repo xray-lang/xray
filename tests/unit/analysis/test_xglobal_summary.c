@@ -671,6 +671,11 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=1 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=1 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=1 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=1 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=1 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=1 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
