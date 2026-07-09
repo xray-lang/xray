@@ -161,4 +161,17 @@ const ROWS: [Row; 2] = comptime [
     Row{samples: [1, 3, 5, 7], weight: TABLE[1]},
 ]
 
-export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, ENTRIES, ROWS }
+struct LabelRow {
+    labels: [string; 2]
+    code: int
+}
+
+@section("__DATA,.xr_ilrow")
+@weak
+@used
+const LABEL_ROWS: [LabelRow; 2] = comptime [
+    LabelRow{labels: ["hot", LABEL], code: TABLE[0]},
+    LabelRow{labels: ["cold", "done"], code: TABLE[1]},
+]
+
+export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, ENTRIES, ROWS, LABEL_ROWS }
