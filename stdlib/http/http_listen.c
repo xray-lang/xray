@@ -662,7 +662,7 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
             return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
                                          http_conn_cleanup_cont, result);
         }
-        XrValue ws_conn = xr_ws_upgrade_and_wrap(X, ctx->fd, hdr_copy);
+        XrValue ws_conn = ws_upgrade_and_wrap(X, ctx->fd, hdr_copy);
         if (XR_IS_NULL(ws_conn)) {
             return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1,
                                          http_conn_cleanup_cont, result);
