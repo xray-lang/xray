@@ -1059,6 +1059,69 @@ TEST(json_open_shape_member_access_lowers_to_dynamic_lookup) {
 #undef REQUIRE_JSON_OPEN_EVIDENCE
 }
 
+TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
+#define REQUIRE_JSON_OPEN_INDEX_EVIDENCE(cond, msg)                                                \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "json_open_shape_static_key_index_lowers_to_dynamic_lookup: %s\n",     \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn readName(k: string) -> Json {\n"
+                                          "    var j: Json = { name: \"ada\", [k]: 1 }\n"
+                                          "    return j[\"name\"]\n"
+                                          "}\n"
+                                          "print(readName(\"age\"))\n",
+                                          &ev);
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_shapes == 1, "producer should record one Json shape");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_accesses == 1,
+                                     "producer should record Json static-key index get");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_shapes[0].shape_kind == XG_JSON_SHAPE_OPEN,
+                                     "shape should be open");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_accesses[0].access_kind == XG_JSON_ACCESS_INDEX_GET,
+                                     "access should be an index_get row");
+
+    XiFunc *read_name = func_tree_find_func_name(main_func, "readName");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(read_name != NULL, "target function should be present");
+
+    uint32_t direct_count = 0;
+    uint32_t dynamic_count = 0;
+    uint32_t access_id = 0;
+    for (uint32_t b = 0; b < read_name->nblocks; b++) {
+        XiBlock *blk = read_name->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->op == XI_JSON_GET_F)
+                direct_count++;
+            if (v->op == XI_INDEX_GET && v->xg_json_access_id != 0) {
+                dynamic_count++;
+                access_id = v->xg_json_access_id;
+            }
+        }
+    }
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(direct_count == 0,
+                                     "open Json shape must not lower to direct indexed get");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(dynamic_count == 1,
+                                     "open Json shape should keep dynamic index lookup");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(access_id == ev.json_accesses[0].json_access_id,
+                                     "dynamic index lookup should retain Json evidence id");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_JSON_OPEN_INDEX_EVIDENCE
+}
+
 TEST(record_access_lowers_with_global_evidence_id) {
 #define REQUIRE_RECORD_EVIDENCE(cond, msg)                                                         \
     do {                                                                                           \
@@ -2444,6 +2507,7 @@ int main(void) {
     run_json_computed_key_access_lowers_with_global_evidence_id();
     run_json_static_key_index_lowers_to_direct_field_with_global_evidence_id();
     run_json_open_shape_member_access_lowers_to_dynamic_lookup();
+    run_json_open_shape_static_key_index_lowers_to_dynamic_lookup();
     run_record_access_lowers_with_global_evidence_id();
     run_map_key_access_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
