@@ -1255,6 +1255,66 @@ TEST(map_key_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_KEY_EVIDENCE
 }
 
+TEST(map_key_access_alias_shape_lowers_with_global_evidence_id) {
+#define REQUIRE_ALIAS_KEY_EVIDENCE(cond, msg)                                                      \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "map_key_access_alias_shape_lowers_with_global_evidence_id: %s\n",     \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn updateAlias() -> int {\n"
+                                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
+                                          "    var alias = scores\n"
+                                          "    alias[\"ada\"] = 8\n"
+                                          "    var assigned: Map<string, int> = #{}\n"
+                                          "    assigned = alias\n"
+                                          "    return assigned[\"ada\"]\n"
+                                          "}\n"
+                                          "print(updateAlias())\n",
+                                          &ev);
+    REQUIRE_ALIAS_KEY_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_ALIAS_KEY_EVIDENCE(ev.nkey_accesses == 2,
+                               "producer should record aliased Map set and get");
+    REQUIRE_ALIAS_KEY_EVIDENCE(ev.key_accesses[0].receiver_shape_id == ev.map_shapes[0].shape_id,
+                               "alias set should retain original map shape");
+    REQUIRE_ALIAS_KEY_EVIDENCE(ev.key_accesses[1].receiver_shape_id == ev.map_shapes[0].shape_id,
+                               "assigned get should retain propagated map shape");
+    XiFunc *update = func_tree_find_func_name(main_func, "updateAlias");
+    REQUIRE_ALIAS_KEY_EVIDENCE(update != NULL, "target function should be present");
+
+    uint32_t get_id = 0;
+    uint32_t set_id = 0;
+    for (uint32_t b = 0; b < update->nblocks; b++) {
+        XiBlock *blk = update->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || (v->op != XI_INDEX_GET && v->op != XI_INDEX_SET) || v->xg_key_access_id == 0)
+                continue;
+            if (v->op == XI_INDEX_GET)
+                get_id = v->xg_key_access_id;
+            else
+                set_id = v->xg_key_access_id;
+        }
+    }
+    REQUIRE_ALIAS_KEY_EVIDENCE(get_id == ev.key_accesses[1].access_id,
+                               "assigned Map get should bind propagated evidence");
+    REQUIRE_ALIAS_KEY_EVIDENCE(set_id == ev.key_accesses[0].access_id,
+                               "alias Map set should bind propagated evidence");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_ALIAS_KEY_EVIDENCE
+}
+
 TEST(map_set_method_key_access_lowers_with_global_evidence_id) {
 #define REQUIRE_METHOD_KEY_EVIDENCE(cond, msg)                                                     \
     do {                                                                                           \
@@ -2510,6 +2570,7 @@ int main(void) {
     run_json_open_shape_static_key_index_lowers_to_dynamic_lookup();
     run_record_access_lowers_with_global_evidence_id();
     run_map_key_access_lowers_with_global_evidence_id();
+    run_map_key_access_alias_shape_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
     run_nested_function();
     run_function_expr();
