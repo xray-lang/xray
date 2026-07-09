@@ -18,6 +18,7 @@
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
 #include <stdint.h>
+#include <string.h>
 
 static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->current_scope && analyzer->current_scope->kind == XA_SCOPE_GLOBAL;
@@ -1945,17 +1946,44 @@ xa_thread_lint_summarize_function(XaInferContext *ctx, AstNode *stmt,
 }
 
 static XaThreadHandleLintFnSummary *
+xa_thread_lint_clone_fn_summary_as(XaThreadHandleLintFnSummary *source, const char *name,
+                                   uint32_t symbol_id) {
+    if (!source || !name || source->param_count <= 0)
+        return NULL;
+    XaThreadHandleLintFnSummary *summary = xr_calloc(1, sizeof(XaThreadHandleLintFnSummary));
+    if (!summary)
+        return NULL;
+    summary->name = name;
+    summary->symbol_id = symbol_id;
+    summary->return_param_index = source->return_param_index;
+    summary->param_count = source->param_count;
+    summary->param_finalized = xr_calloc((size_t) source->param_count, sizeof(bool));
+    if (!summary->param_finalized) {
+        xa_thread_lint_free_fn_summaries(summary);
+        return NULL;
+    }
+    memcpy(summary->param_finalized, source->param_finalized,
+           sizeof(bool) * (size_t) source->param_count);
+    return summary;
+}
+
+static XaThreadHandleLintFnSummary *
 xa_thread_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt,
                                               XaThreadHandleLintFnSummary *visible_summaries) {
     if (!stmt || stmt->type != AST_CONST_DECL)
         return NULL;
     VarDeclNode *var = &stmt->as.var_decl;
     AstNode *initializer = xa_thread_lint_unwrap_expr(var->initializer);
-    if (!var->name || var->storage_mode != XR_STORAGE_NORMAL || !initializer ||
-        initializer->type != AST_FUNCTION_EXPR)
+    if (!var->name || var->storage_mode != XR_STORAGE_NORMAL || !initializer)
         return NULL;
-    return xa_thread_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id,
-                                                  visible_summaries);
+    if (initializer->type == AST_FUNCTION_EXPR)
+        return xa_thread_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id,
+                                                      visible_summaries);
+    if (initializer->type != AST_VARIABLE)
+        return NULL;
+    XaThreadHandleLintFnSummary *source =
+        xa_thread_lint_find_fn_summary(ctx, visible_summaries, initializer);
+    return xa_thread_lint_clone_fn_summary_as(source, var->name, var->symbol_id);
 }
 
 static bool xa_thread_lint_fn_summary_exists(XaThreadHandleLintFnSummary *summaries,
@@ -2029,10 +2057,18 @@ static bool xa_thread_lint_collect_scope_fn_summaries(XaInferContext *ctx, XaSco
             continue;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
         AstNode *initializer = links ? xa_thread_lint_unwrap_expr(links->const_initializer) : NULL;
-        if (!initializer || initializer->type != AST_FUNCTION_EXPR)
+        if (!initializer ||
+            (initializer->type != AST_FUNCTION_EXPR && initializer->type != AST_VARIABLE))
             continue;
-        XaThreadHandleLintFnSummary *summary =
-            xa_thread_lint_summarize_function_node(ctx, initializer, sym->name, sym->id, *head);
+        XaThreadHandleLintFnSummary *summary = NULL;
+        if (initializer->type == AST_FUNCTION_EXPR) {
+            summary =
+                xa_thread_lint_summarize_function_node(ctx, initializer, sym->name, sym->id, *head);
+        } else {
+            XaThreadHandleLintFnSummary *source =
+                xa_thread_lint_find_fn_summary(ctx, *head, initializer);
+            summary = xa_thread_lint_clone_fn_summary_as(source, sym->name, sym->id);
+        }
         if (summary) {
             **tail = summary;
             *tail = &summary->next;
@@ -3720,17 +3756,44 @@ xa_os_resource_lint_summarize_function(XaInferContext *ctx, AstNode *stmt,
 }
 
 static XaOsResourceLintFnSummary *
+xa_os_resource_lint_clone_fn_summary_as(XaOsResourceLintFnSummary *source, const char *name,
+                                        uint32_t symbol_id) {
+    if (!source || !source->params || !name || source->param_count <= 0)
+        return NULL;
+    XaOsResourceLintFnSummary *summary = xr_calloc(1, sizeof(XaOsResourceLintFnSummary));
+    if (!summary)
+        return NULL;
+    summary->name = name;
+    summary->symbol_id = symbol_id;
+    summary->return_param_index = source->return_param_index;
+    summary->param_count = source->param_count;
+    summary->params = xr_calloc((size_t) source->param_count, sizeof(XaOsResourceParamSummary));
+    if (!summary->params) {
+        xa_os_resource_lint_free_fn_summaries(summary);
+        return NULL;
+    }
+    memcpy(summary->params, source->params,
+           sizeof(XaOsResourceParamSummary) * (size_t) source->param_count);
+    return summary;
+}
+
+static XaOsResourceLintFnSummary *
 xa_os_resource_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt,
                                                    XaOsResourceLintFnSummary *visible_summaries) {
     if (!stmt || stmt->type != AST_CONST_DECL)
         return NULL;
     VarDeclNode *var = &stmt->as.var_decl;
     AstNode *initializer = xa_thread_lint_unwrap_expr(var->initializer);
-    if (!var->name || var->storage_mode != XR_STORAGE_NORMAL || !initializer ||
-        initializer->type != AST_FUNCTION_EXPR)
+    if (!var->name || var->storage_mode != XR_STORAGE_NORMAL || !initializer)
         return NULL;
-    return xa_os_resource_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id,
-                                                       visible_summaries);
+    if (initializer->type == AST_FUNCTION_EXPR)
+        return xa_os_resource_lint_summarize_function_node(ctx, initializer, var->name,
+                                                           var->symbol_id, visible_summaries);
+    if (initializer->type != AST_VARIABLE)
+        return NULL;
+    XaOsResourceLintFnSummary *source =
+        xa_os_resource_lint_find_fn_summary(ctx, visible_summaries, initializer);
+    return xa_os_resource_lint_clone_fn_summary_as(source, var->name, var->symbol_id);
 }
 
 static bool xa_os_resource_lint_fn_summary_exists(XaOsResourceLintFnSummary *summaries,
@@ -3804,10 +3867,18 @@ static bool xa_os_resource_lint_collect_scope_fn_summaries(XaInferContext *ctx, 
             continue;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
         AstNode *initializer = links ? xa_thread_lint_unwrap_expr(links->const_initializer) : NULL;
-        if (!initializer || initializer->type != AST_FUNCTION_EXPR)
+        if (!initializer ||
+            (initializer->type != AST_FUNCTION_EXPR && initializer->type != AST_VARIABLE))
             continue;
-        XaOsResourceLintFnSummary *summary = xa_os_resource_lint_summarize_function_node(
-            ctx, initializer, sym->name, sym->id, *head);
+        XaOsResourceLintFnSummary *summary = NULL;
+        if (initializer->type == AST_FUNCTION_EXPR) {
+            summary = xa_os_resource_lint_summarize_function_node(ctx, initializer, sym->name,
+                                                                  sym->id, *head);
+        } else {
+            XaOsResourceLintFnSummary *source =
+                xa_os_resource_lint_find_fn_summary(ctx, *head, initializer);
+            summary = xa_os_resource_lint_clone_fn_summary_as(source, sym->name, sym->id);
+        }
         if (summary) {
             **tail = summary;
             *tail = &summary->next;
