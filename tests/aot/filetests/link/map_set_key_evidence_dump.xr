@@ -1,0 +1,20 @@
+fn readScore() -> int {
+    var scores = #{"ada": 7, "lin": 9}
+    return scores["ada"]
+}
+
+print(readScore())
+args=--dump-global-evidence --dump-xaot-plan
+contains=map-shape
+contains=container=map source=literal
+contains=map-entry
+contains=hash-eq
+contains=kind=builtin
+contains=key-access
+contains=op=index_get
+contains=map-shape-plan
+contains=action=prealloc_hash
+contains=hash-eq-plan
+contains=action=builtin_inline
+contains=key-access-plan
+contains=action=prehashed_lookup
