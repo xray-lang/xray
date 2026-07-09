@@ -8211,6 +8211,9 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_EQ_UINT(ev.json_codecs[1].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[2].codec_kind, XG_JSON_CODEC_ENCODE);
     ASSERT_NE(ev.json_codecs[2].input_type_key, 0);
+    ASSERT_TRUE((ev.json_codecs[2].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
+    ASSERT_EQ_UINT(ev.json_codecs[2].input_shape_id, bridge_shape->json_shape_id);
+    ASSERT_EQ_UINT(ev.json_codecs[2].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[3].codec_kind, XG_JSON_CODEC_STRINGIFY);
     ASSERT_TRUE((ev.json_codecs[3].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
 
