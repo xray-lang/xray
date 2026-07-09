@@ -876,6 +876,23 @@ static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleL
             xa_thread_lint_find_alias_source(states, expr->as.binary.right);
         return left_state && left_state == right_state ? left_state : NULL;
     }
+    if (expr->type == AST_MATCH_EXPR) {
+        MatchExprNode *match = &expr->as.match_expr;
+        XaThreadHandleLintState *matched_state = NULL;
+        for (int i = 0; i < match->arm_count; i++) {
+            AstNode *arm = match->arms ? match->arms[i] : NULL;
+            if (!arm || arm->type != AST_MATCH_ARM)
+                return NULL;
+            AstNode *body = xa_thread_lint_unwrap_expr(arm->as.match_arm.body);
+            if (body && (body->type == AST_BLOCK || body->type == AST_PROGRAM))
+                body = xa_lifecycle_lint_single_expr_block_value(body);
+            XaThreadHandleLintState *arm_state = xa_thread_lint_find_alias_source(states, body);
+            if (!arm_state || (matched_state && matched_state != arm_state))
+                return NULL;
+            matched_state = arm_state;
+        }
+        return matched_state;
+    }
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
         if (!operand)
@@ -2696,6 +2713,24 @@ static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
         XaOsResourceLintState *right_state =
             xa_os_resource_lint_find_alias_source(states, expr->as.binary.right);
         return left_state && left_state == right_state ? left_state : NULL;
+    }
+    if (expr->type == AST_MATCH_EXPR) {
+        MatchExprNode *match = &expr->as.match_expr;
+        XaOsResourceLintState *matched_state = NULL;
+        for (int i = 0; i < match->arm_count; i++) {
+            AstNode *arm = match->arms ? match->arms[i] : NULL;
+            if (!arm || arm->type != AST_MATCH_ARM)
+                return NULL;
+            AstNode *body = xa_thread_lint_unwrap_expr(arm->as.match_arm.body);
+            if (body && (body->type == AST_BLOCK || body->type == AST_PROGRAM))
+                body = xa_lifecycle_lint_single_expr_block_value(body);
+            XaOsResourceLintState *arm_state =
+                xa_os_resource_lint_find_alias_source(states, body);
+            if (!arm_state || (matched_state && matched_state != arm_state))
+                return NULL;
+            matched_state = arm_state;
+        }
+        return matched_state;
     }
     if (expr->type == AST_UNSAFE_EXPR) {
         AstNode *operand = xa_thread_lint_unwrap_expr(expr->as.unsafe_expr.operand);
