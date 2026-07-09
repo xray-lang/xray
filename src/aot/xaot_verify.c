@@ -1035,7 +1035,7 @@ static bool verify_json_shape_kind_valid(uint8_t kind) {
     switch ((XgJsonShapeKind) kind) {
         case XG_JSON_SHAPE_OPEN:
         case XG_JSON_SHAPE_SHAPED:
-        case XG_JSON_SHAPE_RECORD_COMPAT:
+        case XG_JSON_SHAPE_RECORD_BRIDGE:
             return true;
         default:
             return false;
@@ -2830,8 +2830,8 @@ static uint8_t verify_json_shape_action_for(const XgJsonShapeSummary *shape) {
             return XAOT_JSON_SHAPE_OPEN_DYNAMIC;
         case XG_JSON_SHAPE_SHAPED:
             return XAOT_JSON_SHAPE_HIDDEN_CLASS;
-        case XG_JSON_SHAPE_RECORD_COMPAT:
-            return XAOT_JSON_SHAPE_RECORD_COMPAT;
+        case XG_JSON_SHAPE_RECORD_BRIDGE:
+            return XAOT_JSON_SHAPE_RECORD_BRIDGE;
         default:
             return XAOT_JSON_SHAPE_REJECT;
     }
@@ -2849,9 +2849,9 @@ static uint32_t verify_json_shape_evidence_for(const XgJsonShapeSummary *shape) 
         return evidence;
     if ((shape->flags & XG_JSON_SHAPE_STATIC_KEYS) != 0)
         evidence |= XAOT_JSON_EV_STATIC_KEY;
-    if ((shape->flags & XG_JSON_SHAPE_RECORD_COMPATIBLE) != 0 ||
-        shape->shape_kind == XG_JSON_SHAPE_RECORD_COMPAT)
-        evidence |= XAOT_JSON_EV_RECORD_COMPAT;
+    if ((shape->flags & XG_JSON_SHAPE_RECORD_BRIDGEABLE) != 0 ||
+        shape->shape_kind == XG_JSON_SHAPE_RECORD_BRIDGE)
+        evidence |= XAOT_JSON_EV_RECORD_BRIDGE;
     return evidence;
 }
 

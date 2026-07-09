@@ -139,7 +139,7 @@ typedef enum XgDerivedMethodKind {
 typedef enum XgJsonShapeKind {
     XG_JSON_SHAPE_OPEN = 1,
     XG_JSON_SHAPE_SHAPED,
-    XG_JSON_SHAPE_RECORD_COMPAT,
+    XG_JSON_SHAPE_RECORD_BRIDGE,
 } XgJsonShapeKind;
 
 typedef enum XgJsonAccessKind {
@@ -280,7 +280,7 @@ enum {
     XG_JSON_SHAPE_STATIC_KEYS = 1u << 0,
     XG_JSON_SHAPE_HAS_COMPUTED_KEYS = 1u << 1,
     XG_JSON_SHAPE_MUTABLE = 1u << 2,
-    XG_JSON_SHAPE_RECORD_COMPATIBLE = 1u << 3,
+    XG_JSON_SHAPE_RECORD_BRIDGEABLE = 1u << 3,
 };
 
 enum {

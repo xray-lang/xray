@@ -519,8 +519,8 @@ XR_FUNC const char *xg_json_shape_kind_name(uint8_t kind) {
             return "open";
         case XG_JSON_SHAPE_SHAPED:
             return "shaped";
-        case XG_JSON_SHAPE_RECORD_COMPAT:
-            return "record_compat";
+        case XG_JSON_SHAPE_RECORD_BRIDGE:
+            return "record_bridge";
         default:
             return "unknown";
     }
