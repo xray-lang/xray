@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects top-level var declaration
+contains=module storage still requires constructor initialization
+not_contains=xrt_shared
+not_contains=CRASH
