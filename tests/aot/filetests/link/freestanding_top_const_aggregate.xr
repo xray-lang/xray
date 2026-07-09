@@ -32,6 +32,13 @@ struct Header {
 @weak
 const HEADER = comptime Header{magic: TABLE[1], flags: TABLE[3]}
 
+struct PlainHeader {
+    magic: int
+    flags: int
+}
+
+const PLAIN_HEADER = PlainHeader{magic: TABLE[0], flags: TABLE[1]}
+
 struct Packet {
     bytes: [uint8; 4]
     base: int
@@ -282,6 +289,11 @@ fn xray_top_const_cube_runtime(i: int, j: int, k: int) -> int {
 @c_export("xray_top_const_struct_runtime")
 fn xray_top_const_struct_runtime() -> int {
     return HEADER.magic + HEADER.flags
+}
+
+@c_export("xray_top_const_plain_struct_runtime")
+fn xray_top_const_plain_struct_runtime() -> int {
+    return PLAIN_HEADER.magic + PLAIN_HEADER.flags
 }
 
 @c_export("xray_top_const_struct_array_runtime")
