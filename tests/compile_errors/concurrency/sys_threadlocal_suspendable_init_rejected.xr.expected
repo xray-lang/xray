@@ -1,0 +1,1 @@
+sys.ThreadLocal initializer cannot be suspendable
