@@ -34,5 +34,5 @@ map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/ao
 map_set_dense_lookup|covered|key-access-plan .*action=direct_dense_index|tests/aot/filetests/cgen|Dense ordinal int Map/Set literal lookup consumes direct dense-index plans in generated C.
 user_hash_eq_direct_backend|covered|map_set_user_hash_eq_direct_backend_hash_|tests/aot/filetests/cgen|User Hash/Eq direct-call backend consumption passes verified target function pointers to Map/Set helpers.
 fixed_layout_enum_scalarization|covered|enum-scalar-plan .*action=compact_aggregate|tests/aot/filetests/cgen|Enum compact aggregate scalarization ABI is a XaotEnumPlan decision consumed by ABI and prepare.
-summary_payload_cache|gap|-|-|Real declaration/body summary payload cache is still pending.
+summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, and body summary payloads materialize back into validated summary rows.
 cross_package_summary_reuse|gap|-|-|Cross-package export summary reuse is still pending.

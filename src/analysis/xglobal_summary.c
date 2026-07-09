@@ -2921,6 +2921,385 @@ XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
     return xg_evidence_cache_key_matches(&info.key, expected);
 }
 
+static bool materialize_payload_declarations(const char **cursor, XgGlobalEvidence *evidence,
+                                             uint32_t *out_count) {
+    char line[1024];
+    uint32_t count = 0;
+    char trailing = '\0';
+    if (!cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
+        return false;
+    if (sscanf(line, "payload-count decls=%" SCNu32 " %c", &count, &trailing) != 1)
+        return false;
+    if (!xg_global_evidence_reserve_decls(evidence, count))
+        return false;
+    for (uint32_t i = 0; i < count; i++) {
+        XgDeclSummary row;
+        uint32_t kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "decl id=%" SCNu32 " module=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32
+                   " name=%" SCNu32 " type=%" SCNu32 " sig=%" SCNu32 " span=%" SCNu32
+                   " derive=0x%" SCNx32 " %c",
+                   &row.decl_id, &row.module_id, &kind, &row.flags, &row.name_id, &row.type_key,
+                   &row.signature_key, &row.source_span_id, &row.derive_flags, &trailing) != 9)
+            return false;
+        row.kind = (uint8_t) kind;
+        if (!xg_global_evidence_add_decl(evidence, &row))
+            return false;
+    }
+    if (out_count)
+        *out_count = count;
+    return true;
+}
+
+static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evidence) {
+    const char *cursor = body;
+    char line[1024];
+    uint32_t decl_count = 0;
+    uint32_t class_count = 0;
+    uint32_t method_count = 0;
+    uint32_t impl_count = 0;
+    uint32_t extends_count = 0;
+    uint32_t interface_method_count = 0;
+    uint32_t derive_count = 0;
+    uint32_t derived_field_count = 0;
+    uint32_t derived_method_count = 0;
+    uint32_t parsed_decl_count = 0;
+    char trailing = '\0';
+    if (!body || !evidence || !evidence_cache_next_line(&cursor, line, sizeof(line)))
+        return false;
+    if (sscanf(line,
+               "payload-count decls=%" SCNu32 " classes=%" SCNu32 " methods=%" SCNu32
+               " impls=%" SCNu32 " extends=%" SCNu32 " interface_methods=%" SCNu32
+               " derives=%" SCNu32 " derived_fields=%" SCNu32 " derived_methods=%" SCNu32 " %c",
+               &decl_count, &class_count, &method_count, &impl_count, &extends_count,
+               &interface_method_count, &derive_count, &derived_field_count, &derived_method_count,
+               &trailing) != 9)
+        return false;
+    if (!materialize_payload_declarations(&cursor, evidence, &parsed_decl_count) ||
+        parsed_decl_count != decl_count)
+        return false;
+    if (!xg_global_evidence_reserve_classes(evidence, class_count) ||
+        !xg_global_evidence_reserve_methods(evidence, method_count) ||
+        !xg_global_evidence_reserve_interface_impls(evidence, impl_count) ||
+        !xg_global_evidence_reserve_interface_extends(evidence, extends_count) ||
+        !xg_global_evidence_reserve_interface_methods(evidence, interface_method_count) ||
+        !xg_global_evidence_reserve_derives(evidence, derive_count) ||
+        !xg_global_evidence_reserve_derived_fields(evidence, derived_field_count) ||
+        !xg_global_evidence_reserve_derived_methods(evidence, derived_method_count))
+        return false;
+    for (uint32_t i = 0; i < class_count; i++) {
+        XgClassSummary row;
+        uint32_t type_arg_count = 0;
+        uint32_t decl_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "class id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " name=%" SCNu32
+                   " parent=%" SCNu32 " flags=0x%" SCNx32 " fields=%" SCNu32 "+%" SCNu32
+                   " methods=%" SCNu32 "+%" SCNu32 " impls=%" SCNu32 "+%" SCNu32 " origin=%" SCNu32
+                   " origin_name=%" SCNu32 " type=%" SCNu32 " args=%" SCNu32 "+%" SCNu32
+                   " decl_kind=%" SCNu32 " %c",
+                   &row.class_id, &row.module_id, &row.decl_id, &row.name_id, &row.parent_class_id,
+                   &row.flags, &row.field_start, &row.field_count, &row.method_start,
+                   &row.method_count, &row.interface_start, &row.interface_count,
+                   &row.generic_origin_class_id, &row.generic_origin_name_id, &row.generic_type_key,
+                   &row.generic_type_arg_key_start, &type_arg_count, &decl_kind, &trailing) != 18)
+            return false;
+        row.generic_type_arg_count = (uint16_t) type_arg_count;
+        row.decl_kind = (uint8_t) decl_kind;
+        if (!xg_global_evidence_add_class(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < method_count; i++) {
+        XgMethodSummary row;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "method id=%" SCNu32 " owner=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
+                   " override=%" SCNu32 " root=%" SCNu32 " depth=%" SCNu32 " default=%" SCNu32
+                   " flags=0x%" SCNx32 " %c",
+                   &row.method_id, &row.owner_class_id, &row.name_id, &row.signature_key,
+                   &row.override_of, &row.root_method_id, &row.override_depth,
+                   &row.default_arg_contract_id, &row.flags, &trailing) != 9)
+            return false;
+        if (!xg_global_evidence_add_method(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < impl_count; i++) {
+        XgInterfaceImplSummary row;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "interface-impl class=%" SCNu32 " interface=%" SCNu32 " name=%" SCNu32
+                   " type=%" SCNu32 " span=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.implementor_class_id, &row.interface_id, &row.name_id, &row.type_key,
+                   &row.source_span_id, &row.flags, &trailing) != 6)
+            return false;
+        if (!xg_global_evidence_add_interface_impl(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < extends_count; i++) {
+        XgInterfaceExtendsSummary row;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "interface-extends child=%" SCNu32 " parent=%" SCNu32 " name=%" SCNu32
+                   " type=%" SCNu32 " span=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.child_interface_id, &row.parent_interface_id, &row.name_id, &row.type_key,
+                   &row.source_span_id, &row.flags, &trailing) != 6)
+            return false;
+        if (!xg_global_evidence_add_interface_extends(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < interface_method_count; i++) {
+        XgInterfaceMethodSummary row;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "interface-method id=%" SCNu32 " owner=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
+                   " ordinal=%" SCNu32 " span=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.interface_method_id, &row.owner_interface_id, &row.name_id,
+                   &row.signature_key, &row.ordinal, &row.source_span_id, &row.flags,
+                   &trailing) != 7)
+            return false;
+        if (!xg_global_evidence_add_interface_method(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < derive_count; i++) {
+        XgDeriveSummary row;
+        uint32_t derive_kind = 0;
+        uint32_t field_count = 0;
+        uint32_t method_count_row = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "derive id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " span=%" SCNu32
+                   " type=%" SCNu32 " kind=%" SCNu32 " fields=%" SCNu32 "+%" SCNu32
+                   " methods=%" SCNu32 "+%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.derive_id, &row.module_id, &row.owner_decl_id, &row.source_span_id,
+                   &row.type_key, &derive_kind, &row.field_start, &field_count, &row.method_start,
+                   &method_count_row, &row.flags, &row.derive_hash, &trailing) != 12)
+            return false;
+        row.derive_kind = (uint8_t) derive_kind;
+        row.field_count = (uint16_t) field_count;
+        row.method_count = (uint16_t) method_count_row;
+        if (!xg_global_evidence_add_derive(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < derived_field_count; i++) {
+        XgDerivedFieldSummary row;
+        uint32_t field_ordinal = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "derived-field id=%" SCNu32 " derive=%" SCNu32 " ordinal=%" SCNu32
+                   " name=%" SCNu32 " type=%" SCNu32 " source=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.field_id, &row.derive_id, &field_ordinal, &row.name_id, &row.type_key,
+                   &row.source_field_id, &row.flags, &trailing) != 7)
+            return false;
+        row.field_ordinal = (uint16_t) field_ordinal;
+        if (!xg_global_evidence_add_derived_field(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < derived_method_count; i++) {
+        XgDerivedMethodSummary row;
+        uint32_t method_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "derived-method id=%" SCNu32 " derive=%" SCNu32 " kind=%" SCNu32 " body=%" SCNu32
+                   " sig=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.method_id, &row.derive_id, &method_kind, &row.generated_body_func_id,
+                   &row.signature_key, &row.flags, &trailing) != 6)
+            return false;
+        row.method_kind = (uint8_t) method_kind;
+        if (!xg_global_evidence_add_derived_method(evidence, &row))
+            return false;
+    }
+    return *cursor == '\0';
+}
+
+static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidence) {
+    const char *cursor = body;
+    char line[1024];
+    uint32_t body_count = 0;
+    uint32_t callsite_count = 0;
+    uint32_t link_dep_count = 0;
+    uint32_t generic_inst_count = 0;
+    char trailing = '\0';
+    if (!body || !evidence || !evidence_cache_next_line(&cursor, line, sizeof(line)))
+        return false;
+    if (sscanf(line,
+               "payload-count bodies=%" SCNu32 " callsites=%" SCNu32 " link_deps=%" SCNu32
+               " generic_insts=%" SCNu32 " %c",
+               &body_count, &callsite_count, &link_dep_count, &generic_inst_count, &trailing) != 4)
+        return false;
+    if (!xg_global_evidence_reserve_bodies(evidence, body_count) ||
+        !xg_global_evidence_reserve_callsites(evidence, callsite_count) ||
+        !xg_global_evidence_reserve_link_deps(evidence, link_dep_count) ||
+        !xg_global_evidence_reserve_generic_insts(evidence, generic_inst_count))
+        return false;
+    for (uint32_t i = 0; i < body_count; i++) {
+        XgBodySummary row;
+        uint32_t kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "body id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " class=%" SCNu32
+                   " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32 " span=%" SCNu32
+                   " kind=%" SCNu32 " hash=%" SCNx64 " effect=0x%" SCNx32 " escape=0x%" SCNx32
+                   " caps=0x%" SCNx32 " calls=%" SCNu32 "+%" SCNu32 " metadata=0x%" SCNx32
+                   " static=0x%" SCNx32 " %c",
+                   &row.func_id, &row.module_id, &row.owner_decl_id, &row.owner_class_id,
+                   &row.owner_method_id, &row.name_id, &row.signature_key, &row.source_span_id,
+                   &kind, &row.body_hash, &row.effect_bits, &row.escape_bits, &row.capability_bits,
+                   &row.callsite_start, &row.callsite_count, &row.metadata_use_bits,
+                   &row.static_data_use_bits, &trailing) != 17)
+            return false;
+        row.kind = (uint8_t) kind;
+        if (!xg_global_evidence_add_body(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < callsite_count; i++) {
+        XgCallsiteSummary row;
+        uint32_t kind = 0;
+        uint32_t arg_count = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "callsite id=%" SCNu32 " owner=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32
+                   " kind=%" SCNu32 " target=%" SCNu32 " recv_class=%" SCNu32
+                   " recv_interface=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
+                   " args=%" SCNu32 "+%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.callsite_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal,
+                   &kind, &row.static_target_func_id, &row.receiver_static_class_id,
+                   &row.receiver_static_interface_id, &row.method_id, &row.method_name_id,
+                   &row.method_signature_key, &row.arg_type_key_start, &arg_count, &row.flags,
+                   &trailing) != 14)
+            return false;
+        row.kind = (uint8_t) kind;
+        row.arg_count = (uint16_t) arg_count;
+        if (!xg_global_evidence_add_callsite(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < link_dep_count; i++) {
+        XgLinkDependencySummary row;
+        uint32_t kind = 0;
+        char name[XG_LINK_DEP_NAME_MAX];
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        memset(name, 0, sizeof(name));
+        if (sscanf(line,
+                   "link-dep id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " span=%" SCNu32
+                   " name_id=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " name=%511[^\n]%c",
+                   &row.link_id, &row.module_id, &row.decl_id, &row.source_span_id, &row.name_id,
+                   &kind, &row.flags, name, &trailing) < 8)
+            return false;
+        row.kind = (uint8_t) kind;
+        snprintf(row.name, sizeof(row.name), "%s", name);
+        if (!xg_global_evidence_add_link_dependency(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < generic_inst_count; i++) {
+        XgGenericInstSummary row;
+        uint32_t type_arg_count = 0;
+        uint32_t kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "generic-inst id=%" SCNu32 " module=%" SCNu32 " origin_decl=%" SCNu32
+                   " origin_func=%" SCNu32 " origin_method=%" SCNu32 " origin_class=%" SCNu32
+                   " spec_func=%" SCNu32 " spec_class=%" SCNu32 " root=%" SCNu32
+                   " constraint=%" SCNu32 " name=%" SCNu32 " type=%" SCNu32 " args=%" SCNu32
+                   "+%" SCNu32 " span=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.generic_inst_id, &row.module_id, &row.origin_decl_id, &row.origin_func_id,
+                   &row.origin_method_id, &row.origin_class_id, &row.specialized_func_id,
+                   &row.specialized_class_id, &row.root_callsite_id, &row.constraint_interface_id,
+                   &row.name_id, &row.type_key, &row.type_arg_key_start, &type_arg_count,
+                   &row.source_span_id, &kind, &row.flags, &trailing) != 17)
+            return false;
+        row.type_arg_count = (uint16_t) type_arg_count;
+        row.kind = (uint8_t) kind;
+        if (!xg_global_evidence_add_generic_inst(evidence, &row))
+            return false;
+    }
+    return *cursor == '\0';
+}
+
+XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
+                                                   XgGlobalEvidence *out_evidence) {
+    XgEvidenceCachePayloadInfo info;
+    XgGlobalEvidence evidence;
+    XgBuildKey key;
+    XgEvidenceCacheKey materialized_key;
+    bool ok = false;
+    if (!out_evidence || !xg_evidence_cache_payload_parse(text, &info))
+        return false;
+    if (info.phase == XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE)
+        return false;
+    memset(&key, 0, sizeof(key));
+    key.module_id = info.key.module_id;
+    key.profile = info.key.profile;
+    key.compiler_semver_hash = info.key.compiler_semver_hash;
+    key.profile_hash = info.key.profile_hash;
+    key.imported_summary_hash = info.key.imported_summary_hash;
+    xg_global_evidence_init(&evidence, key);
+    switch ((XgEvidenceCachePhase) info.phase) {
+        case XG_EVIDENCE_CACHE_DECLARATIONS: {
+            const char *cursor = info.body;
+            ok = materialize_payload_declarations(&cursor, &evidence, NULL) && *cursor == '\0';
+            break;
+        }
+        case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
+            ok = materialize_payload_semantic(info.body, &evidence);
+            break;
+        case XG_EVIDENCE_CACHE_BODY_SUMMARY:
+            ok = materialize_payload_body(info.body, &evidence);
+            break;
+        default:
+            ok = false;
+            break;
+    }
+    if (ok) {
+        materialized_key = xg_global_evidence_cache_key(&evidence, info.phase);
+        ok = xg_evidence_cache_key_matches(&materialized_key, &info.key);
+    }
+    if (!ok) {
+        xg_global_evidence_free(&evidence);
+        return false;
+    }
+    *out_evidence = evidence;
+    return true;
+}
+
 typedef const char *(*XgBitNameFn)(uint32_t bit);
 
 static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,
