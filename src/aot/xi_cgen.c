@@ -23,6 +23,7 @@
 #include "xaot_abi_gen.h"
 #include "xaot_layout_gen.h"
 #include "xaot_struct_name.h"
+#include "xi_backend_plan_contract.h"
 #include "xi_to_c_dispatch_gen.h"
 #include "xi_to_c_stmt_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
