@@ -686,6 +686,53 @@ static bool cg_key_access_plan_is_dense_index(const XaotKeyAccessPlan *plan) {
     return plan && plan->action == XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
 }
 
+typedef struct CgUserHashEqDirectPlan {
+    const XaotHashEqPlan *hash_eq_plan;
+} CgUserHashEqDirectPlan;
+
+static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *key_plan,
+                                        const XiValue *key_value, CgUserHashEqDirectPlan *out,
+                                        const char *site) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!key_plan || key_plan->action != XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP)
+        return false;
+    const XaotHashEqPlan *hash_plan = cg_key_access_direct_user_hash_eq_plan(ctx, key_plan);
+    if (!out || !hash_plan) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: specialized key-access plan for %s requires direct "
+                "Hash/Eq backend evidence (key_access=%u type=%u)\n",
+                site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key);
+        return false;
+    }
+    (void) key_value;
+    out->hash_eq_plan = hash_plan;
+    return true;
+}
+
+static bool cg_emit_user_hash_eq_direct_args(XiCgenCtx *ctx, FILE *out,
+                                             const CgUserHashEqDirectPlan *plan) {
+    if (!plan || !plan->hash_eq_plan)
+        return false;
+    (void) ctx;
+    fprintf(out, ", ");
+    cg_emit_user_hash_eq_name_pair(out, plan->hash_eq_plan);
+    return true;
+}
+
+static void cg_emit_user_hash_eq_tagged_key(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    XrRep rep = ctx ? cg_value_plan_storage_rep(ctx, value) : cg_rep(value);
+    if (rep == XR_REP_TAGGED) {
+        emit_vref(out, value);
+        return;
+    }
+    const char *conv_suffix =
+        emit_conversion_prefix(out, value ? value->type : NULL, rep, XR_REP_TAGGED);
+    emit_vref(out, value);
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux || !v->args[0] ||
         !v->args[0]->type || v->args[0]->type->kind != XR_KIND_MAP ||
@@ -766,6 +813,59 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
     }
+    CgUserHashEqDirectPlan user_hash_eq;
+    if (cg_user_hash_eq_direct_plan(ctx, key_plan, v->args[1], &user_hash_eq, method)) {
+        if (op == XG_KEY_ACCESS_GET) {
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            fprintf(out, "xrt_map_get_user_hash_eq_owned(");
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, ", ");
+            cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+            if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+            const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_map_has_user_hash_eq"
+                                                         : "xrt_map_delete_user_hash_eq";
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            fprintf(out, "(int64_t)%s(", helper);
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, ", ");
+            cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+            if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        if (op == XG_KEY_ACCESS_SET && nargs == 2) {
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            fprintf(out, "(xrt_map_set_user_hash_eq(");
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, ", ");
+            cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+            if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, "), XR_NULL_VAL)");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+    }
+    if (emit_key_access_abort_expr_if_needed(ctx, out))
+        return true;
     if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
         return false;
 
@@ -1381,6 +1481,42 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
+    CgUserHashEqDirectPlan user_hash_eq;
+    if (cg_user_hash_eq_direct_plan(ctx, key_plan, v->args[1], &user_hash_eq, method)) {
+        if (op == XG_KEY_ACCESS_ADD) {
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            fprintf(out, "(xrt_set_add_user_hash_eq(");
+            cg_emit_local_set_recv(out, recv);
+            fprintf(out, ", ");
+            cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+            if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, "), XR_NULL_VAL)");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+            const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_set_has_user_hash_eq"
+                                                         : "xrt_set_delete_user_hash_eq";
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            fprintf(out, "(int64_t)%s(", helper);
+            cg_emit_local_set_recv(out, recv);
+            fprintf(out, ", ");
+            cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+            if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+    }
+    if (emit_key_access_abort_expr_if_needed(ctx, out))
+        return true;
     if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
         return false;
 

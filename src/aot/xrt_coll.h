@@ -1621,6 +1621,17 @@ static inline int xrt_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t v
     return e->val_tt == val_tt && xrt_eq(e->value, value) != 0;
 }
 
+typedef uint32_t (*xrt_user_hash_fn_t)(XrValue value);
+typedef int (*xrt_user_eq_fn_t)(XrValue a, XrValue b);
+
+static inline uint32_t xrt_user_hash_value(XrValue value, xrt_user_hash_fn_t hash_fn) {
+    return hash_fn ? hash_fn(value) : xrt_hash32_value(value);
+}
+
+static inline int xrt_user_eq_value(XrValue a, XrValue b, xrt_user_eq_fn_t eq_fn) {
+    return eq_fn ? eq_fn(a, b) != 0 : xrt_eq(a, b) != 0;
+}
+
 static inline uint32_t xrt_map_find_entry_slot(xrt_map_t *m, XrValue key, uint32_t hash,
                                                uint8_t key_tt, int32_t *out_eidx) {
     return xr_map_lookup_slot(m->ctrl, m->indices, m->entries, m->indices_size, key, hash, key_tt,
@@ -1630,6 +1641,48 @@ static inline uint32_t xrt_map_find_entry_slot(xrt_map_t *m, XrValue key, uint32
 static inline int32_t xrt_map_find_entry(xrt_map_t *m, XrValue key, uint32_t hash, uint8_t key_tt) {
     int32_t eidx = -1;
     return xrt_map_find_entry_slot(m, key, hash, key_tt, &eidx) == UINT32_MAX ? -1 : eidx;
+}
+
+static inline uint32_t xrt_map_find_entry_slot_user_eq(xrt_map_t *m, XrValue key, uint32_t hash,
+                                                       uint8_t key_tt, xrt_user_eq_fn_t eq,
+                                                       int32_t *out_eidx) {
+    if (!m || !eq || m->indices_size == 0)
+        return UINT32_MAX;
+    uint32_t mask = m->indices_size - 1u;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (uint32_t) ((hash >> 7u) & mask);
+    uint32_t stride = 0;
+    for (;;) {
+        uint64_t group = xr_swiss_group_load(m->ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = m->indices[slot];
+            if (ix >= 0) {
+                XrMapEntry *e = &m->entries[ix];
+                if (e->hash == hash && e->key_tt == key_tt && xrt_user_eq_value(e->key, key, eq)) {
+                    if (out_eidx)
+                        *out_eidx = ix;
+                    return slot;
+                }
+            }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
+        }
+        if (xr_swiss_group_match_empty(group))
+            return UINT32_MAX;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
+    }
+}
+
+static inline int32_t xrt_map_find_entry_user_eq(xrt_map_t *m, XrValue key, uint32_t hash,
+                                                 xrt_user_eq_fn_t eq) {
+    int32_t eidx = -1;
+    return xrt_map_find_entry_slot_user_eq(m, key, hash, xrt_value_type_tag(key), eq, &eidx) ==
+                   UINT32_MAX
+               ? -1
+               : eidx;
 }
 
 static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
@@ -1817,12 +1870,27 @@ static inline XrValue xrt_map_get_prehashed(xrt_map_t *m, XrValue key, uint32_t 
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
+static inline XrValue xrt_map_get_user_hash_eq(xrt_map_t *m, XrValue key,
+                                               xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_get(m, key);
+    uint32_t hash = xrt_user_hash_value(key, hash_fn);
+    int32_t eidx = xrt_map_find_entry_user_eq(m, key, hash, eq_fn);
+    return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
+}
+
 static inline XrValue xrt_map_get_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get(m, key));
 }
 
 static inline XrValue xrt_map_get_prehashed_owned(xrt_map_t *m, XrValue key, uint32_t hash) {
     return xrt_value_to_owned(xrt_map_get_prehashed(m, key, hash));
+}
+
+static inline XrValue xrt_map_get_user_hash_eq_owned(xrt_map_t *m, XrValue key,
+                                                     xrt_user_hash_fn_t hash_fn,
+                                                     xrt_user_eq_fn_t eq_fn) {
+    return xrt_value_to_owned(xrt_map_get_user_hash_eq(m, key, hash_fn, eq_fn));
 }
 
 static inline int32_t xrt_map_find_entry_small(xrt_map_t *m, XrValue key) {
@@ -1902,6 +1970,13 @@ static inline int xrt_map_has_prehashed(xrt_map_t *m, XrValue key, uint32_t hash
     return xrt_map_find_entry(m, key, hash, xrt_value_type_tag(key)) >= 0;
 }
 
+static inline int xrt_map_has_user_hash_eq(xrt_map_t *m, XrValue key, xrt_user_hash_fn_t hash_fn,
+                                           xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_has(m, key);
+    return xrt_map_find_entry_user_eq(m, key, xrt_user_hash_value(key, hash_fn), eq_fn) >= 0;
+}
+
 static inline int xrt_map_has_small(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_has(m, key);
@@ -1943,6 +2018,29 @@ static inline int xrt_map_delete_prehashed(xrt_map_t *m, XrValue key, uint32_t h
     uint8_t key_tt = xrt_value_type_tag(key);
     int32_t eidx = -1;
     uint32_t slot = xrt_map_find_entry_slot(m, key, hash, key_tt, &eidx);
+    if (slot == UINT32_MAX)
+        return 0;
+    m->entries[eidx].key_tt = XR_MAP_ENTRY_NIL_KEY;
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        xrt_release(m->entries[eidx].key);
+        xrt_release(m->entries[eidx].value);
+    }
+    m->entries[eidx].key = XR_NULL_VAL;
+    m->entries[eidx].value = XR_NULL_VAL;
+    m->indices[slot] = XR_MAP_IX_EMPTY;
+    xr_swiss_ctrl_set(m->ctrl, m->indices_size, slot, XR_SWISS_CTRL_DELETED);
+    m->count--;
+    return 1;
+}
+
+static inline int xrt_map_delete_user_hash_eq(xrt_map_t *m, XrValue key, xrt_user_hash_fn_t hash_fn,
+                                              xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_delete(m, key);
+    uint8_t key_tt = xrt_value_type_tag(key);
+    int32_t eidx = -1;
+    uint32_t hash = xrt_user_hash_value(key, hash_fn);
+    uint32_t slot = xrt_map_find_entry_slot_user_eq(m, key, hash, key_tt, eq_fn, &eidx);
     if (slot == UINT32_MAX)
         return 0;
     m->entries[eidx].key_tt = XR_MAP_ENTRY_NIL_KEY;
@@ -2005,6 +2103,43 @@ static inline void xrt_map_set_prehashed(xrt_map_t *m, XrValue key, XrValue val,
     }
     uint8_t key_tt = xrt_value_type_tag(key);
     int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
+    if (eidx >= 0) {
+        if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+            if (XR_IS_ARRAY_REF(val))
+                val = xrt_value_to_owned(val);
+            xrt_release(key);
+            xrt_release(m->entries[eidx].value);
+        }
+        m->entries[eidx].value = val;
+        return;
+    }
+    if (m->nentries >= m->entries_cap)
+        xrt_map_resize_tagged(m, m->count + 1);
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        if (XR_IS_ARRAY_REF(key))
+            key = xrt_value_to_owned(key);
+        if (XR_IS_ARRAY_REF(val))
+            val = xrt_value_to_owned(val);
+    }
+    eidx = (int32_t) m->nentries++;
+    XrMapEntry *entry = &m->entries[eidx];
+    entry->key = key;
+    entry->value = val;
+    entry->hash = hash;
+    entry->key_tt = key_tt;
+    m->count++;
+    xr_swiss_indices_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
+}
+
+static inline void xrt_map_set_user_hash_eq(xrt_map_t *m, XrValue key, XrValue val,
+                                            xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m)) {
+        xrt_map_set(m, key, val);
+        return;
+    }
+    uint8_t key_tt = xrt_value_type_tag(key);
+    uint32_t hash = xrt_user_hash_value(key, hash_fn);
+    int32_t eidx = xrt_map_find_entry_user_eq(m, key, hash, eq_fn);
     if (eidx >= 0) {
         if (!(m->flags & XR_MAP_FLAG_WEAK)) {
             if (XR_IS_ARRAY_REF(val))
@@ -2122,6 +2257,49 @@ static inline uint32_t xrt_set_find_entry_slot(xrt_set_t *s, XrValue value, uint
 static inline int32_t xrt_set_find_entry(xrt_set_t *s, XrValue value, uint32_t hash) {
     int32_t eidx = -1;
     return xrt_set_find_entry_slot(s, value, hash, &eidx) == UINT32_MAX ? -1 : eidx;
+}
+
+static inline uint32_t xrt_set_find_entry_slot_user_eq(xrt_set_t *s, XrValue value, uint32_t hash,
+                                                       uint8_t val_tt, xrt_user_eq_fn_t eq,
+                                                       int32_t *out_eidx) {
+    if (!s || !eq || s->indices_size == 0)
+        return UINT32_MAX;
+    uint32_t mask = s->indices_size - 1u;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (uint32_t) ((hash >> 7u) & mask);
+    uint32_t stride = 0;
+    for (;;) {
+        uint64_t group = xr_swiss_group_load(s->ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = s->indices[slot];
+            if (ix >= 0) {
+                XrSetEntry *e = &s->entries[ix];
+                if (e->hash == hash && e->val_tt == val_tt &&
+                    xrt_user_eq_value(e->value, value, eq)) {
+                    if (out_eidx)
+                        *out_eidx = ix;
+                    return slot;
+                }
+            }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
+        }
+        if (xr_swiss_group_match_empty(group))
+            return UINT32_MAX;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
+    }
+}
+
+static inline int32_t xrt_set_find_entry_user_eq(xrt_set_t *s, XrValue value, uint32_t hash,
+                                                 xrt_user_eq_fn_t eq) {
+    int32_t eidx = -1;
+    return xrt_set_find_entry_slot_user_eq(s, value, hash, xrt_value_type_tag(value), eq, &eidx) ==
+                   UINT32_MAX
+               ? -1
+               : eidx;
 }
 
 static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
@@ -2413,6 +2591,13 @@ static inline int xrt_set_has_prehashed(xrt_set_t *s, XrValue value, uint32_t ha
     return xrt_set_has(s, value);
 }
 
+static inline int xrt_set_has_user_hash_eq(xrt_set_t *s, XrValue value, xrt_user_hash_fn_t hash_fn,
+                                           xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
+        return xrt_set_has(s, value);
+    return xrt_set_find_entry_user_eq(s, value, xrt_user_hash_value(value, hash_fn), eq_fn) >= 0;
+}
+
 static inline int32_t xrt_set_find_entry_small(xrt_set_t *s, XrValue value) {
     if (!s || xrt_set_is_typed(s))
         return -1;
@@ -2517,6 +2702,30 @@ static inline int xrt_set_add_prehashed(xrt_set_t *s, XrValue value, uint32_t ha
     return 1;
 }
 
+static inline int xrt_set_add_user_hash_eq(xrt_set_t *s, XrValue value, xrt_user_hash_fn_t hash_fn,
+                                           xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
+        return xrt_set_add(s, value);
+    uint32_t hash = xrt_user_hash_value(value, hash_fn);
+    if (xrt_set_find_entry_user_eq(s, value, hash, eq_fn) >= 0) {
+        if (!(s->flags & XR_SET_FLAG_WEAK))
+            xrt_release(value);
+        return 0;
+    }
+    if (s->nentries >= s->entries_cap)
+        xrt_set_resize_tagged(s, s->count + 1);
+    if (!(s->flags & XR_SET_FLAG_WEAK) && XR_IS_ARRAY_REF(value))
+        value = xrt_value_to_owned(value);
+    int32_t eidx = (int32_t) s->nentries++;
+    XrSetEntry *entry = &s->entries[eidx];
+    entry->value = value;
+    entry->hash = hash;
+    entry->val_tt = xrt_value_type_tag(value);
+    s->count++;
+    xr_swiss_indices_put(s->ctrl, s->indices, s->indices_size, hash, eidx);
+    return 1;
+}
+
 static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
@@ -2545,6 +2754,26 @@ static inline int xrt_set_delete_prehashed(xrt_set_t *s, XrValue value, uint32_t
         return xrt_set_delete(s, value);
     int32_t eidx = -1;
     uint32_t slot = xrt_set_find_entry_slot(s, value, hash, &eidx);
+    if (slot == UINT32_MAX)
+        return 0;
+    if (!(s->flags & XR_SET_FLAG_WEAK))
+        xrt_release(s->entries[eidx].value);
+    s->entries[eidx].value = XR_NULL_VAL;
+    s->entries[eidx].val_tt = XR_SET_ENTRY_NIL;
+    s->indices[slot] = XR_SET_IX_EMPTY;
+    xr_swiss_ctrl_set(s->ctrl, s->indices_size, slot, XR_SWISS_CTRL_DELETED);
+    s->count--;
+    return 1;
+}
+
+static inline int xrt_set_delete_user_hash_eq(xrt_set_t *s, XrValue value,
+                                              xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
+        return xrt_set_delete(s, value);
+    int32_t eidx = -1;
+    uint32_t hash = xrt_user_hash_value(value, hash_fn);
+    uint32_t slot =
+        xrt_set_find_entry_slot_user_eq(s, value, hash, xrt_value_type_tag(value), eq_fn, &eidx);
     if (slot == UINT32_MAX)
         return 0;
     if (!(s->flags & XR_SET_FLAG_WEAK))
