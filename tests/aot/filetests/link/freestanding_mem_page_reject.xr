@@ -1,7 +1,0 @@
-import mem
-
-@c_export("xray_bad_page_alloc")
-fn xray_bad_page_alloc(n: int) -> int {
-    var p = mem.pageAlloc(n, mem.PROT_READ | mem.PROT_WRITE)
-    return n + 1
-}

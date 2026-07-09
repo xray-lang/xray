@@ -425,6 +425,9 @@ XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
 void xr_hook_write(const char *bytes, size_t len);
 void *xr_hook_alloc(size_t size, size_t align);
 void xr_hook_free(void *ptr);
+void *xr_hook_page_alloc(size_t size, int64_t prot);
+bool xr_hook_page_protect(void *ptr, size_t size, int64_t prot);
+bool xr_hook_page_free(void *ptr, size_t size);
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -436,6 +439,11 @@ typedef struct xrt_buffer_object {
 #define XRT_FREESTANDING_DEFAULT_ALLOC_ALIGN ((size_t) sizeof(void *))
 #define XRT_ARC_KIND_BUFFER 10u
 #define XRT_ARC_HDR(p) ((XrObjHeader *) ((char *) (p) - sizeof(XrObjHeader)))
+
+#define XRT_MEM_PROT_NONE 0
+#define XRT_MEM_PROT_READ 1
+#define XRT_MEM_PROT_WRITE 2
+#define XRT_MEM_PROT_EXEC 4
 
 static inline bool xrt_freestanding_is_power_of_two(size_t value) {
     return value != 0 && (value & (value - 1u)) == 0;
@@ -1698,6 +1706,31 @@ static inline XrValue xrt_mem_alloc_zeroed(XrValue n) {
 
 static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
     return xrt_buffer_new(xrt_mem_int_arg(n), 0, (size_t) xrt_mem_int_arg(align));
+}
+
+static inline XrValue xrt_mem_page_alloc(XrValue bytes, XrValue prot) {
+    int64_t n = xrt_mem_int_arg(bytes);
+    if (n <= 0)
+        return xr_mkptr(NULL, XR_TAG_PTR);
+    return xr_mkptr(xr_hook_page_alloc((size_t) n, xrt_mem_int_arg(prot)), XR_TAG_PTR);
+}
+
+static inline XrValue xrt_mem_page_alloc_default(XrValue bytes) {
+    return xrt_mem_page_alloc(bytes, XR_FROM_INT(XRT_MEM_PROT_READ | XRT_MEM_PROT_WRITE));
+}
+
+static inline XrValue xrt_mem_page_protect(XrValue ptr, XrValue bytes, XrValue prot) {
+    int64_t n = xrt_mem_int_arg(bytes);
+    if (!ptr.ptr || n <= 0)
+        return XR_FALSE_VAL;
+    return XR_FROM_BOOL(xr_hook_page_protect(ptr.ptr, (size_t) n, xrt_mem_int_arg(prot)));
+}
+
+static inline XrValue xrt_mem_page_free(XrValue ptr, XrValue bytes) {
+    int64_t n = xrt_mem_int_arg(bytes);
+    if (!ptr.ptr || n <= 0)
+        return XR_FALSE_VAL;
+    return XR_FROM_BOOL(xr_hook_page_free(ptr.ptr, (size_t) n));
 }
 
 static inline XrValue xrt_mem_from_address(XrValue addr) {

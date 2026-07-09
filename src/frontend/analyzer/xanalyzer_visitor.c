@@ -397,10 +397,7 @@ XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
         return true;
     if (strcmp(module_name, "math") == 0)
         return xa_freestanding_math_member_allowed(member_name);
-    if (strcmp(module_name, "mem") != 0)
-        return true;
-    return strcmp(member_name, "pageAlloc") != 0 && strcmp(member_name, "pageProtect") != 0 &&
-           strcmp(member_name, "pageFree") != 0;
+    return true;
 }
 
 XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name) {
@@ -408,9 +405,6 @@ XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *
         return "libm-backed and system-random math helpers are not part of the freestanding "
                "no-libc subset yet";
     }
-    if (module_name && strcmp(module_name, "mem") == 0)
-        return "page allocation and protection need an OS/page-map contract outside the Buffer "
-               "RAII hook-backed subset";
     return "this stdlib member is not part of the freestanding allowlist yet";
 }
 
