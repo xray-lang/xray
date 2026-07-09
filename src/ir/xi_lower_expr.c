@@ -7001,34 +7001,10 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         return call;
     }
 
-    /* Fallback: unresolved struct → create as Json object (legacy path) */
-    const char **names_copy =
-        (const char **) xi_func_arena_alloc(l->func, (uint32_t) (sizeof(const char *) * n));
-    if (!names_copy)
-        return NULL;
-    for (int i = 0; i < n; i++) {
-        names_copy[i] = arena_strdup(l->func, sl->field_names[i] ? sl->field_names[i] : "?");
-        if (!names_copy[i])
-            return NULL;
-    }
-
-    XiValue *obj = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
-    if (!obj)
-        return NULL;
-    obj->aux_int = n;
-    obj->aux = (void *) names_copy;
-    obj->line = (uint32_t) node->line;
-
-    for (int i = 0; i < n; i++) {
-        XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_unit, 2);
-        if (!init)
-            break;
-        init->args[0] = obj;
-        init->args[1] = val_vals[i];
-        init->aux_int = i;
-        init->flags |= XI_FLAG_SIDE_EFFECT;
-    }
-    return obj;
+    fprintf(stderr, "[LOWER] unresolved struct literal '%s' at line %d\n",
+            sname ? sname : "<anonymous>", (int) node->line);
+    l->had_error = true;
+    return NULL;
 }
 
 /*
