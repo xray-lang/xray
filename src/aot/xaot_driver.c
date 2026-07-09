@@ -36,6 +36,7 @@
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
+#include "xi_backend_plan_contract.h"
 #include "xi_lto.h"
 #include "xaot_bundle.h"
 #include "xaot_link.h"
@@ -305,8 +306,14 @@ static bool reject_profile_capability_plans(const XaotBundle *bundle) {
         return false;
     for (uint32_t i = 0; i < bundle->ncapability_plans; i++) {
         const XaotCapabilityPlan *plan = &bundle->capability_plans[i];
-        if (plan->profile_action != XAOT_CAPABILITY_ACTION_REJECT)
+        XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+        if (xaot_backend_contract_capability_plan_allowed(plan, &issue))
             continue;
+        if (issue != XAOT_BACKEND_CONTRACT_CAPABILITY_PROFILE_REJECTED) {
+            fprintf(stderr, "Error: backend capability plan contract failed: %s\n",
+                    xaot_backend_contract_issue_name(issue));
+            return false;
+        }
         fprintf(stderr, "Error: %s profile rejects runtime capability '%s'\n",
                 xg_build_profile_name(bundle->global_evidence_plan.profile),
                 xg_capability_name(plan->capability));
@@ -320,11 +327,38 @@ static bool reject_profile_metadata_plans(const XaotBundle *bundle) {
         return false;
     for (uint32_t i = 0; i < bundle->nmetadata_plans; i++) {
         const XaotMetadataReachabilityPlan *plan = &bundle->metadata_plans[i];
-        if (plan->profile_action != XAOT_CAPABILITY_ACTION_REJECT)
+        XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+        if (xaot_backend_contract_metadata_plan_allowed(plan, &issue))
             continue;
+        if (issue != XAOT_BACKEND_CONTRACT_METADATA_PROFILE_REJECTED) {
+            fprintf(stderr, "Error: backend metadata plan contract failed: %s\n",
+                    xaot_backend_contract_issue_name(issue));
+            return false;
+        }
         fprintf(stderr, "Error: %s profile rejects metadata '%s'\n",
                 xg_build_profile_name(bundle->global_evidence_plan.profile),
                 xg_metadata_name(plan->metadata));
+        return false;
+    }
+    return true;
+}
+
+static bool reject_profile_static_data_plans(const XaotBundle *bundle) {
+    if (!bundle)
+        return false;
+    for (uint32_t i = 0; i < bundle->nstatic_data_plans; i++) {
+        const XaotStaticDataPlan *plan = &bundle->static_data_plans[i];
+        XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+        if (xaot_backend_contract_static_data_plan_allowed(plan, &issue))
+            continue;
+        if (issue != XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED) {
+            fprintf(stderr, "Error: backend static-data plan contract failed: %s\n",
+                    xaot_backend_contract_issue_name(issue));
+            return false;
+        }
+        fprintf(stderr, "Error: %s profile rejects static data '%s'\n",
+                xg_build_profile_name(bundle->global_evidence_plan.profile),
+                xg_static_data_name(plan->static_data));
         return false;
     }
     return true;
@@ -952,6 +986,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     if (!reject_profile_capability_plans(&aot_bundle))
         goto fail_free_ir;
     if (!reject_profile_metadata_plans(&aot_bundle))
+        goto fail_free_ir;
+    if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
     /* The plan dump is O(functions x values) diagnostics; only build it when
      * the caller actually wants it (--dump-xaot-plan). */
