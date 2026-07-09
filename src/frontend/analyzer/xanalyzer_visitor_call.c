@@ -24,8 +24,10 @@
 #include "xtype_ref_resolve.h"
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../module/xmodule_graph.h"
 #include "../../base/xchecks.h"
 #include "../../base/xconstants.h"
+#include "../../base/xfileio.h"
 #include "../../base/xhashmap.h"
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
@@ -1786,9 +1788,12 @@ static XaSymbolLinks *xa_static_method_fn_links(XaInferContext *ctx, AstNode *ca
         (class_links && class_links->class_info)
             ? xa_class_info_lookup_static_member(class_links->class_info, ma->name)
             : NULL;
-    return (method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->is_static)
-               ? xa_analyzer_get_links(ctx->analyzer, method_sym)
-               : NULL;
+    if (!method_sym || method_sym->kind != XA_SYM_METHOD || !method_sym->is_static)
+        return NULL;
+    XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+    if (method_links && !method_links->file_path && class_links && class_links->class_info)
+        method_links->file_path = class_links->class_info->location.file;
+    return method_links;
 }
 
 static XaSymbolLinks *xa_static_method_fn_links_from_type(XaInferContext *ctx, XrType *class_type,
@@ -1804,9 +1809,12 @@ static XaSymbolLinks *xa_static_method_fn_links_from_type(XaInferContext *ctx, X
     }
     XaSymbol *method_sym =
         class_info ? xa_class_info_lookup_static_member(class_info, method_name) : NULL;
-    return (method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->is_static)
-               ? xa_analyzer_get_links(ctx->analyzer, method_sym)
-               : NULL;
+    if (!method_sym || method_sym->kind != XA_SYM_METHOD || !method_sym->is_static)
+        return NULL;
+    XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+    if (method_links && !method_links->file_path && class_info)
+        method_links->file_path = class_info->location.file;
+    return method_links;
 }
 
 static XaSymbolLinks *xa_class_constructor_links(XaInferContext *ctx, XaSymbol *class_sym) {
@@ -1816,7 +1824,248 @@ static XaSymbolLinks *xa_class_constructor_links(XaInferContext *ctx, XaSymbol *
     XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     XaSymbol *ctor =
         class_info ? xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR) : NULL;
-    return ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+    XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+    if (ctor_links && !ctor_links->file_path && class_info)
+        ctor_links->file_path = class_info->location.file;
+    return ctor_links;
+}
+
+static bool xa_default_arg_path_matches(const char *a, const char *b) {
+    if (!a || !b)
+        return false;
+    if (strcmp(a, b) == 0)
+        return true;
+
+    size_t alen = strlen(a);
+    size_t blen = strlen(b);
+    if (alen > blen && a[alen - blen - 1] == '/' && strcmp(a + alen - blen, b) == 0)
+        return true;
+    if (blen > alen && b[blen - alen - 1] == '/' && strcmp(b + blen - alen, a) == 0)
+        return true;
+
+    char *areal = xr_realpath(a);
+    char *breal = xr_realpath(b);
+    bool same = areal && breal && strcmp(areal, breal) == 0;
+    if (areal)
+        xr_free(areal);
+    if (breal)
+        xr_free(breal);
+    return same;
+}
+
+static bool xa_default_arg_stdlib_module_from_path(const char *path, char *out, size_t out_cap) {
+    if (!path || !out || out_cap == 0)
+        return false;
+
+    const char *marker = "stdlib/";
+    const char *base = strstr(path, marker);
+    if (!base)
+        return false;
+    base += strlen(marker);
+
+    const char *slash = strchr(base, '/');
+    if (!slash || slash == base)
+        return false;
+
+    size_t name_len = (size_t) (slash - base);
+    if (name_len + 1 > out_cap)
+        return false;
+
+    const char *leaf = slash + 1;
+    if (strncmp(leaf, base, name_len) != 0 || strcmp(leaf + name_len, ".xr") != 0)
+        return false;
+
+    memcpy(out, base, name_len);
+    out[name_len] = '\0';
+    return true;
+}
+
+static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks *links) {
+    if (!ctx || !ctx->analyzer || !links || !ctx->analyzer->graph)
+        return NULL;
+
+    if (links->module_name) {
+        bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
+        XrHashMap *exports =
+            resolve_graph_export_symbols(ctx->analyzer, links->module_name, is_quoted);
+        if (exports)
+            return exports;
+    }
+
+    if (!links->file_path)
+        return NULL;
+
+    XrModuleGraph *graph = (XrModuleGraph *) ctx->analyzer->graph;
+    for (int i = 0; i < graph->spec_count; i++) {
+        XrModuleSpec *spec = &graph->specs[i];
+        if (!spec->export_symbols)
+            continue;
+        if ((spec->source_path &&
+             xa_default_arg_path_matches(spec->source_path, links->file_path)) ||
+            (spec->canonical && xa_default_arg_path_matches(spec->canonical, links->file_path)))
+            return spec->export_symbols;
+    }
+
+    char module_name[64];
+    if (xa_default_arg_stdlib_module_from_path(links->file_path, module_name,
+                                               sizeof(module_name))) {
+        return resolve_graph_export_symbols(ctx->analyzer, module_name, false);
+    }
+    return NULL;
+}
+
+static bool xa_default_arg_symbol_is_from_decl_file(XaAnalyzer *analyzer, XaSymbol *sym,
+                                                    const char *decl_file, const char *name) {
+    if (!sym || !decl_file || !name || !sym->name || strcmp(sym->name, name) != 0)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    return links && links->file_path && xa_default_arg_path_matches(links->file_path, decl_file);
+}
+
+static XaSymbol *xa_default_arg_find_decl_file_symbol(XaAnalyzer *analyzer, XaScope *scope,
+                                                      const char *decl_file, const char *name) {
+    if (!analyzer || !scope || !decl_file || !name)
+        return NULL;
+
+    XaSymbol *local = xa_scope_lookup_local(scope, name);
+    if (xa_default_arg_symbol_is_from_decl_file(analyzer, local, decl_file, name))
+        return local;
+
+    for (int i = 0; i < scope->child_count; i++) {
+        XaSymbol *found =
+            xa_default_arg_find_decl_file_symbol(analyzer, scope->children[i], decl_file, name);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+typedef struct XaDefaultArgBindCtx {
+    XaInferContext *ctx;
+    XrHashMap *exports;
+    const char *decl_file;
+} XaDefaultArgBindCtx;
+
+static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name) {
+    if (!bind || !bind->ctx || !bind->ctx->analyzer || !name)
+        return NULL;
+    if (bind->exports) {
+        XaSymbol *sym = (XaSymbol *) xr_hashmap_get(bind->exports, name);
+        if (sym)
+            return sym;
+    }
+    return xa_default_arg_find_decl_file_symbol(
+        bind->ctx->analyzer, bind->ctx->analyzer->global_scope, bind->decl_file, name);
+}
+
+static void xa_bind_default_arg_export_symbols(AstNode *node, XaDefaultArgBindCtx *bind) {
+    if (!node || !bind)
+        return;
+    if (node->type >= AST_BINARY_ADD && node->type <= AST_BINARY_OR) {
+        xa_bind_default_arg_export_symbols(node->as.binary.left, bind);
+        xa_bind_default_arg_export_symbols(node->as.binary.right, bind);
+        return;
+    }
+    if (node->type >= AST_UNARY_NEG && node->type <= AST_UNARY_BNOT) {
+        xa_bind_default_arg_export_symbols(node->as.unary.operand, bind);
+        return;
+    }
+    switch (node->type) {
+        case AST_VARIABLE:
+            if (node->as.variable.name) {
+                XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name);
+                if (sym) {
+                    node->as.variable.symbol_id = sym->id;
+                    break;
+                }
+                XaSymbol *current = node->as.variable.symbol_id
+                                        ? xa_scope_lookup_by_id(bind->ctx->analyzer->global_scope,
+                                                                node->as.variable.symbol_id)
+                                        : NULL;
+                if (!xa_default_arg_symbol_is_from_decl_file(
+                        bind->ctx->analyzer, current, bind->decl_file, node->as.variable.name))
+                    node->as.variable.symbol_id = 0;
+            }
+            break;
+        case AST_MEMBER_ACCESS:
+            xa_bind_default_arg_export_symbols(node->as.member_access.object, bind);
+            break;
+        case AST_CALL_EXPR:
+            xa_bind_default_arg_export_symbols(node->as.call_expr.callee, bind);
+            for (int i = 0; i < node->as.call_expr.arg_count; i++)
+                xa_bind_default_arg_export_symbols(node->as.call_expr.arguments[i], bind);
+            break;
+        case AST_GROUPING:
+            xa_bind_default_arg_export_symbols(node->as.grouping, bind);
+            break;
+        case AST_TERNARY:
+            xa_bind_default_arg_export_symbols(node->as.ternary.condition, bind);
+            xa_bind_default_arg_export_symbols(node->as.ternary.true_expr, bind);
+            xa_bind_default_arg_export_symbols(node->as.ternary.false_expr, bind);
+            break;
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++)
+                xa_bind_default_arg_export_symbols(node->as.array_literal.elements[i], bind);
+            xa_bind_default_arg_export_symbols(node->as.array_literal.repeat_value, bind);
+            xa_bind_default_arg_export_symbols(node->as.array_literal.repeat_count, bind);
+            break;
+        case AST_TUPLE_LITERAL:
+            for (int i = 0; i < node->as.tuple_literal.count; i++)
+                xa_bind_default_arg_export_symbols(node->as.tuple_literal.elements[i], bind);
+            break;
+        case AST_SPREAD_EXPR:
+            xa_bind_default_arg_export_symbols(node->as.spread_expr.expr, bind);
+            break;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++) {
+                xa_bind_default_arg_export_symbols(node->as.object_literal.keys[i], bind);
+                xa_bind_default_arg_export_symbols(node->as.object_literal.values[i], bind);
+            }
+            break;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                xa_bind_default_arg_export_symbols(node->as.map_literal.keys[i], bind);
+                xa_bind_default_arg_export_symbols(node->as.map_literal.values[i], bind);
+            }
+            break;
+        case AST_SET_LITERAL:
+            for (int i = 0; i < node->as.set_literal.count; i++)
+                xa_bind_default_arg_export_symbols(node->as.set_literal.elements[i], bind);
+            break;
+        case AST_INDEX_GET:
+            xa_bind_default_arg_export_symbols(node->as.index_get.array, bind);
+            xa_bind_default_arg_export_symbols(node->as.index_get.index, bind);
+            break;
+        case AST_SLICE_EXPR:
+            xa_bind_default_arg_export_symbols(node->as.slice_expr.source, bind);
+            xa_bind_default_arg_export_symbols(node->as.slice_expr.start, bind);
+            xa_bind_default_arg_export_symbols(node->as.slice_expr.end, bind);
+            break;
+        case AST_NEW_EXPR:
+            for (int i = 0; i < node->as.new_expr.arg_count; i++)
+                xa_bind_default_arg_export_symbols(node->as.new_expr.arguments[i], bind);
+            break;
+        case AST_STRUCT_LITERAL:
+            for (int i = 0; i < node->as.struct_literal.field_count; i++)
+                xa_bind_default_arg_export_symbols(node->as.struct_literal.field_values[i], bind);
+            break;
+        case AST_OPTIONAL_CHAIN:
+            xa_bind_default_arg_export_symbols(node->as.optional_chain.object, bind);
+            xa_bind_default_arg_export_symbols(node->as.optional_chain.index, bind);
+            break;
+        case AST_RANGE:
+            xa_bind_default_arg_export_symbols(node->as.range.start, bind);
+            xa_bind_default_arg_export_symbols(node->as.range.end, bind);
+            break;
+        case AST_IS_EXPR:
+            xa_bind_default_arg_export_symbols(node->as.is_expr.expr, bind);
+            break;
+        case AST_AS_EXPR:
+            xa_bind_default_arg_export_symbols(node->as.as_expr.expr, bind);
+            break;
+        default:
+            break;
+    }
 }
 
 static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *call,
@@ -1846,8 +2095,16 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
         return false;
     for (int i = 0; i < call->arg_count; i++)
         new_args[i] = call->arguments[i];
-    for (int i = call->arg_count; i < param_count; i++)
+    XrHashMap *decl_exports = xa_default_arg_decl_exports(ctx, links);
+    XaDefaultArgBindCtx bind = {
+        .ctx = ctx,
+        .exports = decl_exports,
+        .decl_file = links->file_path,
+    };
+    for (int i = call->arg_count; i < param_count; i++) {
         new_args[i] = xr_ast_clone_session(links->param_defaults[i], sess);
+        xa_bind_default_arg_export_symbols(new_args[i], &bind);
+    }
     call->arguments = new_args;
     call->arg_count = param_count;
     return true;
@@ -1878,7 +2135,11 @@ static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrTyp
     if (!class_info)
         return NULL;
     XaSymbol *method_sym = xa_class_info_lookup_member(class_info, method_name);
-    return method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+    XaSymbolLinks *method_links =
+        method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+    if (method_links && !method_links->file_path && class_info)
+        method_links->file_path = class_info->location.file;
+    return method_links;
 }
 
 static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
@@ -2033,9 +2294,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     } else if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         // Module member call (namespace.fn): resolve the exported function's
         // links so caller-side default-argument filling below applies just as
-        // for a bare-name call. Non-module member calls (instance methods)
-        // resolve to NULL here and are unaffected. Static methods use the same
-        // caller-side default model, including module-exported classes.
+        // for a bare-name call. Static methods use the same caller-side default
+        // model, including module-exported classes. Instance methods are
+        // resolved after the receiver object has been inferred.
         fn_links = xa_module_member_fn_links(ctx, call->callee);
         if (!fn_links)
             fn_links = xa_static_method_fn_links(ctx, call->callee);
@@ -2218,6 +2479,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
         if (!fn_links)
             fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
+        if (!fn_links)
+            fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
@@ -2783,8 +3046,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const char *escape_name = NULL;
     if (call->callee && call->callee->type == AST_VARIABLE)
         escape_name = call->callee->as.variable.name;
-    if (!escape_links && method_name && callee_obj_type) {
-        escape_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
+    if (method_name && callee_obj_type) {
+        if (!escape_links)
+            escape_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         escape_name = method_name;
     }
     if (escape_links && call->arg_count > 0) {

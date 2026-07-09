@@ -38,6 +38,15 @@ static bool xa_type_is_known_non_int(XrType *type) {
     return type && !XR_TYPE_IS_UNKNOWN(type) && !XR_TYPE_IS_INT(type);
 }
 
+static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults, int count) {
+    if (!ctx || !defaults || count <= 0)
+        return;
+    for (int i = 0; i < count; i++) {
+        if (defaults[i])
+            xa_visit_infer_expr(ctx, defaults[i]);
+    }
+}
+
 XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr) {
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
@@ -74,6 +83,33 @@ static void xa_warn_discarded_sys_thread_spawn(XaInferContext *ctx, AstNode *exp
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, message, &loc);
 }
 
+static bool xa_process_options_ctor_detached_literal(AstNode *expr) {
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    AstNode *callee = call->callee;
+    bool is_options = false;
+    if (callee && callee->type == AST_VARIABLE && callee->as.variable.name &&
+        strcmp(callee->as.variable.name, "ProcessOptions") == 0) {
+        is_options = true;
+    } else if (callee && callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &callee->as.member_access;
+        is_options = ma->name && strcmp(ma->name, "ProcessOptions") == 0 && ma->object &&
+                     ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+                     strcmp(ma->object->as.variable.name, "sys") == 0;
+    }
+    if (!is_options || call->arg_count < 6 || !call->arguments[5])
+        return false;
+    return call->arguments[5]->type == AST_LITERAL_TRUE;
+}
+
+static bool xa_process_spawn_detached_literal(AstNode *expr) {
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    return call->arg_count >= 3 && xa_process_options_ctor_detached_literal(call->arguments[2]);
+}
+
 static bool xa_expr_is_sys_os_resource_factory_call(AstNode *expr, const char **factory_name,
                                                     const char **type_name,
                                                     const char **close_method) {
@@ -92,6 +128,8 @@ static bool xa_expr_is_sys_os_resource_factory_call(AstNode *expr, const char **
     if (!module_name || strcmp(module_name, "sys") != 0)
         return false;
     if (strcmp(owner->name, "Process") == 0 && strcmp(method->name, "spawn") == 0) {
+        if (xa_process_spawn_detached_literal(expr))
+            return false;
         if (factory_name)
             *factory_name = "sys.Process.spawn";
         if (type_name)
@@ -121,8 +159,8 @@ static void xa_warn_discarded_sys_os_resource_factory(XaInferContext *ctx, AstNo
         return;
 
     char message[192];
-    snprintf(message, sizeof(message), "%s returns a %s handle; call %s() explicitly",
-             factory_name, type_name, close_method);
+    snprintf(message, sizeof(message), "%s returns a %s handle; call %s() explicitly", factory_name,
+             type_name, close_method);
     XrLocation loc = {.file = ctx->file_path, .line = expr->line, .column = expr->column};
     for (XaDiagnostic *d = ctx->analyzer ? ctx->analyzer->diagnostics : NULL; d; d = d->next) {
         if (d->severity == XR_DIAG_SEV_WARNING && d->code == XR_ERR_ANALYZE &&
@@ -2389,10 +2427,13 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
 
     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
     method_links->type = method_type;
+    method_links->file_path = ctx->file_path;
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
                                      ret_type);
-    if (md->param_count > 0)
+    if (md->param_count > 0) {
+        xa_bind_param_default_exprs(ctx, md->default_values, md->param_count);
         xa_symbol_links_set_param_defaults(method_links, md->default_values, md->param_count);
+    }
 
     xa_class_info_add_method(info, method_sym);
 

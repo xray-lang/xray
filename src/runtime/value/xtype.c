@@ -447,13 +447,6 @@ XrType *xr_type_new_bigint(XrVMRuntime *X) {
     return type;
 }
 
-XrType *xr_type_new_datetime(XrVMRuntime *X) {
-    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
-    if (type)
-        type->instance.class_name = "DateTime";
-    return type;
-}
-
 XrType *xr_type_new_bytes(XrVMRuntime *X) {
     XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
     if (!elem)

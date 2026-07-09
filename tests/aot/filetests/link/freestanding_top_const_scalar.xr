@@ -21,7 +21,7 @@ const NOTHING = null
 @used
 const LABEL = comptime "scalar"
 
-@section("__DATA,.xray_local_label")
+@section("__DATA,.xray_lbl")
 const LOCAL_LABEL = comptime "local"
 
 @c_export("xray_magic")

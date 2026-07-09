@@ -198,6 +198,7 @@ static char *clone_str(const char *s) {
 
 typedef struct {
     XrCompilerSession *session;
+    bool preserve_symbol_ids;
 } XrAstCloneCtx;
 
 static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
@@ -394,6 +395,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             break;
         case AST_VARIABLE:
             n->as.variable.name = clone_str(node->as.variable.name);
+            n->as.variable.symbol_id =
+                clone_ctx && clone_ctx->preserve_symbol_ids ? node->as.variable.symbol_id : 0;
             break;
         case AST_ASSIGNMENT:
             n->as.assignment.name = clone_str(node->as.assignment.name);
@@ -964,7 +967,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
 }
 
 AstNode *xr_ast_clone_session(AstNode *node, XrCompilerSession *session) {
-    XrAstCloneCtx clone_ctx = {.session = session};
+    XrAstCloneCtx clone_ctx = {.session = session, .preserve_symbol_ids = true};
     return xr_ast_clone_ctx(node, NULL, 0, &clone_ctx);
 }
 

@@ -571,7 +571,6 @@ XR_FUNC XrType *xr_type_new_generic_instance(XrVMRuntime *X, const char *class_n
                                              XrClassInfo *class_info, XrType **type_args,
                                              int type_arg_count);
 XR_FUNC XrType *xr_type_new_bigint(XrVMRuntime *X);
-XR_FUNC XrType *xr_type_new_datetime(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_bytes(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_regex(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_stringbuilder(XrVMRuntime *X);

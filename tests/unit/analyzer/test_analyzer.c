@@ -791,18 +791,17 @@ TEST(builtin_http_old_fd_helpers_removed) {
     ASSERT(get_conn_handler == NULL);
 }
 
-TEST(builtin_datetime_type_methods_from_defs) {
-    XrType *dt = xr_type_new_datetime(g_isolate);
+TEST(builtin_datetime_type_methods_not_from_native_defs) {
+    XrType *dt = xr_type_new_named_instance(g_isolate, "DateTime");
     ASSERT(dt != NULL);
 
-    ASSERT(xa_builtin_is_method(dt, "format"));
-    ASSERT(strcmp(xa_builtin_get_member_signature(dt, "format"), "(pattern?: string): string") ==
-           0);
-    ASSERT(strcmp(xa_builtin_get_member_doc(dt, "format"), "Format datetime to string") == 0);
-
-    ASSERT(xa_builtin_is_method(dt, "daysInMonth"));
-    ASSERT(strcmp(xa_builtin_get_member_signature(dt, "daysInMonth"), "(): int") == 0);
-    ASSERT(strcmp(xa_builtin_get_member_doc(dt, "daysInMonth"), "Get days in current month") == 0);
+    ASSERT(xa_builtin_get_by_name("DateTime") == NULL);
+    ASSERT(!xa_builtin_is_method(dt, "format"));
+    ASSERT(xa_builtin_get_member_signature(dt, "format") == NULL);
+    ASSERT(xa_builtin_get_member_doc(dt, "format") == NULL);
+    ASSERT(!xa_builtin_is_method(dt, "daysInMonth"));
+    ASSERT(xa_builtin_get_member_signature(dt, "daysInMonth") == NULL);
+    ASSERT(xa_builtin_get_member_doc(dt, "daysInMonth") == NULL);
 }
 
 // ============================================================================
@@ -874,7 +873,7 @@ int main(void) {
     RUN_TEST(union_type_dedup);
     RUN_TEST(class_info_members);
     RUN_TEST(builtin_http_old_fd_helpers_removed);
-    RUN_TEST(builtin_datetime_type_methods_from_defs);
+    RUN_TEST(builtin_datetime_type_methods_not_from_native_defs);
 
     printf("\n========================================\n");
     printf("Tests passed: %d\n", tests_passed);

@@ -2262,6 +2262,21 @@ static bool cg_emit_imported_static_fixed_matrix_const_decl(XiCgenCtx *ctx, FILE
     return true;
 }
 
+static bool cg_emit_imported_static_fixed_cube_const_decl(XiCgenCtx *ctx, FILE *out,
+                                                          const XiModule *module, int64_t slot,
+                                                          const XiConstLiteral *lit) {
+    if (!ctx || !out || !module || !lit || !lit->data_weak)
+        return false;
+    CgStaticFixedCubeInfo info;
+    if (!cg_freestanding_static_fixed_cube_literal_in_module(ctx, module, slot, &info, NULL))
+        return false;
+    fprintf(out, "extern const %s ", info.lane.ctype);
+    cg_emit_static_fixed_array_name(ctx, out, module, slot);
+    fprintf(out, "[%u][%u][%u];\n", (unsigned) info.outer_count, (unsigned) info.middle_count,
+            (unsigned) info.inner_count);
+    return true;
+}
+
 static bool cg_emit_imported_static_tuple_const_decl(XiCgenCtx *ctx, FILE *out,
                                                      const XiModule *module, int64_t slot,
                                                      const XiConstLiteral *lit) {
@@ -2338,6 +2353,8 @@ static bool cg_emit_freestanding_imported_static_const_decls(XiCgenCtx *ctx, FIL
                                                            lit) ||
             cg_emit_imported_static_fixed_matrix_const_decl(ctx, out, target_module, target_slot,
                                                             lit) ||
+            cg_emit_imported_static_fixed_cube_const_decl(ctx, out, target_module, target_slot,
+                                                          lit) ||
             cg_emit_imported_static_fixed_struct_array_const_decl(ctx, out, target_module,
                                                                   target_slot, lit) ||
             cg_emit_imported_static_tuple_const_decl(ctx, out, target_module, target_slot, lit) ||
@@ -4758,6 +4775,9 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_matrix_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_matrix_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_outer_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||
@@ -5646,6 +5666,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_matrix_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_matrix_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_outer_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||
@@ -5666,6 +5689,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_matrix_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_matrix_index_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_fixed_cube_const_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_fixed_cube_outer_index_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v->args[0]) ||
@@ -6205,6 +6231,9 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_matrix_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_matrix_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_outer_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||

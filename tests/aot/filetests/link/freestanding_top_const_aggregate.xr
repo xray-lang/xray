@@ -13,6 +13,14 @@ const MATRIX: [[uint8; 4]; 2] = comptime [
     [5, 6, 7, 8],
 ]
 
+@section("__DATA,.xray_cube")
+@weak
+@used
+const CUBE: [[[int; 2]; 2]; 2] = comptime [
+    [[1, 2], [3, 4]],
+    [[5, 6], [7, 8]],
+]
+
 struct Header {
     magic: int
     flags: int
@@ -162,6 +170,11 @@ fn xray_top_const_float_runtime(i: int) -> float {
 @c_export("xray_top_const_matrix_runtime")
 fn xray_top_const_matrix_runtime(row: int, col: int) -> int {
     return MATRIX[row][col] as int
+}
+
+@c_export("xray_top_const_cube_runtime")
+fn xray_top_const_cube_runtime(i: int, j: int, k: int) -> int {
+    return CUBE[i][j][k]
 }
 
 @c_export("xray_top_const_struct_runtime")

@@ -87,8 +87,6 @@ XrTypeId xr_value_typeid(XrValue v) {
                             return XR_TID_PANIC_INFO;
                         case XR_BK_RANGE:
                             return XR_TID_RANGE;
-                        case XR_BK_DATETIME:
-                            return XR_TID_DATETIME;
                         case XR_BK_BUFFER:
                             return XR_TID_BUFFER;
                         default:

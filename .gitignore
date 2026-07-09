@@ -107,6 +107,7 @@ osr_debug.log
 # `xray build --native` writes the generated C alongside the .xr source by
 # default; ignore the common scratch name so it doesn't pollute git status.
 /app.c
+/.xray-cache/
 
 # ============================================================================
 # Compiled bytecode bundles

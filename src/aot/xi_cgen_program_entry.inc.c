@@ -511,6 +511,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_matrix_defs(ctx, body, module);
+    cg_emit_freestanding_static_fixed_cube_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_struct_array_defs(ctx, body, module, prefix);
     cg_emit_freestanding_static_tuple_defs(ctx, body, module);
     cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
@@ -643,6 +644,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_matrix_defs(ctx, body, module);
+    cg_emit_freestanding_static_fixed_cube_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_struct_array_defs(ctx, body, module, prefix);
     cg_emit_freestanding_static_tuple_defs(ctx, body, module);
     cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
