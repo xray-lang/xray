@@ -1,0 +1,6 @@
+status=pass
+contains=xray_no_alloc_stringbuilder_clear_ok
+not_contains=allocates via method 'StringBuilder.clear'
+not_contains=allocates via method 'StringBuilder.append'
+not_contains=allocates via method 'StringBuilder.toString'
+not_contains=CRASH
