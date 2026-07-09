@@ -228,27 +228,6 @@ static XrWsContext *get_ws_context(XrVMRuntime *X) {
     return ctx;
 }
 
-// Free WebSocket module context
-void xr_ws_module_context_free(XrWsContext *ctx) {
-    if (!ctx)
-        return;
-
-    if (ctx->conn_array) {
-        for (int i = 0; i < ctx->array_capacity; i++) {
-            XrWebSocket *ws = ctx->conn_array[i];
-            if (ws) {
-                ws_conn_close(ws, WS_CLOSE_GOING_AWAY, NULL);
-                ws_free(ws);
-            }
-        }
-        xr_free(ctx->conn_array);
-    }
-
-    xr_free(ctx->free_ids);
-    xr_mutex_destroy(&ctx->conn_mutex);
-    xr_free(ctx);
-}
-
 // Grow connection array when needed
 static bool ws_conn_array_grow(XrWsContext *ctx, int needed_id) {
     if (needed_id < ctx->array_capacity)
@@ -1129,7 +1108,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
     // Upgrade to WebSocket
     {
         /* Extract request path from the request line ("GET /chat HTTP/1.1")
-         * before xr_ws_upgrade consumes the buffer, so the server-side conn
+         * before ws_upgrade_ex consumes the buffer, so the server-side conn
          * object can expose conn.url to the handler. */
         const char *url_str = NULL;
         size_t url_len = 0;
