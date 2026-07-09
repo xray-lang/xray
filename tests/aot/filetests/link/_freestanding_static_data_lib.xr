@@ -118,6 +118,22 @@ const BITS = comptime I32Bits{i: -1}
 @weak
 const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
 
+@section("__DATA,.xr_ibrows")
+@weak
+@used
+const BIT_ROWS: [I32Bits; 2] = comptime [
+    I32Bits{i: -1},
+    I32Bits{u: 42},
+]
+
+@section("__DATA,.xr_iwrows")
+@weak
+@used
+const WORD_ROWS: [U32Bytes; 2] = comptime [
+    U32Bytes{u: 0x01020304},
+    U32Bytes{b: [8, 7, 6, 5]},
+]
+
 @weak
 const LABEL = comptime "score"
 
@@ -190,4 +206,4 @@ const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
 ]
 
-export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS }
+export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS }
