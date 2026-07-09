@@ -291,6 +291,86 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(cache_payload_reuses_cross_package_export_summaries) {
+    XgGlobalEvidence import_ev = {0};
+    XgGlobalEvidence changed_import = {0};
+    XgGlobalEvidence consumer_a = {0};
+    XgGlobalEvidence consumer_b = {0};
+    XgGlobalEvidence consumer_changed = {0};
+    XgBuildKey consumer_key = {0};
+    XgEvidenceCacheKey consumer_a_key;
+    XgEvidenceCacheKey consumer_changed_key;
+    char *semantic_payload = NULL;
+    char *body_payload = NULL;
+    char *changed_semantic_payload = NULL;
+    uint64_t hash_after_semantic = 0;
+
+    import_ev.key.module_id = 7;
+    import_ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    import_ev.key.compiler_semver_hash = UINT64_C(0x1111);
+    import_ev.key.profile_hash = UINT64_C(0x2222);
+    import_ev.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_body_summary(&import_ev);
+    add_sample_semantic_summary(&import_ev);
+
+    changed_import.key = import_ev.key;
+    add_sample_body_summary(&changed_import);
+    add_sample_semantic_summary(&changed_import);
+    changed_import.decls[0].signature_key++;
+
+    semantic_payload =
+        xg_global_evidence_cache_payload_dump(&import_ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    body_payload =
+        xg_global_evidence_cache_payload_dump(&import_ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    changed_semantic_payload =
+        xg_global_evidence_cache_payload_dump(&changed_import, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    ASSERT_NOT_NULL(semantic_payload);
+    ASSERT_NOT_NULL(body_payload);
+    ASSERT_NOT_NULL(changed_semantic_payload);
+
+    consumer_key.module_id = 99;
+    consumer_key.profile = XG_BUILD_NATIVE_RELEASE;
+    consumer_key.compiler_semver_hash = UINT64_C(0xaaaa);
+    consumer_key.profile_hash = UINT64_C(0xbbbb);
+    xg_global_evidence_init(&consumer_a, consumer_key);
+    xg_global_evidence_init(&consumer_b, consumer_key);
+    xg_global_evidence_init(&consumer_changed, consumer_key);
+
+    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_a, semantic_payload));
+    hash_after_semantic = consumer_a.key.imported_summary_hash;
+    ASSERT(hash_after_semantic != 0);
+    ASSERT_EQ_UINT(consumer_a.ndecls, 2);
+    ASSERT_EQ_UINT(consumer_a.nclasses, 1);
+    ASSERT_EQ_UINT(consumer_a.nderives, 1);
+    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_a, body_payload));
+    ASSERT(consumer_a.key.imported_summary_hash != hash_after_semantic);
+    ASSERT_EQ_UINT(consumer_a.nbodies, 1);
+    ASSERT_EQ_UINT(consumer_a.ncallsites, 1);
+    ASSERT_EQ_UINT(consumer_a.nlink_deps, 1);
+    ASSERT_EQ_UINT(consumer_a.ngeneric_insts, 1);
+
+    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_b, semantic_payload));
+    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_b, body_payload));
+    ASSERT_EQ_UINT(consumer_b.key.imported_summary_hash, consumer_a.key.imported_summary_hash);
+
+    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_changed, changed_semantic_payload));
+    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_changed, body_payload));
+    ASSERT(consumer_changed.key.imported_summary_hash != consumer_a.key.imported_summary_hash);
+    consumer_a_key = xg_global_evidence_cache_key(&consumer_a, XG_EVIDENCE_CACHE_DECLARATIONS);
+    consumer_changed_key =
+        xg_global_evidence_cache_key(&consumer_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT(!xg_evidence_cache_key_matches(&consumer_a_key, &consumer_changed_key));
+
+    xr_free(semantic_payload);
+    xr_free(body_payload);
+    xr_free(changed_semantic_payload);
+    xg_global_evidence_free(&consumer_a);
+    xg_global_evidence_free(&consumer_b);
+    xg_global_evidence_free(&consumer_changed);
+    xg_global_evidence_free(&import_ev);
+    xg_global_evidence_free(&changed_import);
+}
+
 TEST(cache_payload_parse_rejects_body_drift) {
     XgGlobalEvidence ev = {0};
     XgEvidenceCachePayloadInfo info;
@@ -345,6 +425,7 @@ RUN_TEST_SUITE("Global Evidence Cache Payload");
 RUN_TEST(cache_payload_parse_exposes_validated_body);
 RUN_TEST(cache_payload_materializes_declaration_summary);
 RUN_TEST(cache_payload_materializes_semantic_graph_summary);
+RUN_TEST(cache_payload_reuses_cross_package_export_summaries);
 RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_materialize_rejects_global_count_only_payload);

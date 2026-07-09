@@ -3300,6 +3300,96 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
     return true;
 }
 
+static uint64_t evidence_import_hash_extend(uint64_t current, const XgEvidenceCacheKey *key) {
+    uint64_t hash = current ? current : XR_FNV64_OFFSET_BASIS;
+    hash = hash_u32(hash, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION);
+    hash = hash_u64(hash, key ? xg_evidence_cache_key_hash(key) : 0);
+    return hash == 0 ? 1 : hash;
+}
+
+static bool append_imported_summary_rows(XgGlobalEvidence *dst, const XgGlobalEvidence *src) {
+    if (!dst || !src)
+        return false;
+    if (!xg_global_evidence_reserve_decls(dst, dst->ndecls + src->ndecls) ||
+        !xg_global_evidence_reserve_classes(dst, dst->nclasses + src->nclasses) ||
+        !xg_global_evidence_reserve_methods(dst, dst->nmethods + src->nmethods) ||
+        !xg_global_evidence_reserve_interface_impls(dst, dst->ninterface_impls +
+                                                             src->ninterface_impls) ||
+        !xg_global_evidence_reserve_interface_extends(dst, dst->ninterface_extends +
+                                                               src->ninterface_extends) ||
+        !xg_global_evidence_reserve_interface_methods(dst, dst->ninterface_methods +
+                                                               src->ninterface_methods) ||
+        !xg_global_evidence_reserve_derives(dst, dst->nderives + src->nderives) ||
+        !xg_global_evidence_reserve_derived_fields(dst,
+                                                   dst->nderived_fields + src->nderived_fields) ||
+        !xg_global_evidence_reserve_derived_methods(dst, dst->nderived_methods +
+                                                             src->nderived_methods) ||
+        !xg_global_evidence_reserve_bodies(dst, dst->nbodies + src->nbodies) ||
+        !xg_global_evidence_reserve_callsites(dst, dst->ncallsites + src->ncallsites) ||
+        !xg_global_evidence_reserve_link_deps(dst, dst->nlink_deps + src->nlink_deps) ||
+        !xg_global_evidence_reserve_generic_insts(dst, dst->ngeneric_insts + src->ngeneric_insts))
+        return false;
+    for (uint32_t i = 0; i < src->ndecls; i++)
+        if (!xg_global_evidence_add_decl(dst, &src->decls[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nclasses; i++)
+        if (!xg_global_evidence_add_class(dst, &src->classes[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nmethods; i++)
+        if (!xg_global_evidence_add_method(dst, &src->methods[i]))
+            return false;
+    for (uint32_t i = 0; i < src->ninterface_impls; i++)
+        if (!xg_global_evidence_add_interface_impl(dst, &src->interface_impls[i]))
+            return false;
+    for (uint32_t i = 0; i < src->ninterface_extends; i++)
+        if (!xg_global_evidence_add_interface_extends(dst, &src->interface_extends[i]))
+            return false;
+    for (uint32_t i = 0; i < src->ninterface_methods; i++)
+        if (!xg_global_evidence_add_interface_method(dst, &src->interface_methods[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nderives; i++)
+        if (!xg_global_evidence_add_derive(dst, &src->derives[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nderived_fields; i++)
+        if (!xg_global_evidence_add_derived_field(dst, &src->derived_fields[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nderived_methods; i++)
+        if (!xg_global_evidence_add_derived_method(dst, &src->derived_methods[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nbodies; i++)
+        if (!xg_global_evidence_add_body(dst, &src->bodies[i]))
+            return false;
+    for (uint32_t i = 0; i < src->ncallsites; i++)
+        if (!xg_global_evidence_add_callsite(dst, &src->callsites[i]))
+            return false;
+    for (uint32_t i = 0; i < src->nlink_deps; i++)
+        if (!xg_global_evidence_add_link_dependency(dst, &src->link_deps[i]))
+            return false;
+    for (uint32_t i = 0; i < src->ngeneric_insts; i++)
+        if (!xg_global_evidence_add_generic_inst(dst, &src->generic_insts[i]))
+            return false;
+    return true;
+}
+
+XR_FUNC bool xg_global_evidence_reuse_import_summary(XgGlobalEvidence *evidence,
+                                                     const char *payload_text) {
+    XgEvidenceCachePayloadInfo info;
+    XgGlobalEvidence imported;
+    bool ok;
+    memset(&imported, 0, sizeof(imported));
+    if (!evidence || !xg_evidence_cache_payload_parse(payload_text, &info))
+        return false;
+    if (!xg_evidence_cache_payload_materialize(payload_text, &imported))
+        return false;
+    ok = append_imported_summary_rows(evidence, &imported);
+    xg_global_evidence_free(&imported);
+    if (!ok)
+        return false;
+    evidence->key.imported_summary_hash =
+        evidence_import_hash_extend(evidence->key.imported_summary_hash, &info.key);
+    return true;
+}
+
 typedef const char *(*XgBitNameFn)(uint32_t bit);
 
 static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,
