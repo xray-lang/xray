@@ -104,6 +104,18 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
                 if (!first)
                     xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, "Json");
+                first = false;
+            }
+            if (attr->derive_flags & XR_DERIVE_EQ) {
+                if (!first)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, "Eq");
+                first = false;
+            }
+            if (attr->derive_flags & XR_DERIVE_HASH) {
+                if (!first)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, "Hash");
             }
             xfmt_write_char(ctx, ')');
             break;
