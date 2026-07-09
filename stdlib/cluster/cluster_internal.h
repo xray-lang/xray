@@ -25,7 +25,6 @@
 #include "cluster.h"
 #include "cluster_node.h"
 #include "cluster_proto.h"
-#include "cluster_discovery.h"
 #include "../../src/base/xdefs.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
@@ -41,6 +40,7 @@
 struct XrVMRuntime;
 struct XrChannel;
 typedef struct XrCluster XrCluster;
+typedef struct XrClusterDiscovery XrClusterDiscovery;
 
 /* ========== Channel Subscriber (for select push model) ========== */
 
@@ -331,6 +331,20 @@ XrDistChannel *cluster_channel_find(XrCluster *c, const char *name);
 // Unregister a Named Channel
 void cluster_channel_unregister(XrCluster *c, const char *name);
 
+/* ========== Named Channel Distributed Routing ========== */
+
+void cluster_channel_install_hooks(struct XrVMRuntime *X);
+void cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
+
+int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
+                                const uint8_t *value_data, uint32_t value_len);
+void cluster_channel_handle_close(XrCluster *c, const char *channel_name);
+void cluster_channel_push_to_subscribers(XrCluster *c, const char *name);
+int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
+                                const uint8_t *value_data, uint32_t value_len);
+void cluster_channel_subscribe(struct XrChannel *ch);
+void cluster_channel_unsubscribe(struct XrChannel *ch);
+
 /* ========== Service Registry ========== */
 
 // Register a service (returns request channel)
@@ -449,6 +463,11 @@ void cluster_monitor_handle_coro_request(XrCluster *c, struct XrClusterNode *nod
 void cluster_subscriber_add(XrCluster *c, const char *channel_name, XrClusterNode *node);
 void cluster_subscriber_remove(XrCluster *c, const char *channel_name, XrClusterNode *node);
 void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node);
+
+/* ========== LAN Discovery ========== */
+
+int cluster_discovery_start(XrCluster *c);
+void cluster_discovery_stop(XrCluster *c);
 
 /* ========== Cluster Info API ========== */
 

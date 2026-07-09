@@ -13,7 +13,6 @@
  */
 
 #include "cluster_internal.h"
-#include "cluster_channel.h"
 #include "cluster_serial.h"
 #include "../common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe

@@ -25,7 +25,6 @@
  * keeps the codebase simple and avoids LE/BE mixup bugs.
  */
 
-#include "cluster_discovery.h"
 #include "cluster_internal.h"
 #include "cluster_node.h"
 #include "../net/io.h"
@@ -42,6 +41,24 @@
 // than pulling xsocket.h directly; link-time signature checking
 // against xsocket.c keeps them in sync.
 extern int xr_socket_wait_readable(struct XrVMRuntime *X, int fd, int timeout_ms);
+
+// Multicast defaults. These are discovery implementation details; the
+// authenticated cluster protocol continues over TCP after auto-join.
+#define XR_DISCOVERY_MCAST_GROUP "239.42.42.42"
+#define XR_DISCOVERY_MCAST_PORT 47200
+#define XR_DISCOVERY_INTERVAL_MS 3000
+#define XR_DISCOVERY_MAGIC 0x58524459
+#define XR_DISCOVERY_VERSION 2
+
+struct XrClusterDiscovery {
+    int mcast_fd;
+    uint16_t mcast_port;
+    int interval_ms;
+    XrCluster *cluster;
+    uint64_t cluster_hash;
+    bool coro_spawned;
+    _Atomic(bool) coro_exited;
+};
 
 /* ========== Announce Packet ========== */
 
