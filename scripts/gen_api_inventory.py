@@ -446,6 +446,142 @@ def load_builtin_dump(root: Path, xray: Path | None, builtin_dump: Path | None) 
     return json.loads(proc.stdout)
 
 
+def load_stdlibgen(root: Path):
+    tools_dir = root / "tools" / "stdlibgen"
+    sys.path.insert(0, str(tools_dir))
+    try:
+        import stdlibgen  # type: ignore[import-not-found]
+    finally:
+        try:
+            sys.path.remove(str(tools_dir))
+        except ValueError:
+            pass
+    return stdlibgen
+
+
+def build_def_location_index(root: Path) -> dict[tuple[str, str, str], tuple[str, int]]:
+    defs_dir = root / "stdlib" / "defs"
+    index: dict[tuple[str, str, str], tuple[str, int]] = {}
+    current_module = ""
+    block_patterns = (
+        ("fn", re.compile(r"fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+        ("const", re.compile(r"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+        ("handle", re.compile(r"handle\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+    )
+    for path in sorted(defs_dir.glob("*.def")):
+        for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            module_match = re.fullmatch(r"module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            if module_match:
+                current_module = module_match.group(1)
+                continue
+            if line == "}" and current_module:
+                continue
+            if not current_module:
+                continue
+            for kind, pattern in block_patterns:
+                match = pattern.fullmatch(line)
+                if not match:
+                    continue
+                if len(match.groups()) == 1:
+                    name = match.group(1)
+                else:
+                    name = f"{match.group(1)}.{match.group(2)}"
+                index[(kind, current_module, name)] = (rel(root, path), lineno)
+                break
+    return index
+
+
+def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
+    stdlibgen = load_stdlibgen(root)
+    (
+        entries,
+        constants,
+        handles,
+        _type_methods,
+        _native_classes,
+        _classes,
+        _class_methods,
+        _class_fields,
+    ) = stdlibgen.parse_def_metadata(root)
+    locations = build_def_location_index(root)
+
+    def source_for(kind: str, module: str, name: str) -> tuple[str, int]:
+        return locations.get((kind, module, name), ("stdlib/defs/core.def", 1))
+
+    out: list[dict[str, Any]] = []
+    for entry in entries:
+        if entry.is_internal:
+            continue
+        source, line = source_for("fn", entry.module, entry.name)
+        surface, doc_module = stdlib_doc_surface_for_name("stdlib", entry.module, entry.name)
+        out.append(
+            item(
+                category="stdlib-module",
+                namespace=entry.module,
+                name=entry.name,
+                kind="function",
+                signature=entry.signature,
+                summary=entry.doc,
+                source=source,
+                line=line,
+                doc_surface=surface,
+                doc_module=doc_module,
+            )
+        )
+    for const in constants:
+        source, line = source_for("const", const.module, const.name)
+        surface, doc_module = stdlib_doc_surface_for_name("stdlib", const.module, const.name)
+        out.append(
+            item(
+                category="stdlib-module",
+                namespace=const.module,
+                name=const.name,
+                kind="const",
+                signature=const.signature,
+                summary=const.doc,
+                source=source,
+                line=line,
+                doc_surface=surface,
+                doc_module=doc_module,
+            )
+        )
+    for handle in handles:
+        source, line = source_for("handle", handle.module, handle.name)
+        out.append(
+            item(
+                category="stdlib-module",
+                namespace=handle.module,
+                name=handle.name,
+                kind="handle",
+                signature=handle.name,
+                summary=handle.doc,
+                source=source,
+                line=line,
+                doc_surface="stdlib",
+                doc_module=handle.module,
+            )
+        )
+        for field in handle.fields:
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=handle.module,
+                    name=f"{handle.name}.{field.name}",
+                    kind="field",
+                    signature=f"{'const ' if field.is_const else ''}{field.type}",
+                    summary="Handle field",
+                    source=source,
+                    line=line,
+                    doc_surface="stdlib",
+                    doc_module=handle.module,
+                )
+            )
+    return out
+
+
 def collect_builtin_modules(root: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     source = "xray builtin-dump"
@@ -741,7 +877,18 @@ def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
     builtin_data = load_builtin_dump(root, xray, builtin_dump)
     items: list[dict[str, Any]] = []
-    items.extend(collect_builtin_modules(root, builtin_data))
+    def_items = collect_def_stdlib(root)
+    def_module_symbols = {
+        (entry.get("namespace", ""), entry.get("name", ""))
+        for entry in def_items
+        if entry.get("category") == "stdlib-module"
+    }
+    items.extend(def_items)
+    items.extend(
+        entry
+        for entry in collect_builtin_modules(root, builtin_data)
+        if (entry.get("namespace", ""), entry.get("name", "")) not in def_module_symbols
+    )
     items.extend(collect_pure_stdlib(root))
     items.extend(collect_native_types(root))
     items.extend(collect_globals(root))
@@ -790,7 +937,42 @@ def check_docs(root: Path, inventory: dict[str, Any]) -> list[str]:
             errors.append(f"missing stdlib knowledge card for source API module `{module}`")
         if docs_dir.exists() and not (docs_dir / f"{module}.md").exists():
             errors.append(f"missing generated stdlib knowledge markdown for `{module}`")
+    errors.extend(check_def_stdlib_source(root, inventory))
     errors.extend(check_language_spec_stdlib_residue(root))
+    return errors
+
+
+def check_def_stdlib_source(root: Path, inventory: dict[str, Any]) -> list[str]:
+    """Ensure .def-owned module APIs do not silently fall back to builtin-dump."""
+    actual_by_key = {
+        (
+            entry.get("category", ""),
+            entry.get("namespace", ""),
+            entry.get("name", ""),
+            entry.get("kind", ""),
+            entry.get("signature", ""),
+        ): entry
+        for entry in inventory.get("items", [])
+    }
+    errors: list[str] = []
+    for expected in collect_def_stdlib(root):
+        key = (
+            expected.get("category", ""),
+            expected.get("namespace", ""),
+            expected.get("name", ""),
+            expected.get("kind", ""),
+            expected.get("signature", ""),
+        )
+        actual = actual_by_key.get(key)
+        label = f"{expected.get('namespace')}.{expected.get('name')}"
+        if actual is None:
+            errors.append(f".def API symbol missing from source inventory: {label}")
+            continue
+        source = actual.get("source", "")
+        if not source.startswith("stdlib/defs/"):
+            errors.append(
+                f".def API symbol must use .def source, not {source or '<missing>'}: {label}"
+            )
     return errors
 
 
