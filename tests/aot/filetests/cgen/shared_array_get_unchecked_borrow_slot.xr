@@ -1,7 +1,7 @@
 fn readSlot(outputs: Array<Bytes>, index: int) -> int {
     shared sharedOutputs = outputs
     unsafe {
-        var block = sharedOutputs.getUnchecked(index)
+        var block = sharedOutputs.get(index)
         return block.length
     }
 }

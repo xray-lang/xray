@@ -8,13 +8,13 @@ class Array<T> {
     isEmpty: bool
     push(value: T)
     // @lowered
-    getUnchecked(index: int) -> T
+    get(index: int) -> T
     // @lowered
-    setUnchecked(index: int, value: T)
+    set(index: int, value: T)
     // @lowered
-    dataPtrUnchecked() -> RawPtr<T>
+    ptr() -> RawPtr<T>
     // @lowered
-    dataMutPtrUnchecked() -> RawMut<T>
+    mutPtr() -> RawMut<T>
     pop() -> T?
     shift() -> T?
     unshift(value: T)

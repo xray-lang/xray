@@ -15,7 +15,7 @@ parallel range begin, end in 0..8 workers 2 worker wid local lane in lanes {
     var i = begin
     unsafe {
         while (i < end) {
-            lane.setUnchecked(i, i + wid * 100)
+            lane.set(i, i + wid * 100)
             i = i + 1
         }
     }
@@ -49,7 +49,7 @@ var reduced = parallel range reduce begin, end in 0..8 workers 2 worker wid loca
     var i = begin
     unsafe {
         while (i < end) {
-            lane.setUnchecked(i, i)
+            lane.set(i, i)
             local = local + i
             i = i + 1
         }

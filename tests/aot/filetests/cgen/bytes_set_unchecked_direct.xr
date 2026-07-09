@@ -1,9 +1,9 @@
 fn patchHeader(out: Bytes) {
     unsafe {
-        out.setUnchecked(0, 0x04)
-        out.setUnchecked(1, 0x22)
-        out.setUnchecked(2, 0x4D)
-        out.setUnchecked(3, 0x18)
+        out.set(0, 0x04)
+        out.set(1, 0x22)
+        out.set(2, 0x4D)
+        out.set(3, 0x18)
     }
 }
 

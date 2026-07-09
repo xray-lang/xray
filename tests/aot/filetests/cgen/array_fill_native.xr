@@ -1,7 +1,7 @@
 fn fillZero(a: Array<uint32>) -> int {
     a.fill(0)
     unsafe {
-        return int(a.getUnchecked(1)) + int(a.getUnchecked(2)) + int(a.getUnchecked(6))
+        return int(a.get(1)) + int(a.get(2)) + int(a.get(6))
     }
 }
 

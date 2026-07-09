@@ -1,8 +1,8 @@
 fn fill(out: Bytes, src: Bytes) -> int {
     out.resize(4)
     unsafe {
-        var p = out.dataMutPtrUnchecked()
-        var sp = src.dataPtrUnchecked()
+        var p = out.mutPtr()
+        var sp = src.ptr()
         p.copyFromNonOverlappingUnchecked(sp, 4)
     }
     return out[2]
@@ -19,6 +19,6 @@ print(fill(bytes, src))
 
 var view: ByteSpan = bytes[:]
 unsafe {
-    var p = view.dataPtrUnchecked()
+    var p = view.ptr()
     print(p[1])
 }

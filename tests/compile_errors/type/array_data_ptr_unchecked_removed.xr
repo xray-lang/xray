@@ -1,0 +1,2 @@
+var values = Array<int>(1, 0)
+unsafe { values.dataPtrUnchecked() }

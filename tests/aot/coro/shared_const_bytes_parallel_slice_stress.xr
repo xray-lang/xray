@@ -49,7 +49,7 @@ fn checksum(span: ByteSpan) -> int {
     while (i < span.length) {
         var b = 0
         unsafe {
-            b = int(span.getUnchecked(i))
+            b = int(span.get(i))
         }
         h = ((h ^ b) * 16777619) & 0xFFFFFFFF
         i = i + 1

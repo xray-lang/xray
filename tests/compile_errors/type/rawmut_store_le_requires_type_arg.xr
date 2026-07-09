@@ -1,6 +1,6 @@
 fn write(dst: ByteSpan) {
     unsafe {
-        var p = dst.dataMutPtrUnchecked()
+        var p = dst.mutPtr()
         p.storeLEUnchecked(0, 1)
     }
 }

@@ -10,7 +10,7 @@ fn main() {
         local acc = wid
         final {
             unsafe {
-                partials.setUnchecked(wid, acc)
+                partials.set(wid, acc)
             }
         } {
         acc = acc + 1
@@ -20,7 +20,7 @@ fn main() {
     w = 0
     while (w < 4) {
         unsafe {
-            total = total + partials.getUnchecked(w)
+            total = total + partials.get(w)
         }
         w = w + 1
     }
@@ -37,7 +37,7 @@ fn main() {
         local count = 0
         final {
             unsafe {
-                ranges.setUnchecked(wid, count)
+                ranges.set(wid, count)
             }
         } {
         count = end - begin

@@ -4015,7 +4015,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
-            strcmp(ma->name, "getUnchecked") == 0 && n == 1) {
+            strcmp(ma->name, "get") == 0 && n == 1) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
             if (!v)
                 return NULL;
@@ -4027,7 +4027,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
-            strcmp(ma->name, "setUnchecked") == 0 && n == 2) {
+            strcmp(ma->name, "set") == 0 && n == 2) {
             struct XrType *elem_type = xi_get_container_elem_type(recv->type);
             arg_vals[1] = xi_lower_narrow_for_static_type(l, node, arg_vals[1], elem_type);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, result_type, 3);
@@ -4041,8 +4041,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
-            strcmp(ma->name, "getUnchecked") == 0 && n == 1) {
+        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name && strcmp(ma->name, "get") == 0 &&
+            n == 1) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
             if (!v)
                 return NULL;
@@ -4055,8 +4055,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         if (recv->type && (XR_TYPE_IS_ARRAY(recv->type) || XR_TYPE_IS_SPAN(recv->type)) &&
             ma->name && n == 0 &&
-            (strcmp(ma->name, "dataPtrUnchecked") == 0 ||
-             strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
+            (strcmp(ma->name, "ptr") == 0 || strcmp(ma->name, "mutPtr") == 0)) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_DATA_PTR, result_type, 1);
             if (!v)
                 return NULL;

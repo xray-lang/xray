@@ -10,7 +10,7 @@ fn main() {
         local acc = wid
         final {
             unsafe {
-                finals.setUnchecked(wid, acc)
+                finals.set(wid, acc)
             }
         }
         collect {

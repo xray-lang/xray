@@ -6,7 +6,7 @@ fn run() {
     var bytes = Bytes(16)
     var view: ByteSpan = bytes[:]
     unsafe {
-        var p = view.dataMutPtrUnchecked()
+        var p = view.mutPtr()
         p.storeLEUnchecked<uint16>(1, 0x1234)
         p.storeLEUnchecked<uint32>(4, 0x01020304)
         p.storeLEUnchecked<uint64>(8, 0x0102030405060708)

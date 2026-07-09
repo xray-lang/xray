@@ -1,7 +1,7 @@
 fn patchFirst(outputs: Array<Bytes>) {
     unsafe {
-        var block = outputs.getUnchecked(0)
-        block.setUnchecked(0, 0x2A)
+        var block = outputs.get(0)
+        block.set(0, 0x2A)
     }
 }
 

@@ -3,7 +3,7 @@ fn clearLocal() -> int {
     a.resize(0, 0)
     a.push(9)
     unsafe {
-        return int(a.getUnchecked(0)) + a.length
+        return int(a.get(0)) + a.length
     }
 }
 

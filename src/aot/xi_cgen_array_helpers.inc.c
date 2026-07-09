@@ -4556,7 +4556,7 @@ static bool cg_array_call_is_direct_bytes_mutator_trusted_nothrow(XiCgenCtx *ctx
                 cg_array_elem_info_is_u8(&dst_info)) ||
                cg_array_value_type_is_u8_contiguous(ctx, v->args[0]);
     }
-    if (strcmp(method, "setUnchecked") == 0 && v->nargs == 3) {
+    if (strcmp(method, "set") == 0 && v->nargs == 3) {
         return (cg_array_value_storage_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
                 cg_array_elem_info_is_u8(&dst_info)) ||

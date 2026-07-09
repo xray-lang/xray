@@ -1622,12 +1622,12 @@ XR_FUNC bool xa_method_name_mutates_receiver(const char *name) {
     if (!name)
         return false;
     static const char *const mutators[] = {
-        "push",        "setUnchecked", "appendFrom", "pop",     "shift",       "unshift",
-        "reserve",     "resize",       "reverse",    "sort",    "store",       "copyFrom",
-        "repeatFrom",  "fill",         "set",        "delete",  "clear",       "add",
-        "send",        "recv",         "recvOr",     "trySend", "tryRecv",     "sendTimeout",
-        "recvTimeout", "close",        "cancel",     "poll",    "awaitResult", "awaitTimeout",
-        "append",      "flush",        "tryPop",     NULL};
+        "push",       "set",    "appendFrom", "pop",         "shift",        "unshift",
+        "reserve",    "resize", "reverse",    "sort",        "store",        "copyFrom",
+        "repeatFrom", "fill",   "delete",     "clear",       "add",          "send",
+        "recv",       "recvOr", "trySend",    "tryRecv",     "sendTimeout",  "recvTimeout",
+        "close",      "cancel", "poll",       "awaitResult", "awaitTimeout", "append",
+        "flush",      "tryPop", NULL};
     for (const char *const *p = mutators; *p; p++) {
         if (strcmp(name, *p) == 0)
             return true;

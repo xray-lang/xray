@@ -479,7 +479,7 @@ static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const 
         XrType *params[1] = {xr_type_new_span(X, receiver->container.element_type)};
         return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
     }
-    if (strcmp(name, "getUnchecked") != 0)
+    if (strcmp(name, "get") != 0)
         return NULL;
     XrVMRuntime *X = ctx->analyzer->isolate;
     XrType *params[1] = {xr_type_new_int(X)};
@@ -491,9 +491,9 @@ static XrType *xa_array_data_ptr_method_type(XaInferContext *ctx, XrType *receiv
     if (!receiver || !name || (!XR_TYPE_IS_ARRAY(receiver) && !XR_TYPE_IS_SPAN(receiver)))
         return NULL;
     bool mut = false;
-    if (strcmp(name, "dataPtrUnchecked") == 0) {
+    if (strcmp(name, "ptr") == 0) {
         mut = false;
-    } else if (strcmp(name, "dataMutPtrUnchecked") == 0) {
+    } else if (strcmp(name, "mutPtr") == 0) {
         mut = true;
     } else {
         return NULL;
@@ -1673,9 +1673,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_int(NULL);
     }
     if (XR_TYPE_IS_ARRAY(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
-        (strcmp(ma->name, "getUnchecked") == 0 || strcmp(ma->name, "setUnchecked") == 0 ||
-         strcmp(ma->name, "dataPtrUnchecked") == 0 ||
-         strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
+        (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "set") == 0 ||
+         strcmp(ma->name, "ptr") == 0 || strcmp(ma->name, "mutPtr") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
@@ -1684,8 +1683,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                    msg, &loc);
     }
     if (XR_TYPE_IS_SPAN(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
-        (strcmp(ma->name, "getUnchecked") == 0 || strcmp(ma->name, "dataPtrUnchecked") == 0 ||
-         strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
+        (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "ptr") == 0 ||
+         strcmp(ma->name, "mutPtr") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",

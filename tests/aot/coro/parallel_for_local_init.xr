@@ -16,11 +16,11 @@ fn main() {
         local table = makeLane(wid) {
         unsafe {
             buf.push(i)
-            table.setUnchecked(0, table.getUnchecked(0) + 1)
+            table.set(0, table.get(0) + 1)
         }
         acc = acc + 1
         unsafe {
-            partials.setUnchecked(wid, acc + table.getUnchecked(0) + buf.length)
+            partials.set(wid, acc + table.get(0) + buf.length)
         }
     }
 
@@ -28,7 +28,7 @@ fn main() {
     w = 0
     while (w < 4) {
         unsafe {
-            total = total + partials.getUnchecked(w)
+            total = total + partials.get(w)
         }
         w = w + 1
     }
@@ -45,7 +45,7 @@ fn main() {
         local count = 0 {
         count = count + 1
         unsafe {
-            inclusive.setUnchecked(wid, count)
+            inclusive.set(wid, count)
         }
     }
 
@@ -53,7 +53,7 @@ fn main() {
     w = 0
     while (w < 4) {
         unsafe {
-            totalInclusive = totalInclusive + inclusive.getUnchecked(w)
+            totalInclusive = totalInclusive + inclusive.get(w)
         }
         w = w + 1
     }
