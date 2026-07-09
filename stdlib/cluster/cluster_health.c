@@ -25,7 +25,7 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
     if (!c)
         return;
 
-    int64_t now = xr_cluster_now_ms();
+    int64_t now = cluster_now_ms();
 
     /*
      * Collect dead nodes into a growing buffer, then act on them after
@@ -149,7 +149,7 @@ void xr_cluster_mark_dead(XrCluster *c, const char *name) {
     if (c->tombstone_count < c->tombstone_cap) {
         strncpy(c->tombstones[c->tombstone_count].name, name, XR_NODE_NAME_MAX);
         c->tombstones[c->tombstone_count].name[XR_NODE_NAME_MAX] = '\0';
-        c->tombstones[c->tombstone_count].time = xr_cluster_now_ms();
+        c->tombstones[c->tombstone_count].time = cluster_now_ms();
         c->tombstone_count++;
     }
     xr_amutex_unlock(&c->dead_nodes_lock);

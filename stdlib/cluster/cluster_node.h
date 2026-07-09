@@ -280,12 +280,7 @@ XR_FUNC struct XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint6
 // Returns the response Channel, or NULL if not found.
 XR_FUNC struct XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id);
 
-/* ========== Handshake Helpers ========== */
-
-// Compute SHA-256 proof: SHA256(secret + nonce)
-XR_FUNC void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out);
-
 // Get current monotonic time in milliseconds
-XR_FUNC int64_t xr_cluster_now_ms(void);
+int64_t cluster_now_ms(void);
 
 #endif

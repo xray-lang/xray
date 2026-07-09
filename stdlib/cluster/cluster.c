@@ -1296,7 +1296,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                         xr_cluster_node_enqueue(node, pong, (uint32_t) plen);
                     }
                 }
-                int64_t now_hb = xr_cluster_now_ms();
+                int64_t now_hb = cluster_now_ms();
                 node->last_heartbeat_recv = now_hb;
                 node->missed_heartbeats = 0;
                 xr_phi_record_heartbeat(&node->phi, now_hb);
@@ -1305,7 +1305,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
             }
 
             case XR_FRAME_HEARTBEAT_PONG: {
-                int64_t now_pong = xr_cluster_now_ms();
+                int64_t now_pong = cluster_now_ms();
                 // Compute RTT from ping timestamp
                 int64_t ping_ts;
                 if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ping_ts) == 0) {
@@ -1646,7 +1646,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 // Phi accrual failure-detector score. Higher = more
                 // likely dead. Threshold for "kill" is set by
                 // cluster policy in cluster_health.c.
-                int64_t now = xr_cluster_now_ms();
+                int64_t now = cluster_now_ms();
                 double phi = xr_phi_value(&node->phi, now);
                 xr_json_set_by_key(X, nj, "phi", xr_float(phi));
                 xr_json_set_by_key(X, nj, "missed_heartbeats",
