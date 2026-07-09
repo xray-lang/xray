@@ -310,7 +310,7 @@ int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const c
     /* Topic routing trie — allocated eagerly so subscribe never has to
      * worry about a NULL root under the lock. Failure here is fatal to
      * start: pub/sub is a first-class feature, not a best-effort add-on. */
-    if (xr_cluster_topics_init(c) != 0) {
+    if (cluster_topics_init(c) != 0) {
         if (c->tls_client_ctx)
             xr_tls_context_free(c->tls_client_ctx);
         if (c->tls_server_ctx)
@@ -463,8 +463,8 @@ void xr_cluster_stop(XrCluster *c) {
         c->heartbeat_coro_spawned = false;
     }
 
-    // Stop LAN discovery thread (checks c->running)
-    xr_cluster_discovery_stop(c);
+    // Stop LAN discovery coroutine (checks c->running)
+    cluster_discovery_stop(c);
 
     // Uninstall distributed channel hooks (per-isolate)
     xr_cluster_channel_uninstall_hooks(c->isolate);
@@ -510,7 +510,7 @@ void xr_cluster_stop(XrCluster *c) {
     xr_amutex_unlock(&c->services_lock);
 
     // Free topic subscriptions (recursive trie teardown lives in cluster_topic.c)
-    xr_cluster_topics_destroy(c);
+    cluster_topics_destroy(c);
 
     // Free node monitors
     xr_amutex_lock(&c->monitors_lock);
@@ -1252,7 +1252,7 @@ static XrValue cluster_discover_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (!c)
         return xr_bool(0);
 
-    int rc = xr_cluster_discovery_start(c);
+    int rc = cluster_discovery_start(c);
     return xr_bool(rc == 0);
 }
 

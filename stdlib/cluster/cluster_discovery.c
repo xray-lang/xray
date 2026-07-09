@@ -8,7 +8,7 @@
  * cluster_discovery.c - LAN node auto-discovery via UDP multicast
  *
  * KEY CONCEPT:
- *   Background thread sends periodic announce datagrams to a multicast
+ *   A native coroutine sends periodic announce datagrams to a multicast
  *   group and listens for announces from other nodes. On receiving a
  *   new node announce, it triggers xr_cluster_join() to establish the
  *   TCP connection with full challenge-response authentication.
@@ -224,7 +224,7 @@ static bool should_connect(XrCluster *c, const char *name) {
  *      payload per POSIX recv semantics.
  *
  * Exit contract: disc->coro_exited is flipped true as the last
- * statement so xr_cluster_discovery_stop can spin-wait for clean
+ * statement so cluster_discovery_stop can spin-wait for clean
  * teardown before closing mcast_fd (whose PollDesc the coro still
  * holds via netpoll until exit).
  */
@@ -334,9 +334,9 @@ static void discovery_coro(void *arg) {
     atomic_store(&disc->coro_exited, true);
 }
 
-/* ========== Public API ========== */
+/* ========== Internal Discovery Lifecycle ========== */
 
-int xr_cluster_discovery_start(XrCluster *c) {
+int cluster_discovery_start(XrCluster *c) {
     if (!c || !atomic_load(&c->running))
         return -1;
     if (c->discovery)
@@ -383,7 +383,7 @@ int xr_cluster_discovery_start(XrCluster *c) {
     return 0;
 }
 
-void xr_cluster_discovery_stop(XrCluster *c) {
+void cluster_discovery_stop(XrCluster *c) {
     if (!c || !c->discovery)
         return;
 
