@@ -2,6 +2,142 @@
  * xi_cgen_dispatch_helpers.inc.c - Generated Xi lowering driver helpers for AOT C
  */
 
+typedef struct XicgenBigIntLiteral {
+    int sign;
+    uint32_t len;
+    uint32_t cap;
+    uint32_t *limbs;
+} XicgenBigIntLiteral;
+
+static void xicgen_bigint_literal_free(XicgenBigIntLiteral *lit) {
+    if (!lit)
+        return;
+    xr_free(lit->limbs);
+    lit->limbs = NULL;
+    lit->len = 0;
+    lit->cap = 0;
+}
+
+static int xicgen_bigint_digit_value(char c, uint32_t base) {
+    int digit = -1;
+    if (c >= '0' && c <= '9')
+        digit = c - '0';
+    else if (c >= 'a' && c <= 'f')
+        digit = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F')
+        digit = c - 'A' + 10;
+    return digit >= 0 && (uint32_t) digit < base ? digit : -1;
+}
+
+static void xicgen_bigint_literal_normalize(XicgenBigIntLiteral *lit) {
+    if (!lit || !lit->limbs)
+        return;
+    while (lit->len > 1 && lit->limbs[lit->len - 1] == 0)
+        lit->len--;
+    if (lit->len == 0) {
+        lit->len = 1;
+        lit->limbs[0] = 0;
+    }
+    if (lit->len == 1 && lit->limbs[0] == 0)
+        lit->sign = 1;
+}
+
+static bool xicgen_bigint_literal_parse(const char *digits, bool negate, XicgenBigIntLiteral *out) {
+    if (!digits || !*digits || !out)
+        return false;
+    memset(out, 0, sizeof(*out));
+
+    int sign = 1;
+    if (*digits == '-') {
+        sign = -1;
+        digits++;
+    } else if (*digits == '+') {
+        digits++;
+    }
+    if (negate)
+        sign = -sign;
+
+    uint32_t base = 10;
+    if (digits[0] == '0' && digits[1] != '\0') {
+        if (digits[1] == 'x' || digits[1] == 'X') {
+            base = 16;
+            digits += 2;
+        } else if (digits[1] == 'b' || digits[1] == 'B') {
+            base = 2;
+            digits += 2;
+        } else if (digits[1] == 'o' || digits[1] == 'O') {
+            base = 8;
+            digits += 2;
+        }
+    }
+    if (!*digits)
+        return false;
+
+    size_t ndigits = strlen(digits);
+    if (ndigits > (size_t) UINT32_MAX - 1u)
+        return false;
+    out->cap = (uint32_t) ndigits + 1u;
+    out->limbs = (uint32_t *) xr_calloc(out->cap, sizeof(uint32_t));
+    if (!out->limbs)
+        return false;
+    out->sign = sign;
+    out->len = 1;
+
+    for (size_t i = 0; i < ndigits; i++) {
+        int digit = xicgen_bigint_digit_value(digits[i], base);
+        if (digit < 0) {
+            xicgen_bigint_literal_free(out);
+            return false;
+        }
+        uint64_t carry = (uint64_t) digit;
+        for (uint32_t j = 0; j < out->len; j++) {
+            uint64_t prod = (uint64_t) out->limbs[j] * (uint64_t) base + carry;
+            out->limbs[j] = (uint32_t) prod;
+            carry = prod >> 32;
+        }
+        if (carry != 0) {
+            if (out->len >= out->cap) {
+                xicgen_bigint_literal_free(out);
+                return false;
+            }
+            out->limbs[out->len++] = (uint32_t) carry;
+        }
+    }
+
+    xicgen_bigint_literal_normalize(out);
+    return true;
+}
+
+static void xicgen_emit_bigint_literal_value(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                             bool negate) {
+    XicgenBigIntLiteral lit;
+    if (!v || !v->aux || !xicgen_bigint_literal_parse((const char *) v->aux, negate, &lit)) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: invalid BigInt literal at line %u\n",
+                (unsigned) (v ? v->line : 0));
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    fprintf(out,
+            "({ static const struct { XrObjHeader hdr; void *klass; int8_t sign; "
+            "uint8_t _pad1[3]; uint32_t len; uint32_t cap; uint32_t _pad2; "
+            "uint32_t limbs[%uu]; } _xr_bigint_lit_%u = {",
+            (unsigned) lit.len, (unsigned) v->id);
+    fprintf(out,
+            "{XR_TINSTANCE, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0u, 0u}, NULL, "
+            "(int8_t)%d, {0}, %uu, %uu, 0u, {",
+            lit.sign < 0 ? -1 : 1, (unsigned) lit.len, (unsigned) lit.len);
+    for (uint32_t i = 0; i < lit.len; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        fprintf(out, "UINT32_C(%" PRIu32 ")", lit.limbs[i]);
+    }
+    fprintf(out, "}}; xr_mkptr((void *)&_xr_bigint_lit_%u, XR_TAG_BIGINT); })", (unsigned) v->id);
+    xicgen_bigint_literal_free(&lit);
+}
+
 static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) f;
@@ -53,6 +189,8 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {
         cg_emit_str_value(ctx, out, (const char *) v->aux);
+    } else if (xr_type_is_named_class(v->type, "BigInt") && v->aux) {
+        xicgen_emit_bigint_literal_value(ctx, out, v, false);
     } else if (v->type->kind == XR_KIND_UNKNOWN && v->aux) {
         const XiEnumData *ed = cg_enum_for_runtime_type(ctx, v->aux);
         if (ctx && ctx->freestanding_profile && ed)
@@ -561,9 +699,22 @@ XI_TO_C_TEMPLATE_DIV_MOD_DRIVERS(XICGEN_DEFINE_TEMPLATE_DIV_MOD_DRIVER)
 
 static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
+    if (v && xr_type_is_named_class(v->type, "BigInt")) {
+        const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
+        if (arg && arg->op == XI_CONST && xr_type_is_named_class(arg->type, "BigInt") && arg->aux) {
+            xicgen_emit_bigint_literal_value(ctx, out, arg, true);
+            return;
+        }
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: AOT BigInt unary negation requires allocation at line %u\n",
+                (unsigned) (v ? v->line : 0));
+        emit_codegen_abort_expr(out);
+        return;
+    }
     XrRep result_rep = cg_rep(v);
     XrRep a_rep = cg_rep(v->args[0]);
     if (result_rep == XR_REP_TAGGED || a_rep == XR_REP_TAGGED) {

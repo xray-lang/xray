@@ -168,6 +168,7 @@ typedef struct XrValue {
 #define XR_TAG_SYS_ONCE 32    /* AOT sys.Once OS-domain handle */
 #define XR_TAG_THREAD 33      /* AOT Thread<T> OS-thread handle */
 #define XR_TAG_BUFFER 34      /* AOT mem.Buffer managed byte allocation */
+#define XR_TAG_BIGINT 35      /* AOT static BigInt literal view */
 
 typedef struct XrAotEnumBox {
     uint64_t gc_words[2];
@@ -309,6 +310,7 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
 #define XR_IS_ARRAY(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TARRAY)
 #define XR_IS_MAP(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TMAP)
 #define XR_IS_SET(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TSET)
+#define XR_IS_BIGINT(v) ((v).tag == XR_TAG_BIGINT)
 
 /* =========================================================================
  * String object — every AOT string value points at an xrt_str_t header.
@@ -509,6 +511,8 @@ typedef struct xrt_bigint_view_s {
 } xrt_bigint_view_t;
 
 static inline const xrt_bigint_view_t *xrt_bigint_view(XrValue v) {
+    if (v.tag != XR_TAG_BIGINT && !(v.tag == XR_TAG_PTR && v.heap_type == XR_TINSTANCE))
+        return NULL;
     return (const xrt_bigint_view_t *) v.ptr;
 }
 
@@ -564,6 +568,33 @@ static inline double xrt_bigint_to_float_value(XrValue v) {
         base *= 4294967296.0;
     }
     return b->sign < 0 ? -result : result;
+}
+
+static inline int64_t xrt_bigint_eq_value(XrValue a, XrValue b) {
+    const xrt_bigint_view_t *ba = xrt_bigint_view(a);
+    const xrt_bigint_view_t *bb = xrt_bigint_view(b);
+    if (ba == bb)
+        return 1;
+    if (!ba || !bb)
+        return 0;
+    int za = ba->len == 0 || (ba->len == 1 && ba->limbs[0] == 0);
+    int zb = bb->len == 0 || (bb->len == 1 && bb->limbs[0] == 0);
+    if (za || zb)
+        return za == zb;
+    if (ba->sign != bb->sign || ba->len != bb->len)
+        return 0;
+    return memcmp(ba->limbs, bb->limbs, (size_t) ba->len * sizeof(uint32_t)) == 0;
+}
+
+static inline uint64_t xrt_bigint_hash_value(XrValue v) {
+    const xrt_bigint_view_t *b = xrt_bigint_view(v);
+    if (!b)
+        return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
+    if (b->len == 0 || (b->len == 1 && b->limbs[0] == 0))
+        return xr_hash_core_mix_u64(0x424947494e540000ull);
+    uint64_t h = xr_hash_core_bytes((const char *) b->limbs, (size_t) b->len * sizeof(uint32_t));
+    h ^= xr_hash_core_mix_u64((uint64_t) (b->sign < 0 ? 0x9e3779b9u : 0x7f4a7c15u));
+    return xr_hash_core_mix_u64(h);
 }
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
@@ -667,6 +698,8 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         return 0;
     if (ta == XR_TAG_ENUM)
         return xrt_enum_key_eq(a, b);
+    if (ta == XR_TAG_BIGINT)
+        return xrt_bigint_eq_value(a, b);
     if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_CHAR)
         return a.i == b.i;
     if (ta == XR_TAG_F64)
@@ -824,6 +857,15 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
         }
         case XR_TAG_NULL:
             return "null";
+        case XR_TAG_BIGINT: {
+            XrValue i = xrt_bigint_to_int_value(v);
+            if (i.tag == XR_TAG_I64) {
+                snprintf(buf, bufsz, "%lld", (long long) i.i);
+            } else {
+                snprintf(buf, bufsz, "<BigInt@%p>", v.ptr);
+            }
+            return buf;
+        }
         case XR_TAG_ENUM:
             return xrt_enum_to_cstr(v, buf, bufsz);
         case XR_TAG_RANGE:
