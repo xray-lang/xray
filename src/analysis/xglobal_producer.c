@@ -2737,6 +2737,34 @@ static uint64_t body_map_const_prehash(const AstNode *expr) {
     }
 }
 
+static bool body_map_key_type_is_dense_int(uint32_t key_type_key) {
+    static const uint8_t int_widths[] = {
+        XR_TREF_NW_I64, XR_TREF_NW_I8,  XR_TREF_NW_I16, XR_TREF_NW_I32,   XR_TREF_NW_U8,
+        XR_TREF_NW_U16, XR_TREF_NW_U32, XR_TREF_NW_U64, XR_TREF_NW_ISIZE, XR_TREF_NW_USIZE,
+    };
+    if (key_type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0))
+        return true;
+    for (uint32_t i = 0; i < sizeof(int_widths) / sizeof(int_widths[0]); i++) {
+        if (key_type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, int_widths[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool body_map_literal_has_dense_i64_domain(AstNode **keys, int count,
+                                                  uint32_t key_type_key) {
+    if (!keys || count <= 0 || !body_map_key_type_is_dense_int(key_type_key))
+        return false;
+    for (int i = 0; i < count; i++) {
+        const AstNode *key = keys[i];
+        if (!key || key->type != AST_LITERAL_INT || key->as.literal.int_overflows_i64)
+            return false;
+        if (key->as.literal.raw_value.int_val != (int64_t) i)
+            return false;
+    }
+    return true;
+}
+
 static uint32_t body_map_receiver_type_key(uint8_t container_kind, uint32_t key_type_key,
                                            uint32_t value_type_key) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
@@ -2879,6 +2907,8 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     shape.flags = XG_MAP_SHAPE_LITERAL;
     if (count > 0 && count <= XG_SMALL_MAP_LITERAL_MAX)
         shape.flags |= XG_MAP_SHAPE_SMALL;
+    if (body_map_literal_has_dense_i64_domain(keys, count, key_type_key))
+        shape.flags |= XG_MAP_SHAPE_DENSE_INT;
     shape.shape_hash =
         body_map_shape_hash(container_kind, key_type_key, shape.value_type_key, const_ids, count);
     if (!xg_global_evidence_add_map_shape(bc->evidence, &shape)) {
@@ -2899,6 +2929,11 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
         entry.prehash = body_map_const_prehash(keys[i]);
         if (key_const_id != 0)
             entry.flags |= XG_MAP_ENTRY_CONST_KEY;
+        if (keys && keys[i] && keys[i]->type == AST_LITERAL_INT &&
+            !keys[i]->as.literal.int_overflows_i64) {
+            entry.key_i64 = keys[i]->as.literal.raw_value.int_val;
+            entry.flags |= XG_MAP_ENTRY_INT_KEY;
+        }
         if (value_const_id != 0)
             entry.flags |= XG_MAP_ENTRY_CONST_VALUE;
         for (int j = 0; j < i; j++) {

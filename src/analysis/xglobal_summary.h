@@ -51,7 +51,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 9,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 10,
 };
 
 typedef enum XgBuildProfile {
@@ -458,6 +458,7 @@ enum {
     XG_MAP_ENTRY_CONST_KEY = 1u << 0,
     XG_MAP_ENTRY_CONST_VALUE = 1u << 1,
     XG_MAP_ENTRY_DUPLICATE_KEY = 1u << 2,
+    XG_MAP_ENTRY_INT_KEY = 1u << 3,
 };
 
 enum {
@@ -878,6 +879,7 @@ typedef struct XgMapEntrySummary {
     uint32_t entry_ordinal;
     uint32_t key_const_id;
     uint32_t value_const_id;
+    int64_t key_i64;
     uint64_t prehash;
     uint32_t flags;
 } XgMapEntrySummary;

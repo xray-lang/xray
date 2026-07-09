@@ -1825,7 +1825,7 @@ static uint8_t json_access_action_for(const XgGlobalEvidence *evidence,
     if (!shape || access->field_ordinal >= shape->field_count)
         return XAOT_JSON_ACCESS_REJECT;
     if (shape->shape_kind == XG_JSON_SHAPE_OPEN)
-        return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+        return XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX;
     return (access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
                ? XAOT_JSON_ACCESS_DIRECT_INDEX
                : XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX;
@@ -1843,8 +1843,6 @@ static uint8_t json_access_reason_for(const XgGlobalEvidence *evidence,
     shape = xg_global_evidence_find_json_shape(evidence, access->receiver_shape_id);
     if (!shape || access->field_ordinal >= shape->field_count)
         return XAOT_JSON_UNPROVEN_STALE_SHAPE;
-    if (shape->shape_kind == XG_JSON_SHAPE_OPEN)
-        return XAOT_JSON_UNPROVEN_OPEN_SHAPE;
     return XAOT_JSON_UNPROVEN_NONE;
 }
 

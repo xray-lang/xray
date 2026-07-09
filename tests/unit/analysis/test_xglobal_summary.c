@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=9 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=10 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=9 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=9 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=9 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=9 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=10 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=10 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=10 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=10 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=9 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=10 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -8388,14 +8388,14 @@ TEST(global_evidence_producer_records_json_open_shape_access) {
     ASSERT_NOT_NULL(shape_plan);
     ASSERT_NOT_NULL(access_plan);
     ASSERT_EQ_UINT(shape_plan->action, XAOT_JSON_SHAPE_OPEN_DYNAMIC);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_OPEN_SHAPE);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX);
+    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "kind=open action=open_dynamic"));
-    ASSERT_NOT_NULL(strstr(dump, "kind=field_get action=dynamic_lookup"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=open_shape"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=field_get action=shape_guard_index"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=none"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -8439,13 +8439,13 @@ TEST(global_evidence_producer_records_json_open_shape_static_key_index_access) {
     const XaotJsonAccessPlan *access_plan =
         xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_OPEN_SHAPE);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX);
+    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=dynamic_lookup"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=open_shape"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=shape_guard_index"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=none"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -8665,6 +8665,78 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     ASSERT_NOT_NULL(strstr(dump, "map-entry 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "hash-eq 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "key-access 0 id=1"));
+    xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
+    setup_parser_session();
+    const char *source = "fn denseLookup() -> int {\n"
+                         "    var scores = #{0: 10, 1: 11, 2: 12, 3: 13, 4: 14}\n"
+                         "    var seen: Set<int> = #[0, 1, 2, 3, 4]\n"
+                         "    var fromIndex = scores[2]\n"
+                         "    var viaGet = scores.get(4)\n"
+                         "    if (scores.has(3)) {\n"
+                         "        if (seen.has(1)) { return fromIndex + viaGet }\n"
+                         "    }\n"
+                         "    return 0\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 10);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 4);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_DENSE_INT) != 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_DENSE_INT) != 0);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) == 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_SMALL) == 0);
+    for (uint32_t i = 0; i < 5; i++) {
+        ASSERT_TRUE((ev.map_entries[i].flags & XG_MAP_ENTRY_INT_KEY) != 0);
+        ASSERT_TRUE(ev.map_entries[i].key_i64 == (int64_t) i);
+        ASSERT_TRUE((ev.map_entries[5 + i].flags & XG_MAP_ENTRY_INT_KEY) != 0);
+        ASSERT_TRUE(ev.map_entries[5 + i].key_i64 == (int64_t) i);
+    }
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotMapShapePlan *map_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
+    const XaotMapShapePlan *set_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[1].shape_id);
+    ASSERT_NOT_NULL(map_shape_plan);
+    ASSERT_NOT_NULL(set_shape_plan);
+    ASSERT_EQ_UINT(map_shape_plan->action, XAOT_MAP_SHAPE_DENSE_INT_TABLE);
+    ASSERT_EQ_UINT(set_shape_plan->action, XAOT_MAP_SHAPE_DENSE_INT_TABLE);
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XaotKeyAccessPlan *access_plan =
+            xaot_bundle_find_key_access_plan(&bundle, ev.key_accesses[i].access_id);
+        ASSERT_NOT_NULL(access_plan);
+        ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX);
+        ASSERT_TRUE((access_plan->evidence & XAOT_MAP_EV_DENSE_DOMAIN) != 0);
+    }
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "key_i64=0"));
+    ASSERT_NOT_NULL(strstr(dump, "key_i64=4"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -9351,6 +9423,7 @@ RUN_TEST(global_evidence_producer_records_json_unknown_shape_access);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
+RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
 RUN_TEST(global_evidence_producer_propagates_map_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);
