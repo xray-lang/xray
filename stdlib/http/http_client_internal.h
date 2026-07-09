@@ -5,15 +5,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * http_client.h - HTTP client native boundary
+ * http_client_internal.h - Internal HTTP/1.x client native boundary
  *
  * KEY CONCEPT:
  *   Internal HTTP/1.x client data-plane used by http.request and xpkg.
  *   User-facing protocol helpers live in stdlib/http/http.xr.
  */
 
-#ifndef XR_STDLIB_HTTP_CLIENT_H
-#define XR_STDLIB_HTTP_CLIENT_H
+#ifndef XR_STDLIB_HTTP_CLIENT_INTERNAL_H
+#define XR_STDLIB_HTTP_CLIENT_INTERNAL_H
 
 #include "../../src/base/xdefs.h"
 #include "http_parser.h"
