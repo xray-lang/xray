@@ -167,6 +167,8 @@ static bool xa_freestanding_top_const_root_fixed_array_element_allowed(const XrC
         return false;
     if (value->kind == XR_CT_STRING)
         return true;
+    if (value->kind == XR_CT_TUPLE)
+        return xa_freestanding_top_const_aggregate_value_allowed(value, false);
     if (xa_freestanding_top_const_string_fixed_array_allowed(value))
         return true;
     return xa_freestanding_top_const_aggregate_scalar_allowed(value);
