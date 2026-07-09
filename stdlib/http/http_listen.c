@@ -794,13 +794,16 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
         }
         xr_json_set_by_key(X, req, "headers", xr_json_value(hdrs));
 
+        if (ctx->content_length > MAX_BODY_SIZE) {
+            return http_conn_start_write(X, ctx, RESP_413, sizeof(RESP_413) - 1,
+                                         http_conn_cleanup_cont, result);
+        }
+
         /* Default body fields. body is overwritten below (and in async body
          * read continuations) when actual content arrives. contentLength is
-         * -1 when neither Content-Length nor Transfer-Encoding is present.
-         * streaming flips to true only for bodies > MAX_BODY_SIZE. */
+         * -1 when neither Content-Length nor Transfer-Encoding is present. */
         xr_json_set_by_key(X, req, "body", make_string_val(X, "", 0));
         xr_json_set_by_key(X, req, "contentLength", XR_FROM_INT((int64_t) ctx->content_length));
-        xr_json_set_by_key(X, req, "streaming", xr_bool(false));
 
         // Read body if needed, then call handler
         if (is_chunked && parsed > 0) {
@@ -850,17 +853,6 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
                     xr_json_set_by_key(X, req, "body",
                                        make_string_val(X, ctx->body_buf, ctx->content_length));
                 }
-            }
-        } else if (ctx->content_length > MAX_BODY_SIZE) {
-            /* contentLength already populated above; flip streaming and stash
-             * stream-only fields (fd + buffered prefix) for handler-driven
-             * incremental consumption. */
-            xr_json_set_by_key(X, req, "streaming", xr_bool(true));
-            xr_json_set_by_key(X, req, "_fd", xr_int(ctx->fd));
-            int body_in_buf = ctx->buf_used - parsed;
-            if (body_in_buf > 0) {
-                xr_json_set_by_key(X, req, "_bodyPrefix",
-                                   make_string_val(X, ctx->read_buf + parsed, body_in_buf));
             }
         }
 

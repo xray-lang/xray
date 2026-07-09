@@ -436,7 +436,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpReques
     {"http", "HttpRequest", "body", "string", true},
     {"http", "HttpRequest", "contentLength", "int", true},
     {"http", "HttpRequest", "params", "Json", true},
-    {"http", "HttpRequest", "streaming", "bool", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
@@ -456,7 +455,7 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"io", "FileStat", "Native handle type", xr_stdlib_handle_fields_io_FileStat, 10},
     {"net", "UdpPacket", "Native handle type", xr_stdlib_handle_fields_net_UdpPacket, 3},
     {"http", "HttpResponse", "Native handle type", xr_stdlib_handle_fields_http_HttpResponse, 6},
-    {"http", "HttpRequest", "Native handle type", xr_stdlib_handle_fields_http_HttpRequest, 8},
+    {"http", "HttpRequest", "Native handle type", xr_stdlib_handle_fields_http_HttpRequest, 7},
     {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
     {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
 };
