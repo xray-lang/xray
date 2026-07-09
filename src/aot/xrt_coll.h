@@ -3352,6 +3352,27 @@ static inline void xrt_json_merge(XrValue dst_val, XrValue src_val) {
     }
 }
 
+/* Sealed Record spread: only overwrite fields that already exist in the target
+ * Record shape. Unknown source fields are intentionally ignored here; a Record
+ * merge that needs a dynamic source must be lowered through the explicit Json
+ * bridge path instead of turning the result into an open Json object. */
+static inline void xrt_record_merge(XrValue dst_val, XrValue src_val) {
+    if (dst_val.tag != XR_TAG_PTR || !dst_val.ptr)
+        return;
+    if (src_val.tag != XR_TAG_PTR || !src_val.ptr)
+        return;
+    xrt_json_t *dst = (xrt_json_t *) dst_val.ptr;
+    xrt_json_t *src = (xrt_json_t *) src_val.ptr;
+    if (dst->object_kind != XRT_OBJECT_RECORD)
+        return;
+    for (int64_t i = 0; i < src->field_count; i++) {
+        const char *name = src->field_names ? src->field_names[i] : NULL;
+        int64_t dst_idx = name ? xrt_json_find_field(dst, name) : -1;
+        if (dst_idx >= 0)
+            dst->fields[dst_idx] = src->fields[i];
+    }
+}
+
 #include "xrt_index_helpers.inc.c"
 
 /* =========================================================================

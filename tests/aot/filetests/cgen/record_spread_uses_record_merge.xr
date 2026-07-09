@@ -1,0 +1,5 @@
+var base = { x: 1, y: 2 }
+var merged = { ...base, y: 9 }
+
+print(merged.x)
+print(merged.y)
