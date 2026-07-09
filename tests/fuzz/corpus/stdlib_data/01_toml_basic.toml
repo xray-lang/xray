@@ -1,0 +1,4 @@
+1[pkg]
+name = "x"
+nums = [1, 2]
+active = true

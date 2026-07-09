@@ -1,6 +1,6 @@
 # xray Fuzzing Tests
 
-本目录包含使用 [libFuzzer](https://llvm.org/docs/LibFuzzer.html) 的模糊测试工具，用于发现 lexer 和 parser 中的潜在 bug。
+本目录包含使用 [libFuzzer](https://llvm.org/docs/LibFuzzer.html) 的模糊测试工具，用于发现 lexer、parser 和纯 Xray stdlib 数据解析器中的潜在 bug。
 
 ## 种子语料库
 
@@ -41,6 +41,17 @@
 | `19_generics.xr` | 泛型函数、泛型类、泛型 Channel |
 | `20_abstract.xr` | 抽象类、抽象方法 |
 
+### Stdlib 数据解析器语料库 (`corpus/stdlib_data/`) - 4 个文件
+
+这些语料的首字节选择目标解析器，剩余字节作为输入文本：
+
+| 首字节 | 目标 |
+|--------|------|
+| `0` | `csv.parseDetailed` |
+| `1` | `toml.parseStrict` |
+| `2` | `xml.parseDetailed` |
+| `3` | `yaml.parseAll` |
+
 ## 构建
 
 Fuzzing 需要 Clang 编译器（libFuzzer 是 LLVM 的一部分）：
@@ -53,7 +64,7 @@ cmake -B build-fuzz \
   -DCMAKE_CXX_COMPILER=clang++
 
 # 构建 fuzzer
-cmake --build build-fuzz --target fuzz_lexer fuzz_parser
+cmake --build build-fuzz --target fuzz_lexer fuzz_parser fuzz_stdlib_data
 ```
 
 ## 运行
@@ -81,6 +92,13 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 
 # 运行 fuzzer
 ./build-fuzz/tests/fuzz/fuzz_parser corpus/parser -max_len=4096
+```
+
+### Stdlib Data Parser Fuzzer
+
+```bash
+# 运行纯 Xray CSV/TOML/XML/YAML parser fuzzer
+./build-fuzz/tests/fuzz/fuzz_stdlib_data corpus/stdlib_data -max_len=4096
 ```
 
 ## 常用选项
@@ -116,6 +134,9 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 
 # 从 stdin 读取
 echo "var x = 1" | ./build-fuzz/tests/fuzz/fuzz_lexer_standalone
+
+# 测试一个 stdlib 数据解析语料
+./build-fuzz/tests/fuzz/fuzz_stdlib_data_standalone corpus/stdlib_data/00_csv_basic.txt
 ```
 
 ## 语料库维护
@@ -138,6 +159,7 @@ Fuzzer 会自动将发现的有趣输入添加到语料库。定期清理和最�
 # 运行 60 秒 fuzzing
 ./fuzz_lexer corpus/lexer -max_total_time=60 -max_len=4096
 ./fuzz_parser corpus/parser -max_total_time=60 -max_len=4096
+./fuzz_stdlib_data corpus/stdlib_data -max_total_time=60 -max_len=4096
 ```
 
 ## 相关资源
