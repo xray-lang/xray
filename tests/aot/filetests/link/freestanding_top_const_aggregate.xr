@@ -76,6 +76,13 @@ const LABEL_MATRIX: [[string; 2]; 2] = comptime [
     ["level", LABEL],
     ["bonus", "done"],
 ]
+@section("__DATA,.xray_lcube")
+@weak
+@used
+const LABEL_CUBE: [[[string; 2]; 2]; 2] = comptime [
+    [["level", LABEL], ["bonus", "done"]],
+    [["red", "green"], ["blue", "white"]],
+]
 const LABELED = comptime (LABEL, TABLE[0])
 const NESTED = comptime ((TABLE[0], LABEL), (WEIGHTS[2], TABLE[3]))
 const LABELS: [string; 2] = comptime ["level", LABEL]
@@ -332,6 +339,12 @@ fn xray_top_const_string_array_print(i: int) -> int {
 fn xray_top_const_string_matrix_print(row: int, col: int) -> int {
     print(LABEL_MATRIX[row][col])
     return row + col
+}
+
+@c_export("xray_top_const_string_cube_print")
+fn xray_top_const_string_cube_print(i: int, j: int, k: int) -> int {
+    print(LABEL_CUBE[i][j][k])
+    return i + j + k
 }
 
 @c_export("xray_top_const_struct_string_array_print")

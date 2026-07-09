@@ -1085,8 +1085,8 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
         shape = xg_global_evidence_find_json_shape(ev, access->receiver_shape_id);
         if (!shape)
             return set_error(errbuf, errbuf_len, "AOT Json access references missing shape");
-        if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) == 0 &&
-            access->key_name_id != 0 && access->field_ordinal >= shape->field_count)
+        if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) == 0 && access->key_name_id != 0 &&
+            access->field_ordinal >= shape->field_count)
             return set_error(errbuf, errbuf_len, "AOT Json access field ordinal is stale");
     }
     return true;
@@ -2590,22 +2590,49 @@ static const XgDeriveSummary *verify_find_derive_for_type_kind(const XgGlobalEvi
     return NULL;
 }
 
-static bool verify_eq_hash_fields_match(const XgDeriveSummary *eq,
-                                        const XgDeriveSummary *hash) {
-    return eq && hash && eq->field_start == hash->field_start &&
-           eq->field_count == hash->field_count;
+static bool verify_eq_hash_field_range_valid(const XgGlobalEvidence *ev,
+                                             const XgDeriveSummary *derive) {
+    uint32_t end;
+    if (!ev || !derive)
+        return false;
+    if (derive->field_count == 0)
+        return derive->field_start == 0;
+    if (derive->field_start == 0)
+        return false;
+    end = derive->field_start + (uint32_t) derive->field_count - 1;
+    return end >= derive->field_start && end <= ev->nderived_fields;
 }
 
-static uint8_t verify_eq_hash_action_for(const XgDeriveSummary *eq,
+static bool verify_eq_hash_fields_match(const XgGlobalEvidence *ev, const XgDeriveSummary *eq,
+                                        const XgDeriveSummary *hash) {
+    if (!ev || !eq || !hash || eq->field_count != hash->field_count)
+        return false;
+    if (!verify_eq_hash_field_range_valid(ev, eq) || !verify_eq_hash_field_range_valid(ev, hash))
+        return false;
+    for (uint32_t i = 0; i < eq->field_count; i++) {
+        const XgDerivedFieldSummary *eq_field = &ev->derived_fields[eq->field_start - 1 + i];
+        const XgDerivedFieldSummary *hash_field = &ev->derived_fields[hash->field_start - 1 + i];
+        if (eq_field->field_ordinal != hash_field->field_ordinal ||
+            eq_field->name_id != hash_field->name_id ||
+            eq_field->type_key != hash_field->type_key ||
+            eq_field->source_field_id != hash_field->source_field_id ||
+            eq_field->flags != hash_field->flags)
+            return false;
+    }
+    return true;
+}
+
+static uint8_t verify_eq_hash_action_for(const XgGlobalEvidence *ev, const XgDeriveSummary *eq,
                                          const XgDeriveSummary *hash) {
-    if (!eq || !hash || eq->type_key != hash->type_key || !verify_eq_hash_fields_match(eq, hash))
+    if (!eq || !hash || eq->type_key != hash->type_key ||
+        !verify_eq_hash_fields_match(ev, eq, hash))
         return XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE;
     if (eq->method_count != 0 && hash->method_count != 0)
         return XAOT_DERIVED_EQ_HASH_DIRECT_GENERATED_CALL;
     return XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE;
 }
 
-static uint8_t verify_eq_hash_reason_for(const XgDeriveSummary *eq,
+static uint8_t verify_eq_hash_reason_for(const XgGlobalEvidence *ev, const XgDeriveSummary *eq,
                                          const XgDeriveSummary *hash) {
     if (!eq)
         return XAOT_EQ_HASH_UNPROVEN_MISSING_EQ;
@@ -2613,12 +2640,12 @@ static uint8_t verify_eq_hash_reason_for(const XgDeriveSummary *eq,
         return XAOT_EQ_HASH_UNPROVEN_MISSING_HASH;
     if (eq->type_key != hash->type_key)
         return XAOT_EQ_HASH_UNPROVEN_TYPE_MISMATCH;
-    if (!verify_eq_hash_fields_match(eq, hash))
+    if (!verify_eq_hash_fields_match(ev, eq, hash))
         return XAOT_EQ_HASH_UNPROVEN_FIELD_MISMATCH;
     return XAOT_EQ_HASH_UNPROVEN_NONE;
 }
 
-static uint32_t verify_eq_hash_evidence_for(const XgDeriveSummary *eq,
+static uint32_t verify_eq_hash_evidence_for(const XgGlobalEvidence *ev, const XgDeriveSummary *eq,
                                             const XgDeriveSummary *hash) {
     uint32_t evidence = 0;
     if (eq)
@@ -2627,7 +2654,7 @@ static uint32_t verify_eq_hash_evidence_for(const XgDeriveSummary *eq,
         evidence |= XAOT_EQ_HASH_EV_HASH_ROW;
     if (eq && hash && eq->type_key == hash->type_key)
         evidence |= XAOT_EQ_HASH_EV_SAME_TYPE;
-    if (verify_eq_hash_fields_match(eq, hash))
+    if (verify_eq_hash_fields_match(ev, eq, hash))
         evidence |= XAOT_EQ_HASH_EV_SAME_FIELDS;
     if (eq && eq->method_count != 0)
         evidence |= XAOT_EQ_HASH_EV_EQ_BODY;
@@ -2655,14 +2682,15 @@ static bool verify_derived_eq_hash_plan_rederives(const XgGlobalEvidence *ev,
         plan->eq_derive_id != (eq ? eq->derive_id : XG_NO_ID) ||
         plan->hash_derive_id != (hash ? hash->derive_id : XG_NO_ID) ||
         plan->field_start != expected_field_start || plan->field_count != expected_field_count)
-        return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash plan identity does not re-derive");
+        return set_error(errbuf, errbuf_len,
+                         "AOT derived Eq/Hash plan identity does not re-derive");
     if (plan->eq_body_func_id != verify_derive_generated_body_func_id(ev, eq) ||
         plan->hash_body_func_id != verify_derive_generated_body_func_id(ev, hash))
         return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash generated body is stale");
-    if (plan->action != verify_eq_hash_action_for(eq, hash) ||
-        plan->unproven_reason != verify_eq_hash_reason_for(eq, hash))
+    if (plan->action != verify_eq_hash_action_for(ev, eq, hash) ||
+        plan->unproven_reason != verify_eq_hash_reason_for(ev, eq, hash))
         return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash action does not re-derive");
-    if (plan->evidence != verify_eq_hash_evidence_for(eq, hash))
+    if (plan->evidence != verify_eq_hash_evidence_for(ev, eq, hash))
         return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash evidence does not re-derive");
     return true;
 }
@@ -2683,8 +2711,9 @@ static uint8_t verify_json_shape_action_for(const XgJsonShapeSummary *shape) {
 }
 
 static uint8_t verify_json_shape_reason_for(const XgJsonShapeSummary *shape) {
-    return shape && verify_json_shape_kind_valid(shape->shape_kind) ? XAOT_JSON_UNPROVEN_NONE
-                                                                    : XAOT_JSON_UNPROVEN_INVALID_KIND;
+    return shape && verify_json_shape_kind_valid(shape->shape_kind)
+               ? XAOT_JSON_UNPROVEN_NONE
+               : XAOT_JSON_UNPROVEN_INVALID_KIND;
 }
 
 static uint32_t verify_json_shape_evidence_for(const XgJsonShapeSummary *shape) {
@@ -3052,7 +3081,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         for (uint32_t j = 0; j < i; j++) {
             const XgDeriveSummary *prev = &ev->derives[j];
             if ((prev->derive_kind == XG_DERIVE_EQ || prev->derive_kind == XG_DERIVE_HASH) &&
-                prev->owner_decl_id == derive->owner_decl_id && prev->type_key == derive->type_key) {
+                prev->owner_decl_id == derive->owner_decl_id &&
+                prev->type_key == derive->type_key) {
                 seen = true;
                 break;
             }
