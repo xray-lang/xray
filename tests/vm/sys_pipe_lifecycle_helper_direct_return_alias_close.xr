@@ -1,0 +1,21 @@
+import sys
+import { Pipe } from sys
+
+fn wrapPipe(p: Pipe) -> Pipe {
+    return passPipe(p)
+}
+
+fn passPipe(p: Pipe) -> Pipe {
+    return p
+}
+
+fn run() {
+    var opened = sys.Pipe.open()
+    if (opened == null) {
+        print(false)
+        return
+    }
+    print(wrapPipe(opened!).close())
+}
+
+run()

@@ -416,6 +416,9 @@ struct XaThreadHandleLintFnSummary {
     struct XaThreadHandleLintFnSummary *next;
 };
 
+static XaThreadHandleLintState *
+xa_thread_lint_find_returned_call_arg(XaThreadHandleLintState *states, AstNode *expr);
+
 static void xa_thread_lint_free_fn_summaries(XaThreadHandleLintFnSummary *summaries) {
     while (summaries) {
         XaThreadHandleLintFnSummary *next = summaries->next;
@@ -929,6 +932,8 @@ static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *sta
     if (!ma->name || (strcmp(ma->name, "join") != 0 && strcmp(ma->name, "detach") != 0))
         return false;
     XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, ma->object);
+    if (!state)
+        state = xa_thread_lint_find_returned_call_arg(states, ma->object);
     if (!state)
         return false;
     if (can_escape)
@@ -2189,6 +2194,9 @@ struct XaOsResourceLintFnSummary {
     struct XaOsResourceLintFnSummary *next;
 };
 
+static XaOsResourceLintState *
+xa_os_resource_lint_find_returned_call_arg(XaOsResourceLintState *states, AstNode *expr);
+
 static void xa_os_resource_lint_free_fn_summaries(XaOsResourceLintFnSummary *summaries) {
     while (summaries) {
         XaOsResourceLintFnSummary *next = summaries->next;
@@ -2632,6 +2640,8 @@ static bool xa_os_resource_lint_scan_finalizer_call(XaOsResourceLintState *state
         return false;
     MemberAccessNode *ma = &callee->as.member_access;
     XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, ma->object);
+    if (!state)
+        state = xa_os_resource_lint_find_returned_call_arg(states, ma->object);
     if (!state || !ma->name)
         return false;
     if (strcmp(ma->name, xa_os_resource_close_method(state->kind)) == 0) {
