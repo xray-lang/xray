@@ -239,6 +239,46 @@ static uint64_t hash_generic_inst_summary(uint64_t hash, const XgGenericInstSumm
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_derive_summary(uint64_t hash, const XgDeriveSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->derive_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_decl_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u8(hash, row->derive_kind);
+    hash = hash_u32(hash, row->field_start);
+    hash = hash_u32(hash, row->field_count);
+    hash = hash_u32(hash, row->method_start);
+    hash = hash_u32(hash, row->method_count);
+    hash = hash_u32(hash, row->flags);
+    return hash_u64(hash, row->derive_hash);
+}
+
+static uint64_t hash_derived_field_summary(uint64_t hash, const XgDerivedFieldSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->field_id);
+    hash = hash_u32(hash, row->derive_id);
+    hash = hash_u32(hash, row->field_ordinal);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u32(hash, row->source_field_id);
+    return hash_u32(hash, row->flags);
+}
+
+static uint64_t hash_derived_method_summary(uint64_t hash, const XgDerivedMethodSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->method_id);
+    hash = hash_u32(hash, row->derive_id);
+    hash = hash_u8(hash, row->method_kind);
+    hash = hash_u32(hash, row->generated_body_func_id);
+    hash = hash_u32(hash, row->signature_key);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_build_key(uint64_t hash, const XgBuildKey *key) {
     if (!key)
         return hash_u32(hash, 0);
@@ -343,6 +383,40 @@ XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind) {
             return "class";
         case XG_GENERIC_INST_CONTAINER:
             return "container";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_derive_kind_name(uint8_t kind) {
+    switch ((XgDeriveKind) kind) {
+        case XG_DERIVE_JSON:
+            return "json";
+        case XG_DERIVE_INSPECT:
+            return "inspect";
+        case XG_DERIVE_EQ:
+            return "eq";
+        case XG_DERIVE_HASH:
+            return "hash";
+        case XG_DERIVE_CLONE:
+            return "clone";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_derived_method_kind_name(uint8_t kind) {
+    switch ((XgDerivedMethodKind) kind) {
+        case XG_DERIVED_METHOD_JSON_ENCODE:
+            return "json_encode";
+        case XG_DERIVED_METHOD_INSPECT_FORMAT:
+            return "inspect_format";
+        case XG_DERIVED_METHOD_EQ:
+            return "eq";
+        case XG_DERIVED_METHOD_HASH:
+            return "hash";
+        case XG_DERIVED_METHOD_CLONE:
+            return "clone";
         default:
             return "unknown";
     }
@@ -563,6 +637,9 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->callsites);
     xr_free(evidence->link_deps);
     xr_free(evidence->generic_insts);
+    xr_free(evidence->derives);
+    xr_free(evidence->derived_fields);
+    xr_free(evidence->derived_methods);
     memset(evidence, 0, sizeof(*evidence));
 }
 
@@ -622,6 +699,25 @@ XR_FUNC bool xg_global_evidence_reserve_generic_insts(XgGlobalEvidence *evidence
     return evidence &&
            reserve_array((void **) &evidence->generic_insts, &evidence->generic_inst_cap, capacity,
                          sizeof(XgGenericInstSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_derives(XgGlobalEvidence *evidence, uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->derives, &evidence->derive_cap, capacity,
+                                     sizeof(XgDeriveSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_derived_fields(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->derived_fields, &evidence->derived_field_cap,
+                         capacity, sizeof(XgDerivedFieldSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_derived_methods(XgGlobalEvidence *evidence,
+                                                        uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->derived_methods, &evidence->derived_method_cap,
+                         capacity, sizeof(XgDerivedMethodSummary));
 }
 
 XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
@@ -737,6 +833,41 @@ xg_global_evidence_add_generic_inst(XgGlobalEvidence *evidence,
         !xg_global_evidence_reserve_generic_insts(evidence, evidence->ngeneric_insts + 1))
         return NULL;
     row = &evidence->generic_insts[evidence->ngeneric_insts++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgDeriveSummary *xg_global_evidence_add_derive(XgGlobalEvidence *evidence,
+                                                       const XgDeriveSummary *summary) {
+    XgDeriveSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_derives(evidence, evidence->nderives + 1))
+        return NULL;
+    row = &evidence->derives[evidence->nderives++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgDerivedFieldSummary *
+xg_global_evidence_add_derived_field(XgGlobalEvidence *evidence,
+                                     const XgDerivedFieldSummary *summary) {
+    XgDerivedFieldSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_derived_fields(evidence, evidence->nderived_fields + 1))
+        return NULL;
+    row = &evidence->derived_fields[evidence->nderived_fields++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgDerivedMethodSummary *
+xg_global_evidence_add_derived_method(XgGlobalEvidence *evidence,
+                                      const XgDerivedMethodSummary *summary) {
+    XgDerivedMethodSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_derived_methods(evidence, evidence->nderived_methods + 1))
+        return NULL;
+    row = &evidence->derived_methods[evidence->nderived_methods++];
     *row = *summary;
     return row;
 }
@@ -1194,6 +1325,9 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
     hash = hash_mix(hash, &evidence->nlink_deps, sizeof(evidence->nlink_deps));
     hash = hash_mix(hash, &evidence->ngeneric_insts, sizeof(evidence->ngeneric_insts));
+    hash = hash_mix(hash, &evidence->nderives, sizeof(evidence->nderives));
+    hash = hash_mix(hash, &evidence->nderived_fields, sizeof(evidence->nderived_fields));
+    hash = hash_mix(hash, &evidence->nderived_methods, sizeof(evidence->nderived_methods));
     for (uint32_t i = 0; i < evidence->ndecls; i++)
         hash = hash_decl_summary(hash, &evidence->decls[i]);
     for (uint32_t i = 0; i < evidence->nclasses; i++)
@@ -1214,6 +1348,12 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
         hash = hash_generic_inst_summary(hash, &evidence->generic_insts[i]);
+    for (uint32_t i = 0; i < evidence->nderives; i++)
+        hash = hash_derive_summary(hash, &evidence->derives[i]);
+    for (uint32_t i = 0; i < evidence->nderived_fields; i++)
+        hash = hash_derived_field_summary(hash, &evidence->derived_fields[i]);
+    for (uint32_t i = 0; i < evidence->nderived_methods; i++)
+        hash = hash_derived_method_summary(hash, &evidence->derived_methods[i]);
     return hash == 0 ? 1 : hash;
 }
 
@@ -1249,6 +1389,9 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
             hash = hash_u32(hash, evidence->ninterface_impls);
             hash = hash_u32(hash, evidence->ninterface_extends);
             hash = hash_u32(hash, evidence->ninterface_methods);
+            hash = hash_u32(hash, evidence->nderives);
+            hash = hash_u32(hash, evidence->nderived_fields);
+            hash = hash_u32(hash, evidence->nderived_methods);
             for (uint32_t i = 0; i < evidence->ndecls; i++)
                 hash = hash_decl_summary(hash, &evidence->decls[i]);
             for (uint32_t i = 0; i < evidence->nclasses; i++)
@@ -1261,6 +1404,12 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
                 hash = hash_interface_extends_summary(hash, &evidence->interface_extends[i]);
             for (uint32_t i = 0; i < evidence->ninterface_methods; i++)
                 hash = hash_interface_method_summary(hash, &evidence->interface_methods[i]);
+            for (uint32_t i = 0; i < evidence->nderives; i++)
+                hash = hash_derive_summary(hash, &evidence->derives[i]);
+            for (uint32_t i = 0; i < evidence->nderived_fields; i++)
+                hash = hash_derived_field_summary(hash, &evidence->derived_fields[i]);
+            for (uint32_t i = 0; i < evidence->nderived_methods; i++)
+                hash = hash_derived_method_summary(hash, &evidence->derived_methods[i]);
             break;
         case XG_EVIDENCE_CACHE_BODY_SUMMARY:
             hash = hash_u32(hash, evidence->nbodies);
@@ -1602,10 +1751,12 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     dump_cache_manifest(out, evidence);
     fprintf(out,
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
-            "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u\n",
+            "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u "
+            "derives=%u derived_fields=%u derived_methods=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods, evidence->nbodies,
-            evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts);
+            evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts,
+            evidence->nderives, evidence->nderived_fields, evidence->nderived_methods);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -1711,6 +1862,30 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 inst->root_callsite_id, inst->constraint_interface_id, inst->name_id,
                 inst->type_key, inst->type_arg_key_start, (unsigned) inst->type_arg_count,
                 inst->source_span_id, inst->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nderives; i++) {
+        const XgDeriveSummary *d = &evidence->derives[i];
+        fprintf(out,
+                "derive %u id=%u module=%u decl=%u type=%u kind=%s span=%u fields=%u+%u "
+                "methods=%u+%u flags=0x%x hash=%016" PRIx64 "\n",
+                i, d->derive_id, d->module_id, d->owner_decl_id, d->type_key,
+                xg_derive_kind_name(d->derive_kind), d->source_span_id, d->field_start,
+                (unsigned) d->field_count, d->method_start, (unsigned) d->method_count, d->flags,
+                d->derive_hash);
+    }
+    for (uint32_t i = 0; i < evidence->nderived_fields; i++) {
+        const XgDerivedFieldSummary *f = &evidence->derived_fields[i];
+        fprintf(out,
+                "derived-field %u id=%u derive=%u ord=%u name=%u type=%u source_field=%u "
+                "flags=0x%x\n",
+                i, f->field_id, f->derive_id, (unsigned) f->field_ordinal, f->name_id, f->type_key,
+                f->source_field_id, f->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nderived_methods; i++) {
+        const XgDerivedMethodSummary *m = &evidence->derived_methods[i];
+        fprintf(out, "derived-method %u id=%u derive=%u kind=%s body=%u sig=%u flags=0x%x\n", i,
+                m->method_id, m->derive_id, xg_derived_method_kind_name(m->method_kind),
+                m->generated_body_func_id, m->signature_key, m->flags);
     }
 
     if (ferror(out)) {

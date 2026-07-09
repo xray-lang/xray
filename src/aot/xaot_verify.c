@@ -13,6 +13,7 @@
 #include "../base/xglobal_indices.h"
 #include "../ir/xi_effect.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../shared/xr_derive_flags.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <string.h>
@@ -874,6 +875,158 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
             inst->specialized_func_id == XG_NO_ID && inst->specialized_class_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len,
                              "AOT generic inst specialized ABI target is missing");
+    }
+    return true;
+}
+
+static uint32_t verify_derive_kind_flag(uint8_t kind) {
+    switch ((XgDeriveKind) kind) {
+        case XG_DERIVE_JSON:
+            return XR_DERIVE_JSON;
+        case XG_DERIVE_INSPECT:
+            return XR_DERIVE_INSPECT;
+        case XG_DERIVE_EQ:
+            return XR_DERIVE_EQ;
+        case XG_DERIVE_HASH:
+            return XR_DERIVE_HASH;
+        default:
+            return 0;
+    }
+}
+
+static const XgDeriveSummary *verify_find_derive_by_id(const XgGlobalEvidence *ev,
+                                                       XgDeriveId derive_id) {
+    if (!ev || derive_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        if (ev->derives[i].derive_id == derive_id)
+            return &ev->derives[i];
+    }
+    return NULL;
+}
+
+static bool verify_decl_has_derive_row(const XgGlobalEvidence *ev, XgDeclId decl_id,
+                                       uint8_t derive_kind) {
+    if (!ev || decl_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        const XgDeriveSummary *derive = &ev->derives[i];
+        if (derive->owner_decl_id == decl_id && derive->derive_kind == derive_kind)
+            return true;
+    }
+    return false;
+}
+
+static bool verify_derive_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len, "AOT global evidence derive verifier has no evidence");
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        const XgDeriveSummary *derive = &ev->derives[i];
+        const XgDeclSummary *decl;
+        uint32_t expected_flag;
+        if (derive->derive_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT derive evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nderives; j++) {
+            if (ev->derives[j].derive_id == derive->derive_id)
+                return set_error(errbuf, errbuf_len, "AOT derive evidence id is duplicated");
+            if (ev->derives[j].owner_decl_id == derive->owner_decl_id &&
+                ev->derives[j].derive_kind == derive->derive_kind)
+                return set_error(errbuf, errbuf_len, "AOT derive evidence kind is duplicated");
+        }
+        if (derive->module_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT derive evidence has no module");
+        decl = verify_find_evidence_decl(ev, derive->owner_decl_id);
+        if (!decl)
+            return set_error(errbuf, errbuf_len, "AOT derive owner declaration is missing");
+        expected_flag = verify_derive_kind_flag(derive->derive_kind);
+        if (expected_flag == 0)
+            return set_error(errbuf, errbuf_len, "AOT derive evidence has invalid kind");
+        if ((decl->derive_flags & expected_flag) == 0)
+            return set_error(errbuf, errbuf_len, "AOT derive evidence kind does not re-derive");
+        if ((decl->flags & XG_DECL_DERIVE) == 0)
+            return set_error(errbuf, errbuf_len, "AOT derive evidence owner lacks derive flag");
+        if (derive->type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT derive evidence has no type key");
+        if (derive->field_count == 0 && derive->field_start != 0)
+            return set_error(errbuf, errbuf_len, "AOT derive empty field range is stale");
+        if (derive->field_count != 0) {
+            uint32_t start = derive->field_start;
+            uint32_t end = start + derive->field_count - 1;
+            if (start == 0 || end < start || end > ev->nderived_fields)
+                return set_error(errbuf, errbuf_len, "AOT derive field range is stale");
+            for (uint32_t fi = 0; fi < derive->field_count; fi++) {
+                const XgDerivedFieldSummary *field = &ev->derived_fields[start - 1 + fi];
+                if (field->derive_id != derive->derive_id)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT derive field range owner does not re-derive");
+                if (field->field_ordinal != fi)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT derive field ordinal does not re-derive");
+            }
+        }
+        if (derive->method_count == 0 && derive->method_start != 0)
+            return set_error(errbuf, errbuf_len, "AOT derive empty method range is stale");
+        if (derive->method_count != 0) {
+            uint32_t start = derive->method_start;
+            uint32_t end = start + derive->method_count - 1;
+            if (start == 0 || end < start || end > ev->nderived_methods)
+                return set_error(errbuf, errbuf_len, "AOT derive method range is stale");
+            for (uint32_t mi = 0; mi < derive->method_count; mi++) {
+                const XgDerivedMethodSummary *method = &ev->derived_methods[start - 1 + mi];
+                if (method->derive_id != derive->derive_id)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT derive method range owner does not re-derive");
+            }
+        }
+    }
+    for (uint32_t i = 0; i < ev->nderived_fields; i++) {
+        const XgDerivedFieldSummary *field = &ev->derived_fields[i];
+        if (field->field_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT derived field evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nderived_fields; j++) {
+            if (ev->derived_fields[j].field_id == field->field_id)
+                return set_error(errbuf, errbuf_len, "AOT derived field evidence id is duplicated");
+        }
+        if (!verify_find_derive_by_id(ev, field->derive_id))
+            return set_error(errbuf, errbuf_len, "AOT derived field owner derive is missing");
+    }
+    for (uint32_t i = 0; i < ev->nderived_methods; i++) {
+        const XgDerivedMethodSummary *method = &ev->derived_methods[i];
+        if (method->method_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT derived method evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nderived_methods; j++) {
+            if (ev->derived_methods[j].method_id == method->method_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT derived method evidence id is duplicated");
+        }
+        if (!verify_find_derive_by_id(ev, method->derive_id))
+            return set_error(errbuf, errbuf_len, "AOT derived method owner derive is missing");
+        switch ((XgDerivedMethodKind) method->method_kind) {
+            case XG_DERIVED_METHOD_JSON_ENCODE:
+            case XG_DERIVED_METHOD_INSPECT_FORMAT:
+            case XG_DERIVED_METHOD_EQ:
+            case XG_DERIVED_METHOD_HASH:
+            case XG_DERIVED_METHOD_CLONE:
+                break;
+            default:
+                return set_error(errbuf, errbuf_len,
+                                 "AOT derived method evidence has invalid kind");
+        }
+    }
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if ((decl->derive_flags & XR_DERIVE_JSON) != 0 &&
+            !verify_decl_has_derive_row(ev, decl->decl_id, XG_DERIVE_JSON))
+            return set_error(errbuf, errbuf_len, "AOT Json derive row is missing");
+        if ((decl->derive_flags & XR_DERIVE_INSPECT) != 0 &&
+            !verify_decl_has_derive_row(ev, decl->decl_id, XG_DERIVE_INSPECT))
+            return set_error(errbuf, errbuf_len, "AOT Inspect derive row is missing");
+        if ((decl->derive_flags & XR_DERIVE_EQ) != 0 &&
+            !verify_decl_has_derive_row(ev, decl->decl_id, XG_DERIVE_EQ))
+            return set_error(errbuf, errbuf_len, "AOT Eq derive row is missing");
+        if ((decl->derive_flags & XR_DERIVE_HASH) != 0 &&
+            !verify_decl_has_derive_row(ev, decl->decl_id, XG_DERIVE_HASH))
+            return set_error(errbuf, errbuf_len, "AOT Hash derive row is missing");
     }
     return true;
 }
@@ -2312,6 +2465,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
         return false;
     if (!verify_generic_inst_rows(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_derive_rows(ev, errbuf, errbuf_len))
         return false;
 
     for (uint32_t di = 0; di < ev->ndecls; di++) {
