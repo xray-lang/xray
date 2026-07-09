@@ -1031,6 +1031,67 @@ static bool verify_derive_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
     return true;
 }
 
+static bool verify_json_shape_kind_valid(uint8_t kind) {
+    switch ((XgJsonShapeKind) kind) {
+        case XG_JSON_SHAPE_OPEN:
+        case XG_JSON_SHAPE_SHAPED:
+        case XG_JSON_SHAPE_RECORD_COMPAT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_json_access_kind_valid(uint8_t kind) {
+    switch ((XgJsonAccessKind) kind) {
+        case XG_JSON_ACCESS_FIELD_GET:
+        case XG_JSON_ACCESS_FIELD_SET:
+        case XG_JSON_ACCESS_INDEX_GET:
+        case XG_JSON_ACCESS_INDEX_SET:
+        case XG_JSON_ACCESS_GET_DEFAULT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len, "AOT global evidence Json verifier has no evidence");
+    for (uint32_t i = 0; i < ev->njson_shapes; i++) {
+        const XgJsonShapeSummary *shape = &ev->json_shapes[i];
+        if (shape->json_shape_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Json shape evidence has no id");
+        if (!verify_json_shape_kind_valid(shape->shape_kind))
+            return set_error(errbuf, errbuf_len, "AOT Json shape evidence has invalid kind");
+        for (uint32_t j = i + 1; j < ev->njson_shapes; j++) {
+            if (ev->json_shapes[j].json_shape_id == shape->json_shape_id)
+                return set_error(errbuf, errbuf_len, "AOT Json shape evidence id is duplicated");
+        }
+    }
+    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
+        const XgJsonAccessSummary *access = &ev->json_accesses[i];
+        const XgJsonShapeSummary *shape;
+        if (access->json_access_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Json access evidence has no id");
+        if (!verify_json_access_kind_valid(access->access_kind))
+            return set_error(errbuf, errbuf_len, "AOT Json access evidence has invalid kind");
+        for (uint32_t j = i + 1; j < ev->njson_accesses; j++) {
+            if (ev->json_accesses[j].json_access_id == access->json_access_id)
+                return set_error(errbuf, errbuf_len, "AOT Json access evidence id is duplicated");
+        }
+        if (access->receiver_shape_id == XG_NO_ID)
+            continue;
+        shape = xg_global_evidence_find_json_shape(ev, access->receiver_shape_id);
+        if (!shape)
+            return set_error(errbuf, errbuf_len, "AOT Json access references missing shape");
+        if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) == 0 &&
+            access->key_name_id != 0 && access->field_ordinal >= shape->field_count)
+            return set_error(errbuf, errbuf_len, "AOT Json access field ordinal is stale");
+    }
+    return true;
+}
+
 static bool verify_class_method_range_contains(const XgGlobalEvidence *ev,
                                                const XgClassSummary *cls,
                                                const XgMethodSummary *method) {
@@ -2514,6 +2575,126 @@ static bool verify_derive_plan_rederives(const XgGlobalEvidence *ev, const XaotD
     return true;
 }
 
+static uint8_t verify_json_shape_action_for(const XgJsonShapeSummary *shape) {
+    if (!shape)
+        return XAOT_JSON_SHAPE_REJECT;
+    switch ((XgJsonShapeKind) shape->shape_kind) {
+        case XG_JSON_SHAPE_OPEN:
+            return XAOT_JSON_SHAPE_OPEN_DYNAMIC;
+        case XG_JSON_SHAPE_SHAPED:
+            return XAOT_JSON_SHAPE_HIDDEN_CLASS;
+        case XG_JSON_SHAPE_RECORD_COMPAT:
+            return XAOT_JSON_SHAPE_RECORD_COMPAT;
+        default:
+            return XAOT_JSON_SHAPE_REJECT;
+    }
+}
+
+static uint8_t verify_json_shape_reason_for(const XgJsonShapeSummary *shape) {
+    return shape && verify_json_shape_kind_valid(shape->shape_kind) ? XAOT_JSON_UNPROVEN_NONE
+                                                                    : XAOT_JSON_UNPROVEN_INVALID_KIND;
+}
+
+static uint32_t verify_json_shape_evidence_for(const XgJsonShapeSummary *shape) {
+    uint32_t evidence = XAOT_JSON_EV_GLOBAL_ROW;
+    if (!shape)
+        return evidence;
+    if ((shape->flags & XG_JSON_SHAPE_STATIC_KEYS) != 0)
+        evidence |= XAOT_JSON_EV_STATIC_KEY;
+    if ((shape->flags & XG_JSON_SHAPE_RECORD_COMPATIBLE) != 0 ||
+        shape->shape_kind == XG_JSON_SHAPE_RECORD_COMPAT)
+        evidence |= XAOT_JSON_EV_RECORD_COMPAT;
+    return evidence;
+}
+
+static bool verify_json_shape_plan_rederives(const XaotJsonShapePlan *plan,
+                                             const XgJsonShapeSummary *shape, char *errbuf,
+                                             size_t errbuf_len) {
+    if (!plan || !shape)
+        return set_error(errbuf, errbuf_len, "AOT Json shape verifier has incomplete input");
+    if (plan->json_shape_id != shape->json_shape_id || plan->module_id != shape->module_id ||
+        plan->owner_func_id != shape->owner_func_id || plan->type_key != shape->type_key ||
+        plan->field_name_start != shape->field_name_start ||
+        plan->field_count != shape->field_count || plan->shape_kind != shape->shape_kind ||
+        plan->shape_hash != shape->shape_hash)
+        return set_error(errbuf, errbuf_len, "AOT Json shape plan identity does not re-derive");
+    if (plan->action != verify_json_shape_action_for(shape) ||
+        plan->unproven_reason != verify_json_shape_reason_for(shape))
+        return set_error(errbuf, errbuf_len, "AOT Json shape plan action does not re-derive");
+    if (plan->evidence != verify_json_shape_evidence_for(shape))
+        return set_error(errbuf, errbuf_len, "AOT Json shape plan evidence does not re-derive");
+    return true;
+}
+
+static uint8_t verify_json_access_action_for(const XgGlobalEvidence *ev,
+                                             const XgJsonAccessSummary *access) {
+    const XgJsonShapeSummary *shape;
+    if (!access || !verify_json_access_kind_valid(access->access_kind))
+        return XAOT_JSON_ACCESS_REJECT;
+    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || access->key_name_id == 0)
+        return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+    if (access->receiver_shape_id == XG_NO_ID)
+        return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+    shape = xg_global_evidence_find_json_shape(ev, access->receiver_shape_id);
+    if (!shape || access->field_ordinal >= shape->field_count)
+        return XAOT_JSON_ACCESS_REJECT;
+    return (access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
+               ? XAOT_JSON_ACCESS_DIRECT_INDEX
+               : XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX;
+}
+
+static uint8_t verify_json_access_reason_for(const XgGlobalEvidence *ev,
+                                             const XgJsonAccessSummary *access) {
+    const XgJsonShapeSummary *shape;
+    if (!access || !verify_json_access_kind_valid(access->access_kind))
+        return XAOT_JSON_UNPROVEN_INVALID_KIND;
+    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || access->key_name_id == 0)
+        return XAOT_JSON_UNPROVEN_COMPUTED_KEY;
+    if (access->receiver_shape_id == XG_NO_ID)
+        return XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
+    shape = xg_global_evidence_find_json_shape(ev, access->receiver_shape_id);
+    if (!shape || access->field_ordinal >= shape->field_count)
+        return XAOT_JSON_UNPROVEN_STALE_SHAPE;
+    return XAOT_JSON_UNPROVEN_NONE;
+}
+
+static uint32_t verify_json_access_evidence_for(const XgGlobalEvidence *ev,
+                                                const XgJsonAccessSummary *access) {
+    const XgJsonShapeSummary *shape;
+    uint32_t evidence = XAOT_JSON_EV_GLOBAL_ROW;
+    if (!access)
+        return evidence;
+    if ((access->flags & XG_JSON_ACCESS_STATIC_KEY) != 0 && access->key_name_id != 0)
+        evidence |= XAOT_JSON_EV_STATIC_KEY;
+    if (access->receiver_shape_id != XG_NO_ID)
+        evidence |= XAOT_JSON_EV_RECEIVER_SHAPE;
+    shape = xg_global_evidence_find_json_shape(ev, access->receiver_shape_id);
+    if (shape && access->field_ordinal < shape->field_count)
+        evidence |= XAOT_JSON_EV_FIELD_INDEX;
+    return evidence;
+}
+
+static bool verify_json_access_plan_rederives(const XgGlobalEvidence *ev,
+                                              const XaotJsonAccessPlan *plan,
+                                              const XgJsonAccessSummary *access, char *errbuf,
+                                              size_t errbuf_len) {
+    if (!ev || !plan || !access)
+        return set_error(errbuf, errbuf_len, "AOT Json access verifier has incomplete input");
+    if (plan->json_access_id != access->json_access_id || plan->module_id != access->module_id ||
+        plan->owner_func_id != access->owner_func_id ||
+        plan->receiver_shape_id != access->receiver_shape_id ||
+        plan->key_name_id != access->key_name_id ||
+        plan->result_type_key != access->result_type_key ||
+        plan->field_ordinal != access->field_ordinal || plan->access_kind != access->access_kind)
+        return set_error(errbuf, errbuf_len, "AOT Json access plan identity does not re-derive");
+    if (plan->action != verify_json_access_action_for(ev, access) ||
+        plan->unproven_reason != verify_json_access_reason_for(ev, access))
+        return set_error(errbuf, errbuf_len, "AOT Json access plan action does not re-derive");
+    if (plan->evidence != verify_json_access_evidence_for(ev, access))
+        return set_error(errbuf, errbuf_len, "AOT Json access plan evidence does not re-derive");
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -2529,6 +2710,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_generic_specialization_plans = 0;
     uint32_t expected_generic_instantiation_plans = 0;
     uint32_t expected_derive_plans = 0;
+    uint32_t expected_json_shape_plans = 0;
+    uint32_t expected_json_access_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -2551,6 +2734,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (!verify_generic_inst_rows(ev, errbuf, errbuf_len))
         return false;
     if (!verify_derive_rows(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_json_rows(ev, errbuf, errbuf_len))
         return false;
 
     for (uint32_t di = 0; di < ev->ndecls; di++) {
@@ -2764,6 +2949,32 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nderive_plans != expected_derive_plans)
         return set_error(errbuf, errbuf_len, "AOT derive plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->njson_shapes; i++) {
+        const XgJsonShapeSummary *shape = &ev->json_shapes[i];
+        const XaotJsonShapePlan *plan;
+        expected_json_shape_plans++;
+        plan = xaot_bundle_find_json_shape_plan(bundle, shape->json_shape_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Json shape evidence has no shape plan");
+        if (!verify_json_shape_plan_rederives(plan, shape, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->njson_shape_plans != expected_json_shape_plans)
+        return set_error(errbuf, errbuf_len, "AOT Json shape plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
+        const XgJsonAccessSummary *access = &ev->json_accesses[i];
+        const XaotJsonAccessPlan *plan;
+        expected_json_access_plans++;
+        plan = xaot_bundle_find_json_access_plan(bundle, access->json_access_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Json access evidence has no access plan");
+        if (!verify_json_access_plan_rederives(ev, plan, access, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->njson_access_plans != expected_json_access_plans)
+        return set_error(errbuf, errbuf_len, "AOT Json access plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];

@@ -204,6 +204,16 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nderive_plans = 0;
     bundle->derive_plan_cap = 0;
 
+    xr_free(bundle->json_shape_plans);
+    bundle->json_shape_plans = NULL;
+    bundle->njson_shape_plans = 0;
+    bundle->json_shape_plan_cap = 0;
+
+    xr_free(bundle->json_access_plans);
+    bundle->json_access_plans = NULL;
+    bundle->njson_access_plans = 0;
+    bundle->json_access_plan_cap = 0;
+
     xr_free(bundle->metadata_plans);
     bundle->metadata_plans = NULL;
     bundle->nmetadata_plans = 0;
@@ -1174,6 +1184,177 @@ static bool xaot_bundle_add_derive_plans(XaotBundle *bundle, const XgGlobalEvide
     return true;
 }
 
+static uint8_t json_shape_action_for(const XgJsonShapeSummary *shape) {
+    if (!shape)
+        return XAOT_JSON_SHAPE_REJECT;
+    switch ((XgJsonShapeKind) shape->shape_kind) {
+        case XG_JSON_SHAPE_OPEN:
+            return XAOT_JSON_SHAPE_OPEN_DYNAMIC;
+        case XG_JSON_SHAPE_SHAPED:
+            return XAOT_JSON_SHAPE_HIDDEN_CLASS;
+        case XG_JSON_SHAPE_RECORD_COMPAT:
+            return XAOT_JSON_SHAPE_RECORD_COMPAT;
+        default:
+            return XAOT_JSON_SHAPE_REJECT;
+    }
+}
+
+static uint8_t json_shape_reason_for(const XgJsonShapeSummary *shape) {
+    if (!shape)
+        return XAOT_JSON_UNPROVEN_INVALID_KIND;
+    switch ((XgJsonShapeKind) shape->shape_kind) {
+        case XG_JSON_SHAPE_OPEN:
+        case XG_JSON_SHAPE_SHAPED:
+        case XG_JSON_SHAPE_RECORD_COMPAT:
+            return XAOT_JSON_UNPROVEN_NONE;
+        default:
+            return XAOT_JSON_UNPROVEN_INVALID_KIND;
+    }
+}
+
+static uint32_t json_shape_evidence_for(const XgJsonShapeSummary *shape) {
+    uint32_t evidence = XAOT_JSON_EV_GLOBAL_ROW;
+    if (!shape)
+        return evidence;
+    if ((shape->flags & XG_JSON_SHAPE_STATIC_KEYS) != 0)
+        evidence |= XAOT_JSON_EV_STATIC_KEY;
+    if ((shape->flags & XG_JSON_SHAPE_RECORD_COMPATIBLE) != 0 ||
+        shape->shape_kind == XG_JSON_SHAPE_RECORD_COMPAT)
+        evidence |= XAOT_JSON_EV_RECORD_COMPAT;
+    return evidence;
+}
+
+static bool xaot_bundle_add_json_shape_plan(XaotBundle *bundle,
+                                            const XgJsonShapeSummary *shape) {
+    XaotJsonShapePlan *plan;
+    if (!bundle || !shape)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->json_shape_plans, &bundle->json_shape_plan_cap,
+                            bundle->njson_shape_plans + 1, sizeof(XaotJsonShapePlan), 8))
+        return false;
+    plan = &bundle->json_shape_plans[bundle->njson_shape_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->json_shape_id = shape->json_shape_id;
+    plan->module_id = shape->module_id;
+    plan->owner_func_id = shape->owner_func_id;
+    plan->type_key = shape->type_key;
+    plan->field_name_start = shape->field_name_start;
+    plan->field_count = shape->field_count;
+    plan->shape_kind = shape->shape_kind;
+    plan->action = json_shape_action_for(shape);
+    plan->evidence = json_shape_evidence_for(shape);
+    plan->unproven_reason = json_shape_reason_for(shape);
+    plan->shape_hash = shape->shape_hash;
+    return true;
+}
+
+static bool xaot_bundle_add_json_shape_plans(XaotBundle *bundle,
+                                             const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->njson_shapes; i++) {
+        if (!xaot_bundle_add_json_shape_plan(bundle, &evidence->json_shapes[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool json_access_kind_valid(uint8_t kind) {
+    switch ((XgJsonAccessKind) kind) {
+        case XG_JSON_ACCESS_FIELD_GET:
+        case XG_JSON_ACCESS_FIELD_SET:
+        case XG_JSON_ACCESS_INDEX_GET:
+        case XG_JSON_ACCESS_INDEX_SET:
+        case XG_JSON_ACCESS_GET_DEFAULT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t json_access_action_for(const XgGlobalEvidence *evidence,
+                                      const XgJsonAccessSummary *access) {
+    const XgJsonShapeSummary *shape;
+    if (!access || !json_access_kind_valid(access->access_kind))
+        return XAOT_JSON_ACCESS_REJECT;
+    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || access->key_name_id == 0)
+        return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+    if (access->receiver_shape_id == XG_NO_ID)
+        return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+    shape = xg_global_evidence_find_json_shape(evidence, access->receiver_shape_id);
+    if (!shape || access->field_ordinal >= shape->field_count)
+        return XAOT_JSON_ACCESS_REJECT;
+    return (access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
+               ? XAOT_JSON_ACCESS_DIRECT_INDEX
+               : XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX;
+}
+
+static uint8_t json_access_reason_for(const XgGlobalEvidence *evidence,
+                                      const XgJsonAccessSummary *access) {
+    const XgJsonShapeSummary *shape;
+    if (!access || !json_access_kind_valid(access->access_kind))
+        return XAOT_JSON_UNPROVEN_INVALID_KIND;
+    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || access->key_name_id == 0)
+        return XAOT_JSON_UNPROVEN_COMPUTED_KEY;
+    if (access->receiver_shape_id == XG_NO_ID)
+        return XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
+    shape = xg_global_evidence_find_json_shape(evidence, access->receiver_shape_id);
+    if (!shape || access->field_ordinal >= shape->field_count)
+        return XAOT_JSON_UNPROVEN_STALE_SHAPE;
+    return XAOT_JSON_UNPROVEN_NONE;
+}
+
+static uint32_t json_access_evidence_for(const XgGlobalEvidence *evidence,
+                                         const XgJsonAccessSummary *access) {
+    const XgJsonShapeSummary *shape;
+    uint32_t evidence_bits = XAOT_JSON_EV_GLOBAL_ROW;
+    if (!access)
+        return evidence_bits;
+    if ((access->flags & XG_JSON_ACCESS_STATIC_KEY) != 0 && access->key_name_id != 0)
+        evidence_bits |= XAOT_JSON_EV_STATIC_KEY;
+    if (access->receiver_shape_id != XG_NO_ID)
+        evidence_bits |= XAOT_JSON_EV_RECEIVER_SHAPE;
+    shape = xg_global_evidence_find_json_shape(evidence, access->receiver_shape_id);
+    if (shape && access->field_ordinal < shape->field_count)
+        evidence_bits |= XAOT_JSON_EV_FIELD_INDEX;
+    return evidence_bits;
+}
+
+static bool xaot_bundle_add_json_access_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                             const XgJsonAccessSummary *access) {
+    XaotJsonAccessPlan *plan;
+    if (!bundle || !evidence || !access)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->json_access_plans, &bundle->json_access_plan_cap,
+                            bundle->njson_access_plans + 1, sizeof(XaotJsonAccessPlan), 8))
+        return false;
+    plan = &bundle->json_access_plans[bundle->njson_access_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->json_access_id = access->json_access_id;
+    plan->module_id = access->module_id;
+    plan->owner_func_id = access->owner_func_id;
+    plan->receiver_shape_id = access->receiver_shape_id;
+    plan->key_name_id = access->key_name_id;
+    plan->result_type_key = access->result_type_key;
+    plan->field_ordinal = access->field_ordinal;
+    plan->access_kind = access->access_kind;
+    plan->action = json_access_action_for(evidence, access);
+    plan->evidence = json_access_evidence_for(evidence, access);
+    plan->unproven_reason = json_access_reason_for(evidence, access);
+    return true;
+}
+
+static bool xaot_bundle_add_json_access_plans(XaotBundle *bundle,
+                                              const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->njson_accesses; i++) {
+        if (!xaot_bundle_add_json_access_plan(bundle, evidence, &evidence->json_accesses[i]))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
     if (profile == XG_BUILD_FREESTANDING) {
         switch (metadata) {
@@ -1519,6 +1700,14 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_derive_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT derive plan";
+        return false;
+    }
+    if (!xaot_bundle_add_json_shape_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT Json shape plan";
+        return false;
+    }
+    if (!xaot_bundle_add_json_access_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT Json access plan";
         return false;
     }
     if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
@@ -2049,6 +2238,28 @@ XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bun
     for (uint32_t i = 0; i < bundle->nderive_plans; i++) {
         if (bundle->derive_plans[i].derive_id == derive_id)
             return &bundle->derive_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotJsonShapePlan *
+xaot_bundle_find_json_shape_plan(const XaotBundle *bundle, XgJsonShapeId json_shape_id) {
+    if (!bundle || json_shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->njson_shape_plans; i++) {
+        if (bundle->json_shape_plans[i].json_shape_id == json_shape_id)
+            return &bundle->json_shape_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotJsonAccessPlan *
+xaot_bundle_find_json_access_plan(const XaotBundle *bundle, XgJsonAccessId json_access_id) {
+    if (!bundle || json_access_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->njson_access_plans; i++) {
+        if (bundle->json_access_plans[i].json_access_id == json_access_id)
+            return &bundle->json_access_plans[i];
     }
     return NULL;
 }
@@ -3158,6 +3369,53 @@ static const char *derive_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *json_shape_action_name(uint8_t action) {
+    switch ((XaotJsonShapeAction) action) {
+        case XAOT_JSON_SHAPE_OPEN_DYNAMIC:
+            return "open_dynamic";
+        case XAOT_JSON_SHAPE_HIDDEN_CLASS:
+            return "hidden_class";
+        case XAOT_JSON_SHAPE_RECORD_COMPAT:
+            return "record_compat";
+        case XAOT_JSON_SHAPE_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *json_access_action_name(uint8_t action) {
+    switch ((XaotJsonAccessAction) action) {
+        case XAOT_JSON_ACCESS_DIRECT_INDEX:
+            return "direct_index";
+        case XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX:
+            return "shape_guard_index";
+        case XAOT_JSON_ACCESS_DYNAMIC_LOOKUP:
+            return "dynamic_lookup";
+        case XAOT_JSON_ACCESS_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *json_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_JSON_UNPROVEN_NONE:
+            return "none";
+        case XAOT_JSON_UNPROVEN_COMPUTED_KEY:
+            return "computed_key";
+        case XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN:
+            return "receiver_shape_unknown";
+        case XAOT_JSON_UNPROVEN_STALE_SHAPE:
+            return "stale_shape";
+        case XAOT_JSON_UNPROVEN_INVALID_KIND:
+            return "invalid_kind";
+        default:
+            return "unknown";
+    }
+}
+
 static const char *static_data_action_name(uint32_t action) {
     switch ((XaotStaticDataAction) action) {
         case XAOT_STATIC_DATA_ACTION_PROVE:
@@ -3825,6 +4083,29 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 dp->field_start, (unsigned) dp->field_count, dp->method_start,
                 (unsigned) dp->method_count, dp->sidecar_index, dp->generated_body_func_id,
                 dp->evidence, derive_unproven_reason_name(dp->unproven_reason));
+    }
+
+    for (uint32_t ji = 0; ji < bundle->njson_shape_plans; ji++) {
+        const XaotJsonShapePlan *jp = &bundle->json_shape_plans[ji];
+        fprintf(out,
+                "json-shape-plan %u id=%u module=%u func=%u type=%u kind=%s action=%s "
+                "fields=%u+%u hash=%016" PRIx64 " evidence=0x%x reason=%s\n",
+                ji, jp->json_shape_id, jp->module_id, jp->owner_func_id, jp->type_key,
+                xg_json_shape_kind_name(jp->shape_kind), json_shape_action_name(jp->action),
+                jp->field_name_start, (unsigned) jp->field_count, jp->shape_hash, jp->evidence,
+                json_unproven_reason_name(jp->unproven_reason));
+    }
+
+    for (uint32_t ji = 0; ji < bundle->njson_access_plans; ji++) {
+        const XaotJsonAccessPlan *jp = &bundle->json_access_plans[ji];
+        fprintf(out,
+                "json-access-plan %u id=%u module=%u func=%u shape=%u kind=%s action=%s "
+                "key=%u result_type=%u field=%u evidence=0x%x reason=%s\n",
+                ji, jp->json_access_id, jp->module_id, jp->owner_func_id,
+                jp->receiver_shape_id, xg_json_access_kind_name(jp->access_kind),
+                json_access_action_name(jp->action), jp->key_name_id, jp->result_type_key,
+                (unsigned) jp->field_ordinal, jp->evidence,
+                json_unproven_reason_name(jp->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {
