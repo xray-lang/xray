@@ -1,0 +1,7 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_datetime_tostring_reject' allocates via call 'toString'
+contains=@no_alloc function 'xray_no_alloc_datetime_format_reject' allocates via call 'format'
+contains=@no_alloc function 'xray_no_alloc_datetime_add_reject' allocates via call 'add'
+contains=@no_alloc function 'xray_no_alloc_datetime_toutc_reject' allocates via call 'toUTC'
+contains=@no_alloc function 'xray_no_alloc_datetime_tolocal_reject' allocates via call 'toLocal'
+not_contains=CRASH

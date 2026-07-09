@@ -1,0 +1,8 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_json_values_reject' allocates via method 'Json.values'
+contains=@no_alloc function 'xray_no_alloc_json_entries_reject' allocates via method 'Json.entries'
+contains=@no_alloc function 'xray_no_alloc_json_iterator_reject' allocates via method 'Json.iterator'
+contains=@no_alloc function 'xray_no_alloc_json_entries_iterator_reject' allocates via method 'Json.entriesIterator'
+contains=@no_alloc function 'xray_no_alloc_json_tostring_reject' allocates via method 'Json.toString'
+contains=@no_alloc function 'xray_no_alloc_range_values_reject' allocates via method 'Range.values'
+not_contains=CRASH

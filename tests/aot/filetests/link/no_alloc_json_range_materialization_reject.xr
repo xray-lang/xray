@@ -1,0 +1,38 @@
+@no_alloc
+fn xray_no_alloc_json_values_reject(value: Json) -> int {
+    return value.values().length
+}
+
+@no_alloc
+fn xray_no_alloc_json_entries_reject(value: Json) -> int {
+    return value.entries().length
+}
+
+@no_alloc
+fn xray_no_alloc_json_iterator_reject(value: Json) -> bool {
+    return value.iterator().hasNext()
+}
+
+@no_alloc
+fn xray_no_alloc_json_entries_iterator_reject(value: Json) -> bool {
+    return value.entriesIterator().hasNext()
+}
+
+@no_alloc
+fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
+    return value.toString()
+}
+
+@no_alloc
+fn xray_no_alloc_range_values_reject(value: Range) -> int {
+    return value.values().length
+}
+
+var xray_no_alloc_json_range_obj: Json = { answer: 42, label: "edge" }
+
+print(xray_no_alloc_json_values_reject(xray_no_alloc_json_range_obj))
+print(xray_no_alloc_json_entries_reject(xray_no_alloc_json_range_obj))
+print(xray_no_alloc_json_iterator_reject(xray_no_alloc_json_range_obj))
+print(xray_no_alloc_json_entries_iterator_reject(xray_no_alloc_json_range_obj))
+print(xray_no_alloc_json_tostring_reject(xray_no_alloc_json_range_obj))
+print(xray_no_alloc_range_values_reject(1..4))

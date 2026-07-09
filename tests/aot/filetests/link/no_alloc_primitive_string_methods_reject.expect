@@ -1,0 +1,7 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_int_tostring_reject' allocates via method 'int.toString'
+contains=@no_alloc function 'xray_no_alloc_int_tohex_reject' allocates via method 'int.toHex'
+contains=@no_alloc function 'xray_no_alloc_float_tostring_reject' allocates via method 'float.toString'
+contains=@no_alloc function 'xray_no_alloc_bool_tostring_reject' allocates via method 'bool.toString'
+contains=@no_alloc function 'xray_no_alloc_char_tostring_reject' allocates via method 'char.toString'
+not_contains=CRASH

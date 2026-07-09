@@ -3695,6 +3695,24 @@ static bool cg_no_alloc_find_direct_alloc(XiCgenCtx *ctx, const XiFunc *f,
     return false;
 }
 
+static const XiFunc *cg_no_alloc_dispatch_call_target(XiCgenCtx *ctx, const XiValue *call) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotMethodDispatchPlan *plan = NULL;
+    const XaotDispatchTargetCase *target = NULL;
+    if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT))
+        return NULL;
+
+    plan = xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, call);
+    if (!plan && call->xg_callsite_id != XG_NO_ID)
+        plan = xaot_bundle_find_method_dispatch_plan(bundle, call->xg_callsite_id);
+    if (!plan || plan->target_count != 1 || plan->target_start == 0 ||
+        plan->target_start - 1 >= bundle->ndispatch_target_cases)
+        return NULL;
+
+    target = &bundle->dispatch_target_cases[plan->target_start - 1];
+    return xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+}
+
 static const XiFunc *cg_no_alloc_call_target(XiCgenCtx *ctx, const XiFunc *current,
                                              const XiValue *call) {
     if (!ctx || !current || !call)
@@ -3705,6 +3723,9 @@ static const XiFunc *cg_no_alloc_call_target(XiCgenCtx *ctx, const XiFunc *curre
         return static_call.is_class_constructor ? NULL : static_call.func;
     }
     if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) && call->nargs >= 1) {
+        const XiFunc *dispatch_target = cg_no_alloc_dispatch_call_target(ctx, call);
+        if (dispatch_target)
+            return dispatch_target;
         const char *method = (const char *) call->aux;
         if (method) {
             CgStaticFunctionCall module_call =
