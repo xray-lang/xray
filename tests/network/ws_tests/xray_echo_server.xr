@@ -18,7 +18,7 @@ print("Mode: pure echo (zero-copy)")
 print("")
 
 ws.serve(port, fn(conn) {
-    while (ws.isOpen(conn)) {
+    while (true) {
         var msg = ws.recv(conn, null)
         if (msg == null || msg.error) {
             break

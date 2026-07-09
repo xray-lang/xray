@@ -544,7 +544,7 @@ static XrCFuncResult ws_send_continue(XrVMRuntime *X, int status, XrValue resume
 static XrCFuncResult ws_send_step(XrVMRuntime *X, WsSendState *state, XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
-    if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
+    if (!ws || ws->state != WS_STATE_OPEN) {
         if (state->data_owned && state->data)
             xr_free(state->data);
         xr_free(state);
@@ -615,7 +615,7 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     int id = (int) XR_TO_INT(id_val);
     XrWebSocket *ws = get_ws_from_ctx(ctx, id);
 
-    if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
+    if (!ws || ws->state != WS_STATE_OPEN) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
@@ -724,7 +724,7 @@ static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *w
         xr_ws_message_free(msg);
     } else {
         const char *err_msg =
-            (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) ? "Connection closed" : "Receive failed";
+            (!ws || ws->state != WS_STATE_OPEN) ? "Connection closed" : "Receive failed";
         error_val = xrs_string_value_c(X, err_msg);
     }
 
@@ -766,7 +766,7 @@ static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *r
         return XR_CFUNC_DONE;
     }
 
-    if (xr_ws_get_state(ws) != WS_STATE_OPEN) {
+    if (ws->state != WS_STATE_OPEN) {
         *result = make_recv_result(X, ctx, ws, NULL);
         xr_free(state);
         return XR_CFUNC_DONE;
@@ -840,7 +840,7 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     }
 
     // Fast path: try recv without allocating state or yielding
-    if (xr_ws_get_state(ws) == WS_STATE_OPEN) {
+    if (ws->state == WS_STATE_OPEN) {
         bool need_more = false;
         XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
 
@@ -984,71 +984,6 @@ static XrValue ws_ping(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     return xr_bool(xr_ws_ping(ws) == WS_OK);
-}
-
-/*
- * ws.state(conn: Json) -> string
- *
- * Get connection state: "connecting", "open", "closing", "closed"
- */
-static XrValue ws_state(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_json(args[0])) {
-        return xrs_string_value_c(X, "closed");
-    }
-
-    XrWsContext *ctx = get_ws_context(X);
-    if (!ctx)
-        return xrs_string_value_c(X, "closed");
-
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
-
-    if (!XR_IS_INT(id_val))
-        return xrs_string_value_c(X, "closed");
-
-    XrWebSocket *ws = get_ws_from_ctx(ctx, (int) XR_TO_INT(id_val));
-    if (!ws)
-        return xrs_string_value_c(X, "closed");
-
-    switch (xr_ws_get_state(ws)) {
-        case WS_STATE_CONNECTING:
-            return xrs_string_value_c(X, "connecting");
-        case WS_STATE_OPEN:
-            return xrs_string_value_c(X, "open");
-        case WS_STATE_CLOSING:
-            return xrs_string_value_c(X, "closing");
-        case WS_STATE_CLOSED:
-            return xrs_string_value_c(X, "closed");
-        default:
-            return xrs_string_value_c(X, "unknown");
-    }
-}
-
-/*
- * ws.isOpen(conn: Json) -> bool
- *
- * Check if connection is open.
- */
-static XrValue ws_is_open(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_json(args[0])) {
-        return xr_bool(false);
-    }
-
-    XrWsContext *ctx = get_ws_context(X);
-    if (!ctx)
-        return xr_bool(false);
-
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
-
-    if (!XR_IS_INT(id_val))
-        return xr_bool(false);
-
-    XrWebSocket *ws = get_ws_from_ctx(ctx, (int) XR_TO_INT(id_val));
-    if (!ws)
-        return xr_bool(false);
-
-    return xr_bool(xr_ws_get_state(ws) == WS_STATE_OPEN);
 }
 
 /* ========== WebSocket Server API Implementation ========== */

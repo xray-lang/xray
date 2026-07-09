@@ -22,7 +22,7 @@ go fn() {
     ws.serve(8766, fn(conn) {
         print("[Server] Client connected")
         
-        while (ws.isOpen(conn)) {
+        while (true) {
             var msg = ws.recv(conn, null)
             if (msg == null || msg.error) {
                 break

@@ -3629,28 +3629,6 @@ module ws {
     layer: "runtime"
   }
 
-  fn state {
-    signature: "(conn: WsConn): string"
-    doc: "Get connection state"
-    vm: "ws_state"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn isOpen {
-    signature: "(conn: WsConn): bool"
-    doc: "Check if connection is open"
-    vm: "ws_is_open"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn serve {
     signature: "(port: int, handler: fn(conn: WsConn): ()): bool"
     doc: "Start WebSocket server"

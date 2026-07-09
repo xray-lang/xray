@@ -28,7 +28,7 @@ fn test_connect() {
         report("C1 connect", false, conn!.error)
         return
     }
-    var open = ws.isOpen(conn)
+    var open = conn.state == "open"
     ws.close(conn, null, null)
     report("C1 connect", open, null)
 }
@@ -70,22 +70,21 @@ fn test_multiple_messages() {
            success.toString() + "/" + count.toString())
 }
 
-// C4: State API
-fn test_state_api() {
+// C4: Connection result state field
+fn test_connection_state_field() {
     var conn = ws.connect(URL, null)
     if (conn!.error) {
-        report("C4 state API", false, conn!.error)
+        report("C4 state field", false, conn!.error)
         return
     }
-    var s1 = ws.state(conn) == "open"
-    var s2 = ws.isOpen(conn)
-    var s3 = !ws.hasError(conn)
+    var s1 = conn.state == "open"
+    var s2 = conn.error == null
     ws.close(conn, null, null)
-    var ok = s1 && s2 && s3
-    report("C4 state API", ok, null)
+    var ok = s1 && s2
+    report("C4 state field", ok, null)
 }
 
-// C5: Close changes state
+// C5: Close changes connection field state
 fn test_close_state() {
     var conn = ws.connect(URL, null)
     if (conn!.error) {
@@ -93,8 +92,8 @@ fn test_close_state() {
         return
     }
     ws.close(conn, null, null)
-    var s = ws.state(conn)
-    var ok = s == "closed" && !ws.isOpen(conn)
+    var s = conn.state
+    var ok = s == "closed"
     report("C5 close state", ok, "state=" + s)
 }
 
@@ -128,7 +127,7 @@ print("")
 test_connect()
 test_text_echo()
 test_multiple_messages()
-test_state_api()
+test_connection_state_field()
 test_close_state()
 test_connection_failure()
 test_ping()

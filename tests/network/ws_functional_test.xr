@@ -26,7 +26,7 @@ fn test_connect() {
     
     print("  ✓ 连接成功")
     print("  URL: " + conn!.url)
-    print("  状态: " + ws.state(conn))
+    print("  状态: " + conn!.state)
     
     ws.close(conn, null, null)
     print("  ✓ 连接已关闭")
@@ -112,10 +112,10 @@ fn test_multiple_messages() {
     }
 }
 
-/* 测试 4: 状态检查 */
+/* 测试 4: 连接结果状态字段 */
 fn test_state() {
     print("")
-    print("[测试 4] 状态检查...")
+    print("[测试 4] 连接结果状态字段...")
     
     var conn = ws.connect(TEST_URL, null)
     if (conn!.error) {
@@ -123,20 +123,20 @@ fn test_state() {
         return false
     }
     
-    // 检查打开状态
-    if (ws.isOpen(conn)) {
-        print("  ✓ isOpen() = true (连接已打开)")
+    // 检查打开状态字段
+    if (conn!.state == "open") {
+        print("  ✓ state = open (连接已打开)")
     } else {
-        print("  ❌ isOpen() 应该返回 true")
+        print("  ❌ state 应该为 open")
         ws.close(conn, null, null)
         return false
     }
     
-    // 检查错误状态
-    if (!ws.hasError(conn)) {
-        print("  ✓ hasError() = false (无错误)")
+    // 检查错误字段
+    if (conn!.error == null) {
+        print("  ✓ error = null (无错误)")
     } else {
-        print("  ❌ hasError() 应该返回 false")
+        print("  ❌ error 应该为 null")
         ws.close(conn, null, null)
         return false
     }
@@ -144,7 +144,7 @@ fn test_state() {
     // 关闭后检查状态
     ws.close(conn, null, null)
     
-    var state = ws.state(conn)
+    var state = conn!.state
     print("  关闭后状态: " + state)
     
     return true

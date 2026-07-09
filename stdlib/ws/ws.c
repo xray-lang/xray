@@ -1882,10 +1882,6 @@ void xr_ws_message_free(XrWsMessage *msg) {
         xr_free(msg);
 }
 
-XrWsState xr_ws_get_state(XrWebSocket *ws) {
-    return ws ? ws->state : WS_STATE_CLOSED;
-}
-
 const char *xr_ws_error_string(XrWsError err) {
     return xr_net_error_string(err);
 }

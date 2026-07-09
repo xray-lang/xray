@@ -15,7 +15,7 @@ if (conn!.error) {
     print("Connection error: " + conn!.error)
 } else {
     print("Connected!")
-    print("State: " + ws.state(conn))
+    print("State: " + conn.state)
     
     // Send message
     print("Sending message...")

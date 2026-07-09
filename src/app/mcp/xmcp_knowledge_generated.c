@@ -3556,11 +3556,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "isOpen",
-        .signature = "(conn: WsConn): bool",
-        .summary = "Check if connection is open",
-    },
-    {
         .name = "isValidCloseCode",
         .signature = "(code: int): bool",
         .summary = "",
@@ -3629,11 +3624,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .name = "serve",
         .signature = "(port: int, handler: fn(conn: WsConn): ()): bool",
         .summary = "Start WebSocket server",
-    },
-    {
-        .name = "state",
-        .signature = "(conn: WsConn): string",
-        .summary = "Get connection state",
     },
     {
         .name = "stopServer",
@@ -6304,7 +6294,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes` |  |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.frame` | `(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes` |  |\n"
-            "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Bytes, key: Bytes): Bytes` |  |\n"
             "| `ws.parseClosePayload` | `(payload: Bytes): ClosePayload?` |  |\n"
@@ -6319,7 +6308,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
             "| `ws.send` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
             "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
-            "| `ws.state` | `(conn: WsConn): string` | Get connection state |\n"
             "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
             "| `ws.textFrame` | `(data: string, mask: bool = true): Bytes` |  |\n"
             "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"

@@ -2105,8 +2105,8 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
             XrLocation loc = {.file = ctx->file_path,
                               .line = line > 0 ? line : (int) symbol->location.line,
                               .column = (int) symbol->location.column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_COMPILE_VARIABLE_REDEFINED, msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_REDEFINED_VAR,
+                                       msg, &loc);
         }
     }
     xa_scope_add_symbol(scope, symbol);

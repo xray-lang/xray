@@ -14,7 +14,7 @@ ws.serve(8765, fn(conn) {
     print("Client connected!")
     
     // Echo loop
-    while (ws.isOpen(conn)) {
+    while (true) {
         var msg = ws.recv(conn, null)
         if (msg == null) {
             print("recv returned null")

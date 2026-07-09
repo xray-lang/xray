@@ -1,0 +1,3 @@
+import ws
+
+ws.state({_wsId: 0, url: "ws://localhost", state: "open"})

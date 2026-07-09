@@ -58,9 +58,8 @@ ws.send(conn, message)          // 发送消息
 var msg = ws.recv(conn)         // 接收消息
 ws.close(conn)                  // 关闭连接
 ws.ping(conn)                   // 发送 ping
-ws.state(conn)                  // 获取状态: "open", "closed" 等
-ws.isOpen(conn)                 // 检查是否打开
-ws.hasError(conn)               // 检查是否有错误
+conn.state                      // 连接创建/关闭写入的状态字段
+conn.error                      // 连接失败时的错误字段
 ```
 
 ### HTTP 服务端

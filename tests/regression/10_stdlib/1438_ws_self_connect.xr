@@ -17,7 +17,7 @@ import net
 // Echo server: bounce every text/binary frame back until the peer closes.
 fn startEchoServer(port: int) {
     ws.serve(port, fn(conn) {
-        while (ws.isOpen(conn)) {
+        while (true) {
             var msg = ws.recv(conn, null)
             if (msg == null) {
                 break

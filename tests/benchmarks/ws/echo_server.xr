@@ -17,7 +17,7 @@ if (process.args.length > 0) {
 print("xray WebSocket Echo Server on port " + string(port))
 
 ws.serve(port, fn(conn) {
-    while (ws.isOpen(conn)) {
+    while (true) {
         var msg = ws.recv(conn, null)
         if (msg == null || msg!.error != null) {
             break
