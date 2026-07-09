@@ -14,8 +14,11 @@
 #include "../../../src/aot/xaot_bundle.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/shared/xr_derive_flags.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -160,6 +163,40 @@ static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *e
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         if (ev->bodies[i].func_id == func_id)
             return &ev->bodies[i];
+    }
+    return NULL;
+}
+
+static XiFunc *evidence_find_xi_func_by_name(XiFunc *func, const char *name) {
+    if (!func || !name)
+        return NULL;
+    if (func->name && strcmp(func->name, name) == 0)
+        return func;
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        XiFunc *found = evidence_find_xi_func_by_name(func->children[i], name);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+static XiValue *evidence_find_xi_method_call(XiFunc *func) {
+    if (!func)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (value && (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT))
+                return value;
+        }
+    }
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        XiValue *found = evidence_find_xi_method_call(func->children[i]);
+        if (found)
+            return found;
     }
     return NULL;
 }
@@ -5890,6 +5927,92 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_seeds_xi_ids_during_lowering) {
+    setup_parser_session();
+    const char *source = "class Sink {\n"
+                         "    push(v: int) -> int { return v }\n"
+                         "}\n"
+                         "fn use(s: Sink) -> int { return s.push(1) }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_analyze(analyzer, "test.xr", ast);
+
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope =
+        ast->type == AST_PROGRAM && ast->as.program.arena &&
+        xr_compiler_session_push_arena(g_session, ast->as.program.arena, "test.xr", &canon_scope);
+    xr_canon_program(ast, analyzer, g_session);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    spec.source_path = "test.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    const XgBodySummary *use_body = evidence_find_body_by_name(&ev, "use");
+    const XgBodySummary *push_body = evidence_find_body_by_name(&ev, "push");
+    ASSERT_NOT_NULL(use_body);
+    ASSERT_NOT_NULL(push_body);
+    ASSERT_EQ_UINT(use_body->kind, XG_BODY_FUNCTION);
+    ASSERT_EQ_UINT(push_body->kind, XG_BODY_METHOD);
+
+    const XgCallsiteSummary *method_call = NULL;
+    for (uint32_t i = 0; i < ev.ncallsites; i++) {
+        if (ev.callsites[i].kind == XG_CALL_METHOD &&
+            ev.callsites[i].owner_func_id == use_body->func_id) {
+            method_call = &ev.callsites[i];
+            break;
+        }
+    }
+    ASSERT_NOT_NULL(method_call);
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    cfg.run_canonicalize = false;
+    cfg.run_optimize = false;
+    cfg.run_select_rep = false;
+    cfg.run_backend_lower = false;
+    cfg.run_escape = false;
+    cfg.run_arc = false;
+    cfg.run_emit = false;
+    cfg.source_file = "test.xr";
+    cfg.global_evidence = &ev;
+    cfg.global_evidence_module_id = 1;
+    XiPipelineResult res = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    ASSERT_EQ_UINT(res.status, XI_PIPE_OK);
+    ASSERT_NOT_NULL(res.ir);
+
+    XiFunc *use_func = evidence_find_xi_func_by_name(res.ir, "use");
+    XiFunc *push_func = evidence_find_xi_func_by_name(res.ir, "push");
+    ASSERT_NOT_NULL(use_func);
+    ASSERT_NOT_NULL(push_func);
+    ASSERT_EQ_UINT(use_func->xg_body_func_id, use_body->func_id);
+    ASSERT_EQ_UINT(push_func->xg_body_func_id, push_body->func_id);
+
+    XiValue *xi_call = evidence_find_xi_method_call(use_func);
+    ASSERT_NOT_NULL(xi_call);
+    ASSERT_EQ_UINT(xi_call->xg_callsite_id, method_call->callsite_id);
+
+    xi_pipeline_result_free(&res);
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     setup_parser_session();
     const char *source = "class Shape {\n"
@@ -6875,6 +6998,20 @@ TEST(global_evidence_producer_records_derive_rows) {
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nderive_plans, 2);
+    const XaotDerivePlan *json_plan =
+        xaot_bundle_find_derive_plan(&bundle, ev.derives[0].derive_id);
+    ASSERT_NOT_NULL(json_plan);
+    ASSERT_EQ_UINT(json_plan->derive_kind, XG_DERIVE_JSON);
+    ASSERT_EQ_UINT(json_plan->action, XAOT_DERIVE_FIELD_TABLE_SIDECAR);
+    ASSERT_EQ_UINT(json_plan->field_count, 2);
+    ASSERT_EQ_UINT(json_plan->evidence,
+                   XAOT_DERIVE_EV_GLOBAL_ROW | XAOT_DERIVE_EV_OPT_IN | XAOT_DERIVE_EV_FIELD_TABLE);
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "derive-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "kind=json action=field_table_sidecar"));
+    xr_free(plan_dump);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -7361,6 +7498,7 @@ RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
+RUN_TEST(global_evidence_seeds_xi_ids_during_lowering);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
 RUN_TEST(global_evidence_producer_fills_callsite_argument_type_keys);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
