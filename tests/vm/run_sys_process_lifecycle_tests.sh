@@ -141,6 +141,7 @@ PROCESS_HELPER_FORWARD_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_
 PIPE_HELPER_FORWARD_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_forward_return_alias_close.xr"
 PROCESS_HELPER_DIRECT_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_direct_return_alias_wait.xr"
 PIPE_HELPER_DIRECT_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_direct_return_alias_close.xr"
+HELPER_FACTORY_RETURN_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_return_ok.xr"
 PROCESS_HELPER_FINALIZER_RETURN_ARG_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_finalizer_return_arg_wait.xr"
 PIPE_HELPER_FINALIZER_RETURN_ARG_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_finalizer_return_arg_close.xr"
 PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_const_alias_return_receiver_wait.xr"
@@ -158,6 +159,7 @@ MULTIPATH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_m
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_warning.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
+HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -217,6 +219,7 @@ expect_output "process_helper_direct_return_alias_wait" \
     "$PROCESS_HELPER_DIRECT_RETURN_ALIAS_WAIT_SRC" "0"
 expect_output "pipe_helper_direct_return_alias_close" \
     "$PIPE_HELPER_DIRECT_RETURN_ALIAS_CLOSE_SRC" "true"
+expect_output "process_pipe_helper_factory_return_ok" "$HELPER_FACTORY_RETURN_OK_SRC" $'0\ntrue'
 expect_output "process_helper_finalizer_return_arg_wait" \
     "$PROCESS_HELPER_FINALIZER_RETURN_ARG_WAIT_SRC" "0"
 expect_output "pipe_helper_finalizer_return_arg_close" \
@@ -285,6 +288,10 @@ expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_match_warning" "$PIPE_MATCH_WARNING_SRC" \
     $'pipe-match-open\nafter-match' \
+    "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_helper_factory_return_warning" "$HELPER_FACTORY_RETURN_WARNING_SRC" \
+    $'helper-factory-process\nhelper-factory-pipe' \
+    "Process handle 'p' from sys.Process.spawn is not waited before leaving scope" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 
 printf '\nPassed: %d\nFailed: %d\n' "$PASS" "$FAIL"
