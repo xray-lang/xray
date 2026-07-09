@@ -187,8 +187,7 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
 /* Json is no longer a dedicated GC type; use xr_value_is_json(v)
  * from xjson.h which checks builtin_kind on the instance's class. */
 #define XR_IS_AGG_REF(v) ((v).tag == XR_TAG_AGG_REF)
-/* DateTime is no longer a dedicated GC type; use xr_value_is_datetime(iso, v)
- * from datetime.h which walks the class super-chain. */
+/* DateTime is a pure stdlib class supplied by stdlib/datetime/datetime.xr. */
 /* Exception is no longer a dedicated GC type; use xr_value_is_panic_info(iso, v)
  * from xpanic_info.h which walks the class super-chain. The historical
  * XR_IS_EXCEPTION macro and XR_TEXCEPTION enumerator are gone. */
@@ -517,8 +516,7 @@ static inline struct XrTask *xr_value_to_task(XrValue v) {
     return xr_value_is_task(v) ? (struct XrTask *) XR_TO_PTR(v) : NULL;
 }
 
-/* DateTime: use xr_value_is_datetime / xr_value_get_datetime_body from
- * stdlib/datetime/datetime.h — they walk the class super-chain. */
+/* DateTime is a pure stdlib class supplied by stdlib/datetime/datetime.xr. */
 
 /* ========== Compile-time Checks ========== */
 

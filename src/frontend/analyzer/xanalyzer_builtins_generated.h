@@ -24,23 +24,6 @@ static const XaBuiltinMember g_gen_buffer_members[] = {
 };
 #define GEN_BUFFER_MEMBER_COUNT 4
 
-// DateTime methods
-static const XaBuiltinMember g_gen_datetime_members[] = {
-    {"toString", "(): string", "Convert datetime to string", true, false, false},
-    {"format", "(pattern?: string): string", "Format datetime to string", true, false, false},
-    {"toISOString", "(): string", "Convert datetime to ISO string", true, false, false},
-    {"add", "(amount: int, unit: string): DateTime", "Add a duration to this datetime", true, false, false},
-    {"diff", "(other: DateTime, unit?: string): int", "Difference from another datetime", true, false, false},
-    {"toUTC", "(): DateTime", "Convert datetime to UTC", true, false, false},
-    {"toLocal", "(): DateTime", "Convert datetime to local time", true, false, false},
-    {"isBefore", "(other: DateTime): bool", "Check whether this datetime is before another", true, false, false},
-    {"isAfter", "(other: DateTime): bool", "Check whether this datetime is after another", true, false, false},
-    {"equals", "(other: DateTime): bool", "Check whether this datetime equals another", true, false, false},
-    {"isLeapYear", "(): bool", "Check whether this datetime is in a leap year", true, false, false},
-    {"daysInMonth", "(): int", "Get days in current month", true, false, false},
-};
-#define GEN_DATETIME_MEMBER_COUNT 12
-
 // OsBarrier methods
 static const XaBuiltinMember g_gen_osbarrier_members[] = {
     {"wait", "(): bool", "Wait until all parties have arrived", true, false, false},

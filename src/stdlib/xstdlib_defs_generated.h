@@ -480,18 +480,6 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"mem", "Buffer", "asSpan", "(): ByteSpan", "Borrow this buffer as a mutable ByteSpan value"},
     {"mem", "Buffer", "ptrUnchecked", "(): RawMut<uint8>", "Return the underlying raw pointer; unsafe escape hatch"},
     {"mem", "Buffer", "resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure"},
-    {"datetime", "DateTime", "toString", "(): string", "Convert datetime to string"},
-    {"datetime", "DateTime", "format", "(pattern?: string): string", "Format datetime to string"},
-    {"datetime", "DateTime", "toISOString", "(): string", "Convert datetime to ISO string"},
-    {"datetime", "DateTime", "add", "(amount: int, unit: string): DateTime", "Add a duration to this datetime"},
-    {"datetime", "DateTime", "diff", "(other: DateTime, unit?: string): int", "Difference from another datetime"},
-    {"datetime", "DateTime", "toUTC", "(): DateTime", "Convert datetime to UTC"},
-    {"datetime", "DateTime", "toLocal", "(): DateTime", "Convert datetime to local time"},
-    {"datetime", "DateTime", "isBefore", "(other: DateTime): bool", "Check whether this datetime is before another"},
-    {"datetime", "DateTime", "isAfter", "(other: DateTime): bool", "Check whether this datetime is after another"},
-    {"datetime", "DateTime", "equals", "(other: DateTime): bool", "Check whether this datetime equals another"},
-    {"datetime", "DateTime", "isLeapYear", "(): bool", "Check whether this datetime is in a leap year"},
-    {"datetime", "DateTime", "daysInMonth", "(): int", "Get days in current month"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
@@ -505,7 +493,6 @@ static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = 
     {"mem", "Buffer", "objectClass", "memBufferClass", "&g_mem_buffer_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER"},
     {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
     {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
-    {"datetime", "DateTime", "objectClass", "dateTimeClass", "&g_datetime_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_DATETIME"},
 };
 #define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
 
@@ -551,28 +538,6 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
     {"net", "NetListener", "port", "listener_method_port", 0, "0"},
     {"net", "NetListener", "close", "listener_method_close", 0, "0"},
     {"net", "NetListener", "isClosed", "listener_method_is_closed", 0, "0"},
-    {"datetime", "DateTime", "toString", "dt_to_string", 1, "0"},
-    {"datetime", "DateTime", "format", "dt_format", 2, "0"},
-    {"datetime", "DateTime", "toISOString", "dt_to_iso", 1, "0"},
-    {"datetime", "DateTime", "add", "dt_add", 3, "0"},
-    {"datetime", "DateTime", "diff", "dt_diff", 3, "0"},
-    {"datetime", "DateTime", "toUTC", "dt_to_utc", 1, "0"},
-    {"datetime", "DateTime", "toLocal", "dt_to_local", 1, "0"},
-    {"datetime", "DateTime", "isBefore", "dt_is_before", 2, "0"},
-    {"datetime", "DateTime", "isAfter", "dt_is_after", 2, "0"},
-    {"datetime", "DateTime", "equals", "dt_equals", 2, "0"},
-    {"datetime", "DateTime", "isLeapYear", "dt_is_leap_year", 1, "0"},
-    {"datetime", "DateTime", "daysInMonth", "dt_days_in_month", 1, "0"},
-    {"datetime", "DateTime", "get:year", "dt_year", 1, "0"},
-    {"datetime", "DateTime", "get:month", "dt_month", 1, "0"},
-    {"datetime", "DateTime", "get:day", "dt_day", 1, "0"},
-    {"datetime", "DateTime", "get:hour", "dt_hour", 1, "0"},
-    {"datetime", "DateTime", "get:minute", "dt_minute", 1, "0"},
-    {"datetime", "DateTime", "get:second", "dt_second", 1, "0"},
-    {"datetime", "DateTime", "get:millisecond", "dt_millisecond", 1, "0"},
-    {"datetime", "DateTime", "get:weekday", "dt_weekday", 1, "0"},
-    {"datetime", "DateTime", "get:yearday", "dt_yearday", 1, "0"},
-    {"datetime", "DateTime", "get:timestamp", "dt_timestamp", 1, "0"},
 };
 #define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
 

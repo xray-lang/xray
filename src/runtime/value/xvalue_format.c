@@ -361,14 +361,6 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                             : snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64 ":%" PRId64,
                                        rng->start, op, rng->end, rng->step);
                 xr_strbuf_append_cstr(sb, buf, (size_t) n);
-            } else if (xr_value_is_datetime(isolate, val)) {
-                void *dt = xr_instance_native_body(inst);
-                char buf[64];
-                int n = xr_datetime_format(dt, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
-                if (n > 0)
-                    xr_strbuf_append_cstr(sb, buf, (size_t) n);
-                else
-                    xr_strbuf_append_cstr(sb, "<DateTime>", 10);
             } else if (class_is_named_datetime(cls)) {
                 if (!format_datetime_method(isolate, sb, inst, "toString"))
                     xr_strbuf_append_cstr(sb, "DateTime{...}", 13);
