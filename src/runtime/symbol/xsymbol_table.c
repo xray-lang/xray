@@ -254,7 +254,6 @@ static const char *xr_builtin_symbol_names[] = {
     // Newly added builtins append here to keep existing symbol ids stable.
     "recvOr",
     "diff",
-    "pushUnchecked",
     "lock",
     "unlock",
     "tryLock",
