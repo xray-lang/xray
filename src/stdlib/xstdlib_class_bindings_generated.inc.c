@@ -132,10 +132,7 @@ static void xr_stdlib_vm_register_regex_class_generated(XrVMRuntime *X) {
     xr_class_builder_add_method(builder, "findGroup", re_m_find_group, 2, 0);
     xr_class_builder_add_method(builder, "findAll", re_m_find_all, 2, 0);
     xr_class_builder_add_method(builder, "replace", re_m_replace, 2, 0);
-    xr_class_builder_add_method(builder, "replaceAll", re_m_replace_all, 2, 0);
     xr_class_builder_add_method(builder, "split", re_m_split, 2, 0);
-    xr_class_builder_add_method(builder, "pattern", re_method_pattern, 0, 0);
-    xr_class_builder_add_method(builder, "toString", re_m_to_string, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "xr_stdlib_vm_register_regex_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;

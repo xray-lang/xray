@@ -7628,10 +7628,6 @@ TEST(global_evidence_producer_records_json_static_key_index_access) {
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_accesses, 2);
 
-    XaotBundle bundle;
-    memset(&bundle, 0, sizeof(bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-
     bool saw_get = false;
     bool saw_set = false;
     for (uint32_t i = 0; i < ev.njson_accesses; i++) {
@@ -7645,15 +7641,18 @@ TEST(global_evidence_producer_records_json_static_key_index_access) {
             saw_get = true;
         if (row->access_kind == XG_JSON_ACCESS_INDEX_SET)
             saw_set = true;
+        XaotBundle bundle;
+        memset(&bundle, 0, sizeof(bundle));
+        ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
         const XaotJsonAccessPlan *access_plan =
             xaot_bundle_find_json_access_plan(&bundle, row->json_access_id);
         ASSERT_NOT_NULL(access_plan);
         ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
         ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
+        xaot_bundle_free(&bundle);
     }
     ASSERT_TRUE(saw_get);
     ASSERT_TRUE(saw_set);
-    xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
 }

@@ -1513,24 +1513,9 @@ module regex {
     argc: 2
   }
 
-  class_method Regex.replaceAll {
-    vm: "re_m_replace_all"
-    argc: 2
-  }
-
   class_method Regex.split {
     vm: "re_m_split"
     argc: 2
-  }
-
-  class_method Regex.pattern {
-    vm: "re_method_pattern"
-    argc: 0
-  }
-
-  class_method Regex.toString {
-    vm: "re_m_to_string"
-    argc: 0
   }
 
   class_field RegexMatch.start {
