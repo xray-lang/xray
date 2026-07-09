@@ -1,0 +1,46 @@
+interface Shape {
+    area() -> int
+}
+
+class Circle implements Shape {
+    r: int
+
+    constructor(r: int) {
+        this.r = r
+    }
+
+    area() -> int {
+        return this.r * this.r
+    }
+}
+
+class Square implements Shape {
+    side: int
+
+    constructor(side: int) {
+        this.side = side
+    }
+
+    area() -> int {
+        return this.side * this.side
+    }
+}
+
+fn score<T: Shape>(shape: T) -> int {
+    return shape.area()
+}
+
+fn run(n: int) -> int {
+    var circle: Shape = Circle(2)
+    var square: Shape = Square(3)
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        sum = sum + score<Shape>(circle)
+        sum = sum + score<Shape>(square)
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(20000))
