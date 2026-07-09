@@ -1,0 +1,22 @@
+shared ENABLED: bool = true
+shared SCALE: float = 0.5
+shared LETTER: char = 'A'
+shared NOTHING = null
+
+@c_export("xray_shared_literals")
+fn xray_shared_literals() -> int {
+    var score = 0
+    if (ENABLED) {
+        score = score + 1
+    }
+    if (SCALE < 1.0) {
+        score = score + 2
+    }
+    if (LETTER == 'A') {
+        score = score + 4
+    }
+    if (NOTHING == null) {
+        score = score + 8
+    }
+    return score
+}

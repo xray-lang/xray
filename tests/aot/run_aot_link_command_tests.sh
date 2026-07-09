@@ -1411,6 +1411,66 @@ else
     sed 's/^/      /' "$FREESTANDING_SHARED_SCALAR_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_SHARED_LITERALS_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_literals_static.xr"
+FREESTANDING_SHARED_LITERALS_OBJ="$WORK/freestanding_shared_literals_static.o"
+FREESTANDING_SHARED_LITERALS_LOG="$WORK/freestanding_shared_literals_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_SHARED_LITERALS_OBJ" \
+        "$FREESTANDING_SHARED_LITERALS_SRC" >"$FREESTANDING_SHARED_LITERALS_LOG" 2>&1; then
+    FREESTANDING_SHARED_LITERALS_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_SHARED_LITERALS_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_SHARED_LITERALS_C" ]; then
+        expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "static XrValue xrt_shared[5] = {" \
+            "freestanding-profile/shared-literals-static: materializes shared slots as static data"
+        expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "[0] = XR_TRUE_VAL," \
+            "freestanding-profile/shared-literals-static: initializes bool shared slot statically"
+        expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "[1] = XR_FROM_FLOAT(0x1p-1)," \
+            "freestanding-profile/shared-literals-static: initializes float shared slot statically"
+        expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "[2] = XR_FROM_CHAR(UINT32_C(65))," \
+            "freestanding-profile/shared-literals-static: initializes char shared slot statically"
+        expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "[3] = XR_NULL_VAL," \
+            "freestanding-profile/shared-literals-static: initializes null shared slot statically"
+        expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "xrt_shared[0] = XR_TRUE_VAL" \
+            "freestanding-profile/shared-literals-static: elides module-init bool write"
+        expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "xrt_shared[1] = XR_FROM_FLOAT(0x1p-1)" \
+            "freestanding-profile/shared-literals-static: elides module-init float write"
+        expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "xrt_shared[2] = XR_FROM_CHAR(UINT32_C(65))" \
+            "freestanding-profile/shared-literals-static: elides module-init char write"
+        expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
+            "xrt_shared[3] = XR_NULL_VAL" \
+            "freestanding-profile/shared-literals-static: elides module-init null write"
+        expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" "#include \"xrt.h\"" \
+            "freestanding-profile/shared-literals-static: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/shared-literals-static: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_SHARED_LITERALS_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_SHARED_LITERALS_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_SHARED_LITERALS_OBJ")"
+    FREESTANDING_SHARED_LITERALS_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_SHARED_LITERALS_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_SHARED_LITERALS_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/shared-literals-static: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/shared-literals-static: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_SHARED_LITERALS_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/shared-literals-static: object build failed"
+    sed 's/^/      /' "$FREESTANDING_SHARED_LITERALS_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_SHARED_STRING_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_string_static.xr"
 FREESTANDING_SHARED_STRING_OBJ="$WORK/freestanding_shared_string_static.o"
 FREESTANDING_SHARED_STRING_LOG="$WORK/freestanding_shared_string_static.log"
