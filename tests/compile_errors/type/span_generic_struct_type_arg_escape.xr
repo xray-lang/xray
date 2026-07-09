@@ -1,0 +1,12 @@
+struct Slot<T> {
+    value: T
+}
+
+fn bad() {
+    var bytes = Bytes(4)
+    var view: ByteSpan = bytes[:]
+    var slot = Slot<ByteSpan>{value: view}
+    print(slot.value.length)
+}
+
+bad()

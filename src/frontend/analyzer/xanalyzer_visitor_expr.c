@@ -2938,6 +2938,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             resolved_targs[i] = ne->type_args[i]
                                     ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
                                     : xr_type_new_unknown(NULL);
+        xa_check_span_generic_class_type_args(ctx, node, ne->class_name, resolved_targs,
+                                              ne->type_arg_count);
 
         // Check constructor argument types against substituted parameter types
         if (class_info && class_links && ne->arg_count > 0) {
@@ -3044,6 +3046,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
                     // If all type parameters were inferred, create generic instance
                     if (all_inferred) {
+                        xa_check_span_generic_class_type_args(ctx, node, ne->class_name,
+                                                              inferred_args, type_param_count);
                         XrType *result = xr_type_new_generic_instance(
                             ctx->analyzer->isolate, ne->class_name, class_info, inferred_args,
                             type_param_count);
@@ -3103,6 +3107,23 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
         class_info = links ? links->class_info : NULL;
     }
 
+    XrType *resolved_targs_buf[8] = {0};
+    XrType **resolved_targs = NULL;
+    if (sl->type_arg_count > 0) {
+        resolved_targs = (sl->type_arg_count <= 8)
+                             ? resolved_targs_buf
+                             : xr_malloc(sizeof(XrType *) * (size_t) sl->type_arg_count);
+        if (resolved_targs) {
+            for (int i = 0; i < sl->type_arg_count; i++) {
+                resolved_targs[i] =
+                    sl->type_args[i] ? xr_tref_resolve_in_analyzer(ctx->analyzer, sl->type_args[i])
+                                     : xr_type_new_unknown(NULL);
+            }
+            xa_check_span_generic_class_type_args(ctx, node, struct_name, resolved_targs,
+                                                  sl->type_arg_count);
+        }
+    }
+
     // Infer field value types (for side effects / type checking), propagating
     // struct field types so nested literals lower to the declared layout.
     for (int i = 0; i < sl->field_count; i++) {
@@ -3115,13 +3136,21 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
 
     if (class_sym && class_sym->kind == XA_SYM_CLASS) {
         if (links && links->class_info) {
-            XrType *inst_type = xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
+            XrType *inst_type =
+                resolved_targs ? xr_type_new_generic_instance(ctx->analyzer->isolate, struct_name,
+                                                              links->class_info, resolved_targs,
+                                                              sl->type_arg_count)
+                               : xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
             if (links->type && links->type->is_value_type) {
                 inst_type->is_value_type = true;
             }
+            if (resolved_targs && resolved_targs != resolved_targs_buf)
+                xr_free(resolved_targs);
             return inst_type;
         }
         if (links && links->type) {
+            if (resolved_targs && resolved_targs != resolved_targs_buf)
+                xr_free(resolved_targs);
             return links->type;
         }
     }
@@ -3129,8 +3158,12 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
     if (struct_name) {
         XrType *t = xr_type_new_class(ctx->analyzer->isolate, struct_name);
         t->is_value_type = true;
+        if (resolved_targs && resolved_targs != resolved_targs_buf)
+            xr_free(resolved_targs);
         return t;
     }
+    if (resolved_targs && resolved_targs != resolved_targs_buf)
+        xr_free(resolved_targs);
     return xr_type_new_unknown(NULL);
 }
 

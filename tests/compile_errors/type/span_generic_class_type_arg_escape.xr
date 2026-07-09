@@ -1,0 +1,16 @@
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+}
+
+fn bad() {
+    var bytes = Bytes(4)
+    var view: ByteSpan = bytes[:]
+    var box = Box<ByteSpan>(view)
+    print(box.value.length)
+}
+
+bad()

@@ -5408,6 +5408,13 @@ XR_FUNC bool xa_type_contains_span_view(XrType *type) {
                 return true;
         }
     }
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.type_args) {
+        for (int i = 0; i < type->instance.type_arg_count; i++) {
+            if (xa_type_contains_span_view(type->instance.type_args[i]))
+                return true;
+        }
+    }
     return false;
 }
 
@@ -6275,6 +6282,28 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
              escape_context ? escape_context : "var Span view escape");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
+}
+
+XR_FUNC void xa_check_span_generic_class_type_args(XaInferContext *ctx, AstNode *loc_node,
+                                                   const char *class_name, XrType **type_args,
+                                                   int type_arg_count) {
+    if (!ctx || !loc_node || !type_args || type_arg_count <= 0)
+        return;
+
+    for (int i = 0; i < type_arg_count; i++) {
+        if (!xa_type_contains_span_view(type_args[i]))
+            continue;
+        char context[160];
+        if (class_name && class_name[0]) {
+            snprintf(context, sizeof(context),
+                     "use Span view as generic class/struct type argument for '%s'", class_name);
+        } else {
+            snprintf(context, sizeof(context),
+                     "use Span view as generic class/struct type argument");
+        }
+        xa_check_span_value_escape(ctx, loc_node, type_args[i], context);
+        return;
+    }
 }
 
 XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *loc_node,
