@@ -574,9 +574,9 @@ static const char *parse_response(const char *buf, const char *buf_end, int *min
     return parse_headers(buf, buf_end, headers, num_headers, max_headers, ret);
 }
 
-/* ========== Public API ========== */
+/* ========== Internal Parser API ========== */
 
-int xr_http_parse_request_ex(const char *buf_start, size_t len, const char **method,
+int http_parse_request_ex(const char *buf_start, size_t len, const char **method,
                              size_t *method_len, const char **path, size_t *path_len,
                              int *minor_ver, XrHttpHeader *headers, size_t *num_headers,
                              size_t last_len) {
@@ -605,7 +605,7 @@ int xr_http_parse_request_ex(const char *buf_start, size_t len, const char **met
     return (int) (buf - buf_start);
 }
 
-int xr_http_parse_response_ex(const char *buf_start, size_t len, int *minor_ver, int *status,
+int http_parse_response_ex(const char *buf_start, size_t len, int *minor_ver, int *status,
                               const char **msg, size_t *msg_len, XrHttpHeader *headers,
                               size_t *num_headers, size_t last_len) {
     const char *buf = buf_start;
@@ -659,7 +659,7 @@ static int decode_hex(int ch) {
     }
 }
 
-ssize_t xr_http_decode_chunked(XrChunkedDecoder *decoder, char *buf, size_t *_bufsz) {
+ssize_t http_decode_chunked(XrChunkedDecoder *decoder, char *buf, size_t *_bufsz) {
     size_t dst = 0, src = 0, bufsz = *_bufsz;
     ssize_t ret = -2;  // incomplete
 
@@ -886,11 +886,11 @@ const char *http_method_to_string(XrHttpMethod method) {
 
 /* ========== Initialization Functions ========== */
 
-void xr_http_parser_init(XrHttpParser *parser) {
+void http_parser_init(XrHttpParser *parser) {
     parser->state = HTTP_STATE_RESPONSE_LINE;
 }
 
-void xr_http_response_init(XrHttpResponse *resp) {
+void http_response_init(XrHttpResponse *resp) {
     memset(resp, 0, sizeof(XrHttpResponse));
     resp->content_length = -1;
     resp->keep_alive = true;
@@ -993,11 +993,11 @@ static void process_special_header_response(XrHttpResponse *resp, XrHttpHeader *
 
 /* ========== Simplified API ========== */
 
-XrHttpParseResult xr_http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
+XrHttpParseResult http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
                                          const char *data, size_t len) {
     // Use new API to parse
     size_t num_headers = XR_HTTP_MAX_HEADERS;
-    int r = xr_http_parse_response_ex(data, len, &resp->version_minor, &resp->status_code,
+    int r = http_parse_response_ex(data, len, &resp->version_minor, &resp->status_code,
                                       &resp->status_text, &resp->status_text_len, resp->headers,
                                       &num_headers, 0);
 

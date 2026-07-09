@@ -708,8 +708,8 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
 
     XrHttpParser parser;
     XrHttpResponse resp;
-    xr_http_parser_init(&parser);
-    xr_http_response_init(&resp);
+    http_parser_init(&parser);
+    http_response_init(&resp);
 
     while (1) {
         // Ensure buffer has room for more data
@@ -746,7 +746,7 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
 
         // Try to parse response
         XrHttpParseResult parse_result =
-            xr_http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
+            http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
 
         if (parse_result == XR_HTTP_PARSE_OK) {
             bool allows_body = http_response_allows_body(resp.status_code) &&
@@ -802,7 +802,7 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
 
     // Final parse
     XrHttpParseResult parse_result =
-        xr_http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
+        http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
     if (parse_result == XR_HTTP_PARSE_ERROR) {
         result.error = XR_HTTP_ERR_PARSE;
         result.error_msg = xr_strdup("Response parse error");
@@ -862,7 +862,7 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
         decoder.consume_trailer = true;
 
         size_t decoded_len = raw_body_len;
-        ssize_t ret = xr_http_decode_chunked(&decoder, decoded_body, &decoded_len);
+        ssize_t ret = http_decode_chunked(&decoder, decoded_body, &decoded_len);
 
         if (ret >= 0 || ret == -2) {
             decoded_body[decoded_len] = '\0';

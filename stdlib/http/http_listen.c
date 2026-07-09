@@ -622,7 +622,7 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
     size_t num_headers = 32;
 
     int parsed =
-        xr_http_parse_request_ex(ctx->read_buf, ctx->buf_used, &method_str, &method_len, &path_str,
+        http_parse_request_ex(ctx->read_buf, ctx->buf_used, &method_str, &method_len, &path_str,
                                  &path_len, &minor_ver, headers, &num_headers, 0);
 
     if (parsed <= 0) {
@@ -936,7 +936,7 @@ static XrCFuncResult http_conn_read_chunked(XrVMRuntime *X, int status, XrValue 
     for (;;) {
         size_t decode_sz = ctx->chunk_buf->size;
         if (decode_sz > 0) {
-            ssize_t rc = xr_http_decode_chunked(&ctx->decoder, ctx->chunk_buf->bytes, &decode_sz);
+            ssize_t rc = http_decode_chunked(&ctx->decoder, ctx->chunk_buf->bytes, &decode_sz);
             ctx->chunk_buf->size = decode_sz;
             if (rc >= 0)
                 goto chunk_done;

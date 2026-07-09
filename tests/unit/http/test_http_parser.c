@@ -56,7 +56,7 @@ TEST(http_parse_request_get) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
+    int ret = http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
                                        &minor_ver, headers, &num_headers, 0);
     ASSERT_GT(ret, 0);
     ASSERT_EQ_INT((int) method_len, 3);
@@ -80,7 +80,7 @@ TEST(http_parse_request_post) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
+    int ret = http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
                                        &minor_ver, headers, &num_headers, 0);
     ASSERT_GT(ret, 0);
     ASSERT_EQ_INT((int) method_len, 4);
@@ -104,7 +104,7 @@ TEST(http_parse_response_200) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_response_ex(data, len, &minor_ver, &status, &msg, &msg_len, headers,
+    int ret = http_parse_response_ex(data, len, &minor_ver, &status, &msg, &msg_len, headers,
                                         &num_headers, 0);
     ASSERT_GT(ret, 0);
     ASSERT_EQ_INT(status, 200);
@@ -124,7 +124,7 @@ TEST(http_parse_response_404) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_response_ex(data, len, &minor_ver, &status, &msg, &msg_len, headers,
+    int ret = http_parse_response_ex(data, len, &minor_ver, &status, &msg, &msg_len, headers,
                                         &num_headers, 0);
     ASSERT_GT(ret, 0);
     ASSERT_EQ_INT(status, 404);
@@ -134,28 +134,28 @@ TEST(http_parse_response_404) {
 
 TEST(http_find_header_end) {
     const char *data = "GET / HTTP/1.1\r\nHost: x\r\n\r\nBody";
-    const char *end = xr_http_find_header_end(data, strlen(data));
+    const char *end = http_find_header_end(data, strlen(data));
     ASSERT_NOT_NULL(end);
     ASSERT_STR_EQ(end, "Body");
 }
 
 TEST(http_find_header_end_not_found) {
     const char *data = "GET / HTTP/1.1\r\nHost: x\r\n";
-    const char *end = xr_http_find_header_end(data, strlen(data));
+    const char *end = http_find_header_end(data, strlen(data));
     ASSERT_NULL(end);
 }
 
 TEST(http_parse_status_code_helper) {
-    ASSERT_EQ_INT(xr_http_parse_status_code("HTTP/1.1 200 OK"), 200);
-    ASSERT_EQ_INT(xr_http_parse_status_code("HTTP/1.1 404 Not Found"), 404);
-    ASSERT_EQ_INT(xr_http_parse_status_code(NULL), -1);
+    ASSERT_EQ_INT(http_parse_status_code("HTTP/1.1 200 OK"), 200);
+    ASSERT_EQ_INT(http_parse_status_code("HTTP/1.1 404 Not Found"), 404);
+    ASSERT_EQ_INT(http_parse_status_code(NULL), -1);
 }
 
 /* ========== Simplified API ========== */
 
 TEST(http_response_init) {
     XrHttpResponse resp;
-    xr_http_response_init(&resp);
+    http_response_init(&resp);
     ASSERT_EQ_INT(resp.status_code, 0);
     ASSERT_EQ_INT((int) resp.content_length, -1);
 }
@@ -167,9 +167,9 @@ TEST(http_response_rejects_unsupported_transfer_coding) {
                           "0\r\n\r\n";
     XrHttpParser parser;
     XrHttpResponse resp;
-    xr_http_parser_init(&parser);
-    xr_http_response_init(&resp);
-    ASSERT_EQ_INT(xr_http_parse_response(&parser, &resp, ok_data, strlen(ok_data)),
+    http_parser_init(&parser);
+    http_response_init(&resp);
+    ASSERT_EQ_INT(http_parse_response(&parser, &resp, ok_data, strlen(ok_data)),
                   XR_HTTP_PARSE_OK);
     ASSERT(resp.chunked);
 
@@ -177,9 +177,9 @@ TEST(http_response_rejects_unsupported_transfer_coding) {
                            "Transfer-Encoding: gzip, chunked\r\n"
                            "\r\n"
                            "0\r\n\r\n";
-    xr_http_parser_init(&parser);
-    xr_http_response_init(&resp);
-    ASSERT_EQ_INT(xr_http_parse_response(&parser, &resp, bad_data, strlen(bad_data)),
+    http_parser_init(&parser);
+    http_response_init(&resp);
+    ASSERT_EQ_INT(http_parse_response(&parser, &resp, bad_data, strlen(bad_data)),
                   XR_HTTP_PARSE_ERROR);
 }
 
@@ -196,7 +196,7 @@ TEST(http_parse_request_incomplete) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
+    int ret = http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
                                        &minor_ver, headers, &num_headers, 0);
     ASSERT_EQ_INT(ret, -2);  // Incomplete
 }
