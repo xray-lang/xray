@@ -1,0 +1,3 @@
+const bytes = Bytes(4)
+const view: ByteSpan = bytes[:]
+print(view.length)
