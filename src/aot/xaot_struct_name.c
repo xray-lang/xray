@@ -140,7 +140,7 @@ static uint64_t struct_layout_hash_depth(const XrAggregateLayout *sl, int depth)
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].sub_layout_id;
         h *= UINT64_C(1099511628211);
-        if (sl->fields[i].native_type == XR_NATIVE_STRUCT) {
+        if (sl->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE) {
             h ^= struct_layout_hash_depth(sl->fields[i].sub_layout, depth + 1);
             h *= UINT64_C(1099511628211);
         }

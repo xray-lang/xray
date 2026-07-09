@@ -52,8 +52,8 @@ typedef struct {
     uint16_t offset;                       // byte offset within struct
     uint8_t native_type;                   // XrNativeType
     uint16_t size;                         // field size in bytes
-    uint16_t sub_layout_id;                // layout_id for nested struct (XR_NATIVE_STRUCT only)
-    struct XrAggregateLayout *sub_layout;  // nested struct layout (XR_NATIVE_STRUCT only)
+    uint16_t sub_layout_id;                // layout_id for nested aggregate
+    struct XrAggregateLayout *sub_layout;  // nested struct/union layout
     uint8_t elem_native_type;              // element type for XR_NATIVE_ARRAY
     uint16_t elem_count;                   // element count for XR_NATIVE_ARRAY
 } XrAggregateFieldLayout;

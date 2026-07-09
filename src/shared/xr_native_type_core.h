@@ -16,26 +16,26 @@
 
 // Native type tags for value struct fields and aggregate runtime layouts.
 typedef enum {
-    XR_NATIVE_I64 = 0,         // int64_t (8 bytes)
-    XR_NATIVE_F64 = 1,         // double (8 bytes)
-    XR_NATIVE_BOOL = 2,        // uint8_t (1 byte, padded to alignment)
-    XR_NATIVE_I8 = 3,          // int8_t (1 byte)
-    XR_NATIVE_I16 = 4,         // int16_t (2 bytes)
-    XR_NATIVE_I32 = 5,         // int32_t (4 bytes)
-    XR_NATIVE_U8 = 6,          // uint8_t (1 byte)
-    XR_NATIVE_U16 = 7,         // uint16_t (2 bytes)
-    XR_NATIVE_U32 = 8,         // uint32_t (4 bytes)
-    XR_NATIVE_U64 = 9,         // uint64_t (8 bytes)
-    XR_NATIVE_F32 = 10,        // float (4 bytes)
-    XR_NATIVE_STRUCT = 11,     // nested struct (variable size)
-    XR_NATIVE_ARRAY = 12,      // fixed-size inline array [T; N]
-    XR_NATIVE_STRING = 13,     // string pointer (8 bytes)
-    XR_NATIVE_ARRAY_REF = 14,  // tagged XrValue-width aggregate ref slot
-    XR_NATIVE_MAP_REF = 15,    // tagged XrValue-width aggregate ref slot
-    XR_NATIVE_SET_REF = 16,    // tagged XrValue-width aggregate ref slot
-    XR_NATIVE_VALUE = 17,      // full tagged XrValue lane
-    XR_NATIVE_ISIZE = 18,      // ptrdiff_t (target pointer-width signed int)
-    XR_NATIVE_USIZE = 19,      // size_t (target pointer-width unsigned int)
+    XR_NATIVE_I64 = 0,                // int64_t (8 bytes)
+    XR_NATIVE_F64 = 1,                // double (8 bytes)
+    XR_NATIVE_BOOL = 2,               // uint8_t (1 byte, padded to alignment)
+    XR_NATIVE_I8 = 3,                 // int8_t (1 byte)
+    XR_NATIVE_I16 = 4,                // int16_t (2 bytes)
+    XR_NATIVE_I32 = 5,                // int32_t (4 bytes)
+    XR_NATIVE_U8 = 6,                 // uint8_t (1 byte)
+    XR_NATIVE_U16 = 7,                // uint16_t (2 bytes)
+    XR_NATIVE_U32 = 8,                // uint32_t (4 bytes)
+    XR_NATIVE_U64 = 9,                // uint64_t (8 bytes)
+    XR_NATIVE_F32 = 10,               // float (4 bytes)
+    XR_NATIVE_NESTED_AGGREGATE = 11,  // nested aggregate layout (variable size)
+    XR_NATIVE_ARRAY = 12,             // fixed-size inline array [T; N]
+    XR_NATIVE_STRING = 13,            // string pointer (8 bytes)
+    XR_NATIVE_ARRAY_REF = 14,         // tagged XrValue-width aggregate ref slot
+    XR_NATIVE_MAP_REF = 15,           // tagged XrValue-width aggregate ref slot
+    XR_NATIVE_SET_REF = 16,           // tagged XrValue-width aggregate ref slot
+    XR_NATIVE_VALUE = 17,             // full tagged XrValue lane
+    XR_NATIVE_ISIZE = 18,             // ptrdiff_t (target pointer-width signed int)
+    XR_NATIVE_USIZE = 19,             // size_t (target pointer-width unsigned int)
 } XrNativeType;
 
 static inline uint8_t xr_native_type_size(uint8_t native_type) {

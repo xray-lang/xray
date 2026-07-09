@@ -145,8 +145,8 @@
   :heap-field yes
   :ref-tag none)
 
-(define-aot-layout struct
-  :native-type XR_NATIVE_STRUCT
+(define-aot-layout nested-aggregate
+  :native-type XR_NATIVE_NESTED_AGGREGATE
   :field-kind nested-aggregate
   :rep tagged
   :c-type "XrValue"

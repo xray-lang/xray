@@ -29,7 +29,7 @@ static void xr_vm_struct_layout_register_children(XrVMState *vm, XrAggregateLayo
         return;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         XrAggregateFieldLayout *field = &layout->fields[i];
-        if (field->native_type == XR_NATIVE_STRUCT && field->sub_layout) {
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout) {
             field->sub_layout_id = xr_vm_struct_layout_register(vm, field->sub_layout);
         }
     }
@@ -209,7 +209,7 @@ XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
             *out = s ? XR_FROM_STR(s) : xr_null();
             return true;
         }
-        case XR_NATIVE_STRUCT:
+        case XR_NATIVE_NESTED_AGGREGATE:
             if (field->sub_layout && field->sub_layout_id == 0 && isolate)
                 field->sub_layout_id =
                     xr_vm_struct_layout_register(&isolate->vm, field->sub_layout);
@@ -277,7 +277,7 @@ XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
         case XR_NATIVE_STRING:
             *(XrString **) fp = (XrString *) src.ptr;
             return true;
-        case XR_NATIVE_STRUCT:
+        case XR_NATIVE_NESTED_AGGREGATE:
             if (XR_IS_AGG_REF(src)) {
                 uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
                 memcpy(fp, src_ptr, field->size);

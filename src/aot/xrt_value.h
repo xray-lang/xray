@@ -290,7 +290,7 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
 #define XR_NATIVE_U32 8
 #define XR_NATIVE_U64 9
 #define XR_NATIVE_F32 10
-#define XR_NATIVE_STRUCT 11
+#define XR_NATIVE_NESTED_AGGREGATE 11
 #define XR_NATIVE_ARRAY 12
 #define XR_NATIVE_STRING 13
 #define XR_NATIVE_ARRAY_REF 14

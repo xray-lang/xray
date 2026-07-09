@@ -127,7 +127,7 @@ static bool xa_c_export_struct_layout_supported_depth(const XrAggregateLayout *l
         if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
             xa_c_export_native_scalar_supported(field->elem_native_type))
             continue;
-        if (field->native_type == XR_NATIVE_STRUCT &&
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
             xa_c_export_struct_layout_supported_depth(field->sub_layout, depth + 1))
             continue;
         return false;
@@ -153,7 +153,7 @@ static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrAggregateLayo
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         const XrAggregateFieldLayout *field = &layout->fields[i];
-        if (field->native_type == XR_NATIVE_STRUCT) {
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
             if (!xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, depth + 1))
                 return false;
             continue;
@@ -172,7 +172,7 @@ static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrAggregateLayo
 static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout *field) {
     if (!field)
         return false;
-    if (field->native_type == XR_NATIVE_STRUCT)
+    if (field->native_type == XR_NATIVE_NESTED_AGGREGATE)
         return xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, 0);
     if (field->native_type == XR_NATIVE_ARRAY)
         return xa_native_lane_bitwise_reinterpretable(field->elem_native_type);
@@ -3040,7 +3040,7 @@ skip_interfaces:
                     }
                 }
                 if (sub_layout) {
-                    layout->fields[i].native_type = XR_NATIVE_STRUCT;
+                    layout->fields[i].native_type = XR_NATIVE_NESTED_AGGREGATE;
                     layout->fields[i].size =
                         (uint16_t) xr_aggregate_layout_storage_size(sub_layout);
                     layout->fields[i].sub_layout_id = sub_layout->layout_id;

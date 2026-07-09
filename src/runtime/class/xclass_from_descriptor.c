@@ -274,7 +274,7 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
         bool flat = true;
         for (uint16_t fi = 0; fi < desc->struct_layout->field_count; fi++) {
             switch (desc->struct_layout->fields[fi].native_type) {
-                case XR_NATIVE_STRUCT:
+                case XR_NATIVE_NESTED_AGGREGATE:
                 case XR_NATIVE_ARRAY:
                 case XR_NATIVE_ARRAY_REF:
                 case XR_NATIVE_MAP_REF:
