@@ -137,7 +137,7 @@ XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const cha
         return NULL;
 
     // Find the target node
-    XrClusterNode *node = xr_cluster_find_node(c, node_name);
+    XrClusterNode *node = cluster_node_find(c, node_name);
     if (!node || node->state != XR_NODE_CONNECTED)
         return NULL;
 

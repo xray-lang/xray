@@ -51,7 +51,7 @@ static inline uint32_t str_hash(const char *s) {
 
 /*
  * Block the current coroutine for up to `ms` milliseconds, returning
- * early (false) as soon as xr_cluster_stop closes the stop_pipe.
+ * early (false) as soon as cluster_runtime_stop closes the stop_pipe.
  *
  * Strategy:
  *   1. Program a read deadline on stop_pipe[0] via the netpoll timer
@@ -66,7 +66,7 @@ static inline uint32_t str_hash(const char *s) {
  * Requires: stop_pipe created in start_ex (now fatal if pipe() fails)
  * and c->isolate bound (always true for cluster coroutines).
  */
-bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
+bool cluster_sleep_interruptible(XrCluster *c, int ms) {
     if (!c)
         return false;
     if (!atomic_load(&c->running))
@@ -116,7 +116,7 @@ static void cluster_heartbeat_coro(void *arg) {
         sleep_ms = 500;
 
     while (atomic_load(&c->running)) {
-        if (!xr_cluster_sleep_interruptible(c, sleep_ms))
+        if (!cluster_sleep_interruptible(c, sleep_ms))
             break;
 
         cluster_health_send_heartbeats(c);
@@ -128,10 +128,10 @@ static void cluster_heartbeat_coro(void *arg) {
 
 /* ========== Accept Loop ==========
  *
- * Runs as a native coroutine spawned from xr_cluster_start_ex. Handles
+ * Runs as a native coroutine spawned from cluster_runtime_start. Handles
  * every inbound peer: coroutine-friendly accept, optional TLS wrap,
  * cluster handshake, then spawns writer+reader coroutines for the new
- * node. Terminates when the listen fd is closed by xr_cluster_stop.
+ * node. Terminates when the listen fd is closed by cluster_runtime_stop.
  *
  * The loop is intentionally forgiving of per-connection failures —
  * one bad peer (handshake timeout, wrong secret, expired cert) must
@@ -169,13 +169,13 @@ static void cluster_accept_loop(void *arg) {
              * EMFILE (the kernel keeps POLLIN armed because a socket
              * is still pending, so a plain retry would spin).
              *
-             * We yield via xr_cluster_sleep_interruptible instead of
-             * nanosleep so that a concurrent xr_cluster_stop() wakes
+             * We yield via cluster_sleep_interruptible instead of
+             * nanosleep so that a concurrent cluster_runtime_stop() wakes
              * us immediately rather than after the full 10ms, and —
              * more importantly — so we never pin the worker thread. */
             if (!atomic_load(&c->running))
                 break;
-            if (!xr_cluster_sleep_interruptible(c, 10))
+            if (!cluster_sleep_interruptible(c, 10))
                 break;
             continue;
         }
@@ -195,7 +195,7 @@ static void cluster_accept_loop(void *arg) {
             continue;
         }
 
-        xr_cluster_add_node(c, node);
+        cluster_node_add(c, node);
         cluster_node_start_writer(node, c->isolate);
         cluster_node_start_reader(c, node);
     }
@@ -216,7 +216,7 @@ static void cluster_accept_loop(void *arg) {
  * instead of raw SSL_CTX * handles.
  */
 static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
-    // Client context covers outgoing xr_cluster_join traffic.
+    // Client context covers outgoing cluster_runtime_join traffic.
     XrTlsContext *client_ctx = xr_tls_context_new_client();
     if (!client_ctx)
         return -1;
@@ -260,7 +260,7 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     return 0;
 }
 
-int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
+int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
                         const XrClusterTlsOptions *tls) {
     if (X->cluster)
         return -1;  // already running
@@ -389,7 +389,7 @@ int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const c
      * Spawn the inbound-accept coroutine. Failure here is non-fatal
      * for outbound-only deployments (think: edge nodes that only
      * initiate to a central core), but we still surface it via the
-     * accept_coro_spawned flag so xr_cluster_stop does not wait for
+     * accept_coro_spawned flag so cluster_runtime_stop does not wait for
      * something that never ran.
      */
     XrCoroutine *accept_coro = xr_coro_create_native(X, cluster_accept_loop, c, "cluster_accept");
@@ -401,7 +401,7 @@ int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const c
     return 0;
 }
 
-void xr_cluster_stop(XrCluster *c) {
+void cluster_runtime_stop(XrCluster *c) {
     if (!c)
         return;
 
@@ -409,7 +409,7 @@ void xr_cluster_stop(XrCluster *c) {
 
     /*
      * Close the write end of stop_pipe first. Every coroutine inside
-     * xr_cluster_sleep_interruptible is yielded on a read(2) against
+     * cluster_sleep_interruptible is yielded on a read(2) against
      * stop_pipe[0]; EOF wakes them immediately regardless of how far
      * into a deadline they had gotten. We leave the read end open
      * until after every user has observed EOF so no one hits a
@@ -440,7 +440,7 @@ void xr_cluster_stop(XrCluster *c) {
      * we already closed listen_fd, so at worst it observes a stale
      * isolate pointer and a failed accept and bails out.
      *
-     * We spin with nanosleep (not xr_cluster_sleep_interruptible)
+     * We spin with nanosleep (not cluster_sleep_interruptible)
      * because stop() runs on the embedder thread, not a coroutine.
      * Bounded to 1s total; coroutines typically exit within one tick.
      */
@@ -541,7 +541,7 @@ void xr_cluster_stop(XrCluster *c) {
     xr_free(c->tombstones);
     c->tombstones = NULL;
 
-    // Release TLS contexts built in xr_cluster_start_ex. Freeing happens
+    // Release TLS contexts built in cluster_runtime_start. Freeing happens
     // after cluster_node_free loops so no node writer coroutine can
     // still be dereferencing conn->tls which points into these contexts.
     if (c->tls_client_ctx) {
@@ -573,17 +573,17 @@ void xr_cluster_stop(XrCluster *c) {
     xr_free(c);
 }
 
-bool xr_cluster_is_running(XrCluster *c) {
+bool cluster_runtime_is_running(XrCluster *c) {
     return c && atomic_load(&c->running);
 }
 
-const char *xr_cluster_self_name(XrCluster *c) {
+const char *cluster_runtime_self_name(XrCluster *c) {
     return c ? c->self_name : "";
 }
 
 /* ========== Node Management ========== */
 
-XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name) {
+XrClusterNode *cluster_node_find(XrCluster *c, const char *name) {
     if (!c)
         return NULL;
     xr_amutex_lock(&c->nodes_lock);
@@ -599,7 +599,7 @@ XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name) {
     return NULL;
 }
 
-void xr_cluster_add_node(XrCluster *c, XrClusterNode *node) {
+void cluster_node_add(XrCluster *c, XrClusterNode *node) {
     if (!c || !node)
         return;
 
@@ -610,7 +610,7 @@ void xr_cluster_add_node(XrCluster *c, XrClusterNode *node) {
     xr_amutex_unlock(&c->nodes_lock);
 }
 
-void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node) {
+void cluster_node_remove(XrCluster *c, XrClusterNode *node) {
     if (!c || !node)
         return;
 
@@ -627,7 +627,7 @@ void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node) {
     xr_amutex_unlock(&c->nodes_lock);
 }
 
-int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
+int cluster_runtime_join(XrCluster *c, const char *host, uint16_t port) {
     if (!c)
         return -1;
 
@@ -640,7 +640,7 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
         return -1;
     }
 
-    xr_cluster_add_node(c, node);
+    cluster_node_add(c, node);
 
     /* Spawn the async writer AND the frame-processing reader. Both are
      * required for a bidirectional link — pre-P14 the reader was never
@@ -703,7 +703,7 @@ XrDistChannel *cluster_channel_find(XrCluster *c, const char *name) {
 }
 
 bool xr_cluster_vm_is_running(XrVMRuntime *X) {
-    return X && xr_cluster_is_running((XrCluster *) X->cluster);
+    return X && cluster_runtime_is_running((XrCluster *) X->cluster);
 }
 
 struct XrChannel *xr_cluster_find_channel_local(XrVMRuntime *X, const char *name) {
@@ -943,7 +943,7 @@ static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
         tls_ptr = &tls_opts;
     }
 
-    int rc = xr_cluster_start_ex(X, name->data, port, secret, tls_ptr);
+    int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr);
     return xr_bool(rc == 0);
 }
 
@@ -969,7 +969,7 @@ static XrValue cluster_join(XrVMRuntime *X, XrValue *args, int argc) {
     host[host_len] = '\0';
     port = (uint16_t) atoi(colon + 1);
 
-    int rc = xr_cluster_join(c, host, port);
+    int rc = cluster_runtime_join(c, host, port);
     return xr_bool(rc == 0);
 }
 
@@ -978,7 +978,7 @@ static XrValue cluster_self(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCluster *c = (XrCluster *) X->cluster;
-    const char *name = xr_cluster_self_name(c);
+    const char *name = cluster_runtime_self_name(c);
     XrString *str = xr_string_intern(X, name, (uint32_t) strlen(name), 0);
     return xr_string_value(str);
 }
@@ -1021,7 +1021,7 @@ static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *c = (XrCluster *) X->cluster;
 
     // If cluster running, return the existing distributed channel registration.
-    if (xr_cluster_is_running(c)) {
+    if (cluster_runtime_is_running(c)) {
         XrDistChannel *existing = cluster_channel_find(c, name_str->data);
         if (existing && existing->channel) {
             return xr_value_from_channel(existing->channel);
@@ -1032,7 +1032,7 @@ static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (!ch)
         return xr_null();
 
-    if (xr_cluster_is_running(c)) {
+    if (cluster_runtime_is_running(c)) {
         cluster_channel_register(c, name_str->data, ch);
     }
 
@@ -1260,13 +1260,13 @@ static XrValue cluster_discover_fn(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    xr_cluster_stop((XrCluster *) X->cluster);
+    cluster_runtime_stop((XrCluster *) X->cluster);
     return xr_null();
 }
 
 /* ========== Frame Processing Loop ========== */
 
-void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
+void cluster_process_node(XrCluster *c, XrClusterNode *node) {
     XR_DCHECK(c != NULL, "cluster must be initialized");
     XR_DCHECK(node != NULL, "node must not be NULL");
     if (!c || !node)
@@ -1547,7 +1547,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     xr_free(recv_buf);
     cluster_subscriber_remove_all_for_node(c, node);
     cluster_monitor_fire(c, node->name);
-    xr_cluster_remove_node(c, node);
+    cluster_node_remove(c, node);
     cluster_node_free(node);
 }
 

@@ -125,7 +125,7 @@ typedef enum {
  *
  * SAFETY BOUNDARY:
  *   - Names are validated and truncated at the API boundary
- *     (xr_cluster_start_ex) and at the wire boundary
+ *     (cluster_runtime_start) and at the wire boundary
  *     (xr_frame_decode_handshake_req/ack, parse_announce).
  *   - Must be ≤ 255 (wire encodes name_len as uint8_t).
  *   - Must be ≤ 63 to fit in the fixed-size fields inside
