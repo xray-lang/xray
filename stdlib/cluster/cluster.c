@@ -370,7 +370,7 @@ int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const c
     fcntl(c->stop_pipe[1], F_SETFL, O_NONBLOCK);
 
     X->cluster = c;
-    xr_cluster_channel_install_hooks(X);
+    cluster_channel_install_hooks(X);
 
     /*
      * Spawn the heartbeat coroutine. It drives send_heartbeats +
@@ -467,7 +467,7 @@ void xr_cluster_stop(XrCluster *c) {
     cluster_discovery_stop(c);
 
     // Uninstall distributed channel hooks (per-isolate)
-    xr_cluster_channel_uninstall_hooks(c->isolate);
+    cluster_channel_uninstall_hooks(c->isolate);
 
     // Close all node connections
     xr_amutex_lock(&c->nodes_lock);
@@ -1321,7 +1321,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
             case XR_FRAME_CHANNEL_SEND: {
                 XrFrameChannelSend cs;
                 if (xr_frame_decode_channel_send(recv_buf, payload_len, &cs) == 0) {
-                    xr_cluster_channel_handle_send(c, cs.channel_name, cs.value_data, cs.value_len);
+                    cluster_channel_handle_send(c, cs.channel_name, cs.value_data, cs.value_len);
                 }
                 break;
             }
@@ -1330,7 +1330,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 char ch_name[XR_CHANNEL_NAME_MAX + 1];
                 if (xr_frame_decode_channel_close(recv_buf, payload_len, ch_name,
                                                   sizeof(ch_name)) == 0) {
-                    xr_cluster_channel_handle_close(c, ch_name);
+                    cluster_channel_handle_close(c, ch_name);
                 }
                 break;
             }
@@ -1486,8 +1486,8 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
             case XR_FRAME_CHANNEL_PUSH: {
                 XrFrameChannelPush push;
                 if (xr_frame_decode_channel_push(recv_buf, payload_len, &push) == 0) {
-                    xr_cluster_channel_handle_push(c, push.channel_name, push.value_data,
-                                                   push.value_len);
+                    cluster_channel_handle_push(c, push.channel_name, push.value_data,
+                                                push.value_len);
                 }
                 break;
             }

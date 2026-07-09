@@ -131,7 +131,7 @@ typedef struct XrChannelDistHooks {
 } XrChannelDistHooks;
 
 // Hooks live on XrVMRuntime (see XrVMRuntime::channel_dist_hooks in
-// xisolate_internal.h). Install/uninstall via xr_cluster_channel_install_hooks.
+// xisolate_internal.h). Install/uninstall via cluster_channel_install_hooks.
 
 /* ========== Channel Structure ========== */
 

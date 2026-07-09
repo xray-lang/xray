@@ -172,8 +172,8 @@ struct XrVMRuntime {
 
     /*
      * Distributed channel hook vtable. Populated by
-     * xr_cluster_channel_install_hooks when the cluster module starts;
-     * reset to NULL by xr_cluster_channel_uninstall_hooks. Kept as
+     * cluster_channel_install_hooks when the cluster module starts;
+     * reset to NULL by cluster_channel_uninstall_hooks. Kept as
      * `void *` so that the core header avoids a dependency on the
      * coroutine-subsystem struct XrChannelDistHooks — callers cast via
      * the cluster/coro accessor sites that already pull in

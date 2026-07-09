@@ -245,11 +245,11 @@ static void dist_destroy(XrChannel *ch) {
 /* ========== Hook Table ========== */
 
 static void dist_on_select_enter(XrChannel *ch) {
-    xr_cluster_channel_subscribe(ch);
+    cluster_channel_subscribe(ch);
 }
 
 static void dist_on_select_exit(XrChannel *ch) {
-    xr_cluster_channel_unsubscribe(ch);
+    cluster_channel_unsubscribe(ch);
 }
 
 static XrChannelDistHooks cluster_dist_hooks = {
@@ -263,13 +263,13 @@ static XrChannelDistHooks cluster_dist_hooks = {
     .on_select_exit = dist_on_select_exit,
 };
 
-void xr_cluster_channel_install_hooks(XrVMRuntime *X) {
+void cluster_channel_install_hooks(XrVMRuntime *X) {
     if (!X)
         return;
     X->channel_dist_hooks = &cluster_dist_hooks;
 }
 
-void xr_cluster_channel_uninstall_hooks(XrVMRuntime *X) {
+void cluster_channel_uninstall_hooks(XrVMRuntime *X) {
     if (!X)
         return;
     X->channel_dist_hooks = NULL;
@@ -296,8 +296,8 @@ void xr_cluster_channel_uninstall_hooks(XrVMRuntime *X) {
  * Callers that only care about success/failure can keep treating
  * any non-zero return as an error.
  */
-int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
-                                   const uint8_t *value_data, uint32_t value_len) {
+int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
+                                const uint8_t *value_data, uint32_t value_len) {
     if (!c)
         return -1;
 
@@ -323,7 +323,7 @@ int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
 
     // After writing to Owner buffer, push to subscribers if any
     if (dc->subscribers.count > 0) {
-        xr_cluster_channel_push_to_subscribers(c, channel_name);
+        cluster_channel_push_to_subscribers(c, channel_name);
     }
 
     return 0;
@@ -354,7 +354,7 @@ int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
  * cluster_info() metrics counters (frames_sent vs subscriber count)
  * rather than the chan.send() return value.
  */
-void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
+void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     if (!c || !name)
         return;
 
@@ -418,8 +418,8 @@ void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
         xr_free(frame);
 }
 
-int xr_cluster_channel_handle_push(XrCluster *c, const char *channel_name,
-                                   const uint8_t *value_data, uint32_t value_len) {
+int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
+                                const uint8_t *value_data, uint32_t value_len) {
     if (!c)
         return -1;
 
@@ -446,7 +446,7 @@ int xr_cluster_channel_handle_push(XrCluster *c, const char *channel_name,
     return 0;
 }
 
-void xr_cluster_channel_subscribe(XrChannel *ch) {
+void cluster_channel_subscribe(XrChannel *ch) {
     if (!ch || !ch->dist)
         return;
     XrDistChannel *dc = (XrDistChannel *) ch->dist;
@@ -464,7 +464,7 @@ void xr_cluster_channel_subscribe(XrChannel *ch) {
     }
 }
 
-void xr_cluster_channel_unsubscribe(XrChannel *ch) {
+void cluster_channel_unsubscribe(XrChannel *ch) {
     if (!ch || !ch->dist)
         return;
     XrDistChannel *dc = (XrDistChannel *) ch->dist;
@@ -482,7 +482,7 @@ void xr_cluster_channel_unsubscribe(XrChannel *ch) {
     }
 }
 
-void xr_cluster_channel_handle_close(XrCluster *c, const char *channel_name) {
+void cluster_channel_handle_close(XrCluster *c, const char *channel_name) {
     XrDistChannel *dc = xr_cluster_find_channel(c, channel_name);
     if (!dc || !dc->channel)
         return;

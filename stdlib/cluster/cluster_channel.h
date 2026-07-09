@@ -35,13 +35,13 @@
  * Called once during cluster startup. Per-isolate — multiple isolates
  * can independently participate in distinct clusters.
  */
-XR_FUNC void xr_cluster_channel_install_hooks(struct XrVMRuntime *X);
+void cluster_channel_install_hooks(struct XrVMRuntime *X);
 
 /*
  * Uninstall cluster dist hooks (restore NULL on the given isolate).
  * Called during cluster shutdown.
  */
-XR_FUNC void xr_cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
+void cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
 
 /* ========== Named Channel Operations ========== */
 
@@ -56,13 +56,13 @@ XR_FUNC void xr_cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
  *      node can tell "buffer full" apart from "channel closed /
  *      unknown" and surface that to script code accordingly.
  */
-XR_FUNC int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
-                                           const uint8_t *value_data, uint32_t value_len);
+int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
+                                const uint8_t *value_data, uint32_t value_len);
 
 /*
  * Handle an incoming CHANNEL_CLOSE frame from a remote node.
  */
-XR_FUNC void xr_cluster_channel_handle_close(XrCluster *c, const char *channel_name);
+void cluster_channel_handle_close(XrCluster *c, const char *channel_name);
 
 /* ========== Push Model (for Proxy Channel select support) ========== */
 
@@ -70,25 +70,25 @@ XR_FUNC void xr_cluster_channel_handle_close(XrCluster *c, const char *channel_n
  * Push data from Owner channel buffer to one subscriber (round-robin).
  * Called after data is written to an Owner channel that has subscribers.
  */
-XR_FUNC void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name);
+void cluster_channel_push_to_subscribers(XrCluster *c, const char *name);
 
 /*
  * Handle incoming CHANNEL_PUSH frame on Proxy side.
  * Writes value into Proxy channel's local buffer and wakes select waiters.
  */
-XR_FUNC int xr_cluster_channel_handle_push(XrCluster *c, const char *channel_name,
-                                           const uint8_t *value_data, uint32_t value_len);
+int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
+                                const uint8_t *value_data, uint32_t value_len);
 
 /*
  * Send SUBSCRIBE frame to Owner node for a Proxy channel.
  * Called when Proxy channel enters select.
  */
-XR_FUNC void xr_cluster_channel_subscribe(XrChannel *ch);
+void cluster_channel_subscribe(XrChannel *ch);
 
 /*
  * Send UNSUBSCRIBE frame to Owner node for a Proxy channel.
  * Called when Proxy channel exits select.
  */
-XR_FUNC void xr_cluster_channel_unsubscribe(XrChannel *ch);
+void cluster_channel_unsubscribe(XrChannel *ch);
 
 #endif
