@@ -1,0 +1,5 @@
+contains=xaot-plan v0
+regex=closure [0-9]+ func=directClosure value=v[0-9]+ target=<anonymous> captures=0 repr=direct_symbol evidence=xi_value\+target\+captures\+direct_symbol reason=none
+c_contains=closure_direct_symbol_plan___anonymous__
+c_not_contains=xrt_closure_new((void*)closure_direct_symbol_plan___anonymous__
+c_not_contains=xrt_closure_stack_new((void*)closure_direct_symbol_plan___anonymous__
