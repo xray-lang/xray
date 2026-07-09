@@ -336,7 +336,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http", "request", "(options: Json): HttpResponse", "Generic HTTP request", "http_request", "slow", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", "http_route", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"http", "listen", "(port: int): bool", "Start HTTP server accept loop", "xr_http_listen_impl", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"http", "config", "(opts: Json): ()", "Configure HTTP server limits and timeouts", "xr_http_config_impl", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", "http_ws_route", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "stopServer", "(): ()", "Stop the HTTP server", "http_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},

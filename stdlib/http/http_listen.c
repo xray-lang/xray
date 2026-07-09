@@ -92,6 +92,8 @@ static const char RESP_503[] = "HTTP/1.1 503 Service Unavailable\r\n"
 #define MAX_BODY_SIZE 1048576
 #define CONN_YIELD_BATCH 32
 #define CONN_READ_BUF_SIZE 8192
+#define HTTP_SERVER_MAX_CONNS 10000
+#define HTTP_SERVER_READ_TIMEOUT_MS 30000
 
 /* ========== Fast Content-Length Formatting ========== */
 
@@ -1110,8 +1112,8 @@ static XrCFuncResult http_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrV
     ctx->http_ctx = hctx;
     ctx->router = hctx->server ? hctx->server->router : NULL;
     ctx->runtime = (XrRuntime *) X->vm.scheduler;
-    ctx->max_requests = atomic_load(&hctx->max_requests_per_conn);
-    ctx->read_timeout_ms = atomic_load(&hctx->read_timeout_ms);
+    ctx->max_requests = 0;
+    ctx->read_timeout_ms = HTTP_SERVER_READ_TIMEOUT_MS;
 
     ctx->read_buf = (char *) xr_malloc(CONN_READ_BUF_SIZE);
     if (!ctx->read_buf) {
@@ -1283,7 +1285,7 @@ static XrCFuncResult http_listen_cont(XrVMRuntime *X, int status, XrValue resume
 #endif
 
         // Check connection limit
-        int max = atomic_load(&ctx->max_conns);
+        int max = HTTP_SERVER_MAX_CONNS;
         if (max > 0) {
             int cur = atomic_fetch_add(&ctx->current_conns, 1);
             if (cur >= max) {
@@ -1381,42 +1383,4 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
 
     // Block caller until server stops (keeps script alive)
     return xr_yield_for_timeout(X, 1000, http_listen_wait_cont, ctx, result);
-}
-
-/* ======================================================================
- * Config helper (exported as module function)
- * ====================================================================== */
-
-// http.config(opts) -> void
-XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx)
-        return xr_null();
-
-    // opts should be a Json object
-    if (!xr_value_is_json(args[0]))
-        return xr_null();
-    XrJson *opts = xr_value_to_json(args[0]);
-
-    XrValue v;
-    v = xr_json_get_by_key(X, opts, "maxConns");
-    if (XR_IS_INT(v))
-        atomic_store(&ctx->max_conns, (int) XR_TO_INT(v));
-
-    v = xr_json_get_by_key(X, opts, "maxRequestsPerConn");
-    if (XR_IS_INT(v))
-        atomic_store(&ctx->max_requests_per_conn, (int) XR_TO_INT(v));
-
-    v = xr_json_get_by_key(X, opts, "idleTimeout");
-    if (XR_IS_INT(v))
-        atomic_store(&ctx->idle_timeout_ms, (int) XR_TO_INT(v));
-
-    v = xr_json_get_by_key(X, opts, "readTimeout");
-    if (XR_IS_INT(v))
-        atomic_store(&ctx->read_timeout_ms, (int) XR_TO_INT(v));
-
-    return xr_null();
 }

@@ -1243,11 +1243,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "config",
-        .signature = "(opts: Json): ()",
-        .summary = "Configure HTTP server limits and timeouts",
-    },
-    {
         .name = "cookieJar",
         .signature = "(maxCookies: int = 300): CookieJar",
         .summary = "",
@@ -5531,7 +5526,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Router.add` | `(method: string, path: string, value: unknown): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
             "| `Router.find` | `(method: string, path: string): RouteMatch?` |  |\n"
-            "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"

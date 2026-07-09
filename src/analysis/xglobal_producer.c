@@ -2328,14 +2328,42 @@ static XgLocalType *body_lookup_local_map_shape(XgBodyCollect *bc, const AstNode
     return row && row->map_shape_id != XG_NO_ID ? row : NULL;
 }
 
-static void body_add_map_key_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
+static void body_add_map_key_access_row(XgBodyCollect *bc, const AstNode *node,
+                                        const XgLocalType *local, const AstNode *key, uint8_t op,
+                                        bool mutating, bool missing_panics) {
+    uint32_t key_const_id;
+    XgKeyAccessSummary row;
+    if (!bc || !node || !local || local->map_shape_id == XG_NO_ID)
+        return;
+    key_const_id = body_const_expr_id(key);
+    memset(&row, 0, sizeof(row));
+    row.access_id = (XgKeyAccessId) (bc->evidence->nkey_accesses + 1);
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = bc->key_access_count++;
+    row.container_kind = local->map_container_kind;
+    row.op = op;
+    row.receiver_shape_id = local->map_shape_id;
+    row.receiver_type_key = local->map_receiver_type_key;
+    row.key_type_key = local->map_key_type_key;
+    row.value_type_key = local->map_value_type_key;
+    row.key_const_id = key_const_id;
+    row.key_prehash = body_map_const_prehash(local->map_key_type_key, key_const_id);
+    if (key_const_id != 0)
+        row.flags |= XG_KEY_ACCESS_CONST_KEY;
+    if (missing_panics)
+        row.flags |= XG_KEY_ACCESS_MISSING_PANICS;
+    if (mutating)
+        row.flags |= XG_KEY_ACCESS_MUTATING;
+    (void) xg_global_evidence_add_key_access(bc->evidence, &row);
+}
+
+static void body_add_map_index_key_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const IndexGetNode *get;
     const IndexSetNode *set;
     XgLocalType *local;
     const AstNode *receiver;
     const AstNode *key;
-    uint32_t key_const_id;
-    XgKeyAccessSummary row;
     if (!bc || !node)
         return;
     if (node->type == AST_INDEX_GET) {
@@ -2352,27 +2380,70 @@ static void body_add_map_key_access(XgBodyCollect *bc, const AstNode *node, bool
     local = body_lookup_local_map_shape(bc, receiver);
     if (!local || local->map_container_kind != XG_MAP_CONTAINER_MAP)
         return;
-    key_const_id = body_const_expr_id(key);
-    memset(&row, 0, sizeof(row));
-    row.access_id = (XgKeyAccessId) (bc->evidence->nkey_accesses + 1);
-    row.owner_func_id = bc->owner_func_id;
-    row.source_span_id = (uint32_t) node->line;
-    row.body_ordinal = bc->key_access_count++;
-    row.container_kind = XG_MAP_CONTAINER_MAP;
-    row.op = mutating ? XG_KEY_ACCESS_SET : XG_KEY_ACCESS_INDEX_GET;
-    row.receiver_shape_id = local->map_shape_id;
-    row.receiver_type_key = local->map_receiver_type_key;
-    row.key_type_key = local->map_key_type_key;
-    row.value_type_key = local->map_value_type_key;
-    row.key_const_id = key_const_id;
-    row.key_prehash = body_map_const_prehash(local->map_key_type_key, key_const_id);
-    if (key_const_id != 0)
-        row.flags |= XG_KEY_ACCESS_CONST_KEY;
-    if (!mutating)
-        row.flags |= XG_KEY_ACCESS_MISSING_PANICS;
-    else
-        row.flags |= XG_KEY_ACCESS_MUTATING;
-    (void) xg_global_evidence_add_key_access(bc->evidence, &row);
+    body_add_map_key_access_row(bc, node, local, key,
+                                mutating ? XG_KEY_ACCESS_SET : XG_KEY_ACCESS_INDEX_GET, mutating,
+                                !mutating);
+}
+
+static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *node) {
+    const CallExprNode *call;
+    const MemberAccessNode *member;
+    XgLocalType *local;
+    const AstNode *key = NULL;
+    uint8_t op = 0;
+    bool mutating = false;
+    if (!bc || !node || node->type != AST_CALL_EXPR)
+        return;
+    call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return;
+    member = &call->callee->as.member_access;
+    if (!member->name)
+        return;
+    local = body_lookup_local_map_shape(bc, member->object);
+    if (!local)
+        return;
+
+    if (local->map_container_kind == XG_MAP_CONTAINER_MAP) {
+        if (strcmp(member->name, "get") == 0 && call->arg_count == 1) {
+            op = XG_KEY_ACCESS_GET;
+            key = call->arguments ? call->arguments[0] : NULL;
+        } else if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
+            op = XG_KEY_ACCESS_HAS;
+            key = call->arguments ? call->arguments[0] : NULL;
+        } else if (strcmp(member->name, "delete") == 0 && call->arg_count == 1) {
+            op = XG_KEY_ACCESS_DELETE;
+            key = call->arguments ? call->arguments[0] : NULL;
+            mutating = true;
+        } else if (strcmp(member->name, "set") == 0 && call->arg_count == 2) {
+            op = XG_KEY_ACCESS_SET;
+            key = call->arguments ? call->arguments[0] : NULL;
+            mutating = true;
+        } else if (strcmp(member->name, "clear") == 0 && call->arg_count == 0) {
+            op = XG_KEY_ACCESS_CLEAR;
+            mutating = true;
+        }
+    } else if (local->map_container_kind == XG_MAP_CONTAINER_SET) {
+        if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
+            op = XG_KEY_ACCESS_HAS;
+            key = call->arguments ? call->arguments[0] : NULL;
+        } else if (strcmp(member->name, "delete") == 0 && call->arg_count == 1) {
+            op = XG_KEY_ACCESS_DELETE;
+            key = call->arguments ? call->arguments[0] : NULL;
+            mutating = true;
+        } else if (strcmp(member->name, "add") == 0 && call->arg_count == 1) {
+            op = XG_KEY_ACCESS_ADD;
+            key = call->arguments ? call->arguments[0] : NULL;
+            mutating = true;
+        } else if (strcmp(member->name, "clear") == 0 && call->arg_count == 0) {
+            op = XG_KEY_ACCESS_CLEAR;
+            mutating = true;
+        }
+    }
+
+    if (op == 0)
+        return;
+    body_add_map_key_access_row(bc, node, local, key, op, mutating, false);
 }
 
 static void body_add_generic_inst(XgBodyCollect *bc, uint8_t kind, const char *name,
@@ -2769,6 +2840,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR:
+            body_add_map_method_key_access(bc, node);
             collect_callsite(bc, node);
             walk_body_for_calls(bc, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
@@ -2913,12 +2985,12 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_INDEX_GET:
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
-            body_add_map_key_access(bc, node, false);
+            body_add_map_index_key_access(bc, node, false);
             walk_body_for_calls(bc, node->as.index_get.array);
             walk_body_for_calls(bc, node->as.index_get.index);
             break;
         case AST_INDEX_SET:
-            body_add_map_key_access(bc, node, true);
+            body_add_map_index_key_access(bc, node, true);
             walk_body_for_calls(bc, node->as.index_set.array);
             walk_body_for_calls(bc, node->as.index_set.index);
             walk_body_for_calls(bc, node->as.index_set.value);
