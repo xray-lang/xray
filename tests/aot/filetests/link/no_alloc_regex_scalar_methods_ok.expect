@@ -2,3 +2,4 @@ status=pass
 contains=xray_no_alloc_regex_scalar_methods_ok
 not_contains=allocates via stdlib 'regex.test'
 not_contains=allocates via stdlib 'regex.count'
+not_contains=allocates via method 'Regex.test'
