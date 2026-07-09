@@ -764,6 +764,32 @@ static const XgMethodSummary *verify_find_evidence_method_by_id(const XgGlobalEv
     return NULL;
 }
 
+static bool verify_generic_inst_anchors_monomorphized_class(const XgGenericInstSummary *inst,
+                                                            const XgClassSummary *cls) {
+    if (!inst || !cls || inst->specialized_class_id != cls->class_id)
+        return false;
+    if (inst->kind != XG_GENERIC_INST_CLASS)
+        return false;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) == 0)
+        return false;
+    return inst->origin_class_id == cls->generic_origin_class_id &&
+           inst->name_id == cls->generic_origin_name_id &&
+           inst->type_key == cls->generic_type_key &&
+           inst->type_arg_key_start == cls->generic_type_arg_key_start &&
+           inst->type_arg_count == cls->generic_type_arg_count;
+}
+
+static bool verify_monomorphized_class_has_generic_inst_anchor(const XgGlobalEvidence *ev,
+                                                               const XgClassSummary *cls) {
+    if (!ev || !cls || (cls->flags & XG_CLASS_MONOMORPHIZED) == 0)
+        return false;
+    for (uint32_t i = 0; i < ev->ngeneric_insts; i++) {
+        if (verify_generic_inst_anchors_monomorphized_class(&ev->generic_insts[i], cls))
+            return true;
+    }
+    return false;
+}
+
 static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len,
@@ -775,6 +801,14 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
         for (uint32_t j = i + 1; j < ev->ngeneric_insts; j++) {
             if (ev->generic_insts[j].generic_inst_id == inst->generic_inst_id)
                 return set_error(errbuf, errbuf_len, "AOT generic inst evidence id is duplicated");
+            if (inst->specialized_func_id != XG_NO_ID &&
+                ev->generic_insts[j].specialized_func_id == inst->specialized_func_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst specialized body anchor is duplicated");
+            if (inst->specialized_class_id != XG_NO_ID &&
+                ev->generic_insts[j].specialized_class_id == inst->specialized_class_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst specialized class anchor is duplicated");
         }
         if (inst->module_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT generic inst evidence has no module");
@@ -2305,6 +2339,9 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
                 cls->generic_type_arg_key_start == 0 || cls->generic_type_arg_count == 0)
                 return set_error(errbuf, errbuf_len,
                                  "AOT monomorphized class generic identity is incomplete");
+            if (!verify_monomorphized_class_has_generic_inst_anchor(ev, cls))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT monomorphized class generic inst anchor is missing");
         }
         actual_has_subclass = xg_verify_class_has_subclass(ev, cls->class_id);
         flag_has_subclass = (cls->flags & XG_CLASS_HAS_SUBCLASS) != 0;
