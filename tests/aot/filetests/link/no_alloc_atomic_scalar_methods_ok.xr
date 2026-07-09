@@ -1,0 +1,24 @@
+shared xray_no_alloc_atomic_scalar_int = Atomic(10)
+shared xray_no_alloc_atomic_scalar_flag = Atomic(false)
+
+@no_alloc
+fn xray_no_alloc_atomic_scalar_methods_ok(counter: Atomic<int>, flag: Atomic<bool>) -> int {
+    counter.store(11, Ordering.Relaxed)
+    counter.add(2, Ordering.Relaxed)
+    counter.sub(1, Ordering.Relaxed)
+    var score = counter.load(Ordering.Relaxed)
+    score = score + counter.fetchAdd(3, Ordering.Relaxed)
+    score = score + counter.fetchSub(2, Ordering.Relaxed)
+    score = score + counter.swap(5, Ordering.Relaxed)
+    if (!flag.load(Ordering.Relaxed)) {
+        score = score + 10
+    }
+    if (!flag.toggle(Ordering.Relaxed)) {
+        score = score + 20
+    }
+    flag.store(false, Ordering.Relaxed)
+    return score
+}
+
+print(xray_no_alloc_atomic_scalar_methods_ok(xray_no_alloc_atomic_scalar_int,
+                                             xray_no_alloc_atomic_scalar_flag))

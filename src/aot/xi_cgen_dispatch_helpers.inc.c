@@ -4959,6 +4959,56 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
     }
 }
 
+static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                      const char *method, uint16_t nargs) {
+    if (!v || v->nargs < 1 || !method || nargs != 0 ||
+        !xr_type_is_named_class(v->args[0]->type, "BigInt"))
+        return false;
+
+    if (strcmp(method, "sign") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "xrt_bigint_sign_value(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "isZero") == 0 || strcmp(method, "isNegative") == 0 ||
+        strcmp(method, "isPositive") == 0) {
+        const char *helper = strcmp(method, "isZero") == 0 ? "xrt_bigint_is_zero_value"
+                                                           : (strcmp(method, "isNegative") == 0
+                                                                  ? "xrt_bigint_is_negative_value"
+                                                                  : "xrt_bigint_is_positive_value");
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "%s(", helper);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "toInt") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_bigint_to_int_value(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "toFloat") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_F64, cg_rep(v));
+        fprintf(out, "xrt_bigint_to_float_value(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    return false;
+}
+
 /* Direct scalar lowering for int numeric methods (task 153). When the
  * receiver is statically `int`, emit the shared-core helper on native i64
  * operands instead of the tagged xrt_method_* dispatch: the semantics live
@@ -5130,6 +5180,8 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
+        return;
+    if (xicgen_emit_bigint_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_atomic_method(ctx, out, v, method, nargs))
         return;

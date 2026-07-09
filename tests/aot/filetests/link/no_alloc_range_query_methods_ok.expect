@@ -1,0 +1,6 @@
+status=pass
+contains=xray_no_alloc_range_query_methods_ok
+not_contains=allocates via method 'Range.length'
+not_contains=allocates via method 'Range.isEmpty'
+not_contains=allocates via method 'Range.includes'
+not_contains=allocates via method 'Range.contains'

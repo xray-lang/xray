@@ -1160,6 +1160,8 @@ int64_t xr_bigint_to_int64(XrBigInt *a, bool *overflow) {
             *overflow = true;
             return INT64_MIN;
         }
+        if (val == (uint64_t) INT64_MAX + 1)
+            return INT64_MIN;
         return -(int64_t) val;
     }
 }

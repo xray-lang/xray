@@ -1,0 +1,5 @@
+fn readName(j: Json) -> Json {
+    return j.name
+}
+
+print(readName({ name: "ada" }))

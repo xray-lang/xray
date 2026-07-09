@@ -1,0 +1,16 @@
+@no_alloc
+fn xray_no_alloc_range_query_methods_ok(value: Range) -> int {
+    var score = value.length
+    if (!value.isEmpty) {
+        score = score + 10
+    }
+    if (value.includes(3)) {
+        score = score + 20
+    }
+    if (value.contains(4)) {
+        score = score + 30
+    }
+    return score
+}
+
+print(xray_no_alloc_range_query_methods_ok(1..=4))

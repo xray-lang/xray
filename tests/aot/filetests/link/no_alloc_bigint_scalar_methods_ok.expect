@@ -1,0 +1,8 @@
+status=pass
+contains=xray_no_alloc_bigint_scalar_methods_ok
+not_contains=allocates via method 'BigInt.sign'
+not_contains=allocates via method 'BigInt.isZero'
+not_contains=allocates via method 'BigInt.isNegative'
+not_contains=allocates via method 'BigInt.isPositive'
+not_contains=allocates via method 'BigInt.toInt'
+not_contains=allocates via method 'BigInt.toFloat'

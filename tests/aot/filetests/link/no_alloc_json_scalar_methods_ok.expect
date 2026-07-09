@@ -1,0 +1,6 @@
+status=pass
+contains=xray_no_alloc_json_scalar_methods_ok
+not_contains=allocates via method 'Json.has'
+not_contains=allocates via method 'Json.get'
+not_contains=allocates via method 'Json.size'
+not_contains=allocates via method 'Json.isEmpty'
