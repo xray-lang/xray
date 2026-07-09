@@ -150,6 +150,9 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [field=%" PRId64 "]", v->aux_int);
         if (v->xg_json_access_id != 0)
             fprintf(out, " [json_access=%u]", v->xg_json_access_id);
+    } else if (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) {
+        if (v->xg_key_access_id != 0)
+            fprintf(out, " [key_access=%u]", v->xg_key_access_id);
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
                v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {

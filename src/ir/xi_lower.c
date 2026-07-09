@@ -677,6 +677,28 @@ XR_FUNC uint32_t xi_lower_next_callsite_ordinal(XiLower *l) {
     return l->xg_next_callsite_ordinal++;
 }
 
+XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_span_id,
+                                                  uint8_t access_op) {
+    const XgGlobalEvidence *ev;
+    uint32_t ordinal;
+    if (!l || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID)
+        return UINT32_MAX;
+    ev = l->global_evidence;
+    ordinal = l->xg_next_key_access_ordinal;
+    for (uint32_t i = 0; i < ev->nkey_accesses; i++) {
+        const XgKeyAccessSummary *row = &ev->key_accesses[i];
+        if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
+            row->body_ordinal != ordinal)
+            continue;
+        if (row->source_span_id == source_span_id && row->op == access_op) {
+            l->xg_next_key_access_ordinal++;
+            return ordinal;
+        }
+        return UINT32_MAX;
+    }
+    return UINT32_MAX;
+}
+
 XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const char *method_name,
                                               uint32_t source_span_id, uint32_t body_ordinal) {
     const XgGlobalEvidence *ev;
@@ -739,6 +761,30 @@ XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const cha
     }
     if (match)
         access->xg_json_access_id = match->json_access_id;
+}
+
+XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
+                                         uint32_t body_ordinal, uint8_t access_op) {
+    const XgGlobalEvidence *ev;
+    const XgKeyAccessSummary *match = NULL;
+    if (!l || !access || body_ordinal == UINT32_MAX || !l->global_evidence || !l->func ||
+        l->func->xg_body_func_id == XG_NO_ID ||
+        (access->op != XI_INDEX_GET && access->op != XI_INDEX_SET))
+        return;
+    ev = l->global_evidence;
+    for (uint32_t i = 0; i < ev->nkey_accesses; i++) {
+        const XgKeyAccessSummary *row = &ev->key_accesses[i];
+        if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id)
+            continue;
+        if (row->source_span_id != source_span_id || row->body_ordinal != body_ordinal ||
+            row->op != access_op)
+            continue;
+        if (match)
+            return;
+        match = row;
+    }
+    if (match)
+        access->xg_key_access_id = match->access_id;
 }
 
 /* ========== Method Symbol Resolution ========== */
