@@ -22,17 +22,8 @@
 // Encode data to standard Base64 (caller must free with xr_free)
 char *base64_encode_alloc(const unsigned char *data, size_t len, size_t *out_len);
 
-// URL-safe Base64 encoding (+ -> -, / -> _, no padding; caller must free with xr_free)
-char *base64_encode_url_alloc(const unsigned char *data, size_t len, size_t *out_len);
-
 // Decode standard Base64 to binary data (caller must free with xr_free)
 unsigned char *base64_decode_alloc(const char *data, size_t len, size_t *out_len);
-
-// Decode URL-safe Base64 to binary data (caller must free with xr_free)
-unsigned char *base64_decode_url_alloc(const char *data, size_t len, size_t *out_len);
-
-// Validate Base64 string (checks characters and length)
-bool base64_is_valid_bytes(const char *data, size_t len);
 
 /* ========== Module Loader ========== */
 
