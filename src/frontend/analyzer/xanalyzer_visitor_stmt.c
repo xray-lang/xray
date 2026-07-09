@@ -5615,6 +5615,11 @@ static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ct
     }
 }
 
+static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *ctx,
+                                                               VarDeclNode *var) {
+    return xa_freestanding_shared_static_initializer_allowed(ctx, var);
+}
+
 XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
                                 AstNode *node) {
     if (!ctx || !scope)
@@ -6954,7 +6959,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             "shared storage in the current freestanding slice");
     } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
                xa_is_module_level_scope(ctx->analyzer) && node->type != AST_SHARED_DECL &&
-               !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var))) {
+               !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var)) &&
+               !(node->type == AST_VAR_DECL &&
+                 xa_freestanding_top_var_static_initializer_allowed(ctx, var))) {
         xa_freestanding_report_unavailable(
             ctx, node,
             node->type == AST_CONST_DECL ? "top-level const declaration"
@@ -6964,9 +6971,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                   "fixed-array lanes, and recursively scalar fixed-array/tuple/struct "
                   "initializers are allowed as erased or static data objects in the current "
                   "freestanding slice"
-                : "module storage still requires constructor initialization; move mutable state "
-                  "inside functions until freestanding global storage has explicit static "
-                  "object lowering");
+                : "only int/float/bool/char/string/null consteval initializers are supported as "
+                  "static mutable module storage in the current freestanding slice");
     }
 
     // Variable declarations must have a type annotation or initializer.
