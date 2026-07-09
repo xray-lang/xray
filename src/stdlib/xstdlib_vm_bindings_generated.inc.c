@@ -312,6 +312,7 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "sleepMs", sys_sleep_ms);
     XRS_EXPORT(module, isolate, "pinToCpu", sys_pin_to_cpu);
     XRS_EXPORT(module, isolate, "__threadLocalId", sys_thread_local_id);
+    XRS_EXPORT(module, isolate, "__threadLocalAlive", sys_thread_local_alive);
     XRS_EXPORT(module, isolate, "__onSignal", sys_on_signal);
     XRS_EXPORT(module, isolate, "__dylibOpen", sys_dylib_open);
     XRS_EXPORT(module, isolate, "__dylibSymbol", sys_dylib_symbol);

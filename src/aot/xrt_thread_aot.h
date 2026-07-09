@@ -73,6 +73,7 @@ static void *xrt_thread_aot_entry(void *arg) {
     if (name)
         xr_thread_set_name(xr_thread_self(), name);
     xrt_thread_apply_affinity(affinity_cpus, affinity_count);
+    xrt_threadlocal_enter_current();
 
     XrAotResult result =
         desc && desc->resume ? desc->resume(frame, NULL) : xr_aot_error(XR_NULL_VAL, false);
@@ -89,6 +90,7 @@ static void *xrt_thread_aot_entry(void *arg) {
     }
     xrt_thread_aot_release_frame(desc, frame);
     atomic_store_explicit(&thread->finished, true, memory_order_release);
+    xrt_threadlocal_leave_current();
 
     xrt_release(xrt_thread_box(thread));
     return NULL;

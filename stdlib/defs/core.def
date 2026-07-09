@@ -1203,6 +1203,19 @@ module sys {
     visibility: "internal"
   }
 
+  fn __threadLocalAlive {
+    signature: "(id: int): bool"
+    doc: "Return whether an internal sys.ThreadLocal OS-thread token is still live"
+    vm: "sys_thread_local_alive"
+    aot: "xrt_sys_thread_local_alive"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn __onSignal {
     signature: "(signal: int, handler: fn(): ()): bool"
     doc: "Register a VM-hosted safe-point handler for a portable process signal"

@@ -44,6 +44,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"sys", "sleepMs", 1, "xrt_sys_sleep_ms", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__threadLocalId", 0, "xrt_sys_thread_local_id", "", CG_AOT_RET_VALUE, NULL},
+    {"sys", "__threadLocalAlive", 1, "xrt_sys_thread_local_alive", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__onSignal", 2, "xrt_sys_on_signal", "vv", CG_AOT_RET_VALUE, NULL},
     {"sys", "__dylibOpen", 1, "xrt_sys_dylib_open", "s", CG_AOT_RET_VALUE, NULL},
     {"sys", "__dylibSymbol", 2, "xrt_sys_dylib_symbol", "vs", CG_AOT_RET_VALUE, NULL},

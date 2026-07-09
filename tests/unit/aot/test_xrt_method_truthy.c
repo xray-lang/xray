@@ -240,12 +240,52 @@ static void test_xrt_thread_handle_methods(void) {
     ASSERT_NULL(xrt_method_0(handle, XRT_SYM_DETACH), "Thread.detach is a null-returning method");
 }
 
+static _Atomic uint64_t g_threadlocal_test_id;
+static atomic_int g_threadlocal_test_stage;
+
+static void *threadlocal_live_test_entry(void *arg) {
+    (void) arg;
+    xrt_threadlocal_enter_current();
+    atomic_store_explicit(&g_threadlocal_test_id, xr_thread_current_id(), memory_order_release);
+    atomic_store_explicit(&g_threadlocal_test_stage, 1, memory_order_release);
+    while (atomic_load_explicit(&g_threadlocal_test_stage, memory_order_acquire) == 1)
+        xr_thread_yield();
+    xrt_threadlocal_leave_current();
+    atomic_store_explicit(&g_threadlocal_test_stage, 3, memory_order_release);
+    return NULL;
+}
+
+static void test_xrt_threadlocal_live_registry(void) {
+    atomic_store_explicit(&g_threadlocal_test_id, 0, memory_order_release);
+    atomic_store_explicit(&g_threadlocal_test_stage, 0, memory_order_release);
+
+    xr_thread_t thread;
+    ASSERT_TRUE_MSG(xr_thread_create(&thread, threadlocal_live_test_entry, NULL),
+                    "threadlocal live registry test thread starts");
+    while (atomic_load_explicit(&g_threadlocal_test_stage, memory_order_acquire) == 0)
+        xr_thread_yield();
+
+    uint64_t id = atomic_load_explicit(&g_threadlocal_test_id, memory_order_acquire);
+    ASSERT_TRUE_MSG(id != 0 && id != xr_thread_current_id(),
+                    "threadlocal live registry captures child thread id");
+    ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) id)), true,
+                "running sys.Thread id is alive");
+
+    atomic_store_explicit(&g_threadlocal_test_stage, 2, memory_order_release);
+    xr_thread_join(thread, NULL);
+    ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) id)), false,
+                "exited sys.Thread id is not alive");
+    ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) xr_thread_current_id())), true,
+                "current thread id is always alive");
+}
+
 int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
     test_xrt_weak_predicate_accepts_aot_object_tags();
     test_xrt_type_metadata_uses_hot_name_and_derive_tables();
     test_xrt_thread_handle_methods();
+    test_xrt_threadlocal_live_registry();
 
     if (g_failed == 0) {
         printf("test_xrt_method_truthy: %d passed, %d failed\n", g_passed, g_failed);
