@@ -1,0 +1,37 @@
+class Token implements Hashable {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    operator==(other: Token) -> bool {
+        return this.value == other.value
+    }
+
+    hash() -> int {
+        return this.value
+    }
+}
+
+fn run(n: int) -> int {
+    var token = Token(7)
+    var values: Map<Token, int> = #{}
+    values.set(token, 99)
+    var seen: Set<Token> = #[]
+    seen.add(token)
+
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        if (values.has(token)) {
+            if (seen.has(token)) {
+                sum = sum + values.get(token)
+            }
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(20000))
