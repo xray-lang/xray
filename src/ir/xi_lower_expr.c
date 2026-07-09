@@ -84,7 +84,6 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"Process", XR_GLOBAL_VAR_PROCESS},
         {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
         {"Range", XR_GLOBAL_VAR_RANGE},
-        {"DateTime", XR_GLOBAL_VAR_DATETIME},
         {"Atomic", XR_GLOBAL_VAR_ATOMIC},
         {"Ordering", XR_GLOBAL_VAR_ORDERING},
         {"Endian", XR_GLOBAL_VAR_ENDIAN},
@@ -4882,7 +4881,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                 cls->aux_int = upval_idx;
         }
     }
-    /* Built-in unified-class names (Exception, Range, DateTime, etc.)
+    /* Built-in unified-class names (Exception, Range, sync classes, etc.)
      * are populated into the VM builtins array by the prelude module
      * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via
      * XI_GET_BUILTIN before falling back to null. */

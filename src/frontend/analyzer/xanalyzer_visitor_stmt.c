@@ -1675,6 +1675,37 @@ static bool xa_member_path_is_sys_resource_namespace(AstNode *expr, const char *
            strcmp(ns->as.variable.name, "sys") == 0;
 }
 
+static bool xa_process_options_ctor_detached_literal(AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    AstNode *callee = xa_thread_lint_unwrap_expr(call->callee);
+    bool is_options = false;
+    if (callee && callee->type == AST_VARIABLE && callee->as.variable.name &&
+        strcmp(callee->as.variable.name, "ProcessOptions") == 0) {
+        is_options = true;
+    } else if (callee && callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &callee->as.member_access;
+        AstNode *ns = xa_thread_lint_unwrap_expr(ma->object);
+        is_options = ma->name && strcmp(ma->name, "ProcessOptions") == 0 && ns &&
+                     ns->type == AST_VARIABLE && ns->as.variable.name &&
+                     strcmp(ns->as.variable.name, "sys") == 0;
+    }
+    if (!is_options || call->arg_count < 6 || !call->arguments[5])
+        return false;
+    AstNode *detached = xa_thread_lint_unwrap_expr(call->arguments[5]);
+    return detached && detached->type == AST_LITERAL_TRUE;
+}
+
+static bool xa_process_spawn_detached_literal(AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    return call->arg_count >= 3 && xa_process_options_ctor_detached_literal(call->arguments[2]);
+}
+
 static bool xa_expr_is_sys_os_resource_open_call(AstNode *expr, XaOsResourceKind *kind_out) {
     expr = xa_thread_lint_unwrap_expr(expr);
     if (!expr || expr->type != AST_CALL_EXPR)
@@ -1686,6 +1717,8 @@ static bool xa_expr_is_sys_os_resource_open_call(AstNode *expr, XaOsResourceKind
     MemberAccessNode *ma = &callee->as.member_access;
     if (ma->name && strcmp(ma->name, "spawn") == 0 &&
         xa_member_path_is_sys_resource_namespace(ma->object, "Process")) {
+        if (xa_process_spawn_detached_literal(expr))
+            return false;
         if (kind_out)
             *kind_out = XA_OS_RESOURCE_PROCESS;
         return true;

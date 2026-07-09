@@ -8,7 +8,7 @@
  * xnative_type.h - Native type registration system
  *
  * KEY CONCEPT:
- *   Registers C native types (like DateTime, Regex) as XrClass.
+ *   Registers C native types (like Regex) as XrClass.
  *   Provides consistent method call experience with xray classes.
  *
  * WHY THIS DESIGN:
@@ -43,8 +43,8 @@ typedef struct XrNativeYieldableMethod {
 
 // Native type registration descriptor
 typedef struct XrNativeTypeInfo {
-    const char *name;                            // Type name (e.g. "DateTime")
-    XrObjType gc_type;                           // GC type ID (e.g. XR_TDATETIME)
+    const char *name;                            // Type name (e.g. "Regex")
+    XrObjType gc_type;                           // GC type ID
     XrNativeMethod *methods;                     // Instance methods (NULL-terminated)
     XrNativeMethod *getters;                     // Property getters (NULL-terminated, optional)
     XrNativeMethod *static_methods;              // Static methods (NULL-terminated, optional)

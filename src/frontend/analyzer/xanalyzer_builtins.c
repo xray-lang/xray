@@ -54,8 +54,6 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_CHANNEL;
     if (xr_type_is_named_class(type, "Regex"))
         return XR_TID_REGEX;
-    if (xr_type_is_named_class(type, "DateTime"))
-        return XR_TID_DATETIME;
     if (xr_type_is_named_class(type, "PanicInfo"))
         return XR_TID_PANIC_INFO;
     if (xr_type_is_named_class(type, "Task"))

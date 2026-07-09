@@ -1,0 +1,4 @@
+fn main() {
+    var dt = DateTime(0)
+    print(dt)
+}

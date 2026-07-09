@@ -51,6 +51,13 @@ typedef struct CgStaticFixedMatrixInfo {
     uint16_t inner_count;
 } CgStaticFixedMatrixInfo;
 
+typedef struct CgStaticFixedCubeInfo {
+    CgFixedArrayLaneInfo lane;
+    uint16_t outer_count;
+    uint16_t middle_count;
+    uint16_t inner_count;
+} CgStaticFixedCubeInfo;
+
 static bool cg_fixed_array_lane_info_from_type(const XrType *type, CgFixedArrayLaneInfo *out) {
     if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
         type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX || !out)
@@ -321,6 +328,166 @@ static bool cg_freestanding_static_fixed_matrix_index_value(XiCgenCtx *ctx, cons
         return false;
     if (out_index)
         *out_index = v->args[1];
+    return true;
+}
+
+static bool cg_static_fixed_cube_info_from_type(const XrType *type, CgStaticFixedCubeInfo *out) {
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX)
+        return false;
+    const XrType *plane_type = type->fixed_array.element_type;
+    if (!plane_type || plane_type->kind != XR_KIND_FIXED_ARRAY ||
+        plane_type->fixed_array.length <= 0 || plane_type->fixed_array.length > UINT16_MAX)
+        return false;
+    const XrType *row_type = plane_type->fixed_array.element_type;
+    if (!row_type || row_type->kind != XR_KIND_FIXED_ARRAY || row_type->fixed_array.length <= 0 ||
+        row_type->fixed_array.length > UINT16_MAX)
+        return false;
+    CgFixedArrayLaneInfo lane;
+    if (!cg_fixed_array_lane_info_from_type(row_type, &lane) ||
+        (lane.rep == XR_REP_TAGGED && lane.native_type != XR_NATIVE_STRING))
+        return false;
+    if (out)
+        *out = (CgStaticFixedCubeInfo) {
+            .lane = lane,
+            .outer_count = (uint16_t) type->fixed_array.length,
+            .middle_count = (uint16_t) plane_type->fixed_array.length,
+            .inner_count = (uint16_t) row_type->fixed_array.length,
+        };
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_cube_literal_in_module(XiCgenCtx *ctx,
+                                                                const XiModule *module,
+                                                                int64_t slot,
+                                                                CgStaticFixedCubeInfo *out_info,
+                                                                const XrCtValue **out_value) {
+    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
+        slot >= module->nslots)
+        return false;
+    const XiConstLiteral *lit = &module->slot_const_literals[slot];
+    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+        lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
+        lit->type->kind != XR_KIND_FIXED_ARRAY)
+        return false;
+    CgStaticFixedCubeInfo info;
+    if (!cg_static_fixed_cube_info_from_type(lit->type, &info))
+        return false;
+    const XrCtFixedArrayValue *outer = &lit->ct_value->as.fixed_array_val;
+    if (outer->count != (int) info.outer_count || outer->count <= 0 || !outer->elements)
+        return false;
+    for (int plane_idx = 0; plane_idx < outer->count; plane_idx++) {
+        const XrCtValue *plane_value = &outer->elements[plane_idx];
+        if (!plane_value || plane_value->kind != XR_CT_FIXED_ARRAY)
+            return false;
+        const XrCtFixedArrayValue *plane = &plane_value->as.fixed_array_val;
+        if (plane->count != (int) info.middle_count || plane->count <= 0 || !plane->elements)
+            return false;
+        for (int row_idx = 0; row_idx < plane->count; row_idx++) {
+            const XrCtValue *row_value = &plane->elements[row_idx];
+            if (!row_value || row_value->kind != XR_CT_FIXED_ARRAY)
+                return false;
+            const XrCtFixedArrayValue *row = &row_value->as.fixed_array_val;
+            if (row->count != (int) info.inner_count || row->count <= 0 || !row->elements)
+                return false;
+            for (int col = 0; col < row->count; col++) {
+                if (!cg_ct_static_fixed_array_value_supported(&row->elements[col], &info.lane))
+                    return false;
+            }
+        }
+    }
+    if (out_info)
+        *out_info = info;
+    if (out_value)
+        *out_value = lit->ct_value;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_cube_literal(XiCgenCtx *ctx, int64_t slot,
+                                                      CgStaticFixedCubeInfo *out_info,
+                                                      const XrCtValue **out_value) {
+    return cg_freestanding_static_fixed_cube_literal_in_module(ctx, ctx ? ctx->module : NULL, slot,
+                                                               out_info, out_value);
+}
+
+static bool cg_freestanding_static_fixed_cube_value_ex(XiCgenCtx *ctx, const XiValue *value,
+                                                       CgStaticFixedCubeInfo *out_info,
+                                                       int64_t *out_slot,
+                                                       const XiModule **out_module) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (out_module)
+        *out_module = NULL;
+    if (!v)
+        return false;
+
+    const XiModule *module = ctx ? ctx->module : NULL;
+    int64_t slot = -1;
+    if (v->op == XI_GET_SHARED) {
+        slot = v->aux_int;
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit =
+            cg_import_slot_const_literal(ctx, NULL, (int) slot, &import_module, &import_slot);
+        if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+            module = import_module;
+            slot = import_slot;
+        }
+    } else if (v->op == XI_IMPORT_REF && v->aux) {
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit = cg_import_ref_target_const_literal(
+            ctx, (const XiImportRef *) v->aux, &import_module, &import_slot);
+        if (!import_lit || import_lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE)
+            return false;
+        module = import_module;
+        slot = import_slot;
+    } else {
+        return false;
+    }
+
+    if (!cg_freestanding_static_fixed_cube_literal_in_module(ctx, module, slot, out_info, NULL))
+        return false;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
+        cg_report_imported_static_const_requires_weak(ctx, module, slot);
+        ctx->error = true;
+        return false;
+    }
+    if (out_slot)
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_cube_outer_index_value(
+    XiCgenCtx *ctx, const XiValue *value, CgStaticFixedCubeInfo *out_info, int64_t *out_slot,
+    const XiModule **out_module, const XiValue **out_outer_index) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
+        return false;
+    if (!cg_freestanding_static_fixed_cube_value_ex(ctx, v->args[0], out_info, out_slot,
+                                                    out_module))
+        return false;
+    if (out_outer_index)
+        *out_outer_index = v->args[1];
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_cube_index_value(XiCgenCtx *ctx, const XiValue *value,
+                                                          CgStaticFixedCubeInfo *out_info,
+                                                          int64_t *out_slot,
+                                                          const XiModule **out_module,
+                                                          const XiValue **out_outer_index,
+                                                          const XiValue **out_middle_index) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
+        return false;
+    if (!cg_freestanding_static_fixed_cube_outer_index_value(ctx, v->args[0], out_info, out_slot,
+                                                             out_module, out_outer_index))
+        return false;
+    if (out_middle_index)
+        *out_middle_index = v->args[1];
     return true;
 }
 
@@ -644,6 +811,154 @@ static bool cg_value_is_elided_static_fixed_matrix_const_ref(XiCgenCtx *ctx, con
     return cg_static_fixed_matrix_const_ref_safe_uses(ctx, f, v, 0);
 }
 
+static bool cg_static_fixed_cube_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if (v->op == XI_INDEX_GET && a == 0)
+                    continue;
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_cube_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_static_fixed_cube_outer_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if (v->op == XI_INDEX_GET && a == 0 &&
+                    cg_freestanding_static_fixed_cube_index_value(ctx, v, NULL, NULL, NULL, NULL,
+                                                                  NULL)) {
+                    if (!cg_static_fixed_cube_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_cube_outer_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_static_fixed_cube_const_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if (v->op == XI_INDEX_GET && a == 0 &&
+                    cg_freestanding_static_fixed_cube_outer_index_value(ctx, v, NULL, NULL, NULL,
+                                                                        NULL)) {
+                    if (!cg_static_fixed_cube_outer_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_cube_const_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_value_is_elided_static_fixed_cube_index_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *v) {
+    if (!cg_freestanding_static_fixed_cube_index_value(ctx, v, NULL, NULL, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_cube_index_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool cg_value_is_elided_static_fixed_cube_outer_index_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                                 const XiValue *v) {
+    if (!cg_freestanding_static_fixed_cube_outer_index_value(ctx, v, NULL, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_cube_outer_index_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool cg_value_is_elided_static_fixed_cube_const_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *v) {
+    if (!cg_freestanding_static_fixed_cube_value_ex(ctx, v, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_cube_const_ref_safe_uses(ctx, f, v, 0);
+}
+
 static void cg_emit_static_fixed_array_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
                                             int64_t slot) {
     cg_emit_static_const_data_name(ctx, out, module, slot, "_xctarr");
@@ -742,6 +1057,52 @@ static bool cg_emit_freestanding_static_fixed_matrix_defs(XiCgenCtx *ctx, FILE *
                 if (col > 0)
                     fprintf(out, ", ");
                 cg_emit_static_fixed_array_value(ctx, out, &info.lane, &inner->elements[col]);
+            }
+            fprintf(out, "}");
+        }
+        fprintf(out, "};\n");
+        emitted = true;
+    }
+    if (emitted)
+        fprintf(out, "\n");
+    return emitted;
+}
+
+static bool cg_emit_freestanding_static_fixed_cube_defs(XiCgenCtx *ctx, FILE *out,
+                                                        const XiModule *module) {
+    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+        return false;
+    bool emitted = false;
+    for (uint16_t slot = 0; slot < module->nslots; slot++) {
+        CgStaticFixedCubeInfo info;
+        const XrCtValue *value = NULL;
+        if (!cg_freestanding_static_fixed_cube_literal(ctx, slot, &info, &value))
+            continue;
+        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XrCtFixedArrayValue *outer = &value->as.fixed_array_val;
+        cg_emit_static_const_storage(out, lit);
+        fprintf(out, "%s ", info.lane.ctype);
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        fprintf(out, "[%u][%u][%u]", (unsigned) info.outer_count, (unsigned) info.middle_count,
+                (unsigned) info.inner_count);
+        emit_aot_const_data_attrs(out, lit);
+        fprintf(out, " = {");
+        for (int plane_idx = 0; plane_idx < outer->count; plane_idx++) {
+            const XrCtFixedArrayValue *plane = &outer->elements[plane_idx].as.fixed_array_val;
+            if (plane_idx > 0)
+                fprintf(out, ", ");
+            fprintf(out, "{");
+            for (int row_idx = 0; row_idx < plane->count; row_idx++) {
+                const XrCtFixedArrayValue *row = &plane->elements[row_idx].as.fixed_array_val;
+                if (row_idx > 0)
+                    fprintf(out, ", ");
+                fprintf(out, "{");
+                for (int col = 0; col < row->count; col++) {
+                    if (col > 0)
+                        fprintf(out, ", ");
+                    cg_emit_static_fixed_array_value(ctx, out, &info.lane, &row->elements[col]);
+                }
+                fprintf(out, "}");
             }
             fprintf(out, "}");
         }
@@ -1311,6 +1672,24 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         (static_matrix_info.inner_count != info.count || static_matrix_info.lane.rep != info.rep ||
          static_matrix_info.lane.native_type != info.native_type))
         static_matrix_read = false;
+    CgStaticFixedCubeInfo static_cube_info;
+    int64_t static_cube_slot = -1;
+    const XiModule *static_cube_module = NULL;
+    const XiValue *static_cube_outer_index = NULL;
+    const XiValue *static_cube_middle_index = NULL;
+    const XiValue *static_cube_middle_access = cg_unwrap_identity_value(v->args[0]);
+    const XiValue *static_cube_outer_access =
+        (static_cube_middle_access && static_cube_middle_access->op == XI_INDEX_GET &&
+         static_cube_middle_access->nargs >= 1)
+            ? cg_unwrap_identity_value(static_cube_middle_access->args[0])
+            : NULL;
+    bool static_cube_read = cg_freestanding_static_fixed_cube_index_value(
+        ctx, v->args[0], &static_cube_info, &static_cube_slot, &static_cube_module,
+        &static_cube_outer_index, &static_cube_middle_index);
+    if (static_cube_read &&
+        (static_cube_info.inner_count != info.count || static_cube_info.lane.rep != info.rep ||
+         static_cube_info.lane.native_type != info.native_type))
+        static_cube_read = false;
     CgStaticFixedStructArrayInfo static_struct_array_info;
     int64_t static_struct_array_slot = -1;
     int64_t static_struct_array_field_idx = -1;
@@ -1359,6 +1738,64 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
             emit_array_i64_arg(out, static_matrix_outer_index);
         else
             fprintf(out, "_outer_idx");
+        fprintf(out, "][");
+        if (unchecked)
+            emit_array_i64_arg(out, v->args[1]);
+        else
+            fprintf(out, "_idx");
+        fprintf(out, "]");
+        if (guarded)
+            fprintf(out, "; })");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (static_cube_read) {
+        bool outer_unchecked = cg_fixed_array_index_bounds_proven(static_cube_outer_access,
+                                                                  static_cube_info.outer_count);
+        bool middle_unchecked = cg_fixed_array_index_bounds_proven(static_cube_middle_access,
+                                                                   static_cube_info.middle_count);
+        bool guarded = !outer_unchecked || !middle_unchecked || !unchecked;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        if (guarded)
+            fprintf(out, "({ ");
+        if (!outer_unchecked) {
+            fprintf(out, "int64_t _outer_idx = ");
+            emit_value_as_rep_ctx(ctx, out, static_cube_outer_index, XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_outer_idx < 0 || _outer_idx >= %u)) "
+                    "xrt_fixed_index_oob(_outer_idx, %u); ",
+                    (unsigned) static_cube_info.outer_count,
+                    (unsigned) static_cube_info.outer_count);
+        }
+        if (!middle_unchecked) {
+            fprintf(out, "int64_t _middle_idx = ");
+            emit_value_as_rep_ctx(ctx, out, static_cube_middle_index, XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_middle_idx < 0 || _middle_idx >= %u)) "
+                    "xrt_fixed_index_oob(_middle_idx, %u); ",
+                    (unsigned) static_cube_info.middle_count,
+                    (unsigned) static_cube_info.middle_count);
+        }
+        if (!unchecked) {
+            fprintf(out, "int64_t _idx = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) "
+                    "xrt_fixed_index_oob(_idx, %u); ",
+                    (unsigned) info.count, (unsigned) info.count);
+        }
+        emit_fixed_array_lane_load_prefix(out, &info, target_rep);
+        cg_emit_static_fixed_array_name(ctx, out, static_cube_module, static_cube_slot);
+        fprintf(out, "[");
+        if (outer_unchecked)
+            emit_array_i64_arg(out, static_cube_outer_index);
+        else
+            fprintf(out, "_outer_idx");
+        fprintf(out, "][");
+        if (middle_unchecked)
+            emit_array_i64_arg(out, static_cube_middle_index);
+        else
+            fprintf(out, "_middle_idx");
         fprintf(out, "][");
         if (unchecked)
             emit_array_i64_arg(out, v->args[1]);

@@ -748,10 +748,6 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 // xr_deep_copy_json_with_ctx removed: Json values flow through
 // xr_deep_copy_instance_with_ctx via the unified transfer table dispatch.
 
-// DateTime is now an XrInstance with native body — deep copy flows
-// through xr_deep_copy_instance_with_ctx via the unified transfer table
-// dispatch.
-
 static XrValue xr_deep_copy_array_ref_with_ctx(XrCopyContext *ctx, XrValue value) {
     if (!ctx || !XR_IS_ARRAY_REF(value) || !value.ptr)
         return value;

@@ -1,4 +1,4 @@
-import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, ENTRIES, ROWS } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, ENTRIES, ROWS } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
@@ -8,7 +8,7 @@ fn imported_static_sum(i: int) -> int {
         (PACKED_ALIGNED.tag as int) + (PACKED_ALIGNED.value as int) +
         PAIR.0 + PAIR.1 + NESTED.0.0 + NESTED.0.1 + NESTED.1.0 + NESTED.1.1 +
         (unsafe { BITS.u } as int) + (unsafe { WORD_BYTES.b }[i] as int) +
-        (MATRIX[i][i] as int) + ENTRIES[i].code + (ENTRIES[i].flag as int) +
+        (MATRIX[i][i] as int) + CUBE[i][i][i] + ENTRIES[i].code + (ENTRIES[i].flag as int) +
         (ROWS[i].samples[i] as int) + ROWS[i].weight + GROUPS[i].inner.code +
         GROUPS[i].base
 }
