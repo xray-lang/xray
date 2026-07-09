@@ -32,6 +32,8 @@ typedef uint32_t XgDerivedFieldId;
 typedef uint32_t XgDerivedMethodId;
 typedef uint32_t XgJsonShapeId;
 typedef uint32_t XgJsonAccessId;
+typedef uint32_t XgRecordShapeId;
+typedef uint32_t XgRecordAccessId;
 typedef uint32_t XgMapShapeId;
 typedef uint32_t XgMapEntryId;
 typedef uint32_t XgKeyAccessId;
@@ -41,7 +43,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 5,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 6,
 };
 
 typedef enum XgBuildProfile {
@@ -149,6 +151,19 @@ typedef enum XgJsonAccessKind {
     XG_JSON_ACCESS_INDEX_SET,
     XG_JSON_ACCESS_GET_DEFAULT,
 } XgJsonAccessKind;
+
+typedef enum XgRecordShapeKind {
+    XG_RECORD_SHAPE_LITERAL = 1,
+    XG_RECORD_SHAPE_OPTIONS,
+    XG_RECORD_SHAPE_SPREAD,
+    XG_RECORD_SHAPE_STATIC,
+} XgRecordShapeKind;
+
+typedef enum XgRecordAccessKind {
+    XG_RECORD_ACCESS_FIELD_GET = 1,
+    XG_RECORD_ACCESS_FIELD_SET,
+    XG_RECORD_ACCESS_DESTRUCTURE,
+} XgRecordAccessKind;
 
 typedef enum XgMapContainerKind {
     XG_MAP_CONTAINER_MAP = 1,
@@ -288,6 +303,20 @@ enum {
     XG_JSON_ACCESS_COMPUTED_KEY = 1u << 1,
     XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 2,
     XG_JSON_ACCESS_MUTATING = 1u << 3,
+};
+
+enum {
+    XG_RECORD_SHAPE_SEALED = 1u << 0,
+    XG_RECORD_SHAPE_STATIC_KEYS = 1u << 1,
+    XG_RECORD_SHAPE_HAS_SPREAD = 1u << 2,
+    XG_RECORD_SHAPE_HAS_OPTIONS = 1u << 3,
+    XG_RECORD_SHAPE_JSON_BRIDGEABLE = 1u << 4,
+};
+
+enum {
+    XG_RECORD_ACCESS_STATIC_FIELD = 1u << 0,
+    XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 1,
+    XG_RECORD_ACCESS_MUTATING = 1u << 2,
 };
 
 enum {
@@ -556,6 +585,32 @@ typedef struct XgJsonAccessSummary {
     uint32_t flags;
 } XgJsonAccessSummary;
 
+typedef struct XgRecordShapeSummary {
+    XgRecordShapeId record_shape_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t type_key;
+    uint32_t field_name_start;
+    uint16_t field_count;
+    uint8_t shape_kind;
+    uint32_t flags;
+    uint64_t shape_hash;
+} XgRecordShapeSummary;
+
+typedef struct XgRecordAccessSummary {
+    XgRecordAccessId record_access_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgRecordShapeId receiver_shape_id;
+    uint32_t source_span_id;
+    uint32_t field_name_id;
+    uint32_t result_type_key;
+    uint16_t field_ordinal;
+    uint8_t access_kind;
+    uint32_t flags;
+} XgRecordAccessSummary;
+
 typedef struct XgMapShapeSummary {
     XgMapShapeId shape_id;
     XgModuleId module_id;
@@ -627,6 +682,8 @@ typedef struct XgGlobalEvidence {
     XgDerivedMethodSummary *derived_methods;
     XgJsonShapeSummary *json_shapes;
     XgJsonAccessSummary *json_accesses;
+    XgRecordShapeSummary *record_shapes;
+    XgRecordAccessSummary *record_accesses;
     XgMapShapeSummary *map_shapes;
     XgMapEntrySummary *map_entries;
     XgKeyAccessSummary *key_accesses;
@@ -647,6 +704,8 @@ typedef struct XgGlobalEvidence {
     uint32_t nderived_methods;
     uint32_t njson_shapes;
     uint32_t njson_accesses;
+    uint32_t nrecord_shapes;
+    uint32_t nrecord_accesses;
     uint32_t nmap_shapes;
     uint32_t nmap_entries;
     uint32_t nkey_accesses;
@@ -667,6 +726,8 @@ typedef struct XgGlobalEvidence {
     uint32_t derived_method_cap;
     uint32_t json_shape_cap;
     uint32_t json_access_cap;
+    uint32_t record_shape_cap;
+    uint32_t record_access_cap;
     uint32_t map_shape_cap;
     uint32_t map_entry_cap;
     uint32_t key_access_cap;
@@ -683,6 +744,8 @@ XR_FUNC const char *xg_derive_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derived_method_kind_name(uint8_t kind);
 XR_FUNC const char *xg_json_shape_kind_name(uint8_t kind);
 XR_FUNC const char *xg_json_access_kind_name(uint8_t kind);
+XR_FUNC const char *xg_record_shape_kind_name(uint8_t kind);
+XR_FUNC const char *xg_record_access_kind_name(uint8_t kind);
 XR_FUNC const char *xg_map_container_kind_name(uint8_t kind);
 XR_FUNC const char *xg_map_shape_source_name(uint8_t source);
 XR_FUNC const char *xg_key_access_op_name(uint8_t op);
@@ -724,6 +787,10 @@ XR_FUNC bool xg_global_evidence_reserve_derived_methods(XgGlobalEvidence *eviden
 XR_FUNC bool xg_global_evidence_reserve_json_shapes(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_json_accesses(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_record_shapes(XgGlobalEvidence *evidence,
+                                                      uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *evidence,
+                                                        uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_map_shapes(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_map_entries(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_key_accesses(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -766,6 +833,12 @@ XR_FUNC XgJsonShapeSummary *xg_global_evidence_add_json_shape(XgGlobalEvidence *
                                                               const XgJsonShapeSummary *summary);
 XR_FUNC XgJsonAccessSummary *xg_global_evidence_add_json_access(XgGlobalEvidence *evidence,
                                                                 const XgJsonAccessSummary *summary);
+XR_FUNC XgRecordShapeSummary *
+xg_global_evidence_add_record_shape(XgGlobalEvidence *evidence,
+                                    const XgRecordShapeSummary *summary);
+XR_FUNC XgRecordAccessSummary *
+xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
+                                     const XgRecordAccessSummary *summary);
 XR_FUNC XgMapShapeSummary *xg_global_evidence_add_map_shape(XgGlobalEvidence *evidence,
                                                             const XgMapShapeSummary *summary);
 XR_FUNC XgMapEntrySummary *xg_global_evidence_add_map_entry(XgGlobalEvidence *evidence,
@@ -781,6 +854,9 @@ xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
                                      XgGenericInstId generic_inst_id);
 XR_FUNC const XgJsonShapeSummary *
 xg_global_evidence_find_json_shape(const XgGlobalEvidence *evidence, XgJsonShapeId json_shape_id);
+XR_FUNC const XgRecordShapeSummary *
+xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
+                                     XgRecordShapeId record_shape_id);
 XR_FUNC const XgMapShapeSummary *xg_global_evidence_find_map_shape(const XgGlobalEvidence *evidence,
                                                                    XgMapShapeId shape_id);
 XR_FUNC const XgHashEqSummary *xg_global_evidence_find_hash_eq(const XgGlobalEvidence *evidence,

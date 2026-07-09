@@ -1,0 +1,6 @@
+fn readX() -> int {
+    var point = { x: 1, y: 2 }
+    return point.x
+}
+
+print(readX())

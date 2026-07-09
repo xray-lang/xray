@@ -742,6 +742,66 @@ typedef struct XaotJsonAccessPlan {
     uint8_t unproven_reason;
 } XaotJsonAccessPlan;
 
+typedef enum XaotRecordShapeAction {
+    XAOT_RECORD_SHAPE_SEALED_RECORD = 1,
+    XAOT_RECORD_SHAPE_OPTIONS_BAG,
+    XAOT_RECORD_SHAPE_SPREAD_RESULT,
+    XAOT_RECORD_SHAPE_STATIC_RECORD,
+    XAOT_RECORD_SHAPE_REJECT,
+} XaotRecordShapeAction;
+
+typedef enum XaotRecordAccessAction {
+    XAOT_RECORD_ACCESS_DIRECT_FIELD = 1,
+    XAOT_RECORD_ACCESS_COPY_DESTRUCTURE,
+    XAOT_RECORD_ACCESS_CHECKED_FIELD,
+    XAOT_RECORD_ACCESS_REJECT,
+} XaotRecordAccessAction;
+
+enum {
+    XAOT_RECORD_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_RECORD_EV_SEALED = 1u << 1,
+    XAOT_RECORD_EV_STATIC_FIELD = 1u << 2,
+    XAOT_RECORD_EV_RECEIVER_SHAPE = 1u << 3,
+    XAOT_RECORD_EV_FIELD_INDEX = 1u << 4,
+    XAOT_RECORD_EV_JSON_BRIDGE = 1u << 5,
+};
+
+enum {
+    XAOT_RECORD_UNPROVEN_NONE = 0,
+    XAOT_RECORD_UNPROVEN_INVALID_KIND = 1,
+    XAOT_RECORD_UNPROVEN_RECEIVER_SHAPE_UNKNOWN = 2,
+    XAOT_RECORD_UNPROVEN_STALE_SHAPE = 3,
+    XAOT_RECORD_UNPROVEN_DYNAMIC_FIELD = 4,
+};
+
+typedef struct XaotRecordShapePlan {
+    XgRecordShapeId record_shape_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint32_t type_key;
+    uint32_t field_name_start;
+    uint16_t field_count;
+    uint8_t shape_kind;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+    uint64_t shape_hash;
+} XaotRecordShapePlan;
+
+typedef struct XaotRecordAccessPlan {
+    XgRecordAccessId record_access_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgRecordShapeId receiver_shape_id;
+    uint32_t field_name_id;
+    uint32_t result_type_key;
+    uint16_t field_ordinal;
+    uint8_t access_kind;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotRecordAccessPlan;
+
 typedef enum XaotMapShapeAction {
     XAOT_MAP_SHAPE_RUNTIME_HASH = 1,
     XAOT_MAP_SHAPE_PREALLOC_HASH,
@@ -1039,6 +1099,12 @@ typedef struct XaotBundle {
     XaotJsonAccessPlan *json_access_plans;
     uint32_t njson_access_plans;
     uint32_t json_access_plan_cap;
+    XaotRecordShapePlan *record_shape_plans;
+    uint32_t nrecord_shape_plans;
+    uint32_t record_shape_plan_cap;
+    XaotRecordAccessPlan *record_access_plans;
+    uint32_t nrecord_access_plans;
+    uint32_t record_access_plan_cap;
     XaotMapShapePlan *map_shape_plans;
     uint32_t nmap_shape_plans;
     uint32_t map_shape_plan_cap;
@@ -1113,6 +1179,10 @@ XR_FUNC const XaotJsonShapePlan *xaot_bundle_find_json_shape_plan(const XaotBund
                                                                   XgJsonShapeId json_shape_id);
 XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBundle *bundle,
                                                                     XgJsonAccessId json_access_id);
+XR_FUNC const XaotRecordShapePlan *
+xaot_bundle_find_record_shape_plan(const XaotBundle *bundle, XgRecordShapeId record_shape_id);
+XR_FUNC const XaotRecordAccessPlan *
+xaot_bundle_find_record_access_plan(const XaotBundle *bundle, XgRecordAccessId record_access_id);
 XR_FUNC const XaotMapShapePlan *xaot_bundle_find_map_shape_plan(const XaotBundle *bundle,
                                                                 XgMapShapeId shape_id);
 XR_FUNC const XaotKeyAccessPlan *xaot_bundle_find_key_access_plan(const XaotBundle *bundle,
