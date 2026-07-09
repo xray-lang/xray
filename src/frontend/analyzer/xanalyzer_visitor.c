@@ -4294,6 +4294,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 if (node->as.set_literal.elements[si]) {
                     ctx->expected_type = elem;
                     XrType *et = xa_visit_infer_expr(ctx, node->as.set_literal.elements[si]);
+                    xa_check_span_value_escape(ctx, node->as.set_literal.elements[si], et,
+                                               "store Span view in set literal");
                     if (!elem && si == 0)
                         elem = et;
                 }

@@ -2204,6 +2204,7 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 continue;
             }
+            xa_check_span_value_escape(ctx, child, src, "spread Span view into tuple literal");
             int ec = src->tuple.element_count;
             if (slot + ec > cap) {
                 int new_cap = (slot + ec + 8) * 2;
@@ -2235,7 +2236,9 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
             elem_types = resized;
             cap = new_cap;
         }
-        elem_types[slot++] = xa_visit_infer_expr(ctx, child);
+        XrType *elem = xa_visit_infer_expr(ctx, child);
+        xa_check_span_value_escape(ctx, child, elem, "store Span view in tuple literal");
+        elem_types[slot++] = elem;
     }
     ctx->expected_type = saved_expected;
 
@@ -2290,6 +2293,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = elem_expected;
         XrType *elem_type = xa_visit_infer_expr(ctx, arr->repeat_value);
         ctx->expected_type = saved_expected;
+        xa_check_span_value_escape(ctx, arr->repeat_value, elem_type,
+                                   "repeat Span view in array literal");
         XrType *count_type = xa_visit_infer_expr(ctx, arr->repeat_count);
         if (count_type && !XR_TYPE_IS_UNKNOWN(count_type) && !XR_TYPE_IS_INT(count_type)) {
             XrLocation loc = {.file = ctx->file_path,
@@ -2347,6 +2352,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             }
             ctx->expected_type = elem_expected;
             XrType *elem_type = xa_visit_infer_expr(ctx, child);
+            xa_check_span_value_escape(ctx, child, elem_type,
+                                       "store Span view in fixed array literal");
             if (elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
                 !xa_typecheck_assignable(elem_expected, elem_type)) {
                 XrLocation loc = {
@@ -2386,6 +2393,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             }
             ctx->expected_type = json_type;
             XrType *elem_type = xa_visit_infer_expr(ctx, child);
+            xa_check_span_value_escape(ctx, child, elem_type,
+                                       "store Span view in Json array literal");
             if (elem_type && !xr_type_is_json_field_compatible(elem_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = child->line, .column = child->column};
@@ -2444,6 +2453,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_VIEW(src) || XR_TYPE_IS_SPAN(src)) &&
                 src->container.element_type) {
                 contributed = src->container.element_type;
+                xa_check_span_value_escape(ctx, child, src, "spread Span view into array literal");
             } else {
                 if (src && !XR_TYPE_IS_UNKNOWN(src)) {
                     XrLocation loc = {
@@ -2460,6 +2470,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         } else {
             ctx->expected_type = target_elem_type;
             contributed = xa_visit_infer_expr(ctx, child);
+            xa_check_span_value_escape(ctx, child, contributed, "store Span view in array literal");
         }
 
         if (use_target_elem_type && contributed && !XR_TYPE_IS_UNKNOWN(contributed) &&
@@ -2514,15 +2525,19 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     // Infer key/value types from first element
     ctx->expected_type = target_key_type;
     XrType *key_type = xa_visit_infer_expr(ctx, map->keys[0]);
+    xa_check_span_value_escape(ctx, map->keys[0], key_type, "store Span view as map literal key");
     ctx->expected_type = target_value_type;
     XrType *val_type = xa_visit_infer_expr(ctx, map->values[0]);
+    xa_check_span_value_escape(ctx, map->values[0], val_type, "store Span view in map literal");
 
     // Union with remaining elements (same pattern as array_literal)
     for (int i = 1; i < map->count; i++) {
         ctx->expected_type = target_key_type;
         XrType *k = xa_visit_infer_expr(ctx, map->keys[i]);
+        xa_check_span_value_escape(ctx, map->keys[i], k, "store Span view as map literal key");
         ctx->expected_type = target_value_type;
         XrType *v = xa_visit_infer_expr(ctx, map->values[i]);
+        xa_check_span_value_escape(ctx, map->values[i], v, "store Span view in map literal");
         if (!xr_type_equals(key_type, k)) {
             key_type = xr_type_union(ctx->analyzer->isolate, key_type, k);
         }
@@ -2591,6 +2606,8 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         if (val && val->type == AST_SPREAD_EXPR) {
             XrType *src = xa_visit_infer_expr(ctx, val->as.spread_expr.expr);
             entry_types[i] = src;
+            xa_check_span_value_escape(ctx, val, src,
+                                       "spread Span view fields into object literal");
             bool src_ok =
                 result_is_json ? (src && XR_TYPE_IS_JSON(src)) : (src && XR_TYPE_IS_RECORD(src));
             if (src_ok) {
@@ -2635,6 +2652,8 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             }
             ctx->expected_type = field_expected;
             entry_types[i] = xa_visit_infer_expr(ctx, obj->values[i]);
+            xa_check_span_value_escape(ctx, obj->values[i], entry_types[i],
+                                       "store Span view in object literal");
             ctx->expected_type = saved_expected;
             cap += 1;
 
