@@ -24,6 +24,8 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xinstance.h"
 #include "../base/xdynarray.h"
 #include <limits.h>
 #include <stdio.h>
@@ -243,8 +245,48 @@ static char *bc_get_string(BcReader *r) {
 #define BC_VAL_INT 2
 #define BC_VAL_FLOAT 3
 #define BC_VAL_STRING 4
+#define BC_VAL_DYNAMIC_SHAPE 5
 
-static bool bc_write_value(BcWriter *w, XrValue val) {
+#define BC_SHAPE_JSON 1
+#define BC_SHAPE_RECORD 2
+
+static bool bc_write_dynamic_shape(BcWriter *w, XrValue val) {
+    if (!XR_IS_INT(val))
+        return false;
+
+    XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(val);
+    if (!cls || !(cls->flags & XR_CLASS_DYNAMIC_LAYOUT))
+        return false;
+
+    uint8_t kind = 0;
+    if (cls->builtin_kind == XR_BK_JSON) {
+        kind = BC_SHAPE_JSON;
+    } else if (cls->builtin_kind == XR_BK_RECORD) {
+        kind = BC_SHAPE_RECORD;
+    } else {
+        return false;
+    }
+
+    if (!bc_put_u8(w, BC_VAL_DYNAMIC_SHAPE))
+        return false;
+    if (!bc_put_u8(w, kind))
+        return false;
+    if (!bc_put_u8(w, (cls->flags & XR_CLASS_DYNAMIC_SEALED) ? 1 : 0))
+        return false;
+    if (!bc_put_u32(w, cls->field_count))
+        return false;
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        const char *name = (cls->fields && cls->fields[i].name) ? cls->fields[i].name : "";
+        if (!bc_put_string(w, name))
+            return false;
+    }
+    return true;
+}
+
+static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape) {
+    if (as_dynamic_shape)
+        return bc_write_dynamic_shape(w, val);
+
     if (XR_IS_NULL(val)) {
         return bc_put_u8(w, BC_VAL_NULL);
     } else if (XR_IS_BOOL(val)) {
@@ -269,6 +311,67 @@ static bool bc_write_value(BcWriter *w, XrValue val) {
     return bc_put_u8(w, BC_VAL_NULL);
 }
 
+static XrValue bc_read_dynamic_shape(BcReader *r) {
+    uint8_t kind = bc_get_u8(r);
+    uint8_t sealed_raw = bc_get_u8(r);
+    uint32_t count = bc_get_u32(r);
+    if (r->error != XR_BC_OK)
+        return xr_null();
+    if (count > UINT16_MAX || (kind != BC_SHAPE_JSON && kind != BC_SHAPE_RECORD)) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return xr_null();
+    }
+
+    char **names = NULL;
+    if (count > 0) {
+        names = xr_malloc(sizeof(char *) * (size_t) count);
+        if (!names) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        memset(names, 0, sizeof(char *) * (size_t) count);
+    }
+
+    for (uint32_t i = 0; i < count; i++) {
+        names[i] = bc_get_string(r);
+        if (r->error != XR_BC_OK) {
+            for (uint32_t j = 0; j <= i; j++)
+                xr_free(names[j]);
+            xr_free(names);
+            return xr_null();
+        }
+        if (!names[i]) {
+            names[i] = xr_malloc(1);
+            if (!names[i]) {
+                r->error = XR_BC_ERR_ALLOC;
+                for (uint32_t j = 0; j < i; j++)
+                    xr_free(names[j]);
+                xr_free(names);
+                return xr_null();
+            }
+            names[i][0] = '\0';
+        }
+    }
+
+    XrClass *cls = NULL;
+    bool sealed = sealed_raw != 0;
+    if (kind == BC_SHAPE_JSON) {
+        cls = xr_class_build_json_chain(r->X, (const char *const *) names, (int) count, sealed);
+    } else {
+        cls = xr_class_build_record_chain(r->X, (const char *const *) names, (int) count, sealed);
+    }
+
+    for (uint32_t i = 0; i < count; i++)
+        xr_free(names[i]);
+    xr_free(names);
+
+    if (!cls) {
+        r->error = XR_BC_ERR_ALLOC;
+        return xr_null();
+    }
+    return xr_int((int64_t) (intptr_t) cls);
+}
+
 static XrValue bc_read_value(BcReader *r) {
     uint8_t type = bc_get_u8(r);
     if (r->error != XR_BC_OK)
@@ -291,6 +394,8 @@ static XrValue bc_read_value(BcReader *r) {
             xr_free(str);
             return s ? xr_string_value(s) : xr_null();
         }
+        case BC_VAL_DYNAMIC_SHAPE:
+            return bc_read_dynamic_shape(r);
         default:
             r->error = XR_BC_ERR_CORRUPT;
             return xr_null();
@@ -381,6 +486,31 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth);
 
 #define BC_MAX_NESTING_DEPTH 64
 
+static bool *bc_collect_dynamic_shape_constants(XrProto *proto, uint32_t const_count) {
+    if (const_count == 0)
+        return NULL;
+
+    bool *shape_consts = xr_calloc(const_count, sizeof(bool));
+    if (!shape_consts)
+        return NULL;
+
+    uint32_t code_count = (uint32_t) PROTO_CODE_COUNT(proto);
+    for (uint32_t i = 0; i < code_count; i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        OpCode op = GET_OPCODE(inst);
+        int kidx = -1;
+        if (op == OP_NEWJSON) {
+            kidx = GETARG_B(inst);
+        } else if (op == OP_JSON_DECODE) {
+            kidx = GETARG_C(inst);
+        }
+        if (kidx >= 0 && (uint32_t) kidx < const_count) {
+            shape_consts[kidx] = true;
+        }
+    }
+    return shape_consts;
+}
+
 static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!proto)
         return false;
@@ -464,11 +594,17 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     uint32_t const_count = (uint32_t) PROTO_CONST_COUNT(proto);
     if (!bc_put_u32(w, const_count))
         return false;
+    bool *shape_consts = bc_collect_dynamic_shape_constants(proto, const_count);
+    if (const_count > 0 && !shape_consts)
+        return false;
     for (uint32_t i = 0; i < const_count; i++) {
         XrValue val = PROTO_CONSTANT(proto, i);
-        if (!bc_write_value(w, val))
+        if (!bc_write_value(w, val, shape_consts[i])) {
+            xr_free(shape_consts);
             return false;
+        }
     }
+    xr_free(shape_consts);
 
     // 6. Line info (optional)
     if (w->flags & XR_BC_STRIP_DEBUG) {
@@ -528,13 +664,13 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
         r->error = XR_BC_ERR_CORRUPT;
         return NULL;
     }
-    // Allocate Proto
-    XrProto *proto = xr_malloc(sizeof(XrProto));
+    // Allocate Proto through the canonical constructor so runtime metadata
+    // such as proto_id stays unique for inline-cache indexing.
+    XrProto *proto = xr_vm_proto_new();
     if (!proto) {
         r->error = XR_BC_ERR_ALLOC;
         return NULL;
     }
-    memset(proto, 0, sizeof(XrProto));
 
     // 1. Function name
     char *name = bc_get_string(r);
@@ -640,7 +776,6 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     uint32_t code_count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         goto fail;
-    xr_dynarray_init(&proto->code, sizeof(XrInstruction));
     for (uint32_t i = 0; i < code_count; i++) {
         XrInstruction inst = bc_get_u64(r);
         if (r->error != XR_BC_OK)
@@ -652,7 +787,6 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     uint32_t const_count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         goto fail;
-    xr_dynarray_init(&proto->constants, sizeof(XrValue));
     for (uint32_t i = 0; i < const_count; i++) {
         XrValue val = bc_read_value(r);
         if (r->error != XR_BC_OK)
@@ -664,7 +798,6 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     uint32_t line_count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         goto fail;
-    xr_dynarray_init(&proto->lineinfo, sizeof(int));
     for (uint32_t i = 0; i < line_count; i++) {
         int line = (int) bc_get_u32(r);
         if (r->error != XR_BC_OK)
@@ -676,7 +809,6 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     uint32_t upval_count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         goto fail;
-    xr_dynarray_init(&proto->upvalues, sizeof(UpvalInfo));
     for (uint32_t i = 0; i < upval_count; i++) {
         UpvalInfo info = {0};
         info.index = bc_get_u16(r);
@@ -693,12 +825,11 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     uint32_t sub_count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         goto fail;
-    xr_dynarray_init(&proto->protos, sizeof(XrProto *));
     for (uint32_t i = 0; i < sub_count; i++) {
         XrProto *sub = bc_read_proto_depth(r, depth + 1);
         if (!sub)
             goto fail;
-        DYNARRAY_ADD(&proto->protos, sub, XrProto *);
+        xr_vm_proto_add_proto(proto, sub);
     }
 
     // 9. Per-function symbol table
@@ -723,22 +854,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     return proto;
 
 fail:
-    // Free all resources allocated during partial read
-    if (proto->source_file)
-        xr_free((void *) proto->source_file);
-    xr_dynarray_free(&proto->code);
-    xr_dynarray_free(&proto->constants);
-    xr_dynarray_free(&proto->lineinfo);
-    xr_dynarray_free(&proto->upvalues);
-    // Recursively free nested protos already read
-    for (int i = 0; i < proto->protos.count; i++) {
-        XrProto *sub = DYNARRAY_GET(&proto->protos, i, XrProto *);
-        if (sub)
-            xr_free(sub);  // sub's own cleanup handled by its bc_read_proto fail path
-    }
-    xr_dynarray_free(&proto->protos);
-    xr_free(proto->symbols);
-    xr_free(proto);
+    xr_vm_proto_free(proto);
     return NULL;
 }
 

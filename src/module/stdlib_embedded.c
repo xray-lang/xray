@@ -9,9 +9,8 @@
  *
  * KEY CONCEPT:
  *   Pure-Xray stdlib modules must be loadable without relying on cwd or an
- *   installed stdlib directory. Bytecode is the preferred artifact; embedded
- *   source remains as a bootstrap fallback while the stdlib bytecode generator
- *   is being wired into the build.
+ *   installed stdlib directory. Bytecode is the preferred runtime artifact;
+ *   embedded source is retained for AOT/export analysis and bootstrap builds.
  */
 
 #include <stddef.h>
@@ -29,7 +28,8 @@ typedef struct {
     size_t size;
 } XrEmbeddedStdlibBytecode;
 
-#include <stdlib_embedded_generated.inc>
+#include <stdlib_embedded_sources.inc>
+#include <stdlib_embedded_bytecodes.inc>
 
 const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size) {
     if (out_size)
