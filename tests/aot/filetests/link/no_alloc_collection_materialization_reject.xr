@@ -30,6 +30,11 @@ fn xray_no_alloc_map_values_reject(values: Map<int, int>) -> int {
 }
 
 @no_alloc
+fn xray_no_alloc_map_entries_reject(values: Map<int, int>) -> int {
+    return values.entries().length
+}
+
+@no_alloc
 fn xray_no_alloc_map_iterator_reject(values: Map<int, int>) -> bool {
     return values.iterator().hasNext()
 }
@@ -47,6 +52,11 @@ fn xray_no_alloc_map_tostring_reject(values: Map<int, int>) -> string {
 @no_alloc
 fn xray_no_alloc_set_toarray_reject(values: Set<int>) -> int {
     return values.toArray().length
+}
+
+@no_alloc
+fn xray_no_alloc_set_values_reject(values: Set<int>) -> int {
+    return values.values().length
 }
 
 @no_alloc
@@ -93,10 +103,12 @@ print(xray_no_alloc_array_entries_reject(xray_no_alloc_collection_array))
 print(xray_no_alloc_array_entries_iterator_reject(xray_no_alloc_collection_array))
 print(xray_no_alloc_map_keys_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_values_reject(xray_no_alloc_collection_map))
+print(xray_no_alloc_map_entries_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_iterator_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_entries_iterator_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_tostring_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_set_toarray_reject(xray_no_alloc_collection_set))
+print(xray_no_alloc_set_values_reject(xray_no_alloc_collection_set))
 print(xray_no_alloc_set_union_reject(xray_no_alloc_collection_set,
                                      xray_no_alloc_collection_set_other))
 print(xray_no_alloc_set_intersection_reject(xray_no_alloc_collection_set,
