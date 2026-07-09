@@ -113,6 +113,19 @@ const ROWS: [Row; 2] = comptime [
     Row{samples: [5, 6, 7, 8], weight: TABLE[1]},
 ]
 
+struct LabelRow {
+    labels: [string; 2]
+    code: int
+}
+
+@section("__DATA,.xray_label_rows")
+@weak
+@used
+const LABEL_ROWS: [LabelRow; 2] = comptime [
+    LabelRow{labels: ["hot", LABEL], code: TABLE[0]},
+    LabelRow{labels: ["cold", "done"], code: TABLE[1]},
+]
+
 packed struct PackedPair {
     tag: uint8
     value: uint32
@@ -262,6 +275,12 @@ fn xray_top_const_struct_array_field_runtime(i: int) -> int {
 @c_export("xray_top_const_struct_array_fixed_field_runtime")
 fn xray_top_const_struct_array_fixed_field_runtime(row: int, col: int) -> int {
     return ROWS[row].samples[col] as int + ROWS[row].weight
+}
+
+@c_export("xray_top_const_struct_array_string_fixed_field_print")
+fn xray_top_const_struct_array_string_fixed_field_print(row: int, col: int) -> int {
+    print(LABEL_ROWS[row].labels[col])
+    return LABEL_ROWS[row].code
 }
 
 @c_export("xray_top_const_struct_array_nested_field_runtime")

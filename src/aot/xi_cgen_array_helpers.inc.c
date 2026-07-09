@@ -1600,6 +1600,15 @@ static bool cg_value_is_elided_static_fixed_struct_array_index_ref(XiCgenCtx *ct
     return cg_static_fixed_struct_array_index_ref_safe_uses(ctx, f, v, 0);
 }
 
+static bool cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(XiCgenCtx *ctx,
+                                                                               const XiFunc *f,
+                                                                               const XiValue *v) {
+    if (!cg_static_fixed_struct_array_fixed_array_field_value(ctx, v, NULL, NULL, NULL, NULL, NULL,
+                                                              NULL, NULL))
+        return false;
+    return cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(ctx, f, v, 0);
+}
+
 static bool cg_value_is_elided_static_fixed_struct_array_nested_field_ref(XiCgenCtx *ctx,
                                                                           const XiFunc *f,
                                                                           const XiValue *v) {

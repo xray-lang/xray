@@ -4780,6 +4780,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_const_ref(ctx, f, v) ||
@@ -5671,6 +5672,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_const_ref(ctx, f, v))
@@ -5694,6 +5696,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_tuple_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_struct_const_ref(ctx, f, v->args[0]) ||
@@ -6236,6 +6239,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
