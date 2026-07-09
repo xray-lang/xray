@@ -3,6 +3,7 @@
 #include "../common.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xcoroutine.h"
+#include "../../src/coro/xthread_obj.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/os/os_dylib.h"
 #include "../../src/os/os_pipe.h"
@@ -616,6 +617,13 @@ static XrValue sys_thread_local_id(XrVMRuntime *isolate, XrValue *args, int argc
     (void) args;
     (void) argc;
     return xr_int((int64_t) xr_thread_current_id());
+}
+
+static XrValue sys_thread_local_alive(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    return xr_bool(xr_thread_obj_threadlocal_id_alive((uint64_t) XR_TO_INT(args[0])));
 }
 
 static XrValue sys_dylib_open(XrVMRuntime *isolate, XrValue *args, int argc) {

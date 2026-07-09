@@ -40,6 +40,83 @@ static bool thread_join_can_yield(XrVMRuntime *isolate) {
     return isolate && worker && worker->p.id >= 0 && xr_current_coro(isolate) != NULL;
 }
 
+static atomic_flag g_threadlocal_live_lock = ATOMIC_FLAG_INIT;
+static _Atomic bool g_threadlocal_live_fail_open = false;
+static uint64_t *g_threadlocal_live_ids = NULL;
+static size_t g_threadlocal_live_count = 0;
+static size_t g_threadlocal_live_cap = 0;
+
+static void threadlocal_live_lock(void) {
+    while (atomic_flag_test_and_set_explicit(&g_threadlocal_live_lock, memory_order_acquire))
+        xr_thread_yield();
+}
+
+static void threadlocal_live_unlock(void) {
+    atomic_flag_clear_explicit(&g_threadlocal_live_lock, memory_order_release);
+}
+
+static size_t threadlocal_live_find_unlocked(uint64_t id) {
+    for (size_t i = 0; i < g_threadlocal_live_count; i++) {
+        if (g_threadlocal_live_ids[i] == id)
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+void xr_thread_obj_threadlocal_enter_current(void) {
+    uint64_t id = xr_thread_current_id();
+    if (id == 0)
+        return;
+
+    threadlocal_live_lock();
+    if (threadlocal_live_find_unlocked(id) != SIZE_MAX) {
+        threadlocal_live_unlock();
+        return;
+    }
+    if (g_threadlocal_live_count == g_threadlocal_live_cap) {
+        size_t next_cap = g_threadlocal_live_cap ? g_threadlocal_live_cap * 2u : 8u;
+        uint64_t *next =
+            (uint64_t *) xr_realloc(g_threadlocal_live_ids, next_cap * sizeof(uint64_t));
+        if (!next) {
+            atomic_store_explicit(&g_threadlocal_live_fail_open, true, memory_order_release);
+            threadlocal_live_unlock();
+            return;
+        }
+        g_threadlocal_live_ids = next;
+        g_threadlocal_live_cap = next_cap;
+    }
+    g_threadlocal_live_ids[g_threadlocal_live_count++] = id;
+    threadlocal_live_unlock();
+}
+
+void xr_thread_obj_threadlocal_leave_current(void) {
+    uint64_t id = xr_thread_current_id();
+    if (id == 0)
+        return;
+
+    threadlocal_live_lock();
+    size_t i = threadlocal_live_find_unlocked(id);
+    if (i != SIZE_MAX) {
+        g_threadlocal_live_ids[i] = g_threadlocal_live_ids[g_threadlocal_live_count - 1u];
+        g_threadlocal_live_count--;
+    }
+    threadlocal_live_unlock();
+}
+
+bool xr_thread_obj_threadlocal_id_alive(uint64_t id) {
+    if (id == 0)
+        return false;
+    if (id == xr_thread_current_id())
+        return true;
+    if (atomic_load_explicit(&g_threadlocal_live_fail_open, memory_order_acquire))
+        return true;
+
+    threadlocal_live_lock();
+    bool alive = threadlocal_live_find_unlocked(id) != SIZE_MAX;
+    threadlocal_live_unlock();
+    return alive;
+}
+
 static void thread_release_ref(XrThread *thread) {
     if (!thread)
         return;
@@ -132,6 +209,7 @@ static void *thread_entry_vm(void *arg) {
     XrWorker worker;
     XrMachine machine;
     bool bound_vm_tls = thread_bind_vm_tls(thread, &worker, &machine);
+    xr_thread_obj_threadlocal_enter_current();
 
     XrValue out = xr_null();
     XrCoroRunKind kind =
@@ -152,6 +230,7 @@ static void *thread_entry_vm(void *arg) {
         thread_unbind_vm_tls(&worker, &machine);
     if (isolate)
         xray_vm_exit();
+    xr_thread_obj_threadlocal_leave_current();
 
     thread_release_ref(thread);
     thread_runtime_leave(isolate);
