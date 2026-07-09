@@ -398,6 +398,10 @@ static bool cg_static_struct_native_nested_layout_supported(const XrAggregateFie
            xaot_layout_native_field_uses_nested_layout(field->native_type);
 }
 
+static bool cg_static_struct_direct_field_set_supported(const XrAggregateFieldLayout *field) {
+    return field && cg_static_struct_native_scalar_supported(field->native_type);
+}
+
 static uint8_t cg_static_struct_array_ref_elem_native_type(const XrAggregateFieldLayout *field) {
     return field && field->elem_native_type == XR_NATIVE_STRING ? XR_NATIVE_VALUE
                                                                 : field->elem_native_type;
@@ -466,7 +470,7 @@ static bool cg_static_struct_field_access_index(const XiValue *v, const XrAggreg
     if (!v || !sl)
         return false;
     int64_t idx = -1;
-    if (v->op == XI_AGG_GET) {
+    if (v->op == XI_AGG_GET || v->op == XI_AGG_SET) {
         idx = v->aux_int;
     } else if (v->op == XI_LOAD_FIELD) {
         idx = cg_static_struct_field_index_by_name(sl, (const char *) v->aux);
@@ -1363,6 +1367,18 @@ static bool cg_static_struct_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f, cons
                     continue;
                 if ((v->op == XI_AGG_GET || v->op == XI_LOAD_FIELD) && a == 0)
                     continue;
+                if (v->op == XI_AGG_SET && a == 0) {
+                    const XrAggregateLayout *sl = NULL;
+                    int64_t slot = -1;
+                    if (!cg_freestanding_static_struct_value(ctx, target, &sl, &slot) || !sl)
+                        return false;
+                    int64_t field_idx = -1;
+                    if (!cg_static_struct_field_access_index(v, sl, &field_idx))
+                        return false;
+                    if (!cg_static_struct_direct_field_set_supported(&sl->fields[field_idx]))
+                        return false;
+                    continue;
+                }
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
                 if (cg_is_static_const_ref_alias(v) && a == 0) {
@@ -1451,6 +1467,15 @@ static bool cg_static_struct_nested_field_ref_safe_uses(XiCgenCtx *ctx, const Xi
                     const XrAggregateFieldLayout *field = &nested_layout->fields[field_idx];
                     if (cg_static_struct_native_fixed_array_supported(field) &&
                         !cg_static_struct_fixed_array_field_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if (v->op == XI_AGG_SET && a == 0) {
+                    int64_t field_idx = -1;
+                    if (!cg_static_struct_field_access_index(v, nested_layout, &field_idx))
+                        return false;
+                    if (!cg_static_struct_direct_field_set_supported(
+                            &nested_layout->fields[field_idx]))
                         return false;
                     continue;
                 }
@@ -2236,6 +2261,20 @@ static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         cg_struct_layout_same_shape(static_layout, sl)) {
         cg_emit_static_struct_field_lvalue_in_module(ctx, out, static_module, static_layout,
                                                      static_slot, idx);
+        return;
+    }
+    const XrAggregateLayout *static_parent = NULL;
+    const XrAggregateLayout *static_nested = NULL;
+    int64_t static_nested_slot = -1;
+    int64_t static_parent_field_idx = -1;
+    const XiModule *static_nested_module = NULL;
+    if (cg_freestanding_static_struct_nested_field_value(
+            ctx, object, &static_parent, &static_nested_slot, &static_parent_field_idx,
+            &static_nested, &static_nested_module) &&
+        cg_struct_layout_same_shape(static_nested, sl)) {
+        cg_emit_static_struct_nested_field_lvalue(ctx, out, static_nested_module, static_parent,
+                                                  static_nested_slot, static_parent_field_idx,
+                                                  static_nested, idx);
         return;
     }
     const XiValue *origin = cg_trace_struct_new(object);

@@ -1488,6 +1488,8 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
         }
     }
     const_literal_normalize_for_static_slot_type(&lit, type);
+    if (s->type == AST_VAR_DECL)
+        lit.data_mutable = true;
     switch (lit.kind) {
         case XI_CONST_LITERAL_INT:
         case XI_CONST_LITERAL_FLOAT:

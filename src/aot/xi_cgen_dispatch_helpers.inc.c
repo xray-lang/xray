@@ -1017,6 +1017,15 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "XR_NULL_VAL");
         return;
     }
+    if (shared_init && ctx && ctx->freestanding_profile &&
+        shared_init->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: freestanding profile rejects whole-value assignment to static "
+                "aggregate top-level var; mutate fields directly in the current slice\n");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (ctx && ctx->freestanding_profile &&
         cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
         fprintf(out, "XR_NULL_VAL");

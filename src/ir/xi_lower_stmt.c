@@ -2994,7 +2994,7 @@ static bool stmt_freestanding_static_aggregate_is_erased(XiLower *l, AstNode *no
             return false;
         return l->func->shared_const_literals[slot].kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE;
     }
-    if (node->as.var_decl.storage_mode == XR_STORAGE_SHARED) {
+    if (node->type == AST_VAR_DECL || node->as.var_decl.storage_mode == XR_STORAGE_SHARED) {
         if (!l->func->shared_init_literals || slot >= (int) l->func->shared_init_literal_count)
             return false;
         return l->func->shared_init_literals[slot].kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE;

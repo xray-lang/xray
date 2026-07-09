@@ -5624,7 +5624,7 @@ static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *c
     if (!var)
         return false;
     if (var->initializer)
-        return xa_freestanding_shared_static_initializer_allowed(ctx, var, false);
+        return xa_freestanding_shared_static_initializer_allowed(ctx, var, true);
     if (!declared_type || XR_TYPE_IS_UNKNOWN(declared_type) ||
         !xa_type_is_default_initializable(ctx, declared_type))
         return false;
@@ -7001,9 +7001,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                   "initializers are allowed as erased or static data objects in the current "
                   "freestanding slice"
                 : "only int/float/bool/char/string/null consteval initializers, typed "
-                  "int/float/bool zero defaults, or typed nullable scalar/string/null defaults "
-                  "are supported as static mutable module "
-                  "storage in the current freestanding slice");
+                  "int/float/bool zero defaults, typed nullable scalar/string/null defaults, or "
+                  "recursively scalar struct/union consteval initializers are supported as static "
+                  "mutable module storage in the current freestanding slice");
     }
 
     // Variable declarations must have a type annotation or initializer.
@@ -7230,6 +7230,16 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *var_type = xa_analyzer_get_type(ctx->analyzer, sym);
+    if (xa_freestanding_profile_enabled(ctx->analyzer) && sym->scope &&
+        sym->scope->kind == XA_SCOPE_GLOBAL && xa_type_has_fixed_layout_data_object(var_type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "freestanding profile rejects whole-value assignment to static aggregate top-level "
+            "var; mutate fields directly in the current slice",
+            &loc);
+        return;
+    }
     xa_check_active_span_borrow_owner_mutation(ctx, node, sym, "reassigning the owner");
 
     // Bidirectional inference: propagate target type to value expression

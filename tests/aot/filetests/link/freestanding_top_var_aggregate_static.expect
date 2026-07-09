@@ -1,0 +1,28 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_static_
+c_contains=static struct { union { int32_t i; uint32_t u; } bits; int64_t count; } _xctstruct_freestanding_top_var_aggregate_static_
+c_contains=.value = (int64_t)INT64_C(1)
+c_contains=.limit = (int64_t)INT64_C(10)
+c_contains=.u = (uint32_t)INT64_C(7)
+c_contains=.count = (int64_t)INT64_C(3)
+c_contains=xray_top_var_aggregate_static
+c_contains=.value =
+c_contains=.count =
+c_contains=.bits.u
+c_not_contains=const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_static_
+c_not_contains=xrt_shared[0] =
+c_not_contains=xrt_shared[1] =
+c_not_contains=xrt_arc_alloc
+c_not_contains=xr_aggregate_ref
+c_not_contains=xrt_value_clone_for_coro
+c_not_contains=xrt_tuple_new
+c_not_contains=XR_NATIVE_UNION
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core

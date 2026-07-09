@@ -1,6 +1,6 @@
 args=--profile freestanding
 status=fail
 contains=freestanding profile rejects top-level var declaration
-contains=only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, or typed nullable scalar/string/null defaults are supported as static mutable module storage
+contains=only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, typed nullable scalar/string/null defaults, or recursively scalar struct/union consteval initializers are supported as static mutable module storage
 not_contains=xrt_shared
 not_contains=CRASH

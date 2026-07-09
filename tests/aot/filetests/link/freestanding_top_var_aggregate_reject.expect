@@ -1,6 +1,6 @@
 args=--profile freestanding
 status=fail
-contains=freestanding profile rejects top-level var declaration
-contains=only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, or typed nullable scalar/string/null defaults are supported as static mutable module storage in the current freestanding slice
+contains=freestanding profile rejects whole-value assignment to static aggregate top-level var
+contains=mutate fields directly in the current slice
 not_contains=xrt_shared
 not_contains=CRASH
