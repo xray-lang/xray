@@ -738,6 +738,22 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Freestanding static-data address. Returns the address of an already
+; materialized top-level const object as RawPtr<T>. aux_int is the module
+; shared slot; imported slots resolve to the target module's weak data symbol.
+; This is deliberately narrower than a general address-of/lvalue op.
+(define-xi-op xi.static.addr
+  :class pure
+  :arity 0
+  :result-ownership borrowed
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires (static-data addressable)
+  :observable ()
+  :targets (aot-c aot-verify))
+
 ; FFI raw-pointer load/store. The address is an address-width int; aux_int holds
 ; the XrFFIType width of the pointee. No bounds check (unsafe-only). Modeled on
 ; the bytes primitives: implicit TBAA-NONE keeps them out of value numbering and

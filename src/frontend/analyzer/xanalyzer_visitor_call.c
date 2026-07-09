@@ -58,6 +58,41 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
+static XaSymbol *xa_raw_pointer_of_arg_symbol(XaInferContext *ctx, AstNode *arg) {
+    if (!ctx || !ctx->analyzer || !arg || arg->type != AST_VARIABLE)
+        return NULL;
+    uint32_t sid = arg->as.variable.symbol_id;
+    if (sid != 0) {
+        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, sid);
+        if (sym)
+            return sym;
+    }
+    return arg->as.variable.name ? xa_lookup_visible_symbol(ctx, arg->as.variable.name) : NULL;
+}
+
+static void xa_check_raw_pointer_of_static_const_arg(XaInferContext *ctx, AstNode *node,
+                                                     CallExprNode *call, XrType *ptr_type) {
+    if (!ctx || !ctx->analyzer || !node || !call || !ptr_type || ptr_type->ptr_is_mut ||
+        !xa_freestanding_profile_enabled(ctx->analyzer))
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    if (call->arg_count != 1 || !call->arguments || !call->arguments[0] ||
+        call->arguments[0]->type != AST_VARIABLE) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "RawPtr.of requires exactly one top-level const name", &loc);
+        return;
+    }
+    AstNode *arg = call->arguments[0];
+    XaSymbol *sym = xa_raw_pointer_of_arg_symbol(ctx, arg);
+    if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const || !sym->scope ||
+        sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared) {
+        XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "RawPtr.of can only take the name of a top-level const static object", &aloc);
+    }
+}
+
 static bool xa_type_is_c_callback(const XrType *type) {
     return type && XR_TYPE_IS_C_FUNCTION(type);
 }
@@ -2474,13 +2509,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         method_name = ma->name;
-        callee_obj_type = xa_call_raw_pointer_type_namespace(ctx, ma->object);
+        XrType *raw_pointer_namespace_type = xa_call_raw_pointer_type_namespace(ctx, ma->object);
+        callee_obj_type = raw_pointer_namespace_type;
         if (!callee_obj_type)
             callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
         if (!fn_links)
             fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
         if (!fn_links)
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
+        if (raw_pointer_namespace_type && method_name && strcmp(method_name, "of") == 0)
+            xa_check_raw_pointer_of_static_const_arg(ctx, node, call, raw_pointer_namespace_type);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
