@@ -28,8 +28,10 @@
 #include "../../src/base/xdefs.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
+#include "../../src/runtime/value/xvalue.h"
 #include "../net/tls.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
@@ -71,6 +73,37 @@ typedef struct XrServiceEntry {
     struct XrChannel *request_ch;  // Channel to deliver incoming requests
     struct XrServiceEntry *next;
 } XrServiceEntry;
+
+/* ========== Value Wire Serialization ========== */
+
+typedef struct XrSerialBuf {
+    uint8_t *data;
+    size_t len;
+    size_t cap;
+    bool error;
+} XrSerialBuf;
+
+typedef struct XrSerialReader {
+    const uint8_t *data;
+    size_t len;
+    size_t pos;
+    int depth;
+    struct XrVMRuntime *X;
+} XrSerialReader;
+
+void cluster_serial_buf_init(XrSerialBuf *buf);
+void cluster_serial_buf_free(XrSerialBuf *buf);
+int cluster_encode(struct XrVMRuntime *X, XrValue value, XrSerialBuf *buf);
+void cluster_serial_reader_init(XrSerialReader *r, struct XrVMRuntime *X, const uint8_t *data,
+                                size_t len);
+int cluster_decode(XrSerialReader *r, XrValue *out);
+
+static inline int cluster_decode_value(struct XrVMRuntime *X, const uint8_t *data, size_t len,
+                                       XrValue *out) {
+    XrSerialReader r;
+    cluster_serial_reader_init(&r, X, data, len);
+    return cluster_decode(&r, out);
+}
 
 /* ========== Forward Declarations ========== */
 

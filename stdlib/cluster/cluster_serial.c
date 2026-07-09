@@ -18,7 +18,7 @@
  *   - Depth limit prevents stack overflow on cyclic-like deep nesting
  */
 
-#include "cluster_serial.h"
+#include "cluster_internal.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xmap.h"
@@ -34,6 +34,24 @@
 #include <string.h>
 
 /* ========== Encode Buffer ========== */
+
+#define XR_SERIAL_VERSION 0x03
+#define XR_SERIAL_MAX_DEPTH 128
+
+#define XR_STAG_NULL 0x01
+#define XR_STAG_BOOL 0x02
+#define XR_STAG_INT 0x03
+#define XR_STAG_FLOAT 0x04
+#define XR_STAG_STRING 0x05
+#define XR_STAG_BYTES 0x06
+#define XR_STAG_ARRAY 0x07
+#define XR_STAG_MAP 0x08
+#define XR_STAG_SET 0x09
+#define XR_STAG_JSON 0x0A
+#define XR_STAG_ARRAY_I32 0x0B
+#define XR_STAG_ARRAY_I64 0x0C
+#define XR_STAG_ARRAY_F32 0x0D
+#define XR_STAG_ARRAY_F64 0x0E
 
 #define SERIAL_BUF_INIT_CAP 256
 
