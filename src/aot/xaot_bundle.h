@@ -611,6 +611,108 @@ typedef struct XaotGenericInstantiationPlan {
     uint8_t unproven_reason;
 } XaotGenericInstantiationPlan;
 
+typedef enum XaotGenericBodyAction {
+    XAOT_GENERIC_BODY_CLONE = 1,
+    XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY,
+    XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL,
+    XAOT_GENERIC_BODY_REJECT,
+} XaotGenericBodyAction;
+
+typedef enum XaotGenericStorageAction {
+    XAOT_GENERIC_STORAGE_TYPED_INLINE = 1,
+    XAOT_GENERIC_STORAGE_REF_LANE,
+    XAOT_GENERIC_STORAGE_BOXED,
+    XAOT_GENERIC_STORAGE_SPECIALIZED_CLASS,
+    XAOT_GENERIC_STORAGE_SPECIALIZED_STRUCT,
+    XAOT_GENERIC_STORAGE_REJECT,
+} XaotGenericStorageAction;
+
+typedef enum XaotGenericCodeSizeAction {
+    XAOT_GENERIC_CODESIZE_ALLOW_CLONE = 1,
+    XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY,
+    XAOT_GENERIC_CODESIZE_FORCE_CLONE,
+    XAOT_GENERIC_CODESIZE_REJECT,
+} XaotGenericCodeSizeAction;
+
+enum {
+    XAOT_GENERIC_BODY_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_GENERIC_BODY_EV_GENERIC_INST = 1u << 1,
+    XAOT_GENERIC_BODY_EV_TYPE_ARGS = 1u << 2,
+    XAOT_GENERIC_BODY_EV_ORIGIN_BODY = 1u << 3,
+    XAOT_GENERIC_BODY_EV_SPECIALIZED_BODY = 1u << 4,
+    XAOT_GENERIC_BODY_EV_ROOT_CALLSITE = 1u << 5,
+};
+
+enum {
+    XAOT_GENERIC_STORAGE_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_GENERIC_STORAGE_EV_GENERIC_INST = 1u << 1,
+    XAOT_GENERIC_STORAGE_EV_SPECIALIZED_TYPE = 1u << 2,
+    XAOT_GENERIC_STORAGE_EV_CONTAINER_PLAN = 1u << 3,
+};
+
+enum {
+    XAOT_GENERIC_CODESIZE_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_GENERIC_CODESIZE_EV_GENERIC_INST = 1u << 1,
+    XAOT_GENERIC_CODESIZE_EV_BODY_USE = 1u << 2,
+    XAOT_GENERIC_CODESIZE_EV_THRESHOLD = 1u << 3,
+};
+
+enum {
+    XAOT_GENERIC_DEEPEN_UNPROVEN_NONE = 0,
+    XAOT_GENERIC_DEEPEN_UNPROVEN_MISSING_CONCRETE_TYPES = 1,
+    XAOT_GENERIC_DEEPEN_UNPROVEN_NO_SPECIALIZED_BODY = 2,
+    XAOT_GENERIC_DEEPEN_UNPROVEN_UNSUPPORTED_STORAGE = 3,
+    XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD = 4,
+    XAOT_GENERIC_DEEPEN_UNPROVEN_DYNAMIC_BOUNDARY = 5,
+};
+
+typedef struct XaotGenericBodyPlan {
+    XgGenericBodyUseId use_id;
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgFuncId origin_body_func_id;
+    XgFuncId specialized_body_func_id;
+    XgCallsiteId root_callsite_id;
+    uint32_t type_key;
+    uint32_t type_arg_key_start;
+    uint16_t type_arg_count;
+    uint32_t estimated_body_size;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotGenericBodyPlan;
+
+typedef struct XaotGenericStoragePlan {
+    XgGenericStorageId storage_id;
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    uint8_t storage_kind;
+    uint8_t action;
+    uint32_t origin_type_key;
+    uint32_t specialized_type_key;
+    uint32_t elem_type_key;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t container_plan_id;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotGenericStoragePlan;
+
+typedef struct XaotGenericCodeSizePlan {
+    XgGenericCodeSizeId code_size_id;
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    XgGenericBodyUseId body_use_id;
+    uint32_t origin_body_size_estimate;
+    uint32_t specialized_body_size_estimate;
+    uint32_t instantiation_count;
+    uint32_t threshold;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotGenericCodeSizePlan;
+
 typedef enum XaotDeriveAction {
     XAOT_DERIVE_FIELD_TABLE_SIDECAR = 1,
     XAOT_DERIVE_INLINE_GENERATED_BODY,
@@ -1090,6 +1192,15 @@ typedef struct XaotBundle {
     XaotGenericInstantiationPlan *generic_instantiation_plans;
     uint32_t ngeneric_instantiation_plans;
     uint32_t generic_instantiation_plan_cap;
+    XaotGenericBodyPlan *generic_body_plans;
+    uint32_t ngeneric_body_plans;
+    uint32_t generic_body_plan_cap;
+    XaotGenericStoragePlan *generic_storage_plans;
+    uint32_t ngeneric_storage_plans;
+    uint32_t generic_storage_plan_cap;
+    XaotGenericCodeSizePlan *generic_code_size_plans;
+    uint32_t ngeneric_code_size_plans;
+    uint32_t generic_code_size_plan_cap;
     XaotDerivePlan *derive_plans;
     uint32_t nderive_plans;
     uint32_t derive_plan_cap;
@@ -1174,6 +1285,12 @@ xaot_bundle_find_generic_specialization_plan(const XaotBundle *bundle, XgCallsit
 XR_FUNC const XaotGenericInstantiationPlan *
 xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
                                             XgGenericInstId generic_inst_id);
+XR_FUNC const XaotGenericBodyPlan *xaot_bundle_find_generic_body_plan(const XaotBundle *bundle,
+                                                                      XgGenericBodyUseId use_id);
+XR_FUNC const XaotGenericStoragePlan *
+xaot_bundle_find_generic_storage_plan(const XaotBundle *bundle, XgGenericStorageId storage_id);
+XR_FUNC const XaotGenericCodeSizePlan *
+xaot_bundle_find_generic_code_size_plan(const XaotBundle *bundle, XgGenericCodeSizeId code_size_id);
 XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
                                                            XgDeriveId derive_id);
 XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle,

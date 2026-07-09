@@ -199,6 +199,21 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->ngeneric_instantiation_plans = 0;
     bundle->generic_instantiation_plan_cap = 0;
 
+    xr_free(bundle->generic_body_plans);
+    bundle->generic_body_plans = NULL;
+    bundle->ngeneric_body_plans = 0;
+    bundle->generic_body_plan_cap = 0;
+
+    xr_free(bundle->generic_storage_plans);
+    bundle->generic_storage_plans = NULL;
+    bundle->ngeneric_storage_plans = 0;
+    bundle->generic_storage_plan_cap = 0;
+
+    xr_free(bundle->generic_code_size_plans);
+    bundle->generic_code_size_plans = NULL;
+    bundle->ngeneric_code_size_plans = 0;
+    bundle->generic_code_size_plan_cap = 0;
+
     xr_free(bundle->derive_plans);
     bundle->derive_plans = NULL;
     bundle->nderive_plans = 0;
@@ -1115,6 +1130,268 @@ static bool xaot_bundle_add_generic_instantiation_plans(XaotBundle *bundle,
         return false;
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
         if (!xaot_bundle_add_generic_instantiation_plan(bundle, &evidence->generic_insts[i]))
+            return false;
+    }
+    return true;
+}
+
+static uint32_t generic_deepen_inst_evidence(const XgGlobalEvidence *evidence,
+                                             XgGenericInstId generic_inst_id) {
+    const XgGenericInstSummary *inst =
+        xg_global_evidence_find_generic_inst(evidence, generic_inst_id);
+    if (!inst)
+        return 0;
+    return XAOT_GENERIC_BODY_EV_GENERIC_INST | XAOT_GENERIC_STORAGE_EV_GENERIC_INST |
+           XAOT_GENERIC_CODESIZE_EV_GENERIC_INST;
+}
+
+static uint8_t generic_body_action_for(const XgGlobalEvidence *evidence,
+                                       const XgGenericBodyUseSummary *use) {
+    const XgGenericInstSummary *inst =
+        use ? xg_global_evidence_find_generic_inst(evidence, use->generic_inst_id) : NULL;
+    if (!use || !inst || (inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) == 0)
+        return XAOT_GENERIC_BODY_REJECT;
+    if ((use->flags & XG_GENERIC_BODY_DYNAMIC_BOUNDARY) != 0)
+        return XAOT_GENERIC_BODY_REJECT;
+    if (use->specialized_body_func_id != XG_NO_ID ||
+        (inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
+        return XAOT_GENERIC_BODY_CLONE;
+    if ((inst->flags & XG_GENERIC_INST_INTERFACE_CONSTRAINT) != 0)
+        return XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL;
+    return XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
+}
+
+static uint8_t generic_body_reason_for(const XgGlobalEvidence *evidence,
+                                       const XgGenericBodyUseSummary *use) {
+    const XgGenericInstSummary *inst =
+        use ? xg_global_evidence_find_generic_inst(evidence, use->generic_inst_id) : NULL;
+    if (!use || !inst || (inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) == 0)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_MISSING_CONCRETE_TYPES;
+    if ((use->flags & XG_GENERIC_BODY_DYNAMIC_BOUNDARY) != 0)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_DYNAMIC_BOUNDARY;
+    if (generic_body_action_for(evidence, use) == XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_NO_SPECIALIZED_BODY;
+    return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
+}
+
+static uint32_t generic_body_evidence_for(const XgGlobalEvidence *evidence,
+                                          const XgGenericBodyUseSummary *use) {
+    uint32_t bits = XAOT_GENERIC_BODY_EV_GLOBAL_ROW;
+    if (!use)
+        return bits;
+    bits |= generic_deepen_inst_evidence(evidence, use->generic_inst_id) &
+            XAOT_GENERIC_BODY_EV_GENERIC_INST;
+    if (use->type_key != 0 && use->type_arg_count != 0)
+        bits |= XAOT_GENERIC_BODY_EV_TYPE_ARGS;
+    if (use->origin_body_func_id != XG_NO_ID)
+        bits |= XAOT_GENERIC_BODY_EV_ORIGIN_BODY;
+    if (use->specialized_body_func_id != XG_NO_ID)
+        bits |= XAOT_GENERIC_BODY_EV_SPECIALIZED_BODY;
+    if (use->root_callsite_id != XG_NO_ID)
+        bits |= XAOT_GENERIC_BODY_EV_ROOT_CALLSITE;
+    return bits;
+}
+
+static bool xaot_bundle_add_generic_body_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                              const XgGenericBodyUseSummary *use) {
+    XaotGenericBodyPlan *plan;
+    if (!bundle || !evidence || !use)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->generic_body_plans, &bundle->generic_body_plan_cap,
+                            bundle->ngeneric_body_plans + 1, sizeof(XaotGenericBodyPlan), 8))
+        return false;
+    plan = &bundle->generic_body_plans[bundle->ngeneric_body_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->use_id = use->use_id;
+    plan->generic_inst_id = use->generic_inst_id;
+    plan->module_id = use->module_id;
+    plan->owner_func_id = use->owner_func_id;
+    plan->origin_body_func_id = use->origin_body_func_id;
+    plan->specialized_body_func_id = use->specialized_body_func_id;
+    plan->root_callsite_id = use->root_callsite_id;
+    plan->type_key = use->type_key;
+    plan->type_arg_key_start = use->type_arg_key_start;
+    plan->type_arg_count = use->type_arg_count;
+    plan->estimated_body_size = use->estimated_body_size;
+    plan->action = generic_body_action_for(evidence, use);
+    plan->evidence = generic_body_evidence_for(evidence, use);
+    plan->unproven_reason = generic_body_reason_for(evidence, use);
+    return true;
+}
+
+static bool xaot_bundle_add_generic_body_plans(XaotBundle *bundle,
+                                               const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
+        if (!xaot_bundle_add_generic_body_plan(bundle, evidence, &evidence->generic_body_uses[i]))
+            return false;
+    }
+    return true;
+}
+
+static uint8_t generic_storage_action_for(const XgGenericStorageSummary *storage) {
+    if (!storage || storage->specialized_type_key == 0)
+        return XAOT_GENERIC_STORAGE_REJECT;
+    switch ((XgGenericStorageKind) storage->storage_kind) {
+        case XG_GENERIC_STORAGE_CLASS:
+            return XAOT_GENERIC_STORAGE_SPECIALIZED_CLASS;
+        case XG_GENERIC_STORAGE_STRUCT:
+            return XAOT_GENERIC_STORAGE_SPECIALIZED_STRUCT;
+        case XG_GENERIC_STORAGE_ARRAY:
+        case XG_GENERIC_STORAGE_MAP:
+        case XG_GENERIC_STORAGE_SET:
+            if ((storage->flags & XG_GENERIC_STORAGE_TYPED_INLINE) != 0)
+                return XAOT_GENERIC_STORAGE_TYPED_INLINE;
+            if ((storage->flags & XG_GENERIC_STORAGE_REF_LANE) != 0)
+                return XAOT_GENERIC_STORAGE_REF_LANE;
+            if ((storage->flags & XG_GENERIC_STORAGE_BOXED) != 0)
+                return XAOT_GENERIC_STORAGE_BOXED;
+            return XAOT_GENERIC_STORAGE_REJECT;
+        default:
+            return XAOT_GENERIC_STORAGE_REJECT;
+    }
+}
+
+static uint8_t generic_storage_reason_for(const XgGlobalEvidence *evidence,
+                                          const XgGenericStorageSummary *storage) {
+    const XgGenericInstSummary *inst =
+        storage ? xg_global_evidence_find_generic_inst(evidence, storage->generic_inst_id) : NULL;
+    if (!storage || !inst || (inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) == 0)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_MISSING_CONCRETE_TYPES;
+    if (generic_storage_action_for(storage) == XAOT_GENERIC_STORAGE_REJECT)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_UNSUPPORTED_STORAGE;
+    return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
+}
+
+static uint32_t generic_storage_evidence_for(const XgGlobalEvidence *evidence,
+                                             const XgGenericStorageSummary *storage) {
+    uint32_t bits = XAOT_GENERIC_STORAGE_EV_GLOBAL_ROW;
+    if (!storage)
+        return bits;
+    bits |= generic_deepen_inst_evidence(evidence, storage->generic_inst_id) &
+            XAOT_GENERIC_STORAGE_EV_GENERIC_INST;
+    if (storage->specialized_type_key != 0)
+        bits |= XAOT_GENERIC_STORAGE_EV_SPECIALIZED_TYPE;
+    if (storage->container_plan_id != 0)
+        bits |= XAOT_GENERIC_STORAGE_EV_CONTAINER_PLAN;
+    return bits;
+}
+
+static bool xaot_bundle_add_generic_storage_plan(XaotBundle *bundle,
+                                                 const XgGlobalEvidence *evidence,
+                                                 const XgGenericStorageSummary *storage) {
+    XaotGenericStoragePlan *plan;
+    if (!bundle || !evidence || !storage)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->generic_storage_plans,
+                            &bundle->generic_storage_plan_cap, bundle->ngeneric_storage_plans + 1,
+                            sizeof(XaotGenericStoragePlan), 8))
+        return false;
+    plan = &bundle->generic_storage_plans[bundle->ngeneric_storage_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->storage_id = storage->storage_id;
+    plan->generic_inst_id = storage->generic_inst_id;
+    plan->module_id = storage->module_id;
+    plan->storage_kind = storage->storage_kind;
+    plan->action = generic_storage_action_for(storage);
+    plan->origin_type_key = storage->origin_type_key;
+    plan->specialized_type_key = storage->specialized_type_key;
+    plan->elem_type_key = storage->elem_type_key;
+    plan->key_type_key = storage->key_type_key;
+    plan->value_type_key = storage->value_type_key;
+    plan->container_plan_id = storage->container_plan_id;
+    plan->evidence = generic_storage_evidence_for(evidence, storage);
+    plan->unproven_reason = generic_storage_reason_for(evidence, storage);
+    return true;
+}
+
+static bool xaot_bundle_add_generic_storage_plans(XaotBundle *bundle,
+                                                  const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
+        if (!xaot_bundle_add_generic_storage_plan(bundle, evidence, &evidence->generic_storages[i]))
+            return false;
+    }
+    return true;
+}
+
+static uint8_t generic_code_size_action_for(const XgGenericCodeSizeSummary *size) {
+    if (!size)
+        return XAOT_GENERIC_CODESIZE_REJECT;
+    if ((size->flags & XG_GENERIC_CODESIZE_FORCE_CLONE) != 0)
+        return XAOT_GENERIC_CODESIZE_FORCE_CLONE;
+    if ((size->flags & XG_GENERIC_CODESIZE_ALLOW_CLONE) != 0)
+        return XAOT_GENERIC_CODESIZE_ALLOW_CLONE;
+    if ((size->flags & XG_GENERIC_CODESIZE_SHARE_CANONICAL_BODY) != 0)
+        return XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY;
+    if (size->threshold != 0 &&
+        (uint64_t) size->specialized_body_size_estimate * (uint64_t) size->instantiation_count >
+            (uint64_t) size->threshold)
+        return XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY;
+    return XAOT_GENERIC_CODESIZE_ALLOW_CLONE;
+}
+
+static uint8_t generic_code_size_reason_for(const XgGlobalEvidence *evidence,
+                                            const XgGenericCodeSizeSummary *size) {
+    const XgGenericInstSummary *inst =
+        size ? xg_global_evidence_find_generic_inst(evidence, size->generic_inst_id) : NULL;
+    if (!size || !inst || (inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) == 0)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_MISSING_CONCRETE_TYPES;
+    if (generic_code_size_action_for(size) == XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY &&
+        (size->flags & XG_GENERIC_CODESIZE_SHARE_CANONICAL_BODY) == 0)
+        return XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD;
+    return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
+}
+
+static uint32_t generic_code_size_evidence_for(const XgGlobalEvidence *evidence,
+                                               const XgGenericCodeSizeSummary *size) {
+    uint32_t bits = XAOT_GENERIC_CODESIZE_EV_GLOBAL_ROW;
+    if (!size)
+        return bits;
+    bits |= generic_deepen_inst_evidence(evidence, size->generic_inst_id) &
+            XAOT_GENERIC_CODESIZE_EV_GENERIC_INST;
+    if (size->body_use_id != XG_NO_ID)
+        bits |= XAOT_GENERIC_CODESIZE_EV_BODY_USE;
+    if (size->threshold != 0)
+        bits |= XAOT_GENERIC_CODESIZE_EV_THRESHOLD;
+    return bits;
+}
+
+static bool xaot_bundle_add_generic_code_size_plan(XaotBundle *bundle,
+                                                   const XgGlobalEvidence *evidence,
+                                                   const XgGenericCodeSizeSummary *size) {
+    XaotGenericCodeSizePlan *plan;
+    if (!bundle || !evidence || !size)
+        return false;
+    if (!reserve_plan_array(
+            (void **) &bundle->generic_code_size_plans, &bundle->generic_code_size_plan_cap,
+            bundle->ngeneric_code_size_plans + 1, sizeof(XaotGenericCodeSizePlan), 8))
+        return false;
+    plan = &bundle->generic_code_size_plans[bundle->ngeneric_code_size_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->code_size_id = size->code_size_id;
+    plan->generic_inst_id = size->generic_inst_id;
+    plan->module_id = size->module_id;
+    plan->body_use_id = size->body_use_id;
+    plan->origin_body_size_estimate = size->origin_body_size_estimate;
+    plan->specialized_body_size_estimate = size->specialized_body_size_estimate;
+    plan->instantiation_count = size->instantiation_count;
+    plan->threshold = size->threshold;
+    plan->action = generic_code_size_action_for(size);
+    plan->evidence = generic_code_size_evidence_for(evidence, size);
+    plan->unproven_reason = generic_code_size_reason_for(evidence, size);
+    return true;
+}
+
+static bool xaot_bundle_add_generic_code_size_plans(XaotBundle *bundle,
+                                                    const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++) {
+        if (!xaot_bundle_add_generic_code_size_plan(bundle, evidence,
+                                                    &evidence->generic_code_sizes[i]))
             return false;
     }
     return true;
@@ -2335,6 +2612,18 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT generic instantiation plan";
         return false;
     }
+    if (!xaot_bundle_add_generic_body_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT generic body plan";
+        return false;
+    }
+    if (!xaot_bundle_add_generic_storage_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT generic storage plan";
+        return false;
+    }
+    if (!xaot_bundle_add_generic_code_size_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT generic code-size plan";
+        return false;
+    }
     if (!xaot_bundle_add_derive_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT derive plan";
         return false;
@@ -2888,6 +3177,40 @@ xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
     for (uint32_t i = 0; i < bundle->ngeneric_instantiation_plans; i++) {
         if (bundle->generic_instantiation_plans[i].generic_inst_id == generic_inst_id)
             return &bundle->generic_instantiation_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotGenericBodyPlan *xaot_bundle_find_generic_body_plan(const XaotBundle *bundle,
+                                                                      XgGenericBodyUseId use_id) {
+    if (!bundle || use_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
+        if (bundle->generic_body_plans[i].use_id == use_id)
+            return &bundle->generic_body_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotGenericStoragePlan *
+xaot_bundle_find_generic_storage_plan(const XaotBundle *bundle, XgGenericStorageId storage_id) {
+    if (!bundle || storage_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ngeneric_storage_plans; i++) {
+        if (bundle->generic_storage_plans[i].storage_id == storage_id)
+            return &bundle->generic_storage_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotGenericCodeSizePlan *
+xaot_bundle_find_generic_code_size_plan(const XaotBundle *bundle,
+                                        XgGenericCodeSizeId code_size_id) {
+    if (!bundle || code_size_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ngeneric_code_size_plans; i++) {
+        if (bundle->generic_code_size_plans[i].code_size_id == code_size_id)
+            return &bundle->generic_code_size_plans[i];
     }
     return NULL;
 }
@@ -4560,6 +4883,130 @@ static void print_generic_instantiation_evidence_bits(FILE *out, uint32_t bits) 
 #undef PRINT_BIT
 }
 
+static const char *generic_body_action_name(uint8_t action) {
+    switch ((XaotGenericBodyAction) action) {
+        case XAOT_GENERIC_BODY_CLONE:
+            return "clone";
+        case XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY:
+            return "share_canonical_body";
+        case XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL:
+            return "direct_constraint_call";
+        case XAOT_GENERIC_BODY_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *generic_storage_action_name(uint8_t action) {
+    switch ((XaotGenericStorageAction) action) {
+        case XAOT_GENERIC_STORAGE_TYPED_INLINE:
+            return "typed_inline";
+        case XAOT_GENERIC_STORAGE_REF_LANE:
+            return "ref_lane";
+        case XAOT_GENERIC_STORAGE_BOXED:
+            return "boxed";
+        case XAOT_GENERIC_STORAGE_SPECIALIZED_CLASS:
+            return "specialized_class";
+        case XAOT_GENERIC_STORAGE_SPECIALIZED_STRUCT:
+            return "specialized_struct";
+        case XAOT_GENERIC_STORAGE_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *generic_code_size_action_name(uint8_t action) {
+    switch ((XaotGenericCodeSizeAction) action) {
+        case XAOT_GENERIC_CODESIZE_ALLOW_CLONE:
+            return "allow_clone";
+        case XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY:
+            return "share_canonical_body";
+        case XAOT_GENERIC_CODESIZE_FORCE_CLONE:
+            return "force_clone";
+        case XAOT_GENERIC_CODESIZE_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *generic_deepen_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_GENERIC_DEEPEN_UNPROVEN_NONE:
+            return "none";
+        case XAOT_GENERIC_DEEPEN_UNPROVEN_MISSING_CONCRETE_TYPES:
+            return "missing_concrete_types";
+        case XAOT_GENERIC_DEEPEN_UNPROVEN_NO_SPECIALIZED_BODY:
+            return "no_specialized_body";
+        case XAOT_GENERIC_DEEPEN_UNPROVEN_UNSUPPORTED_STORAGE:
+            return "unsupported_storage";
+        case XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD:
+            return "code_size_threshold";
+        case XAOT_GENERIC_DEEPEN_UNPROVEN_DYNAMIC_BOUNDARY:
+            return "dynamic_boundary";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_generic_body_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_GENERIC_BODY_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_GENERIC_BODY_EV_GENERIC_INST, "inst");
+    PRINT_BIT(XAOT_GENERIC_BODY_EV_TYPE_ARGS, "types");
+    PRINT_BIT(XAOT_GENERIC_BODY_EV_ORIGIN_BODY, "origin_body");
+    PRINT_BIT(XAOT_GENERIC_BODY_EV_SPECIALIZED_BODY, "specialized_body");
+    PRINT_BIT(XAOT_GENERIC_BODY_EV_ROOT_CALLSITE, "root");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static void print_generic_storage_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_GENERIC_STORAGE_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_GENERIC_STORAGE_EV_GENERIC_INST, "inst");
+    PRINT_BIT(XAOT_GENERIC_STORAGE_EV_SPECIALIZED_TYPE, "specialized_type");
+    PRINT_BIT(XAOT_GENERIC_STORAGE_EV_CONTAINER_PLAN, "container_plan");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static void print_generic_code_size_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_GENERIC_INST, "inst");
+    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_BODY_USE, "body_use");
+    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_THRESHOLD, "threshold");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static void print_bounds_evidence_bits(FILE *out, uint32_t bits) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -4958,6 +5405,47 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         print_generic_instantiation_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n",
                 generic_instantiation_unproven_reason_name(gp->unproven_reason));
+    }
+
+    for (uint32_t gi = 0; gi < bundle->ngeneric_body_plans; gi++) {
+        const XaotGenericBodyPlan *gp = &bundle->generic_body_plans[gi];
+        fprintf(out,
+                "generic-body-plan %u id=%u inst=%u module=%u owner=%u origin_body=%u "
+                "specialized_body=%u root_callsite=%u type=%u type_args=%u+%u size=%u "
+                "action=%s evidence=",
+                gi, gp->use_id, gp->generic_inst_id, gp->module_id, gp->owner_func_id,
+                gp->origin_body_func_id, gp->specialized_body_func_id, gp->root_callsite_id,
+                gp->type_key, gp->type_arg_key_start, (unsigned) gp->type_arg_count,
+                gp->estimated_body_size, generic_body_action_name(gp->action));
+        print_generic_body_evidence_bits(out, gp->evidence);
+        fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
+    }
+
+    for (uint32_t gi = 0; gi < bundle->ngeneric_storage_plans; gi++) {
+        const XaotGenericStoragePlan *gp = &bundle->generic_storage_plans[gi];
+        fprintf(out,
+                "generic-storage-plan %u id=%u inst=%u module=%u kind=%s action=%s "
+                "origin_type=%u specialized_type=%u elem_type=%u key_type=%u value_type=%u "
+                "container_plan=%u evidence=",
+                gi, gp->storage_id, gp->generic_inst_id, gp->module_id,
+                xg_generic_storage_kind_name(gp->storage_kind),
+                generic_storage_action_name(gp->action), gp->origin_type_key,
+                gp->specialized_type_key, gp->elem_type_key, gp->key_type_key, gp->value_type_key,
+                gp->container_plan_id);
+        print_generic_storage_evidence_bits(out, gp->evidence);
+        fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
+    }
+
+    for (uint32_t gi = 0; gi < bundle->ngeneric_code_size_plans; gi++) {
+        const XaotGenericCodeSizePlan *gp = &bundle->generic_code_size_plans[gi];
+        fprintf(out,
+                "generic-code-size-plan %u id=%u inst=%u module=%u body_use=%u origin=%u "
+                "specialized=%u count=%u threshold=%u action=%s evidence=",
+                gi, gp->code_size_id, gp->generic_inst_id, gp->module_id, gp->body_use_id,
+                gp->origin_body_size_estimate, gp->specialized_body_size_estimate,
+                gp->instantiation_count, gp->threshold, generic_code_size_action_name(gp->action));
+        print_generic_code_size_evidence_bits(out, gp->evidence);
+        fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
     }
 
     for (uint32_t di = 0; di < bundle->nderive_plans; di++) {

@@ -27,6 +27,9 @@ typedef uint32_t XgFieldId;
 typedef uint32_t XgCallsiteId;
 typedef uint32_t XgLinkId;
 typedef uint32_t XgGenericInstId;
+typedef uint32_t XgGenericBodyUseId;
+typedef uint32_t XgGenericStorageId;
+typedef uint32_t XgGenericCodeSizeId;
 typedef uint32_t XgDeriveId;
 typedef uint32_t XgDerivedFieldId;
 typedef uint32_t XgDerivedMethodId;
@@ -43,7 +46,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 6,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 7,
 };
 
 typedef enum XgBuildProfile {
@@ -121,6 +124,14 @@ typedef enum XgGenericInstKind {
     XG_GENERIC_INST_CLASS,
     XG_GENERIC_INST_CONTAINER,
 } XgGenericInstKind;
+
+typedef enum XgGenericStorageKind {
+    XG_GENERIC_STORAGE_ARRAY = 1,
+    XG_GENERIC_STORAGE_MAP,
+    XG_GENERIC_STORAGE_SET,
+    XG_GENERIC_STORAGE_CLASS,
+    XG_GENERIC_STORAGE_STRUCT,
+} XgGenericStorageKind;
 
 typedef enum XgDeriveKind {
     XG_DERIVE_JSON = 1,
@@ -266,6 +277,28 @@ enum {
     XG_GENERIC_INST_SPECIALIZED_BODY = 1u << 2,
     XG_GENERIC_INST_SPECIALIZED_ABI = 1u << 3,
     XG_GENERIC_INST_CONCRETE_STORAGE = 1u << 4,
+};
+
+enum {
+    XG_GENERIC_BODY_EXPLICIT_ROOT = 1u << 0,
+    XG_GENERIC_BODY_IMPLICIT_ROOT = 1u << 1,
+    XG_GENERIC_BODY_EXPORTED = 1u << 2,
+    XG_GENERIC_BODY_DYNAMIC_BOUNDARY = 1u << 3,
+};
+
+enum {
+    XG_GENERIC_STORAGE_TYPED_INLINE = 1u << 0,
+    XG_GENERIC_STORAGE_REF_LANE = 1u << 1,
+    XG_GENERIC_STORAGE_BOXED = 1u << 2,
+    XG_GENERIC_STORAGE_POD = 1u << 3,
+    XG_GENERIC_STORAGE_MANAGED_REF = 1u << 4,
+};
+
+enum {
+    XG_GENERIC_CODESIZE_ALLOW_CLONE = 1u << 0,
+    XG_GENERIC_CODESIZE_SHARE_CANONICAL_BODY = 1u << 1,
+    XG_GENERIC_CODESIZE_FORCE_CLONE = 1u << 2,
+    XG_GENERIC_CODESIZE_PROFILE_IGNORED = 1u << 3,
 };
 
 enum {
@@ -525,6 +558,49 @@ typedef struct XgGenericInstSummary {
     uint32_t flags;
 } XgGenericInstSummary;
 
+typedef struct XgGenericBodyUseSummary {
+    XgGenericBodyUseId use_id;
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgFuncId origin_body_func_id;
+    XgFuncId specialized_body_func_id;
+    XgCallsiteId root_callsite_id;
+    uint32_t type_key;
+    uint32_t type_arg_key_start;
+    uint16_t type_arg_count;
+    uint32_t estimated_body_size;
+    uint32_t flags;
+    uint64_t body_use_hash;
+} XgGenericBodyUseSummary;
+
+typedef struct XgGenericStorageSummary {
+    XgGenericStorageId storage_id;
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    uint8_t storage_kind;
+    uint32_t origin_type_key;
+    uint32_t specialized_type_key;
+    uint32_t elem_type_key;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t container_plan_id;
+    uint32_t flags;
+    uint64_t storage_hash;
+} XgGenericStorageSummary;
+
+typedef struct XgGenericCodeSizeSummary {
+    XgGenericCodeSizeId code_size_id;
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    XgGenericBodyUseId body_use_id;
+    uint32_t origin_body_size_estimate;
+    uint32_t specialized_body_size_estimate;
+    uint32_t instantiation_count;
+    uint32_t threshold;
+    uint32_t flags;
+} XgGenericCodeSizeSummary;
+
 typedef struct XgDeriveSummary {
     XgDeriveId derive_id;
     XgModuleId module_id;
@@ -677,6 +753,9 @@ typedef struct XgGlobalEvidence {
     XgCallsiteSummary *callsites;
     XgLinkDependencySummary *link_deps;
     XgGenericInstSummary *generic_insts;
+    XgGenericBodyUseSummary *generic_body_uses;
+    XgGenericStorageSummary *generic_storages;
+    XgGenericCodeSizeSummary *generic_code_sizes;
     XgDeriveSummary *derives;
     XgDerivedFieldSummary *derived_fields;
     XgDerivedMethodSummary *derived_methods;
@@ -699,6 +778,9 @@ typedef struct XgGlobalEvidence {
     uint32_t ncallsites;
     uint32_t nlink_deps;
     uint32_t ngeneric_insts;
+    uint32_t ngeneric_body_uses;
+    uint32_t ngeneric_storages;
+    uint32_t ngeneric_code_sizes;
     uint32_t nderives;
     uint32_t nderived_fields;
     uint32_t nderived_methods;
@@ -721,6 +803,9 @@ typedef struct XgGlobalEvidence {
     uint32_t callsite_cap;
     uint32_t link_dep_cap;
     uint32_t generic_inst_cap;
+    uint32_t generic_body_use_cap;
+    uint32_t generic_storage_cap;
+    uint32_t generic_code_size_cap;
     uint32_t derive_cap;
     uint32_t derived_field_cap;
     uint32_t derived_method_cap;
@@ -740,6 +825,7 @@ XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind);
+XR_FUNC const char *xg_generic_storage_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derive_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derived_method_kind_name(uint8_t kind);
 XR_FUNC const char *xg_json_shape_kind_name(uint8_t kind);
@@ -779,6 +865,12 @@ XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, ui
 XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_generic_insts(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_generic_body_uses(XgGlobalEvidence *evidence,
+                                                          uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_generic_storages(XgGlobalEvidence *evidence,
+                                                         uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_generic_code_sizes(XgGlobalEvidence *evidence,
+                                                           uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_derives(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_derived_fields(XgGlobalEvidence *evidence,
                                                        uint32_t capacity);
@@ -821,6 +913,15 @@ xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
 XR_FUNC XgGenericInstSummary *
 xg_global_evidence_add_generic_inst(XgGlobalEvidence *evidence,
                                     const XgGenericInstSummary *summary);
+XR_FUNC XgGenericBodyUseSummary *
+xg_global_evidence_add_generic_body_use(XgGlobalEvidence *evidence,
+                                        const XgGenericBodyUseSummary *summary);
+XR_FUNC XgGenericStorageSummary *
+xg_global_evidence_add_generic_storage(XgGlobalEvidence *evidence,
+                                       const XgGenericStorageSummary *summary);
+XR_FUNC XgGenericCodeSizeSummary *
+xg_global_evidence_add_generic_code_size(XgGlobalEvidence *evidence,
+                                         const XgGenericCodeSizeSummary *summary);
 XR_FUNC XgDeriveSummary *xg_global_evidence_add_derive(XgGlobalEvidence *evidence,
                                                        const XgDeriveSummary *summary);
 XR_FUNC XgDerivedFieldSummary *
@@ -852,6 +953,15 @@ XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobal
 XR_FUNC const XgGenericInstSummary *
 xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
                                      XgGenericInstId generic_inst_id);
+XR_FUNC const XgGenericBodyUseSummary *
+xg_global_evidence_find_generic_body_use(const XgGlobalEvidence *evidence,
+                                         XgGenericBodyUseId use_id);
+XR_FUNC const XgGenericStorageSummary *
+xg_global_evidence_find_generic_storage(const XgGlobalEvidence *evidence,
+                                        XgGenericStorageId storage_id);
+XR_FUNC const XgGenericCodeSizeSummary *
+xg_global_evidence_find_generic_code_size(const XgGlobalEvidence *evidence,
+                                          XgGenericCodeSizeId code_size_id);
 XR_FUNC const XgJsonShapeSummary *
 xg_global_evidence_find_json_shape(const XgGlobalEvidence *evidence, XgJsonShapeId json_shape_id);
 XR_FUNC const XgRecordShapeSummary *

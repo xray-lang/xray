@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=6 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=7 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=6 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=6 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=6 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=6 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=7 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=7 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=7 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=7 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -5726,6 +5726,183 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_records_generic_body_storage_code_size_plans) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x1830,
+                      .compiler_semver_hash = 0x1831,
+                      .profile_hash = 0x1832,
+                      .imported_summary_hash = 0x1833,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary origin_decl = {.module_id = 1,
+                                 .decl_id = 1,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("origin"),
+                                 .signature_key = 100,
+                                 .source_span_id = 10};
+    XgDeclSummary owner_decl = {.module_id = 1,
+                                .decl_id = 2,
+                                .kind = XG_DECL_FUNC,
+                                .name_id = xg_name_id("owner"),
+                                .signature_key = 101,
+                                .source_span_id = 11};
+    XgBodySummary origin_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 1,
+                                 .name_id = xg_name_id("origin"),
+                                 .signature_key = 100,
+                                 .source_span_id = 10,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0x1834};
+    XgBodySummary owner_body = {.func_id = 2,
+                                .module_id = 1,
+                                .owner_decl_id = 2,
+                                .name_id = xg_name_id("owner"),
+                                .signature_key = 101,
+                                .source_span_id = 11,
+                                .kind = XG_BODY_FUNCTION,
+                                .body_hash = 0x1835,
+                                .callsite_start = 1,
+                                .callsite_count = 1};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 2,
+                              .source_span_id = 12,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_DIRECT_FUNC,
+                              .static_target_func_id = 1,
+                              .arg_count = 1};
+    XgGenericInstSummary inst = {.generic_inst_id = 1,
+                                 .module_id = 1,
+                                 .origin_decl_id = 1,
+                                 .origin_func_id = 1,
+                                 .specialized_func_id = 2,
+                                 .root_callsite_id = 1,
+                                 .name_id = xg_name_id("origin"),
+                                 .type_key = 200,
+                                 .type_arg_key_start = 201,
+                                 .type_arg_count = 1,
+                                 .source_span_id = 12,
+                                 .kind = XG_GENERIC_INST_FUNCTION,
+                                 .flags = XG_GENERIC_INST_CONCRETE_TYPES |
+                                          XG_GENERIC_INST_SPECIALIZED_BODY |
+                                          XG_GENERIC_INST_CONCRETE_STORAGE};
+    XgGenericBodyUseSummary body_use = {.use_id = 1,
+                                        .generic_inst_id = 1,
+                                        .module_id = 1,
+                                        .owner_func_id = 2,
+                                        .origin_body_func_id = 1,
+                                        .specialized_body_func_id = 2,
+                                        .root_callsite_id = 1,
+                                        .type_key = 200,
+                                        .type_arg_key_start = 201,
+                                        .type_arg_count = 1,
+                                        .estimated_body_size = 18,
+                                        .flags = XG_GENERIC_BODY_EXPLICIT_ROOT,
+                                        .body_use_hash = 0x1836};
+    XgGenericStorageSummary storage = {.storage_id = 1,
+                                       .generic_inst_id = 1,
+                                       .module_id = 1,
+                                       .storage_kind = XG_GENERIC_STORAGE_ARRAY,
+                                       .origin_type_key = 300,
+                                       .specialized_type_key = 301,
+                                       .elem_type_key = 200,
+                                       .container_plan_id = 7,
+                                       .flags =
+                                           XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD,
+                                       .storage_hash = 0x1837};
+    XgGenericCodeSizeSummary code_size = {.code_size_id = 1,
+                                          .generic_inst_id = 1,
+                                          .module_id = 1,
+                                          .body_use_id = 1,
+                                          .origin_body_size_estimate = 18,
+                                          .specialized_body_size_estimate = 18,
+                                          .instantiation_count = 1,
+                                          .threshold = 64,
+                                          .flags = XG_GENERIC_CODESIZE_ALLOW_CLONE};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &origin_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &owner_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &origin_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &owner_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_body_use(&ev, &body_use));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_storage(&ev, &storage));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_code_size(&ev, &code_size));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "generic-body-use 0 id=1 inst=1"));
+    ASSERT_NOT_NULL(strstr(dump, "generic-storage 0 id=1 inst=1 module=1 kind=array"));
+    ASSERT_NOT_NULL(strstr(dump, "generic-code-size 0 id=1 inst=1"));
+    xr_free(dump);
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.ngeneric_body_plans, 1);
+    ASSERT_EQ_UINT(bundle.ngeneric_storage_plans, 1);
+    ASSERT_EQ_UINT(bundle.ngeneric_code_size_plans, 1);
+    const XaotGenericBodyPlan *body_plan = xaot_bundle_find_generic_body_plan(&bundle, 1);
+    const XaotGenericStoragePlan *storage_plan = xaot_bundle_find_generic_storage_plan(&bundle, 1);
+    const XaotGenericCodeSizePlan *code_size_plan =
+        xaot_bundle_find_generic_code_size_plan(&bundle, 1);
+    ASSERT_NOT_NULL(body_plan);
+    ASSERT_NOT_NULL(storage_plan);
+    ASSERT_NOT_NULL(code_size_plan);
+    ASSERT_EQ_UINT(body_plan->action, XAOT_GENERIC_BODY_CLONE);
+    ASSERT_EQ_UINT(storage_plan->action, XAOT_GENERIC_STORAGE_TYPED_INLINE);
+    ASSERT_EQ_UINT(code_size_plan->action, XAOT_GENERIC_CODESIZE_ALLOW_CLONE);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-body-plan 0 id=1 inst=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=clone"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-storage-plan 0 id=1 inst=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=typed_inline"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-code-size-plan 0 id=1 inst=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=allow_clone"));
+    xr_free(plan_dump);
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+
+    bundle.generic_body_plans[0].action = XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic body plan action does not re-derive"));
+    bundle.generic_body_plans[0].action = XAOT_GENERIC_BODY_CLONE;
+
+    bundle.generic_storage_plans[0].action = XAOT_GENERIC_STORAGE_BOXED;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic storage plan action does not re-derive"));
+    bundle.generic_storage_plans[0].action = XAOT_GENERIC_STORAGE_TYPED_INLINE;
+
+    bundle.generic_code_size_plans[0].action = XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic code-size plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     setup_parser_session();
     const char *source = "fn caller() -> int { return unknown(41) }\n";
@@ -8610,5 +8787,6 @@ RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
+RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 TEST_MAIN_END()
