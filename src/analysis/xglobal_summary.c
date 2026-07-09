@@ -1328,6 +1328,44 @@ XR_FUNC bool xg_evidence_cache_key_matches(const XgEvidenceCacheKey *cached,
            cached->content_hash == expected->content_hash;
 }
 
+XR_FUNC bool xg_evidence_cache_key_format(const XgEvidenceCacheKey *key, char *buf,
+                                          size_t buf_len) {
+    int written;
+    if (!key || !buf || buf_len == 0)
+        return false;
+    written = snprintf(buf, buf_len,
+                       "xg-cache-key v1 schema=%u phase=%u module=%u profile=%u "
+                       "compiler=%016" PRIx64 " profile_hash=%016" PRIx64 " imports=%016" PRIx64
+                       " content=%016" PRIx64 " key=%016" PRIx64,
+                       key->schema_version, key->phase, key->module_id, key->profile,
+                       key->compiler_semver_hash, key->profile_hash, key->imported_summary_hash,
+                       key->content_hash, xg_evidence_cache_key_hash(key));
+    return written > 0 && (size_t) written < buf_len;
+}
+
+XR_FUNC bool xg_evidence_cache_key_parse(const char *text, XgEvidenceCacheKey *out_key) {
+    XgEvidenceCacheKey key;
+    uint64_t recorded_hash = 0;
+    char trailing = '\0';
+    int matched;
+    if (!text || !out_key)
+        return false;
+    memset(&key, 0, sizeof(key));
+    matched = sscanf(text,
+                     "xg-cache-key v1 schema=%" SCNu32 " phase=%" SCNu32 " module=%" SCNu32
+                     " profile=%" SCNu32 " compiler=%" SCNx64 " profile_hash=%" SCNx64
+                     " imports=%" SCNx64 " content=%" SCNx64 " key=%" SCNx64 " %c",
+                     &key.schema_version, &key.phase, &key.module_id, &key.profile,
+                     &key.compiler_semver_hash, &key.profile_hash, &key.imported_summary_hash,
+                     &key.content_hash, &recorded_hash, &trailing);
+    if (matched != 9)
+        return false;
+    if (recorded_hash != xg_evidence_cache_key_hash(&key))
+        return false;
+    *out_key = key;
+    return true;
+}
+
 typedef const char *(*XgBitNameFn)(uint32_t bit);
 
 static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,
