@@ -17,7 +17,7 @@
  *   - Yieldable C functions enable non-blocking I/O in coroutines
  */
 
-#include "http.h"
+#include "http_internal.h"
 #include "http_client.h"
 #include "http_parser.h"
 #include "http_router.h"

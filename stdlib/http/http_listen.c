@@ -19,7 +19,7 @@
  *   - Natural blocking loops instead of continuation state machines
  */
 
-#include "http.h"
+#include "http_internal.h"
 #include "http_server.h"
 #include "http_parser.h"
 #include "http_router.h"

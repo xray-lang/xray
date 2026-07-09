@@ -17,7 +17,7 @@
 #include "http_client.h"
 #include "http_parser.h"
 #include "../../src/base/xplatform.h"
-#include "http.h"
+#include "http_internal.h"
 #include "../net/tls.h"
 #include "../compress/compress.h"
 #include "../../src/io/xdns.h"
