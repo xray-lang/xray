@@ -1347,7 +1347,7 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
 
     // Auto-create server instance
     if (!ctx->server) {
-        ctx->server = xr_http_server_new();
+        ctx->server = http_server_new();
         if (!ctx->server) {
             fprintf(stderr, "http.listen: failed to create server\n");
             *result = xr_bool(false);

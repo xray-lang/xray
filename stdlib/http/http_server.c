@@ -24,7 +24,7 @@
 /*
  * Create server
  */
-XrHttpServer *xr_http_server_new(void) {
+XrHttpServer *http_server_new(void) {
     XrHttpServer *server = (XrHttpServer *) xr_calloc(1, sizeof(XrHttpServer));
     if (!server)
         return NULL;
@@ -41,7 +41,7 @@ XrHttpServer *xr_http_server_new(void) {
 /*
  * Free server
  */
-void xr_http_server_free(XrHttpServer *server) {
+void http_server_free(XrHttpServer *server) {
     if (!server)
         return;
 
@@ -64,7 +64,7 @@ void xr_http_server_free(XrHttpServer *server) {
 /*
  * Add route
  */
-void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
+void http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
                           struct XrClosure *handler) {
     if (!server || !server->router || !path || !handler)
         return;
@@ -88,7 +88,7 @@ void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char 
 /*
  * Stop server
  */
-void xr_http_server_stop(XrHttpServer *server) {
+void http_server_stop(XrHttpServer *server) {
     if (!server)
         return;
 
