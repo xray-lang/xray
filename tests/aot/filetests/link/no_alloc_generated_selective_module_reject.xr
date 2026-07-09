@@ -1,0 +1,8 @@
+import { cwd as currentDir } from "io"
+
+@no_alloc
+fn xray_no_alloc_io_cwd_selective_reject() -> string {
+    return currentDir()
+}
+
+print(xray_no_alloc_io_cwd_selective_reject())
