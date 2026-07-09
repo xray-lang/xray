@@ -23,6 +23,39 @@ XR_FUNC uint32_t xg_name_id(const char *name) {
     return h ? h : 1;
 }
 
+static uint64_t type_key_fold_bytes(uint64_t h, const void *data, size_t len) {
+    uint64_t part = xr_hash_bytes64(data, len);
+    h ^= part + UINT64_C(0x9e3779b97f4a7c15) + (h << 6) + (h >> 2);
+    return h ? h : 1;
+}
+
+static uint64_t type_key_fold_u64(uint64_t h, uint64_t value) {
+    return type_key_fold_bytes(h, &value, sizeof(value));
+}
+
+static uint32_t type_key_folded32(uint64_t h) {
+    uint32_t v = (uint32_t) (h ^ (h >> 32));
+    return v ? v : 1;
+}
+
+XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = type_key_fold_u64(h, tref_kind);
+    h = type_key_fold_u64(h, 0);
+    h = type_key_fold_u64(h, 0);
+    h = type_key_fold_u64(h, 0);
+    return type_key_folded32(h);
+}
+
+XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_width) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = type_key_fold_u64(h, tref_kind);
+    h = type_key_fold_u64(h, native_width);
+    h = type_key_fold_u64(h, 0);
+    h = type_key_fold_u64(h, 0);
+    return type_key_folded32(h);
+}
+
 static bool reserve_array(void **items, uint32_t *cap, uint32_t needed, size_t elem_size) {
     uint32_t new_cap;
     void *new_items;
@@ -1013,8 +1046,8 @@ XR_FUNC const char *xg_interface_object_use_name(uint32_t reason) {
 
 XR_FUNC const uint32_t *xg_interface_object_use_catalog(uint32_t *out_count) {
     static const uint32_t reasons[] = {
-        XG_INTERFACE_OBJECT_USE_VALUE,  XG_INTERFACE_OBJECT_USE_ARRAY,
-        XG_INTERFACE_OBJECT_USE_FIELD,  XG_INTERFACE_OBJECT_USE_RETURN,
+        XG_INTERFACE_OBJECT_USE_VALUE,   XG_INTERFACE_OBJECT_USE_ARRAY,
+        XG_INTERFACE_OBJECT_USE_FIELD,   XG_INTERFACE_OBJECT_USE_RETURN,
         XG_INTERFACE_OBJECT_USE_CAPTURE, XG_INTERFACE_OBJECT_USE_PARAM,
     };
     if (out_count)
@@ -1236,10 +1269,9 @@ XR_FUNC bool xg_global_evidence_reserve_interface_methods(XgGlobalEvidence *evid
 
 XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *evidence,
                                                               uint32_t capacity) {
-    return evidence &&
-           reserve_array((void **) &evidence->interface_object_uses,
-                         &evidence->interface_object_use_cap, capacity,
-                         sizeof(XgInterfaceObjectUseSummary));
+    return evidence && reserve_array((void **) &evidence->interface_object_uses,
+                                     &evidence->interface_object_use_cap, capacity,
+                                     sizeof(XgInterfaceObjectUseSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1454,8 +1486,8 @@ xg_global_evidence_add_interface_object_use(XgGlobalEvidence *evidence,
                                             const XgInterfaceObjectUseSummary *summary) {
     XgInterfaceObjectUseSummary *row;
     if (!evidence || !summary || summary->interface_id == XG_NO_ID || summary->reason == 0 ||
-        !xg_global_evidence_reserve_interface_object_uses(
-            evidence, evidence->ninterface_object_uses + 1))
+        !xg_global_evidence_reserve_interface_object_uses(evidence,
+                                                          evidence->ninterface_object_uses + 1))
         return NULL;
     row = &evidence->interface_object_uses[evidence->ninterface_object_uses++];
     *row = *summary;
@@ -2314,8 +2346,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->ninterface_impls, sizeof(evidence->ninterface_impls));
     hash = hash_mix(hash, &evidence->ninterface_extends, sizeof(evidence->ninterface_extends));
     hash = hash_mix(hash, &evidence->ninterface_methods, sizeof(evidence->ninterface_methods));
-    hash = hash_mix(hash, &evidence->ninterface_object_uses,
-                    sizeof(evidence->ninterface_object_uses));
+    hash =
+        hash_mix(hash, &evidence->ninterface_object_uses, sizeof(evidence->ninterface_object_uses));
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
     hash = hash_mix(hash, &evidence->nlink_deps, sizeof(evidence->nlink_deps));
@@ -2849,8 +2881,8 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         fprintf(out,
                 "interface-object-use id=%u interface=%u owner=%u span=%u ordinal=%u type=%u "
                 "reason=0x%x flags=0x%x\n",
-                u->use_id, u->interface_id, u->owner_func_id, u->source_span_id,
-                u->body_ordinal, u->type_key, u->reason, u->flags);
+                u->use_id, u->interface_id, u->owner_func_id, u->source_span_id, u->body_ordinal,
+                u->type_key, u->reason, u->flags);
     }
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *l = &evidence->link_deps[i];
@@ -2888,17 +2920,17 @@ static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidenc
         evidence ? evidence->ninterface_extends : 0, evidence ? evidence->ninterface_methods : 0,
         evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->nbodies : 0,
         evidence ? evidence->ncallsites : 0, evidence ? evidence->nlink_deps : 0,
-        evidence ? evidence->ngeneric_insts : 0,
-        evidence ? evidence->ngeneric_body_uses : 0, evidence ? evidence->ngeneric_storages : 0,
-        evidence ? evidence->ngeneric_code_sizes : 0, evidence ? evidence->nsequence_accesses : 0,
-        evidence ? evidence->ncapacity_ops : 0, evidence ? evidence->nbulk_ops : 0,
-        evidence ? evidence->nencoding_ops : 0, evidence ? evidence->nderives : 0,
-        evidence ? evidence->nderived_fields : 0, evidence ? evidence->nderived_methods : 0,
-        evidence ? evidence->njson_shapes : 0, evidence ? evidence->njson_accesses : 0,
-        evidence ? evidence->njson_codecs : 0, evidence ? evidence->nrecord_shapes : 0,
-        evidence ? evidence->nrecord_accesses : 0, evidence ? evidence->nmap_shapes : 0,
-        evidence ? evidence->nmap_entries : 0, evidence ? evidence->nkey_accesses : 0,
-        evidence ? evidence->nhash_eqs : 0, evidence ? xg_global_evidence_hash(evidence) : 0);
+        evidence ? evidence->ngeneric_insts : 0, evidence ? evidence->ngeneric_body_uses : 0,
+        evidence ? evidence->ngeneric_storages : 0, evidence ? evidence->ngeneric_code_sizes : 0,
+        evidence ? evidence->nsequence_accesses : 0, evidence ? evidence->ncapacity_ops : 0,
+        evidence ? evidence->nbulk_ops : 0, evidence ? evidence->nencoding_ops : 0,
+        evidence ? evidence->nderives : 0, evidence ? evidence->nderived_fields : 0,
+        evidence ? evidence->nderived_methods : 0, evidence ? evidence->njson_shapes : 0,
+        evidence ? evidence->njson_accesses : 0, evidence ? evidence->njson_codecs : 0,
+        evidence ? evidence->nrecord_shapes : 0, evidence ? evidence->nrecord_accesses : 0,
+        evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
+        evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0,
+        evidence ? xg_global_evidence_hash(evidence) : 0);
 }
 
 static void dump_cache_payload_body_for_phase(FILE *out, const XgGlobalEvidence *evidence,
@@ -3240,8 +3272,8 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
         return false;
     if (sscanf(line,
                "payload-count bodies=%" SCNu32 " callsites=%" SCNu32
-               " interface_object_uses=%" SCNu32 " link_deps=%" SCNu32
-               " generic_insts=%" SCNu32 " %c",
+               " interface_object_uses=%" SCNu32 " link_deps=%" SCNu32 " generic_insts=%" SCNu32
+               " %c",
                &body_count, &callsite_count, &interface_object_use_count, &link_dep_count,
                &generic_inst_count, &trailing) != 5)
         return false;
@@ -3305,9 +3337,9 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "interface-object-use id=%" SCNu32 " interface=%" SCNu32
-                   " owner=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32 " type=%" SCNu32
-                   " reason=0x%" SCNx32 " flags=0x%" SCNx32 " %c",
+                   "interface-object-use id=%" SCNu32 " interface=%" SCNu32 " owner=%" SCNu32
+                   " span=%" SCNu32 " ordinal=%" SCNu32 " type=%" SCNu32 " reason=0x%" SCNx32
+                   " flags=0x%" SCNx32 " %c",
                    &row.use_id, &row.interface_id, &row.owner_func_id, &row.source_span_id,
                    &row.body_ordinal, &row.type_key, &row.reason, &row.flags, &trailing) != 8)
             return false;
@@ -3427,8 +3459,8 @@ static bool append_imported_summary_rows(XgGlobalEvidence *dst, const XgGlobalEv
                                                                src->ninterface_extends) ||
         !xg_global_evidence_reserve_interface_methods(dst, dst->ninterface_methods +
                                                                src->ninterface_methods) ||
-        !xg_global_evidence_reserve_interface_object_uses(
-            dst, dst->ninterface_object_uses + src->ninterface_object_uses) ||
+        !xg_global_evidence_reserve_interface_object_uses(dst, dst->ninterface_object_uses +
+                                                                   src->ninterface_object_uses) ||
         !xg_global_evidence_reserve_derives(dst, dst->nderives + src->nderives) ||
         !xg_global_evidence_reserve_derived_fields(dst,
                                                    dst->nderived_fields + src->nderived_fields) ||
@@ -3557,8 +3589,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     uint32_t escape_count = 0;
     const uint32_t *escapes = xg_body_escape_catalog(&escape_count);
     uint32_t interface_use_count = 0;
-    const uint32_t *interface_uses =
-        xg_interface_object_use_catalog(&interface_use_count);
+    const uint32_t *interface_uses = xg_interface_object_use_catalog(&interface_use_count);
     uint32_t metadata_count = 0;
     const uint32_t *metadata = xg_metadata_catalog(&metadata_count);
     uint32_t static_data_count = 0;
@@ -3595,15 +3626,14 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods,
             evidence->ninterface_object_uses, evidence->nbodies, evidence->ncallsites,
-            evidence->nlink_deps,
-            evidence->ngeneric_insts,
-            evidence->ngeneric_body_uses, evidence->ngeneric_storages,
-            evidence->ngeneric_code_sizes, evidence->nsequence_accesses, evidence->ncapacity_ops,
-            evidence->nbulk_ops, evidence->nencoding_ops, evidence->nderives,
-            evidence->nderived_fields, evidence->nderived_methods, evidence->njson_shapes,
-            evidence->njson_accesses, evidence->njson_codecs, evidence->nrecord_shapes,
-            evidence->nrecord_accesses, evidence->nmap_shapes, evidence->nmap_entries,
-            evidence->nkey_accesses, evidence->nhash_eqs);
+            evidence->nlink_deps, evidence->ngeneric_insts, evidence->ngeneric_body_uses,
+            evidence->ngeneric_storages, evidence->ngeneric_code_sizes,
+            evidence->nsequence_accesses, evidence->ncapacity_ops, evidence->nbulk_ops,
+            evidence->nencoding_ops, evidence->nderives, evidence->nderived_fields,
+            evidence->nderived_methods, evidence->njson_shapes, evidence->njson_accesses,
+            evidence->njson_codecs, evidence->nrecord_shapes, evidence->nrecord_accesses,
+            evidence->nmap_shapes, evidence->nmap_entries, evidence->nkey_accesses,
+            evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -3659,8 +3689,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(out,
                 "interface-object-use %u id=%u interface=%u owner=%u span=%u ordinal=%u type=%u "
                 "reason=0x%x",
-                i, u->use_id, u->interface_id, u->owner_func_id, u->source_span_id,
-                u->body_ordinal, u->type_key, u->reason);
+                i, u->use_id, u->interface_id, u->owner_func_id, u->source_span_id, u->body_ordinal,
+                u->type_key, u->reason);
         dump_named_bitset(out, u->reason, interface_uses, interface_use_count,
                           xg_interface_object_use_name);
         fprintf(out, " flags=0x%x\n", u->flags);

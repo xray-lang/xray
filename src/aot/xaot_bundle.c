@@ -12,6 +12,7 @@
 #include "xaot_struct_name.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
+#include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi_op_name.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -2318,9 +2319,24 @@ static bool hash_eq_kind_valid(uint8_t kind) {
     }
 }
 
+static bool map_shape_value_type_supports_bool_direct(uint32_t value_type_key) {
+    return value_type_key == xg_synthetic_type_key(XR_TREF_INT) ||
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_I64) ||
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_FLOAT_WIDTH, XR_TREF_NW_F32);
+}
+
+static bool map_shape_supports_bool_direct(const XgMapShapeSummary *shape) {
+    return shape && shape->container_kind == XG_MAP_CONTAINER_MAP &&
+           shape->key_type_key == xg_synthetic_type_key(XR_TREF_BOOL) &&
+           map_shape_value_type_supports_bool_direct(shape->value_type_key) &&
+           shape->entry_count > 0 && shape->entry_count <= 2;
+}
+
 static uint8_t map_shape_action_for(const XgMapShapeSummary *shape) {
     if (!shape || !map_container_kind_valid(shape->container_kind) ||
         !map_shape_source_valid(shape->source))
+        return XAOT_MAP_SHAPE_REJECT;
+    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 && !map_shape_supports_bool_direct(shape))
         return XAOT_MAP_SHAPE_REJECT;
     if ((shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
         (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY))
@@ -2329,7 +2345,7 @@ static uint8_t map_shape_action_for(const XgMapShapeSummary *shape) {
         return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
     if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
         return XAOT_MAP_SHAPE_DENSE_INT_TABLE;
-    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 && map_shape_supports_bool_direct(shape))
         return XAOT_MAP_SHAPE_BOOL_DIRECT;
     if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
         return XAOT_MAP_SHAPE_SMALL_INLINE;
@@ -2479,7 +2495,7 @@ static uint8_t key_access_action_for(const XgGlobalEvidence *evidence,
         bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
                          access->op == XG_KEY_ACCESS_HAS;
         if (lookup_op && access->container_kind == XG_MAP_CONTAINER_MAP &&
-            (shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+            (shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 && map_shape_supports_bool_direct(shape))
             return XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
         if (lookup_op && (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
@@ -2530,7 +2546,7 @@ static uint32_t key_access_evidence_for(const XgGlobalEvidence *evidence,
             bits |= XAOT_MAP_EV_DENSE_DOMAIN;
         if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
             bits |= XAOT_MAP_EV_SMALL;
-        if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+        if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 && map_shape_supports_bool_direct(shape))
             bits |= XAOT_MAP_EV_BOOL_DOMAIN;
     }
     hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);
