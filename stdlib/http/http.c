@@ -514,7 +514,9 @@ static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
 
-    // Save closure to server's root array (prevent GC collection)
+    // Reserve a root slot before route insertion, then commit it only after
+    // the router accepts the path. path_copy is only a null-terminated
+    // scratch buffer; the router copies its own path segments.
     if (ctx->server->route_closure_count >= ctx->server->route_closure_capacity) {
         int new_cap =
             ctx->server->route_closure_capacity == 0 ? 16 : ctx->server->route_closure_capacity * 2;
@@ -527,9 +529,13 @@ static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
         ctx->server->route_closures = arr;
         ctx->server->route_closure_capacity = new_cap;
     }
-    ctx->server->route_closures[ctx->server->route_closure_count++] = closure;
 
-    http_router_add_websocket(ctx->server->router, path_copy, (void *) closure);
+    bool ok = http_router_add_websocket(ctx->server->router, path_copy, (void *) closure);
+    xr_free(path_copy);
+    if (!ok)
+        return xr_null();
+
+    ctx->server->route_closures[ctx->server->route_closure_count++] = closure;
     return xr_null();
 }
 
