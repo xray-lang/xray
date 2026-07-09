@@ -878,7 +878,7 @@ int http2_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
 
 /* ========== Frame Header Parsing/Generation ========== */
 
-static int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header) {
+static int http2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header) {
     header->length = ((uint32_t) buf[0] << 16) | ((uint32_t) buf[1] << 8) | buf[2];
     header->type = buf[3];
     header->flags = buf[4];
@@ -888,7 +888,7 @@ static int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header)
     return 0;
 }
 
-static void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
+static void http2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
     buf[0] = (header->length >> 16) & 0xFF;
     buf[1] = (header->length >> 8) & 0xFF;
     buf[2] = header->length & 0xFF;
@@ -902,7 +902,7 @@ static void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header
 
 /* ========== HTTP/2 Connection ========== */
 
-static void xr_h2_stream_hash_free(XrH2StreamHash *hash);
+static void http2_stream_hash_free(XrH2StreamHash *hash);
 
 void http2_conn_free(XrH2Conn *conn) {
     if (!conn)
@@ -912,7 +912,7 @@ void http2_conn_free(XrH2Conn *conn) {
     http2_hpack_free(&conn->decoder_table);
 
     // Free stream hash table
-    xr_h2_stream_hash_free(&conn->stream_hash);
+    http2_stream_hash_free(&conn->stream_hash);
 
     xr_free(conn->recv_buf);
     xr_free(conn);
@@ -949,11 +949,11 @@ static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
     return (int) total;
 }
 
-static int xr_h2_send_settings(XrH2Conn *conn);
-static int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
-static int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
-static int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
-static int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
+static int http2_send_settings(XrH2Conn *conn);
+static int http2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
+static int http2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
+static int http2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
+static int http2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
 
 int http2_conn_init(XrH2Conn *conn) {
     if (!conn)
@@ -967,10 +967,10 @@ int http2_conn_init(XrH2Conn *conn) {
     }
 
     // Send SETTINGS
-    return xr_h2_send_settings(conn);
+    return http2_send_settings(conn);
 }
 
-static int xr_h2_send_settings(XrH2Conn *conn) {
+static int http2_send_settings(XrH2Conn *conn) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 36];
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     int payload_len = 0;
@@ -1001,16 +1001,16 @@ static int xr_h2_send_settings(XrH2Conn *conn) {
     // Write frame header
     XrH2FrameHeader header = {
         .length = payload_len, .type = XR_H2_FRAME_SETTINGS, .flags = 0, .stream_id = 0};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
 
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + payload_len);
 }
 
-static int xr_h2_send_settings_ack(XrH2Conn *conn) {
+static int http2_send_settings_ack(XrH2Conn *conn) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE];
     XrH2FrameHeader header = {
         .length = 0, .type = XR_H2_FRAME_SETTINGS, .flags = XR_H2_FLAG_ACK, .stream_id = 0};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE);
 }
 
@@ -1025,7 +1025,7 @@ static inline uint32_t stream_hash_func(uint32_t stream_id, uint32_t nbuckets) {
     return h & (nbuckets - 1);
 }
 
-static void xr_h2_stream_hash_init(XrH2StreamHash *hash) {
+static void http2_stream_hash_init(XrH2StreamHash *hash) {
     if (!hash)
         return;
     hash->nbuckets = XR_H2_STREAM_HASH_INIT_CAP;
@@ -1057,7 +1057,7 @@ static void stream_hash_resize(XrH2StreamHash *hash) {
     hash->nbuckets = new_cap;
 }
 
-static void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
+static void http2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
     if (!hash || !stream)
         return;
 
@@ -1075,7 +1075,7 @@ static void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
     hash->count++;
 }
 
-static XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
+static XrH2Stream *http2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
     if (!hash || !hash->buckets)
         return NULL;
     uint32_t idx = stream_hash_func(stream_id, hash->nbuckets);
@@ -1088,7 +1088,7 @@ static XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_
     return NULL;
 }
 
-static void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
+static void http2_stream_hash_free(XrH2StreamHash *hash) {
     if (!hash)
         return;
     if (hash->buckets) {
@@ -1126,15 +1126,15 @@ XrH2Stream *http2_stream_new(XrH2Conn *conn) {
     stream->window_size = conn->remote_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE];
 
     // Add to stream hash table
-    xr_h2_stream_hash_add(&conn->stream_hash, stream);
+    http2_stream_hash_add(&conn->stream_hash, stream);
 
     return stream;
 }
 
-static XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
+static XrH2Stream *http2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
     if (!conn)
         return NULL;
-    return xr_h2_stream_hash_find(&conn->stream_hash, stream_id);
+    return http2_stream_hash_find(&conn->stream_hash, stream_id);
 }
 
 // Receive exactly `len` bytes (or return short on EOF / error).
@@ -1146,7 +1146,7 @@ static XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
 // Loop until we've drained the requested length: both OpenSSL's SSL_read
 // and POSIX read() are permitted to return fewer bytes than asked for,
 // even when more data is available on the wire. The frame parser above
-// (xr_h2_recv) expects an exact-length read for the 9-byte frame header
+// (http2_recv) expects an exact-length read for the 9-byte frame header
 // and for the payload, so a short read was silently mis-classified as
 // "connection broken" and aborted every HTTP/2 request whose first TLS
 // record split the header. Looping fixes that and is also correct for
@@ -1183,7 +1183,7 @@ static void h2_header_callback(const char *name, size_t name_len, const char *va
 }
 
 // Receive and process frame
-static int xr_h2_recv(XrH2Conn *conn) {
+static int http2_recv(XrH2Conn *conn) {
     if (!conn)
         return -1;
 
@@ -1194,7 +1194,7 @@ static int xr_h2_recv(XrH2Conn *conn) {
         return -1;
 
     XrH2FrameHeader header;
-    xr_h2_parse_frame_header(frame_header, &header);
+    http2_parse_frame_header(frame_header, &header);
 
     // Receive frame payload
     uint8_t *payload = NULL;
@@ -1225,17 +1225,17 @@ static int xr_h2_recv(XrH2Conn *conn) {
                     if (id < 7)
                         conn->remote_settings[id] = val;
                 }
-                xr_h2_send_settings_ack(conn);
+                http2_send_settings_ack(conn);
             }
             break;
 
         case XR_H2_FRAME_HEADERS: {
-            XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
+            XrH2Stream *stream = http2_get_stream(conn, header.stream_id);
             if (!stream) {
                 stream = (XrH2Stream *) xr_calloc(1, sizeof(XrH2Stream));
                 if (stream) {
                     stream->id = header.stream_id;
-                    xr_h2_stream_hash_add(&conn->stream_hash, stream);
+                    http2_stream_hash_add(&conn->stream_hash, stream);
                 }
             }
             // RFC 7540 6.2: strip optional Pad Length + Exclusive/Stream-Dep/
@@ -1277,7 +1277,7 @@ static int xr_h2_recv(XrH2Conn *conn) {
         }
 
         case XR_H2_FRAME_DATA: {
-            XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
+            XrH2Stream *stream = http2_get_stream(conn, header.stream_id);
             // RFC 7540 6.1: if PADDED flag set, first octet is Pad Length and
             // the last `pad_len` octets are padding that must NOT be delivered
             // to the application. Prior code pass-through made HTTP body carry
@@ -1320,8 +1320,8 @@ static int xr_h2_recv(XrH2Conn *conn) {
             // payload including Pad Length and padding octets, not just the
             // useful body bytes. So credit back header.length, not data_len.
             if (header.length > 0) {
-                xr_h2_send_window_update(conn, 0, header.length);
-                xr_h2_send_window_update(conn, header.stream_id, header.length);
+                http2_send_window_update(conn, 0, header.length);
+                http2_send_window_update(conn, header.stream_id, header.length);
             }
             break;
         }
@@ -1331,17 +1331,17 @@ static int xr_h2_recv(XrH2Conn *conn) {
 
         case XR_H2_FRAME_PING:
             if (header.length != 8 || header.stream_id != 0 || !payload) {
-                xr_h2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
+                http2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
                 result = -1;
                 break;
             }
             if (!(header.flags & XR_H2_FLAG_ACK)) {
-                xr_h2_send_ping(conn, payload, true);
+                http2_send_ping(conn, payload, true);
             }
             break;
 
         case XR_H2_FRAME_RST_STREAM: {
-            XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
+            XrH2Stream *stream = http2_get_stream(conn, header.stream_id);
             if (stream) {
                 stream->state = XR_H2_STREAM_STATE_CLOSED;
             }
@@ -1360,9 +1360,9 @@ static int xr_h2_recv(XrH2Conn *conn) {
             inc &= 0x7FFFFFFFU;  // Clear reserved bit (RFC 7540 §6.9)
             if (inc == 0) {
                 if (header.stream_id == 0) {
-                    xr_h2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
+                    http2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
                 } else {
-                    xr_h2_send_rst_stream(conn, header.stream_id, XR_H2_PROTOCOL_ERROR);
+                    http2_send_rst_stream(conn, header.stream_id, XR_H2_PROTOCOL_ERROR);
                 }
                 result = -1;
                 break;
@@ -1371,18 +1371,18 @@ static int xr_h2_recv(XrH2Conn *conn) {
                 // RFC 7540 §6.9.1: connection window must not exceed
                 // 2^31-1. Overflow → FLOW_CONTROL_ERROR on connection.
                 if ((int64_t) conn->connection_window + inc > 0x7FFFFFFF) {
-                    xr_h2_send_goaway(conn, 0, XR_H2_FLOW_CONTROL_ERROR);
+                    http2_send_goaway(conn, 0, XR_H2_FLOW_CONTROL_ERROR);
                     result = -1;
                     break;
                 }
                 conn->connection_window += (int32_t) inc;
             } else {
-                XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
+                XrH2Stream *stream = http2_get_stream(conn, header.stream_id);
                 if (stream) {
                     // RFC 7540 §6.9.1: stream window must not exceed
                     // 2^31-1. Overflow → RST_STREAM FLOW_CONTROL_ERROR.
                     if ((int64_t) stream->window_size + inc > 0x7FFFFFFF) {
-                        xr_h2_send_rst_stream(conn, header.stream_id, XR_H2_FLOW_CONTROL_ERROR);
+                        http2_send_rst_stream(conn, header.stream_id, XR_H2_FLOW_CONTROL_ERROR);
                         result = -1;
                         break;
                     }
@@ -1430,7 +1430,7 @@ int http2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
                               .flags =
                                   XR_H2_FLAG_END_HEADERS | (end_stream ? XR_H2_FLAG_END_STREAM : 0),
                               .stream_id = stream->id};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
     if (headers_len > 0) {
         memcpy(frame + XR_H2_FRAME_HEADER_SIZE, headers_buf, (size_t) headers_len);
     }
@@ -1447,7 +1447,7 @@ int http2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data, 
     // Receive until stream closes
     while (stream->state != XR_H2_STREAM_STATE_CLOSED &&
            stream->state != XR_H2_STREAM_HALF_CLOSED_REMOTE) {
-        if (xr_h2_recv(conn) < 0)
+        if (http2_recv(conn) < 0)
             return -1;
     }
 
@@ -1485,7 +1485,7 @@ int http2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t
             .type = XR_H2_FRAME_DATA,
             .flags = (sent + chunk >= len && end_stream) ? XR_H2_FLAG_END_STREAM : 0,
             .stream_id = stream->id};
-        xr_h2_write_frame_header(frame, &header);
+        http2_write_frame_header(frame, &header);
 
         if (h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE) < 0)
             return -1;
@@ -1502,10 +1502,10 @@ int http2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t
     return (int) sent;
 }
 
-static int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error) {
+static int http2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 8];
     XrH2FrameHeader header = {.length = 8, .type = XR_H2_FRAME_GOAWAY, .flags = 0, .stream_id = 0};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
 
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     payload[0] = (last_stream_id >> 24) & 0x7F;
@@ -1520,11 +1520,11 @@ static int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorC
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 8);
 }
 
-static int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment) {
+static int http2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 4];
     XrH2FrameHeader header = {
         .length = 4, .type = XR_H2_FRAME_WINDOW_UPDATE, .flags = 0, .stream_id = stream_id};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
 
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     payload[0] = (increment >> 24) & 0x7F;
@@ -1566,7 +1566,7 @@ XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
     // our stream (HEADERS, DATA, RST_STREAM) resolve to a NULL stream
     // pointer and are silently dropped, leaving recv_stream_data
     // looping forever until sysmon cancels the coroutine.
-    xr_h2_stream_hash_init(&conn->stream_hash);
+    http2_stream_hash_init(&conn->stream_hash);
 
     conn->next_stream_id = is_client ? 1 : 2;
     conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
@@ -1585,14 +1585,14 @@ XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
 
 /* ========== Stream Cancellation ========== */
 
-static int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error) {
+static int http2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error) {
     if (!conn)
         return -1;
 
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 4];
     XrH2FrameHeader header = {
         .length = 4, .type = XR_H2_FRAME_RST_STREAM, .flags = 0, .stream_id = stream_id};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
 
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     payload[0] = (error >> 24) & 0xFF;
@@ -1605,14 +1605,14 @@ static int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCo
 
 /* ========== PING ========== */
 
-static int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
+static int http2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
     if (!conn)
         return -1;
 
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 8];
     XrH2FrameHeader header = {
         .length = 8, .type = XR_H2_FRAME_PING, .flags = ack ? XR_H2_FLAG_ACK : 0, .stream_id = 0};
-    xr_h2_write_frame_header(frame, &header);
+    http2_write_frame_header(frame, &header);
 
     if (data) {
         memcpy(frame + XR_H2_FRAME_HEADER_SIZE, data, 8);
