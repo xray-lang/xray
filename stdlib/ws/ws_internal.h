@@ -195,13 +195,6 @@ typedef struct XrWebSocket {
 
     // permessage-deflate (RFC 7692)
     bool deflate_enabled;  // Extension negotiated successfully
-
-    // Cached PollDesc (avoids fdmap lookup on every yield)
-    void *cached_pd;
-
-    // Close info
-    int close_code;
-    char *close_reason;
 } XrWebSocket;
 
 // Validate WebSocket URL syntax without touching DNS or sockets.
