@@ -198,7 +198,7 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
         req.header_count = hcount;
     }
 
-    XrH2Response *resp = http2_client_request(ctx->h2_client_pool, url, &req);
+    XrH2Response *resp = http2_client_request(X, ctx->h2_client_pool, url, &req);
 
     if (headers)
         xr_free(headers);

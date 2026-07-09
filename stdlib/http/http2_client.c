@@ -94,14 +94,15 @@ void http2_client_pool_destroy(XrH2Pool *pool) {
 }
 
 // Forward declarations
-static XrH2PoolEntry *create_h2_connection(const char *host, int port);
+static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int port);
 static uint64_t get_time_ms(void);
 static unsigned int hash_host(const char *host, int port);
 static void h2_pool_entry_free(XrH2PoolEntry *entry);
 static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target);
 
 // Acquire connection from per-isolate pool
-static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port) {
+static XrH2PoolEntry *http2_client_pool_acquire(XrVMRuntime *X, XrH2Pool *pool, const char *host,
+                                                int port) {
     if (!pool || !host)
         return NULL;
 
@@ -148,7 +149,7 @@ static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host
     xr_mutex_unlock(&pool->lock);
 
     // Create new connection
-    entry = create_h2_connection(host, port);
+    entry = create_h2_connection(X, host, port);
     if (!entry)
         return NULL;
 
@@ -231,7 +232,7 @@ static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target) {
 }
 
 // Create new HTTPS HTTP/2 connection
-static XrH2PoolEntry *create_h2_connection(const char *host, int port) {
+static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int port) {
     XrH2PoolEntry *entry = (XrH2PoolEntry *) xr_calloc(1, sizeof(XrH2PoolEntry));
     if (!entry)
         return NULL;
@@ -241,10 +242,9 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port) {
     entry->in_use = true;
     entry->last_used = get_time_ms();
 
-    // DNS resolution (with cache, IPv4/IPv6 dual-stack). H2 client has
-    // no isolate plumbing yet, so this falls back to a cacheless resolve.
+    // DNS resolution (with the runtime cache when h2Request is called from a VM isolate).
     XrSockAddr resolved_addr;
-    if (!xr_dns_resolve(NULL, host, &resolved_addr, XR_AF_UNSPEC)) {
+    if (!xr_dns_resolve(X, host, &resolved_addr, XR_AF_UNSPEC)) {
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -362,7 +362,8 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port) {
 
 /* ========== HTTP/2 Request ========== */
 
-XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Request *req) {
+XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *url,
+                                   const XrH2Request *req) {
     if (!pool || !url)
         return NULL;
 
@@ -379,7 +380,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     }
 
     // Get connection
-    XrH2PoolEntry *entry = http2_client_pool_acquire(pool, parsed.host, parsed.port);
+    XrH2PoolEntry *entry = http2_client_pool_acquire(X, pool, parsed.host, parsed.port);
     if (!entry) {
         http_url_free(&parsed);
         return NULL;

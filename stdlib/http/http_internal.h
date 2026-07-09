@@ -196,7 +196,8 @@ typedef struct XrH2Response {
 
 XrH2Pool *http2_client_pool_create(void);
 void http2_client_pool_destroy(XrH2Pool *pool);
-XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Request *req);
+XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *url,
+                                   const XrH2Request *req);
 void http2_client_response_free(XrH2Response *resp);
 
 typedef struct {
