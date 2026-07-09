@@ -1,0 +1,14 @@
+import sys
+
+fn run() {
+    var empty: Array<int> = []
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    for (i in [...empty]) {
+        print(t.join())
+    }
+    print("spread-empty")
+}
+
+run()

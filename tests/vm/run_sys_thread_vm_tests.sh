@@ -149,6 +149,8 @@ HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_
 HELPER_FINALIZER_RETURN_ARG_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_finalizer_return_arg_join.xr"
 CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_const_alias_return_receiver_join.xr"
 TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_top_const_alias_return_receiver_join.xr"
+FOR_IN_LITERAL_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_literal_join.xr"
+FOR_IN_SPREAD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_for_in_spread_warning.xr"
 REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_reassigned_alias_warning.xr"
 BRANCH_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_branch_alias_warning.xr"
 BRANCH_ALIAS_MERGE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_branch_alias_merge_warning.xr"
@@ -206,6 +208,7 @@ expect_output "helper_direct_return_alias_join" "$HELPER_DIRECT_RETURN_ALIAS_JOI
 expect_output "helper_finalizer_return_arg_join" "$HELPER_FINALIZER_RETURN_ARG_JOIN_SRC" "42"
 expect_output "const_alias_return_receiver_join" "$CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC" "42"
 expect_output "top_const_alias_return_receiver_join" "$TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC" "42"
+expect_output "for_in_literal_join" "$FOR_IN_LITERAL_JOIN_SRC" "42"
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \
@@ -228,6 +231,8 @@ expect_warning "loop_join_warning" "$LOOP_JOIN_WARNING_SRC" "conditional-loop" \
 expect_warning "loop_continue_warning" "$LOOP_CONTINUE_WARNING_SRC" "42" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "loop_try_continue_warning" "$LOOP_TRY_CONTINUE_WARNING_SRC" "42" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "for_in_spread_warning" "$FOR_IN_SPREAD_WARNING_SRC" "spread-empty" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "move_alias_warning" "$MOVE_ALIAS_WARNING_SRC" "moved" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
