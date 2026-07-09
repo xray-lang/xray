@@ -3382,17 +3382,6 @@ module http {
     layer: "runtime"
   }
 
-  fn serverStats {
-    signature: "(): Json"
-    doc: "Return HTTP server counters"
-    vm: "xr_http_server_stats"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn ws {
     signature: "(path: string, handler: fn(conn: WsConn): ()): ()"
     doc: "Register WebSocket upgrade route on HTTP server"
