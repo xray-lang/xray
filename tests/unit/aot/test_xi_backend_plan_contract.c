@@ -125,10 +125,44 @@ static void test_itable_requires_interface_abi_plan(void) {
     passed++;
 }
 
+static void test_profile_contracts(void) {
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    XaotCapabilityPlan cap = {.capability = XG_CAP_CHANNEL,
+                              .profile_action = XAOT_CAPABILITY_ACTION_LINK};
+    XaotMetadataReachabilityPlan metadata = {.metadata = XG_METADATA_TYPENAME,
+                                             .profile_action = XAOT_CAPABILITY_ACTION_ALLOW};
+    XaotStaticDataPlan static_data = {.static_data = XG_STATIC_DATA_RUNTIME_INIT,
+                                      .action = XAOT_STATIC_DATA_ACTION_RUNTIME_INIT};
+
+    ASSERT_TRUE(xaot_backend_contract_capability_plan_allowed(&cap, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+    cap.profile_action = XAOT_CAPABILITY_ACTION_REJECT;
+    ASSERT_TRUE(!xaot_backend_contract_capability_plan_allowed(&cap, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_CAPABILITY_PROFILE_REJECTED);
+
+    ASSERT_TRUE(xaot_backend_contract_metadata_plan_allowed(&metadata, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+    metadata.profile_action = XAOT_CAPABILITY_ACTION_REJECT;
+    ASSERT_TRUE(!xaot_backend_contract_metadata_plan_allowed(&metadata, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_METADATA_PROFILE_REJECTED);
+
+    ASSERT_TRUE(xaot_backend_contract_static_data_plan_allowed(&static_data, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+    static_data.action = XAOT_STATIC_DATA_ACTION_REJECT;
+    ASSERT_TRUE(!xaot_backend_contract_static_data_plan_allowed(&static_data, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED);
+
+    ASSERT_TRUE(!xaot_backend_contract_capability_plan_allowed(NULL, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+
+    passed++;
+}
+
 int main(void) {
     test_runtime_helper_contract();
     test_target_case_contract();
     test_itable_requires_interface_abi_plan();
+    test_profile_contracts();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }

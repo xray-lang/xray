@@ -34,6 +34,9 @@ typedef enum XaotBackendContractIssue {
     XAOT_BACKEND_CONTRACT_MISSING_INTERFACE_ABI_PLAN,
     XAOT_BACKEND_CONTRACT_RUNTIME_HELPER_FOR_OPTIMIZED_PLAN,
     XAOT_BACKEND_CONTRACT_RUNTIME_HELPER_IDENTITY_MISMATCH,
+    XAOT_BACKEND_CONTRACT_CAPABILITY_PROFILE_REJECTED,
+    XAOT_BACKEND_CONTRACT_METADATA_PROFILE_REJECTED,
+    XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED,
 } XaotBackendContractIssue;
 
 static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIssue issue) {
@@ -54,6 +57,12 @@ static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIs
             return "runtime_helper_for_optimized_plan";
         case XAOT_BACKEND_CONTRACT_RUNTIME_HELPER_IDENTITY_MISMATCH:
             return "runtime_helper_identity_mismatch";
+        case XAOT_BACKEND_CONTRACT_CAPABILITY_PROFILE_REJECTED:
+            return "capability_profile_rejected";
+        case XAOT_BACKEND_CONTRACT_METADATA_PROFILE_REJECTED:
+            return "metadata_profile_rejected";
+        case XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED:
+            return "static_data_profile_rejected";
     }
     return "unknown";
 }
@@ -196,6 +205,53 @@ static inline bool xaot_backend_contract_runtime_helper_allowed(
          plan->source_span_id != source_span_id)) {
         xaot_backend_contract_set_issue(out_issue,
                                         XAOT_BACKEND_CONTRACT_RUNTIME_HELPER_IDENTITY_MISMATCH);
+        return false;
+    }
+    xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
+    return true;
+}
+
+static inline bool
+xaot_backend_contract_capability_plan_allowed(const XaotCapabilityPlan *plan,
+                                              XaotBackendContractIssue *out_issue) {
+    if (!plan) {
+        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+        return false;
+    }
+    if (plan->profile_action == XAOT_CAPABILITY_ACTION_REJECT) {
+        xaot_backend_contract_set_issue(out_issue,
+                                        XAOT_BACKEND_CONTRACT_CAPABILITY_PROFILE_REJECTED);
+        return false;
+    }
+    xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
+    return true;
+}
+
+static inline bool
+xaot_backend_contract_metadata_plan_allowed(const XaotMetadataReachabilityPlan *plan,
+                                            XaotBackendContractIssue *out_issue) {
+    if (!plan) {
+        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+        return false;
+    }
+    if (plan->profile_action == XAOT_CAPABILITY_ACTION_REJECT) {
+        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_METADATA_PROFILE_REJECTED);
+        return false;
+    }
+    xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
+    return true;
+}
+
+static inline bool
+xaot_backend_contract_static_data_plan_allowed(const XaotStaticDataPlan *plan,
+                                               XaotBackendContractIssue *out_issue) {
+    if (!plan) {
+        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+        return false;
+    }
+    if (plan->action == XAOT_STATIC_DATA_ACTION_REJECT) {
+        xaot_backend_contract_set_issue(out_issue,
+                                        XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED);
         return false;
     }
     xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
