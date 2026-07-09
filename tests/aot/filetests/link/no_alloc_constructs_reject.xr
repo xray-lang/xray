@@ -1,0 +1,32 @@
+@no_alloc
+fn xray_no_alloc_bytes_constructor_reject() -> Bytes {
+    return Bytes(4)
+}
+
+@no_alloc
+fn xray_no_alloc_map_literal_reject() -> Map<string, int> {
+    return #{"a": 1}
+}
+
+@no_alloc
+fn xray_no_alloc_set_literal_reject() -> Set<int> {
+    return #[1, 2]
+}
+
+@no_alloc
+fn xray_no_alloc_json_literal_reject() -> Json {
+    return { answer: 42 }
+}
+
+@no_alloc
+fn xray_no_alloc_copy_builtin_reject(values: Array<int>) -> Array<int> {
+    return copy(values)
+}
+
+var xray_no_alloc_copy_source: Array<int> = [1, 2, 3]
+
+print(xray_no_alloc_bytes_constructor_reject().length)
+print(xray_no_alloc_map_literal_reject().length)
+print(xray_no_alloc_set_literal_reject().length)
+print(Json.size(xray_no_alloc_json_literal_reject()))
+print(xray_no_alloc_copy_builtin_reject(xray_no_alloc_copy_source).length)

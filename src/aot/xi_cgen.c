@@ -4122,6 +4122,19 @@ static bool cg_check_no_alloc_func(XiCgenCtx *ctx, const XiFunc *f) {
     return false;
 }
 
+static bool cg_check_no_alloc_func_tree(XiCgenCtx *ctx, const XiFunc *root) {
+    if (!root)
+        return true;
+    bool ok = true;
+    if (root->no_alloc && !cg_check_no_alloc_func(ctx, root))
+        ok = false;
+    for (uint16_t i = 0; i < root->nchildren; i++) {
+        if (!cg_check_no_alloc_func_tree(ctx, root->children[i]))
+            ok = false;
+    }
+    return ok;
+}
+
 static bool cg_value_aliases_value(const XiValue *value, const XiValue *target) {
     return value && target && cg_unwrap_identity_value(value) == target;
 }
