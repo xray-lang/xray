@@ -1,0 +1,34 @@
+import datetime
+
+var xray_no_alloc_datetime_extra_epoch = datetime.fromTimestamp(0)
+
+@no_alloc
+fn xray_no_alloc_datetime_tostring_reject(value: DateTime) -> string {
+    return value.toString()
+}
+
+@no_alloc
+fn xray_no_alloc_datetime_format_reject(value: DateTime) -> string {
+    return value.format("YYYY")
+}
+
+@no_alloc
+fn xray_no_alloc_datetime_add_reject(value: DateTime) -> int {
+    return value.add(1, "day").timestamp
+}
+
+@no_alloc
+fn xray_no_alloc_datetime_toutc_reject(value: DateTime) -> int {
+    return value.toUTC().timestamp
+}
+
+@no_alloc
+fn xray_no_alloc_datetime_tolocal_reject(value: DateTime) -> int {
+    return value.toLocal().timestamp
+}
+
+print(xray_no_alloc_datetime_tostring_reject(xray_no_alloc_datetime_extra_epoch))
+print(xray_no_alloc_datetime_format_reject(xray_no_alloc_datetime_extra_epoch))
+print(xray_no_alloc_datetime_add_reject(xray_no_alloc_datetime_extra_epoch))
+print(xray_no_alloc_datetime_toutc_reject(xray_no_alloc_datetime_extra_epoch))
+print(xray_no_alloc_datetime_tolocal_reject(xray_no_alloc_datetime_extra_epoch))
