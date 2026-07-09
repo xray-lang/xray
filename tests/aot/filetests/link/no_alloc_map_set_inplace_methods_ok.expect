@@ -1,0 +1,9 @@
+status=pass
+contains=xray_no_alloc_map_set_inplace_methods_ok
+not_contains=allocates via method 'Map.get'
+not_contains=allocates via method 'Map.has'
+not_contains=allocates via method 'Map.delete'
+not_contains=allocates via method 'Map.clear'
+not_contains=allocates via method 'Set.has'
+not_contains=allocates via method 'Set.delete'
+not_contains=allocates via method 'Set.clear'
