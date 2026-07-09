@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_stringbuilder_constructor_reject' allocates via constructor 'StringBuilder'
+contains=xray_no_alloc_stringbuilder_constructor_reject
+not_contains=CRASH
