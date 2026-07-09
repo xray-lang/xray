@@ -833,6 +833,7 @@ typedef enum XaotJsonShapeAction {
 typedef enum XaotJsonAccessAction {
     XAOT_JSON_ACCESS_DIRECT_INDEX = 1,
     XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX,
+    XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD,
     XAOT_JSON_ACCESS_DYNAMIC_LOOKUP,
     XAOT_JSON_ACCESS_REJECT,
 } XaotJsonAccessAction;

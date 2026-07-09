@@ -1,2 +1,4 @@
 contains=xaot-plan v0
-regex=json-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=index_get action=dynamic_lookup key=0 result_type=0 field=65535 evidence=0x5 reason=computed_key
+regex=json-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=index_get action=computed_key_guard key=0 result_type=0 field=65535 evidence=0x5 reason=none
+c_contains=xrt_json_get_computed_key_guard_owned
+c_not_contains=xrt_index_get(

@@ -33,6 +33,7 @@
 #include <string.h>
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
+XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
 
 /* =========================================================================
  * Array runtime
@@ -3101,6 +3102,22 @@ static inline XrValue xrt_json_get_shape_guard_owned(XrValue obj, int field_idx,
     return xrt_json_get_name_owned(obj, name);
 }
 
+static inline XrValue xrt_json_get_computed_key_guard_owned(XrValue obj, XrValue key) {
+    if (!XR_IS_STR(key))
+        xrt_type_no_index("Json object only supports string keys");
+    const char *name = xr_str_data(key);
+    if (obj.tag == XR_TAG_PTR && obj.ptr) {
+        xrt_json_t *j = (xrt_json_t *) obj.ptr;
+        if ((j->object_kind == XRT_OBJECT_JSON || j->object_kind == XRT_OBJECT_RECORD) &&
+            j->field_names) {
+            int64_t idx = xrt_json_find_field(j, name);
+            if (idx >= 0)
+                return xrt_value_to_owned(xrt_json_get_field(obj, (int) idx));
+        }
+    }
+    return xrt_json_get_name_owned(obj, name);
+}
+
 static inline int xrt_json_has_name(XrValue obj, const char *name) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
         return 0;
@@ -3179,6 +3196,24 @@ static inline XrValue xrt_json_set_shape_guard(XrValue obj, int field_idx, const
     if (xrt_json_shape_guard_matches(obj, field_idx, name)) {
         xrt_json_set_field(obj, field_idx, val);
         return val;
+    }
+    return xrt_json_set_name(obj, name, val);
+}
+
+static inline XrValue xrt_json_set_computed_key_guard(XrValue obj, XrValue key, XrValue val) {
+    if (!XR_IS_STR(key))
+        xrt_type_no_index("Json object only supports string keys");
+    const char *name = xr_str_data(key);
+    if (obj.tag == XR_TAG_PTR && obj.ptr) {
+        xrt_json_t *j = (xrt_json_t *) obj.ptr;
+        if ((j->object_kind == XRT_OBJECT_JSON || j->object_kind == XRT_OBJECT_RECORD) &&
+            j->field_names) {
+            int64_t idx = xrt_json_find_field(j, name);
+            if (idx >= 0) {
+                xrt_json_set_field(obj, (int) idx, val);
+                return val;
+            }
+        }
     }
     return xrt_json_set_name(obj, name, val);
 }
