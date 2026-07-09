@@ -23,6 +23,9 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xutf8.h"
 #include "../base64/base64.h"
+#if XR_HAS_ZLIB
+#include "../compress/compress.h"
+#endif
 #include "../net/io.h"
 #include "../../src/io/xdns.h"
 #include "../net/tls.h"
@@ -56,6 +59,20 @@ static inline unsigned char *SHA1(const unsigned char *data, size_t len, unsigne
 
 static uint64_t ws_now_ms(void) {
     return xr_time_monotonic_ms();
+}
+
+static int ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                                 size_t *out_len) {
+#if XR_HAS_ZLIB
+    return xr_inflate_bounded(in, in_len, max_out, out, out_len);
+#else
+    (void) in;
+    (void) in_len;
+    (void) max_out;
+    (void) out;
+    (void) out_len;
+    return -1;
+#endif
 }
 
 // WebSocket frame header constants
