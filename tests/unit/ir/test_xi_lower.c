@@ -1024,6 +1024,12 @@ TEST(struct_literal_inside_function) {
     xi_func_free(f);
 }
 
+TEST(unresolved_struct_literal_does_not_lower_to_json) {
+    XiFunc *f = lower_source("var p = Missing{x: 1}\n"
+                             "print(p)\n");
+    assert(f == NULL && "unresolved struct literal must not fall back to Json object");
+}
+
 TEST(struct_field_store_narrows_native_width) {
     XiFunc *f = lower_source("struct Sample {\n"
                              "    byte: uint8\n"
@@ -1801,6 +1807,7 @@ int main(void) {
     run_optional_call();
     run_struct_literal();
     run_struct_literal_inside_function();
+    run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_native_width();
     run_as_to_native_width_int_lowers_to_narrow();
     run_force_unwrap();
