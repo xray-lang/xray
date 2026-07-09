@@ -23,6 +23,10 @@
 #include <stdio.h>
 #include <string.h>
 
+enum {
+    XG_SMALL_MAP_LITERAL_MAX = 4
+};
+
 typedef struct XgClassNameRow {
     const char *name;
     const char *super_name;
@@ -1870,6 +1874,19 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return body_expr_type_key(bc, expr->as.unsafe_expr.operand);
         case AST_FORCE_UNWRAP:
             return body_expr_type_key(bc, expr->as.unary.operand);
+        case AST_CALL_EXPR: {
+            const CallExprNode *call = &expr->as.call_expr;
+            const AstNode *callee = call->callee;
+            if (callee && callee->type == AST_MEMBER_ACCESS && call->type_arg_count > 0 &&
+                call->type_args && call->type_args[0]) {
+                const MemberAccessNode *member = &callee->as.member_access;
+                if (member->name && strcmp(member->name, "decode") == 0 && member->object &&
+                    member->object->type == AST_VARIABLE && member->object->as.variable.name &&
+                    strcmp(member->object->as.variable.name, "Json") == 0)
+                    return hash_tref32(call->type_args[0]);
+            }
+            break;
+        }
         case AST_NEW_EXPR:
             return hash_named_type_key32(expr->as.new_expr.class_name, expr->as.new_expr.type_args,
                                          expr->as.new_expr.type_arg_count);
@@ -2241,7 +2258,21 @@ static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNo
     XgLocalType *row;
     if (out_literal)
         *out_literal = NULL;
-    if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+    if (!bc || !expr)
+        return XG_NO_ID;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_lookup_local_json_shape(bc, expr->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return body_lookup_local_json_shape(bc, expr->as.move_expr.expr, out_literal);
+        case AST_UNSAFE_EXPR:
+            return body_lookup_local_json_shape(bc, expr->as.unsafe_expr.operand, out_literal);
+        case AST_FORCE_UNWRAP:
+            return body_lookup_local_json_shape(bc, expr->as.unary.operand, out_literal);
+        default:
+            break;
+    }
+    if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return XG_NO_ID;
     row = body_find_local(bc, expr->as.variable.name);
     if (!row || row->json_shape_id == XG_NO_ID)
@@ -2257,7 +2288,21 @@ static bool body_local_type_is_json(const XgLocalType *row) {
 
 static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *expr) {
     XgLocalType *row;
-    if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+    if (!bc || !expr)
+        return false;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_expr_is_json_without_shape(bc, expr->as.grouping);
+        case AST_MOVE_EXPR:
+            return body_expr_is_json_without_shape(bc, expr->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return body_expr_is_json_without_shape(bc, expr->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return body_expr_is_json_without_shape(bc, expr->as.unary.operand);
+        default:
+            break;
+    }
+    if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return false;
     row = body_find_local(bc, expr->as.variable.name);
     return row && row->json_shape_id == XG_NO_ID && body_local_type_is_json(row);
@@ -2566,7 +2611,21 @@ static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const A
     XgLocalType *row;
     if (out_literal)
         *out_literal = NULL;
-    if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+    if (!bc || !expr)
+        return XG_NO_ID;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_lookup_local_record_shape(bc, expr->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return body_lookup_local_record_shape(bc, expr->as.move_expr.expr, out_literal);
+        case AST_UNSAFE_EXPR:
+            return body_lookup_local_record_shape(bc, expr->as.unsafe_expr.operand, out_literal);
+        case AST_FORCE_UNWRAP:
+            return body_lookup_local_record_shape(bc, expr->as.unary.operand, out_literal);
+        default:
+            break;
+    }
+    if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return XG_NO_ID;
     row = body_find_local(bc, expr->as.variable.name);
     if (!row || row->record_shape_id == XG_NO_ID)
@@ -2818,6 +2877,8 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     shape.entry_count = (uint16_t) (count < UINT16_MAX ? count : UINT16_MAX);
     shape.literal_count = (uint32_t) (count > 0 ? count : 0);
     shape.flags = XG_MAP_SHAPE_LITERAL;
+    if (count > 0 && count <= XG_SMALL_MAP_LITERAL_MAX)
+        shape.flags |= XG_MAP_SHAPE_SMALL;
     shape.shape_hash =
         body_map_shape_hash(container_kind, key_type_key, shape.value_type_key, const_ids, count);
     if (!xg_global_evidence_add_map_shape(bc->evidence, &shape)) {

@@ -1,0 +1,15 @@
+fn smallLookup() -> int {
+    var scores = #{"ada": 7, "lin": 9}
+    var seen: Set<string> = #["ada", "lin"]
+    var fromIndex = scores["ada"]
+    var viaGet = scores.get("lin")
+    var total = fromIndex + viaGet
+    if (scores.has("lin")) {
+        if (seen.has("ada")) {
+            return total
+        }
+    }
+    return 0
+}
+
+print(smallLookup())

@@ -678,6 +678,10 @@ static bool cg_key_access_plan_is_prehashed_lookup(const XaotKeyAccessPlan *plan
     return plan && plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP && plan->key_prehash != 0;
 }
 
+static bool cg_key_access_plan_is_small_scan(const XaotKeyAccessPlan *plan) {
+    return plan && plan->action == XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
+}
+
 static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux || !v->args[0] ||
         !v->args[0]->type || v->args[0]->type->kind != XR_KIND_MAP ||
@@ -712,6 +716,29 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_MAP, op, method);
     if (emit_key_access_abort_expr_if_needed(ctx, out))
         return true;
+    if (cg_key_access_plan_is_small_scan(key_plan)) {
+        if (op == XG_KEY_ACCESS_GET) {
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            fprintf(out, "xrt_map_get_small_owned(");
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        if (op == XG_KEY_ACCESS_HAS) {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            fprintf(out, "(int64_t)xrt_map_has_small(");
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+    }
     if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
         return false;
 
@@ -1307,6 +1334,16 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_SET, op, method);
     if (emit_key_access_abort_expr_if_needed(ctx, out))
         return true;
+    if (cg_key_access_plan_is_small_scan(key_plan) && op == XG_KEY_ACCESS_HAS) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)xrt_set_has_small(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
         return false;
 
