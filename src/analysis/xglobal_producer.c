@@ -129,6 +129,7 @@ typedef struct XgBodyCollect {
     uint32_t callsite_start;
     uint32_t callsite_count;
     uint32_t key_access_count;
+    uint32_t interface_object_use_count;
     uint32_t sequence_access_count;
     uint32_t capacity_op_count;
     uint32_t bulk_op_count;
@@ -138,6 +139,7 @@ typedef struct XgBodyCollect {
     uint32_t capability_bits;
     uint32_t metadata_use_bits;
     uint32_t static_data_use_bits;
+    const XrTypeRef *return_type;
 } XgBodyCollect;
 
 static uint64_t fold_bytes(uint64_t h, const void *data, size_t len) {
@@ -1819,6 +1821,147 @@ static uint32_t body_interface_type_key(XgBodyCollect *bc, XgInterfaceId interfa
     return row ? hash_named_type_key32(row->name, NULL, 0) : 0;
 }
 
+static bool producer_add_interface_object_use_row(XgProducer *p, XgInterfaceId interface_id,
+                                                  XgFuncId owner_func_id, uint32_t source_span_id,
+                                                  uint32_t body_ordinal, uint32_t type_key,
+                                                  uint32_t reason) {
+    XgInterfaceObjectUseSummary use;
+    if (!p || !p->evidence || interface_id == XG_NO_ID || reason == 0)
+        return true;
+    if (type_key == 0)
+        type_key = interface_id;
+    for (uint32_t i = 0; i < p->evidence->ninterface_object_uses; i++) {
+        XgInterfaceObjectUseSummary *existing = &p->evidence->interface_object_uses[i];
+        if (existing->interface_id == interface_id && existing->owner_func_id == owner_func_id &&
+            existing->source_span_id == source_span_id && existing->body_ordinal == body_ordinal &&
+            existing->type_key == type_key) {
+            existing->reason |= reason;
+            return true;
+        }
+    }
+    memset(&use, 0, sizeof(use));
+    use.use_id = (XgInterfaceObjectUseId) (p->evidence->ninterface_object_uses + 1);
+    use.interface_id = interface_id;
+    use.owner_func_id = owner_func_id;
+    use.source_span_id = source_span_id;
+    use.body_ordinal = body_ordinal;
+    use.type_key = type_key;
+    use.reason = reason;
+    return xg_global_evidence_add_interface_object_use(p->evidence, &use) != NULL;
+}
+
+static bool producer_add_interface_object_uses_for_type_ref(
+    XgProducer *p, XgFuncId owner_func_id, uint32_t source_span_id, uint32_t *body_ordinal,
+    const XrTypeRef *type, uint32_t base_reason, uint32_t storage_type_key) {
+    XgInterfaceId direct_interface;
+    uint32_t type_key;
+    if (!p || !type)
+        return true;
+    type_key = storage_type_key != 0 ? storage_type_key : hash_tref32(type);
+
+    if (type->kind == XR_TREF_GENERIC && type->name && type->children && type->nchildren > 0 &&
+        strcmp(type->name, "Array") == 0) {
+        const XrTypeRef *elem = type->children[0];
+        XgInterfaceId elem_interface = producer_lookup_interface_from_tref(p, elem);
+        if (elem_interface != XG_NO_ID) {
+            uint32_t ordinal = body_ordinal ? ++(*body_ordinal) : 0;
+            return producer_add_interface_object_use_row(
+                p, elem_interface, owner_func_id, source_span_id, ordinal, hash_tref32(type),
+                base_reason | XG_INTERFACE_OBJECT_USE_ARRAY);
+        }
+        return producer_add_interface_object_uses_for_type_ref(
+            p, owner_func_id, source_span_id, body_ordinal, elem,
+            base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, hash_tref32(type));
+    }
+
+    if (type->kind == XR_TREF_FIXED_ARRAY && type->children && type->nchildren > 0) {
+        return producer_add_interface_object_uses_for_type_ref(
+            p, owner_func_id, source_span_id, body_ordinal, type->children[0],
+            base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, hash_tref32(type));
+    }
+
+    direct_interface = producer_lookup_interface_from_tref(p, type);
+    if (direct_interface != XG_NO_ID) {
+        uint32_t ordinal = body_ordinal ? ++(*body_ordinal) : 0;
+        return producer_add_interface_object_use_row(p, direct_interface, owner_func_id,
+                                                     source_span_id, ordinal, type_key,
+                                                     base_reason | XG_INTERFACE_OBJECT_USE_VALUE);
+    }
+
+    switch ((XrTypeRefKind) type->kind) {
+        case XR_TREF_OPTIONAL:
+            return type->children && type->nchildren > 0
+                       ? producer_add_interface_object_uses_for_type_ref(
+                             p, owner_func_id, source_span_id, body_ordinal, type->children[0],
+                             base_reason, type_key)
+                       : true;
+        case XR_TREF_UNION:
+        case XR_TREF_TUPLE:
+            for (uint8_t i = 0; i < type->nchildren; i++) {
+                if (!producer_add_interface_object_uses_for_type_ref(
+                        p, owner_func_id, source_span_id, body_ordinal,
+                        type->children ? type->children[i] : NULL, base_reason, 0))
+                    return false;
+            }
+            return true;
+        case XR_TREF_OBJECT:
+            for (uint8_t i = 0; i < type->nchildren; i++) {
+                if (!producer_add_interface_object_uses_for_type_ref(
+                        p, owner_func_id, source_span_id, body_ordinal,
+                        type->children ? type->children[i] : NULL,
+                        base_reason | XG_INTERFACE_OBJECT_USE_FIELD, 0))
+                    return false;
+            }
+            return true;
+        case XR_TREF_FUNCTION:
+            if (type->children && type->nchildren > 0) {
+                for (uint8_t i = 0; i + 1 < type->nchildren; i++) {
+                    if (!producer_add_interface_object_uses_for_type_ref(
+                            p, owner_func_id, source_span_id, body_ordinal, type->children[i],
+                            base_reason | XG_INTERFACE_OBJECT_USE_PARAM, 0))
+                        return false;
+                }
+                return producer_add_interface_object_uses_for_type_ref(
+                    p, owner_func_id, source_span_id, body_ordinal,
+                    type->children[type->nchildren - 1],
+                    base_reason | XG_INTERFACE_OBJECT_USE_RETURN, 0);
+            }
+            return true;
+        default:
+            return true;
+    }
+}
+
+static bool body_add_interface_object_uses_for_type_ref(XgBodyCollect *bc, const XrTypeRef *type,
+                                                        uint32_t base_reason,
+                                                        uint32_t source_span_id) {
+    if (!bc || !type)
+        return true;
+    return producer_add_interface_object_uses_for_type_ref(
+        bc->producer, bc->owner_func_id, source_span_id, &bc->interface_object_use_count, type,
+        base_reason, 0);
+}
+
+static bool body_add_interface_capture_uses(XgBodyCollect *bc, uint32_t source_span_id) {
+    if (!bc)
+        return true;
+    for (uint32_t i = 0; i < bc->nlocals; i++) {
+        const XgLocalType *local = &bc->locals[i];
+        uint32_t type_key;
+        uint32_t ordinal;
+        if (local->interface_id == XG_NO_ID)
+            continue;
+        type_key = local->type_key != 0 ? local->type_key
+                                        : body_interface_type_key(bc, local->interface_id);
+        ordinal = ++bc->interface_object_use_count;
+        if (!producer_add_interface_object_use_row(
+                bc->producer, local->interface_id, bc->owner_func_id, source_span_id, ordinal,
+                type_key, XG_INTERFACE_OBJECT_USE_CAPTURE | XG_INTERFACE_OBJECT_USE_VALUE))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t body_unknown_arg_type_key(const AstNode *expr) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     static const char tag[] = "xg_arg_unknown_type";
@@ -2643,8 +2786,9 @@ static bool record_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLit
         if (body_object_literal_entry_is_spread(obj, i)) {
             const ObjectLiteralNode *source_literal = NULL;
             AstNode *spread = obj->values[i];
-            if (!spread || body_lookup_local_record_shape(bc, spread->as.spread_expr.expr,
-                                                          &source_literal) == XG_NO_ID ||
+            if (!spread ||
+                body_lookup_local_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
+                    XG_NO_ID ||
                 !source_literal)
                 return false;
             if (!record_shape_count_candidate_keys(bc, source_literal, count, depth + 1))
@@ -2669,8 +2813,9 @@ static bool record_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
             AstNode *spread = obj->values[i];
             if (has_spread)
                 *has_spread = true;
-            if (!spread || body_lookup_local_record_shape(bc, spread->as.spread_expr.expr,
-                                                          &source_literal) == XG_NO_ID ||
+            if (!spread ||
+                body_lookup_local_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
+                    XG_NO_ID ||
                 !source_literal)
                 return false;
             if (!record_shape_collect_keys(bc, source_literal, keys, capacity, count, has_spread,
@@ -2686,8 +2831,8 @@ static bool record_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
 }
 
 static bool record_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
-                                             const char ***out_keys, uint32_t *out_count,
-                                             bool *out_has_spread, uint64_t *out_hash) {
+                                              const char ***out_keys, uint32_t *out_count,
+                                              bool *out_has_spread, uint64_t *out_hash) {
     uint32_t capacity = 0;
     uint32_t count = 0;
     bool has_spread = false;
@@ -2744,8 +2889,7 @@ static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
     row.source_span_id = source_span_id;
     row.type_key = type_key ? type_key : body_record_type_key(obj);
     row.field_name_start = (uint32_t) (shape_hash & UINT32_MAX);
-    row.field_count =
-        (uint16_t) (shape_key_count < UINT16_MAX ? shape_key_count : UINT16_MAX);
+    row.field_count = (uint16_t) (shape_key_count < UINT16_MAX ? shape_key_count : UINT16_MAX);
     row.shape_kind = has_spread ? XG_RECORD_SHAPE_SPREAD : XG_RECORD_SHAPE_LITERAL;
     row.flags =
         XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
@@ -2753,8 +2897,7 @@ static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
         row.flags |= XG_RECORD_SHAPE_HAS_SPREAD;
     row.shape_hash = shape_hash;
     xr_free(shape_keys);
-    return xg_global_evidence_add_record_shape(bc->evidence, &row) ? row.record_shape_id
-                                                                   : XG_NO_ID;
+    return xg_global_evidence_add_record_shape(bc->evidence, &row) ? row.record_shape_id : XG_NO_ID;
 }
 
 static XgRecordShapeId body_add_record_shape_for_type_alias(XgGlobalEvidence *evidence,
@@ -4133,15 +4276,19 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_FUNCTION_EXPR: {
             uint32_t base_locals = bc->nlocals;
             uint32_t base_name_locals = bc->nname_locals;
+            const XrTypeRef *outer_return_type = bc->return_type;
             bool captures = body_function_expr_captures_current_locals(bc, &node->as.function_expr);
             if (captures) {
                 bc->escape_bits |= XG_BODY_ESCAPE_CAPTURE;
                 bc->effect_bits |= XG_BODY_MAY_ALLOC;
+                (void) body_add_interface_capture_uses(bc, (uint32_t) node->line);
             }
             if (node->as.function_expr.is_generator)
                 bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
+            bc->return_type = node->as.function_expr.return_type;
             body_add_function_params(bc, &node->as.function_expr);
             walk_body_for_calls(bc, node->as.function_expr.body);
+            bc->return_type = outer_return_type;
             bc->nlocals = base_locals;
             bc->nname_locals = base_name_locals;
             break;
@@ -4201,6 +4348,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bool inferred = false;
             (void) body_type_ref_sequence_parts(node->as.var_decl.type_annotation, &sequence_kind,
                                                 &sequence_elem_type_key);
+            (void) body_add_interface_object_uses_for_type_ref(
+                bc, node->as.var_decl.type_annotation, 0, (uint32_t) node->line);
             bc->capability_bits |=
                 body_capabilities_for_type_ref(node->as.var_decl.type_annotation);
             walk_body_for_calls(bc, node->as.var_decl.initializer);
@@ -4249,10 +4398,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (record_literal) {
                 record_shape_id = body_add_record_shape_for_literal(
                     bc, record_literal, (uint32_t) node->line, type_key);
-                body_bind_record_shape_local(bc, node->as.var_decl.name, record_shape_id,
-                                             body_record_literal_has_spread(record_literal)
-                                                 ? NULL
-                                                 : record_literal);
+                body_bind_record_shape_local(
+                    bc, node->as.var_decl.name, record_shape_id,
+                    body_record_literal_has_spread(record_literal) ? NULL : record_literal);
             }
             if (map_shape_id != XG_NO_ID) {
                 body_bind_map_shape_local(bc, node->as.var_decl.name, map_shape_id,
@@ -4291,6 +4439,16 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             body_clear_sequence_local(bc, node->as.assignment.name);
             body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
                               interface_id, type_key);
+            if (target_row && target_row->interface_id != XG_NO_ID) {
+                uint32_t target_type_key =
+                    target_row->type_key != 0
+                        ? target_row->type_key
+                        : body_interface_type_key(bc, target_row->interface_id);
+                uint32_t ordinal = ++bc->interface_object_use_count;
+                (void) producer_add_interface_object_use_row(
+                    bc->producer, target_row->interface_id, bc->owner_func_id,
+                    (uint32_t) node->line, ordinal, target_type_key, XG_INTERFACE_OBJECT_USE_VALUE);
+            }
             target_row = body_find_local(bc, node->as.assignment.name);
             body_bind_record_bridge_shapes_for_type_key(
                 bc, node->as.assignment.name,
@@ -4364,6 +4522,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
                 walk_body_for_calls(bc, node->as.return_stmt.values[i]);
+            if (node->as.return_stmt.value_count > 0)
+                (void) body_add_interface_object_uses_for_type_ref(
+                    bc, bc->return_type, XG_INTERFACE_OBJECT_USE_RETURN, (uint32_t) node->line);
             if (node->as.return_stmt.value_count > 0)
                 bc->escape_bits |= XG_BODY_ESCAPE_RETURN;
             break;
@@ -4727,6 +4888,9 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
         uint32_t sequence_elem_type_key = 0;
         bc->capability_bits |=
             body_capabilities_for_type_ref(method->param_types ? method->param_types[i] : NULL);
+        (void) body_add_interface_object_uses_for_type_ref(
+            bc, method->param_types ? method->param_types[i] : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
+            0);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
                                interface_id, type_key, false);
         if (body_type_ref_sequence_parts(method->param_types ? method->param_types[i] : NULL,
@@ -4750,6 +4914,9 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
         uint8_t sequence_kind = 0;
         uint32_t sequence_elem_type_key = 0;
         bc->capability_bits |= body_capabilities_for_type_ref(param ? param->type : NULL);
+        (void) body_add_interface_object_uses_for_type_ref(
+            bc, param ? param->type : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
+            param && param->line > 0 ? (uint32_t) param->line : 0);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key, false);
         if (body_type_ref_sequence_parts(param ? param->type : NULL, &sequence_kind,
@@ -4771,6 +4938,9 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     bc.owner_func_id = pending->func_id;
     bc.module_id = pending->module_id;
     bc.current_class_id = pending->current_class_id;
+    bc.return_type = pending->method     ? pending->method->return_type
+                     : pending->function ? pending->function->return_type
+                                         : NULL;
     body_add_method_params(&bc, pending->method);
     body_add_function_params(&bc, pending->function);
     if (pending->function && pending->function->is_generator)
@@ -4938,6 +5108,17 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
                                    method.method_id, hash_name32(m->name), method.signature_key,
                                    (uint32_t) method_node->line, XG_BODY_METHOD, m->body, m, NULL))
+            return false;
+    }
+    for (int i = 0; i < cls->field_count; i++) {
+        const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
+        const FieldDeclNode *field;
+        if (!field_node || field_node->type != AST_FIELD_DECL)
+            continue;
+        field = &field_node->as.field_decl;
+        if (!producer_add_interface_object_uses_for_type_ref(
+                p, XG_NO_ID, (uint32_t) field_node->line, NULL, field->field_type,
+                XG_INTERFACE_OBJECT_USE_FIELD, 0))
             return false;
     }
 

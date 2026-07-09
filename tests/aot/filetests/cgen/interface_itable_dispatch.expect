@@ -2,7 +2,7 @@ contains=xaot-plan v0
 regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=itable .*recv_class=0 recv_iface=[1-9][0-9]* slot=0 targets=[0-9]+\+5 evidence=0x11 reason=large_implementor_set
 regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* owner_class=[1-9][0-9]* body=[1-9][0-9]* name=[1-9][0-9]* sig=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x11
 regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=[1-9][0-9]* reason=value flags=iface_object\+itable
-regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=5 slots=1 flags=iface_object\+itable\+boxed_receiver data=boxed_value type=native_type_id itable=dispatch_slot tag=none evidence=callsite\+methods\+implementors\+dispatch reason=none
+regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=5 slots=1 flags=iface_object\+itable\+boxed_receiver data=boxed_value type=native_type_id itable=dispatch_slot tag=none evidence=callsite\+methods\+implementors\+dispatch\+object_use reason=none
 regex=generic-specialization [0-9]+ callsite=[0-9]+ owner=[0-9]+ interface=[1-9][0-9]* .*action=fallback dispatch=itable implementors=5 single=0 targets=5 evidence=callsite\+dispatch\+implementors\+targets reason=large_set
 c_contains=static XrtMethodFn _xr_it_methods_
 c_contains=static const XrtInterfaceMethodTable _xr_itable_

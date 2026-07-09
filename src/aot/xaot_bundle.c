@@ -935,10 +935,54 @@ static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
                                                   XAOT_INTERFACE_USE_REASON_VALUE, flags);
 }
 
+static uint32_t xaot_interface_use_reason_from_object_use(uint32_t reason) {
+    uint32_t out = 0;
+    if ((reason & XG_INTERFACE_OBJECT_USE_VALUE) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_VALUE;
+    if ((reason & XG_INTERFACE_OBJECT_USE_ARRAY) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_ARRAY;
+    if ((reason & XG_INTERFACE_OBJECT_USE_FIELD) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_FIELD;
+    if ((reason & XG_INTERFACE_OBJECT_USE_RETURN) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_RETURN;
+    if ((reason & XG_INTERFACE_OBJECT_USE_CAPTURE) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_CAPTURE;
+    if ((reason & XG_INTERFACE_OBJECT_USE_PARAM) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_PARAM;
+    return out;
+}
+
+static bool xaot_bundle_add_interface_object_use_plan(XaotBundle *bundle,
+                                                      const XgGlobalEvidence *ev,
+                                                      const XgInterfaceObjectUseSummary *use) {
+    uint32_t reason;
+    uint32_t flags = XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT;
+    if (!bundle || !ev || !use || use->interface_id == XG_NO_ID)
+        return false;
+    reason = xaot_interface_use_reason_from_object_use(use->reason);
+    if (reason == 0)
+        return false;
+    if (xg_evidence_interface_visible_method_count(ev, use->interface_id) != 0)
+        flags |= XAOT_INTERFACE_USE_NEEDS_ITABLE;
+    for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (!xg_evidence_interface_impl_matches(ev, impl->interface_id, use->interface_id))
+            continue;
+        if (xg_evidence_effective_interface_implementor_seen(ev, use->interface_id,
+                                                             impl->implementor_class_id, i))
+            continue;
+        if (!xaot_bundle_add_interface_use_plan_row(
+                bundle, use->interface_id, impl->implementor_class_id, XG_NO_ID, reason, flags))
+            return false;
+    }
+    return true;
+}
+
 static bool xaot_bundle_add_interface_abi_plan(XaotBundle *bundle, const XgGlobalEvidence *ev,
                                                XgInterfaceId interface_id) {
     XaotInterfaceAbiPlan *plan;
     uint32_t callsite_count = 0;
+    uint32_t object_use_count = 0;
     uint32_t flags = 0;
     uint32_t evidence = 0;
     uint8_t data_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
@@ -973,12 +1017,27 @@ static bool xaot_bundle_add_interface_abi_plan(XaotBundle *bundle, const XgGloba
             itable_source = XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT;
         }
     }
-    if (callsite_count == 0)
+    for (uint32_t i = 0; i < ev->ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &ev->interface_object_uses[i];
+        if (use->interface_id != interface_id)
+            continue;
+        object_use_count++;
+        flags |= XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT | XAOT_INTERFACE_ABI_BOXED_RECEIVER;
+        data_source = XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE;
+        type_source = XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID;
+        evidence |= XAOT_INTERFACE_ABI_EV_OBJECT_USE;
+    }
+    if (callsite_count == 0 && object_use_count == 0)
         return true;
     if (xg_evidence_interface_visible_method_count(ev, interface_id) != 0)
         evidence |= XAOT_INTERFACE_ABI_EV_INTERFACE_METHODS;
     if (xg_evidence_effective_interface_implementor_count(ev, interface_id) != 0)
         evidence |= XAOT_INTERFACE_ABI_EV_IMPLEMENTOR_SET;
+    if (object_use_count != 0 &&
+        xg_evidence_interface_visible_method_count(ev, interface_id) != 0) {
+        flags |= XAOT_INTERFACE_ABI_NEEDS_ITABLE;
+        itable_source = XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT;
+    }
     if (!reserve_plan_array((void **) &bundle->interface_abi_plans, &bundle->interface_abi_plan_cap,
                             bundle->ninterface_abi_plans + 1, sizeof(XaotInterfaceAbiPlan), 8))
         return false;
@@ -1008,6 +1067,11 @@ static bool xaot_bundle_add_interface_abi_plans(XaotBundle *bundle,
             continue;
         if (!xaot_bundle_add_interface_abi_plan(bundle, evidence,
                                                 call->receiver_static_interface_id))
+            return false;
+    }
+    for (uint32_t i = 0; i < evidence->ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &evidence->interface_object_uses[i];
+        if (!xaot_bundle_add_interface_abi_plan(bundle, evidence, use->interface_id))
             return false;
     }
     return true;
@@ -3250,6 +3314,13 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
         if (!xaot_bundle_add_interface_use_plan(bundle, &evidence->interface_impls[i])) {
             bundle->error_msg = "failed to allocate AOT interface use plan";
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < evidence->ninterface_object_uses; i++) {
+        if (!xaot_bundle_add_interface_object_use_plan(bundle, evidence,
+                                                       &evidence->interface_object_uses[i])) {
+            bundle->error_msg = "failed to allocate AOT interface object use plan";
             return false;
         }
     }
@@ -5851,6 +5922,7 @@ static void print_interface_abi_evidence_bits(FILE *out, uint32_t bits) {
     PRINT_BIT(XAOT_INTERFACE_ABI_EV_INTERFACE_METHODS, "methods");
     PRINT_BIT(XAOT_INTERFACE_ABI_EV_IMPLEMENTOR_SET, "implementors");
     PRINT_BIT(XAOT_INTERFACE_ABI_EV_DISPATCH_PLAN, "dispatch");
+    PRINT_BIT(XAOT_INTERFACE_ABI_EV_OBJECT_USE, "object_use");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT
