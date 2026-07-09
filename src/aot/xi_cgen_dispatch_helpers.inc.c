@@ -3743,14 +3743,13 @@ static bool xicgen_emit_planned_type_switch_method(XiCgenCtx *ctx, FILE *out, co
                                                    const XaotMethodDispatchPlan *dispatch_plan) {
     const XaotBundle *bundle;
     bool void_like;
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
     if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_TYPE_SWITCH)
         return false;
     if (dispatch_plan->receiver_static_interface_id == XG_NO_ID)
         return false;
     bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || dispatch_plan->target_count == 0 || dispatch_plan->target_start == 0 ||
-        dispatch_plan->target_start - 1 + dispatch_plan->target_count >
-            bundle->ndispatch_target_cases) {
+    if (!xaot_backend_dispatch_plan_target_range_valid(bundle, dispatch_plan, &issue)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: verified AOT type-switch dispatch plan at line %u has no "
@@ -3880,14 +3879,13 @@ static bool xicgen_emit_planned_vtable_method(XiCgenCtx *ctx, FILE *out, const X
                                               const XaotMethodDispatchPlan *dispatch_plan) {
     const XaotBundle *bundle;
     bool void_like;
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
     if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_VTABLE)
         return false;
     if (dispatch_plan->receiver_static_class_id == XG_NO_ID)
         return false;
     bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || dispatch_plan->target_count == 0 || dispatch_plan->target_start == 0 ||
-        dispatch_plan->target_start - 1 + dispatch_plan->target_count >
-            bundle->ndispatch_target_cases) {
+    if (!xaot_backend_dispatch_plan_target_range_valid(bundle, dispatch_plan, &issue)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: verified AOT vtable dispatch plan at line %u has no target "
@@ -3977,14 +3975,14 @@ static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const X
     const XaotDispatchTargetCase *target;
     const XiFunc *target_func;
     const char *target_prefix = NULL;
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
     if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_DIRECT)
         return false;
     if (dispatch_plan->receiver_static_class_id == XG_NO_ID &&
         dispatch_plan->receiver_static_interface_id == XG_NO_ID)
         return false;
     bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || dispatch_plan->target_count != 1 || dispatch_plan->target_start == 0 ||
-        dispatch_plan->target_start - 1 >= bundle->ndispatch_target_cases) {
+    if (!xaot_backend_dispatch_plan_target_range_valid(bundle, dispatch_plan, &issue)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: verified AOT direct dispatch plan at line %u has no target\n",
@@ -5128,31 +5126,31 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
 static bool xicgen_runtime_method_plan_allows_helper(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                      const char *method, uint16_t nargs,
                                                      const XaotMethodDispatchPlan *dispatch_plan) {
-    if (!dispatch_plan)
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    uint32_t method_name_id = method ? xg_name_id(method) : 0;
+    uint32_t source_span_id = v ? v->line : 0;
+    if (xaot_backend_contract_runtime_helper_allowed(dispatch_plan, method_name_id, nargs,
+                                                     source_span_id, &issue))
         return true;
-    if (dispatch_plan->kind != XAOT_DISPATCH_RUNTIME_FALLBACK) {
+
+    if (issue == XAOT_BACKEND_CONTRACT_RUNTIME_HELPER_FOR_OPTIMIZED_PLAN) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: verified AOT dispatch plan kind %u for method '%s' at line %u "
                 "cannot use runtime method helper\n",
-                (unsigned) dispatch_plan->kind, method ? method : "?", v ? (unsigned) v->line : 0);
+                dispatch_plan ? (unsigned) dispatch_plan->kind : 0, method ? method : "?",
+                v ? (unsigned) v->line : 0);
         emit_codegen_abort_expr(out);
         return false;
     }
-    if (dispatch_plan->method_name_id == 0 || dispatch_plan->method_name_id != xg_name_id(method) ||
-        dispatch_plan->arg_count != nargs ||
-        (v && v->line != 0 && dispatch_plan->source_span_id != 0 &&
-         dispatch_plan->source_span_id != v->line)) {
-        ctx->error = true;
-        fprintf(
-            stderr,
+
+    ctx->error = true;
+    fprintf(stderr,
             "[xi_cgen] ERROR: runtime method helper for '%s' at line %u does not match verified "
             "AOT dispatch plan\n",
             method ? method : "?", v ? (unsigned) v->line : 0);
-        emit_codegen_abort_expr(out);
-        return false;
-    }
-    return true;
+    emit_codegen_abort_expr(out);
+    return false;
 }
 
 static bool xicgen_key_access_runtime_method_preflight(XiCgenCtx *ctx, FILE *out, const XiValue *v,
@@ -5605,6 +5603,13 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (!is_super && !dispatch_plan && xicgen_emit_static_method(ctx, out, f, v, prefix))
         return;
     if (dispatch_plan && dispatch_plan->kind != XAOT_DISPATCH_RUNTIME_FALLBACK) {
+        XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+        (void) xaot_backend_contract_check_mandatory_dispatch(
+            cg_ctx_aot_bundle(ctx), dispatch_plan,
+            XAOT_BACKEND_DISPATCH_SUPPORT_DIRECT | XAOT_BACKEND_DISPATCH_SUPPORT_VTABLE |
+                XAOT_BACKEND_DISPATCH_SUPPORT_TYPE_SWITCH |
+                XAOT_BACKEND_DISPATCH_SUPPORT_RUNTIME_HELPER,
+            &issue);
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: verified AOT dispatch plan kind %u for method '%s' at line %u "
