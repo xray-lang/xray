@@ -1557,6 +1557,14 @@ static void dump_cache_key(FILE *out, const XgGlobalEvidence *evidence, uint32_t
             key.imported_summary_hash, key.content_hash, xg_evidence_cache_key_hash(&key));
 }
 
+static void dump_cache_manifest(FILE *out, const XgGlobalEvidence *evidence) {
+    char manifest_text[1400];
+    XgEvidenceCacheManifest manifest = xg_global_evidence_cache_manifest(evidence);
+    if (!xg_evidence_cache_manifest_format(&manifest, manifest_text, sizeof(manifest_text)))
+        return;
+    fprintf(out, "%s", manifest_text);
+}
+
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     char *buf = NULL;
     size_t bufsz = 0;
@@ -1590,6 +1598,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
     dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    dump_cache_manifest(out, evidence);
     fprintf(out,
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
             "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u\n",
