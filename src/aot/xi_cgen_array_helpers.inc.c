@@ -1740,7 +1740,7 @@ static bool cg_static_fixed_struct_array_nested_field_value(
     if (!cg_static_struct_field_access_index(v, info.layout, &parent_field_idx))
         return false;
     const XrAggregateFieldLayout *field = &info.layout->fields[parent_field_idx];
-    if (!field || field->native_type != XR_NATIVE_STRUCT || !field->sub_layout)
+    if (!cg_static_struct_native_nested_layout_supported(field))
         return false;
     if (out_info)
         *out_info = info;
@@ -1768,6 +1768,53 @@ static void cg_emit_static_fixed_struct_array_nested_field_lvalue(
                                                             tmp_index, parent, parent_field_idx);
     cg_struct_field_c_name(nested, nested_field_idx, fname, sizeof(fname));
     fprintf(out, ".%s", fname);
+}
+
+static bool cg_static_fixed_struct_array_nested_fixed_array_field_value(
+    XiCgenCtx *ctx, const XiValue *value, CgStaticFixedStructArrayInfo *out_info, int64_t *out_slot,
+    const XiModule **out_module, const XiValue **out_elem_access, const XiValue **out_elem_index,
+    int64_t *out_parent_field_idx, const XrAggregateLayout **out_nested_layout,
+    int64_t *out_nested_field_idx, const XrAggregateFieldLayout **out_field) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || (v->op != XI_AGG_GET && v->op != XI_LOAD_FIELD) || v->nargs < 1)
+        return false;
+    CgStaticFixedStructArrayInfo info;
+    int64_t slot = -1;
+    const XiModule *module = NULL;
+    const XiValue *elem_access = NULL;
+    const XiValue *elem_index = NULL;
+    int64_t parent_field_idx = -1;
+    const XrAggregateLayout *nested_layout = NULL;
+    if (!cg_static_fixed_struct_array_nested_field_value(ctx, v->args[0], &info, &slot, &module,
+                                                         &elem_access, &elem_index,
+                                                         &parent_field_idx, &nested_layout) ||
+        !nested_layout)
+        return false;
+    int64_t nested_field_idx = -1;
+    if (!cg_static_struct_field_access_index(v, nested_layout, &nested_field_idx))
+        return false;
+    const XrAggregateFieldLayout *field = &nested_layout->fields[nested_field_idx];
+    if (!cg_static_struct_native_fixed_array_supported(field))
+        return false;
+    if (out_info)
+        *out_info = info;
+    if (out_slot)
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
+    if (out_elem_access)
+        *out_elem_access = elem_access;
+    if (out_elem_index)
+        *out_elem_index = elem_index;
+    if (out_parent_field_idx)
+        *out_parent_field_idx = parent_field_idx;
+    if (out_nested_layout)
+        *out_nested_layout = nested_layout;
+    if (out_nested_field_idx)
+        *out_nested_field_idx = nested_field_idx;
+    if (out_field)
+        *out_field = field;
+    return true;
 }
 
 static void
@@ -2002,6 +2049,12 @@ static bool cg_static_fixed_struct_array_nested_field_ref_safe_uses(XiCgenCtx *c
                     if (!cg_static_struct_field_access_index(v, nested_layout, &field_idx))
                         return false;
                     const XrAggregateFieldLayout *field = &nested_layout->fields[field_idx];
+                    if (cg_static_struct_native_fixed_array_supported(field)) {
+                        if (!cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(
+                                ctx, f, v, depth + 1))
+                            return false;
+                        continue;
+                    }
                     if (!cg_static_fixed_struct_array_field_result_supported(field))
                         return false;
                     continue;
@@ -2081,6 +2134,21 @@ static bool cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(X
     return cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(ctx, f, v, 0);
 }
 
+static bool cg_value_is_elided_static_fixed_struct_array_nested_fixed_array_field_ref(
+    XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!cg_static_fixed_struct_array_nested_fixed_array_field_value(ctx, v, NULL, NULL, NULL, NULL,
+                                                                     NULL, NULL, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool
+cg_value_is_static_fixed_struct_array_nested_fixed_array_field_ref(XiCgenCtx *ctx,
+                                                                   const XiValue *value) {
+    return cg_static_fixed_struct_array_nested_fixed_array_field_value(
+        ctx, value, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+}
+
 static bool cg_value_is_elided_static_fixed_struct_array_nested_field_ref(XiCgenCtx *ctx,
                                                                           const XiFunc *f,
                                                                           const XiValue *v) {
@@ -2141,6 +2209,23 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         (static_struct_field->elem_count != info.count ||
          cg_struct_native_rep(static_struct_field->elem_native_type) != info.rep))
         static_struct_field_read = false;
+    const XrAggregateLayout *static_struct_nested_parent = NULL;
+    const XrAggregateLayout *static_struct_nested_layout = NULL;
+    int64_t static_struct_nested_slot = -1;
+    int64_t static_struct_nested_parent_field_idx = -1;
+    int64_t static_struct_nested_field_idx = -1;
+    const XrAggregateFieldLayout *static_struct_nested_field = NULL;
+    const XiModule *static_struct_nested_module = NULL;
+    bool static_struct_nested_field_read =
+        cg_freestanding_static_struct_nested_fixed_array_field_value(
+            ctx, v->args[0], &static_struct_nested_parent, &static_struct_nested_slot,
+            &static_struct_nested_parent_field_idx, &static_struct_nested_layout,
+            &static_struct_nested_field_idx, &static_struct_nested_field,
+            &static_struct_nested_module);
+    if (static_struct_nested_field_read &&
+        (static_struct_nested_field->elem_count != info.count ||
+         cg_struct_native_rep(static_struct_nested_field->elem_native_type) != info.rep))
+        static_struct_nested_field_read = false;
     CgStaticFixedMatrixInfo static_matrix_info;
     int64_t static_matrix_slot = -1;
     const XiModule *static_matrix_module = NULL;
@@ -2186,6 +2271,26 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         (static_struct_array_field->elem_count != info.count ||
          cg_struct_native_rep(static_struct_array_field->elem_native_type) != info.rep))
         static_struct_array_field_read = false;
+    CgStaticFixedStructArrayInfo static_struct_array_nested_info;
+    int64_t static_struct_array_nested_slot = -1;
+    int64_t static_struct_array_nested_parent_field_idx = -1;
+    int64_t static_struct_array_nested_field_idx = -1;
+    const XiModule *static_struct_array_nested_module = NULL;
+    const XiValue *static_struct_array_nested_access = NULL;
+    const XiValue *static_struct_array_nested_elem_index = NULL;
+    const XrAggregateLayout *static_struct_array_nested_layout = NULL;
+    const XrAggregateFieldLayout *static_struct_array_nested_field = NULL;
+    bool static_struct_array_nested_field_read =
+        cg_static_fixed_struct_array_nested_fixed_array_field_value(
+            ctx, v->args[0], &static_struct_array_nested_info, &static_struct_array_nested_slot,
+            &static_struct_array_nested_module, &static_struct_array_nested_access,
+            &static_struct_array_nested_elem_index, &static_struct_array_nested_parent_field_idx,
+            &static_struct_array_nested_layout, &static_struct_array_nested_field_idx,
+            &static_struct_array_nested_field);
+    if (static_struct_array_nested_field_read &&
+        (static_struct_array_nested_field->elem_count != info.count ||
+         cg_struct_native_rep(static_struct_array_nested_field->elem_native_type) != info.rep))
+        static_struct_array_nested_field_read = false;
     bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     if (static_matrix_read) {
@@ -2328,6 +2433,47 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
+    if (static_struct_array_nested_field_read) {
+        bool outer_unchecked = cg_fixed_array_index_bounds_proven(
+            static_struct_array_nested_access, static_struct_array_nested_info.count);
+        bool guarded = !outer_unchecked || !unchecked;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        if (guarded)
+            fprintf(out, "({ ");
+        if (!outer_unchecked) {
+            fprintf(out, "int64_t _outer_idx = ");
+            emit_value_as_rep_ctx(ctx, out, static_struct_array_nested_elem_index, XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_outer_idx < 0 || _outer_idx >= %u)) "
+                    "xrt_fixed_index_oob(_outer_idx, %u); ",
+                    (unsigned) static_struct_array_nested_info.count,
+                    (unsigned) static_struct_array_nested_info.count);
+        }
+        if (!unchecked) {
+            fprintf(out, "int64_t _idx = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) "
+                    "xrt_fixed_index_oob(_idx, %u); ",
+                    (unsigned) info.count, (unsigned) info.count);
+        }
+        emit_fixed_array_lane_load_prefix(out, &info, target_rep);
+        cg_emit_static_fixed_struct_array_nested_field_lvalue(
+            ctx, out, static_struct_array_nested_module, static_struct_array_nested_slot,
+            static_struct_array_nested_elem_index, outer_unchecked ? NULL : "_outer_idx",
+            static_struct_array_nested_info.layout, static_struct_array_nested_parent_field_idx,
+            static_struct_array_nested_layout, static_struct_array_nested_field_idx);
+        fprintf(out, "[");
+        if (unchecked)
+            emit_array_i64_arg(out, v->args[1]);
+        else
+            fprintf(out, "_idx");
+        fprintf(out, "]");
+        if (guarded)
+            fprintf(out, "; })");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
     if (!unchecked) {
         fprintf(out, "({ int64_t _idx = ");
@@ -2337,6 +2483,11 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_fixed_array_lane_load_prefix(out, &info, target_rep);
     if (static_slot_read)
         cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
+    else if (static_struct_nested_field_read)
+        cg_emit_static_struct_nested_field_lvalue(
+            ctx, out, static_struct_nested_module, static_struct_nested_parent,
+            static_struct_nested_slot, static_struct_nested_parent_field_idx,
+            static_struct_nested_layout, static_struct_nested_field_idx);
     else if (static_struct_field_read)
         cg_emit_static_struct_field_lvalue_in_module(ctx, out, static_struct_module,
                                                      static_struct_layout, static_struct_slot,

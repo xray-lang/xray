@@ -187,6 +187,38 @@ const WORD_ROWS: [U32Bytes; 2] = comptime [
     U32Bytes{b: [8, 7, 6, 5]},
 ]
 
+struct BitHolder {
+    bits: I32Bits
+    base: int
+}
+
+@weak
+const BIT_HOLDER = comptime BitHolder{bits: I32Bits{u: 33}, base: TABLE[0]}
+
+@section("__DATA,.xray_bit_groups")
+@weak
+@used
+const BIT_GROUPS: [BitHolder; 2] = comptime [
+    BitHolder{bits: I32Bits{i: -1}, base: TABLE[0]},
+    BitHolder{bits: I32Bits{u: 42}, base: TABLE[1]},
+]
+
+struct WordHolder {
+    word: U32Bytes
+    base: int
+}
+
+@weak
+const WORD_HOLDER = comptime WordHolder{word: U32Bytes{b: [9, 8, 7, 6]}, base: TABLE[1]}
+
+@section("__DATA,.xray_wgroups")
+@weak
+@used
+const WORD_GROUPS: [WordHolder; 2] = comptime [
+    WordHolder{word: U32Bytes{u: 0x01020304}, base: TABLE[2]},
+    WordHolder{word: U32Bytes{b: [8, 7, 6, 5]}, base: TABLE[3]},
+]
+
 @c_export("xray_top_const_aggregate")
 fn xray_top_const_aggregate() -> int {
     const first = comptime TABLE[0]
@@ -357,4 +389,17 @@ fn xray_top_const_union_byte_runtime(i: int) -> int {
 @c_export("xray_top_const_union_array_runtime")
 fn xray_top_const_union_array_runtime(i: int) -> int {
     return (unsafe { BIT_ROWS[i].u } as int) + (unsafe { WORD_ROWS[i].b }[i] as int)
+}
+
+@c_export("xray_top_const_struct_nested_union_runtime")
+fn xray_top_const_struct_nested_union_runtime(i: int) -> int {
+    return (unsafe { BIT_HOLDER.bits.u } as int) + (unsafe { WORD_HOLDER.word.b }[i] as int) +
+        BIT_HOLDER.base + WORD_HOLDER.base
+}
+
+@c_export("xray_top_const_struct_array_nested_union_runtime")
+fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
+    return (unsafe { BIT_GROUPS[row].bits.u } as int) +
+        (unsafe { WORD_GROUPS[row].word.b }[col] as int) +
+        BIT_GROUPS[row].base + WORD_GROUPS[row].base
 }

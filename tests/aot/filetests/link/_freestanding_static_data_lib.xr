@@ -134,6 +134,38 @@ const WORD_ROWS: [U32Bytes; 2] = comptime [
     U32Bytes{b: [8, 7, 6, 5]},
 ]
 
+struct BitHolder {
+    bits: I32Bits
+    base: int
+}
+
+@weak
+const BIT_HOLDER = comptime BitHolder{bits: I32Bits{u: 33}, base: TABLE[0]}
+
+@section("__DATA,.xr_ibgroups")
+@weak
+@used
+const BIT_GROUPS: [BitHolder; 2] = comptime [
+    BitHolder{bits: I32Bits{i: -1}, base: TABLE[0]},
+    BitHolder{bits: I32Bits{u: 42}, base: TABLE[1]},
+]
+
+struct WordHolder {
+    word: U32Bytes
+    base: int
+}
+
+@weak
+const WORD_HOLDER = comptime WordHolder{word: U32Bytes{b: [9, 8, 7, 6]}, base: TABLE[1]}
+
+@section("__DATA,.xr_iwgroups")
+@weak
+@used
+const WORD_GROUPS: [WordHolder; 2] = comptime [
+    WordHolder{word: U32Bytes{u: 0x01020304}, base: TABLE[2]},
+    WordHolder{word: U32Bytes{b: [8, 7, 6, 5]}, base: TABLE[3]},
+]
+
 @weak
 const LABEL = comptime "score"
 
@@ -206,4 +238,4 @@ const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
 ]
 
-export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS }
+export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS }

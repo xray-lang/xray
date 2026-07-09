@@ -699,6 +699,29 @@ static const XiImportRef *xicgen_freestanding_module_import_slot(const XiCgenCtx
     return ref && ref->module_path && !ref->member_name ? ref : NULL;
 }
 
+static bool xicgen_value_is_elided_static_aggregate_access(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *v) {
+    return cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
+           cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
+           cg_value_is_elided_static_struct_nested_fixed_array_field_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_matrix_const_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_matrix_index_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_cube_const_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_cube_outer_index_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_cube_index_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_struct_array_index_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_struct_array_fixed_array_field_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_struct_array_nested_fixed_array_field_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_struct_array_nested_field_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_tuple_array_const_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_tuple_array_index_ref(ctx, f, v) ||
+           cg_value_is_elided_static_fixed_tuple_array_tuple_ref(ctx, f, v) ||
+           cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
+           cg_value_is_elided_static_struct_const_ref(ctx, f, v);
+}
+
 static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
@@ -731,11 +754,7 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
         if ((f && f->module && f == f->module->init) ||
-            cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
-            cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
-            cg_value_is_elided_static_fixed_tuple_array_const_ref(ctx, f, v) ||
-            cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
-            cg_value_is_elided_static_struct_const_ref(ctx, f, v)) {
+            xicgen_value_is_elided_static_aggregate_access(ctx, f, v)) {
             fprintf(out, "XR_NULL_VAL /* static const import: %s.%s */",
                     import_const_module && import_const_module->name ? import_const_module->name
                                                                      : "?",
@@ -757,6 +776,10 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     const XiConstLiteral *erased = xicgen_freestanding_erased_const_slot(ctx, v ? v->aux_int : -1);
     if (erased && erased->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        if (xicgen_value_is_elided_static_aggregate_access(ctx, f, v)) {
+            fprintf(out, "XR_NULL_VAL /* static aggregate const */");
+            return;
+        }
         fprintf(stderr,
                 "[xi_cgen] ERROR: freestanding top-level aggregate const slot %d must be "
                 "consumed through comptime before static data sections land\n",
