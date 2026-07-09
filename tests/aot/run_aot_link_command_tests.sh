@@ -1707,6 +1707,53 @@ else
     sed 's/^/      /' "$FREESTANDING_TOP_CONST_SCALAR_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_PLAIN_CONST_ADDR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_plain_const_addr.xr"
+FREESTANDING_PLAIN_CONST_ADDR_OBJ="$WORK/freestanding_rawptr_of_plain_const_addr.o"
+FREESTANDING_PLAIN_CONST_ADDR_LOG="$WORK/freestanding_rawptr_of_plain_const_addr.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_PLAIN_CONST_ADDR_OBJ" \
+        "$FREESTANDING_PLAIN_CONST_ADDR_SRC" >"$FREESTANDING_PLAIN_CONST_ADDR_LOG" 2>&1; then
+    FREESTANDING_PLAIN_CONST_ADDR_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_PLAIN_CONST_ADDR_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_PLAIN_CONST_ADDR_C" ]; then
+        expect_log_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" \
+            "static const int64_t _xctscalar_freestanding_rawptr_of_plain_const_addr_" \
+            "freestanding-profile/plain-const-addr: materializes addressed scalar const"
+        expect_log_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" \
+            "static const xrt_str_t _xctstr_freestanding_rawptr_of_plain_const_addr_" \
+            "freestanding-profile/plain-const-addr: materializes addressed string const"
+        expect_log_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" \
+            "&_xctscalar_freestanding_rawptr_of_plain_const_addr_" \
+            "freestanding-profile/plain-const-addr: takes scalar static address directly"
+        expect_log_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" \
+            "&_xctstr_freestanding_rawptr_of_plain_const_addr_" \
+            "freestanding-profile/plain-const-addr: takes string static address directly"
+        expect_log_not_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" "xrt_mem_address_of" \
+            "freestanding-profile/plain-const-addr: avoids hosted address helper"
+        expect_log_not_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" "#include \"xrt.h\"" \
+            "freestanding-profile/plain-const-addr: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/plain-const-addr: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_PLAIN_CONST_ADDR_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_PLAIN_CONST_ADDR_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_PLAIN_CONST_ADDR_OBJ")"
+    FREESTANDING_PLAIN_CONST_ADDR_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_PLAIN_CONST_ADDR_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_PLAIN_CONST_ADDR_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/plain-const-addr: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/plain-const-addr: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_PLAIN_CONST_ADDR_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/plain-const-addr: object build failed"
+    sed 's/^/      /' "$FREESTANDING_PLAIN_CONST_ADDR_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_CONST_AGG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_aggregate.xr"
 FREESTANDING_TOP_CONST_AGG_OBJ="$WORK/freestanding_top_const_aggregate.o"
 FREESTANDING_TOP_CONST_AGG_LOG="$WORK/freestanding_top_const_aggregate.log"
