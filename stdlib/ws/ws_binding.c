@@ -124,9 +124,9 @@ static const char *get_data_arg(XrValue v, size_t *out_len) {
 /* ========== WebSocket Storage via Per-Isolate Context ========== */
 
 /*
- * Per-isolate WebSocket context - similar to XrHttpContext.
- * Each isolate has its own connection map and statistics.
- * This allows multi-isolate support and proper resource cleanup.
+ * Per-isolate WebSocket context. Each isolate owns its connection registry and
+ * server listen state so module teardown can clean native resources without
+ * relying on global process state.
  */
 
 // Include hashmap header for proper type declarations
@@ -139,20 +139,12 @@ typedef struct XrWsContext {
     XrWebSocket **conn_array;  // conn_array[id] = ws, id starts from 1
     int array_capacity;        // current capacity of conn_array
     _Atomic int next_id;       // Connection ID counter (atomic for multi-worker)
-    _Atomic int conn_count;    // Active connection count
-    int max_conns;             // Max connections (0 = unlimited)
     xr_mutex_t conn_mutex;     // Protects conn_array grow/store/remove
 
     // Free-list for ID recycling (protected by conn_mutex)
     int *free_ids;      // Stack of recycled IDs
     int free_count;     // Number of recycled IDs
     int free_capacity;  // Capacity of free_ids array
-
-    // Statistics (atomic for multi-worker safety)
-    _Atomic uint64_t total_msgs_sent;
-    _Atomic uint64_t total_msgs_recv;
-    _Atomic uint64_t total_bytes_sent;
-    _Atomic uint64_t total_bytes_recv;
 
     // Per-isolate cached SymbolIds (immutable after init, no sync needed)
     SymbolId sym_wsid;
@@ -292,7 +284,6 @@ static int store_ws(XrVMRuntime *X, XrWebSocket *ws) {
     ctx->conn_array[id] = ws;
     xr_mutex_unlock(&ctx->conn_mutex);
 
-    atomic_fetch_add(&ctx->conn_count, 1);
     return id;
 }
 
@@ -321,7 +312,6 @@ static void remove_ws(XrWsContext *ctx, int id) {
         }
     }
     xr_mutex_unlock(&ctx->conn_mutex);
-    atomic_fetch_sub(&ctx->conn_count, 1);
 }
 
 /* ========== WebSocket API Implementation ========== */
@@ -557,10 +547,6 @@ static XrCFuncResult ws_send_step(XrVMRuntime *X, WsSendState *state, XrValue *r
     int ret = ws_conn_send_frame_try(ws, opcode, state->data, state->len);
 
     if (ret == 0) {
-        if (ctx) {
-            ctx->total_msgs_sent++;
-            ctx->total_bytes_sent += state->len;
-        }
         if (state->data_owned && state->data)
             xr_free(state->data);
         xr_free(state);
@@ -637,8 +623,6 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     int ret = ws_conn_send_frame_try(ws, opcode, msg, msg_len);
 
     if (ret == 0) {
-        ctx->total_msgs_sent++;
-        ctx->total_bytes_sent += msg_len;
 #if WS_PROFILE
         ws_prof_send_fast++;
 #endif
@@ -777,10 +761,6 @@ static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *r
     XrWsMessage *msg = ws_conn_recv_try(ws, &need_more);
 
     if (msg) {
-        if (ctx) {
-            ctx->total_msgs_recv++;
-            ctx->total_bytes_recv += msg->len;
-        }
         *result = make_recv_result(X, ctx, ws, msg);
         xr_free(state);
         return XR_CFUNC_DONE;
@@ -846,8 +826,6 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
         XrWsMessage *msg = ws_conn_recv_try(ws, &need_more);
 
         if (msg) {
-            ctx->total_msgs_recv++;
-            ctx->total_bytes_recv += msg->len;
 #if WS_PROFILE
             uint64_t t0 = ws_now_ns();
 #endif
