@@ -55,6 +55,7 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
     XR_DCHECK(ctx != NULL, "xi_cgen_resolve_module_imports: NULL ctx");
     ctx->all_modules = modules;
     ctx->all_nmodules = modules && nmodules > 0 ? nmodules : 0;
+    cg_reachability_cache_clear(ctx);
     ctx->nshared_native_exports = 0;
     if (ctx->shared_native_exports)
         memset(ctx->shared_native_exports, 0,

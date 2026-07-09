@@ -538,6 +538,19 @@ typedef struct CgNoAllocSummary {
     const char *detail;
 } CgNoAllocSummary;
 
+typedef struct CgFuncReachMemo {
+    const XiFunc *func;
+    uint8_t state; /* 1 = computing, 2 = done */
+    bool reachable;
+} CgFuncReachMemo;
+
+typedef struct CgSharedSlotReachMemo {
+    const XiModule *module;
+    int slot;
+    uint8_t state; /* 1 = computing, 2 = done */
+    bool has_get;
+} CgSharedSlotReachMemo;
+
 /* All mutable codegen state for one C-generation session.
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
@@ -616,7 +629,20 @@ struct XiCgenCtx {
     char **no_alloc_detail_strings;
     int nno_alloc_detail_strings;
     int no_alloc_detail_cap;
+    CgFuncReachMemo *func_reach_memo;
+    int nfunc_reach_memo;
+    int func_reach_memo_cap;
+    CgSharedSlotReachMemo *shared_slot_reach_memo;
+    int nshared_slot_reach_memo;
+    int shared_slot_reach_memo_cap;
 };
+
+static void cg_reachability_cache_clear(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    ctx->nfunc_reach_memo = 0;
+    ctx->nshared_slot_reach_memo = 0;
+}
 
 static void cg_ctx_set_error(XiCgenCtx *ctx) {
     if (ctx)
@@ -1466,17 +1492,20 @@ static bool cg_func_tree_contains(const XiFunc *root, const XiFunc *target) {
     return false;
 }
 
-static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc *target) {
+static const XiModule *cg_module_for_func(const XiCgenCtx *ctx, const XiFunc *target) {
     if (!ctx || !target || !ctx->all_modules || ctx->all_nmodules <= 0)
-        return NULL;
+        return target->module;
     for (int i = 0; i < ctx->all_nmodules; i++) {
         const XiModule *mod = ctx->all_modules[i];
-        if (!mod || !mod->init)
-            continue;
-        if (cg_func_tree_contains(mod->init, target))
-            return mod->name;
+        if (mod && mod->init && cg_func_tree_contains(mod->init, target))
+            return mod;
     }
-    return NULL;
+    return target->module;
+}
+
+static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc *target) {
+    const XiModule *mod = cg_module_for_func(ctx, target);
+    return mod ? mod->name : NULL;
 }
 
 #include "xi_cgen_call_resolve.inc.c"
@@ -1841,6 +1870,64 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const XiValue *v, const char *prefix, bool in_coro);
 #include "xi_cgen_abi_helpers.inc.c"
+
+static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot);
+
+static bool cg_closure_new_value_can_emit_null_for_unreachable_body(
+    XiCgenCtx *ctx, const XiFunc *owner, const XiValue *ref, const XiFunc *target, int depth) {
+    if (!ctx || !owner || !ref || !target)
+        return false;
+    if (depth > 16)
+        return false;
+    const XiModule *owner_mod = cg_module_for_func(ctx, owner);
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == ref)
+            return false;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != ref)
+                    continue;
+                switch ((XiOp) user->op) {
+                    case XI_SET_SHARED:
+                        if (ai != 0)
+                            return false;
+                        if (cg_shared_static_function_set_is_elided(ctx, owner, user))
+                            break;
+                        if (!owner_mod || !owner_mod->init || user->aux_int < 0 ||
+                            user->aux_int >= owner_mod->init->nshared ||
+                            (owner_mod->init->export_names &&
+                             owner_mod->init->export_names[user->aux_int]) ||
+                            cg_shared_slot_has_reachable_get(ctx, owner_mod, (int) user->aux_int))
+                            return false;
+                        break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (ai != 0)
+                            return false;
+                        break;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (ai != 0 || !cg_closure_new_value_can_emit_null_for_unreachable_body(
+                                           ctx, owner, user, target, depth + 1))
+                            return false;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 #include "xi_cgen_value_helpers.inc.c"
 #include "xi_cgen_method_symbols.inc.c"
 static bool cg_array_same_value(const XiValue *a, const XiValue *b);
@@ -3302,6 +3389,185 @@ static void emit_codegen_abort_aot_result(FILE *out) {
 static bool cg_aot_compare_present_bool_map_get_const(XiCgenCtx *ctx, const XiValue *compare,
                                                       const XiValue **out_get,
                                                       bool *out_const_value);
+
+static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth);
+
+static CgFuncReachMemo *cg_func_reach_memo_entry(XiCgenCtx *ctx, const XiFunc *func, bool create) {
+    if (!ctx || !func)
+        return NULL;
+    for (int i = 0; i < ctx->nfunc_reach_memo; i++) {
+        if (ctx->func_reach_memo[i].func == func)
+            return &ctx->func_reach_memo[i];
+    }
+    if (!create)
+        return NULL;
+    if (ctx->nfunc_reach_memo >= ctx->func_reach_memo_cap) {
+        int new_cap = ctx->func_reach_memo_cap ? ctx->func_reach_memo_cap * 2 : 64;
+        CgFuncReachMemo *new_items = (CgFuncReachMemo *) xr_realloc(
+            ctx->func_reach_memo, (size_t) new_cap * sizeof(CgFuncReachMemo));
+        if (!new_items)
+            return NULL;
+        memset(new_items + ctx->func_reach_memo_cap, 0,
+               (size_t) (new_cap - ctx->func_reach_memo_cap) * sizeof(CgFuncReachMemo));
+        ctx->func_reach_memo = new_items;
+        ctx->func_reach_memo_cap = new_cap;
+    }
+    CgFuncReachMemo *entry = &ctx->func_reach_memo[ctx->nfunc_reach_memo++];
+    memset(entry, 0, sizeof(*entry));
+    entry->func = func;
+    return entry;
+}
+
+static CgSharedSlotReachMemo *
+cg_shared_slot_reach_memo_entry(XiCgenCtx *ctx, const XiModule *module, int slot, bool create) {
+    if (!ctx || !module || slot < 0)
+        return NULL;
+    for (int i = 0; i < ctx->nshared_slot_reach_memo; i++) {
+        if (ctx->shared_slot_reach_memo[i].module == module &&
+            ctx->shared_slot_reach_memo[i].slot == slot)
+            return &ctx->shared_slot_reach_memo[i];
+    }
+    if (!create)
+        return NULL;
+    if (ctx->nshared_slot_reach_memo >= ctx->shared_slot_reach_memo_cap) {
+        int new_cap = ctx->shared_slot_reach_memo_cap ? ctx->shared_slot_reach_memo_cap * 2 : 64;
+        CgSharedSlotReachMemo *new_items = (CgSharedSlotReachMemo *) xr_realloc(
+            ctx->shared_slot_reach_memo, (size_t) new_cap * sizeof(CgSharedSlotReachMemo));
+        if (!new_items)
+            return NULL;
+        memset(new_items + ctx->shared_slot_reach_memo_cap, 0,
+               (size_t) (new_cap - ctx->shared_slot_reach_memo_cap) *
+                   sizeof(CgSharedSlotReachMemo));
+        ctx->shared_slot_reach_memo = new_items;
+        ctx->shared_slot_reach_memo_cap = new_cap;
+    }
+    CgSharedSlotReachMemo *entry = &ctx->shared_slot_reach_memo[ctx->nshared_slot_reach_memo++];
+    memset(entry, 0, sizeof(*entry));
+    entry->module = module;
+    entry->slot = slot;
+    return entry;
+}
+
+static bool cg_func_body_gets_shared_slot(const XiFunc *f, int slot) {
+    if (!f || slot < 0)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v && v->op == XI_GET_SHARED && (int) v->aux_int == slot)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_reachable_func_tree_gets_shared_slot(XiCgenCtx *ctx, const XiModule *owner_mod,
+                                                    const XiFunc *source, int slot, int depth) {
+    if (!ctx || !owner_mod || !source || slot < 0)
+        return false;
+    if (depth > 64)
+        return true;
+    const XiFunc *slot_target = (owner_mod->slot_funcs && slot < (int) owner_mod->nslots)
+                                    ? owner_mod->slot_funcs[slot]
+                                    : NULL;
+    if (slot_target && cg_func_tree_contains(slot_target, source))
+        return false;
+    bool source_reachable = cg_func_body_is_reachable_from_roots(ctx, source, depth + 1);
+    if (!source_reachable)
+        return false;
+    if (cg_module_for_func(ctx, source) == owner_mod && cg_func_body_gets_shared_slot(source, slot))
+        return true;
+    for (uint16_t ci = 0; ci < source->nchildren; ci++) {
+        if (cg_reachable_func_tree_gets_shared_slot(ctx, owner_mod, source->children[ci], slot,
+                                                    depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot) {
+    if (!owner_mod || !owner_mod->init || slot < 0)
+        return false;
+    CgSharedSlotReachMemo *memo = cg_shared_slot_reach_memo_entry(ctx, owner_mod, slot, true);
+    if (!memo)
+        return true;
+    if (memo->state == 2)
+        return memo->has_get;
+    if (memo->state == 1)
+        return false;
+    memo->state = 1;
+    bool has_get =
+        cg_reachable_func_tree_gets_shared_slot(ctx, owner_mod, owner_mod->init, slot, 0);
+    memo = cg_shared_slot_reach_memo_entry(ctx, owner_mod, slot, false);
+    if (!memo)
+        return has_get;
+    memo->has_get = has_get;
+    memo->state = 2;
+    return memo->has_get;
+}
+
+static bool cg_import_ref_value_use_requires_runtime_value(XiCgenCtx *ctx, const XiFunc *owner,
+                                                           const XiValue *ref, int depth) {
+    if (!ctx || !owner || !ref)
+        return false;
+    if (depth > 16)
+        return true;
+    const XiModule *owner_mod = cg_module_for_func(ctx, owner);
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != ref)
+                    continue;
+                switch ((XiOp) user->op) {
+                    case XI_SET_SHARED:
+                        if (ai != 0)
+                            return true;
+                        if (!owner_mod || !owner_mod->init || user->aux_int < 0 ||
+                            user->aux_int >= owner_mod->init->nshared ||
+                            (owner_mod->init->export_names &&
+                             owner_mod->init->export_names[user->aux_int]) ||
+                            cg_shared_slot_has_reachable_get(ctx, owner_mod, (int) user->aux_int))
+                            return true;
+                        break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (ai != 0)
+                            return true;
+                        break;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (ai != 0)
+                            return true;
+                        if (cg_import_ref_value_use_requires_runtime_value(ctx, owner, user,
+                                                                           depth + 1))
+                            return true;
+                        break;
+                    default:
+                        return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static bool cg_import_ref_value_is_dead_for_aot(XiCgenCtx *ctx, const XiFunc *owner,
+                                                const XiValue *v) {
+    if (!ctx || !owner || !v || v->op != XI_IMPORT_REF || !v->aux)
+        return false;
+    return !cg_import_ref_value_use_requires_runtime_value(ctx, owner, v, 0);
+}
 
 #include "xi_cgen_dispatch_helpers.inc.c"
 
@@ -7695,6 +7961,7 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
 
     ctx->all_modules = modules;
     ctx->all_nmodules = modules && nmodules > 0 ? nmodules : 0;
+    cg_reachability_cache_clear(ctx);
     cg_no_alloc_summaries_invalidate(ctx);
 
     memset(typedefs, 0, sizeof(typedefs));
@@ -7818,6 +8085,257 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
     fprintf(out, "}\n\n");
 }
 
+static bool cg_func_is_module_export(const XiCgenCtx *ctx, const XiFunc *f) {
+    const XiModule *mod = cg_module_for_func(ctx, f);
+    if (!mod || !f)
+        return false;
+    for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+        if (mod->exports[ei].function == f)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_func_is_class_member(const XiCgenCtx *ctx, const XiFunc *f) {
+    const XiModule *mod = cg_module_for_func(ctx, f);
+    if (!mod || !mod->init || !f)
+        return false;
+    for (uint16_t ci = 0; ci < mod->nclasses; ci++) {
+        const XiClassData *cd = mod->classes ? mod->classes[ci] : NULL;
+        if (!cd)
+            continue;
+        if (cd->child_idx) {
+            uint16_t total = (uint16_t) (cd->ninst + cd->nstat);
+            if (total > cd->nmethod)
+                total = cd->nmethod;
+            for (uint16_t mi = 0; mi < total; mi++) {
+                uint16_t child_idx = cd->child_idx[mi];
+                if (child_idx < mod->init->nchildren && mod->init->children[child_idx] == f)
+                    return true;
+            }
+        }
+        if (cd->clinit_child_idx >= 0 && cd->clinit_child_idx < mod->init->nchildren &&
+            mod->init->children[cd->clinit_child_idx] == f)
+            return true;
+    }
+    return false;
+}
+
+static const XiFunc *cg_shared_function_slot_target_for_func(const XiCgenCtx *ctx,
+                                                             const XiFunc *owner, int slot) {
+    if (slot < 0)
+        return NULL;
+    if (owner && owner->shared_slot_funcs && slot < (int) owner->shared_slot_func_count)
+        return owner->shared_slot_funcs[slot];
+    const XiModule *mod = cg_module_for_func(ctx, owner);
+    if (mod && mod->slot_funcs && slot < (int) mod->nslots)
+        return mod->slot_funcs[slot];
+    return cg_shared_function_slot_target((XiCgenCtx *) ctx, owner, slot);
+}
+
+static bool cg_value_is_static_func_ref(const XiCgenCtx *ctx, const XiFunc *owner,
+                                        const XiValue *value, const XiFunc *target) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || !target)
+        return false;
+    if ((v->op == XI_CLOSURE_NEW || (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) &&
+        v->aux == target)
+        return true;
+    if (v->op == XI_GET_SHARED &&
+        cg_shared_function_slot_target_for_func(ctx, owner, (int) v->aux_int) == target)
+        return true;
+    if (v->op == XI_IMPORT_REF && v->aux &&
+        cg_import_ref_targets_func((XiCgenCtx *) ctx, (const XiImportRef *) v->aux, target))
+        return true;
+    return false;
+}
+
+static bool cg_parallel_op_targets_func(const XiValue *user, const XiFunc *target) {
+    if (!user || !target)
+        return false;
+    switch ((XiOp) user->op) {
+        case XI_PAR_FOR: {
+            const XiParallelForData *data = (user->aux_kind == XI_AUX_KIND_PAR_FOR)
+                                                ? (const XiParallelForData *) user->aux
+                                                : NULL;
+            return data && data->body_func == target;
+        }
+        case XI_PAR_COLLECT: {
+            const XiParallelCollectData *data = (user->aux_kind == XI_AUX_KIND_PAR_COLLECT)
+                                                    ? (const XiParallelCollectData *) user->aux
+                                                    : NULL;
+            return data && data->body_func == target;
+        }
+        case XI_PAR_REDUCE: {
+            const XiParallelReduceData *data = (user->aux_kind == XI_AUX_KIND_PAR_REDUCE)
+                                                   ? (const XiParallelReduceData *) user->aux
+                                                   : NULL;
+            return data && (data->body_func == target || data->combine_func == target);
+        }
+        default:
+            return false;
+    }
+}
+
+static bool cg_static_func_ref_use_requires_body(XiCgenCtx *ctx, const XiFunc *owner,
+                                                 const XiValue *ref, const XiFunc *target,
+                                                 int depth) {
+    if (!ctx || !owner || !ref || !target)
+        return false;
+    if (depth > 16)
+        return true;
+    const XiModule *owner_mod = cg_module_for_func(ctx, owner);
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            if (cg_parallel_op_targets_func(user, target))
+                return true;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != ref)
+                    continue;
+                switch ((XiOp) user->op) {
+                    case XI_CALL:
+                    case XI_TAIL_CALL:
+                        return true;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (ai != 0)
+                            return true;
+                        if (cg_static_func_ref_use_requires_body(ctx, owner, user, target,
+                                                                 depth + 1))
+                            return true;
+                        break;
+                    case XI_SET_SHARED:
+                        if (ai != 0)
+                            return true;
+                        if (cg_shared_slot_has_reachable_get(ctx, owner_mod, (int) user->aux_int))
+                            return true;
+                        break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (ai != 0)
+                            return true;
+                        break;
+                    case XI_PAR_FOR:
+                    case XI_PAR_COLLECT:
+                    case XI_PAR_REDUCE:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner,
+                                             const XiFunc *target) {
+    if (!ctx || !owner || !target)
+        return false;
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        if (cg_value_is_static_func_ref(ctx, owner, blk->control, target))
+            return true;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (cg_parallel_op_targets_func(v, target))
+                return true;
+            if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1) {
+                CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, owner, v->args[0]);
+                if (call.func == target)
+                    return true;
+            }
+            if (cg_value_is_static_func_ref(ctx, owner, v, target) &&
+                cg_static_func_ref_use_requires_body(ctx, owner, v, target, 0))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth);
+
+static bool cg_reachable_func_tree_uses_target(XiCgenCtx *ctx, const XiFunc *source,
+                                               const XiFunc *target, int depth) {
+    if (!ctx || !source || !target)
+        return false;
+    if (cg_func_tree_contains(target, source))
+        return false;
+    bool source_reachable = cg_func_body_is_reachable_from_roots(ctx, source, depth + 1);
+    if (!source_reachable)
+        return false;
+    if (cg_func_body_has_static_func_use(ctx, source, target))
+        return true;
+    for (uint16_t ci = 0; ci < source->nchildren; ci++) {
+        if (cg_reachable_func_tree_uses_target(ctx, source->children[ci], target, depth))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
+    const XiModule *mod = cg_module_for_func(ctx, f);
+    if (!f)
+        return false;
+    if (mod && mod->init == f)
+        return true;
+    if (f->c_export || f->aot_used || f->aot_naked || f->aot_weak || f->aot_section ||
+        (f->aot_interrupt_abi && f->aot_interrupt_abi[0]))
+        return true;
+    return cg_func_is_module_export(ctx, f) || cg_func_is_class_member(ctx, f);
+}
+
+static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth) {
+    if (!ctx || !target)
+        return false;
+    if (depth > 64)
+        return true;
+    CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, true);
+    if (!memo)
+        return true;
+    if (memo->state == 2)
+        return memo->reachable;
+    if (memo->state == 1)
+        return false;
+
+    memo->state = 1;
+    bool reachable = false;
+    if (cg_func_has_forced_body_root(ctx, target)) {
+        reachable = true;
+    } else if (!ctx->all_modules || ctx->all_nmodules <= 0) {
+        const XiModule *mod = cg_module_for_func(ctx, target);
+        reachable = mod && mod->init &&
+                    cg_reachable_func_tree_uses_target(ctx, mod->init, target, depth + 1);
+    } else {
+        for (int mi = 0; mi < ctx->all_nmodules; mi++) {
+            const XiModule *mod = ctx->all_modules[mi];
+            if (mod && mod->init &&
+                cg_reachable_func_tree_uses_target(ctx, mod->init, target, depth + 1)) {
+                reachable = true;
+                break;
+            }
+        }
+    }
+    memo = cg_func_reach_memo_entry(ctx, target, false);
+    if (!memo)
+        return reachable;
+    memo->reachable = reachable;
+    memo->state = 2;
+    return memo->reachable;
+}
+
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
@@ -7825,6 +8343,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
      * sym(...)` forward declaration is emitted (see emit_one_forward_decl);
      * call sites emit a direct C call. Never emit a body. */
     if (f->is_extern)
+        return;
+    if (!cg_func_body_is_reachable_from_roots(ctx, f, 0))
         return;
     /* Auto-lower if callers bypass the pipeline. */
     if (f->stage < XI_STAGE_REPPED) {
@@ -8127,10 +8647,11 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 /* Forward-declare a function and all its nested functions (children first). */
 static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     for (uint16_t i = 0; i < f->nchildren; i++) {
-        if (f->children[i])
+        if (f->children[i] && cg_func_body_is_reachable_from_roots(ctx, f->children[i], 0))
             emit_forward_decls(ctx, out, f->children[i], prefix);
     }
-    emit_one_forward_decl(ctx, out, f, prefix);
+    if (cg_func_body_is_reachable_from_roots(ctx, f, 0))
+        emit_one_forward_decl(ctx, out, f, prefix);
 }
 
 #include "xi_cgen_import_helpers.inc.c"

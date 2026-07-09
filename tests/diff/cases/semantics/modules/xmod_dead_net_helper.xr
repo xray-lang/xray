@@ -1,0 +1,5 @@
+// Multi-module AOT reachability: an imported module may contain private
+// runtime-I/O helpers that are not part of the reachable entry graph.
+import { label } from "./_dead_net_helper"
+
+print(label())
