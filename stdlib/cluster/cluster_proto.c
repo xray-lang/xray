@@ -13,7 +13,7 @@
  *   Decode functions parse from a payload buffer (after header).
  */
 
-#include "cluster_proto.h"
+#include "cluster_internal.h"
 #include <string.h>
 
 /* ========== Byte Helpers ========== */

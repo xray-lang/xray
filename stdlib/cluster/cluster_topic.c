@@ -564,7 +564,7 @@ int cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
      * Build wire frame with the cluster-wide default hop limit. Each
      * downstream node decrements before forwarding further; see the
      * detailed comment on XR_TOPIC_DEFAULT_HOP_LIMIT in
-     * cluster_proto.h for the depth-vs-damage trade-off.
+     * cluster_internal.h for the depth-vs-damage trade-off.
      */
     XrFrameBuf fb;
     int payload_len = topic_build_publish_frame(X, topic, &value, XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
