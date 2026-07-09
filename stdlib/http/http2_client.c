@@ -31,7 +31,7 @@ static const unsigned char ALPN_PROTOS[] = "\x02h2\x08http/1.1";
 /* ========== Per-Isolate Connection Pool ========== */
 
 // Create per-isolate pool
-XrH2Pool *xr_h2_pool_create(void) {
+XrH2Pool *http2_client_pool_create(void) {
     XrH2Pool *pool = (XrH2Pool *) xr_calloc(1, sizeof(XrH2Pool));
     if (!pool)
         return NULL;
@@ -42,7 +42,7 @@ XrH2Pool *xr_h2_pool_create(void) {
 }
 
 // Free per-isolate pool
-void xr_h2_pool_destroy(XrH2Pool *pool) {
+void http2_client_pool_destroy(XrH2Pool *pool) {
     if (!pool)
         return;
 
@@ -83,7 +83,8 @@ static void h2_pool_entry_free(XrH2PoolEntry *entry);
 static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target);
 
 // Acquire connection from per-isolate pool
-XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int port, bool is_https) {
+XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port,
+                                         bool is_https) {
     if (!pool || !pool->initialized || !host)
         return NULL;
 
@@ -147,7 +148,7 @@ XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
 }
 
 // Release connection to per-isolate pool
-void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry) {
+void http2_client_pool_release(XrH2Pool *pool, XrH2PoolEntry *entry) {
     if (!pool || !entry)
         return;
 
@@ -349,7 +350,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
 
 /* ========== HTTP/2 Request ========== */
 
-XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *req) {
+XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Request *req) {
     if (!pool || !url)
         return NULL;
 
@@ -366,7 +367,7 @@ XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *
     }
 
     // Get connection
-    XrH2PoolEntry *entry = xr_h2_pool_acquire_from(pool, parsed.host, parsed.port, true);
+    XrH2PoolEntry *entry = http2_client_pool_acquire(pool, parsed.host, parsed.port, true);
     if (!entry) {
         xr_http_url_free(&parsed);
         return NULL;
@@ -375,7 +376,7 @@ XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *
     // Create stream
     XrH2Stream *stream = xr_h2_stream_new(entry->conn);
     if (!stream) {
-        xr_h2_pool_release_to(pool, entry);
+        http2_client_pool_release(pool, entry);
         xr_http_url_free(&parsed);
         return NULL;
     }
@@ -449,7 +450,7 @@ XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *
     XrH2Response *resp = (XrH2Response *) xr_calloc(1, sizeof(XrH2Response));
     if (!resp) {
         entry->active_streams--;
-        xr_h2_pool_release_to(pool, entry);
+        http2_client_pool_release(pool, entry);
         xr_http_url_free(&parsed);
         return NULL;
     }
@@ -464,13 +465,13 @@ XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *
     resp->status = stream->status > 0 ? stream->status : 200;
 
     entry->active_streams--;
-    xr_h2_pool_release_to(pool, entry);
+    http2_client_pool_release(pool, entry);
     xr_http_url_free(&parsed);
 
     return resp;
 }
 
-void xr_h2_response_free(XrH2Response *resp) {
+void http2_client_response_free(XrH2Response *resp) {
     if (!resp)
         return;
 

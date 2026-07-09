@@ -72,20 +72,20 @@ typedef struct XrH2Response {
     char *error_msg;      // Error message
 } XrH2Response;
 
-/* ========== Per-Isolate Pool API ========== */
+/* ========== Internal HTTP/2 Client API ========== */
 
 // Create per-isolate HTTP/2 connection pool
-XR_FUNC XrH2Pool *xr_h2_pool_create(void);
+XrH2Pool *http2_client_pool_create(void);
 
 // Free per-isolate pool
-XR_FUNC void xr_h2_pool_destroy(XrH2Pool *pool);
+void http2_client_pool_destroy(XrH2Pool *pool);
 
 // Acquire connection from per-isolate pool
-XR_FUNC XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int port,
-                                               bool is_https);
+XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port,
+                                         bool is_https);
 
 // Release connection to per-isolate pool
-XR_FUNC void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry);
+void http2_client_pool_release(XrH2Pool *pool, XrH2PoolEntry *entry);
 
 /*
  * Send HTTP/2 request
@@ -94,13 +94,13 @@ XR_FUNC void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry);
  * url: Request URL
  * req: Request parameters
  *
- * Returns: response (must call xr_h2_response_free to free)
+ * Returns: response (must call http2_client_response_free to free)
  */
-XR_FUNC XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *req);
+XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Request *req);
 
 /*
  * Free response
  */
-XR_FUNC void xr_h2_response_free(XrH2Response *resp);
+void http2_client_response_free(XrH2Response *resp);
 
 #endif

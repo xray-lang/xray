@@ -396,7 +396,7 @@ static void http_context_destroy(void *handle) {
         ctx->conn_pool = NULL;
     }
     if (ctx->h2_client_pool) {
-        xr_h2_pool_destroy(ctx->h2_client_pool);
+        http2_client_pool_destroy(ctx->h2_client_pool);
         ctx->h2_client_pool = NULL;
     }
 
