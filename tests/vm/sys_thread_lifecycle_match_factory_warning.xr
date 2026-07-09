@@ -1,0 +1,13 @@
+import sys
+
+var tag = 1
+var t = match (tag) {
+    0 -> sys.Thread.spawn(fn() -> int {
+        return 1
+    }),
+    _ -> sys.Thread.spawn(fn() -> int {
+        return 2
+    })
+}
+
+print("match-factory-thread")

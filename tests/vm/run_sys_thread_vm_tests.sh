@@ -168,6 +168,8 @@ HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_help
 HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_factory_return_warning.xr"
 HELPER_FACTORY_DISCARD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_factory_discard_warning.xr"
 DESTRUCTURE_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_destructure_factory_return_warning.xr"
+CONDITIONAL_FACTORY_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_conditional_factory_warning.xr"
+MATCH_FACTORY_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_match_factory_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -281,6 +283,11 @@ expect_warning "helper_factory_discard_warning" "$HELPER_FACTORY_DISCARD_WARNING
 expect_warning "destructure_factory_return_warning" "$DESTRUCTURE_FACTORY_RETURN_WARNING_SRC" \
     "destructure-factory-thread" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "conditional_factory_warning" "$CONDITIONAL_FACTORY_WARNING_SRC" \
+    "conditional-factory-thread" \
+    "Thread handle 't' from sys.Thread.spawn is never used"
+expect_warning "match_factory_warning" "$MATCH_FACTORY_WARNING_SRC" "match-factory-thread" \
+    "Thread handle 't' from sys.Thread.spawn is never used"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]THREAD_SPAWN[[:space:]]' "$WORK/join.dump"; then

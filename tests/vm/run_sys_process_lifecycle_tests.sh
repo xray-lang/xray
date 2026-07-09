@@ -164,6 +164,7 @@ HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_hel
 HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_return_warning.xr"
 HELPER_FACTORY_DISCARD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_factory_discard_warning.xr"
 DESTRUCTURE_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_factory_return_warning.xr"
+CONDITIONAL_FACTORY_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_conditional_factory_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -310,6 +311,10 @@ expect_warning "process_pipe_destructure_factory_return_warning" \
     $'destructure-factory-process\ndestructure-factory-pipe' \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_conditional_factory_warning" "$CONDITIONAL_FACTORY_WARNING_SRC" \
+    "conditional-factory-process-pipe" \
+    "Process handle 'p' from sys.Process.spawn is never used" \
+    "Pipe handle 'pipe' from sys.Pipe.open is never used"
 
 printf '\nPassed: %d\nFailed: %d\n' "$PASS" "$FAIL"
 

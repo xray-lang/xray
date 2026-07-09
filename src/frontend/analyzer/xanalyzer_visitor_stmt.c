@@ -1438,6 +1438,30 @@ static bool xa_thread_lint_expr_returns_new_handle(XaInferContext *ctx,
     if (xa_expr_is_sys_thread_spawn_call(expr))
         return true;
     switch (expr->type) {
+        case AST_TERNARY:
+            return xa_thread_lint_expr_returns_new_handle(ctx, summaries,
+                                                          expr->as.ternary.true_expr) &&
+                   xa_thread_lint_expr_returns_new_handle(ctx, summaries,
+                                                          expr->as.ternary.false_expr);
+        case AST_NULLISH_COALESCE:
+            return xa_thread_lint_expr_returns_new_handle(ctx, summaries, expr->as.binary.left) &&
+                   xa_thread_lint_expr_returns_new_handle(ctx, summaries, expr->as.binary.right);
+        case AST_MATCH_EXPR: {
+            MatchExprNode *match = &expr->as.match_expr;
+            if (match->arm_count <= 0)
+                return false;
+            for (int i = 0; i < match->arm_count; i++) {
+                AstNode *arm = match->arms ? match->arms[i] : NULL;
+                if (!arm || arm->type != AST_MATCH_ARM)
+                    return false;
+                AstNode *body = xa_thread_lint_unwrap_expr(arm->as.match_arm.body);
+                if (body && (body->type == AST_BLOCK || body->type == AST_PROGRAM))
+                    body = xa_lifecycle_lint_single_expr_block_value(body);
+                if (!xa_thread_lint_expr_returns_new_handle(ctx, summaries, body))
+                    return false;
+            }
+            return true;
+        }
         case AST_CALL_EXPR: {
             XaThreadHandleLintFnSummary *summary =
                 xa_thread_lint_find_fn_summary(ctx, summaries, expr->as.call_expr.callee);
@@ -3822,6 +3846,57 @@ static bool xa_os_resource_lint_expr_returns_new_resource(XaInferContext *ctx,
         return true;
     }
     switch (expr->type) {
+        case AST_TERNARY: {
+            XaOsResourceKind true_kind = XA_OS_RESOURCE_PROCESS;
+            XaOsResourceKind false_kind = XA_OS_RESOURCE_PROCESS;
+            if (!xa_os_resource_lint_expr_returns_new_resource(
+                    ctx, summaries, expr->as.ternary.true_expr, &true_kind) ||
+                !xa_os_resource_lint_expr_returns_new_resource(
+                    ctx, summaries, expr->as.ternary.false_expr, &false_kind) ||
+                true_kind != false_kind)
+                return false;
+            if (kind_out)
+                *kind_out = true_kind;
+            return true;
+        }
+        case AST_NULLISH_COALESCE: {
+            XaOsResourceKind left_kind = XA_OS_RESOURCE_PROCESS;
+            XaOsResourceKind right_kind = XA_OS_RESOURCE_PROCESS;
+            if (!xa_os_resource_lint_expr_returns_new_resource(ctx, summaries, expr->as.binary.left,
+                                                               &left_kind) ||
+                !xa_os_resource_lint_expr_returns_new_resource(
+                    ctx, summaries, expr->as.binary.right, &right_kind) ||
+                left_kind != right_kind)
+                return false;
+            if (kind_out)
+                *kind_out = left_kind;
+            return true;
+        }
+        case AST_MATCH_EXPR: {
+            MatchExprNode *match = &expr->as.match_expr;
+            if (match->arm_count <= 0)
+                return false;
+            XaOsResourceKind matched_kind = XA_OS_RESOURCE_PROCESS;
+            bool have_kind = false;
+            for (int i = 0; i < match->arm_count; i++) {
+                AstNode *arm = match->arms ? match->arms[i] : NULL;
+                if (!arm || arm->type != AST_MATCH_ARM)
+                    return false;
+                AstNode *body = xa_thread_lint_unwrap_expr(arm->as.match_arm.body);
+                if (body && (body->type == AST_BLOCK || body->type == AST_PROGRAM))
+                    body = xa_lifecycle_lint_single_expr_block_value(body);
+                XaOsResourceKind arm_kind = XA_OS_RESOURCE_PROCESS;
+                if (!xa_os_resource_lint_expr_returns_new_resource(ctx, summaries, body, &arm_kind))
+                    return false;
+                if (have_kind && arm_kind != matched_kind)
+                    return false;
+                matched_kind = arm_kind;
+                have_kind = true;
+            }
+            if (kind_out)
+                *kind_out = matched_kind;
+            return true;
+        }
         case AST_CALL_EXPR: {
             XaOsResourceLintFnSummary *summary =
                 xa_os_resource_lint_find_fn_summary(ctx, summaries, expr->as.call_expr.callee);
