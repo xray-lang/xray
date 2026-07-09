@@ -39,7 +39,7 @@
 #include "../../src/base/xarena.h"
 #include "../../src/base/xmalloc.h"
 #include "../net/xnetbuf.h"
-#include "../ws/ws_http_bridge.h"
+#include "../ws/ws_internal.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -620,9 +620,8 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
     XrHttpHeader headers[32];
     size_t num_headers = 32;
 
-    int parsed =
-        http_parse_request_ex(ctx->read_buf, ctx->buf_used, &method_str, &method_len, &path_str,
-                                 &path_len, &minor_ver, headers, &num_headers, 0);
+    int parsed = http_parse_request_ex(ctx->read_buf, ctx->buf_used, &method_str, &method_len,
+                                       &path_str, &path_len, &minor_ver, headers, &num_headers, 0);
 
     if (parsed <= 0) {
         return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1, http_conn_cleanup_cont,
