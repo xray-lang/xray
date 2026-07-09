@@ -1,0 +1,16 @@
+fn endpoint(host: string, port: int = 80, tls: bool = false) -> int {
+    if (tls) {
+        return port + host.length()
+    }
+    return port
+}
+
+fn allSupplied() -> int {
+    return endpoint("api", 443, true)
+}
+
+fn needsDefaults() -> int {
+    return endpoint("local")
+}
+
+print(allSupplied() + needsDefaults())

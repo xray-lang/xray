@@ -22,6 +22,7 @@ json_encode_field_table|covered|json-codec-plan .*kind=encode action=encode_fiel
 record_json_bridge|covered|XG_JSON_SHAPE_RECORD_BRIDGE|tests/unit/analysis|Record type aliases produce Json bridge shape and codec evidence.
 record_access_direct|covered|record-access-plan .*action=direct_field|tests/aot/filetests/cgen|Record field access consumes a verified direct-field plan.
 record_spread_merge_plan|covered|record-shape-plan .*kind=spread action=spread_result|tests/aot/filetests/cgen|Record spread merge consumes an explicit spread-result shape plan.
+options_default_args_plan|covered|options-plan .*action=default_fill_table|tests/aot/filetests/link|Caller-side default argument filling produces verified options bag plans from real callsites.
 map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/filetests/cgen|Map/Set static key access consumes prehashed lookup plans.
 map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
 backend_contract_dispatch|covered|XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE|tests/unit/aot|Backend contract accepts verified itable plans only with complete target cases and ABI evidence.

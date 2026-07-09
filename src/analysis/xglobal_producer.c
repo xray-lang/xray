@@ -2058,6 +2058,136 @@ static uint32_t body_call_arg_type_key_start(XgBodyCollect *bc, AstNode **argume
     return hash_folded32(h);
 }
 
+static uint32_t body_options_count_mask_id(XgCallsiteId callsite_id, const char *role,
+                                           uint16_t start, uint16_t count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    if (count == 0)
+        return 0;
+    h = fold_u64(h, hash_name32(role));
+    h = fold_u64(h, callsite_id);
+    h = fold_u64(h, start);
+    h = fold_u64(h, count);
+    return hash_folded32(h);
+}
+
+static uint32_t body_options_shape_type_key(const char *role, const XgCallsiteSummary *call,
+                                            uint32_t arg_type_key_start, uint16_t field_count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, hash_name32(role));
+    h = fold_u64(h, call ? call->method_signature_key : 0);
+    h = fold_u64(h, arg_type_key_start);
+    h = fold_u64(h, field_count);
+    return hash_folded32(h);
+}
+
+static uint64_t body_options_shape_hash(const char *role, const XgCallsiteSummary *call,
+                                        uint32_t type_key, uint16_t field_count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, hash_name32(role));
+    h = fold_u64(h, call ? call->callsite_id : 0);
+    h = fold_u64(h, call ? call->source_span_id : 0);
+    h = fold_u64(h, type_key);
+    h = fold_u64(h, field_count);
+    return h ? h : 1;
+}
+
+static void body_add_options_bag_callsite(XgBodyCollect *bc, const CallExprNode *call,
+                                          const XgCallsiteSummary *callsite) {
+    if (!bc || !bc->evidence || !call || !callsite || call->default_arg_param_count <= 0)
+        return;
+    uint16_t param_count =
+        (uint16_t) (call->default_arg_param_count < UINT16_MAX ? call->default_arg_param_count
+                                                               : UINT16_MAX);
+    uint16_t supplied_count =
+        (uint16_t) (call->supplied_arg_count < 0
+                        ? 0
+                        : (call->supplied_arg_count < UINT16_MAX ? call->supplied_arg_count
+                                                                 : UINT16_MAX));
+    uint16_t default_count =
+        (uint16_t) (call->default_arg_count < 0
+                        ? 0
+                        : (call->default_arg_count < UINT16_MAX ? call->default_arg_count
+                                                                : UINT16_MAX));
+    uint16_t required_count =
+        (uint16_t) (call->required_arg_count < 0
+                        ? 0
+                        : (call->required_arg_count < UINT16_MAX ? call->required_arg_count
+                                                                 : UINT16_MAX));
+    if (param_count == 0 || supplied_count > param_count || default_count > param_count)
+        return;
+
+    XgRecordShapeId param_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 1);
+    XgRecordShapeId supplied_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 2);
+    uint32_t supplied_type_key =
+        body_call_arg_type_key_start(bc, call->arguments, (int) supplied_count);
+    XgRecordShapeSummary param_shape;
+    XgRecordShapeSummary supplied_shape;
+    XgOptionsBagSummary options;
+
+    memset(&param_shape, 0, sizeof(param_shape));
+    param_shape.record_shape_id = param_shape_id;
+    param_shape.module_id = bc->module_id;
+    param_shape.owner_func_id = bc->owner_func_id;
+    param_shape.source_span_id = callsite->source_span_id;
+    param_shape.type_key = body_options_shape_type_key("options:param", callsite,
+                                                       callsite->arg_type_key_start, param_count);
+    param_shape.field_name_start =
+        body_options_count_mask_id(callsite->callsite_id, "options:param-fields", 0, param_count);
+    param_shape.field_count = param_count;
+    param_shape.shape_kind = XG_RECORD_SHAPE_OPTIONS;
+    param_shape.flags =
+        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_HAS_OPTIONS;
+    param_shape.shape_hash =
+        body_options_shape_hash("options:param", callsite, param_shape.type_key, param_count);
+
+    memset(&supplied_shape, 0, sizeof(supplied_shape));
+    supplied_shape.record_shape_id = supplied_shape_id;
+    supplied_shape.module_id = bc->module_id;
+    supplied_shape.owner_func_id = bc->owner_func_id;
+    supplied_shape.source_span_id = callsite->source_span_id;
+    supplied_shape.type_key = body_options_shape_type_key("options:supplied", callsite,
+                                                          supplied_type_key, supplied_count);
+    supplied_shape.field_name_start = body_options_count_mask_id(
+        callsite->callsite_id, "options:supplied-fields", 0, supplied_count);
+    supplied_shape.field_count = supplied_count;
+    supplied_shape.shape_kind = XG_RECORD_SHAPE_LITERAL;
+    supplied_shape.flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS;
+    supplied_shape.shape_hash = body_options_shape_hash("options:supplied", callsite,
+                                                        supplied_shape.type_key, supplied_count);
+
+    if (!xg_global_evidence_add_record_shape(bc->evidence, &param_shape))
+        return;
+    if (!xg_global_evidence_add_record_shape(bc->evidence, &supplied_shape))
+        return;
+
+    memset(&options, 0, sizeof(options));
+    options.options_id = (XgOptionsId) (bc->evidence->noptions_bags + 1);
+    options.module_id = bc->module_id;
+    options.owner_func_id = bc->owner_func_id;
+    options.callsite_id = callsite->callsite_id;
+    options.param_shape_id = param_shape_id;
+    options.supplied_shape_id = supplied_shape_id;
+    options.source_span_id = callsite->source_span_id;
+    options.supplied_field_mask_id = body_options_count_mask_id(
+        callsite->callsite_id, "options:supplied-mask", 0, supplied_count);
+    options.default_field_mask_id = body_options_count_mask_id(
+        callsite->callsite_id, "options:default-mask", supplied_count, default_count);
+    options.required_field_mask_id = body_options_count_mask_id(
+        callsite->callsite_id, "options:required-mask", 0, required_count);
+    options.supplied_count = supplied_count;
+    options.default_count = default_count;
+    options.required_count = required_count;
+    options.flags = XG_OPTIONS_CALLSITE_PROVEN;
+    if (default_count == 0) {
+        options.action = XG_OPTIONS_DEFAULT_ELIDED;
+        options.flags |= XG_OPTIONS_ALL_SUPPLIED;
+    } else {
+        options.action = XG_OPTIONS_DEFAULT_FILL_TABLE;
+        options.flags |= XG_OPTIONS_NEEDS_DEFAULTS;
+    }
+    (void) xg_global_evidence_add_options_bag(bc->evidence, &options);
+}
+
 static bool body_type_ref_is_json(const XrTypeRef *type) {
     return type && type->kind == XR_TREF_NAMED && type->name && strcmp(type->name, "Json") == 0;
 }
@@ -3970,6 +4100,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                                                               : UINT16_MAX);
     row.arg_type_key_start = body_call_arg_type_key_start(bc, call->as.call_expr.arguments,
                                                           call->as.call_expr.arg_count);
+    if (call->as.call_expr.default_arg_count > 0)
+        row.flags |= XG_CALL_USES_DEFAULT_ARGS;
     callee = call->as.call_expr.callee;
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
@@ -4062,6 +4194,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         bc->callsite_start = row.callsite_id;
     if (xg_global_evidence_add_callsite(bc->evidence, &row)) {
         bc->callsite_count++;
+        body_add_options_bag_callsite(bc, &call->as.call_expr, &row);
         body_add_generic_inst(bc, generic_kind, generic_name, call->as.call_expr.type_args,
                               call->as.call_expr.type_arg_count, row.callsite_id,
                               (uint32_t) call->line, generic_origin_decl_id, generic_origin_func_id,

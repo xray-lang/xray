@@ -1,0 +1,11 @@
+args=--dump-global-evidence
+contains=options-bag
+contains=action=default_elided
+contains=action=default_fill_table
+contains=record-shape-plan
+contains=kind=options
+contains=action=options_bag
+contains=options-plan
+regex=options-plan .*action=default_fill_table
+contains=evidence=0x
+contains=callsite
