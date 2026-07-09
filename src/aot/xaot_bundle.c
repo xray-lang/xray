@@ -811,7 +811,9 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
                 bundle, call->callsite_id, call->receiver_static_class_id, ev, method, evidence))
             return false;
         target_count = 1;
-    } else if ((kind == XAOT_DISPATCH_DIRECT || kind == XAOT_DISPATCH_TYPE_SWITCH) &&
+    } else if ((kind == XAOT_DISPATCH_DIRECT || kind == XAOT_DISPATCH_TYPE_SWITCH ||
+                (kind == XAOT_DISPATCH_ITABLE &&
+                 reason == XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET)) &&
                call->kind == XG_CALL_INTERFACE) {
         target_start = bundle->ndispatch_target_cases + 1;
         for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
@@ -924,6 +926,8 @@ static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
     uint32_t flags = XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT;
     if (kind == XAOT_DISPATCH_TYPE_SWITCH)
         flags |= XAOT_INTERFACE_USE_TYPE_SWITCHABLE;
+    else if (kind == XAOT_DISPATCH_ITABLE)
+        flags |= XAOT_INTERFACE_USE_NEEDS_ITABLE;
     if (!bundle || !call || call->kind != XG_CALL_INTERFACE)
         return false;
     return xaot_bundle_add_interface_use_plan_row(bundle, call->receiver_static_interface_id,

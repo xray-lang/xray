@@ -114,6 +114,7 @@ xaot_backend_dispatch_plan_target_range_valid(const XaotBundle *bundle,
             return false;
 
         case XAOT_DISPATCH_VTABLE:
+        case XAOT_DISPATCH_ITABLE:
         case XAOT_DISPATCH_TYPE_SWITCH:
             if (bundle && plan->target_count > 0 && plan->target_start > 0 &&
                 plan->target_start - 1 + plan->target_count <= bundle->ndispatch_target_cases) {
@@ -123,7 +124,6 @@ xaot_backend_dispatch_plan_target_range_valid(const XaotBundle *bundle,
             xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_TARGET_CASES);
             return false;
 
-        case XAOT_DISPATCH_ITABLE:
         case XAOT_DISPATCH_RUNTIME_FALLBACK:
             if (plan->target_start == 0 && plan->target_count == 0) {
                 xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
