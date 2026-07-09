@@ -8,30 +8,43 @@
  * test_url_encoding.c - Unit tests for URL encoding/decoding
  *
  * KEY CONCEPT:
- *   Tests RFC 3986 percent-encoding, form encoding, and roundtrip behavior.
+ *   Tests RFC 3986 percent-encoding, form encoding, and roundtrip behavior in
+ *   the shared C core used by native-only unit coverage. User-facing URL
+ *   semantics live in stdlib/url/url.xr.
  */
 
 #include "../test_framework.h"
+#include "../../../src/shared/xr_url_core.h"
 
-// C-level API from stdlib
-int xr_url_encode(const char *str, size_t len, char *buf, size_t buf_size);
-int xr_url_decode(const char *str, size_t len, char *buf, size_t buf_size);
-int xr_url_encode_form(const char *str, size_t len, char *buf, size_t buf_size);
-int xr_url_decode_form(const char *str, size_t len, char *buf, size_t buf_size);
+static int url_encode(const char *str, size_t len, char *buf, size_t buf_size) {
+    return xr_url_core_encode_bounded(str, len, false, buf, buf_size);
+}
+
+static int url_decode(const char *str, size_t len, char *buf, size_t buf_size) {
+    return xr_url_core_decode_bounded(str, len, false, buf, buf_size);
+}
+
+static int url_encode_form(const char *str, size_t len, char *buf, size_t buf_size) {
+    return xr_url_core_encode_bounded(str, len, true, buf, buf_size);
+}
+
+static int url_decode_form(const char *str, size_t len, char *buf, size_t buf_size) {
+    return xr_url_core_decode_bounded(str, len, true, buf, buf_size);
+}
 
 /* ========== RFC 3986 Encode ========== */
 
 TEST(url_encode_passthrough) {
     char buf[256];
     // Unreserved chars should pass through: A-Z a-z 0-9 - _ . ~
-    int n = xr_url_encode("Hello-World_2026.v5~", 20, buf, sizeof(buf));
+    int n = url_encode("Hello-World_2026.v5~", 20, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_STR_EQ(buf, "Hello-World_2026.v5~");
 }
 
 TEST(url_encode_special) {
     char buf[256];
-    int n = xr_url_encode("hello world!", 12, buf, sizeof(buf));
+    int n = url_encode("hello world!", 12, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     // space -> %20, ! -> %21
     ASSERT_TRUE(strstr(buf, "%20") != NULL);
@@ -41,14 +54,14 @@ TEST(url_encode_special) {
 TEST(url_encode_unicode) {
     char buf[256];
     // UTF-8 bytes for a multi-byte char should each be percent-encoded
-    int n = xr_url_encode("a/b", 3, buf, sizeof(buf));
+    int n = url_encode("a/b", 3, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_TRUE(strstr(buf, "%2F") != NULL || strstr(buf, "%2f") != NULL);
 }
 
 TEST(url_encode_empty) {
     char buf[64];
-    int n = xr_url_encode("", 0, buf, sizeof(buf));
+    int n = url_encode("", 0, buf, sizeof(buf));
     ASSERT_EQ_INT(n, 0);
     ASSERT_STR_EQ(buf, "");
 }
@@ -57,28 +70,28 @@ TEST(url_encode_empty) {
 
 TEST(url_decode_basic) {
     char buf[256];
-    int n = xr_url_decode("Hello%20World%21", 16, buf, sizeof(buf));
+    int n = url_decode("Hello%20World%21", 16, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_STR_EQ(buf, "Hello World!");
 }
 
 TEST(url_decode_passthrough) {
     char buf[256];
-    int n = xr_url_decode("abc123", 6, buf, sizeof(buf));
+    int n = url_decode("abc123", 6, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_STR_EQ(buf, "abc123");
 }
 
 TEST(url_decode_empty) {
     char buf[64];
-    int n = xr_url_decode("", 0, buf, sizeof(buf));
+    int n = url_decode("", 0, buf, sizeof(buf));
     ASSERT_EQ_INT(n, 0);
 }
 
 TEST(url_decode_plus_not_space) {
     char buf[256];
     // RFC 3986: + is NOT treated as space
-    int n = xr_url_decode("a+b", 3, buf, sizeof(buf));
+    int n = url_decode("a+b", 3, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_STR_EQ(buf, "a+b");
 }
@@ -87,7 +100,7 @@ TEST(url_decode_plus_not_space) {
 
 TEST(url_form_encode_space) {
     char buf[256];
-    int n = xr_url_encode_form("hello world", 11, buf, sizeof(buf));
+    int n = url_encode_form("hello world", 11, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     // Form encoding: space -> +
     ASSERT_TRUE(strstr(buf, "+") != NULL);
@@ -96,14 +109,14 @@ TEST(url_form_encode_space) {
 
 TEST(url_form_decode_plus) {
     char buf[256];
-    int n = xr_url_decode_form("hello+world", 11, buf, sizeof(buf));
+    int n = url_decode_form("hello+world", 11, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_STR_EQ(buf, "hello world");
 }
 
 TEST(url_form_decode_percent) {
     char buf[256];
-    int n = xr_url_decode_form("a%26b%3Dc", 9, buf, sizeof(buf));
+    int n = url_decode_form("a%26b%3Dc", 9, buf, sizeof(buf));
     ASSERT_GT(n, 0);
     ASSERT_STR_EQ(buf, "a&b=c");
 }
@@ -118,10 +131,10 @@ TEST(url_roundtrip) {
         char enc[512], dec[512];
         size_t in_len = strlen(inputs[i]);
 
-        int enc_len = xr_url_encode(inputs[i], in_len, enc, sizeof(enc));
+        int enc_len = url_encode(inputs[i], in_len, enc, sizeof(enc));
         ASSERT_GT(enc_len, 0);
 
-        int dec_len = xr_url_decode(enc, (size_t) enc_len, dec, sizeof(dec));
+        int dec_len = url_decode(enc, (size_t) enc_len, dec, sizeof(dec));
         ASSERT_GT(dec_len, 0);
         ASSERT_STR_EQ(dec, inputs[i]);
     }
@@ -135,10 +148,10 @@ TEST(url_form_roundtrip) {
         char enc[512], dec[512];
         size_t in_len = strlen(inputs[i]);
 
-        int enc_len = xr_url_encode_form(inputs[i], in_len, enc, sizeof(enc));
+        int enc_len = url_encode_form(inputs[i], in_len, enc, sizeof(enc));
         ASSERT_GT(enc_len, 0);
 
-        int dec_len = xr_url_decode_form(enc, (size_t) enc_len, dec, sizeof(dec));
+        int dec_len = url_decode_form(enc, (size_t) enc_len, dec, sizeof(dec));
         ASSERT_GT(dec_len, 0);
         ASSERT_STR_EQ(dec, inputs[i]);
     }
