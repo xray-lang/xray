@@ -1,4 +1,5 @@
 import base64
+import "base64" as b64
 import { isValid as isValidBase64 } from "base64"
 
 @no_alloc
@@ -12,10 +13,16 @@ fn xray_no_alloc_pure_stdlib_scalar_call_reject(data: string) -> bool {
 }
 
 @no_alloc
+fn xray_no_alloc_pure_stdlib_namespace_alias_call_reject(data: string) -> bool {
+    return b64.isValid(data)
+}
+
+@no_alloc
 fn xray_no_alloc_pure_stdlib_selective_call_reject(data: string) -> bool {
     return isValidBase64(data)
 }
 
 print(xray_no_alloc_pure_stdlib_call_reject("edge"))
 print(xray_no_alloc_pure_stdlib_scalar_call_reject("ZWRnZQ=="))
+print(xray_no_alloc_pure_stdlib_namespace_alias_call_reject("ZWRnZQ=="))
 print(xray_no_alloc_pure_stdlib_selective_call_reject("ZWRnZQ=="))

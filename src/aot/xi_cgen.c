@@ -3694,6 +3694,10 @@ static const char *cg_no_alloc_regex_alloc_detail(const char *name) {
     return NULL;
 }
 
+static bool cg_no_alloc_regex_known_no_heap(const char *name) {
+    return name && (strcmp(name, "test") == 0 || strcmp(name, "count") == 0);
+}
+
 static const char *cg_no_alloc_datetime_alloc_detail(const char *name) {
     if (!name)
         return NULL;
@@ -3857,9 +3861,11 @@ static const char *cg_no_alloc_stdlib_alloc_detail(XiCgenCtx *ctx, const char *m
     const char *detail = NULL;
     if (strcmp(module, "mem") == 0)
         detail = cg_no_alloc_mem_alloc_detail(name);
-    else if (strcmp(module, "regex") == 0)
+    else if (strcmp(module, "regex") == 0) {
         detail = cg_no_alloc_regex_alloc_detail(name);
-    else if (strcmp(module, "datetime") == 0)
+        if (!detail && cg_no_alloc_regex_known_no_heap(name))
+            return NULL;
+    } else if (strcmp(module, "datetime") == 0)
         detail = cg_no_alloc_datetime_alloc_detail(name);
     if (detail)
         return detail;
