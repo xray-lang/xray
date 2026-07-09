@@ -37,7 +37,7 @@ extern void xr_socket_set_write_timeout(struct XrVMRuntime *X, int fd, int timeo
 
 /* ========== Time Utility ========== */
 
-int64_t xr_cluster_now_ms(void) {
+int64_t cluster_now_ms(void) {
     return (int64_t) xr_time_monotonic_ms();
 }
 
@@ -63,7 +63,7 @@ int64_t xr_cluster_now_ms(void) {
  * scratch buffer internally so we no longer stage `secret || nonce` on
  * the stack — the caller's secret never leaves the HMAC inner context.
  */
-void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out) {
+static void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out) {
     size_t secret_len = strlen(secret);
     xr_hmac_sha256((const uint8_t *) secret, secret_len, nonce, XR_NONCE_SIZE, proof_out);
 }
@@ -693,7 +693,7 @@ bool xr_cluster_node_is_slow(XrClusterNode *node) {
 /* ========== Heartbeat ========== */
 
 int xr_cluster_node_send_ping(XrClusterNode *node) {
-    int64_t now = xr_cluster_now_ms();
+    int64_t now = cluster_now_ms();
     uint8_t frame[32];
     int len = xr_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, now);
     if (len < 0)
@@ -806,7 +806,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     // Verify proof_b = HMAC-SHA256(secret, nonce_a). Constant-time compare
     // to avoid leaking information about the first mismatching byte.
     uint8_t expected_proof[XR_PROOF_SIZE];
-    xr_cluster_compute_proof(cluster->secret, req.nonce, expected_proof);
+    cluster_compute_proof(cluster->secret, req.nonce, expected_proof);
     if (!cluster_proof_equal(ack.proof, expected_proof)) {
         xr_secure_wipe(expected_proof, sizeof(expected_proof));
         xr_secure_wipe(&req, sizeof(req));
@@ -824,7 +824,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
     // Step 3: Send HANDSHAKE_DONE with proof_a = HMAC-SHA256(secret, nonce_b)
     XrFrameHandshakeDone done;
-    xr_cluster_compute_proof(cluster->secret, ack.nonce, done.proof);
+    cluster_compute_proof(cluster->secret, ack.nonce, done.proof);
 
     flen = xr_frame_encode_handshake_done(frame_buf, sizeof(frame_buf), &done);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t) flen) != flen) {
@@ -847,7 +847,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     cluster_handshake_set_deadline(cluster, node->conn, 0);
 
     node->state = XR_NODE_CONNECTED;
-    node->last_heartbeat_recv = xr_cluster_now_ms();
+    node->last_heartbeat_recv = cluster_now_ms();
     return 0;
 }
 
@@ -899,7 +899,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     ack.version = XR_CLUSTER_HANDSHAKE_VERSION;
     strncpy(ack.name, cluster->self_name, XR_NODE_NAME_MAX);
     xr_random_bytes(ack.nonce, XR_NONCE_SIZE);
-    xr_cluster_compute_proof(cluster->secret, req.nonce, ack.proof);
+    cluster_compute_proof(cluster->secret, req.nonce, ack.proof);
     ack.flags = 0x01;
 
     uint8_t frame_buf[512];
@@ -925,7 +925,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
 
     // Verify proof_a = HMAC-SHA256(secret, nonce_b). Constant-time compare.
     uint8_t expected_proof[XR_PROOF_SIZE];
-    xr_cluster_compute_proof(cluster->secret, ack.nonce, expected_proof);
+    cluster_compute_proof(cluster->secret, ack.nonce, expected_proof);
     if (!cluster_proof_equal(done.proof, expected_proof)) {
         xr_secure_wipe(expected_proof, sizeof(expected_proof));
         xr_secure_wipe(&req, sizeof(req));
@@ -957,7 +957,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     node->conn = conn;
     node->state = XR_NODE_CONNECTED;
     node->flags = req.flags;
-    node->last_heartbeat_recv = xr_cluster_now_ms();
+    node->last_heartbeat_recv = cluster_now_ms();
 
     return node;
 }
