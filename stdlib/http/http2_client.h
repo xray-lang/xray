@@ -14,39 +14,12 @@
 #ifndef XR_STDLIB_HTTP2_CLIENT_H
 #define XR_STDLIB_HTTP2_CLIENT_H
 
-#include "../../src/base/xdefs.h"
 #include "http2.h"
 #include "http_client.h"
-#include "../net/tls.h"
-#include <stdbool.h>
-#include "../../src/os/os_thread.h"
 
 /* ========== Connection Pool ========== */
 
-#define XR_H2_POOL_MAX_CONNS 16        // Max connections per host
-#define XR_H2_POOL_MAX_HOSTS 64        // Max number of hosts
-#define XR_H2_CONN_IDLE_TIMEOUT 60000  // Idle timeout (milliseconds)
-
-// Connection pool entry
-typedef struct XrH2PoolEntry {
-    char *host;                  // Hostname
-    int port;                    // Port
-    XrH2Conn *conn;              // HTTP/2 connection
-    XrTlsConn *tls_conn;         // TLS connection
-    XrTlsContext *tls_ctx;       // TLS context
-    uint64_t last_used;          // Last used time
-    int active_streams;          // Active stream count
-    bool in_use;                 // Is in use
-    struct XrH2PoolEntry *next;  // Next connection for same host
-} XrH2PoolEntry;
-
-// Connection pool
-typedef struct XrH2Pool {
-    XrH2PoolEntry *hosts[XR_H2_POOL_MAX_HOSTS];
-    int host_count;
-    xr_mutex_t lock;
-    bool initialized;
-} XrH2Pool;
+typedef struct XrH2Pool XrH2Pool;
 
 /* ========== HTTP/2 Request ========== */
 
@@ -79,13 +52,6 @@ XrH2Pool *http2_client_pool_create(void);
 
 // Free per-isolate pool
 void http2_client_pool_destroy(XrH2Pool *pool);
-
-// Acquire connection from per-isolate pool
-XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port,
-                                         bool is_https);
-
-// Release connection to per-isolate pool
-void http2_client_pool_release(XrH2Pool *pool, XrH2PoolEntry *entry);
 
 /*
  * Send HTTP/2 request

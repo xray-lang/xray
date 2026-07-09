@@ -15,14 +15,38 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_time.h"
+#include "../../src/os/os_thread.h"
 #include "http2_client.h"
 #include "http2.h"
 #include "../net/io.h"
+#include "../net/tls.h"
 #include "../../src/io/xdns.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define XR_H2_POOL_MAX_HOSTS 64
+#define XR_H2_CONN_IDLE_TIMEOUT 60000
+
+typedef struct XrH2PoolEntry {
+    char *host;
+    int port;
+    XrH2Conn *conn;
+    XrTlsConn *tls_conn;
+    XrTlsContext *tls_ctx;
+    uint64_t last_used;
+    int active_streams;
+    bool in_use;
+    struct XrH2PoolEntry *next;
+} XrH2PoolEntry;
+
+struct XrH2Pool {
+    XrH2PoolEntry *hosts[XR_H2_POOL_MAX_HOSTS];
+    int host_count;
+    xr_mutex_t lock;
+    bool initialized;
+};
 
 // ALPN protocol list: h2, http/1.1
 static const unsigned char ALPN_PROTOS[] = "\x02h2\x08http/1.1";
@@ -83,8 +107,8 @@ static void h2_pool_entry_free(XrH2PoolEntry *entry);
 static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target);
 
 // Acquire connection from per-isolate pool
-XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port,
-                                         bool is_https) {
+static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port,
+                                                bool is_https) {
     if (!pool || !pool->initialized || !host)
         return NULL;
 
@@ -148,7 +172,7 @@ XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int p
 }
 
 // Release connection to per-isolate pool
-void http2_client_pool_release(XrH2Pool *pool, XrH2PoolEntry *entry) {
+static void http2_client_pool_release(XrH2Pool *pool, XrH2PoolEntry *entry) {
     if (!pool || !entry)
         return;
 
