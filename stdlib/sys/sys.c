@@ -4,6 +4,7 @@
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/coro/xthread_obj.h"
+#include "../../src/coro/xworker_internal.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/os/os_dylib.h"
 #include "../../src/os/os_pipe.h"
@@ -817,7 +818,9 @@ typedef struct XrSysProcessWaitCtx {
 } XrSysProcessWaitCtx;
 
 static bool sys_process_wait_can_yield(XrVMRuntime *isolate) {
-    return isolate && xr_current_coro(isolate) != NULL;
+    XrWorker *worker = xr_current_worker();
+    return isolate && worker && worker->p.id >= 0 && worker->p.vm_direct_switch_ok &&
+           xr_current_coro(isolate) != NULL;
 }
 
 static XrCFuncResult sys_process_wait_yield_step(XrVMRuntime *isolate, XrSysProcessWaitCtx *ctx,
@@ -924,7 +927,9 @@ static bool sys_pipe_can_yield(XrVMRuntime *isolate) {
     (void) isolate;
     return false;
 #else
-    return isolate && xr_current_coro(isolate) != NULL;
+    XrWorker *worker = xr_current_worker();
+    return isolate && worker && worker->p.id >= 0 && worker->p.vm_direct_switch_ok &&
+           xr_current_coro(isolate) != NULL;
 #endif
 }
 

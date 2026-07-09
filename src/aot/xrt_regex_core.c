@@ -8,8 +8,14 @@
  * xrt_regex_core.c - Freestanding AOT regex engine helpers
  */
 
+#ifndef XRT_IMPL
+#define XRT_IMPL
+#endif
+
 #include "xrt_coll.h"
 #include "xrt_class.h"
+#include "xrt_exception.h"
+#include "xrt_defer.h"
 #include "xrt_regex.h"
 #include "../../stdlib/regex/xregex.h"
 #include "../../stdlib/regex/xregex_internal.h"

@@ -1,0 +1,13 @@
+import sys
+
+fn run() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    defer {
+        print(t.join())
+    }
+    print("thread-defer")
+}
+
+run()
