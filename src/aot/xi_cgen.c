@@ -7593,6 +7593,10 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
     XR_DCHECK(ctx != NULL, "xi_cgen_c_export_header: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_c_export_header: NULL out");
 
+    ctx->all_modules = modules;
+    ctx->all_nmodules = modules && nmodules > 0 ? nmodules : 0;
+    cg_no_alloc_summaries_invalidate(ctx);
+
     memset(typedefs, 0, sizeof(typedefs));
     for (int i = 0; i < nmodules; i++) {
         if (!modules || !modules[i] || !modules[i]->init)
