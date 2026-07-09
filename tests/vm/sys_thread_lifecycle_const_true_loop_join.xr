@@ -1,0 +1,14 @@
+import sys
+
+fn run() {
+    const always = true
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    while (always) {
+        print(t.join())
+        break
+    }
+}
+
+run()

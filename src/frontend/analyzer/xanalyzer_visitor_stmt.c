@@ -829,9 +829,19 @@ static AstNode *xa_lifecycle_lint_single_expr_block_value(AstNode *body) {
     return statements[0]->as.expr_stmt;
 }
 
-static bool xa_lifecycle_lint_expr_is_true(AstNode *expr) {
+static bool xa_lifecycle_lint_expr_known_true(XaInferContext *ctx, AstNode *expr) {
     expr = xa_thread_lint_unwrap_expr(expr);
-    return expr && expr->type == AST_LITERAL_TRUE;
+    if (!expr)
+        return false;
+    if (expr->type == AST_LITERAL_TRUE)
+        return true;
+    if (!ctx || !ctx->analyzer)
+        return false;
+    XrCtValue value = {0};
+    const char *err = NULL;
+    if (!xa_consteval_expr(ctx->analyzer, expr, &value, &err))
+        return false;
+    return value.kind == XR_CT_BOOL && value.as.bool_val;
 }
 
 static bool xa_lifecycle_lint_break_targets_loop(AstNode *stmt, const char *loop_label) {
@@ -968,14 +978,14 @@ static bool xa_lifecycle_lint_body_has_non_tail_exit(AstNode *body) {
     return false;
 }
 
-static bool xa_lifecycle_lint_loop_always_enters(AstNode *stmt) {
+static bool xa_lifecycle_lint_loop_always_enters(XaInferContext *ctx, AstNode *stmt) {
     if (!stmt)
         return false;
     if (stmt->type == AST_WHILE_STMT)
-        return xa_lifecycle_lint_expr_is_true(stmt->as.while_stmt.condition);
+        return xa_lifecycle_lint_expr_known_true(ctx, stmt->as.while_stmt.condition);
     if (stmt->type == AST_FOR_STMT)
         return !stmt->as.for_stmt.condition ||
-               xa_lifecycle_lint_expr_is_true(stmt->as.for_stmt.condition);
+               xa_lifecycle_lint_expr_known_true(ctx, stmt->as.for_stmt.condition);
     return false;
 }
 
@@ -2030,7 +2040,7 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
 
 static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintState *states,
                                                             AstNode *stmt) {
-    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(stmt))
+    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(states->ctx, stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
@@ -3641,7 +3651,7 @@ static bool xa_os_resource_lint_try_wait_break_stmt(XaOsResourceLintState *state
 
 static bool xa_os_resource_lint_mark_try_wait_poll_loop(XaOsResourceLintState *states,
                                                         AstNode *stmt) {
-    if (!stmt || !xa_lifecycle_lint_loop_always_enters(stmt))
+    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(states->ctx, stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
@@ -3674,7 +3684,7 @@ static bool xa_os_resource_lint_mark_try_wait_poll_loop(XaOsResourceLintState *s
 
 static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLintState *states,
                                                                  AstNode *stmt) {
-    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(stmt))
+    if (!states || !stmt || !xa_lifecycle_lint_loop_always_enters(states->ctx, stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;

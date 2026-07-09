@@ -103,6 +103,7 @@ PROCESS_TRYWAIT_ONCE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_tr
 PROCESS_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_continue_warning.xr"
 PROCESS_MATCH_CONTINUE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_match_continue_warning.xr"
 CONTROL_FLOW_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_control_flow_ok.xr"
+CONST_TRUE_LOOP_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_const_true_loop_ok.xr"
 EXPR_CONTAINERS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_expr_containers_ok.xr"
 DESTRUCTURE_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_alias_ok.xr"
 DESTRUCTURE_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_helper_return_alias_ok.xr"
@@ -158,6 +159,7 @@ HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_hel
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
     $'0\n0\n0\n0\ntrue\ntrue\n0\ntrue\n0\ntrue'
+expect_output "process_pipe_const_true_loop_ok" "$CONST_TRUE_LOOP_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_lifecycle_expr_containers_ok" "$EXPR_CONTAINERS_OK_SRC" \
     $'0\ntrue\ncode 0\n2\n0\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_destructure_alias_ok" "$DESTRUCTURE_ALIAS_OK_SRC" $'0\ntrue'

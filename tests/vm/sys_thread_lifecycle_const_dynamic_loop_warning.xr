@@ -1,0 +1,15 @@
+import sys
+
+fn run(flag: bool) {
+    const maybe = flag
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    while (maybe) {
+        print(t.join())
+        break
+    }
+    print("const-dynamic-loop")
+}
+
+run(false)
