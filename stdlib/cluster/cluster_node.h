@@ -162,10 +162,10 @@ typedef struct XrClusterNode {
     /*
      * Flipped true by the writer coroutine as its very last action
      * before returning, so xr_cluster_node_free can spin-wait until
-     * the writer has stopped dereferencing node->outq before calling
-     * xr_outq_destroy (which closes the read end of notify_pipe, a
-     * fd the writer may still have registered with netpoll). Starts
-     * false for fresh nodes and for nodes whose writer never spawned.
+     * the writer has stopped dereferencing node->outq before queue
+     * teardown closes the read end of notify_pipe, a fd the writer may
+     * still have registered with netpoll. Starts false for fresh nodes
+     * and for nodes whose writer never spawned.
      */
     _Atomic(bool) writer_exited;
     _Atomic(bool) reader_running;  // frame-processing reader loop control
@@ -240,29 +240,11 @@ XR_FUNC void xr_cluster_node_writer_loop(void *arg);
 // already running for this node.
 XR_FUNC void xr_cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node);
 
-/* ========== Output Queue Helpers ========== */
-
-XR_FUNC void xr_outq_init(XrOutputQueue *q);
-XR_FUNC void xr_outq_destroy(XrOutputQueue *q);
-
-/*
- * Close only the write end of the notify pipe so a writer
- * coroutine yielded on xr_socket_read(notify_pipe[0]) observes EOF
- * and exits cleanly. Must be paired with xr_outq_destroy (which
- * closes the read end) in the teardown sequence; called from
- * xr_cluster_node_free before the writer-drain wait.
- */
-XR_FUNC void xr_outq_close_write_end(XrOutputQueue *q);
-
-XR_FUNC int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
-XR_FUNC int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
-XR_FUNC XrOutFrame *xr_outq_pop_all(XrOutputQueue *q);
-
 /* ========== Phi Accrual Failure Detector ========== */
 
-XR_FUNC void xr_phi_init(XrPhiDetector *det);
-XR_FUNC void xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
-XR_FUNC double xr_phi_value(XrPhiDetector *det, int64_t now_ms);
+void cluster_phi_init(XrPhiDetector *det);
+void cluster_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
+double cluster_phi_value(XrPhiDetector *det, int64_t now_ms);
 
 /* ========== Slow Consumer Detection ========== */
 

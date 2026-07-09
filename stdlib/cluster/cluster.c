@@ -1299,7 +1299,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 int64_t now_hb = cluster_now_ms();
                 node->last_heartbeat_recv = now_hb;
                 node->missed_heartbeats = 0;
-                xr_phi_record_heartbeat(&node->phi, now_hb);
+                cluster_phi_record_heartbeat(&node->phi, now_hb);
                 atomic_fetch_add(&node->metrics.frames_recv, 1);
                 break;
             }
@@ -1313,7 +1313,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 }
                 node->last_heartbeat_recv = now_pong;
                 node->missed_heartbeats = 0;
-                xr_phi_record_heartbeat(&node->phi, now_pong);
+                cluster_phi_record_heartbeat(&node->phi, now_pong);
                 atomic_fetch_add(&node->metrics.frames_recv, 1);
                 break;
             }
@@ -1647,7 +1647,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 // likely dead. Threshold for "kill" is set by
                 // cluster policy in cluster_health.c.
                 int64_t now = cluster_now_ms();
-                double phi = xr_phi_value(&node->phi, now);
+                double phi = cluster_phi_value(&node->phi, now);
                 xr_json_set_by_key(X, nj, "phi", xr_float(phi));
                 xr_json_set_by_key(X, nj, "missed_heartbeats",
                                    xr_int((int64_t) node->missed_heartbeats));
