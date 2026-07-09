@@ -788,6 +788,41 @@ typedef struct XaotDerivedEqHashPlan {
     uint8_t unproven_reason;
 } XaotDerivedEqHashPlan;
 
+typedef enum XaotDerivedCloneAction {
+    XAOT_DERIVED_CLONE_BITWISE_COPY = 1,
+    XAOT_DERIVED_CLONE_FIELDWISE_COPY,
+    XAOT_DERIVED_CLONE_DEEP_COPY_PLAN,
+    XAOT_DERIVED_CLONE_DIRECT_GENERATED_CALL,
+    XAOT_DERIVED_CLONE_REJECT,
+} XaotDerivedCloneAction;
+
+enum {
+    XAOT_CLONE_EV_CLONE_ROW = 1u << 0,
+    XAOT_CLONE_EV_FIELD_TABLE = 1u << 1,
+    XAOT_CLONE_EV_GENERATED_BODY = 1u << 2,
+    XAOT_CLONE_EV_TRANSFER_PLAN = 1u << 3,
+};
+
+enum {
+    XAOT_CLONE_UNPROVEN_NONE = 0,
+    XAOT_CLONE_UNPROVEN_MISSING_CLONE = 1,
+    XAOT_CLONE_UNPROVEN_UNSAFE_FIELD = 2,
+    XAOT_CLONE_UNPROVEN_MISSING_TRANSFER_PLAN = 3,
+};
+
+typedef struct XaotDerivedClonePlan {
+    XgDeclId owner_decl_id;
+    uint32_t type_key;
+    XgDeriveId clone_derive_id;
+    uint32_t field_start;
+    uint16_t field_count;
+    XgFuncId clone_body_func_id;
+    uint32_t transfer_plan_id;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotDerivedClonePlan;
+
 typedef enum XaotJsonShapeAction {
     XAOT_JSON_SHAPE_OPEN_DYNAMIC = 1,
     XAOT_JSON_SHAPE_HIDDEN_CLASS,
@@ -1369,6 +1404,9 @@ typedef struct XaotBundle {
     XaotDerivedEqHashPlan *derived_eq_hash_plans;
     uint32_t nderived_eq_hash_plans;
     uint32_t derived_eq_hash_plan_cap;
+    XaotDerivedClonePlan *derived_clone_plans;
+    uint32_t nderived_clone_plans;
+    uint32_t derived_clone_plan_cap;
     XaotJsonShapePlan *json_shape_plans;
     uint32_t njson_shape_plans;
     uint32_t json_shape_plan_cap;
@@ -1469,6 +1507,8 @@ XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bun
                                                            XgDeriveId derive_id);
 XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle,
                                                                            uint32_t type_key);
+XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const XaotBundle *bundle,
+                                                                        uint32_t type_key);
 XR_FUNC const XaotJsonShapePlan *xaot_bundle_find_json_shape_plan(const XaotBundle *bundle,
                                                                   XgJsonShapeId json_shape_id);
 XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBundle *bundle,

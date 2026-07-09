@@ -7325,6 +7325,79 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_derived_clone_plan) {
+    setup_parser_session();
+    const char *source = "@derive(Clone)\n"
+                         "class Payload {\n"
+                         "    id: int\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nderives, 1);
+    ASSERT_EQ_UINT(ev.derives[0].derive_kind, XG_DERIVE_CLONE);
+    ASSERT_EQ_UINT(ev.derives[0].field_count, 1);
+    ASSERT_EQ_UINT(ev.nderived_fields, 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nderived_clone_plans, 1);
+    const XaotDerivedClonePlan *plan =
+        xaot_bundle_find_derived_clone_plan(&bundle, ev.derives[0].type_key);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->clone_derive_id, ev.derives[0].derive_id);
+    ASSERT_EQ_UINT(plan->action, XAOT_DERIVED_CLONE_FIELDWISE_COPY);
+    ASSERT_EQ_UINT(plan->unproven_reason, XAOT_CLONE_UNPROVEN_NONE);
+    ASSERT_EQ_UINT(plan->evidence, XAOT_CLONE_EV_CLONE_ROW | XAOT_CLONE_EV_FIELD_TABLE);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "derived-clone-plan 0"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=fieldwise_copy"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=none"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.derived_clone_plans[0].action = XAOT_DERIVED_CLONE_BITWISE_COPY;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT derived Clone action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_rejects_eq_only_as_hashable_plan) {
     XgBuildKey key = {.source_hash = 51,
                       .compiler_semver_hash = 52,
@@ -8387,6 +8460,60 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
+    setup_parser_session();
+    const char *source = "fn readAlias() -> int {\n"
+                         "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
+                         "    var alias = scores\n"
+                         "    alias[\"ada\"] = 8\n"
+                         "    var assigned: Map<string, int> = #{}\n"
+                         "    assigned = alias\n"
+                         "    return assigned[\"ada\"]\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 2);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 2);
+    ASSERT_EQ_UINT(ev.key_accesses[0].op, XG_KEY_ACCESS_SET);
+    ASSERT_EQ_UINT(ev.key_accesses[1].op, XG_KEY_ACCESS_INDEX_GET);
+    ASSERT_EQ_UINT(ev.key_accesses[0].receiver_shape_id, ev.map_shapes[0].shape_id);
+    ASSERT_EQ_UINT(ev.key_accesses[1].receiver_shape_id, ev.map_shapes[0].shape_id);
+    ASSERT_TRUE(ev.key_accesses[0].key_prehash != 0);
+    ASSERT_TRUE(ev.key_accesses[1].key_prehash != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotKeyAccessPlan *set_plan =
+        xaot_bundle_find_key_access_plan(&bundle, ev.key_accesses[0].access_id);
+    const XaotKeyAccessPlan *get_plan =
+        xaot_bundle_find_key_access_plan(&bundle, ev.key_accesses[1].access_id);
+    ASSERT_NOT_NULL(set_plan);
+    ASSERT_NOT_NULL(get_plan);
+    ASSERT_EQ_UINT(set_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+    ASSERT_EQ_UINT(get_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     setup_parser_session();
     const char *source = "fn makeEmpty() -> int {\n"
@@ -8995,6 +9122,7 @@ RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_records_derive_rows);
 RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
 RUN_TEST(global_evidence_producer_records_derived_eq_hash_plan);
+RUN_TEST(global_evidence_producer_records_derived_clone_plan);
 RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
@@ -9010,6 +9138,7 @@ RUN_TEST(global_evidence_producer_records_json_unknown_shape_access);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
+RUN_TEST(global_evidence_producer_propagates_map_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
