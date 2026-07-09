@@ -14,7 +14,7 @@
  *   compile in AOT.
  */
 
-#include "ws.h"
+#include "ws_internal.h"
 #include "../common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
@@ -457,7 +457,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
         }
     }
 
-    XrWsError url_err = xr_ws_url_validate(config.url);
+    XrWsError url_err = ws_url_validate(config.url);
     if (url_err != WS_OK) {
         XrJson *r = xr_json_new(xr_current_coro(X));
         xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));

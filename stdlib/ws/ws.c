@@ -11,7 +11,7 @@
  *   Implements RFC 6455 WebSocket protocol
  */
 
-#include "ws.h"
+#include "ws_internal.h"
 #include "ws_deflate.h"
 #include "../../src/os/os_net.h"
 #include "../../src/os/os_random.h"
@@ -298,7 +298,7 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
     return 0;
 }
 
-XrWsError xr_ws_url_validate(const char *url) {
+XrWsError ws_url_validate(const char *url) {
     char *host = NULL;
     char *path = NULL;
     int port = 0;
