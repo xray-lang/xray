@@ -288,6 +288,66 @@ static uint64_t hash_generic_code_size_summary(uint64_t hash, const XgGenericCod
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_sequence_access_summary(uint64_t hash, const XgSequenceAccessSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->access_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->body_ordinal);
+    hash = hash_u8(hash, row->sequence_kind);
+    hash = hash_u8(hash, row->access_kind);
+    hash = hash_u32(hash, row->receiver_type_key);
+    hash = hash_u32(hash, row->elem_type_key);
+    hash = hash_u32(hash, row->index_expr_id);
+    hash = hash_u32(hash, row->length_expr_id);
+    return hash_u32(hash, row->flags);
+}
+
+static uint64_t hash_capacity_op_summary(uint64_t hash, const XgCapacityOpSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->op_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->body_ordinal);
+    hash = hash_u8(hash, row->sequence_kind);
+    hash = hash_u8(hash, row->op_kind);
+    hash = hash_u32(hash, row->receiver_type_key);
+    hash = hash_u32(hash, row->elem_type_key);
+    hash = hash_u32(hash, row->count_expr_id);
+    hash = hash_u32(hash, row->loop_id);
+    return hash_u32(hash, row->flags);
+}
+
+static uint64_t hash_bulk_op_summary(uint64_t hash, const XgBulkOpSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->op_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->body_ordinal);
+    hash = hash_u8(hash, row->op_kind);
+    hash = hash_u32(hash, row->elem_type_key);
+    hash = hash_u32(hash, row->src_type_key);
+    hash = hash_u32(hash, row->dst_type_key);
+    hash = hash_u32(hash, row->length_expr_id);
+    return hash_u32(hash, row->flags);
+}
+
+static uint64_t hash_encoding_op_summary(uint64_t hash, const XgEncodingOpSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->op_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->body_ordinal);
+    hash = hash_u8(hash, row->op_kind);
+    hash = hash_u32(hash, row->input_type_key);
+    hash = hash_u32(hash, row->output_type_key);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_derive_summary(uint64_t hash, const XgDeriveSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -570,6 +630,99 @@ XR_FUNC const char *xg_generic_storage_kind_name(uint8_t kind) {
             return "class";
         case XG_GENERIC_STORAGE_STRUCT:
             return "struct";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_sequence_kind_name(uint8_t kind) {
+    switch ((XgSequenceKind) kind) {
+        case XG_SEQ_ARRAY:
+            return "array";
+        case XG_SEQ_BYTES:
+            return "bytes";
+        case XG_SEQ_STRING:
+            return "string";
+        case XG_SEQ_SPAN:
+            return "span";
+        case XG_SEQ_BYTE_SPAN:
+            return "byte_span";
+        case XG_SEQ_STRING_BUILDER:
+            return "string_builder";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_sequence_access_kind_name(uint8_t kind) {
+    switch ((XgSequenceAccessKind) kind) {
+        case XG_SEQ_ACCESS_INDEX_GET:
+            return "index_get";
+        case XG_SEQ_ACCESS_INDEX_SET:
+            return "index_set";
+        case XG_SEQ_ACCESS_SLICE:
+            return "slice";
+        case XG_SEQ_ACCESS_ITER:
+            return "iter";
+        case XG_SEQ_ACCESS_LENGTH:
+            return "length";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_capacity_op_kind_name(uint8_t kind) {
+    switch ((XgCapacityOpKind) kind) {
+        case XG_CAPACITY_PUSH:
+            return "push";
+        case XG_CAPACITY_APPEND:
+            return "append";
+        case XG_CAPACITY_EXTEND:
+            return "extend";
+        case XG_CAPACITY_RESERVE:
+            return "reserve";
+        case XG_CAPACITY_CONCAT:
+            return "concat";
+        case XG_CAPACITY_TO_STRING:
+            return "to_string";
+        case XG_CAPACITY_CLEAR:
+            return "clear";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_bulk_op_kind_name(uint8_t kind) {
+    switch ((XgBulkOpKind) kind) {
+        case XG_BULK_COPY:
+            return "copy";
+        case XG_BULK_FILL:
+            return "fill";
+        case XG_BULK_COMPARE:
+            return "compare";
+        case XG_BULK_REPEAT:
+            return "repeat";
+        case XG_BULK_COPY_WITHIN:
+            return "copy_within";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_encoding_op_kind_name(uint8_t kind) {
+    switch ((XgEncodingOpKind) kind) {
+        case XG_ENCODING_STRING_TO_BYTES:
+            return "string_to_bytes";
+        case XG_ENCODING_BYTES_TO_STRING:
+            return "bytes_to_string";
+        case XG_ENCODING_UTF8_VALIDATE:
+            return "utf8_validate";
+        case XG_ENCODING_UTF8_COUNT:
+            return "utf8_count";
+        case XG_ENCODING_UTF16_ENCODE:
+            return "utf16_encode";
+        case XG_ENCODING_UTF16_DECODE:
+            return "utf16_decode";
         default:
             return "unknown";
     }
@@ -949,6 +1102,10 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->generic_body_uses);
     xr_free(evidence->generic_storages);
     xr_free(evidence->generic_code_sizes);
+    xr_free(evidence->sequence_accesses);
+    xr_free(evidence->capacity_ops);
+    xr_free(evidence->bulk_ops);
+    xr_free(evidence->encoding_ops);
     xr_free(evidence->derives);
     xr_free(evidence->derived_fields);
     xr_free(evidence->derived_methods);
@@ -1040,6 +1197,30 @@ XR_FUNC bool xg_global_evidence_reserve_generic_code_sizes(XgGlobalEvidence *evi
     return evidence &&
            reserve_array((void **) &evidence->generic_code_sizes, &evidence->generic_code_size_cap,
                          capacity, sizeof(XgGenericCodeSizeSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_sequence_accesses(XgGlobalEvidence *evidence,
+                                                          uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->sequence_accesses, &evidence->sequence_access_cap,
+                         capacity, sizeof(XgSequenceAccessSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_capacity_ops(XgGlobalEvidence *evidence,
+                                                     uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->capacity_ops, &evidence->capacity_op_cap,
+                                     capacity, sizeof(XgCapacityOpSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_bulk_ops(XgGlobalEvidence *evidence, uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->bulk_ops, &evidence->bulk_op_cap,
+                                     capacity, sizeof(XgBulkOpSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_encoding_ops(XgGlobalEvidence *evidence,
+                                                     uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->encoding_ops, &evidence->encoding_op_cap,
+                                     capacity, sizeof(XgEncodingOpSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_derives(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1260,6 +1441,51 @@ xg_global_evidence_add_generic_code_size(XgGlobalEvidence *evidence,
     return row;
 }
 
+XR_FUNC XgSequenceAccessSummary *
+xg_global_evidence_add_sequence_access(XgGlobalEvidence *evidence,
+                                       const XgSequenceAccessSummary *summary) {
+    XgSequenceAccessSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_sequence_accesses(evidence, evidence->nsequence_accesses + 1))
+        return NULL;
+    row = &evidence->sequence_accesses[evidence->nsequence_accesses++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgCapacityOpSummary *
+xg_global_evidence_add_capacity_op(XgGlobalEvidence *evidence, const XgCapacityOpSummary *summary) {
+    XgCapacityOpSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_capacity_ops(evidence, evidence->ncapacity_ops + 1))
+        return NULL;
+    row = &evidence->capacity_ops[evidence->ncapacity_ops++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgBulkOpSummary *xg_global_evidence_add_bulk_op(XgGlobalEvidence *evidence,
+                                                        const XgBulkOpSummary *summary) {
+    XgBulkOpSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_bulk_ops(evidence, evidence->nbulk_ops + 1))
+        return NULL;
+    row = &evidence->bulk_ops[evidence->nbulk_ops++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgEncodingOpSummary *
+xg_global_evidence_add_encoding_op(XgGlobalEvidence *evidence, const XgEncodingOpSummary *summary) {
+    XgEncodingOpSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_encoding_ops(evidence, evidence->nencoding_ops + 1))
+        return NULL;
+    row = &evidence->encoding_ops[evidence->nencoding_ops++];
+    *row = *summary;
+    return row;
+}
+
 XR_FUNC XgDeriveSummary *xg_global_evidence_add_derive(XgGlobalEvidence *evidence,
                                                        const XgDeriveSummary *summary) {
     XgDeriveSummary *row;
@@ -1440,6 +1666,51 @@ xg_global_evidence_find_generic_code_size(const XgGlobalEvidence *evidence,
     for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++) {
         if (evidence->generic_code_sizes[i].code_size_id == code_size_id)
             return &evidence->generic_code_sizes[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgSequenceAccessSummary *
+xg_global_evidence_find_sequence_access(const XgGlobalEvidence *evidence,
+                                        XgSequenceAccessId access_id) {
+    if (!evidence || access_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nsequence_accesses; i++) {
+        if (evidence->sequence_accesses[i].access_id == access_id)
+            return &evidence->sequence_accesses[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgCapacityOpSummary *
+xg_global_evidence_find_capacity_op(const XgGlobalEvidence *evidence, XgCapacityOpId op_id) {
+    if (!evidence || op_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ncapacity_ops; i++) {
+        if (evidence->capacity_ops[i].op_id == op_id)
+            return &evidence->capacity_ops[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgBulkOpSummary *xg_global_evidence_find_bulk_op(const XgGlobalEvidence *evidence,
+                                                               XgBulkOpId op_id) {
+    if (!evidence || op_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nbulk_ops; i++) {
+        if (evidence->bulk_ops[i].op_id == op_id)
+            return &evidence->bulk_ops[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgEncodingOpSummary *
+xg_global_evidence_find_encoding_op(const XgGlobalEvidence *evidence, XgEncodingOpId op_id) {
+    if (!evidence || op_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nencoding_ops; i++) {
+        if (evidence->encoding_ops[i].op_id == op_id)
+            return &evidence->encoding_ops[i];
     }
     return NULL;
 }
@@ -1922,6 +2193,10 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->ngeneric_body_uses, sizeof(evidence->ngeneric_body_uses));
     hash = hash_mix(hash, &evidence->ngeneric_storages, sizeof(evidence->ngeneric_storages));
     hash = hash_mix(hash, &evidence->ngeneric_code_sizes, sizeof(evidence->ngeneric_code_sizes));
+    hash = hash_mix(hash, &evidence->nsequence_accesses, sizeof(evidence->nsequence_accesses));
+    hash = hash_mix(hash, &evidence->ncapacity_ops, sizeof(evidence->ncapacity_ops));
+    hash = hash_mix(hash, &evidence->nbulk_ops, sizeof(evidence->nbulk_ops));
+    hash = hash_mix(hash, &evidence->nencoding_ops, sizeof(evidence->nencoding_ops));
     hash = hash_mix(hash, &evidence->nderives, sizeof(evidence->nderives));
     hash = hash_mix(hash, &evidence->nderived_fields, sizeof(evidence->nderived_fields));
     hash = hash_mix(hash, &evidence->nderived_methods, sizeof(evidence->nderived_methods));
@@ -1959,6 +2234,14 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_generic_storage_summary(hash, &evidence->generic_storages[i]);
     for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++)
         hash = hash_generic_code_size_summary(hash, &evidence->generic_code_sizes[i]);
+    for (uint32_t i = 0; i < evidence->nsequence_accesses; i++)
+        hash = hash_sequence_access_summary(hash, &evidence->sequence_accesses[i]);
+    for (uint32_t i = 0; i < evidence->ncapacity_ops; i++)
+        hash = hash_capacity_op_summary(hash, &evidence->capacity_ops[i]);
+    for (uint32_t i = 0; i < evidence->nbulk_ops; i++)
+        hash = hash_bulk_op_summary(hash, &evidence->bulk_ops[i]);
+    for (uint32_t i = 0; i < evidence->nencoding_ops; i++)
+        hash = hash_encoding_op_summary(hash, &evidence->encoding_ops[i]);
     for (uint32_t i = 0; i < evidence->nderives; i++)
         hash = hash_derive_summary(hash, &evidence->derives[i]);
     for (uint32_t i = 0; i < evidence->nderived_fields; i++)
@@ -2379,7 +2662,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     fprintf(out,
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
             "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u "
-            "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u derives=%u "
+            "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
+            "sequence_accesses=%u capacity_ops=%u bulk_ops=%u encoding_ops=%u derives=%u "
             "derived_fields=%u derived_methods=%u json_shapes=%u "
             "json_accesses=%u record_shapes=%u record_accesses=%u map_shapes=%u map_entries=%u "
             "key_accesses=%u hash_eqs=%u\n",
@@ -2387,10 +2671,12 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->ninterface_extends, evidence->ninterface_methods, evidence->nbodies,
             evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts,
             evidence->ngeneric_body_uses, evidence->ngeneric_storages,
-            evidence->ngeneric_code_sizes, evidence->nderives, evidence->nderived_fields,
-            evidence->nderived_methods, evidence->njson_shapes, evidence->njson_accesses,
-            evidence->nrecord_shapes, evidence->nrecord_accesses, evidence->nmap_shapes,
-            evidence->nmap_entries, evidence->nkey_accesses, evidence->nhash_eqs);
+            evidence->ngeneric_code_sizes, evidence->nsequence_accesses, evidence->ncapacity_ops,
+            evidence->nbulk_ops, evidence->nencoding_ops, evidence->nderives,
+            evidence->nderived_fields, evidence->nderived_methods, evidence->njson_shapes,
+            evidence->njson_accesses, evidence->nrecord_shapes, evidence->nrecord_accesses,
+            evidence->nmap_shapes, evidence->nmap_entries, evidence->nkey_accesses,
+            evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -2528,6 +2814,44 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 i, size->code_size_id, size->generic_inst_id, size->module_id, size->body_use_id,
                 size->origin_body_size_estimate, size->specialized_body_size_estimate,
                 size->instantiation_count, size->threshold, size->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nsequence_accesses; i++) {
+        const XgSequenceAccessSummary *seq = &evidence->sequence_accesses[i];
+        fprintf(out,
+                "seq-access %u id=%u owner=%u span=%u ordinal=%u kind=%s access=%s "
+                "receiver_type=%u elem_type=%u index=%u length=%u flags=0x%x\n",
+                i, seq->access_id, seq->owner_func_id, seq->source_span_id, seq->body_ordinal,
+                xg_sequence_kind_name(seq->sequence_kind),
+                xg_sequence_access_kind_name(seq->access_kind), seq->receiver_type_key,
+                seq->elem_type_key, seq->index_expr_id, seq->length_expr_id, seq->flags);
+    }
+    for (uint32_t i = 0; i < evidence->ncapacity_ops; i++) {
+        const XgCapacityOpSummary *cap = &evidence->capacity_ops[i];
+        fprintf(out,
+                "capacity-op %u id=%u owner=%u span=%u ordinal=%u kind=%s op=%s "
+                "receiver_type=%u elem_type=%u count=%u loop=%u flags=0x%x\n",
+                i, cap->op_id, cap->owner_func_id, cap->source_span_id, cap->body_ordinal,
+                xg_sequence_kind_name(cap->sequence_kind), xg_capacity_op_kind_name(cap->op_kind),
+                cap->receiver_type_key, cap->elem_type_key, cap->count_expr_id, cap->loop_id,
+                cap->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nbulk_ops; i++) {
+        const XgBulkOpSummary *bulk = &evidence->bulk_ops[i];
+        fprintf(out,
+                "bulk-op %u id=%u owner=%u span=%u ordinal=%u op=%s elem_type=%u "
+                "src_type=%u dst_type=%u length=%u flags=0x%x\n",
+                i, bulk->op_id, bulk->owner_func_id, bulk->source_span_id, bulk->body_ordinal,
+                xg_bulk_op_kind_name(bulk->op_kind), bulk->elem_type_key, bulk->src_type_key,
+                bulk->dst_type_key, bulk->length_expr_id, bulk->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nencoding_ops; i++) {
+        const XgEncodingOpSummary *enc = &evidence->encoding_ops[i];
+        fprintf(out,
+                "encoding-op %u id=%u owner=%u span=%u ordinal=%u op=%s input_type=%u "
+                "output_type=%u flags=0x%x\n",
+                i, enc->op_id, enc->owner_func_id, enc->source_span_id, enc->body_ordinal,
+                xg_encoding_op_kind_name(enc->op_kind), enc->input_type_key, enc->output_type_key,
+                enc->flags);
     }
     for (uint32_t i = 0; i < evidence->nderives; i++) {
         const XgDeriveSummary *d = &evidence->derives[i];
