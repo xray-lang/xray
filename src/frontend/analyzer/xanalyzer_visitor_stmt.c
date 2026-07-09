@@ -6996,8 +6996,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                   "fixed-array lanes, and recursively scalar fixed-array/tuple/struct "
                   "initializers are allowed as erased or static data objects in the current "
                   "freestanding slice"
-                : "only int/float/bool/char/string/null consteval initializers, or typed "
-                  "scalar/string/null nullable defaults, are supported as static mutable module "
+                : "only int/float/bool/char/string/null consteval initializers, typed "
+                  "int/float/bool zero defaults, or typed nullable scalar/string/null defaults "
+                  "are supported as static mutable module "
                   "storage in the current freestanding slice");
     }
 
