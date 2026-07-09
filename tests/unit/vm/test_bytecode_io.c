@@ -13,6 +13,8 @@
 #include "base/xmalloc.h"
 #include "module/xbytecode_io.h"
 #include "runtime/xisolate_api.h"
+#include "runtime/class/xclass.h"
+#include "runtime/class/xinstance.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
@@ -91,6 +93,38 @@ TEST(bytecode_roundtrips_struct_area_size) {
     xray_vm_delete(iso);
 }
 
+TEST(bytecode_reader_assigns_unique_proto_ids) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+
+    XrProto *child = make_minimal_proto();
+    ASSERT_NOT_NULL(child);
+    ASSERT_EQ_INT(xr_vm_proto_add_proto(proto, child), 0);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_PROTO_COUNT(roundtrip), 1);
+
+    XrProto *roundtrip_child = PROTO_PROTO(roundtrip, 0);
+    ASSERT_NOT_NULL(roundtrip_child);
+    ASSERT_TRUE(roundtrip->proto_id != roundtrip_child->proto_id);
+    ASSERT_TRUE(roundtrip_child->enclosing == roundtrip);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
 TEST(bytecode_reader_rejects_previous_layout_version) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
@@ -115,6 +149,54 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     xr_free(bytes);
     xr_vm_proto_free(proto);
     xray_vm_delete(iso);
+}
+
+TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+
+    const char *names[] = {"host", "port"};
+    XrClass *shape = xr_class_build_json_chain(writer, names, 2, false);
+    ASSERT_NOT_NULL(shape);
+
+    int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
+    ASSERT_EQ_INT(kidx, 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    proto->maxstacksize = 1;
+    xr_vm_proto_write(proto, CREATE_ABC(OP_NEWJSON, 0, kidx, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
+
+    XrValue cls_val = PROTO_CONSTANT(roundtrip, 0);
+    ASSERT_TRUE(XR_IS_INT(cls_val));
+    XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
+    ASSERT_NOT_NULL(roundtrip_shape);
+    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_JSON);
+    ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_LAYOUT) != 0);
+    ASSERT_EQ_UINT(roundtrip_shape->field_count, 2);
+    ASSERT_STR_EQ(roundtrip_shape->fields[0].name, "host");
+    ASSERT_STR_EQ(roundtrip_shape->fields[1].name, "port");
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
 }
 
 TEST(bytecode_roundtrips_u16_upvalue_index) {
@@ -340,7 +422,9 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_roundtrips_struct_area_size);
+    RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
+    RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_declared_shared_count);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);

@@ -705,23 +705,38 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
-set(XRAY_STDLIB_EMBEDDED_INC
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_generated.inc")
+set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
+set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/bootstrap")
+set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC
+    "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}/stdlib_embedded_bytecodes.inc")
+set(XRAY_STDLIB_FINAL_BYTECODE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/final")
+set(XRAY_STDLIB_FINAL_BYTECODE_INC
+    "${XRAY_STDLIB_FINAL_BYTECODE_DIR}/stdlib_embedded_bytecodes.inc")
+set(XRAY_STDLIB_XRC_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
 add_custom_command(
-    OUTPUT ${XRAY_STDLIB_EMBEDDED_INC}
+    OUTPUT
+        ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
+        ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}
-            --output ${XRAY_STDLIB_EMBEDDED_INC}
+            --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
+            --bytecode-output ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
         ${XRAY_STDLIB_SCRIPT_SOURCES}
-    COMMENT "Generating embedded stdlib script table"
+    COMMENT "Generating embedded stdlib source table"
     VERBATIM
 )
-add_custom_target(gen-stdlib-embedded DEPENDS ${XRAY_STDLIB_EMBEDDED_INC})
+add_custom_target(gen-stdlib-embedded-sources
+    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC} ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC})
 
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
@@ -769,8 +784,14 @@ set(CORE_ALL_SOURCES
     ${STDLIB_SRC}
 )
 
+add_library(xray_stdlib_bootstrap_core OBJECT ${CORE_ALL_SOURCES})
+add_dependencies(xray_stdlib_bootstrap_core
+    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
+    gen-stdlib-embedded-sources)
+
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata gen-stdlib-embedded)
+add_dependencies(xray_core
+    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata)
 
 add_library(xray_aot_core STATIC
     src/aot/xrt_regex_core.c
@@ -848,7 +869,7 @@ set(XRAY_VM_RUNTIME_SOURCES
 list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 
 add_library(xray_vm_runtime STATIC ${XRAY_VM_RUNTIME_SOURCES})
-add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-embedded)
+add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
@@ -866,12 +887,23 @@ add_compile_definitions(
 
 
 # Core library include paths (detailed configuration)
+target_include_directories(xray_stdlib_bootstrap_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(xray_stdlib_bootstrap_core PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
 target_include_directories(xray_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 target_include_directories(xray_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
+    ${XRAY_STDLIB_FINAL_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -889,6 +921,7 @@ target_include_directories(xray_vm_runtime PUBLIC
 
 target_include_directories(xray_vm_runtime PRIVATE
     ${XRAY_COMMON_INCLUDES}
+    ${XRAY_STDLIB_FINAL_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -896,17 +929,21 @@ target_include_directories(xray_vm_runtime PRIVATE
 if(WIN32)
     # Math library is part of the MSVC runtime; ws2_32 for sockets,
     # synchronization for WaitOnAddress/WakeByAddressSingle
+    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_vm_runtime PUBLIC ws2_32 synchronization)
 else()
+    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC m pthread)
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
     target_link_libraries(xray_vm_runtime PUBLIC m pthread)
 endif()
 if(ZLIB_FOUND)
+    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_vm_runtime PUBLIC ZLIB::ZLIB)
+    target_compile_definitions(xray_stdlib_bootstrap_core PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_core PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_vm_runtime PRIVATE XR_HAS_ZLIB=1)
 endif()
@@ -928,19 +965,23 @@ if(NOT LIBFFI_FOUND)
 endif()
 if(LIBFFI_FOUND)
     message(STATUS "libffi: found (VM FFI enabled)")
+    target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_vm_runtime PRIVATE ${LIBFFI_INCLUDE_DIRS})
+    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_core PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_vm_runtime PUBLIC ${LIBFFI_LIBRARIES})
     # PUBLIC: the CLI target builds AOT link commands by hand (invoke_cc) and
     # must know xray_core embeds the libffi-based @extern invoker, so a runtime
     # program links -lffi too.
+    target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_vm_runtime PUBLIC XRAY_HAVE_LIBFFI=1)
 else()
     message(STATUS "libffi: not found (@extern calls limited to the AOT backend)")
 endif()
 if(NOT WIN32)
+    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_core PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_vm_runtime PUBLIC ${CMAKE_DL_LIBS})
 endif()
@@ -954,20 +995,58 @@ endif()
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
     message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
+    target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_vm_runtime PRIVATE ${OPENSSL_INCLUDE_DIR})
     # Always link libcrypto (needed by ws module for SHA1)
+    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::Crypto)
     if(ENABLE_TLS)
+        target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::SSL)
+        target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_vm_runtime PUBLIC XR_ENABLE_TLS=1)
     endif()
 else()
     message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
 endif()
+
+add_executable(xray_stdlib_bcgen
+    src/app/tools/xstdlib_bcgen.c
+)
+target_link_libraries(xray_stdlib_bcgen PRIVATE xray_stdlib_bootstrap_core)
+target_include_directories(xray_stdlib_bcgen PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+add_custom_command(
+    OUTPUT ${XRAY_STDLIB_FINAL_BYTECODE_INC}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_FINAL_BYTECODE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_XRC_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}
+            --compiler $<TARGET_FILE:xray_stdlib_bcgen>
+            --bytecode-dir ${XRAY_STDLIB_XRC_DIR}
+            --require-bytecode
+            --bytecode-output ${XRAY_STDLIB_FINAL_BYTECODE_INC}
+            ${XRAY_STDLIB_SCRIPT_SOURCES}
+    DEPENDS
+        xray_stdlib_bcgen
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+        ${XRAY_STDLIB_SCRIPT_SOURCES}
+    COMMENT "Generating embedded stdlib bytecode table"
+    VERBATIM
+)
+add_custom_target(gen-stdlib-embedded-bytecodes DEPENDS ${XRAY_STDLIB_FINAL_BYTECODE_INC})
+add_custom_target(gen-stdlib-embedded
+    DEPENDS gen-stdlib-embedded-sources gen-stdlib-embedded-bytecodes)
+add_dependencies(xray_core gen-stdlib-embedded-bytecodes)
+add_dependencies(xray_vm_runtime gen-stdlib-embedded-bytecodes)
 
 # ============================================================================
 # Build Target - Main Executable (optional LSP and DAP)
