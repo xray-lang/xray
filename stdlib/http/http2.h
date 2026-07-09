@@ -178,20 +178,20 @@ typedef struct {
 
 } XrH2Conn;
 
-/* ========== HPACK API ========== */
+/* ========== Internal HPACK API ========== */
 
-XR_FUNC void xr_hpack_init(XrHpackTable *table, size_t max_size);
-XR_FUNC void xr_hpack_free(XrHpackTable *table);
+void http2_hpack_init(XrHpackTable *table, size_t max_size);
+void http2_hpack_free(XrHpackTable *table);
 
 // HPACK encode header, returns encoded length or -1
-XR_FUNC int xr_hpack_encode(XrHpackTable *table, const char *name, size_t name_len,
-                            const char *value, size_t value_len, uint8_t *buf, size_t buf_len);
+int http2_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, const char *value,
+                       size_t value_len, uint8_t *buf, size_t buf_len);
 
 // HPACK decode header block
-XR_FUNC int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
-                            void (*callback)(const char *name, size_t name_len, const char *value,
-                                             size_t value_len, void *user_data),
-                            void *user_data);
+int http2_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
+                       void (*callback)(const char *name, size_t name_len, const char *value,
+                                        size_t value_len, void *user_data),
+                       void *user_data);
 
 /* ========== HTTP/2 Connection API ========== */
 

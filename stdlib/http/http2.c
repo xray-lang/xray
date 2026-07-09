@@ -580,12 +580,12 @@ static int hpack_decode_string(const uint8_t *buf, size_t buf_len, char **str, s
 
 /* ========== HPACK Dynamic Table ========== */
 
-void xr_hpack_init(XrHpackTable *table, size_t max_size) {
+void http2_hpack_init(XrHpackTable *table, size_t max_size) {
     memset(table, 0, sizeof(XrHpackTable));
     table->max_size = max_size;
 }
 
-void xr_hpack_free(XrHpackTable *table) {
+void http2_hpack_free(XrHpackTable *table) {
     XrHpackEntry *entry = table->entries;
     while (entry) {
         XrHpackEntry *next = entry->next;
@@ -637,7 +637,7 @@ static void hpack_table_add(XrHpackTable *table, const char *name, size_t name_l
 
     if (entry_size > table->max_size) {
         // Entry too large, clear table (RFC 7541 §4.4)
-        xr_hpack_free(table);
+        http2_hpack_free(table);
         return;
     }
 
@@ -692,7 +692,7 @@ static XrHpackEntry *hpack_table_get(XrHpackTable *table, int index) {
 
 /* ========== HPACK Encoding ========== */
 
-int xr_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, const char *value,
+int http2_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, const char *value,
                     size_t value_len, uint8_t *buf, size_t buf_len) {
     (void) table;
     // Simplified: use literal without indexing
@@ -743,7 +743,7 @@ int xr_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, cons
 
 /* ========== HPACK Decoding ========== */
 
-int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
+int http2_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
                     void (*callback)(const char *name, size_t name_len, const char *value,
                                      size_t value_len, void *user_data),
                     void *user_data) {
@@ -908,8 +908,8 @@ void http2_conn_free(XrH2Conn *conn) {
     if (!conn)
         return;
 
-    xr_hpack_free(&conn->encoder_table);
-    xr_hpack_free(&conn->decoder_table);
+    http2_hpack_free(&conn->encoder_table);
+    http2_hpack_free(&conn->decoder_table);
 
     // Free stream hash table
     xr_h2_stream_hash_free(&conn->stream_hash);
@@ -1268,7 +1268,7 @@ static int xr_h2_recv(XrH2Conn *conn) {
             }
             // Decode HPACK headers to extract :status pseudo-header
             if (stream && hdr_ptr && hdr_len > 0) {
-                xr_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len, h2_header_callback, stream);
+                http2_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len, h2_header_callback, stream);
             }
             if (stream && header.flags & XR_H2_FLAG_END_STREAM) {
                 stream->state = XR_H2_STREAM_HALF_CLOSED_REMOTE;
@@ -1410,13 +1410,13 @@ int http2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
 
     // Encode headers. Zero-initialise so that analyzers can prove the
     // subsequent memcpy only reads bytes that were written by
-    // xr_hpack_encode; the cost is negligible compared to the network I/O.
+    // http2_hpack_encode; the cost is negligible compared to the network I/O.
     uint8_t headers_buf[16384] = {0};
     int headers_len = 0;
 
     for (int i = 0; i < count; i++) {
         int len =
-            xr_hpack_encode(&conn->encoder_table, names[i], name_lens[i], values[i], value_lens[i],
+            http2_hpack_encode(&conn->encoder_table, names[i], name_lens[i], values[i], value_lens[i],
                             headers_buf + headers_len, sizeof(headers_buf) - headers_len);
         if (len < 0)
             return -1;
@@ -1557,8 +1557,8 @@ XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
 
     memcpy(conn->remote_settings, conn->local_settings, sizeof(conn->remote_settings));
 
-    xr_hpack_init(&conn->encoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
-    xr_hpack_init(&conn->decoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
+    http2_hpack_init(&conn->encoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
+    http2_hpack_init(&conn->decoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
 
     // Initialize stream hash. Without this, hash->buckets is NULL and
     // both stream_hash_add() and stream_hash_find() silently no-op,
@@ -1574,8 +1574,8 @@ XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
     conn->recv_cap = 65536;
     conn->recv_buf = (char *) xr_malloc(conn->recv_cap);
     if (!conn->recv_buf) {
-        xr_hpack_free(&conn->encoder_table);
-        xr_hpack_free(&conn->decoder_table);
+        http2_hpack_free(&conn->encoder_table);
+        http2_hpack_free(&conn->decoder_table);
         xr_free(conn);
         return NULL;
     }
