@@ -105,6 +105,9 @@ YIELDABLE_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_yieldable_wait.xr"
 YIELDABLE_PIPE_READ_SRC="$PROJECT_DIR/tests/vm/sys_pipe_yieldable_read.xr"
 PROCESS_DEFER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_defer_wait.xr"
 PIPE_DEFER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_defer_close.xr"
+PROCESS_HELPER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_wait.xr"
+PIPE_HELPER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_close.xr"
+PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" \
@@ -120,6 +123,8 @@ expect_output_workers "process_yieldable_wait" "$YIELDABLE_WAIT_SRC" $'tick\n1\n
 expect_output_workers "pipe_yieldable_read" "$YIELDABLE_PIPE_READ_SRC" $'tick\n1\nread 2\n2\n0\ntrue' 1
 expect_output "process_defer_wait" "$PROCESS_DEFER_WAIT_SRC" $'process-defer\n0'
 expect_output "pipe_defer_close" "$PIPE_DEFER_CLOSE_SRC" $'pipe-defer\ntrue\ntrue'
+expect_output "process_helper_wait" "$PROCESS_HELPER_WAIT_SRC" $'helper waited 0\n0'
+expect_output "pipe_helper_close" "$PIPE_HELPER_CLOSE_SRC" $'true\ntrue\npipe-helper'
 expect_warning "process_orphan" "$PROCESS_ORPHAN_SRC" "process-orphan" \
     "sys.Process.spawn returns a Process handle; call wait() explicitly"
 expect_warning "pipe_orphan" "$PIPE_ORPHAN_SRC" "pipe-orphan" \
@@ -135,6 +140,9 @@ expect_warning "process_lifecycle_match_continue_warning" "$PROCESS_MATCH_CONTIN
 expect_warning "process_lifecycle_try_catch_warning" "$PROCESS_TRY_CATCH_WARNING_SRC" \
     $'0\ntry-catch-open' \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
+expect_warning "process_helper_early_return_warning" "$PROCESS_HELPER_EARLY_RETURN_WARNING_SRC" \
+    "process-helper-skip" \
+    "Process handle 'p0' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC" "true" \

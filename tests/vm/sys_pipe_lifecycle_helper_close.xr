@@ -1,0 +1,15 @@
+import sys
+import { Pipe } from sys
+
+fn closePipe(p: Pipe) {
+    print(p.closeRead())
+    print(p.closeWrite())
+}
+
+fn run() {
+    var pipe = sys.Pipe.open()
+    closePipe(pipe!)
+    print("pipe-helper")
+}
+
+run()

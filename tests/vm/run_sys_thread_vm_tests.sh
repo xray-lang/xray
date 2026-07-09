@@ -122,6 +122,8 @@ UNSAFE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_unsafe_join.xr"
 THREADLOCAL_BASIC_SRC="$PROJECT_DIR/tests/vm/sys_threadlocal_basic.xr"
 YIELDABLE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_yieldable_join.xr"
 DEFER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_defer_join.xr"
+HELPER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_join.xr"
+HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_early_return_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -150,6 +152,7 @@ expect_output "unsafe_join" "$UNSAFE_JOIN_SRC" "42"
 expect_output "threadlocal_basic" "$THREADLOCAL_BASIC_SRC" $'10\n20\n15\n20'
 expect_output_workers "yieldable_join" "$YIELDABLE_JOIN_SRC" $'tick\n1\njoined 7\n7' 1
 expect_output "defer_join" "$DEFER_JOIN_SRC" $'thread-defer\n42'
+expect_output "helper_join" "$HELPER_JOIN_SRC" $'helper joined 42\n42'
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \
@@ -172,6 +175,8 @@ expect_warning "loop_join_warning" "$LOOP_JOIN_WARNING_SRC" "conditional-loop" \
 expect_warning "loop_continue_warning" "$LOOP_CONTINUE_WARNING_SRC" "42" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "loop_try_continue_warning" "$LOOP_TRY_CONTINUE_WARNING_SRC" "42" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "helper_early_return_warning" "$HELPER_EARLY_RETURN_WARNING_SRC" "helper-skip" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
