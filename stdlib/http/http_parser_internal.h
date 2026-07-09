@@ -15,7 +15,6 @@
 #ifndef XR_STDLIB_HTTP_PARSER_INTERNAL_H
 #define XR_STDLIB_HTTP_PARSER_INTERNAL_H
 
-#include "../../src/base/xdefs.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -184,8 +183,8 @@ void http_parser_init(XrHttpParser *parser);
  * Parse HTTP response (auto-fill XrHttpResponse struct)
  * Uses http_parse_response_ex internally, and handles special headers
  */
-XrHttpParseResult http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
-                                      const char *data, size_t len);
+XrHttpParseResult http_parse_response(XrHttpParser *parser, XrHttpResponse *resp, const char *data,
+                                      size_t len);
 
 /*
  * Initialize response struct
