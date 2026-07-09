@@ -2454,6 +2454,52 @@ static bool prepare_func_alias_plans(XaotBundle *bundle, const XiFunc *func,
     return true;
 }
 
+static bool xaot_closure_target_can_be_direct_symbol(const XiFunc *target) {
+    return target && target->ncaptures == 0 && !xi_coro_func_is_suspendable(target, NULL);
+}
+
+static bool xaot_closure_value_uses_direct_symbol(const XiFunc *owner, const XiValue *value,
+                                                  const XiFunc *target, int depth) {
+    if (!owner || !value || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                switch ((XiOp) user->op) {
+                    case XI_CALL:
+                        if (ai != 0)
+                            return false;
+                        break;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (ai != 0 ||
+                            !xaot_closure_value_uses_direct_symbol(owner, user, target, depth + 1))
+                            return false;
+                        break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (ai != 0)
+                            return false;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiValue *value,
                                                  XaotClosurePlan *out) {
     bool stack_closure = false;
@@ -2495,6 +2541,13 @@ XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiVal
     }
 
     out->evidence |= XAOT_CLOSURE_EV_CAPTURE_ARITY;
+    if (xaot_closure_target_can_be_direct_symbol(target)) {
+        if (xaot_closure_value_uses_direct_symbol(func, value, target, 0)) {
+            out->representation = XAOT_CLOSURE_DIRECT_SYMBOL;
+            out->evidence &= ~XAOT_CLOSURE_EV_NOESCAPE_STACK;
+            out->evidence |= XAOT_CLOSURE_EV_DIRECT_SYMBOL;
+        }
+    }
     out->unproven_reason = XAOT_CLOSURE_UNPROVEN_NONE;
     return true;
 }

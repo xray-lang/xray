@@ -4681,6 +4681,8 @@ static const char *closure_representation_name(uint8_t representation) {
             return "runtime";
         case XAOT_CLOSURE_STACK:
             return "stack";
+        case XAOT_CLOSURE_DIRECT_SYMBOL:
+            return "direct_symbol";
         default:
             return "unknown";
     }
@@ -4712,6 +4714,7 @@ static void print_closure_evidence_bits(FILE *out, uint32_t bits) {
     PRINT_BIT(XAOT_CLOSURE_EV_TARGET_FUNC, "target");
     PRINT_BIT(XAOT_CLOSURE_EV_CAPTURE_ARITY, "captures");
     PRINT_BIT(XAOT_CLOSURE_EV_NOESCAPE_STACK, "noescape_stack");
+    PRINT_BIT(XAOT_CLOSURE_EV_DIRECT_SYMBOL, "direct_symbol");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT

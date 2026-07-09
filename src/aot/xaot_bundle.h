@@ -287,6 +287,7 @@ typedef struct XaotAliasPlan {
 typedef enum XaotClosureRepresentation {
     XAOT_CLOSURE_RUNTIME = 1,
     XAOT_CLOSURE_STACK = 2,
+    XAOT_CLOSURE_DIRECT_SYMBOL = 3,
 } XaotClosureRepresentation;
 
 enum {
@@ -294,6 +295,7 @@ enum {
     XAOT_CLOSURE_EV_TARGET_FUNC = 1u << 1,
     XAOT_CLOSURE_EV_CAPTURE_ARITY = 1u << 2,
     XAOT_CLOSURE_EV_NOESCAPE_STACK = 1u << 3,
+    XAOT_CLOSURE_EV_DIRECT_SYMBOL = 1u << 4,
 };
 
 enum {

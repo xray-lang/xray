@@ -1,0 +1,8 @@
+fn directClosure() -> int {
+    const f = fn() -> int {
+        return 41
+    }
+    return f() + 1
+}
+
+print(directClosure())
