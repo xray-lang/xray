@@ -84,7 +84,7 @@ typedef struct XrIterator {
     union {
         struct XrMap *map;        // Map iterator
         struct XrSet *set;        // Set iterator
-        struct XrInstance *json;  // Json iterator (XrJson is alias for XrInstance)
+        struct XrInstance *json;  // Json iterator over dynamic-layout instance storage
         struct XrArray *array;    // Array iterator
         struct XrString *string;  // String iterator
         struct XrCoroutine *gen;  // Generator: owned, pull-driven producer coroutine

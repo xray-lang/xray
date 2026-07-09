@@ -8,7 +8,7 @@
  * xjson.h - Structured data object backed by dynamic-layout XrInstance
  *
  * KEY CONCEPT:
- *   - XrJson is a thin compatibility alias over XrInstance.
+ *   - XrJson is the runtime handle name for Json-shaped XrInstance objects.
  *   - All Json objects use a dynamic-layout XrClass (V8-style hidden class).
  *   - Adding a property triggers a class transition; identical structures
  *     converge on the same descendant class.
@@ -32,11 +32,11 @@
 
 struct XrCoroutine;
 
-/* ========== Type Alias ========== */
+/* ========== Runtime Handle ========== */
 
 // Json objects are dynamic-layout XrInstance with class chains rooted at
-// core->jsonRootClass. The XrJson alias is preserved so existing call
-// sites keep compiling; new code should prefer XrInstance directly.
+// core->jsonRootClass. XrJson names that runtime contract while sharing
+// the same storage as XrInstance.
 typedef XrInstance XrJson;
 
 /* ========== Creation API ========== */
