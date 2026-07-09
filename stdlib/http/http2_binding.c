@@ -83,9 +83,10 @@ static bool ascii_ieq(const char *a, size_t a_len, const char *b) {
 }
 
 static bool h2_token_char(unsigned char c) {
-    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '!' ||
-           c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
-           c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+           c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' ||
+           c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_' ||
+           c == '`' || c == '|' || c == '~';
 }
 
 static bool h2_method_valid(const char *method, size_t len) {
@@ -132,7 +133,8 @@ static bool h2_custom_header_allowed(const XrHttpHeader *h) {
         ascii_ieq(h->name, h->name_len, "keep-alive") ||
         ascii_ieq(h->name, h->name_len, "proxy-connection") ||
         ascii_ieq(h->name, h->name_len, "transfer-encoding") ||
-        ascii_ieq(h->name, h->name_len, "upgrade") || ascii_ieq(h->name, h->name_len, "host"))
+        ascii_ieq(h->name, h->name_len, "upgrade") ||
+        ascii_ieq(h->name, h->name_len, "host"))
         return false;
 
     if (ascii_ieq(h->name, h->name_len, "te") && !ascii_ieq(h->value, h->value_len, "trailers"))
