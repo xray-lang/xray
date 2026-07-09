@@ -184,7 +184,7 @@ static bool should_connect(XrCluster *c, const char *name) {
         return false;
 
     // Don't connect if node is in tombstone
-    if (xr_cluster_is_dead(c, name))
+    if (cluster_health_is_dead(c, name))
         return false;
 
     // Don't connect if already connected

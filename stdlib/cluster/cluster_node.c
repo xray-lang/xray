@@ -626,7 +626,7 @@ void xr_cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
  *     stopped (c->running cleared).
  *   - Cleanup of the node (remove from cluster list, mark dead, fire
  *     monitors, free struct) happens in the heartbeat thread's
- *     xr_cluster_check_heartbeats path when phi/missed-heartbeat
+ *     cluster_health_check_heartbeats path when phi/missed-heartbeat
  *     thresholds trip. That thread already owns the removal lock
  *     discipline; duplicating it in the reader would race against
  *     writer_running teardown.
