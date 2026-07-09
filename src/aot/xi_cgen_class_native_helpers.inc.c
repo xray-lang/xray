@@ -674,6 +674,85 @@ static void cg_emit_local_map_recv(FILE *out, const XiValue *recv) {
     fprintf(out, ").ptr)");
 }
 
+static bool cg_key_access_plan_is_prehashed_lookup(const XaotKeyAccessPlan *plan) {
+    return plan && plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP && plan->key_prehash != 0;
+}
+
+static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux || !v->args[0] ||
+        !v->args[0]->type || v->args[0]->type->kind != XR_KIND_MAP ||
+        cg_rep(v->args[0]) != XR_REP_TAGGED)
+        return false;
+    const XiValue *recv = v->args[0];
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    if (nargs == 0 && strcmp(method, "clear") == 0) {
+        const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
+            ctx, v, XG_MAP_CONTAINER_MAP, XG_KEY_ACCESS_CLEAR, "Map.clear");
+        if (!cg_key_access_plan_action_has_backend(ctx, key_plan, v, "Map.clear") &&
+            emit_key_access_abort_expr_if_needed(ctx, out))
+            return true;
+        if (emit_key_access_abort_expr_if_needed(ctx, out))
+            return true;
+        if (!key_plan)
+            return false;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_map_clear(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    uint8_t op = 0;
+    if (!cg_key_access_method_op(XG_MAP_CONTAINER_MAP, method, nargs, &op))
+        return false;
+    const XaotKeyAccessPlan *key_plan =
+        cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_MAP, op, method);
+    if (emit_key_access_abort_expr_if_needed(ctx, out))
+        return true;
+    if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
+        return false;
+
+    if (op == XG_KEY_ACCESS_GET) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_map_get_prehashed_owned(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) key_plan->key_prehash);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+        const char *helper =
+            op == XG_KEY_ACCESS_HAS ? "xrt_map_has_prehashed" : "xrt_map_delete_prehashed";
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) key_plan->key_prehash);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_SET && nargs == 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_map_set_prehashed(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 ")), XR_NULL_VAL)",
+                (uint32_t) key_plan->key_prehash);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
+}
+
 /* A map method receiver that is a local/param boxed value (not a class field)
  * whose static type is a native-direct Map. Such receivers otherwise fall back
  * to boxed generic xrt_method dispatch (plus a per-call pending-error check);
@@ -1192,6 +1271,69 @@ static void cg_emit_local_set_recv(FILE *out, const XiValue *recv) {
     fprintf(out, "((xrt_set_t *)(");
     emit_value_as_rep(out, recv, XR_REP_TAGGED);
     fprintf(out, ").ptr)");
+}
+
+static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux || !v->args[0] ||
+        !v->args[0]->type || v->args[0]->type->kind != XR_KIND_SET ||
+        cg_rep(v->args[0]) != XR_REP_TAGGED)
+        return false;
+    const XiValue *recv = v->args[0];
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    if (nargs == 0 && strcmp(method, "clear") == 0) {
+        const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
+            ctx, v, XG_MAP_CONTAINER_SET, XG_KEY_ACCESS_CLEAR, "Set.clear");
+        if (!cg_key_access_plan_action_has_backend(ctx, key_plan, v, "Set.clear") &&
+            emit_key_access_abort_expr_if_needed(ctx, out))
+            return true;
+        if (emit_key_access_abort_expr_if_needed(ctx, out))
+            return true;
+        if (!key_plan)
+            return false;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_set_clear(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    uint8_t op = 0;
+    if (!cg_key_access_method_op(XG_MAP_CONTAINER_SET, method, nargs, &op))
+        return false;
+    const XaotKeyAccessPlan *key_plan =
+        cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_SET, op, method);
+    if (emit_key_access_abort_expr_if_needed(ctx, out))
+        return true;
+    if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
+        return false;
+
+    if (op == XG_KEY_ACCESS_ADD) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_set_add_prehashed(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 ")), XR_NULL_VAL)",
+                (uint32_t) key_plan->key_prehash);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+        const char *helper =
+            op == XG_KEY_ACCESS_HAS ? "xrt_set_has_prehashed" : "xrt_set_delete_prehashed";
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) key_plan->key_prehash);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
 }
 
 /* A set method receiver that is a local/param boxed value (not a class field)

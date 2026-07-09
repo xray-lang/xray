@@ -1832,6 +1832,12 @@ static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     return xrt_map_find_entry(m, key, xrt_hash32_value(key), xrt_value_type_tag(key)) >= 0;
 }
 
+static inline int xrt_map_has_prehashed(xrt_map_t *m, XrValue key, uint32_t hash) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_has(m, key);
+    return xrt_map_find_entry(m, key, hash, xrt_value_type_tag(key)) >= 0;
+}
+
 static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_delete_v((xrt_boolmap_t *) m, key);
@@ -1839,6 +1845,27 @@ static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
         return xrt_map_delete_typed(m, key);
     uint8_t key_tt = xrt_value_type_tag(key);
     uint32_t hash = xrt_hash32_value(key);
+    int32_t eidx = -1;
+    uint32_t slot = xrt_map_find_entry_slot(m, key, hash, key_tt, &eidx);
+    if (slot == UINT32_MAX)
+        return 0;
+    m->entries[eidx].key_tt = XR_MAP_ENTRY_NIL_KEY;
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        xrt_release(m->entries[eidx].key);
+        xrt_release(m->entries[eidx].value);
+    }
+    m->entries[eidx].key = XR_NULL_VAL;
+    m->entries[eidx].value = XR_NULL_VAL;
+    m->indices[slot] = XR_MAP_IX_EMPTY;
+    xr_swiss_ctrl_set(m->ctrl, m->indices_size, slot, XR_SWISS_CTRL_DELETED);
+    m->count--;
+    return 1;
+}
+
+static inline int xrt_map_delete_prehashed(xrt_map_t *m, XrValue key, uint32_t hash) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_delete(m, key);
+    uint8_t key_tt = xrt_value_type_tag(key);
     int32_t eidx = -1;
     uint32_t slot = xrt_map_find_entry_slot(m, key, hash, key_tt, &eidx);
     if (slot == UINT32_MAX)
@@ -2305,6 +2332,12 @@ static inline int xrt_set_has(xrt_set_t *s, XrValue value) {
     return xrt_set_find_value(s, value) >= 0;
 }
 
+static inline int xrt_set_has_prehashed(xrt_set_t *s, XrValue value, uint32_t hash) {
+    if (!xrt_set_is_typed(s))
+        return xrt_set_find_entry(s, value, hash) >= 0;
+    return xrt_set_has(s, value);
+}
+
 static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
@@ -2333,6 +2366,28 @@ static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
     return 1;
 }
 
+static inline int xrt_set_add_prehashed(xrt_set_t *s, XrValue value, uint32_t hash) {
+    if (xrt_set_is_typed(s))
+        return xrt_set_add(s, value);
+    if (xrt_set_find_entry(s, value, hash) >= 0) {
+        if (!(s->flags & XR_SET_FLAG_WEAK))
+            xrt_release(value);
+        return 0;
+    }
+    if (s->nentries >= s->entries_cap)
+        xrt_set_resize_tagged(s, s->count + 1);
+    if (!(s->flags & XR_SET_FLAG_WEAK) && XR_IS_ARRAY_REF(value))
+        value = xrt_value_to_owned(value);
+    int32_t eidx = (int32_t) s->nentries++;
+    XrSetEntry *entry = &s->entries[eidx];
+    entry->value = value;
+    entry->hash = hash;
+    entry->val_tt = xrt_value_type_tag(value);
+    s->count++;
+    xr_swiss_indices_put(s->ctrl, s->indices, s->indices_size, hash, eidx);
+    return 1;
+}
+
 static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
@@ -2353,6 +2408,23 @@ static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
     if (slot < 0)
         return 0;
     xrt_set_erase_slot(s, slot);
+    return 1;
+}
+
+static inline int xrt_set_delete_prehashed(xrt_set_t *s, XrValue value, uint32_t hash) {
+    if (xrt_set_is_typed(s))
+        return xrt_set_delete(s, value);
+    int32_t eidx = -1;
+    uint32_t slot = xrt_set_find_entry_slot(s, value, hash, &eidx);
+    if (slot == UINT32_MAX)
+        return 0;
+    if (!(s->flags & XR_SET_FLAG_WEAK))
+        xrt_release(s->entries[eidx].value);
+    s->entries[eidx].value = XR_NULL_VAL;
+    s->entries[eidx].val_tt = XR_SET_ENTRY_NIL;
+    s->indices[slot] = XR_SET_IX_EMPTY;
+    xr_swiss_ctrl_set(s->ctrl, s->indices_size, slot, XR_SWISS_CTRL_DELETED);
+    s->count--;
     return 1;
 }
 

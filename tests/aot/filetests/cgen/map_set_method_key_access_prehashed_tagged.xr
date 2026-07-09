@@ -1,0 +1,23 @@
+fn methodTagged() -> int {
+    var scores: Map<string, int> = #{}
+    scores.set("ada", 8)
+    var hasAda = scores.has("ada")
+    var one = scores.get("ada")
+    scores.delete("ada")
+    scores.clear()
+
+    var seen: Set<string> = #[]
+    seen.add("ada")
+    var sawAda = seen.has("ada")
+    seen.delete("ada")
+    seen.clear()
+
+    if (hasAda) {
+        if (sawAda) {
+            return one
+        }
+    }
+    return 0
+}
+
+print(methodTagged())
