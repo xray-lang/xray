@@ -15,7 +15,7 @@
  *   - Complete Chunked encoding decoder
  */
 
-#include "http_parser.h"
+#include "http_parser_internal.h"
 #include "../../src/base/xsimd.h"
 #include <string.h>
 #include <ctype.h>

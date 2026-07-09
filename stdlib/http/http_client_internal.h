@@ -16,7 +16,7 @@
 #define XR_STDLIB_HTTP_CLIENT_INTERNAL_H
 
 #include "../../src/base/xdefs.h"
-#include "http_parser.h"
+#include "http_parser_internal.h"
 #include "../net/xneterror.h"
 #include <stdbool.h>
 
