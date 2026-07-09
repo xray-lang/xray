@@ -226,6 +226,26 @@ expect_log_not_contains() {
     fi
 }
 
+expect_freestanding_reject() {
+    local src="$1"
+    local out="$2"
+    local log="$3"
+    local name="$4"
+    shift 4
+
+    if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+            --cache-dir "$BUILD_CACHE" -o "$out" "$src" >"$log" 2>&1; then
+        record_fail "$name"
+        sed 's/^/      /' "$log" | sed -n '1,120p'
+        return
+    fi
+
+    local needle
+    for needle in "$@"; do
+        expect_log_contains "$log" "$needle" "$name: contains '$needle'"
+    done
+}
+
 expect_output() {
     local bin="$1"
     local want="$2"
@@ -2397,6 +2417,109 @@ else
         "freestanding profile rejects top-level const declaration" \
         "freestanding-profile: rejects top-level const declarations"
 fi
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_reject.xr" \
+    "$WORK/freestanding_top_var_reject" \
+    "$WORK/freestanding_top_var_reject.log" \
+    "freestanding-profile: rejects top-level var declarations" \
+    "freestanding profile rejects top-level var declaration" \
+    "module storage still requires constructor initialization"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \
+    "$WORK/freestanding_rawptr_of_local_reject" \
+    "$WORK/freestanding_rawptr_of_local_reject.log" \
+    "freestanding-profile/static-address: rejects local RawPtr.of" \
+    "RawPtr.of can only take the name of a top-level const static object"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_import_nonweak_reject.xr" \
+    "$WORK/freestanding_rawptr_of_import_nonweak_reject" \
+    "$WORK/freestanding_rawptr_of_import_nonweak_reject.log" \
+    "freestanding-profile/static-address: rejects imported non-weak RawPtr.of" \
+    "requires @weak for cross-module data access"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_static_reject.xr" \
+    "$WORK/freestanding_rawmut_of_static_reject" \
+    "$WORK/freestanding_rawmut_of_static_reject.log" \
+    "freestanding-profile/static-address: rejects RawMut.of static const" \
+    "RawMut.of is not supported for static const data"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_heap_constructs_reject.xr" \
+    "$WORK/freestanding_heap_constructs_reject" \
+    "$WORK/freestanding_heap_constructs_reject.log" \
+    "freestanding-profile: rejects hosted heap constructs aggregate" \
+    "freestanding profile rejects Map literal" \
+    "dynamic containers require hosted allocation" \
+    "freestanding profile rejects Set literal" \
+    "freestanding profile rejects object literal" \
+    "use a declared struct literal for fixed layout data" \
+    "freestanding profile rejects regex literal" \
+    "freestanding profile rejects BigInt literal" \
+    "freestanding profile rejects anonymous function/closure" \
+    "use a top-level function symbol" \
+    "freestanding profile rejects string concatenation" \
+    "use static string literals or write into an explicit user buffer" \
+    "freestanding profile rejects class construction" \
+    "use structs or explicit raw-memory APIs in this profile"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_float_reject.xr" \
+    "$WORK/freestanding_math_float_reject" \
+    "$WORK/freestanding_math_float_reject.log" \
+    "freestanding-profile/math: rejects float min/clamp" \
+    "freestanding profile rejects math.min" \
+    "freestanding profile rejects math.clamp" \
+    "int-only min/max/clamp"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_free_removed.xr" \
+    "$WORK/freestanding_mem_free_removed" \
+    "$WORK/freestanding_mem_free_removed.log" \
+    "freestanding-profile/mem: rejects removed mem.free" \
+    "stdlib module 'mem' has no member 'free'"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_free_selective_removed.xr" \
+    "$WORK/freestanding_mem_free_selective_removed" \
+    "$WORK/freestanding_mem_free_selective_removed.log" \
+    "freestanding-profile/mem: rejects removed selective free import" \
+    "stdlib module 'mem' has no member 'free'"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_method_reject.xr" \
+    "$WORK/freestanding_enum_method_reject" \
+    "$WORK/freestanding_enum_method_reject.log" \
+    "freestanding-profile/enum: rejects enum methods" \
+    "freestanding profile rejects enum methods" \
+    "freestanding enums support static variants only"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_name_reject.xr" \
+    "$WORK/freestanding_enum_name_reject" \
+    "$WORK/freestanding_enum_name_reject.log" \
+    "freestanding-profile/enum: rejects enum.name" \
+    "freestanding profile rejects enum.name" \
+    "use ordinal or match in freestanding code"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_tostring_reject.xr" \
+    "$WORK/freestanding_enum_tostring_reject" \
+    "$WORK/freestanding_enum_tostring_reject.log" \
+    "freestanding-profile/enum: rejects enum.toString" \
+    "freestanding profile rejects enum.toString" \
+    "use ordinal or match in freestanding code"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_payload_untyped_catch_reject.xr" \
+    "$WORK/freestanding_enum_payload_untyped_catch_reject" \
+    "$WORK/freestanding_enum_payload_untyped_catch_reject.log" \
+    "freestanding-profile/enum: rejects untyped payload enum catch" \
+    "freestanding profile requires a single typed catch for payload enum error FsErr" \
+    "write catch (e: ThatEnum)"
 
 FREESTANDING_ARRAY_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_array_reject.xr"
 FREESTANDING_ARRAY_LOG="$WORK/freestanding_array_reject.log"
