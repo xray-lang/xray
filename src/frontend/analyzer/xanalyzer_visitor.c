@@ -83,31 +83,40 @@ static void xa_warn_discarded_sys_thread_spawn(XaInferContext *ctx, AstNode *exp
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, message, &loc);
 }
 
-static bool xa_process_options_ctor_detached_literal(AstNode *expr) {
-    if (!expr || expr->type != AST_CALL_EXPR)
-        return false;
-    CallExprNode *call = &expr->as.call_expr;
-    AstNode *callee = call->callee;
-    bool is_options = false;
-    if (callee && callee->type == AST_VARIABLE && callee->as.variable.name &&
-        strcmp(callee->as.variable.name, "ProcessOptions") == 0) {
-        is_options = true;
-    } else if (callee && callee->type == AST_MEMBER_ACCESS) {
-        MemberAccessNode *ma = &callee->as.member_access;
-        is_options = ma->name && strcmp(ma->name, "ProcessOptions") == 0 && ma->object &&
-                     ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
-                     strcmp(ma->object->as.variable.name, "sys") == 0;
-    }
-    if (!is_options || call->arg_count < 6 || !call->arguments[5])
-        return false;
-    return call->arguments[5]->type == AST_LITERAL_TRUE;
+static AstNode *xa_discard_lint_unwrap_expr(AstNode *expr) {
+    while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP))
+        expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.unary.operand;
+    return expr;
 }
 
-static bool xa_process_spawn_detached_literal(AstNode *expr) {
-    if (!expr || expr->type != AST_CALL_EXPR)
+static bool xa_process_options_expr_has_detached_literal(AstNode *expr) {
+    expr = xa_discard_lint_unwrap_expr(expr);
+    if (!expr)
         return false;
-    CallExprNode *call = &expr->as.call_expr;
-    return call->arg_count >= 3 && xa_process_options_ctor_detached_literal(call->arguments[2]);
+    AstNode **args = NULL;
+    int arg_count = 0;
+    if (expr->type == AST_CALL_EXPR) {
+        args = expr->as.call_expr.arguments;
+        arg_count = expr->as.call_expr.arg_count;
+    } else if (expr->type == AST_NEW_EXPR) {
+        args = expr->as.new_expr.arguments;
+        arg_count = expr->as.new_expr.arg_count;
+    }
+    if (!args || arg_count < 6 || !args[5])
+        return false;
+    AstNode *detached = xa_discard_lint_unwrap_expr(args[5]);
+    return detached && detached->type == AST_LITERAL_TRUE;
+}
+
+static bool xa_process_spawn_discard_is_detached(XaInferContext *ctx, CallExprNode *call) {
+    if (!ctx || !ctx->analyzer || !call || call->arg_count < 3)
+        return false;
+    AstNode *options = xa_discard_lint_unwrap_expr(call->arguments[2]);
+    if (!xa_process_options_expr_has_detached_literal(options))
+        return false;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, options);
+    const char *type_name = type ? xr_type_get_class_name(type) : NULL;
+    return type_name && strcmp(type_name, "ProcessOptions") == 0;
 }
 
 static bool xa_expr_is_sys_os_resource_factory_call(AstNode *expr, const char **factory_name,
@@ -128,8 +137,6 @@ static bool xa_expr_is_sys_os_resource_factory_call(AstNode *expr, const char **
     if (!module_name || strcmp(module_name, "sys") != 0)
         return false;
     if (strcmp(owner->name, "Process") == 0 && strcmp(method->name, "spawn") == 0) {
-        if (xa_process_spawn_detached_literal(expr))
-            return false;
         if (factory_name)
             *factory_name = "sys.Process.spawn";
         if (type_name)
@@ -156,6 +163,10 @@ static void xa_warn_discarded_sys_os_resource_factory(XaInferContext *ctx, AstNo
     const char *close_method = NULL;
     if (!ctx || !expr ||
         !xa_expr_is_sys_os_resource_factory_call(expr, &factory_name, &type_name, &close_method))
+        return;
+    if (factory_name && strcmp(factory_name, "sys.Process.spawn") == 0 &&
+        expr->type == AST_CALL_EXPR &&
+        xa_process_spawn_discard_is_detached(ctx, &expr->as.call_expr))
         return;
 
     char message[192];

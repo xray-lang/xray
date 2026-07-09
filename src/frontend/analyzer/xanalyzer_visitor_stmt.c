@@ -1377,6 +1377,42 @@ static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintSt
     return false;
 }
 
+static void xa_thread_lint_scan_defer_expr(XaThreadHandleLintState *states, AstNode *expr,
+                                           bool can_escape) {
+    if (!states || !expr || !can_escape)
+        return;
+
+    int state_count = xa_thread_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+    size_t snapshot_size = sizeof(XaThreadHandleLintSnapshot) * (size_t) state_count;
+    XaThreadHandleLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *after = xr_calloc(1, snapshot_size);
+    if (!before || !after) {
+        xr_free(before);
+        xr_free(after);
+        return;
+    }
+
+    xa_thread_lint_snapshot_states(states, before);
+    AstNode *deferred = xa_thread_lint_unwrap_expr(expr);
+    if (deferred && deferred->type == AST_FUNCTION_EXPR)
+        xa_thread_lint_scan_stmt(states, deferred->as.function_expr.body, true);
+    else
+        xa_thread_lint_scan_expr(states, deferred, false, true);
+    xa_thread_lint_snapshot_states(states, after);
+
+    xa_thread_lint_restore_states(states, before);
+    int i = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        if (!xa_thread_lint_snapshot_closed(&before[i]) && after[i].finalized)
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(after);
+}
+
 static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
                                      bool can_escape) {
     if (!stmt)
@@ -1473,7 +1509,7 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_expr(states, stmt->as.throw_stmt.expression, false, can_escape);
             return;
         case AST_DEFER_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.defer_stmt.expr, false, can_escape);
+            xa_thread_lint_scan_defer_expr(states, stmt->as.defer_stmt.expr, can_escape);
             return;
         case AST_SCOPE_BLOCK:
             xa_thread_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
@@ -1675,9 +1711,45 @@ static bool xa_member_path_is_sys_resource_namespace(AstNode *expr, const char *
            strcmp(ns->as.variable.name, "sys") == 0;
 }
 
-static bool xa_process_options_ctor_detached_literal(AstNode *expr) {
+static bool xa_process_options_arg_detached_literal(AstNode **args, int arg_count) {
+    if (arg_count < 6 || !args || !args[5])
+        return false;
+    AstNode *detached = xa_thread_lint_unwrap_expr(args[5]);
+    return detached && detached->type == AST_LITERAL_TRUE;
+}
+
+static bool xa_process_options_expr_has_detached_literal(AstNode *expr) {
     expr = xa_thread_lint_unwrap_expr(expr);
-    if (!expr || expr->type != AST_CALL_EXPR)
+    if (!expr)
+        return false;
+
+    if (expr->type == AST_NEW_EXPR)
+        return xa_process_options_arg_detached_literal(expr->as.new_expr.arguments,
+                                                       expr->as.new_expr.arg_count);
+    if (expr->type == AST_CALL_EXPR)
+        return xa_process_options_arg_detached_literal(expr->as.call_expr.arguments,
+                                                       expr->as.call_expr.arg_count);
+    return false;
+}
+
+static bool xa_process_options_ctor_detached_literal(XaInferContext *ctx, AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || !xa_process_options_expr_has_detached_literal(expr))
+        return false;
+
+    XrType *expr_type =
+        (ctx && ctx->analyzer) ? xa_analyzer_get_node_type(ctx->analyzer, expr) : NULL;
+    const char *type_name = expr_type ? xr_type_get_class_name(expr_type) : NULL;
+    if (type_name && strcmp(type_name, "ProcessOptions") == 0)
+        return true;
+
+    if (expr->type == AST_NEW_EXPR) {
+        NewExprNode *ne = &expr->as.new_expr;
+        return ne->class_name && strcmp(ne->class_name, "ProcessOptions") == 0 &&
+               (!ne->module_name || strcmp(ne->module_name, "sys") == 0);
+    }
+
+    if (expr->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &expr->as.call_expr;
     AstNode *callee = xa_thread_lint_unwrap_expr(call->callee);
@@ -1692,21 +1764,20 @@ static bool xa_process_options_ctor_detached_literal(AstNode *expr) {
                      ns->type == AST_VARIABLE && ns->as.variable.name &&
                      strcmp(ns->as.variable.name, "sys") == 0;
     }
-    if (!is_options || call->arg_count < 6 || !call->arguments[5])
-        return false;
-    AstNode *detached = xa_thread_lint_unwrap_expr(call->arguments[5]);
-    return detached && detached->type == AST_LITERAL_TRUE;
+    return is_options;
 }
 
-static bool xa_process_spawn_detached_literal(AstNode *expr) {
+static bool xa_process_spawn_detached_literal(XaInferContext *ctx, AstNode *expr) {
     expr = xa_thread_lint_unwrap_expr(expr);
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &expr->as.call_expr;
-    return call->arg_count >= 3 && xa_process_options_ctor_detached_literal(call->arguments[2]);
+    return call->arg_count >= 3 &&
+           xa_process_options_ctor_detached_literal(ctx, call->arguments[2]);
 }
 
-static bool xa_expr_is_sys_os_resource_open_call(AstNode *expr, XaOsResourceKind *kind_out) {
+static bool xa_expr_is_sys_os_resource_open_call(XaInferContext *ctx, AstNode *expr,
+                                                 XaOsResourceKind *kind_out) {
     expr = xa_thread_lint_unwrap_expr(expr);
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
@@ -1717,7 +1788,7 @@ static bool xa_expr_is_sys_os_resource_open_call(AstNode *expr, XaOsResourceKind
     MemberAccessNode *ma = &callee->as.member_access;
     if (ma->name && strcmp(ma->name, "spawn") == 0 &&
         xa_member_path_is_sys_resource_namespace(ma->object, "Process")) {
-        if (xa_process_spawn_detached_literal(expr))
+        if (xa_process_spawn_detached_literal(ctx, expr))
             return false;
         if (kind_out)
             *kind_out = XA_OS_RESOURCE_PROCESS;
@@ -2119,6 +2190,48 @@ static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLin
     xr_free(before);
     xr_free(after);
     return false;
+}
+
+static void xa_os_resource_lint_scan_defer_expr(XaOsResourceLintState *states, AstNode *expr,
+                                                bool can_escape) {
+    if (!states || !expr || !can_escape)
+        return;
+
+    int state_count = xa_os_resource_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+    size_t snapshot_size = sizeof(XaOsResourceLintSnapshot) * (size_t) state_count;
+    XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *after = xr_calloc(1, snapshot_size);
+    if (!before || !after) {
+        xr_free(before);
+        xr_free(after);
+        return;
+    }
+
+    xa_os_resource_lint_snapshot_states(states, before);
+    AstNode *deferred = xa_thread_lint_unwrap_expr(expr);
+    if (deferred && deferred->type == AST_FUNCTION_EXPR)
+        xa_os_resource_lint_scan_stmt(states, deferred->as.function_expr.body, true);
+    else
+        xa_os_resource_lint_scan_expr(states, deferred, false, true);
+    xa_os_resource_lint_snapshot_states(states, after);
+
+    xa_os_resource_lint_restore_states(states, before);
+    int i = 0;
+    for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
+        if (after[i].pipe_read_closed)
+            s->pipe_read_closed = true;
+        if (after[i].pipe_write_closed)
+            s->pipe_write_closed = true;
+        if (!xa_os_resource_lint_snapshot_closed(&before[i]) && after[i].finalized)
+            s->finalized = true;
+        if (s->kind == XA_OS_RESOURCE_PIPE && s->pipe_read_closed && s->pipe_write_closed)
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(after);
 }
 
 static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode *expr,
@@ -2794,7 +2907,7 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_stmt(states, stmt->as.select_case.body, can_escape);
             return;
         case AST_DEFER_STMT:
-            xa_os_resource_lint_scan_expr(states, stmt->as.defer_stmt.expr, false, can_escape);
+            xa_os_resource_lint_scan_defer_expr(states, stmt->as.defer_stmt.expr, can_escape);
             return;
         case AST_SCOPE_BLOCK:
             xa_os_resource_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
@@ -2821,7 +2934,7 @@ static XaOsResourceLintState *xa_os_resource_lint_collect_states(XaInferContext 
         VarDeclNode *var = &stmt->as.var_decl;
         XaOsResourceKind kind = XA_OS_RESOURCE_PROCESS;
         if (!var->name || !var->initializer ||
-            !xa_expr_is_sys_os_resource_open_call(var->initializer, &kind))
+            !xa_expr_is_sys_os_resource_open_call(ctx, var->initializer, &kind))
             continue;
         XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
         if (!xa_symbol_is_local_os_resource_handle(sym, ctx->analyzer->current_scope, kind))
@@ -2847,7 +2960,7 @@ static void xa_warn_unused_os_resource_decl(XaInferContext *ctx, AstNode *stmt) 
     VarDeclNode *var = &stmt->as.var_decl;
     XaOsResourceKind kind = XA_OS_RESOURCE_PROCESS;
     if (!var->name || !var->initializer ||
-        !xa_expr_is_sys_os_resource_open_call(var->initializer, &kind))
+        !xa_expr_is_sys_os_resource_open_call(ctx, var->initializer, &kind))
         return;
 
     XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);

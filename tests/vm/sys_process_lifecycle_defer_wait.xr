@@ -1,0 +1,16 @@
+import sys
+
+fn run() {
+    var p0 = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (p0 == null) {
+        print("spawn-failed")
+        return
+    }
+    var p = p0!
+    defer {
+        print(p.wait())
+    }
+    print("process-defer")
+}
+
+run()

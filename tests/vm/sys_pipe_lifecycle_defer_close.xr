@@ -1,0 +1,12 @@
+import sys
+
+fn run() {
+    var pipe = sys.Pipe.open()
+    defer {
+        print(pipe!.closeRead())
+        print(pipe!.closeWrite())
+    }
+    print("pipe-defer")
+}
+
+run()
