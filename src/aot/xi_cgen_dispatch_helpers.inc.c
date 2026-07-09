@@ -5097,6 +5097,36 @@ static bool xicgen_runtime_method_plan_allows_helper(XiCgenCtx *ctx, FILE *out, 
     return true;
 }
 
+static bool xicgen_key_access_runtime_method_preflight(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                       const char *method, uint16_t nargs) {
+    if (!v || v->xg_key_access_id == 0)
+        return true;
+    uint8_t container_kind = 0;
+    uint8_t op = 0;
+    const XrType *recv_type = v->nargs >= 1 && v->args[0] ? v->args[0]->type : NULL;
+    if (recv_type && recv_type->kind == XR_KIND_MAP)
+        container_kind = XG_MAP_CONTAINER_MAP;
+    else if (recv_type && recv_type->kind == XR_KIND_SET)
+        container_kind = XG_MAP_CONTAINER_SET;
+    if (container_kind == 0 || !cg_key_access_method_op(container_kind, method, nargs, &op)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: key-access id %u is attached to unsupported runtime method "
+                "'%s' at line %u\n",
+                v->xg_key_access_id, method ? method : "?", (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    const XaotKeyAccessPlan *plan =
+        cg_verified_key_access_plan(ctx, v, container_kind, op, method ? method : "Map/Set");
+    if (!cg_key_access_plan_action_has_backend(ctx, plan, v, method ? method : "Map/Set") ||
+        (ctx && ctx->error)) {
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    return true;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs,
                                        const XaotMethodDispatchPlan *dispatch_plan) {
@@ -5160,13 +5190,31 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     if (emit_class_native_map_method_call_expr(ctx, out, f, v))
         return;
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_class_native_set_method_call_expr(ctx, out, f, v))
         return;
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_class_native_array_method_call_expr(ctx, out, f, v))
         return;
     if (emit_local_typed_map_method_call_expr(ctx, out, f, v))
         return;
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_local_typed_set_method_call_expr(ctx, out, f, v))
+        return;
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (!xicgen_key_access_runtime_method_preflight(ctx, out, v, method, nargs))
         return;
     if (!xicgen_runtime_method_plan_allows_helper(ctx, out, v, method, nargs, dispatch_plan))
         return;
@@ -6373,9 +6421,22 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
 }
 
+static bool xicgen_verify_key_access_plan(XiCgenCtx *ctx, const XiValue *v, uint8_t expected_op) {
+    if (!v || v->xg_key_access_id == 0)
+        return true;
+    const char *site = expected_op == XG_KEY_ACCESS_INDEX_GET ? "Map.index_get" : "Map.index_set";
+    const XaotKeyAccessPlan *plan =
+        cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_MAP, expected_op, site);
+    return cg_key_access_plan_action_has_backend(ctx, plan, v, site) && (!ctx || !ctx->error);
+}
+
 static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
+    if (!xicgen_verify_key_access_plan(ctx, v, XG_KEY_ACCESS_INDEX_GET)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
         emit_fixed_array_index_get_expr(ctx, out, f, v) ||
         emit_span_index_get_expr(ctx, out, f, v) ||
@@ -6395,6 +6456,10 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 3, "xicgen_index_set: need obj, key, and value");
+    if (!xicgen_verify_key_access_plan(ctx, v, XG_KEY_ACCESS_SET)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
         return;
     if (emit_fixed_array_index_set_expr(ctx, out, f, v))

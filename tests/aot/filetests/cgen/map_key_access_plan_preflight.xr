@@ -1,0 +1,7 @@
+fn updateScore() -> int {
+    var scores = #{"ada": 7, "lin": 9}
+    scores["ada"] = 8
+    return scores["ada"]
+}
+
+print(updateScore())
