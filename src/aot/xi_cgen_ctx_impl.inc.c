@@ -67,6 +67,8 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     for (int i = 0; i < ctx->nno_alloc_detail_strings; i++)
         xr_free(ctx->no_alloc_detail_strings[i]);
     xr_free(ctx->no_alloc_detail_strings);
+    xr_free(ctx->func_reach_memo);
+    xr_free(ctx->shared_slot_reach_memo);
     xr_free(ctx);
 }
 

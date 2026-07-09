@@ -1120,6 +1120,11 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
             fprintf(out, "XR_NULL_VAL");
             return;
         }
+        if (cg_closure_new_value_can_emit_null_for_unreachable_body(ctx, current, v, child, 0)) {
+            fprintf(out, "XR_NULL_VAL /* unreachable closure: %s */",
+                    child->name ? child->name : "?");
+            return;
+        }
         if (cg_func_needs_aot_coro_ctx(ctx, child) &&
             !cg_aot_coro_closure_has_only_supported_uses(ctx, current, v, child, 0)) {
             ctx->error = true;

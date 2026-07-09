@@ -478,6 +478,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     XiModule *single_module[1] = {module};
     ctx->all_modules = single_module;
     ctx->all_nmodules = 1;
+    cg_reachability_cache_clear(ctx);
     cg_no_alloc_summaries_invalidate(ctx);
     ctx->nshared_native_exports = 0;
     if (ctx->shared_native_exports)
@@ -604,6 +605,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     ctx->all_modules = modules;
     ctx->all_nmodules = nmodules;
+    cg_reachability_cache_clear(ctx);
     cg_no_alloc_summaries_invalidate(ctx);
     ctx->extern_linkage = true;
     /* Internal (non-exported) functions take a per-module ordinal suffix, so
