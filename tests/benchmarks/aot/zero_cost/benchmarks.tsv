@@ -9,3 +9,5 @@ json_computed_key_guard|json_shape/computed_key_guard_loop.xr|1
 json_open_shape_guard|json_shape/open_shape_guard_loop.xr|1
 map_static_key|map_set/static_key_prehash_loop.xr|20000
 map_dynamic_key|map_set/dynamic_key_lookup_loop.xr|20000
+map_dense_int|map_set/dense_int_lookup_loop.xr|520000
+map_user_hash_eq|map_set/user_hash_eq_loop.xr|1980000

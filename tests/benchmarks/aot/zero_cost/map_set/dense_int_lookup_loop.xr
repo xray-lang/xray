@@ -1,0 +1,18 @@
+fn run(n: int) -> int {
+    var scores = #{0: 10, 1: 11, 2: 12, 3: 13, 4: 14}
+    var seen: Set<int> = #[0, 1, 2, 3, 4]
+
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        if (scores.has(3)) {
+            if (seen.has(1)) {
+                sum = sum + scores.get(4) + scores[2]
+            }
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(20000))
