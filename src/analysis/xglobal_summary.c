@@ -1366,6 +1366,162 @@ XR_FUNC bool xg_evidence_cache_key_parse(const char *text, XgEvidenceCacheKey *o
     return true;
 }
 
+static bool evidence_cache_phase_index(uint32_t phase, uint32_t *out_index) {
+    switch ((XgEvidenceCachePhase) phase) {
+        case XG_EVIDENCE_CACHE_DECLARATIONS:
+        case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
+        case XG_EVIDENCE_CACHE_BODY_SUMMARY:
+        case XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE:
+            if (out_index)
+                *out_index = phase - 1;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint32_t evidence_cache_phase_bit(uint32_t phase) {
+    uint32_t index = 0;
+    if (!evidence_cache_phase_index(phase, &index))
+        return 0;
+    return 1u << index;
+}
+
+static uint32_t evidence_cache_all_phase_mask(void) {
+    return (1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u;
+}
+
+XR_FUNC XgEvidenceCacheManifest
+xg_global_evidence_cache_manifest(const XgGlobalEvidence *evidence) {
+    static const uint32_t phases[] = {
+        XG_EVIDENCE_CACHE_DECLARATIONS,
+        XG_EVIDENCE_CACHE_SEMANTIC_GRAPH,
+        XG_EVIDENCE_CACHE_BODY_SUMMARY,
+        XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
+    };
+    XgEvidenceCacheManifest manifest;
+    memset(&manifest, 0, sizeof(manifest));
+    if (!evidence)
+        return manifest;
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+        manifest.keys[i] = xg_global_evidence_cache_key(evidence, phases[i]);
+        manifest.phase_mask |= 1u << i;
+    }
+    return manifest;
+}
+
+XR_FUNC const XgEvidenceCacheKey *
+xg_evidence_cache_manifest_find(const XgEvidenceCacheManifest *manifest, uint32_t phase) {
+    uint32_t index = 0;
+    uint32_t bit = evidence_cache_phase_bit(phase);
+    if (!manifest || bit == 0 || (manifest->phase_mask & bit) == 0 ||
+        !evidence_cache_phase_index(phase, &index))
+        return NULL;
+    if (manifest->keys[index].phase != phase)
+        return NULL;
+    return &manifest->keys[index];
+}
+
+XR_FUNC bool xg_evidence_cache_manifest_phase_matches(const XgEvidenceCacheManifest *manifest,
+                                                      const XgEvidenceCacheKey *expected) {
+    const XgEvidenceCacheKey *cached;
+    if (!expected)
+        return false;
+    cached = xg_evidence_cache_manifest_find(manifest, expected->phase);
+    return xg_evidence_cache_key_matches(cached, expected);
+}
+
+XR_FUNC bool xg_evidence_cache_manifest_format(const XgEvidenceCacheManifest *manifest, char *buf,
+                                               size_t buf_len) {
+    static const uint32_t phases[] = {
+        XG_EVIDENCE_CACHE_DECLARATIONS,
+        XG_EVIDENCE_CACHE_SEMANTIC_GRAPH,
+        XG_EVIDENCE_CACHE_BODY_SUMMARY,
+        XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
+    };
+    size_t used = 0;
+    int written;
+    char line[256];
+    if (!manifest || !buf || buf_len == 0)
+        return false;
+    if ((manifest->phase_mask & evidence_cache_all_phase_mask()) != evidence_cache_all_phase_mask())
+        return false;
+    written = snprintf(buf, buf_len, "xg-cache-manifest v1 phases=0x%x\n",
+                       manifest->phase_mask & evidence_cache_all_phase_mask());
+    if (written <= 0 || (size_t) written >= buf_len)
+        return false;
+    used = (size_t) written;
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+        const XgEvidenceCacheKey *key = xg_evidence_cache_manifest_find(manifest, phases[i]);
+        if (!key || !xg_evidence_cache_key_format(key, line, sizeof(line)))
+            return false;
+        written = snprintf(buf + used, buf_len - used, "%s\n", line);
+        if (written <= 0 || (size_t) written >= buf_len - used)
+            return false;
+        used += (size_t) written;
+    }
+    return true;
+}
+
+static bool evidence_cache_next_line(const char **cursor, char *line, size_t line_len) {
+    const char *start;
+    const char *end;
+    size_t len;
+    if (!cursor || !*cursor || !line || line_len == 0 || **cursor == '\0')
+        return false;
+    start = *cursor;
+    end = strchr(start, '\n');
+    len = end ? (size_t) (end - start) : strlen(start);
+    if (len >= line_len)
+        return false;
+    memcpy(line, start, len);
+    line[len] = '\0';
+    *cursor = end ? end + 1 : start + len;
+    return true;
+}
+
+XR_FUNC bool xg_evidence_cache_manifest_parse(const char *text,
+                                              XgEvidenceCacheManifest *out_manifest) {
+    XgEvidenceCacheManifest manifest;
+    const char *cursor = text;
+    char line[320];
+    uint32_t declared_mask = 0;
+    char trailing = '\0';
+    if (!text || !out_manifest)
+        return false;
+    memset(&manifest, 0, sizeof(manifest));
+    if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        return false;
+    if (sscanf(line, "xg-cache-manifest v1 phases=%" SCNx32 "%c", &declared_mask, &trailing) != 1)
+        return false;
+    if ((declared_mask & evidence_cache_all_phase_mask()) != evidence_cache_all_phase_mask())
+        return false;
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+        XgEvidenceCacheKey key;
+        uint32_t index = 0;
+        uint32_t bit;
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        if (!xg_evidence_cache_key_parse(line, &key) ||
+            !evidence_cache_phase_index(key.phase, &index))
+            return false;
+        bit = 1u << index;
+        if ((manifest.phase_mask & bit) != 0)
+            return false;
+        manifest.keys[index] = key;
+        manifest.phase_mask |= bit;
+    }
+    if (manifest.phase_mask != (declared_mask & evidence_cache_all_phase_mask()))
+        return false;
+    while (*cursor) {
+        if (*cursor != '\n' && *cursor != '\r' && *cursor != ' ' && *cursor != '\t')
+            return false;
+        cursor++;
+    }
+    *out_manifest = manifest;
+    return true;
+}
+
 typedef const char *(*XgBitNameFn)(uint32_t bit);
 
 static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,

@@ -211,6 +211,15 @@ typedef struct XgEvidenceCacheKey {
     uint64_t content_hash;
 } XgEvidenceCacheKey;
 
+enum {
+    XG_EVIDENCE_CACHE_PHASE_COUNT = 4,
+};
+
+typedef struct XgEvidenceCacheManifest {
+    XgEvidenceCacheKey keys[XG_EVIDENCE_CACHE_PHASE_COUNT];
+    uint32_t phase_mask;
+} XgEvidenceCacheManifest;
+
 typedef struct XgDeclSummary {
     XgModuleId module_id;
     XgDeclId decl_id;
@@ -466,6 +475,15 @@ XR_FUNC bool xg_evidence_cache_key_matches(const XgEvidenceCacheKey *cached,
                                            const XgEvidenceCacheKey *expected);
 XR_FUNC bool xg_evidence_cache_key_format(const XgEvidenceCacheKey *key, char *buf, size_t buf_len);
 XR_FUNC bool xg_evidence_cache_key_parse(const char *text, XgEvidenceCacheKey *out_key);
+XR_FUNC XgEvidenceCacheManifest xg_global_evidence_cache_manifest(const XgGlobalEvidence *evidence);
+XR_FUNC const XgEvidenceCacheKey *
+xg_evidence_cache_manifest_find(const XgEvidenceCacheManifest *manifest, uint32_t phase);
+XR_FUNC bool xg_evidence_cache_manifest_phase_matches(const XgEvidenceCacheManifest *manifest,
+                                                      const XgEvidenceCacheKey *expected);
+XR_FUNC bool xg_evidence_cache_manifest_format(const XgEvidenceCacheManifest *manifest, char *buf,
+                                               size_t buf_len);
+XR_FUNC bool xg_evidence_cache_manifest_parse(const char *text,
+                                              XgEvidenceCacheManifest *out_manifest);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H
