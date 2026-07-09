@@ -12,8 +12,9 @@
 #define XR_STDLIB_HTTP_INTERNAL_H
 
 #include "http.h"
+#include "http2.h"
+#include "http_client.h"
 #include "http_parser.h"
-#include "http2_client.h"
 #include "../net/conn_pool.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -21,6 +22,34 @@
 struct XrClosure;
 
 #define XR_ROUTER_MAX_PARAMS 16
+
+typedef struct XrH2Pool XrH2Pool;
+
+typedef struct XrH2Request {
+    const char *method;
+    const char *path;
+    const char *authority;
+    const char *scheme;
+    XrHttpHeader *headers;
+    int header_count;
+    const char *body;
+    size_t body_len;
+} XrH2Request;
+
+typedef struct XrH2Response {
+    int status;
+    XrHttpHeader *headers;
+    int header_count;
+    char *body;
+    size_t body_len;
+    XrH2ErrorCode error;
+    char *error_msg;
+} XrH2Response;
+
+XrH2Pool *http2_client_pool_create(void);
+void http2_client_pool_destroy(XrH2Pool *pool);
+XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Request *req);
+void http2_client_response_free(XrH2Response *resp);
 
 typedef struct {
     const char *key;

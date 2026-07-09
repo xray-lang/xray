@@ -11,7 +11,6 @@
  *   Uses Json type uniformly for input/output
  */
 
-#include "http2_client.h"
 #include "http_internal.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
