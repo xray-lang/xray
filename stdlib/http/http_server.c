@@ -33,7 +33,7 @@ XrHttpServer *http_server_new(void) {
     server->running = false;
 
     // Create router
-    server->router = xr_router_new();
+    server->router = http_router_new();
 
     return server;
 }
@@ -50,7 +50,7 @@ void http_server_free(XrHttpServer *server) {
     }
 
     if (server->router) {
-        xr_router_free(server->router);
+        http_router_free(server->router);
     }
 
     // Free route closure array (closures themselves managed by GC)
@@ -82,7 +82,7 @@ void http_server_route(XrHttpServer *server, XrHttpMethod method, const char *pa
     server->route_closures[server->route_closure_count++] = handler;
 
     // Register to router (closure stored in user_data)
-    xr_router_add(server->router, method, path, (void *) handler);
+    http_router_add(server->router, method, path, (void *) handler);
 }
 
 /*

@@ -356,14 +356,14 @@ static XrRouteKind find_route(XrRouterNode *node, const char *path, size_t path_
     return XR_ROUTE_NONE;
 }
 
-/* ========== Public API ========== */
+/* ========== Internal Router API ========== */
 
-XrRouter *xr_router_new(void) {
+XrRouter *http_router_new(void) {
     XrRouter *router = (XrRouter *) xr_calloc(1, sizeof(XrRouter));
     return router;
 }
 
-void xr_router_free(XrRouter *router) {
+void http_router_free(XrRouter *router) {
     if (!router)
         return;
 
@@ -373,7 +373,7 @@ void xr_router_free(XrRouter *router) {
     xr_free(router);
 }
 
-bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path, void *user_data) {
+bool http_router_add(XrRouter *router, XrHttpMethod method, const char *path, void *user_data) {
     if (!router || !path || !user_data)
         return false;
     if (method < 0 || method > XR_HTTP_METHOD_UNKNOWN)
@@ -395,8 +395,8 @@ bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path, void
                         user_data, NULL, 0);
 }
 
-bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
-                          const char *response, size_t response_len) {
+bool http_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
+                            const char *response, size_t response_len) {
     if (!router || !path || (!response && response_len > 0))
         return false;
     if (method < 0 || method > XR_HTTP_METHOD_UNKNOWN)
@@ -424,9 +424,9 @@ bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *pat
     return ok;
 }
 
-XrRouteKind xr_router_find(XrRouter *router, XrHttpMethod method, const char *path, size_t path_len,
-                           XrRouteParams *params, void **user_data, const char **static_response,
-                           size_t *static_response_len) {
+XrRouteKind http_router_find(XrRouter *router, XrHttpMethod method, const char *path,
+                             size_t path_len, XrRouteParams *params, void **user_data,
+                             const char **static_response, size_t *static_response_len) {
     if (!router || !path)
         return XR_ROUTE_NONE;
     if (method < 0 || method > XR_HTTP_METHOD_UNKNOWN)
@@ -455,7 +455,7 @@ XrRouteKind xr_router_find(XrRouter *router, XrHttpMethod method, const char *pa
  * WS upgrade routes live on the GET tree (RFC 6455: upgrade is always GET).
  * Caller stores the WS closure in user_data.
  */
-bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data) {
+bool http_router_add_websocket(XrRouter *router, const char *path, void *user_data) {
     if (!router || !path || path[0] != '/')
         return false;
 
