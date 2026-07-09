@@ -2130,7 +2130,7 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
     } else if (static_key) {
         const XgJsonShapeSummary *shape =
             xg_global_evidence_find_json_shape(bc->evidence, shape_id);
-        if (!shape || shape->shape_kind == XG_JSON_SHAPE_OPEN)
+        if (!shape)
             return;
         field_index = body_object_literal_static_field_index(literal, static_key);
         if (field_index < 0)

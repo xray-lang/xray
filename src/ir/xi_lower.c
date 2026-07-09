@@ -734,6 +734,9 @@ XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const c
     }
 }
 
+static bool xi_lower_json_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
+                                                             const XgJsonAccessSummary *row);
+
 XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
                                           uint32_t source_span_id, uint16_t field_ordinal,
                                           uint8_t access_kind) {
@@ -755,8 +758,12 @@ XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const cha
             continue;
         if (!xi_lower_evidence_module_matches(l, row->module_id))
             continue;
+        bool field_matches = row->field_ordinal == field_ordinal;
+        if (!field_matches && field_ordinal == UINT16_MAX &&
+            (access->op == XI_INDEX_GET || access->op == XI_INDEX_SET))
+            field_matches = xi_lower_json_access_row_requires_dynamic_lookup(ev, row);
         if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
-            row->field_ordinal != field_ordinal || row->access_kind != access_kind)
+            !field_matches || row->access_kind != access_kind)
             continue;
         if (match)
             return;
