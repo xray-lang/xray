@@ -16,6 +16,7 @@
 #include "net.h"
 #include "io.h"
 #include "tls.h"
+#include "xneterror.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"
 #include "../../src/runtime/class/xclass.h"
@@ -69,6 +70,21 @@ extern void xr_socket_close(struct XrVMRuntime *X, int fd);
 #endif
 
 // ========== Internal Helpers ==========
+
+typedef enum {
+    XR_NET_IPV4,
+    XR_NET_IPV6
+} XrNetFamily;
+
+typedef struct XrNetAddr {
+    XrNetFamily family;
+    char host[256];
+    uint16_t port;
+    union {
+        uint8_t ipv4[4];
+        uint8_t ipv6[16];
+    } addr;
+} XrNetAddr;
 
 /*
  * Close a socket fd with proper netpoll cleanup.
@@ -177,42 +193,6 @@ static int net_dns_lookup_to_addrs(XrVMRuntime *X, const char *hostname, XrNetAd
         addrs[i].port = 0;
     }
     return count;
-}
-
-// ========== Utility Functions ==========
-
-int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *port) {
-    if (!addr_str)
-        return -1;
-
-    const char *colon = strrchr(addr_str, ':');
-    if (!colon) {
-        if (host && host_len > 0) {
-            strncpy(host, addr_str, host_len - 1);
-            host[host_len - 1] = '\0';
-        }
-        if (port)
-            *port = 0;
-        return 0;
-    }
-
-    size_t host_part_len = colon - addr_str;
-    if (host && host_len > 0) {
-        if (host_part_len >= host_len)
-            host_part_len = host_len - 1;
-        memcpy(host, addr_str, host_part_len);
-        host[host_part_len] = '\0';
-    }
-    if (port) {
-        *port = atoi(colon + 1);
-    }
-    return 0;
-}
-
-int xr_net_format_addr(const XrNetAddr *addr, char *buf, size_t buf_len) {
-    if (!addr || !buf || buf_len == 0)
-        return -1;
-    return snprintf(buf, buf_len, "%s:%d", addr->host, addr->port);
 }
 
 // ========== Script Bindings ==========
