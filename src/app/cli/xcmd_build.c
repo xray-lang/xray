@@ -2037,6 +2037,108 @@ static int xaot_resolve_cache_dir(const char *output_file, const XrCliBuildTarge
     return xaot_mkdir_p(out);
 }
 
+static int xaot_evidence_cache_manifest_path(const char *cache_dir,
+                                             const XgEvidenceCacheManifest *manifest,
+                                             uint32_t phase, char *out, size_t out_sz) {
+    const XgEvidenceCacheKey *key = xg_evidence_cache_manifest_find(manifest, phase);
+    char phase_dir[XR_PATH_MAX];
+    int n;
+
+    if (!cache_dir || !manifest || !key || !out || out_sz == 0)
+        return -1;
+    n = snprintf(phase_dir, sizeof(phase_dir), "%s/evidence/%s", cache_dir,
+                 xg_evidence_cache_phase_name(phase));
+    if (n < 0 || (size_t) n >= sizeof(phase_dir))
+        return -1;
+    if (xaot_mkdir_p(phase_dir) != 0)
+        return -1;
+    n = snprintf(out, out_sz, "%s/%016llx.xgcache", phase_dir,
+                 (unsigned long long) xg_evidence_cache_key_hash(key));
+    return (n >= 0 && (size_t) n < out_sz) ? 0 : -1;
+}
+
+static bool xaot_read_evidence_cache_manifest(const char *path,
+                                              XgEvidenceCacheManifest *out_manifest) {
+    char text[2048];
+    FILE *f;
+    size_t n;
+    bool ok;
+
+    if (!path || !out_manifest)
+        return false;
+    f = fopen(path, "rb");
+    if (!f)
+        return false;
+    n = fread(text, 1, sizeof(text) - 1, f);
+    ok = !ferror(f) && feof(f);
+    fclose(f);
+    if (!ok)
+        return false;
+    text[n] = '\0';
+    return xg_evidence_cache_manifest_parse(text, out_manifest);
+}
+
+static void xaot_write_evidence_cache_manifest(const char *path,
+                                               const XgEvidenceCacheManifest *manifest) {
+    char text[1400];
+    char tmp[XR_PATH_MAX];
+    FILE *f;
+    int n;
+
+    if (!path || !manifest || !xg_evidence_cache_manifest_format(manifest, text, sizeof(text)))
+        return;
+    n = snprintf(tmp, sizeof(tmp), "%s.%d.tmp", path, (int) xr_proc_self_pid());
+    if (n < 0 || (size_t) n >= sizeof(tmp))
+        return;
+    f = fopen(tmp, "w");
+    if (!f)
+        return;
+    bool write_ok = fputs(text, f) >= 0;
+    if (fclose(f) != 0)
+        write_ok = false;
+    if (!write_ok) {
+        xr_fs_remove(tmp);
+        return;
+    }
+    if (xr_fs_rename(tmp, path) != 0)
+        xr_fs_remove(tmp);
+}
+
+static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
+                                               const XgEvidenceCacheManifest *manifest,
+                                               bool verbose, bool force_rebuild, bool dry_run) {
+    static const uint32_t phases[] = {
+        XG_EVIDENCE_CACHE_DECLARATIONS,
+        XG_EVIDENCE_CACHE_SEMANTIC_GRAPH,
+        XG_EVIDENCE_CACHE_BODY_SUMMARY,
+        XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
+    };
+
+    if (!cache_dir || !manifest)
+        return;
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+        uint32_t phase = phases[i];
+        const XgEvidenceCacheKey *expected = xg_evidence_cache_manifest_find(manifest, phase);
+        XgEvidenceCacheManifest cached;
+        char path[XR_PATH_MAX];
+        bool hit = false;
+
+        if (!expected ||
+            xaot_evidence_cache_manifest_path(cache_dir, manifest, phase, path, sizeof(path)) != 0)
+            continue;
+        if (!force_rebuild && xaot_read_evidence_cache_manifest(path, &cached))
+            hit = xg_evidence_cache_manifest_phase_matches(&cached, expected);
+        if (verbose) {
+            printf("[xi-native] evidence cache %s: %s (%016llx)%s\n",
+                   xg_evidence_cache_phase_name(phase), hit ? "hit" : "miss",
+                   (unsigned long long) xg_evidence_cache_key_hash(expected),
+                   force_rebuild ? " rebuild" : "");
+        }
+        if (!dry_run)
+            xaot_write_evidence_cache_manifest(path, manifest);
+    }
+}
+
 /* Compile one module's generated C to an object file, reusing a cached object
  * when the content hash already exists.  Fills `obj_out` with the object path
  * (which the caller then links).  Returns 0 on success. */
@@ -2339,6 +2441,10 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         fprintf(stderr, "Error: cannot create object cache directory '%s'\n", cache_dir);
         xaot_build_result_free(&aot_result);
         return 1;
+    }
+    if (aot_result.has_evidence_cache_manifest) {
+        xaot_probe_evidence_cache_manifest(cache_dir, &aot_result.evidence_cache_manifest, verbose,
+                                           rebuild, dry_run_link);
     }
 
     bool has_objcopy = target_config && objcopy_output && objcopy_output[0];

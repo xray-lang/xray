@@ -24,6 +24,7 @@
 #define XAOT_DRIVER_H
 
 #include "../base/xchecks.h"
+#include "../analysis/xglobal_summary.h"
 #include "xi_cgen.h"
 #include "xaot_link.h"
 #include "xaot_prepare.h"
@@ -112,7 +113,9 @@ typedef struct {
     int n_sources;              /* number of generated C translation units */
     char *plan_dump;            /* stable AOT prepare plan dump (malloc'd) */
     char *global_evidence_dump; /* global evidence dump (malloc'd) */
-    char *c_export_header;      /* public @c_export C declarations (malloc'd) */
+    XgEvidenceCacheManifest evidence_cache_manifest;
+    bool has_evidence_cache_manifest;
+    char *c_export_header; /* public @c_export C declarations (malloc'd) */
     XaotLinkManifest link_manifest;
     int total_compiled;      /* number of functions successfully transpiled */
     int total_aot;           /* total AOT-eligible functions found */
