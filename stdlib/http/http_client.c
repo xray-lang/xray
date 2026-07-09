@@ -239,7 +239,7 @@ void http_client_request_config_init(XrHttpRequestConfig *config) {
 /* ========== Error Description ========== */
 
 const char *http_client_error_string(XrHttpError err) {
-    return xr_net_error_string(err);
+    return net_error_string(err);
 }
 
 /* ========== Compact Header Copy (single allocation) ========== */

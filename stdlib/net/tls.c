@@ -606,7 +606,7 @@ int xr_tls_conn_get_fd(XrTlsConn *conn) {
 }
 
 const char *xr_tls_error_string(XrTlsError err) {
-    return xr_net_error_string(err);
+    return net_error_string(err);
 }
 
 /* ========== Production Features (P17) ========== */
