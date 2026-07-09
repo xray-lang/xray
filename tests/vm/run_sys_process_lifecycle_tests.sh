@@ -120,6 +120,7 @@ NULLISH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_
 MATCH_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_match_helper_return_alias_ok.xr"
 HELPER_MATCH_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_match_return_alias_ok.xr"
 MOVE_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_ok.xr"
+HELPER_ARG_ALIAS_WRAPPERS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_arg_alias_wrappers_ok.xr"
 UNSAFE_HELPER_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_helper_return_alias_ok.xr"
 UNSAFE_RETURN_ALIAS_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_unsafe_return_alias_ok.xr"
 PROCESS_HELPER_CHAINED_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_chained_return_alias_wait.xr"
@@ -174,6 +175,8 @@ expect_output "process_pipe_match_helper_return_alias_ok" \
 expect_output "process_pipe_helper_match_return_alias_ok" \
     "$HELPER_MATCH_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_move_alias_ok" "$MOVE_ALIAS_OK_SRC" $'0\ntrue'
+expect_output "process_pipe_helper_arg_alias_wrappers_ok" \
+    "$HELPER_ARG_ALIAS_WRAPPERS_OK_SRC" $'0\ntrue\n0\ntrue'
 expect_output "process_pipe_unsafe_helper_return_alias_ok" \
     "$UNSAFE_HELPER_RETURN_ALIAS_OK_SRC" $'0\ntrue'
 expect_output "process_pipe_unsafe_return_alias_ok" \

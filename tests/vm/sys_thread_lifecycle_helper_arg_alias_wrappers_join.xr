@@ -1,0 +1,24 @@
+import sys
+
+fn passThread(t: Thread<int>) -> Thread<int> {
+    return t
+}
+
+fn joinCastAlias() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    var joined = passThread(t) as Thread<int>
+    print(joined.join())
+}
+
+fn joinMovedArgAlias() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    var joined = passThread(move t)
+    print(joined.join())
+}
+
+joinCastAlias()
+joinMovedArgAlias()
