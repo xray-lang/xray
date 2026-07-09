@@ -1200,6 +1200,10 @@ XR_FUNC bool xg_evidence_cache_manifest_format(const XgEvidenceCacheManifest *ma
                                                size_t buf_len);
 XR_FUNC bool xg_evidence_cache_manifest_parse(const char *text,
                                               XgEvidenceCacheManifest *out_manifest);
+XR_FUNC char *xg_global_evidence_cache_payload_dump(const XgGlobalEvidence *evidence,
+                                                    uint32_t phase);
+XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
+                                               const XgEvidenceCacheKey *expected);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H

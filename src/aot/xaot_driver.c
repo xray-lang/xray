@@ -847,6 +847,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     XaotPrepareStats prepare_stats;
     char *plan_dump = NULL;
     char *global_evidence_dump = NULL;
+    char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT];
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool evidence_cache_manifest_valid = false;
     char *c_export_header = NULL;
@@ -854,6 +855,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     bool link_manifest_initialized = false;
     memset(&aot_bundle, 0, sizeof(aot_bundle));
     memset(&global_evidence, 0, sizeof(global_evidence));
+    memset(evidence_cache_payloads, 0, sizeof(evidence_cache_payloads));
     memset(&evidence_cache_manifest, 0, sizeof(evidence_cache_manifest));
     memset(&prepare_stats, 0, sizeof(prepare_stats));
     memset(&link_manifest, 0, sizeof(link_manifest));
@@ -901,6 +903,22 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     evidence_cache_manifest = xg_global_evidence_cache_manifest(&global_evidence);
     evidence_cache_manifest_valid =
         evidence_cache_manifest.phase_mask == ((1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u);
+    if (evidence_cache_manifest_valid) {
+        static const uint32_t phases[] = {
+            XG_EVIDENCE_CACHE_DECLARATIONS,
+            XG_EVIDENCE_CACHE_SEMANTIC_GRAPH,
+            XG_EVIDENCE_CACHE_BODY_SUMMARY,
+            XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
+        };
+        for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+            evidence_cache_payloads[i] =
+                xg_global_evidence_cache_payload_dump(&global_evidence, phases[i]);
+            if (!evidence_cache_payloads[i]) {
+                fprintf(stderr, "Error: failed to dump evidence cache payload\n");
+                goto fail_free_ir;
+            }
+        }
+    }
     if (emit_global_evidence_dump) {
         global_evidence_dump = xg_global_evidence_dump(&global_evidence);
         if (!global_evidence_dump) {
@@ -1144,6 +1162,10 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     global_evidence_dump = NULL;
     result->evidence_cache_manifest = evidence_cache_manifest;
     result->has_evidence_cache_manifest = evidence_cache_manifest_valid;
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+        result->evidence_cache_payloads[i] = evidence_cache_payloads[i];
+        evidence_cache_payloads[i] = NULL;
+    }
     result->c_export_header = c_export_header;
     c_export_header = NULL;
     result->link_manifest = link_manifest;
@@ -1169,6 +1191,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
 fail_free_ir:
     xr_free(plan_dump);
     xr_free(global_evidence_dump);
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
+        xr_free(evidence_cache_payloads[i]);
     xr_free(c_export_header);
     if (link_manifest_initialized)
         xaot_link_manifest_free(&link_manifest);
@@ -1226,6 +1250,8 @@ XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
     }
     xr_free(result->plan_dump);
     xr_free(result->global_evidence_dump);
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
+        xr_free(result->evidence_cache_payloads[i]);
     xr_free(result->c_export_header);
     xaot_link_manifest_free(&result->link_manifest);
     memset(result, 0, sizeof(*result));

@@ -187,6 +187,33 @@ corrupt_evidence_phase() {
     fi
 }
 
+corrupt_evidence_payload_phase() {
+    local cache="$1" phase="$2" name="$3" file count
+    file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
+    count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
+    if [ -n "$file" ] && [ "$count" = "1" ]; then
+        printf 'tampered-payload\n' >"$file"
+        record_pass "$name: corrupted $phase payload"
+    else
+        record_fail "$name: expected one $phase payload, found ${count:-0}"
+    fi
+}
+
+expect_evidence_sidecars() {
+    local cache="$1" name="$2" phase manifest_count payload_count payload_file
+    for phase in declarations semantic_graph body_summary global_evidence; do
+        manifest_count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | wc -l | tr -d ' ')"
+        payload_count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
+        payload_file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
+        if [ "$manifest_count" = "1" ] && [ "$payload_count" = "1" ] &&
+           grep -q '^xg-cache-payload v1 ' "$payload_file"; then
+            record_pass "$name: $phase manifest+payload sidecars"
+        else
+            record_fail "$name: expected $phase manifest+payload sidecars"
+        fi
+    done
+}
+
 run_basic_modules() {
     local dir="$WORK/basic"
     local cache="$dir/.cache"
@@ -277,6 +304,7 @@ XR_EOF
     require_build "evidence-cold" "$dir/log1" \
         build_log "$cache" "$app" "$dir/ev1" "$dir/log1" || return 1
     expect_evidence_summary "$dir/log1" 0 4 "evidence-cold"
+    expect_evidence_sidecars "$cache" "evidence-cold"
     expect_output "$dir/ev1" "7" "evidence-cold"
 
     require_build "evidence-warm" "$dir/log2" \
@@ -293,6 +321,16 @@ XR_EOF
     expect_evidence_phase "$dir/log_corrupt" global_evidence hit "evidence-corrupt"
     expect_evidence_summary "$dir/log_corrupt" 3 1 "evidence-corrupt"
     expect_output "$dir/ev_corrupt" "7" "evidence-corrupt"
+
+    corrupt_evidence_payload_phase "$cache" global_evidence "evidence-payload-corrupt"
+    require_build "evidence-payload-corrupt" "$dir/log_payload_corrupt" \
+        build_log "$cache" "$app" "$dir/ev_payload_corrupt" "$dir/log_payload_corrupt" || return 1
+    expect_evidence_phase "$dir/log_payload_corrupt" declarations hit "evidence-payload-corrupt"
+    expect_evidence_phase "$dir/log_payload_corrupt" semantic_graph hit "evidence-payload-corrupt"
+    expect_evidence_phase "$dir/log_payload_corrupt" body_summary hit "evidence-payload-corrupt"
+    expect_evidence_phase "$dir/log_payload_corrupt" global_evidence miss "evidence-payload-corrupt"
+    expect_evidence_summary "$dir/log_payload_corrupt" 3 1 "evidence-payload-corrupt"
+    expect_output "$dir/ev_payload_corrupt" "7" "evidence-payload-corrupt"
 
     cat >"$app" <<'XR_EOF'
 fn id(x: int) -> int {

@@ -2057,6 +2057,26 @@ static int xaot_evidence_cache_manifest_path(const char *cache_dir,
     return (n >= 0 && (size_t) n < out_sz) ? 0 : -1;
 }
 
+static int xaot_evidence_cache_payload_path(const char *cache_dir,
+                                            const XgEvidenceCacheManifest *manifest, uint32_t phase,
+                                            char *out, size_t out_sz) {
+    const XgEvidenceCacheKey *key = xg_evidence_cache_manifest_find(manifest, phase);
+    char phase_dir[XR_PATH_MAX];
+    int n;
+
+    if (!cache_dir || !manifest || !key || !out || out_sz == 0)
+        return -1;
+    n = snprintf(phase_dir, sizeof(phase_dir), "%s/evidence/%s", cache_dir,
+                 xg_evidence_cache_phase_name(phase));
+    if (n < 0 || (size_t) n >= sizeof(phase_dir))
+        return -1;
+    if (xaot_mkdir_p(phase_dir) != 0)
+        return -1;
+    n = snprintf(out, out_sz, "%s/%016llx.xgpayload", phase_dir,
+                 (unsigned long long) xg_evidence_cache_key_hash(key));
+    return (n >= 0 && (size_t) n < out_sz) ? 0 : -1;
+}
+
 static bool xaot_read_evidence_cache_manifest(const char *path,
                                               XgEvidenceCacheManifest *out_manifest) {
     char text[2048];
@@ -2078,14 +2098,12 @@ static bool xaot_read_evidence_cache_manifest(const char *path,
     return xg_evidence_cache_manifest_parse(text, out_manifest);
 }
 
-static void xaot_write_evidence_cache_manifest(const char *path,
-                                               const XgEvidenceCacheManifest *manifest) {
-    char text[1400];
+static void xaot_write_evidence_cache_text(const char *path, const char *text) {
     char tmp[XR_PATH_MAX];
     FILE *f;
     int n;
 
-    if (!path || !manifest || !xg_evidence_cache_manifest_format(manifest, text, sizeof(text)))
+    if (!path || !text)
         return;
     n = snprintf(tmp, sizeof(tmp), "%s.%d.tmp", path, (int) xr_proc_self_pid());
     if (n < 0 || (size_t) n >= sizeof(tmp))
@@ -2104,8 +2122,32 @@ static void xaot_write_evidence_cache_manifest(const char *path,
         xr_fs_remove(tmp);
 }
 
+static void xaot_write_evidence_cache_manifest(const char *path,
+                                               const XgEvidenceCacheManifest *manifest) {
+    char text[1400];
+    if (!path || !manifest || !xg_evidence_cache_manifest_format(manifest, text, sizeof(text)))
+        return;
+    xaot_write_evidence_cache_text(path, text);
+}
+
+static bool xaot_read_evidence_cache_payload(const char *path, const XgEvidenceCacheKey *expected) {
+    size_t size = 0;
+    char *text;
+    bool ok;
+    if (!path || !expected)
+        return false;
+    text = xr_file_read_all(path, "rb", &size);
+    if (!text)
+        return false;
+    (void) size;
+    ok = xg_evidence_cache_payload_matches(text, expected);
+    xr_free(text);
+    return ok;
+}
+
 static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
                                                const XgEvidenceCacheManifest *manifest,
+                                               char *const payloads[XG_EVIDENCE_CACHE_PHASE_COUNT],
                                                bool verbose, bool force_rebuild, bool dry_run) {
     static const uint32_t phases[] = {
         XG_EVIDENCE_CACHE_DECLARATIONS,
@@ -2123,25 +2165,38 @@ static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
         const XgEvidenceCacheKey *expected = xg_evidence_cache_manifest_find(manifest, phase);
         XgEvidenceCacheManifest cached;
         char path[XR_PATH_MAX];
-        bool hit = false;
+        char payload_path[XR_PATH_MAX];
+        bool manifest_hit = false;
+        bool payload_hit = false;
+        bool hit;
 
         if (!expected ||
             xaot_evidence_cache_manifest_path(cache_dir, manifest, phase, path, sizeof(path)) != 0)
             continue;
+        if (xaot_evidence_cache_payload_path(cache_dir, manifest, phase, payload_path,
+                                             sizeof(payload_path)) != 0)
+            continue;
         if (!force_rebuild && xaot_read_evidence_cache_manifest(path, &cached))
-            hit = xg_evidence_cache_manifest_phase_matches(&cached, expected);
+            manifest_hit = xg_evidence_cache_manifest_phase_matches(&cached, expected);
+        if (!force_rebuild)
+            payload_hit = xaot_read_evidence_cache_payload(payload_path, expected);
+        hit = manifest_hit && payload_hit;
         if (hit)
             hits++;
         else
             misses++;
         if (verbose) {
-            printf("[xi-native] evidence cache %s: %s (%016llx)%s\n",
+            printf("[xi-native] evidence cache %s: %s (%016llx manifest=%s payload=%s)%s\n",
                    xg_evidence_cache_phase_name(phase), hit ? "hit" : "miss",
                    (unsigned long long) xg_evidence_cache_key_hash(expected),
+                   manifest_hit ? "hit" : "miss", payload_hit ? "hit" : "miss",
                    force_rebuild ? " rebuild" : "");
         }
-        if (!dry_run)
+        if (!dry_run) {
             xaot_write_evidence_cache_manifest(path, manifest);
+            if (payloads && payloads[i])
+                xaot_write_evidence_cache_text(payload_path, payloads[i]);
+        }
     }
     if (verbose)
         printf("[xi-native] evidence cache summary: hits=%u misses=%u%s\n", hits, misses,
@@ -2452,8 +2507,9 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         return 1;
     }
     if (aot_result.has_evidence_cache_manifest) {
-        xaot_probe_evidence_cache_manifest(cache_dir, &aot_result.evidence_cache_manifest, verbose,
-                                           rebuild, dry_run_link);
+        xaot_probe_evidence_cache_manifest(cache_dir, &aot_result.evidence_cache_manifest,
+                                           aot_result.evidence_cache_payloads, verbose, rebuild,
+                                           dry_run_link);
     }
 
     bool has_objcopy = target_config && objcopy_output && objcopy_output[0];
