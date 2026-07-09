@@ -198,6 +198,27 @@ static void test_user_interface_constraint_accepts_implementor(void) {
     ASSERT(n == 0);
 }
 
+static void test_user_interface_constraint_accepts_same_interface_object(void) {
+    const char *src = "interface Shape {\n"
+                      "    area() -> int\n"
+                      "}\n"
+                      "class Circle implements Shape {\n"
+                      "    r: int\n"
+                      "    constructor(r: int) { this.r = r }\n"
+                      "    area() -> int { return this.r * this.r }\n"
+                      "}\n"
+                      "fn score<T: Shape>(shape: T) -> int {\n"
+                      "    return shape.area()\n"
+                      "}\n"
+                      "fn main() -> int {\n"
+                      "    var shape: Shape = Circle(7)\n"
+                      "    return score<Shape>(shape)\n"
+                      "}\n";
+    int total = 0;
+    int n = count_diagnostics(src, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, &total);
+    ASSERT(n == 0);
+}
+
 static void test_user_interface_constraint_rejects_non_implementor(void) {
     const char *src = "interface Shape {\n"
                       "    area() -> int\n"
@@ -289,6 +310,7 @@ int main(void) {
     RUN_TEST(class_property_as_getter_accepted);
     RUN_TEST(unknown_interface_is_not_audited);
     RUN_TEST(user_interface_constraint_accepts_implementor);
+    RUN_TEST(user_interface_constraint_accepts_same_interface_object);
     RUN_TEST(user_interface_constraint_rejects_non_implementor);
 
     printf("\nParameterised built-in interface constraints:\n");
