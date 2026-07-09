@@ -292,6 +292,172 @@ TEST(global_evidence_hash_is_content_stable) {
     xg_global_evidence_free(&b);
 }
 
+static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
+    XgDeclSummary decl = {.module_id = key.module_id,
+                          .decl_id = 1,
+                          .kind = XG_DECL_CLASS,
+                          .flags = XG_DECL_PUBLIC,
+                          .name_id = 10,
+                          .type_key = 20,
+                          .signature_key = 30,
+                          .source_span_id = 40};
+    XgClassSummary cls = {.module_id = key.module_id,
+                          .decl_id = 1,
+                          .class_id = 1,
+                          .name_id = 10,
+                          .parent_class_id = XG_NO_ID,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {.method_id = 1,
+                              .owner_class_id = 1,
+                              .name_id = 11,
+                              .signature_key = 31,
+                              .root_method_id = 1};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = key.module_id,
+                          .owner_decl_id = 1,
+                          .owner_class_id = 1,
+                          .owner_method_id = 1,
+                          .name_id = 11,
+                          .signature_key = 31,
+                          .source_span_id = 41,
+                          .kind = XG_BODY_METHOD,
+                          .body_hash = 0xabcdef,
+                          .effect_bits = XG_BODY_MAY_READ_MEM,
+                          .callsite_start = 1,
+                          .callsite_count = 1};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 42,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_NATIVE,
+                              .method_name_id = 12,
+                              .arg_count = 1};
+    XgLinkDependencySummary link = {.link_id = 1,
+                                    .module_id = key.module_id,
+                                    .decl_id = 1,
+                                    .source_span_id = 43,
+                                    .name_id = 13,
+                                    .kind = XG_LINK_DEP_STDLIB_SYMBOL};
+    XgGenericInstSummary inst = {.generic_inst_id = 1,
+                                 .module_id = key.module_id,
+                                 .origin_method_id = 1,
+                                 .root_callsite_id = 1,
+                                 .name_id = 14,
+                                 .type_key = 44,
+                                 .type_arg_key_start = 45,
+                                 .type_arg_count = 1,
+                                 .kind = XG_GENERIC_INST_METHOD,
+                                 .flags = XG_GENERIC_INST_CONCRETE_TYPES};
+
+    snprintf(link.name, sizeof(link.name), "math.sqrt");
+    xg_global_evidence_init(ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(ev, &call));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(ev, &link));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(ev, &inst));
+}
+
+TEST(global_evidence_cache_keys_are_phase_specific) {
+    XgGlobalEvidence base;
+    XgGlobalEvidence body_changed;
+    XgGlobalEvidence decl_changed;
+    XgGlobalEvidence semantic_changed;
+    XgGlobalEvidence import_changed;
+    XgGlobalEvidence profile_changed;
+    XgBuildKey key = {.source_hash = 0x100,
+                      .compiler_semver_hash = 0x200,
+                      .profile_hash = 0x300,
+                      .imported_summary_hash = 0x400,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgBuildKey import_key = key;
+    XgBuildKey profile_key = key;
+
+    init_cache_key_fixture(&base, key);
+
+    init_cache_key_fixture(&body_changed, key);
+    body_changed.key.source_hash = 0x101;
+    body_changed.bodies[0].body_hash = 0xfeed;
+
+    init_cache_key_fixture(&decl_changed, key);
+    decl_changed.decls[0].signature_key = 0x333;
+
+    init_cache_key_fixture(&semantic_changed, key);
+    semantic_changed.classes[0].flags |= XG_CLASS_EXPLICIT_FINAL;
+
+    import_key.imported_summary_hash = 0x401;
+    init_cache_key_fixture(&import_changed, import_key);
+
+    profile_key.profile = XG_BUILD_FREESTANDING;
+    profile_key.profile_hash = 0x301;
+    init_cache_key_fixture(&profile_changed, profile_key);
+
+    XgEvidenceCacheKey base_decl =
+        xg_global_evidence_cache_key(&base, XG_EVIDENCE_CACHE_DECLARATIONS);
+    XgEvidenceCacheKey base_semantic =
+        xg_global_evidence_cache_key(&base, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    XgEvidenceCacheKey base_body =
+        xg_global_evidence_cache_key(&base, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    XgEvidenceCacheKey base_global =
+        xg_global_evidence_cache_key(&base, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    XgEvidenceCacheKey body_decl =
+        xg_global_evidence_cache_key(&body_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
+    XgEvidenceCacheKey body_semantic =
+        xg_global_evidence_cache_key(&body_changed, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    XgEvidenceCacheKey body_body =
+        xg_global_evidence_cache_key(&body_changed, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    XgEvidenceCacheKey body_global =
+        xg_global_evidence_cache_key(&body_changed, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    XgEvidenceCacheKey changed_decl =
+        xg_global_evidence_cache_key(&decl_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
+    XgEvidenceCacheKey changed_semantic =
+        xg_global_evidence_cache_key(&semantic_changed, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    XgEvidenceCacheKey changed_import =
+        xg_global_evidence_cache_key(&import_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
+    XgEvidenceCacheKey changed_profile =
+        xg_global_evidence_cache_key(&profile_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
+    XgEvidenceCacheKey stale_schema = base_decl;
+
+    ASSERT_TRUE(
+        strcmp(xg_evidence_cache_phase_name(XG_EVIDENCE_CACHE_DECLARATIONS), "declarations") == 0);
+    ASSERT_TRUE(strcmp(xg_evidence_cache_phase_name(XG_EVIDENCE_CACHE_SEMANTIC_GRAPH),
+                       "semantic_graph") == 0);
+    ASSERT_TRUE(
+        strcmp(xg_evidence_cache_phase_name(XG_EVIDENCE_CACHE_BODY_SUMMARY), "body_summary") == 0);
+    ASSERT_TRUE(strcmp(xg_evidence_cache_phase_name(XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE),
+                       "global_evidence") == 0);
+    ASSERT_TRUE(strcmp(xg_evidence_cache_phase_name(99), "unknown") == 0);
+    ASSERT_EQ_UINT(base_decl.schema_version, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION);
+    ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
+    ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
+
+    ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &body_decl));
+    ASSERT_TRUE(xg_evidence_cache_key_matches(&base_semantic, &body_semantic));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_body, &body_body));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_global, &body_global));
+
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_decl, &changed_decl));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_semantic, &changed_semantic));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_decl, &changed_import));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_decl, &changed_profile));
+
+    stale_schema.schema_version++;
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&stale_schema, &base_decl));
+
+    xg_global_evidence_free(&base);
+    xg_global_evidence_free(&body_changed);
+    xg_global_evidence_free(&decl_changed);
+    xg_global_evidence_free(&semantic_changed);
+    xg_global_evidence_free(&import_changed);
+    xg_global_evidence_free(&profile_changed);
+}
+
 TEST(global_evidence_dump_lists_core_rows) {
     XgGlobalEvidence ev;
     char *dump;
@@ -6894,6 +7060,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_hash_is_content_stable);
+RUN_TEST(global_evidence_cache_keys_are_phase_specific);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class);

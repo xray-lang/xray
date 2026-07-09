@@ -31,6 +31,7 @@ typedef uint32_t XgGenericInstId;
 
 enum {
     XG_NO_ID = 0,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 1,
 };
 
 typedef enum XgBuildProfile {
@@ -190,6 +191,24 @@ typedef struct XgBuildKey {
     XgModuleId module_id;
     uint32_t profile;
 } XgBuildKey;
+
+typedef enum XgEvidenceCachePhase {
+    XG_EVIDENCE_CACHE_DECLARATIONS = 1,
+    XG_EVIDENCE_CACHE_SEMANTIC_GRAPH,
+    XG_EVIDENCE_CACHE_BODY_SUMMARY,
+    XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
+} XgEvidenceCachePhase;
+
+typedef struct XgEvidenceCacheKey {
+    uint32_t schema_version;
+    uint32_t phase;
+    XgModuleId module_id;
+    uint32_t profile;
+    uint64_t compiler_semver_hash;
+    uint64_t profile_hash;
+    uint64_t imported_summary_hash;
+    uint64_t content_hash;
+} XgEvidenceCacheKey;
 
 typedef struct XgDeclSummary {
     XgModuleId module_id;
@@ -384,6 +403,7 @@ XR_FUNC const char *xg_metadata_name(uint32_t metadata);
 XR_FUNC const uint32_t *xg_metadata_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_static_data_name(uint32_t static_data);
 XR_FUNC const uint32_t *xg_static_data_catalog(uint32_t *out_count);
+XR_FUNC const char *xg_evidence_cache_phase_name(uint32_t phase);
 
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key);
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);
@@ -438,6 +458,11 @@ XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *
                                                         uint32_t *out_effect_bits);
 
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
+XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *evidence,
+                                                        uint32_t phase);
+XR_FUNC uint64_t xg_evidence_cache_key_hash(const XgEvidenceCacheKey *key);
+XR_FUNC bool xg_evidence_cache_key_matches(const XgEvidenceCacheKey *cached,
+                                           const XgEvidenceCacheKey *expected);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H
