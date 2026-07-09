@@ -1,0 +1,15 @@
+import sys
+
+fn passThread(t: Thread<int>) -> Thread<int> {
+    return t
+}
+
+fn run(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    var joined = flag ? passThread(t) : passThread(t)
+    print(joined.join())
+}
+
+run(true)
