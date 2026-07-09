@@ -1934,6 +1934,36 @@ static const char *cg_module_const_slot_name(const XiModule *module, int64_t slo
     return module->init->slot_owned_names[slot];
 }
 
+static bool cg_shared_initializer_literal_supported(const XiConstLiteral *lit) {
+    if (!lit)
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static const XiConstLiteral *cg_module_shared_initializer_literal(const XiModule *module,
+                                                                  int64_t slot) {
+    if (!module || !module->slot_shared_initializers || slot < 0 || slot >= module->nslots)
+        return NULL;
+    const XiConstLiteral *lit = &module->slot_shared_initializers[slot];
+    return cg_shared_initializer_literal_supported(lit) ? lit : NULL;
+}
+
+static const XiConstLiteral *cg_freestanding_shared_initializer_literal(XiCgenCtx *ctx,
+                                                                        int64_t slot) {
+    if (!ctx || !ctx->freestanding_profile)
+        return NULL;
+    return cg_module_shared_initializer_literal(ctx->module, slot);
+}
+
 static void cg_emit_static_const_fallback_name(FILE *out, const XiModule *module,
                                                const char *prefix, int64_t slot) {
     const char *base = prefix ? prefix : "_xctvalue";
@@ -2118,6 +2148,88 @@ static void cg_emit_static_scalar_i64(FILE *out, int64_t value) {
         fprintf(out, "INT64_MIN");
     else
         fprintf(out, "INT64_C(%" PRId64 ")", value);
+}
+
+static void cg_emit_xrvalue_literal_initializer(FILE *out, const XiConstLiteral *lit) {
+    switch (lit ? lit->kind : XI_CONST_LITERAL_NONE) {
+        case XI_CONST_LITERAL_INT:
+            fprintf(out, "XR_FROM_INT(");
+            cg_emit_static_scalar_i64(out, lit->int_value);
+            fprintf(out, ")");
+            break;
+        case XI_CONST_LITERAL_FLOAT:
+            fprintf(out, "XR_FROM_FLOAT(");
+            emit_c_float_literal(out, lit->float_value);
+            fprintf(out, ")");
+            break;
+        case XI_CONST_LITERAL_BOOL:
+            fprintf(out, "%s", lit->bool_value ? "XR_TRUE_VAL" : "XR_FALSE_VAL");
+            break;
+        case XI_CONST_LITERAL_CHAR:
+            fprintf(out, "XR_FROM_CHAR(UINT32_C(%" PRIu32 "))", (uint32_t) lit->int_value);
+            break;
+        case XI_CONST_LITERAL_NULL:
+        default:
+            fprintf(out, "XR_NULL_VAL");
+            break;
+    }
+}
+
+static bool cg_const_value_matches_literal(const XiValue *value, const XiConstLiteral *lit) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_CONST || !v->type || !cg_shared_initializer_literal_supported(lit))
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+            return v->type->kind == XR_KIND_INT && v->aux_int == lit->int_value;
+        case XI_CONST_LITERAL_FLOAT: {
+            double value_f = 0.0;
+            if (v->type->kind != XR_KIND_FLOAT)
+                return false;
+            memcpy(&value_f, &v->aux_int, sizeof(double));
+            return memcmp(&value_f, &lit->float_value, sizeof(double)) == 0;
+        }
+        case XI_CONST_LITERAL_BOOL:
+            return v->type->kind == XR_KIND_BOOL && (v->aux_int != 0) == lit->bool_value;
+        case XI_CONST_LITERAL_CHAR:
+            return v->type->kind == XR_KIND_CHAR && v->aux_int == lit->int_value;
+        case XI_CONST_LITERAL_NULL:
+            return v->type->kind == XR_KIND_NULL;
+        default:
+            return false;
+    }
+}
+
+static bool cg_emit_shared_array_definition(XiCgenCtx *ctx, FILE *out, const char *linkage,
+                                            const char *name, const XiModule *module,
+                                            uint16_t nshared) {
+    if (!out || !name || nshared == 0)
+        return false;
+    bool has_static_init = false;
+    if (ctx && ctx->freestanding_profile && module && module->slot_shared_initializers) {
+        for (uint16_t slot = 0; slot < nshared && slot < module->nslots; slot++) {
+            if (cg_module_shared_initializer_literal(module, slot)) {
+                has_static_init = true;
+                break;
+            }
+        }
+    }
+    fprintf(out, "%sXrValue %s[%u]", linkage ? linkage : "", name, nshared);
+    if (!has_static_init) {
+        fprintf(out, ";\n\n");
+        return true;
+    }
+    fprintf(out, " = {\n");
+    for (uint16_t slot = 0; slot < nshared && slot < module->nslots; slot++) {
+        const XiConstLiteral *lit = cg_module_shared_initializer_literal(module, slot);
+        if (!lit)
+            continue;
+        fprintf(out, "    [%u] = ", slot);
+        cg_emit_xrvalue_literal_initializer(out, lit);
+        fprintf(out, ",\n");
+    }
+    fprintf(out, "};\n\n");
+    return true;
 }
 
 static void cg_emit_static_string_header_initializer(FILE *out, const char *s) {

@@ -77,8 +77,9 @@ typedef struct XiModule {
     XiEnumData **slot_enums;             /* [nslots] shared slot -> XiEnumData* */
     XiImportRef **slot_imports;          /* [nslots] shared slot -> XiImportRef* */
     XiConstLiteral *slot_const_literals; /* [nslots] shared slot -> const literal/static data */
-    uint16_t nslots;                     /* = init->nshared */
-    const char **global_asm_templates;   /* module-level top-level asm templates */
+    XiConstLiteral *slot_shared_initializers; /* [nslots] static initial value for shared decls */
+    uint16_t nslots;                          /* = init->nshared */
+    const char **global_asm_templates;        /* module-level top-level asm templates */
     uint16_t nglobal_asm;
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */

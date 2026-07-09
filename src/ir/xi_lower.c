@@ -1331,6 +1331,7 @@ typedef struct PrescanSlotMeta {
     const char **owned_names;
     uint8_t *owned_consts;
     XiConstLiteral *const_literals;
+    XiConstLiteral *shared_initializers;
     uint16_t cap;
 } PrescanSlotMeta;
 
@@ -1353,7 +1354,9 @@ static bool prescan_slot_meta_reserve(PrescanSlotMeta *m, uint16_t need) {
     uint8_t *consts = (uint8_t *) xr_realloc(m->owned_consts, (size_t) nc * sizeof(uint8_t));
     XiConstLiteral *lits =
         (XiConstLiteral *) xr_realloc(m->const_literals, (size_t) nc * sizeof(XiConstLiteral));
-    if (!exports || !owned || !consts || !lits)
+    XiConstLiteral *shared_inits =
+        (XiConstLiteral *) xr_realloc(m->shared_initializers, (size_t) nc * sizeof(XiConstLiteral));
+    if (!exports || !owned || !consts || !lits || !shared_inits)
         return false;
 
     uint16_t old = m->cap;
@@ -1361,10 +1364,12 @@ static bool prescan_slot_meta_reserve(PrescanSlotMeta *m, uint16_t need) {
     m->owned_names = owned;
     m->owned_consts = consts;
     m->const_literals = lits;
+    m->shared_initializers = shared_inits;
     memset(&m->export_names[old], 0, (size_t) (nc - old) * sizeof(const char *));
     memset(&m->owned_names[old], 0, (size_t) (nc - old) * sizeof(const char *));
     memset(&m->owned_consts[old], 0, (size_t) (nc - old) * sizeof(uint8_t));
     memset(&m->const_literals[old], 0, (size_t) (nc - old) * sizeof(XiConstLiteral));
+    memset(&m->shared_initializers[old], 0, (size_t) (nc - old) * sizeof(XiConstLiteral));
     m->cap = nc;
     return true;
 }
@@ -1376,6 +1381,7 @@ static void prescan_slot_meta_free(PrescanSlotMeta *m) {
     xr_free(m->owned_names);
     xr_free(m->owned_consts);
     xr_free(m->const_literals);
+    xr_free(m->shared_initializers);
     memset(m, 0, sizeof(*m));
 }
 
@@ -1419,6 +1425,37 @@ static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *typ
         case AST_LITERAL_NULL:
             out->kind = XI_CONST_LITERAL_NULL;
             out->type = type ? type : l->type_null;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool const_literal_from_ct_value(XiLower *l, const XrCtValue *value, struct XrType *type,
+                                        XiConstLiteral *out);
+
+static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct XrType *type,
+                                                XiConstLiteral *out) {
+    if (!l || !s || s->type != AST_SHARED_DECL || !s->as.var_decl.initializer || !out)
+        return false;
+    XiConstLiteral lit;
+    if (!const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
+        XaSymbol *sym =
+            (l->analyzer && s->as.var_decl.symbol_id != 0)
+                ? xa_scope_lookup_by_id(l->analyzer->global_scope, s->as.var_decl.symbol_id)
+                : NULL;
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        if (!links || !links->has_ct_value ||
+            !const_literal_from_ct_value(l, &links->ct_value, type, &lit))
+            return false;
+    }
+    switch (lit.kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_NULL:
+            *out = lit;
             return true;
         default:
             return false;
@@ -1726,6 +1763,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 prescan_apply_const_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             }
+        } else if (s && s->type == AST_SHARED_DECL && s->as.var_decl.initializer) {
+            XiConstLiteral lit;
+            if (shared_static_initializer_from_decl(l, s, type, &lit))
+                slot_meta.shared_initializers[next_shared] = lit;
         }
         if (is_exported)
             slot_meta.export_names[next_shared] = name;
@@ -1747,12 +1788,16 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(uint8_t)));
         XiConstLiteral *literals = (XiConstLiteral *) xi_func_arena_alloc(
             l->func, (uint32_t) (next_shared * sizeof(XiConstLiteral)));
+        XiConstLiteral *shared_inits = (XiConstLiteral *) xi_func_arena_alloc(
+            l->func, (uint32_t) (next_shared * sizeof(XiConstLiteral)));
         XiFunc **slot_funcs =
             (XiFunc **) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(XiFunc *)));
         l->func->shared_slot_funcs = slot_funcs;
         l->func->shared_slot_func_count = next_shared;
         l->func->shared_const_literals = literals;
         l->func->shared_const_literal_count = literals ? next_shared : 0;
+        l->func->shared_init_literals = shared_inits;
+        l->func->shared_init_literal_count = shared_inits ? next_shared : 0;
         for (uint16_t si = 0; si < next_shared; si++) {
             if (names) {
                 const char *src = (si < slot_meta.cap) ? slot_meta.export_names[si] : NULL;
@@ -1785,6 +1830,12 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     literals[si] = slot_meta.const_literals[si];
                 else
                     memset(&literals[si], 0, sizeof(XiConstLiteral));
+            }
+            if (shared_inits) {
+                if (si < slot_meta.cap)
+                    shared_inits[si] = slot_meta.shared_initializers[si];
+                else
+                    memset(&shared_inits[si], 0, sizeof(XiConstLiteral));
             }
         }
         if (consts) {
@@ -1919,8 +1970,10 @@ static void build_module_metadata(XiLower *l) {
         mod->slot_enums = (XiEnumData **) xr_calloc(nshared, sizeof(XiEnumData *));
         mod->slot_imports = (XiImportRef **) xr_calloc(nshared, sizeof(XiImportRef *));
         mod->slot_const_literals = (XiConstLiteral *) xr_calloc(nshared, sizeof(XiConstLiteral));
+        mod->slot_shared_initializers =
+            (XiConstLiteral *) xr_calloc(nshared, sizeof(XiConstLiteral));
         if (mod->slot_funcs && mod->slot_classes && mod->slot_enums && mod->slot_imports &&
-            mod->slot_const_literals) {
+            mod->slot_const_literals && mod->slot_shared_initializers) {
             for (uint16_t s = 0; s < nshared; s++) {
                 mod->slot_funcs[s] = l->shared_slot_funcs[s];
                 mod->slot_classes[s] = l->shared_slot_classes[s];
@@ -1928,6 +1981,8 @@ static void build_module_metadata(XiLower *l) {
                 mod->slot_imports[s] = l->shared_slot_imports[s];
                 if (f->shared_const_literals && s < f->shared_const_literal_count)
                     mod->slot_const_literals[s] = f->shared_const_literals[s];
+                if (f->shared_init_literals && s < f->shared_init_literal_count)
+                    mod->slot_shared_initializers[s] = f->shared_init_literals[s];
             }
         }
     }

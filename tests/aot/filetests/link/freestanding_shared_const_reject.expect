@@ -1,5 +1,6 @@
 args=--profile freestanding
 status=fail
 contains=freestanding profile rejects shared declaration
+contains=only int/float/bool/char/null consteval initializers are supported as static shared storage
 not_contains=xrt_shared
 not_contains=CRASH
