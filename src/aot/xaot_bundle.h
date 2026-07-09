@@ -742,6 +742,99 @@ typedef struct XaotJsonAccessPlan {
     uint8_t unproven_reason;
 } XaotJsonAccessPlan;
 
+typedef enum XaotMapShapeAction {
+    XAOT_MAP_SHAPE_RUNTIME_HASH = 1,
+    XAOT_MAP_SHAPE_PREALLOC_HASH,
+    XAOT_MAP_SHAPE_SMALL_INLINE,
+    XAOT_MAP_SHAPE_DENSE_ENUM_TABLE,
+    XAOT_MAP_SHAPE_DENSE_INT_TABLE,
+    XAOT_MAP_SHAPE_READONLY_STATIC_TABLE,
+    XAOT_MAP_SHAPE_REJECT,
+} XaotMapShapeAction;
+
+typedef enum XaotKeyAccessAction {
+    XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX = 1,
+    XAOT_KEY_ACCESS_PREHASHED_LOOKUP,
+    XAOT_KEY_ACCESS_INLINE_SMALL_SCAN,
+    XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP,
+    XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP,
+    XAOT_KEY_ACCESS_REJECT,
+} XaotKeyAccessAction;
+
+typedef enum XaotHashEqAction {
+    XAOT_HASH_EQ_BUILTIN_INLINE = 1,
+    XAOT_HASH_EQ_DERIVE_INLINE,
+    XAOT_HASH_EQ_DIRECT_CALL,
+    XAOT_HASH_EQ_DYNAMIC_REJECT,
+} XaotHashEqAction;
+
+enum {
+    XAOT_MAP_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_MAP_EV_LITERAL = 1u << 1,
+    XAOT_MAP_EV_CONST_KEY = 1u << 2,
+    XAOT_MAP_EV_PREHASH = 1u << 3,
+    XAOT_MAP_EV_HASH_EQ = 1u << 4,
+    XAOT_MAP_EV_DENSE_DOMAIN = 1u << 5,
+    XAOT_MAP_EV_SMALL = 1u << 6,
+};
+
+enum {
+    XAOT_MAP_UNPROVEN_NONE = 0,
+    XAOT_MAP_UNPROVEN_INVALID_KIND = 1,
+    XAOT_MAP_UNPROVEN_COMPUTED_KEY = 2,
+    XAOT_MAP_UNPROVEN_MISSING_SHAPE = 3,
+    XAOT_MAP_UNPROVEN_MISSING_HASH_EQ = 4,
+    XAOT_MAP_UNPROVEN_UNHASHABLE = 5,
+};
+
+typedef struct XaotMapShapePlan {
+    XgMapShapeId shape_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint8_t container_kind;
+    uint8_t source;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t entry_start;
+    uint16_t entry_count;
+    uint32_t literal_count;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+    uint64_t shape_hash;
+} XaotMapShapePlan;
+
+typedef struct XaotKeyAccessPlan {
+    XgKeyAccessId access_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint8_t container_kind;
+    uint8_t op;
+    XgMapShapeId receiver_shape_id;
+    uint32_t receiver_type_key;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t key_const_id;
+    uint64_t key_prehash;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotKeyAccessPlan;
+
+typedef struct XaotHashEqPlan {
+    XgHashEqId hash_eq_id;
+    uint32_t type_key;
+    uint8_t kind;
+    XgDeriveId eq_derive_id;
+    XgDeriveId hash_derive_id;
+    XgFuncId eq_func_id;
+    XgFuncId hash_func_id;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotHashEqPlan;
+
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
     XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
@@ -946,6 +1039,15 @@ typedef struct XaotBundle {
     XaotJsonAccessPlan *json_access_plans;
     uint32_t njson_access_plans;
     uint32_t json_access_plan_cap;
+    XaotMapShapePlan *map_shape_plans;
+    uint32_t nmap_shape_plans;
+    uint32_t map_shape_plan_cap;
+    XaotKeyAccessPlan *key_access_plans;
+    uint32_t nkey_access_plans;
+    uint32_t key_access_plan_cap;
+    XaotHashEqPlan *hash_eq_plans;
+    uint32_t nhash_eq_plans;
+    uint32_t hash_eq_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -1005,12 +1107,18 @@ xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
                                             XgGenericInstId generic_inst_id);
 XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
                                                            XgDeriveId derive_id);
-XR_FUNC const XaotDerivedEqHashPlan *
-xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle, uint32_t type_key);
-XR_FUNC const XaotJsonShapePlan *
-xaot_bundle_find_json_shape_plan(const XaotBundle *bundle, XgJsonShapeId json_shape_id);
-XR_FUNC const XaotJsonAccessPlan *
-xaot_bundle_find_json_access_plan(const XaotBundle *bundle, XgJsonAccessId json_access_id);
+XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle,
+                                                                           uint32_t type_key);
+XR_FUNC const XaotJsonShapePlan *xaot_bundle_find_json_shape_plan(const XaotBundle *bundle,
+                                                                  XgJsonShapeId json_shape_id);
+XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBundle *bundle,
+                                                                    XgJsonAccessId json_access_id);
+XR_FUNC const XaotMapShapePlan *xaot_bundle_find_map_shape_plan(const XaotBundle *bundle,
+                                                                XgMapShapeId shape_id);
+XR_FUNC const XaotKeyAccessPlan *xaot_bundle_find_key_access_plan(const XaotBundle *bundle,
+                                                                  XgKeyAccessId access_id);
+XR_FUNC const XaotHashEqPlan *xaot_bundle_find_hash_eq_plan(const XaotBundle *bundle,
+                                                            uint32_t type_key);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,

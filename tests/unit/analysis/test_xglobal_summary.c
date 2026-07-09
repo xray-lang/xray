@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=4 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=5 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=4 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=4 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=4 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=5 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=5 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=5 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=5 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=4 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -7288,6 +7288,128 @@ TEST(global_evidence_records_json_shape_and_access_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_map_set_key_plans) {
+    XgBuildKey key = {.source_hash = 21,
+                      .compiler_semver_hash = 22,
+                      .profile_hash = 23,
+                      .imported_summary_hash = 24,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgMapShapeSummary shape = {.shape_id = 1,
+                               .module_id = 1,
+                               .owner_func_id = 7,
+                               .source_span_id = 100,
+                               .container_kind = XG_MAP_CONTAINER_MAP,
+                               .source = XG_MAP_SHAPE_SRC_LITERAL,
+                               .key_type_key = 200,
+                               .value_type_key = 201,
+                               .entry_start = 1,
+                               .entry_count = 2,
+                               .literal_count = 2,
+                               .flags = XG_MAP_SHAPE_LITERAL,
+                               .shape_hash = UINT64_C(0xaaa1)};
+    XgMapEntrySummary first = {.entry_id = 1,
+                               .shape_id = 1,
+                               .entry_ordinal = 0,
+                               .key_const_id = xg_name_id("a"),
+                               .value_const_id = 301,
+                               .prehash = UINT64_C(0x1001),
+                               .flags = XG_MAP_ENTRY_CONST_KEY | XG_MAP_ENTRY_CONST_VALUE};
+    XgMapEntrySummary second = {.entry_id = 2,
+                                .shape_id = 1,
+                                .entry_ordinal = 1,
+                                .key_const_id = xg_name_id("b"),
+                                .value_const_id = 302,
+                                .prehash = UINT64_C(0x1002),
+                                .flags = XG_MAP_ENTRY_CONST_KEY | XG_MAP_ENTRY_CONST_VALUE};
+    XgHashEqSummary hash_eq = {.hash_eq_id = 1,
+                               .type_key = 200,
+                               .kind = XG_HASH_EQ_BUILTIN,
+                               .flags = XG_HASH_EQ_NO_ALLOC | XG_HASH_EQ_NO_THROW |
+                                        XG_HASH_EQ_PURE | XG_HASH_EQ_FINAL};
+    XgKeyAccessSummary access = {.access_id = 1,
+                                 .owner_func_id = 7,
+                                 .source_span_id = 101,
+                                 .body_ordinal = 3,
+                                 .container_kind = XG_MAP_CONTAINER_MAP,
+                                 .op = XG_KEY_ACCESS_INDEX_GET,
+                                 .receiver_shape_id = 1,
+                                 .receiver_type_key = 400,
+                                 .key_type_key = 200,
+                                 .value_type_key = 201,
+                                 .key_const_id = xg_name_id("a"),
+                                 .key_prehash = UINT64_C(0x1001),
+                                 .flags = XG_KEY_ACCESS_CONST_KEY | XG_KEY_ACCESS_MISSING_PANICS};
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_shape(&ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_entry(&ev, &first));
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_entry(&ev, &second));
+    ASSERT_NOT_NULL(xg_global_evidence_add_hash_eq(&ev, &hash_eq));
+    ASSERT_NOT_NULL(xg_global_evidence_add_key_access(&ev, &access));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "map-shape 0 id=1 module=1 func=7 container=map source=literal"));
+    ASSERT_NOT_NULL(strstr(dump, "map-entry 0 id=1 shape=1 ord=0"));
+    ASSERT_NOT_NULL(strstr(dump, "hash-eq 0 id=1 type=200 kind=builtin"));
+    ASSERT_NOT_NULL(strstr(dump, "key-access 0 id=1 func=7 span=101 ordinal=3 container=map"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nmap_shape_plans, 1);
+    ASSERT_EQ_UINT(bundle.nhash_eq_plans, 1);
+    ASSERT_EQ_UINT(bundle.nkey_access_plans, 1);
+    const XaotMapShapePlan *shape_plan = xaot_bundle_find_map_shape_plan(&bundle, 1);
+    const XaotHashEqPlan *hash_eq_plan = xaot_bundle_find_hash_eq_plan(&bundle, 200);
+    const XaotKeyAccessPlan *access_plan = xaot_bundle_find_key_access_plan(&bundle, 1);
+    ASSERT_NOT_NULL(shape_plan);
+    ASSERT_NOT_NULL(hash_eq_plan);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(shape_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
+    ASSERT_EQ_UINT(hash_eq_plan->action, XAOT_HASH_EQ_BUILTIN_INLINE);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+    ASSERT_TRUE((access_plan->evidence & XAOT_MAP_EV_HASH_EQ) != 0);
+    ASSERT_TRUE((access_plan->evidence & XAOT_MAP_EV_PREHASH) != 0);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "map-shape-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=prealloc_hash"));
+    ASSERT_NOT_NULL(
+        strstr(plan_dump, "hash-eq-plan 0 id=1 type=200 kind=builtin action=builtin_inline"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "key-access-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=prehashed_lookup"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.key_access_plans[0].access_id = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT key access evidence has no plan"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_records_explicit_json_shape_access) {
     setup_parser_session();
     const char *source = "fn readName() -> string {\n"
@@ -7793,6 +7915,7 @@ RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
 RUN_TEST(global_evidence_producer_records_derived_eq_hash_plan);
 RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
+RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);

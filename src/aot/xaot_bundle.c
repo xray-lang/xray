@@ -219,6 +219,21 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->njson_access_plans = 0;
     bundle->json_access_plan_cap = 0;
 
+    xr_free(bundle->map_shape_plans);
+    bundle->map_shape_plans = NULL;
+    bundle->nmap_shape_plans = 0;
+    bundle->map_shape_plan_cap = 0;
+
+    xr_free(bundle->key_access_plans);
+    bundle->key_access_plans = NULL;
+    bundle->nkey_access_plans = 0;
+    bundle->key_access_plan_cap = 0;
+
+    xr_free(bundle->hash_eq_plans);
+    bundle->hash_eq_plans = NULL;
+    bundle->nhash_eq_plans = 0;
+    bundle->hash_eq_plan_cap = 0;
+
     xr_free(bundle->metadata_plans);
     bundle->metadata_plans = NULL;
     bundle->nmetadata_plans = 0;
@@ -1495,6 +1510,296 @@ static bool xaot_bundle_add_json_access_plans(XaotBundle *bundle,
     return true;
 }
 
+static bool map_container_kind_valid(uint8_t kind) {
+    return kind == XG_MAP_CONTAINER_MAP || kind == XG_MAP_CONTAINER_SET;
+}
+
+static bool map_shape_source_valid(uint8_t source) {
+    switch ((XgMapShapeSource) source) {
+        case XG_MAP_SHAPE_SRC_LITERAL:
+        case XG_MAP_SHAPE_SRC_CONSTRUCTOR:
+        case XG_MAP_SHAPE_SRC_FROM_ARRAY:
+        case XG_MAP_SHAPE_SRC_STATIC:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool key_access_op_valid(uint8_t op) {
+    switch ((XgKeyAccessOp) op) {
+        case XG_KEY_ACCESS_GET:
+        case XG_KEY_ACCESS_INDEX_GET:
+        case XG_KEY_ACCESS_SET:
+        case XG_KEY_ACCESS_HAS:
+        case XG_KEY_ACCESS_DELETE:
+        case XG_KEY_ACCESS_ADD:
+        case XG_KEY_ACCESS_CLEAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool hash_eq_kind_valid(uint8_t kind) {
+    switch ((XgHashEqKind) kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+        case XG_HASH_EQ_DERIVE:
+        case XG_HASH_EQ_USER_METHOD:
+        case XG_HASH_EQ_MISSING:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t map_shape_action_for(const XgMapShapeSummary *shape) {
+    if (!shape || !map_container_kind_valid(shape->container_kind) ||
+        !map_shape_source_valid(shape->source))
+        return XAOT_MAP_SHAPE_REJECT;
+    if ((shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
+        (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY))
+        return XAOT_MAP_SHAPE_READONLY_STATIC_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_DENSE_ENUM) != 0)
+        return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
+        return XAOT_MAP_SHAPE_DENSE_INT_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        return XAOT_MAP_SHAPE_SMALL_INLINE;
+    if ((shape->flags & XG_MAP_SHAPE_LITERAL) != 0 || shape->source == XG_MAP_SHAPE_SRC_LITERAL)
+        return XAOT_MAP_SHAPE_PREALLOC_HASH;
+    return XAOT_MAP_SHAPE_RUNTIME_HASH;
+}
+
+static uint8_t map_shape_reason_for(const XgMapShapeSummary *shape) {
+    return shape && map_container_kind_valid(shape->container_kind) &&
+                   map_shape_source_valid(shape->source)
+               ? XAOT_MAP_UNPROVEN_NONE
+               : XAOT_MAP_UNPROVEN_INVALID_KIND;
+}
+
+static uint32_t map_shape_evidence_for(const XgMapShapeSummary *shape) {
+    uint32_t evidence = XAOT_MAP_EV_GLOBAL_ROW;
+    if (!shape)
+        return evidence;
+    if ((shape->flags & XG_MAP_SHAPE_LITERAL) != 0 || shape->source == XG_MAP_SHAPE_SRC_LITERAL)
+        evidence |= XAOT_MAP_EV_LITERAL;
+    if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+        evidence |= XAOT_MAP_EV_DENSE_DOMAIN;
+    if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        evidence |= XAOT_MAP_EV_SMALL;
+    return evidence;
+}
+
+static bool xaot_bundle_add_map_shape_plan(XaotBundle *bundle, const XgMapShapeSummary *shape) {
+    XaotMapShapePlan *plan;
+    if (!bundle || !shape)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->map_shape_plans, &bundle->map_shape_plan_cap,
+                            bundle->nmap_shape_plans + 1, sizeof(XaotMapShapePlan), 8))
+        return false;
+    plan = &bundle->map_shape_plans[bundle->nmap_shape_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->shape_id = shape->shape_id;
+    plan->module_id = shape->module_id;
+    plan->owner_func_id = shape->owner_func_id;
+    plan->container_kind = shape->container_kind;
+    plan->source = shape->source;
+    plan->key_type_key = shape->key_type_key;
+    plan->value_type_key = shape->value_type_key;
+    plan->entry_start = shape->entry_start;
+    plan->entry_count = shape->entry_count;
+    plan->literal_count = shape->literal_count;
+    plan->action = map_shape_action_for(shape);
+    plan->evidence = map_shape_evidence_for(shape);
+    plan->unproven_reason = map_shape_reason_for(shape);
+    plan->shape_hash = shape->shape_hash;
+    return true;
+}
+
+static bool xaot_bundle_add_map_shape_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nmap_shapes; i++) {
+        if (!xaot_bundle_add_map_shape_plan(bundle, &evidence->map_shapes[i]))
+            return false;
+    }
+    return true;
+}
+
+static uint8_t hash_eq_action_for(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq || !hash_eq_kind_valid(hash_eq->kind) || hash_eq->type_key == 0)
+        return XAOT_HASH_EQ_DYNAMIC_REJECT;
+    switch ((XgHashEqKind) hash_eq->kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+            return XAOT_HASH_EQ_BUILTIN_INLINE;
+        case XG_HASH_EQ_DERIVE:
+            return hash_eq->eq_derive_id != XG_NO_ID && hash_eq->hash_derive_id != XG_NO_ID
+                       ? XAOT_HASH_EQ_DERIVE_INLINE
+                       : XAOT_HASH_EQ_DYNAMIC_REJECT;
+        case XG_HASH_EQ_USER_METHOD:
+            return hash_eq->eq_func_id != XG_NO_ID && hash_eq->hash_func_id != XG_NO_ID
+                       ? XAOT_HASH_EQ_DIRECT_CALL
+                       : XAOT_HASH_EQ_DYNAMIC_REJECT;
+        case XG_HASH_EQ_MISSING:
+        default:
+            return XAOT_HASH_EQ_DYNAMIC_REJECT;
+    }
+}
+
+static uint8_t hash_eq_reason_for(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq || !hash_eq_kind_valid(hash_eq->kind) || hash_eq->type_key == 0)
+        return XAOT_MAP_UNPROVEN_INVALID_KIND;
+    return hash_eq_action_for(hash_eq) == XAOT_HASH_EQ_DYNAMIC_REJECT ? XAOT_MAP_UNPROVEN_UNHASHABLE
+                                                                      : XAOT_MAP_UNPROVEN_NONE;
+}
+
+static uint32_t hash_eq_evidence_for(const XgHashEqSummary *hash_eq) {
+    uint32_t evidence = XAOT_MAP_EV_GLOBAL_ROW;
+    if (!hash_eq)
+        return evidence;
+    if (hash_eq_action_for(hash_eq) != XAOT_HASH_EQ_DYNAMIC_REJECT)
+        evidence |= XAOT_MAP_EV_HASH_EQ;
+    return evidence;
+}
+
+static bool xaot_bundle_add_hash_eq_plan(XaotBundle *bundle, const XgHashEqSummary *hash_eq) {
+    XaotHashEqPlan *plan;
+    if (!bundle || !hash_eq)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->hash_eq_plans, &bundle->hash_eq_plan_cap,
+                            bundle->nhash_eq_plans + 1, sizeof(XaotHashEqPlan), 8))
+        return false;
+    plan = &bundle->hash_eq_plans[bundle->nhash_eq_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->hash_eq_id = hash_eq->hash_eq_id;
+    plan->type_key = hash_eq->type_key;
+    plan->kind = hash_eq->kind;
+    plan->eq_derive_id = hash_eq->eq_derive_id;
+    plan->hash_derive_id = hash_eq->hash_derive_id;
+    plan->eq_func_id = hash_eq->eq_func_id;
+    plan->hash_func_id = hash_eq->hash_func_id;
+    plan->action = hash_eq_action_for(hash_eq);
+    plan->evidence = hash_eq_evidence_for(hash_eq);
+    plan->unproven_reason = hash_eq_reason_for(hash_eq);
+    return true;
+}
+
+static bool xaot_bundle_add_hash_eq_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nhash_eqs; i++) {
+        if (!xaot_bundle_add_hash_eq_plan(bundle, &evidence->hash_eqs[i]))
+            return false;
+    }
+    return true;
+}
+
+static uint8_t key_access_action_for(const XgGlobalEvidence *evidence,
+                                     const XgKeyAccessSummary *access) {
+    const XgMapShapeSummary *shape = NULL;
+    const XgHashEqSummary *hash_eq = NULL;
+    if (!access || !map_container_kind_valid(access->container_kind) ||
+        !key_access_op_valid(access->op))
+        return XAOT_KEY_ACCESS_REJECT;
+    if (access->receiver_shape_id != XG_NO_ID) {
+        shape = xg_global_evidence_find_map_shape(evidence, access->receiver_shape_id);
+        if (!shape)
+            return XAOT_KEY_ACCESS_REJECT;
+        if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+            return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
+        if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+            return XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
+    }
+    hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);
+    if (!hash_eq || hash_eq_action_for(hash_eq) == XAOT_HASH_EQ_DYNAMIC_REJECT)
+        return XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP;
+    return (access->flags & XG_KEY_ACCESS_CONST_KEY) != 0 && access->key_const_id != 0
+               ? XAOT_KEY_ACCESS_PREHASHED_LOOKUP
+               : XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP;
+}
+
+static uint8_t key_access_reason_for(const XgGlobalEvidence *evidence,
+                                     const XgKeyAccessSummary *access) {
+    const XgHashEqSummary *hash_eq;
+    if (!access || !map_container_kind_valid(access->container_kind) ||
+        !key_access_op_valid(access->op))
+        return XAOT_MAP_UNPROVEN_INVALID_KIND;
+    if (access->receiver_shape_id != XG_NO_ID &&
+        !xg_global_evidence_find_map_shape(evidence, access->receiver_shape_id))
+        return XAOT_MAP_UNPROVEN_MISSING_SHAPE;
+    hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);
+    if (!hash_eq)
+        return XAOT_MAP_UNPROVEN_MISSING_HASH_EQ;
+    if (hash_eq_action_for(hash_eq) == XAOT_HASH_EQ_DYNAMIC_REJECT)
+        return XAOT_MAP_UNPROVEN_UNHASHABLE;
+    return XAOT_MAP_UNPROVEN_NONE;
+}
+
+static uint32_t key_access_evidence_for(const XgGlobalEvidence *evidence,
+                                        const XgKeyAccessSummary *access) {
+    const XgMapShapeSummary *shape;
+    const XgHashEqSummary *hash_eq;
+    uint32_t bits = XAOT_MAP_EV_GLOBAL_ROW;
+    if (!access)
+        return bits;
+    if ((access->flags & XG_KEY_ACCESS_CONST_KEY) != 0 && access->key_const_id != 0)
+        bits |= XAOT_MAP_EV_CONST_KEY;
+    if (access->key_prehash != 0)
+        bits |= XAOT_MAP_EV_PREHASH;
+    shape = xg_global_evidence_find_map_shape(evidence, access->receiver_shape_id);
+    if (shape) {
+        if ((shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+            bits |= XAOT_MAP_EV_DENSE_DOMAIN;
+        if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+            bits |= XAOT_MAP_EV_SMALL;
+    }
+    hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);
+    if (hash_eq && hash_eq_action_for(hash_eq) != XAOT_HASH_EQ_DYNAMIC_REJECT)
+        bits |= XAOT_MAP_EV_HASH_EQ;
+    return bits;
+}
+
+static bool xaot_bundle_add_key_access_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                            const XgKeyAccessSummary *access) {
+    XaotKeyAccessPlan *plan;
+    if (!bundle || !evidence || !access)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->key_access_plans, &bundle->key_access_plan_cap,
+                            bundle->nkey_access_plans + 1, sizeof(XaotKeyAccessPlan), 8))
+        return false;
+    plan = &bundle->key_access_plans[bundle->nkey_access_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->access_id = access->access_id;
+    plan->owner_func_id = access->owner_func_id;
+    plan->source_span_id = access->source_span_id;
+    plan->body_ordinal = access->body_ordinal;
+    plan->container_kind = access->container_kind;
+    plan->op = access->op;
+    plan->receiver_shape_id = access->receiver_shape_id;
+    plan->receiver_type_key = access->receiver_type_key;
+    plan->key_type_key = access->key_type_key;
+    plan->value_type_key = access->value_type_key;
+    plan->key_const_id = access->key_const_id;
+    plan->key_prehash = access->key_prehash;
+    plan->action = key_access_action_for(evidence, access);
+    plan->evidence = key_access_evidence_for(evidence, access);
+    plan->unproven_reason = key_access_reason_for(evidence, access);
+    return true;
+}
+
+static bool xaot_bundle_add_key_access_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nkey_accesses; i++) {
+        if (!xaot_bundle_add_key_access_plan(bundle, evidence, &evidence->key_accesses[i]))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
     if (profile == XG_BUILD_FREESTANDING) {
         switch (metadata) {
@@ -1852,6 +2157,18 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_json_access_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT Json access plan";
+        return false;
+    }
+    if (!xaot_bundle_add_map_shape_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT Map/Set shape plan";
+        return false;
+    }
+    if (!xaot_bundle_add_hash_eq_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT Hash/Eq plan";
+        return false;
+    }
+    if (!xaot_bundle_add_key_access_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT Map/Set key access plan";
         return false;
     }
     if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
@@ -2415,6 +2732,39 @@ XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBu
     for (uint32_t i = 0; i < bundle->njson_access_plans; i++) {
         if (bundle->json_access_plans[i].json_access_id == json_access_id)
             return &bundle->json_access_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotMapShapePlan *xaot_bundle_find_map_shape_plan(const XaotBundle *bundle,
+                                                                XgMapShapeId shape_id) {
+    if (!bundle || shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nmap_shape_plans; i++) {
+        if (bundle->map_shape_plans[i].shape_id == shape_id)
+            return &bundle->map_shape_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotKeyAccessPlan *xaot_bundle_find_key_access_plan(const XaotBundle *bundle,
+                                                                  XgKeyAccessId access_id) {
+    if (!bundle || access_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nkey_access_plans; i++) {
+        if (bundle->key_access_plans[i].access_id == access_id)
+            return &bundle->key_access_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotHashEqPlan *xaot_bundle_find_hash_eq_plan(const XaotBundle *bundle,
+                                                            uint32_t type_key) {
+    if (!bundle || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nhash_eq_plans; i++) {
+        if (bundle->hash_eq_plans[i].type_key == type_key)
+            return &bundle->hash_eq_plans[i];
     }
     return NULL;
 }
@@ -3603,6 +3953,80 @@ static const char *json_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *map_shape_action_name(uint8_t action) {
+    switch ((XaotMapShapeAction) action) {
+        case XAOT_MAP_SHAPE_RUNTIME_HASH:
+            return "runtime_hash";
+        case XAOT_MAP_SHAPE_PREALLOC_HASH:
+            return "prealloc_hash";
+        case XAOT_MAP_SHAPE_SMALL_INLINE:
+            return "small_inline";
+        case XAOT_MAP_SHAPE_DENSE_ENUM_TABLE:
+            return "dense_enum_table";
+        case XAOT_MAP_SHAPE_DENSE_INT_TABLE:
+            return "dense_int_table";
+        case XAOT_MAP_SHAPE_READONLY_STATIC_TABLE:
+            return "readonly_static_table";
+        case XAOT_MAP_SHAPE_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *key_access_action_name(uint8_t action) {
+    switch ((XaotKeyAccessAction) action) {
+        case XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX:
+            return "direct_dense_index";
+        case XAOT_KEY_ACCESS_PREHASHED_LOOKUP:
+            return "prehashed_lookup";
+        case XAOT_KEY_ACCESS_INLINE_SMALL_SCAN:
+            return "inline_small_scan";
+        case XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP:
+            return "specialized_hash_lookup";
+        case XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP:
+            return "generic_hash_lookup";
+        case XAOT_KEY_ACCESS_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *hash_eq_action_name(uint8_t action) {
+    switch ((XaotHashEqAction) action) {
+        case XAOT_HASH_EQ_BUILTIN_INLINE:
+            return "builtin_inline";
+        case XAOT_HASH_EQ_DERIVE_INLINE:
+            return "derive_inline";
+        case XAOT_HASH_EQ_DIRECT_CALL:
+            return "direct_call";
+        case XAOT_HASH_EQ_DYNAMIC_REJECT:
+            return "dynamic_reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *map_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_MAP_UNPROVEN_NONE:
+            return "none";
+        case XAOT_MAP_UNPROVEN_INVALID_KIND:
+            return "invalid_kind";
+        case XAOT_MAP_UNPROVEN_COMPUTED_KEY:
+            return "computed_key";
+        case XAOT_MAP_UNPROVEN_MISSING_SHAPE:
+            return "missing_shape";
+        case XAOT_MAP_UNPROVEN_MISSING_HASH_EQ:
+            return "missing_hash_eq";
+        case XAOT_MAP_UNPROVEN_UNHASHABLE:
+            return "unhashable";
+        default:
+            return "unknown";
+    }
+}
+
 static const char *static_data_action_name(uint32_t action) {
     switch ((XaotStaticDataAction) action) {
         case XAOT_STATIC_DATA_ACTION_PROVE:
@@ -4303,6 +4727,44 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 xg_json_access_kind_name(jp->access_kind), json_access_action_name(jp->action),
                 jp->key_name_id, jp->result_type_key, (unsigned) jp->field_ordinal, jp->evidence,
                 json_unproven_reason_name(jp->unproven_reason));
+    }
+
+    for (uint32_t mi = 0; mi < bundle->nmap_shape_plans; mi++) {
+        const XaotMapShapePlan *mp = &bundle->map_shape_plans[mi];
+        fprintf(out,
+                "map-shape-plan %u id=%u module=%u func=%u container=%s source=%s action=%s "
+                "key_type=%u value_type=%u entries=%u+%u literal_count=%u hash=%016" PRIx64
+                " evidence=0x%x reason=%s\n",
+                mi, mp->shape_id, mp->module_id, mp->owner_func_id,
+                xg_map_container_kind_name(mp->container_kind),
+                xg_map_shape_source_name(mp->source), map_shape_action_name(mp->action),
+                mp->key_type_key, mp->value_type_key, mp->entry_start, (unsigned) mp->entry_count,
+                mp->literal_count, mp->shape_hash, mp->evidence,
+                map_unproven_reason_name(mp->unproven_reason));
+    }
+
+    for (uint32_t hi = 0; hi < bundle->nhash_eq_plans; hi++) {
+        const XaotHashEqPlan *hp = &bundle->hash_eq_plans[hi];
+        fprintf(out,
+                "hash-eq-plan %u id=%u type=%u kind=%s action=%s eq_derive=%u hash_derive=%u "
+                "eq_func=%u hash_func=%u evidence=0x%x reason=%s\n",
+                hi, hp->hash_eq_id, hp->type_key, xg_hash_eq_kind_name(hp->kind),
+                hash_eq_action_name(hp->action), hp->eq_derive_id, hp->hash_derive_id,
+                hp->eq_func_id, hp->hash_func_id, hp->evidence,
+                map_unproven_reason_name(hp->unproven_reason));
+    }
+
+    for (uint32_t ki = 0; ki < bundle->nkey_access_plans; ki++) {
+        const XaotKeyAccessPlan *kp = &bundle->key_access_plans[ki];
+        fprintf(out,
+                "key-access-plan %u id=%u func=%u span=%u ordinal=%u container=%s op=%s "
+                "shape=%u action=%s receiver_type=%u key_type=%u value_type=%u key_const=%u "
+                "prehash=%016" PRIx64 " evidence=0x%x reason=%s\n",
+                ki, kp->access_id, kp->owner_func_id, kp->source_span_id, kp->body_ordinal,
+                xg_map_container_kind_name(kp->container_kind), xg_key_access_op_name(kp->op),
+                kp->receiver_shape_id, key_access_action_name(kp->action), kp->receiver_type_key,
+                kp->key_type_key, kp->value_type_key, kp->key_const_id, kp->key_prehash,
+                kp->evidence, map_unproven_reason_name(kp->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {
