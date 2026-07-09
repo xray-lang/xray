@@ -14,7 +14,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "ws.h"
 #include "../net/xneterror.h"
 
 /* ========== WebSocket Opcodes ========== */
