@@ -1,27 +1,31 @@
-var label = "  alpha,beta  ".trim()
-var parts = label.split(",")
-print(parts.length)
-print(parts[0])
-print("xo".repeat(3))
-print(("pre" + "fix").startsWith("pre"))
+fn run_collections_boundary() {
+    var label = "  alpha,beta  ".trim()
+    var parts = label.split(",")
+    print(parts.length)
+    print(parts[0])
+    print("xo".repeat(3))
+    print(("pre" + "fix").startsWith("pre"))
 
-var xs: Array<int> = [1, 2, 3]
-xs.push(4)
-print(xs.length)
-print(xs[2])
-print(xs.join("|"))
-var view: Span<int> = xs[1:3]
-print(view.length)
+    var xs: Array<int> = [1, 2, 3]
+    xs.push(4)
+    print(xs.length)
+    print(xs[2])
+    print(xs.join("|"))
+    var view: Span<int> = xs[1:3]
+    print(view.length)
 
-var scores: Map<string, int> = #{"a": 1}
-scores.set("b", 2)
-print(scores.get("b"))
-print(scores.has("a"))
-scores.delete("a")
-print(scores.length)
+    var scores: Map<string, int> = #{"a": 1}
+    scores.set("b", 2)
+    print(scores.get("b"))
+    print(scores.has("a"))
+    scores.delete("a")
+    print(scores.length)
 
-var seen: Set<string> = #["x"]
-seen.add("y")
-print(seen.has("y"))
-seen.delete("x")
-print(seen.length)
+    var seen: Set<string> = #["x"]
+    seen.add("y")
+    print(seen.has("y"))
+    seen.delete("x")
+    print(seen.length)
+}
+
+run_collections_boundary()
