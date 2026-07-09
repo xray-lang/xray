@@ -18,21 +18,8 @@
 
 #include "../../src/base/xdefs.h"
 
-#ifndef XR_VALUE_DEFINED
-typedef struct XrValue XrValue;
-#endif
-
 struct XrVMRuntime;
 struct XrModule;
-
-/* ========== WebSocket Server API ========== */
-
-/*
- * Upgrade HTTP connection to WebSocket and wrap as script-visible Json object.
- * Used by HTTP server to upgrade in-place when a WS route matches.
- * Returns xr_null() on failure.
- */
-XrValue ws_upgrade_and_wrap(struct XrVMRuntime *X, int fd, const char *request_headers);
 
 /* ========== Module API ========== */
 

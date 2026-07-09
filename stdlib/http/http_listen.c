@@ -41,7 +41,7 @@
 #include "../../src/base/xarena.h"
 #include "../../src/base/xmalloc.h"
 #include "../net/xnetbuf.h"
-#include "../ws/ws.h"
+#include "../ws/ws_http_bridge.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
