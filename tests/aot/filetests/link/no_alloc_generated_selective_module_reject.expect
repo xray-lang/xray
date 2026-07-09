@@ -1,0 +1,5 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_io_cwd_selective_reject' allocates via stdlib 'io.cwd'
+contains=xray_no_alloc_io_cwd_selective_reject
+not_contains=Return type mismatch
+not_contains=CRASH
