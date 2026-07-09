@@ -297,16 +297,6 @@ XrHttpConnPool *http_conn_pool_new(void) {
     return pool;
 }
 
-void http_conn_pool_init(XrHttpConnPool *pool) {
-    if (!pool || pool->initialized)
-        return;
-
-    memset(pool, 0, sizeof(XrHttpConnPool));
-    xr_mutex_init(&pool->lock);
-    pool->initialized = true;
-    pool->idle_timeout_ms = (uint64_t) XR_HTTP_POOL_MAX_IDLE_TIME * 1000;
-}
-
 void http_conn_pool_destroy(XrHttpConnPool *pool) {
     if (!pool || !pool->initialized)
         return;
@@ -342,7 +332,6 @@ void http_conn_pool_destroy(XrHttpConnPool *pool) {
     }
 #endif
 
-    pool->total_conns = 0;
     pool->initialized = false;
 
     xr_mutex_unlock(&pool->lock);
@@ -385,7 +374,6 @@ XrHttpPooledConn *http_conn_pool_get(struct XrVMRuntime *X, XrHttpConnPool *pool
                     xr_free(conn);
                     hp->conn_count--;
                     hp->idle_count--;
-                    pool->total_conns--;
                     continue;
                 }
                 *pp = conn->next;
@@ -394,7 +382,6 @@ XrHttpPooledConn *http_conn_pool_get(struct XrVMRuntime *X, XrHttpConnPool *pool
                 conn->last_used_ms = now;
                 hp->conn_count--;
                 hp->idle_count--;
-                pool->total_conns--;
                 result = conn;
                 break;
             }
@@ -470,7 +457,6 @@ void http_conn_pool_put(struct XrVMRuntime *X, XrHttpConnPool *pool, XrHttpPoole
     hp->conns = conn;
     hp->conn_count++;
     hp->idle_count++;
-    pool->total_conns++;
 
     xr_mutex_unlock(&pool->lock);
 }
@@ -505,7 +491,6 @@ int http_conn_pool_evict_idle(struct XrVMRuntime *X, XrHttpConnPool *pool) {
                     xr_free(conn);
                     hp->conn_count--;
                     hp->idle_count--;
-                    pool->total_conns--;
                     evicted++;
                 } else {
                     pp = &(*pp)->next;
@@ -517,39 +502,6 @@ int http_conn_pool_evict_idle(struct XrVMRuntime *X, XrHttpConnPool *pool) {
 
     xr_mutex_unlock(&pool->lock);
     return evicted;
-}
-
-void http_conn_pool_cleanup(struct XrVMRuntime *X, XrHttpConnPool *pool) {
-    http_conn_pool_evict_idle(X, pool);
-}
-
-void http_conn_pool_stats(XrHttpConnPool *pool, int *total, int *idle) {
-    if (!pool || !pool->initialized) {
-        if (total)
-            *total = 0;
-        if (idle)
-            *idle = 0;
-        return;
-    }
-
-    xr_mutex_lock(&pool->lock);
-
-    int t = 0, i = 0;
-    for (int b = 0; b < XR_HTTP_POOL_MAX_HOSTS; b++) {
-        XrHttpHostPool *hp = pool->buckets[b];
-        while (hp) {
-            t += hp->conn_count;
-            i += hp->idle_count;
-            hp = hp->next;
-        }
-    }
-
-    if (total)
-        *total = t;
-    if (idle)
-        *idle = i;
-
-    xr_mutex_unlock(&pool->lock);
 }
 
 /* ========== Connection Read/Write Helpers ========== */
