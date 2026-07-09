@@ -3,7 +3,7 @@ fn fill(out: Bytes, src: Bytes) -> int {
     unsafe {
         var p = out.mutPtr()
         var sp = src.ptr()
-        p.copyFromNonOverlappingUnchecked(sp, 4)
+        p.copyFromNonOverlapping(sp, 4)
     }
     return out[2]
 }

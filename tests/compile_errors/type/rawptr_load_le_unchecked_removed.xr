@@ -1,0 +1,6 @@
+fn read(src: Bytes) -> int {
+    unsafe {
+        var p = src.ptr()
+        return int(p.loadLEUnchecked<uint16>(0))
+    }
+}

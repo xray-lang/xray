@@ -1,1 +1,1 @@
-RawMut.storeLEUnchecked() must be inside an unsafe block
+RawMut.storeLE() must be inside an unsafe block

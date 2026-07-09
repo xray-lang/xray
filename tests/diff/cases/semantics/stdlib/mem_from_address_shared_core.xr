@@ -35,7 +35,7 @@ print(mem.addressOf(q) == addr)
 var q32 = mem.fromAddress(addr) as RawMut<uint32>
 unsafe { q32[0] = 0x01020304 as uint32 }
 var p_ro: RawPtr<uint8> = p
-unsafe { print(int(p_ro.loadLEUnchecked<uint32>(0))) }
+unsafe { print(int(p_ro.loadLE<uint32>(0))) }
 
 // addressOf is pointee-type agnostic: C pointer comparisons/differences often
 // start from typed pointers, not only byte pointers.
