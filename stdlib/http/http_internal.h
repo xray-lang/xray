@@ -166,6 +166,7 @@ int http2_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
 XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client);
 void http2_conn_free(XrH2Conn *conn);
 int http2_conn_init(XrH2Conn *conn);
+XrH2ErrorCode http2_validate_inbound_frame_header(const XrH2FrameHeader *header);
 XrH2ErrorCode http2_apply_settings_payload(XrH2Conn *conn, const uint8_t *payload, uint32_t length);
 XrH2Stream *http2_stream_new(XrH2Conn *conn);
 int http2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,

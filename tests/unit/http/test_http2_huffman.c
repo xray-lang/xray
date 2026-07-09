@@ -57,6 +57,12 @@ static void write_setting(uint8_t out[6], uint16_t id, uint32_t value) {
     out[5] = (uint8_t) value;
 }
 
+static XrH2FrameHeader frame_header(uint8_t type, uint8_t flags, uint32_t stream_id,
+                                    uint32_t length) {
+    XrH2FrameHeader h = {.length = length, .type = type, .flags = flags, .stream_id = stream_id};
+    return h;
+}
+
 /* ========== RFC 7541 C.4.1: First Request with Huffman ========== */
 
 // :method = GET            indexed 2:      0x82
@@ -277,6 +283,55 @@ TEST(settings_payload_rejects_invalid_enable_push_without_mutation) {
     http2_conn_free(conn);
 }
 
+/* ========== HTTP/2 frame header validation ========== */
+
+TEST(frame_header_accepts_current_client_frames) {
+    XrH2FrameHeader data = frame_header(XR_H2_FRAME_DATA, XR_H2_FLAG_END_STREAM, 1, 4);
+    XrH2FrameHeader headers = frame_header(XR_H2_FRAME_HEADERS, XR_H2_FLAG_END_HEADERS, 1, 0);
+    XrH2FrameHeader settings = frame_header(XR_H2_FRAME_SETTINGS, 0, 0, 0);
+    XrH2FrameHeader ping = frame_header(XR_H2_FRAME_PING, 0, 0, 8);
+    XrH2FrameHeader window = frame_header(XR_H2_FRAME_WINDOW_UPDATE, 0, 0, 4);
+
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&data), XR_H2_NO_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&headers), XR_H2_NO_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&settings), XR_H2_NO_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&ping), XR_H2_NO_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&window), XR_H2_NO_ERROR);
+}
+
+TEST(frame_header_rejects_stream_zero_data_headers_rst) {
+    XrH2FrameHeader data = frame_header(XR_H2_FRAME_DATA, 0, 0, 1);
+    XrH2FrameHeader headers = frame_header(XR_H2_FRAME_HEADERS, XR_H2_FLAG_END_HEADERS, 0, 1);
+    XrH2FrameHeader rst = frame_header(XR_H2_FRAME_RST_STREAM, 0, 0, 4);
+
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&data), XR_H2_PROTOCOL_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&headers), XR_H2_PROTOCOL_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&rst), XR_H2_PROTOCOL_ERROR);
+}
+
+TEST(frame_header_rejects_unjoined_headers_block) {
+    XrH2FrameHeader headers = frame_header(XR_H2_FRAME_HEADERS, 0, 1, 1);
+
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&headers), XR_H2_PROTOCOL_ERROR);
+}
+
+TEST(frame_header_rejects_control_frame_shape_errors) {
+    XrH2FrameHeader settings_ack_payload = frame_header(XR_H2_FRAME_SETTINGS, XR_H2_FLAG_ACK, 0, 6);
+    XrH2FrameHeader rst_bad_len = frame_header(XR_H2_FRAME_RST_STREAM, 0, 1, 3);
+    XrH2FrameHeader ping_bad_stream = frame_header(XR_H2_FRAME_PING, 0, 1, 8);
+    XrH2FrameHeader goaway_short = frame_header(XR_H2_FRAME_GOAWAY, 0, 0, 4);
+    XrH2FrameHeader window_bad_len = frame_header(XR_H2_FRAME_WINDOW_UPDATE, 0, 0, 3);
+
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&settings_ack_payload),
+                  XR_H2_FRAME_SIZE_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&rst_bad_len), XR_H2_FRAME_SIZE_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&ping_bad_stream),
+                  XR_H2_PROTOCOL_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&goaway_short), XR_H2_FRAME_SIZE_ERROR);
+    ASSERT_EQ_INT((int) http2_validate_inbound_frame_header(&window_bad_len),
+                  XR_H2_FRAME_SIZE_ERROR);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -300,5 +355,11 @@ RUN_TEST(settings_payload_rejects_partial_setting);
 RUN_TEST(settings_payload_rejects_invalid_max_frame_without_mutation);
 RUN_TEST(settings_payload_rejects_initial_window_overflow_without_mutation);
 RUN_TEST(settings_payload_rejects_invalid_enable_push_without_mutation);
+
+RUN_TEST_SUITE("HTTP/2 frame header validation");
+RUN_TEST(frame_header_accepts_current_client_frames);
+RUN_TEST(frame_header_rejects_stream_zero_data_headers_rst);
+RUN_TEST(frame_header_rejects_unjoined_headers_block);
+RUN_TEST(frame_header_rejects_control_frame_shape_errors);
 
 TEST_MAIN_END()

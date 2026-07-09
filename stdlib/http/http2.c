@@ -1013,6 +1013,59 @@ static int http2_send_settings_ack(XrH2Conn *conn) {
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE);
 }
 
+XrH2ErrorCode http2_validate_inbound_frame_header(const XrH2FrameHeader *header) {
+    if (!header)
+        return XR_H2_INTERNAL_ERROR;
+
+    switch (header->type) {
+        case XR_H2_FRAME_DATA:
+        case XR_H2_FRAME_HEADERS:
+        case XR_H2_FRAME_RST_STREAM:
+            if (header->stream_id == 0)
+                return XR_H2_PROTOCOL_ERROR;
+            break;
+        default:
+            break;
+    }
+
+    switch (header->type) {
+        case XR_H2_FRAME_SETTINGS:
+            if (header->stream_id != 0)
+                return XR_H2_PROTOCOL_ERROR;
+            if ((header->flags & XR_H2_FLAG_ACK) && header->length != 0)
+                return XR_H2_FRAME_SIZE_ERROR;
+            break;
+        case XR_H2_FRAME_HEADERS:
+            if (!(header->flags & XR_H2_FLAG_END_HEADERS))
+                return XR_H2_PROTOCOL_ERROR;
+            break;
+        case XR_H2_FRAME_RST_STREAM:
+            if (header->length != 4)
+                return XR_H2_FRAME_SIZE_ERROR;
+            break;
+        case XR_H2_FRAME_PING:
+            if (header->stream_id != 0)
+                return XR_H2_PROTOCOL_ERROR;
+            if (header->length != 8)
+                return XR_H2_FRAME_SIZE_ERROR;
+            break;
+        case XR_H2_FRAME_GOAWAY:
+            if (header->stream_id != 0)
+                return XR_H2_PROTOCOL_ERROR;
+            if (header->length < 8)
+                return XR_H2_FRAME_SIZE_ERROR;
+            break;
+        case XR_H2_FRAME_WINDOW_UPDATE:
+            if (header->length != 4)
+                return XR_H2_FRAME_SIZE_ERROR;
+            break;
+        default:
+            break;
+    }
+
+    return XR_H2_NO_ERROR;
+}
+
 static uint32_t h2_read_u32(const uint8_t *p) {
     return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) | ((uint32_t) p[2] << 8) |
            (uint32_t) p[3];
@@ -1251,20 +1304,18 @@ static int http2_recv(XrH2Conn *conn) {
         }
     }
 
+    XrH2ErrorCode header_err = http2_validate_inbound_frame_header(&header);
+    if (header_err != XR_H2_NO_ERROR) {
+        http2_send_goaway(conn, 0, header_err);
+        xr_free(payload);
+        return -1;
+    }
+
     // Process frame
     int result = 0;
     switch (header.type) {
         case XR_H2_FRAME_SETTINGS:
-            if (header.stream_id != 0) {
-                http2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
-                result = -1;
-                break;
-            }
             if (header.flags & XR_H2_FLAG_ACK) {
-                if (header.length != 0) {
-                    http2_send_goaway(conn, 0, XR_H2_FRAME_SIZE_ERROR);
-                    result = -1;
-                }
                 break;
             } else {
                 XrH2ErrorCode err = http2_apply_settings_payload(conn, payload, header.length);
@@ -1379,11 +1430,6 @@ static int http2_recv(XrH2Conn *conn) {
             break;
 
         case XR_H2_FRAME_PING:
-            if (header.length != 8 || header.stream_id != 0 || !payload) {
-                http2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
-                result = -1;
-                break;
-            }
             if (!(header.flags & XR_H2_FLAG_ACK)) {
                 http2_send_ping(conn, payload, true);
             }
@@ -1398,11 +1444,6 @@ static int http2_recv(XrH2Conn *conn) {
         }
 
         case XR_H2_FRAME_WINDOW_UPDATE: {
-            // RFC 7540 §6.9: WINDOW_UPDATE payload is exactly 4 bytes.
-            if (header.length != 4 || !payload) {
-                result = -1;
-                break;
-            }
             uint32_t inc = ((uint32_t) payload[0] << 24) | ((uint32_t) payload[1] << 16) |
                            ((uint32_t) payload[2] << 8) | (uint32_t) payload[3];
             // RFC 7540 §6.9: increment of 0 is a PROTOCOL_ERROR.
