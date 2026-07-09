@@ -1,8 +1,12 @@
 // anchor: bytes-range-arg-shared-core
-var bytes = Bytes(8, 1)
-var view: ByteSpan = bytes[:]
-var offset = 4294967296
-print("before-range")
-var value: uint32 = view.load<uint32>(offset, Endian.LE)
-print(int(value))
-print("unreachable")
+fn main() {
+    var bytes = Bytes(8, 1)
+    var view: ByteSpan = bytes[:]
+    var offset = 4294967296
+    print("before-range")
+    var value: uint32 = view.load<uint32>(offset, Endian.LE)
+    print(int(value))
+    print("unreachable")
+}
+
+main()

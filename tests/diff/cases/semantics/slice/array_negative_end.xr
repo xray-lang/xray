@@ -1,10 +1,13 @@
 // anchor: slice-array-negative-end
-var arr = [1, 2, 3, 4]
+fn main() {
+    var arr = [1, 2, 3, 4]
+    var endDrop: Span<int> = arr[:-1]
+    print(endDrop)
+    print(copy(arr[:-1]))
+    var hugeDrop: Span<int> = arr[:-999]
+    print(hugeDrop)
+    var reversed: Span<int> = arr[3:1]
+    print(reversed)
+}
 
-var endDrop: Span<int> = arr[:-1]
-print(endDrop)
-print(copy(arr[:-1]))
-var hugeDrop: Span<int> = arr[:-999]
-print(hugeDrop)
-var reversed: Span<int> = arr[3:1]
-print(reversed)
+main()

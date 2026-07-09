@@ -1,10 +1,13 @@
 // anchor: slice-array-negative-both
-var arr = [1, 2, 3, 4]
+fn main() {
+    var arr = [1, 2, 3, 4]
+    var middle: Span<int> = arr[-3:-1]
+    print(middle)
+    print(copy(arr[-3:-1]))
+    var clampedStart: Span<int> = arr[-999:-1]
+    print(clampedStart)
+    var reversed: Span<int> = arr[-1:-999]
+    print(reversed)
+}
 
-var middle: Span<int> = arr[-3:-1]
-print(middle)
-print(copy(arr[-3:-1]))
-var clampedStart: Span<int> = arr[-999:-1]
-print(clampedStart)
-var reversed: Span<int> = arr[-1:-999]
-print(reversed)
+main()

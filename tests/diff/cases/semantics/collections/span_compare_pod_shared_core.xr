@@ -1,36 +1,34 @@
 // anchor: span-compare-pod-shared-core
-var left = Array<uint32>(2, 0)
-left[0] = 1
-left[1] = 2
+fn main() {
+    var left = Array<uint32>(2, 0)
+    left[0] = 1
+    left[1] = 2
+    var same = Array<uint32>(2, 0)
+    same[0] = 1
+    same[1] = 2
+    var higher = Array<uint32>(2, 0)
+    higher[0] = 1
+    higher[1] = 3
+    var prefix = Array<uint32>(1, 0)
+    prefix[0] = 1
+    var leftSpan: Span<uint32> = left[:]
+    var sameSpan: Span<uint32> = same[:]
+    var higherSpan: Span<uint32> = higher[:]
+    var prefixSpan: Span<uint32> = prefix[:]
+    print(leftSpan.compare(sameSpan))
+    print(leftSpan.compare(higherSpan))
+    print(higherSpan.compare(leftSpan))
+    print(leftSpan.compare(prefixSpan))
+    print(prefixSpan.compare(leftSpan))
+    var windowed = Array<uint16>(4, 0)
+    windowed[0] = 9
+    windowed[1] = 7
+    windowed[2] = 8
+    windowed[3] = 6
+    var winSpan: Span<uint16> = windowed[:]
+    var first: Span<uint16> = winSpan[1:3]
+    var second: Span<uint16> = winSpan[2:4]
+    print(first.compare(second))
+}
 
-var same = Array<uint32>(2, 0)
-same[0] = 1
-same[1] = 2
-
-var higher = Array<uint32>(2, 0)
-higher[0] = 1
-higher[1] = 3
-
-var prefix = Array<uint32>(1, 0)
-prefix[0] = 1
-
-var leftSpan: Span<uint32> = left[:]
-var sameSpan: Span<uint32> = same[:]
-var higherSpan: Span<uint32> = higher[:]
-var prefixSpan: Span<uint32> = prefix[:]
-
-print(leftSpan.compare(sameSpan))
-print(leftSpan.compare(higherSpan))
-print(higherSpan.compare(leftSpan))
-print(leftSpan.compare(prefixSpan))
-print(prefixSpan.compare(leftSpan))
-
-var windowed = Array<uint16>(4, 0)
-windowed[0] = 9
-windowed[1] = 7
-windowed[2] = 8
-windowed[3] = 6
-var winSpan: Span<uint16> = windowed[:]
-var first: Span<uint16> = winSpan[1:3]
-var second: Span<uint16> = winSpan[2:4]
-print(first.compare(second))
+main()

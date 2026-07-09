@@ -1,0 +1,13 @@
+fn erase(x: unknown) -> unknown {
+    return x
+}
+
+fn bad() {
+    var bytes = Bytes(4)
+    var view: ByteSpan = bytes[:]
+    var any = erase(view)
+    var values = Array<unknown>()
+    values.push(any)
+}
+
+bad()

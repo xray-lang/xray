@@ -485,6 +485,73 @@ static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const Xi
     }
 }
 
+static bool arc_type_is_span_view(const XrType *type) {
+    return type && XR_TYPE_IS_SPAN(type);
+}
+
+static bool arc_value_is_span_view_carrier(const XiValue *v) {
+    if (!v)
+        return false;
+    if (arc_type_is_span_view(v->type))
+        return true;
+    switch (v->op) {
+        case XI_COPY:
+        case XI_CONVERT:
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_MOVE:
+        case XI_PHI:
+        case XI_SELECT:
+            return v->nargs > 0 && arc_value_is_span_view_carrier(v->args[0]);
+        default:
+            return false;
+    }
+}
+
+static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiValue *user) {
+    if (!member || !user)
+        return false;
+    if (user->op == XI_SLICE && arc_type_is_span_view(user->type) && user->nargs >= 1 &&
+        user->args[0] == member)
+        return true;
+    if (user->op == XI_CALL_BUILTIN && arc_type_is_span_view(user->type) && user->nargs >= 1 &&
+        user->args[0] == member && user->aux &&
+        strcmp((const char *) user->aux, "string_bytes_span") == 0)
+        return true;
+    if (!arc_value_is_span_view_carrier(member))
+        return false;
+    if (!arc_type_is_span_view(user->type))
+        return false;
+    switch (user->op) {
+        case XI_SPAN_AS_BYTES:
+        case XI_SPAN_REINTERPRET:
+        case XI_SPAN_FILL:
+        case XI_SPAN_COPY:
+        case XI_BYTES_SPAN_FILL:
+        case XI_BYTES_SPAN_COPY:
+        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTES_COPY_WITHIN:
+        case XI_BYTES_COPY_FROM:
+        case XI_BYTES_REPEAT_FROM:
+        case XI_COPY:
+        case XI_CONVERT:
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_MOVE:
+        case XI_PHI:
+        case XI_SELECT:
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] == member)
+                    return true;
+            }
+            return false;
+        case XI_SLICE:
+            return user->nargs >= 1 && user->args[0] == member;
+        default:
+            return false;
+    }
+}
+
 /* ========== Per-callee return-ownership ==========
  *
  * A call result can be promoted from CALL_RESULT to OWNED when the callee
@@ -896,11 +963,11 @@ static XiBlock *arc_split_edge(XiFunc *f, XiBlock *pred, XiBlock *succ) {
 }
 
 /* Collect `target` plus the transitive closure of borrowed projections
- * (GETFIELD and friends, plus RawPtr/RawMut data-pointer borrows). A borrow
- * reads through the owner without holding a reference, so the owner must
- * outlive the projection's last use — otherwise the release would free storage
- * a live borrow still points into. Returns a heap array (caller frees) with
- * the count in *out_count, or NULL on OOM. */
+ * (GETFIELD and friends, RawPtr/RawMut data-pointer borrows, and Span value
+ * views). A borrow reads through the owner without holding a reference, so the
+ * owner must outlive the projection's last use — otherwise the release would
+ * free storage a live borrow still points into. Returns a heap array (caller
+ * frees) with the count in *out_count, or NULL on OOM. */
 static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t *out_count) {
     enum {
         ARC_TRACK_INIT = 16
@@ -921,7 +988,8 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 if (!u)
                     continue;
                 bool is_member_borrow = false;
-                if (arc_raw_pointer_borrow_flows_to_user(member, u)) {
+                if (arc_raw_pointer_borrow_flows_to_user(member, u) ||
+                    arc_span_view_borrow_flows_to_user(member, u)) {
                     is_member_borrow = true;
                 } else if (op_produces_borrow(u->op) && xi_own_type_may_be_ref(u->type)) {
                     /* A projection (GETFIELD / INDEX_GET / ...) borrows through
