@@ -733,6 +733,7 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         if ((f && f->module && f == f->module->init) ||
             cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
             cg_value_is_elided_static_fixed_struct_array_const_ref(ctx, f, v) ||
+            cg_value_is_elided_static_fixed_tuple_array_const_ref(ctx, f, v) ||
             cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
             cg_value_is_elided_static_struct_const_ref(ctx, f, v)) {
             fprintf(out, "XR_NULL_VAL /* static const import: %s.%s */",
@@ -5981,6 +5982,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) midx))
             return;
     }
+    if (emit_static_fixed_tuple_array_get_expr(ctx, out, v))
+        return;
     if (emit_static_tuple_get_expr(ctx, out, v))
         return;
     if (emit_static_fixed_struct_array_field_get_expr(ctx, out, v))
@@ -6379,6 +6382,8 @@ static void xicgen_tuple_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_tuple_get: need tuple");
+    if (emit_static_fixed_tuple_array_get_expr(ctx, out, v))
+        return;
     if (emit_static_tuple_get_expr(ctx, out, v))
         return;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
