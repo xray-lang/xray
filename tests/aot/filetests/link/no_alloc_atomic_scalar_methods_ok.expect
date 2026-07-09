@@ -1,0 +1,10 @@
+status=pass
+contains=xray_no_alloc_atomic_scalar_methods_ok
+not_contains=allocates via method 'Atomic.load'
+not_contains=allocates via method 'Atomic.store'
+not_contains=allocates via method 'Atomic.add'
+not_contains=allocates via method 'Atomic.sub'
+not_contains=allocates via method 'Atomic.fetchAdd'
+not_contains=allocates via method 'Atomic.fetchSub'
+not_contains=allocates via method 'Atomic.swap'
+not_contains=allocates via method 'Atomic.toggle'

@@ -1,0 +1,18 @@
+@no_alloc
+fn xray_no_alloc_bigint_scalar_methods_ok(value: BigInt) -> int {
+    var score = value.sign()
+    if (value.isPositive()) {
+        score = score + 10
+    }
+    if (!value.isNegative()) {
+        score = score + 20
+    }
+    if (!value.isZero()) {
+        score = score + 30
+    }
+    score = score + (value.toInt() ?? 0)
+    if (value.toFloat() > 0.0) {
+        score = score + 40
+    }
+    return score
+}

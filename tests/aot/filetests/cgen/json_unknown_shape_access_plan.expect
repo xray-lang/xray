@@ -1,0 +1,2 @@
+contains=xaot-plan v0
+regex=json-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=0 kind=field_get action=dynamic_lookup key=[0-9]+ result_type=0 field=65535 evidence=0x3 reason=receiver_shape_unknown

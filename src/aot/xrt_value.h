@@ -497,6 +497,75 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_TO_BOOL(v) ((int) (v).i)
 #define XR_TO_CHAR(v) ((uint32_t) (v).i)
 
+typedef struct xrt_bigint_view_s {
+    XrObjHeader hdr;
+    void *klass;
+    int8_t sign;
+    uint8_t _pad1[3];
+    uint32_t len;
+    uint32_t cap;
+    uint32_t _pad2;
+    uint32_t limbs[];
+} xrt_bigint_view_t;
+
+static inline const xrt_bigint_view_t *xrt_bigint_view(XrValue v) {
+    return (const xrt_bigint_view_t *) v.ptr;
+}
+
+static inline int xrt_bigint_is_zero_value(XrValue v) {
+    const xrt_bigint_view_t *b = xrt_bigint_view(v);
+    return !b || b->len == 0 || (b->len == 1 && b->limbs[0] == 0);
+}
+
+static inline int64_t xrt_bigint_sign_value(XrValue v) {
+    const xrt_bigint_view_t *b = xrt_bigint_view(v);
+    if (!b || xrt_bigint_is_zero_value(v))
+        return 0;
+    return b->sign < 0 ? -1 : 1;
+}
+
+static inline int xrt_bigint_is_negative_value(XrValue v) {
+    return xrt_bigint_sign_value(v) < 0;
+}
+
+static inline int xrt_bigint_is_positive_value(XrValue v) {
+    return xrt_bigint_sign_value(v) > 0;
+}
+
+static inline XrValue xrt_bigint_to_int_value(XrValue v) {
+    const xrt_bigint_view_t *b = xrt_bigint_view(v);
+    if (!b || b->len == 0)
+        return XR_FROM_INT(0);
+    if (b->len > 2)
+        return XR_NULL_VAL;
+    uint64_t value = (uint64_t) b->limbs[0];
+    if (b->len == 2)
+        value |= ((uint64_t) b->limbs[1]) << 32;
+    if (b->sign < 0) {
+        if (value > (uint64_t) INT64_MAX + 1u)
+            return XR_NULL_VAL;
+        if (value == (uint64_t) INT64_MAX + 1u)
+            return XR_FROM_INT(INT64_MIN);
+        return XR_FROM_INT(-(int64_t) value);
+    }
+    if (value > (uint64_t) INT64_MAX)
+        return XR_NULL_VAL;
+    return XR_FROM_INT((int64_t) value);
+}
+
+static inline double xrt_bigint_to_float_value(XrValue v) {
+    const xrt_bigint_view_t *b = xrt_bigint_view(v);
+    if (!b || b->len == 0)
+        return 0.0;
+    double result = 0.0;
+    double base = 1.0;
+    for (uint32_t i = 0; i < b->len; i++) {
+        result += (double) b->limbs[i] * base;
+        base *= 4294967296.0;
+    }
+    return b->sign < 0 ? -result : result;
+}
+
 static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
     XrAotEnumAggregate out = {0};
     for (uint32_t i = 0; i < XR_AOT_ENUM_AGG_PAYLOAD_CAP; i++)
