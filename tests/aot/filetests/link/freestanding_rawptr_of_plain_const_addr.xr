@@ -1,0 +1,10 @@
+import mem
+
+const PLAIN_MAGIC: int = 7
+const PLAIN_LABEL = comptime "plain"
+
+@c_export("xray_plain_const_addr")
+fn plainConstAddr() -> int {
+    return mem.addressOf(RawPtr<int>.of(PLAIN_MAGIC)) +
+        mem.addressOf(RawPtr<string>.of(PLAIN_LABEL))
+}
