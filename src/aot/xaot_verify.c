@@ -3642,6 +3642,364 @@ static bool verify_key_access_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static bool verify_sequence_kind_valid(uint8_t kind) {
+    switch ((XgSequenceKind) kind) {
+        case XG_SEQ_ARRAY:
+        case XG_SEQ_BYTES:
+        case XG_SEQ_STRING:
+        case XG_SEQ_SPAN:
+        case XG_SEQ_BYTE_SPAN:
+        case XG_SEQ_STRING_BUILDER:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_sequence_access_kind_valid(uint8_t kind) {
+    switch ((XgSequenceAccessKind) kind) {
+        case XG_SEQ_ACCESS_INDEX_GET:
+        case XG_SEQ_ACCESS_INDEX_SET:
+        case XG_SEQ_ACCESS_SLICE:
+        case XG_SEQ_ACCESS_ITER:
+        case XG_SEQ_ACCESS_LENGTH:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t verify_sequence_access_action_for(const XgSequenceAccessSummary *seq) {
+    if (!seq || !verify_sequence_kind_valid(seq->sequence_kind) ||
+        !verify_sequence_access_kind_valid(seq->access_kind) || seq->receiver_type_key == 0)
+        return XAOT_SEQUENCE_ACCESS_REJECT;
+    switch ((XgSequenceAccessKind) seq->access_kind) {
+        case XG_SEQ_ACCESS_INDEX_GET:
+        case XG_SEQ_ACCESS_INDEX_SET:
+            return XAOT_SEQUENCE_ACCESS_CHECKED_INDEX;
+        case XG_SEQ_ACCESS_SLICE:
+            return XAOT_SEQUENCE_ACCESS_CHECKED_SLICE;
+        case XG_SEQ_ACCESS_ITER:
+            return XAOT_SEQUENCE_ACCESS_ITER_HELPER;
+        case XG_SEQ_ACCESS_LENGTH:
+            return XAOT_SEQUENCE_ACCESS_DIRECT_LENGTH;
+        default:
+            return XAOT_SEQUENCE_ACCESS_REJECT;
+    }
+}
+
+static uint8_t verify_sequence_access_reason_for(const XgSequenceAccessSummary *seq) {
+    if (!seq || !verify_sequence_kind_valid(seq->sequence_kind) ||
+        !verify_sequence_access_kind_valid(seq->access_kind))
+        return XAOT_SEQUENCE_UNPROVEN_INVALID_KIND;
+    if (seq->receiver_type_key == 0)
+        return XAOT_SEQUENCE_UNPROVEN_MISSING_RECEIVER_TYPE;
+    if ((seq->flags & XG_SEQ_ACCESS_NEGATIVE_INDEX) != 0)
+        return XAOT_SEQUENCE_UNPROVEN_NEGATIVE_INDEX;
+    if ((seq->access_kind == XG_SEQ_ACCESS_INDEX_GET ||
+         seq->access_kind == XG_SEQ_ACCESS_INDEX_SET) &&
+        (seq->flags & XG_SEQ_ACCESS_CONST_INDEX) == 0)
+        return XAOT_SEQUENCE_UNPROVEN_COMPUTED_INDEX;
+    if (seq->access_kind == XG_SEQ_ACCESS_SLICE && seq->length_expr_id == 0)
+        return XAOT_SEQUENCE_UNPROVEN_DYNAMIC_LENGTH;
+    return XAOT_SEQUENCE_UNPROVEN_NONE;
+}
+
+static uint32_t verify_sequence_access_evidence_for(const XgSequenceAccessSummary *seq) {
+    uint32_t bits = XAOT_SEQUENCE_EV_GLOBAL_ROW;
+    if (!seq)
+        return bits;
+    if (seq->receiver_type_key != 0)
+        bits |= XAOT_SEQUENCE_EV_RECEIVER_TYPE;
+    if (seq->elem_type_key != 0)
+        bits |= XAOT_SEQUENCE_EV_ELEM_TYPE;
+    if ((seq->flags & XG_SEQ_ACCESS_CONST_INDEX) != 0)
+        bits |= XAOT_SEQUENCE_EV_CONST_INDEX;
+    if (seq->length_expr_id != 0)
+        bits |= XAOT_SEQUENCE_EV_LENGTH_EXPR;
+    if ((seq->flags & XG_SEQ_ACCESS_MUTATING) != 0)
+        bits |= XAOT_SEQUENCE_EV_MUTATING;
+    return bits;
+}
+
+static bool verify_sequence_access_plan_rederives(const XaotSequenceAccessPlan *plan,
+                                                  const XgSequenceAccessSummary *seq, char *errbuf,
+                                                  size_t errbuf_len) {
+    if (!plan || !seq)
+        return set_error(errbuf, errbuf_len, "AOT sequence access verifier has incomplete input");
+    if (plan->access_id != seq->access_id || plan->owner_func_id != seq->owner_func_id ||
+        plan->source_span_id != seq->source_span_id || plan->body_ordinal != seq->body_ordinal ||
+        plan->sequence_kind != seq->sequence_kind || plan->access_kind != seq->access_kind ||
+        plan->receiver_type_key != seq->receiver_type_key ||
+        plan->elem_type_key != seq->elem_type_key || plan->index_expr_id != seq->index_expr_id ||
+        plan->length_expr_id != seq->length_expr_id)
+        return set_error(errbuf, errbuf_len,
+                         "AOT sequence access plan identity does not re-derive");
+    if (plan->action != verify_sequence_access_action_for(seq) ||
+        plan->unproven_reason != verify_sequence_access_reason_for(seq))
+        return set_error(errbuf, errbuf_len, "AOT sequence access plan action does not re-derive");
+    if (plan->evidence != verify_sequence_access_evidence_for(seq))
+        return set_error(errbuf, errbuf_len,
+                         "AOT sequence access plan evidence does not re-derive");
+    return true;
+}
+
+static bool verify_capacity_op_kind_valid(uint8_t kind) {
+    switch ((XgCapacityOpKind) kind) {
+        case XG_CAPACITY_PUSH:
+        case XG_CAPACITY_APPEND:
+        case XG_CAPACITY_EXTEND:
+        case XG_CAPACITY_RESERVE:
+        case XG_CAPACITY_CONCAT:
+        case XG_CAPACITY_TO_STRING:
+        case XG_CAPACITY_CLEAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t verify_capacity_action_for(const XgCapacityOpSummary *cap) {
+    if (!cap || !verify_sequence_kind_valid(cap->sequence_kind) ||
+        !verify_capacity_op_kind_valid(cap->op_kind) || cap->receiver_type_key == 0)
+        return XAOT_CAPACITY_REJECT;
+    switch ((XgCapacityOpKind) cap->op_kind) {
+        case XG_CAPACITY_RESERVE:
+            return XAOT_CAPACITY_RESERVE_ONCE;
+        case XG_CAPACITY_CLEAR:
+            return XAOT_CAPACITY_CLEAR_DIRECT;
+        case XG_CAPACITY_TO_STRING:
+            return XAOT_CAPACITY_BUILDER_FINISH;
+        case XG_CAPACITY_PUSH:
+        case XG_CAPACITY_APPEND:
+        case XG_CAPACITY_EXTEND:
+        case XG_CAPACITY_CONCAT:
+            return ((cap->flags & (XG_CAPACITY_EXACT_COUNT | XG_CAPACITY_LOOP_APPEND)) != 0)
+                       ? XAOT_CAPACITY_RESERVE_ONCE
+                       : XAOT_CAPACITY_CHECKED_GROW;
+        default:
+            return XAOT_CAPACITY_REJECT;
+    }
+}
+
+static uint8_t verify_capacity_reason_for(const XgCapacityOpSummary *cap) {
+    if (!cap || !verify_sequence_kind_valid(cap->sequence_kind) ||
+        !verify_capacity_op_kind_valid(cap->op_kind))
+        return XAOT_CAPACITY_UNPROVEN_INVALID_KIND;
+    if (cap->receiver_type_key == 0)
+        return XAOT_CAPACITY_UNPROVEN_MISSING_RECEIVER_TYPE;
+    if (verify_capacity_action_for(cap) == XAOT_CAPACITY_CHECKED_GROW)
+        return XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN;
+    return XAOT_CAPACITY_UNPROVEN_NONE;
+}
+
+static uint32_t verify_capacity_evidence_for(const XgCapacityOpSummary *cap) {
+    uint32_t bits = XAOT_CAPACITY_EV_GLOBAL_ROW;
+    if (!cap)
+        return bits;
+    if (cap->receiver_type_key != 0)
+        bits |= XAOT_CAPACITY_EV_RECEIVER_TYPE;
+    if (cap->elem_type_key != 0)
+        bits |= XAOT_CAPACITY_EV_ELEM_TYPE;
+    if ((cap->flags & XG_CAPACITY_EXACT_COUNT) != 0)
+        bits |= XAOT_CAPACITY_EV_EXACT_COUNT;
+    if ((cap->flags & XG_CAPACITY_LOOP_APPEND) != 0)
+        bits |= XAOT_CAPACITY_EV_LOOP_APPEND;
+    if ((cap->flags & XG_CAPACITY_MAY_GROW) != 0)
+        bits |= XAOT_CAPACITY_EV_MAY_GROW;
+    return bits;
+}
+
+static bool verify_capacity_plan_rederives(const XaotCapacityPlan *plan,
+                                           const XgCapacityOpSummary *cap, char *errbuf,
+                                           size_t errbuf_len) {
+    if (!plan || !cap)
+        return set_error(errbuf, errbuf_len, "AOT capacity verifier has incomplete input");
+    if (plan->op_id != cap->op_id || plan->owner_func_id != cap->owner_func_id ||
+        plan->source_span_id != cap->source_span_id || plan->body_ordinal != cap->body_ordinal ||
+        plan->sequence_kind != cap->sequence_kind || plan->op_kind != cap->op_kind ||
+        plan->receiver_type_key != cap->receiver_type_key ||
+        plan->elem_type_key != cap->elem_type_key || plan->count_expr_id != cap->count_expr_id ||
+        plan->loop_id != cap->loop_id)
+        return set_error(errbuf, errbuf_len, "AOT capacity plan identity does not re-derive");
+    if (plan->action != verify_capacity_action_for(cap) ||
+        plan->unproven_reason != verify_capacity_reason_for(cap))
+        return set_error(errbuf, errbuf_len, "AOT capacity plan action does not re-derive");
+    if (plan->evidence != verify_capacity_evidence_for(cap))
+        return set_error(errbuf, errbuf_len, "AOT capacity plan evidence does not re-derive");
+    return true;
+}
+
+static bool verify_bulk_op_kind_valid(uint8_t kind) {
+    switch ((XgBulkOpKind) kind) {
+        case XG_BULK_COPY:
+        case XG_BULK_FILL:
+        case XG_BULK_COMPARE:
+        case XG_BULK_REPEAT:
+        case XG_BULK_COPY_WITHIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t verify_bulk_action_for(const XgBulkOpSummary *bulk) {
+    if (!bulk || !verify_bulk_op_kind_valid(bulk->op_kind))
+        return XAOT_BULK_REJECT;
+    if (bulk->length_expr_id == 0)
+        return XAOT_BULK_RUNTIME_HELPER;
+    if ((bulk->flags & XG_BULK_WRITE_BARRIER) != 0)
+        return XAOT_BULK_TYPED_LOOP;
+    if ((bulk->flags & XG_BULK_POD) == 0)
+        return XAOT_BULK_TYPED_LOOP;
+    switch ((XgBulkOpKind) bulk->op_kind) {
+        case XG_BULK_COPY:
+            return (bulk->flags & XG_BULK_OVERLAP_POSSIBLE) != 0 ? XAOT_BULK_INLINE_MEMMOVE
+                                                                 : XAOT_BULK_INLINE_MEMCPY;
+        case XG_BULK_COPY_WITHIN:
+            return XAOT_BULK_INLINE_MEMMOVE;
+        case XG_BULK_FILL:
+            return XAOT_BULK_INLINE_MEMSET;
+        case XG_BULK_COMPARE:
+            return XAOT_BULK_INLINE_MEMCMP;
+        case XG_BULK_REPEAT:
+            return XAOT_BULK_TYPED_LOOP;
+        default:
+            return XAOT_BULK_REJECT;
+    }
+}
+
+static uint8_t verify_bulk_reason_for(const XgBulkOpSummary *bulk) {
+    if (!bulk || !verify_bulk_op_kind_valid(bulk->op_kind))
+        return XAOT_BULK_UNPROVEN_INVALID_KIND;
+    if (bulk->length_expr_id == 0)
+        return XAOT_BULK_UNPROVEN_LENGTH_UNKNOWN;
+    if ((bulk->flags & XG_BULK_WRITE_BARRIER) != 0)
+        return XAOT_BULK_UNPROVEN_WRITE_BARRIER;
+    if ((bulk->flags & XG_BULK_POD) == 0)
+        return XAOT_BULK_UNPROVEN_NON_POD;
+    return XAOT_BULK_UNPROVEN_NONE;
+}
+
+static uint32_t verify_bulk_evidence_for(const XgBulkOpSummary *bulk) {
+    uint32_t bits = XAOT_BULK_EV_GLOBAL_ROW;
+    if (!bulk)
+        return bits;
+    if ((bulk->flags & XG_BULK_POD) != 0)
+        bits |= XAOT_BULK_EV_POD;
+    if ((bulk->flags & XG_BULK_OVERLAP_POSSIBLE) != 0)
+        bits |= XAOT_BULK_EV_OVERLAP_POSSIBLE;
+    if ((bulk->flags & XG_BULK_READONLY_SRC) != 0)
+        bits |= XAOT_BULK_EV_READONLY_SRC;
+    if ((bulk->flags & XG_BULK_WRITE_BARRIER) != 0)
+        bits |= XAOT_BULK_EV_WRITE_BARRIER;
+    if (bulk->length_expr_id != 0)
+        bits |= XAOT_BULK_EV_LENGTH_EXPR;
+    return bits;
+}
+
+static bool verify_bulk_plan_rederives(const XaotBulkPlan *plan, const XgBulkOpSummary *bulk,
+                                       char *errbuf, size_t errbuf_len) {
+    if (!plan || !bulk)
+        return set_error(errbuf, errbuf_len, "AOT bulk verifier has incomplete input");
+    if (plan->op_id != bulk->op_id || plan->owner_func_id != bulk->owner_func_id ||
+        plan->source_span_id != bulk->source_span_id || plan->body_ordinal != bulk->body_ordinal ||
+        plan->op_kind != bulk->op_kind || plan->elem_type_key != bulk->elem_type_key ||
+        plan->src_type_key != bulk->src_type_key || plan->dst_type_key != bulk->dst_type_key ||
+        plan->length_expr_id != bulk->length_expr_id)
+        return set_error(errbuf, errbuf_len, "AOT bulk plan identity does not re-derive");
+    if (plan->action != verify_bulk_action_for(bulk) ||
+        plan->unproven_reason != verify_bulk_reason_for(bulk))
+        return set_error(errbuf, errbuf_len, "AOT bulk plan action does not re-derive");
+    if (plan->evidence != verify_bulk_evidence_for(bulk))
+        return set_error(errbuf, errbuf_len, "AOT bulk plan evidence does not re-derive");
+    return true;
+}
+
+static bool verify_encoding_op_kind_valid(uint8_t kind) {
+    switch ((XgEncodingOpKind) kind) {
+        case XG_ENCODING_STRING_TO_BYTES:
+        case XG_ENCODING_BYTES_TO_STRING:
+        case XG_ENCODING_UTF8_VALIDATE:
+        case XG_ENCODING_UTF8_COUNT:
+        case XG_ENCODING_UTF16_ENCODE:
+        case XG_ENCODING_UTF16_DECODE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t verify_encoding_action_for(const XgEncodingOpSummary *enc) {
+    if (!enc || !verify_encoding_op_kind_valid(enc->op_kind))
+        return XAOT_ENCODING_REJECT;
+    switch ((XgEncodingOpKind) enc->op_kind) {
+        case XG_ENCODING_STRING_TO_BYTES:
+            return (enc->flags & XG_ENCODING_KNOWN_UTF8) != 0 ? XAOT_ENCODING_VALIDATE_ELIDED
+                                                              : XAOT_ENCODING_RUNTIME_VALIDATE;
+        case XG_ENCODING_BYTES_TO_STRING:
+        case XG_ENCODING_UTF8_COUNT:
+            if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
+                return XAOT_ENCODING_VALIDATE_ELIDED;
+            if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
+                return XAOT_ENCODING_VALIDATE_ONCE;
+            return XAOT_ENCODING_RUNTIME_VALIDATE;
+        case XG_ENCODING_UTF8_VALIDATE:
+            return XAOT_ENCODING_RUNTIME_VALIDATE;
+        case XG_ENCODING_UTF16_ENCODE:
+        case XG_ENCODING_UTF16_DECODE:
+            return XAOT_ENCODING_TRANSCODE;
+        default:
+            return XAOT_ENCODING_REJECT;
+    }
+}
+
+static uint8_t verify_encoding_reason_for(const XgEncodingOpSummary *enc) {
+    if (!enc || !verify_encoding_op_kind_valid(enc->op_kind))
+        return XAOT_ENCODING_UNPROVEN_INVALID_KIND;
+    if (verify_encoding_action_for(enc) == XAOT_ENCODING_RUNTIME_VALIDATE &&
+        (enc->op_kind == XG_ENCODING_BYTES_TO_STRING || enc->op_kind == XG_ENCODING_UTF8_COUNT))
+        return XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN;
+    return XAOT_ENCODING_UNPROVEN_NONE;
+}
+
+static uint32_t verify_encoding_evidence_for(const XgEncodingOpSummary *enc) {
+    uint32_t bits = XAOT_ENCODING_EV_GLOBAL_ROW;
+    if (!enc)
+        return bits;
+    if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
+        bits |= XAOT_ENCODING_EV_KNOWN_UTF8;
+    if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
+        bits |= XAOT_ENCODING_EV_VALIDATED_ONCE;
+    if ((enc->flags & XG_ENCODING_SCALAR_BOUNDARY) != 0)
+        bits |= XAOT_ENCODING_EV_SCALAR_BOUNDARY;
+    if ((enc->flags & XG_ENCODING_STATIC_LITERAL) != 0)
+        bits |= XAOT_ENCODING_EV_STATIC_LITERAL;
+    if (enc->input_type_key != 0)
+        bits |= XAOT_ENCODING_EV_INPUT_TYPE;
+    if (enc->output_type_key != 0)
+        bits |= XAOT_ENCODING_EV_OUTPUT_TYPE;
+    return bits;
+}
+
+static bool verify_encoding_plan_rederives(const XaotEncodingPlan *plan,
+                                           const XgEncodingOpSummary *enc, char *errbuf,
+                                           size_t errbuf_len) {
+    if (!plan || !enc)
+        return set_error(errbuf, errbuf_len, "AOT encoding verifier has incomplete input");
+    if (plan->op_id != enc->op_id || plan->owner_func_id != enc->owner_func_id ||
+        plan->source_span_id != enc->source_span_id || plan->body_ordinal != enc->body_ordinal ||
+        plan->op_kind != enc->op_kind || plan->input_type_key != enc->input_type_key ||
+        plan->output_type_key != enc->output_type_key)
+        return set_error(errbuf, errbuf_len, "AOT encoding plan identity does not re-derive");
+    if (plan->action != verify_encoding_action_for(enc) ||
+        plan->unproven_reason != verify_encoding_reason_for(enc))
+        return set_error(errbuf, errbuf_len, "AOT encoding plan action does not re-derive");
+    if (plan->evidence != verify_encoding_evidence_for(enc))
+        return set_error(errbuf, errbuf_len, "AOT encoding plan evidence does not re-derive");
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -3668,6 +4026,10 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_map_shape_plans = 0;
     uint32_t expected_key_access_plans = 0;
     uint32_t expected_hash_eq_plans = 0;
+    uint32_t expected_sequence_access_plans = 0;
+    uint32_t expected_capacity_plans = 0;
+    uint32_t expected_bulk_plans = 0;
+    uint32_t expected_encoding_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -4071,6 +4433,83 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nkey_access_plans != expected_key_access_plans)
         return set_error(errbuf, errbuf_len, "AOT key access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nsequence_accesses; i++) {
+        const XgSequenceAccessSummary *seq = &ev->sequence_accesses[i];
+        const XaotSequenceAccessPlan *plan;
+        if (seq->access_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT sequence access evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nsequence_accesses; j++) {
+            if (ev->sequence_accesses[j].access_id == seq->access_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT sequence access evidence id is duplicated");
+        }
+        expected_sequence_access_plans++;
+        plan = xaot_bundle_find_sequence_access_plan(bundle, seq->access_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT sequence access evidence has no plan");
+        if (!verify_sequence_access_plan_rederives(plan, seq, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nsequence_access_plans != expected_sequence_access_plans)
+        return set_error(errbuf, errbuf_len, "AOT sequence access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->ncapacity_ops; i++) {
+        const XgCapacityOpSummary *cap = &ev->capacity_ops[i];
+        const XaotCapacityPlan *plan;
+        if (cap->op_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT capacity evidence has no id");
+        for (uint32_t j = i + 1; j < ev->ncapacity_ops; j++) {
+            if (ev->capacity_ops[j].op_id == cap->op_id)
+                return set_error(errbuf, errbuf_len, "AOT capacity evidence id is duplicated");
+        }
+        expected_capacity_plans++;
+        plan = xaot_bundle_find_capacity_plan(bundle, cap->op_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT capacity evidence has no plan");
+        if (!verify_capacity_plan_rederives(plan, cap, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->ncapacity_plans != expected_capacity_plans)
+        return set_error(errbuf, errbuf_len, "AOT capacity plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nbulk_ops; i++) {
+        const XgBulkOpSummary *bulk = &ev->bulk_ops[i];
+        const XaotBulkPlan *plan;
+        if (bulk->op_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT bulk evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nbulk_ops; j++) {
+            if (ev->bulk_ops[j].op_id == bulk->op_id)
+                return set_error(errbuf, errbuf_len, "AOT bulk evidence id is duplicated");
+        }
+        expected_bulk_plans++;
+        plan = xaot_bundle_find_bulk_plan(bundle, bulk->op_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT bulk evidence has no plan");
+        if (!verify_bulk_plan_rederives(plan, bulk, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nbulk_plans != expected_bulk_plans)
+        return set_error(errbuf, errbuf_len, "AOT bulk plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nencoding_ops; i++) {
+        const XgEncodingOpSummary *enc = &ev->encoding_ops[i];
+        const XaotEncodingPlan *plan;
+        if (enc->op_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT encoding evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nencoding_ops; j++) {
+            if (ev->encoding_ops[j].op_id == enc->op_id)
+                return set_error(errbuf, errbuf_len, "AOT encoding evidence id is duplicated");
+        }
+        expected_encoding_plans++;
+        plan = xaot_bundle_find_encoding_plan(bundle, enc->op_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT encoding evidence has no plan");
+        if (!verify_encoding_plan_rederives(plan, enc, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nencoding_plans != expected_encoding_plans)
+        return set_error(errbuf, errbuf_len, "AOT encoding plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];

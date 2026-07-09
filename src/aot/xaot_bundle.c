@@ -259,6 +259,26 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nhash_eq_plans = 0;
     bundle->hash_eq_plan_cap = 0;
 
+    xr_free(bundle->sequence_access_plans);
+    bundle->sequence_access_plans = NULL;
+    bundle->nsequence_access_plans = 0;
+    bundle->sequence_access_plan_cap = 0;
+
+    xr_free(bundle->capacity_plans);
+    bundle->capacity_plans = NULL;
+    bundle->ncapacity_plans = 0;
+    bundle->capacity_plan_cap = 0;
+
+    xr_free(bundle->bulk_plans);
+    bundle->bulk_plans = NULL;
+    bundle->nbulk_plans = 0;
+    bundle->bulk_plan_cap = 0;
+
+    xr_free(bundle->encoding_plans);
+    bundle->encoding_plans = NULL;
+    bundle->nencoding_plans = 0;
+    bundle->encoding_plan_cap = 0;
+
     xr_free(bundle->metadata_plans);
     bundle->metadata_plans = NULL;
     bundle->nmetadata_plans = 0;
@@ -2269,6 +2289,424 @@ static bool xaot_bundle_add_key_access_plans(XaotBundle *bundle, const XgGlobalE
     return true;
 }
 
+static bool sequence_kind_valid(uint8_t kind) {
+    switch ((XgSequenceKind) kind) {
+        case XG_SEQ_ARRAY:
+        case XG_SEQ_BYTES:
+        case XG_SEQ_STRING:
+        case XG_SEQ_SPAN:
+        case XG_SEQ_BYTE_SPAN:
+        case XG_SEQ_STRING_BUILDER:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool sequence_access_kind_valid(uint8_t kind) {
+    switch ((XgSequenceAccessKind) kind) {
+        case XG_SEQ_ACCESS_INDEX_GET:
+        case XG_SEQ_ACCESS_INDEX_SET:
+        case XG_SEQ_ACCESS_SLICE:
+        case XG_SEQ_ACCESS_ITER:
+        case XG_SEQ_ACCESS_LENGTH:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t sequence_access_action_for(const XgSequenceAccessSummary *seq) {
+    if (!seq || !sequence_kind_valid(seq->sequence_kind) ||
+        !sequence_access_kind_valid(seq->access_kind) || seq->receiver_type_key == 0)
+        return XAOT_SEQUENCE_ACCESS_REJECT;
+    switch ((XgSequenceAccessKind) seq->access_kind) {
+        case XG_SEQ_ACCESS_INDEX_GET:
+        case XG_SEQ_ACCESS_INDEX_SET:
+            return XAOT_SEQUENCE_ACCESS_CHECKED_INDEX;
+        case XG_SEQ_ACCESS_SLICE:
+            return XAOT_SEQUENCE_ACCESS_CHECKED_SLICE;
+        case XG_SEQ_ACCESS_ITER:
+            return XAOT_SEQUENCE_ACCESS_ITER_HELPER;
+        case XG_SEQ_ACCESS_LENGTH:
+            return XAOT_SEQUENCE_ACCESS_DIRECT_LENGTH;
+        default:
+            return XAOT_SEQUENCE_ACCESS_REJECT;
+    }
+}
+
+static uint8_t sequence_access_reason_for(const XgSequenceAccessSummary *seq) {
+    if (!seq || !sequence_kind_valid(seq->sequence_kind) ||
+        !sequence_access_kind_valid(seq->access_kind))
+        return XAOT_SEQUENCE_UNPROVEN_INVALID_KIND;
+    if (seq->receiver_type_key == 0)
+        return XAOT_SEQUENCE_UNPROVEN_MISSING_RECEIVER_TYPE;
+    if ((seq->flags & XG_SEQ_ACCESS_NEGATIVE_INDEX) != 0)
+        return XAOT_SEQUENCE_UNPROVEN_NEGATIVE_INDEX;
+    if ((seq->access_kind == XG_SEQ_ACCESS_INDEX_GET ||
+         seq->access_kind == XG_SEQ_ACCESS_INDEX_SET) &&
+        (seq->flags & XG_SEQ_ACCESS_CONST_INDEX) == 0)
+        return XAOT_SEQUENCE_UNPROVEN_COMPUTED_INDEX;
+    if (seq->access_kind == XG_SEQ_ACCESS_SLICE && seq->length_expr_id == 0)
+        return XAOT_SEQUENCE_UNPROVEN_DYNAMIC_LENGTH;
+    return XAOT_SEQUENCE_UNPROVEN_NONE;
+}
+
+static uint32_t sequence_access_evidence_for(const XgSequenceAccessSummary *seq) {
+    uint32_t bits = XAOT_SEQUENCE_EV_GLOBAL_ROW;
+    if (!seq)
+        return bits;
+    if (seq->receiver_type_key != 0)
+        bits |= XAOT_SEQUENCE_EV_RECEIVER_TYPE;
+    if (seq->elem_type_key != 0)
+        bits |= XAOT_SEQUENCE_EV_ELEM_TYPE;
+    if ((seq->flags & XG_SEQ_ACCESS_CONST_INDEX) != 0)
+        bits |= XAOT_SEQUENCE_EV_CONST_INDEX;
+    if (seq->length_expr_id != 0)
+        bits |= XAOT_SEQUENCE_EV_LENGTH_EXPR;
+    if ((seq->flags & XG_SEQ_ACCESS_MUTATING) != 0)
+        bits |= XAOT_SEQUENCE_EV_MUTATING;
+    return bits;
+}
+
+static bool xaot_bundle_add_sequence_access_plan(XaotBundle *bundle,
+                                                 const XgSequenceAccessSummary *seq) {
+    XaotSequenceAccessPlan *plan;
+    if (!bundle || !seq)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->sequence_access_plans,
+                            &bundle->sequence_access_plan_cap, bundle->nsequence_access_plans + 1,
+                            sizeof(XaotSequenceAccessPlan), 8))
+        return false;
+    plan = &bundle->sequence_access_plans[bundle->nsequence_access_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->access_id = seq->access_id;
+    plan->owner_func_id = seq->owner_func_id;
+    plan->source_span_id = seq->source_span_id;
+    plan->body_ordinal = seq->body_ordinal;
+    plan->sequence_kind = seq->sequence_kind;
+    plan->access_kind = seq->access_kind;
+    plan->receiver_type_key = seq->receiver_type_key;
+    plan->elem_type_key = seq->elem_type_key;
+    plan->index_expr_id = seq->index_expr_id;
+    plan->length_expr_id = seq->length_expr_id;
+    plan->action = sequence_access_action_for(seq);
+    plan->evidence = sequence_access_evidence_for(seq);
+    plan->unproven_reason = sequence_access_reason_for(seq);
+    return true;
+}
+
+static bool xaot_bundle_add_sequence_access_plans(XaotBundle *bundle,
+                                                  const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nsequence_accesses; i++) {
+        if (!xaot_bundle_add_sequence_access_plan(bundle, &evidence->sequence_accesses[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool capacity_op_kind_valid(uint8_t kind) {
+    switch ((XgCapacityOpKind) kind) {
+        case XG_CAPACITY_PUSH:
+        case XG_CAPACITY_APPEND:
+        case XG_CAPACITY_EXTEND:
+        case XG_CAPACITY_RESERVE:
+        case XG_CAPACITY_CONCAT:
+        case XG_CAPACITY_TO_STRING:
+        case XG_CAPACITY_CLEAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t capacity_action_for(const XgCapacityOpSummary *cap) {
+    if (!cap || !sequence_kind_valid(cap->sequence_kind) || !capacity_op_kind_valid(cap->op_kind) ||
+        cap->receiver_type_key == 0)
+        return XAOT_CAPACITY_REJECT;
+    switch ((XgCapacityOpKind) cap->op_kind) {
+        case XG_CAPACITY_RESERVE:
+            return XAOT_CAPACITY_RESERVE_ONCE;
+        case XG_CAPACITY_CLEAR:
+            return XAOT_CAPACITY_CLEAR_DIRECT;
+        case XG_CAPACITY_TO_STRING:
+            return XAOT_CAPACITY_BUILDER_FINISH;
+        case XG_CAPACITY_PUSH:
+        case XG_CAPACITY_APPEND:
+        case XG_CAPACITY_EXTEND:
+        case XG_CAPACITY_CONCAT:
+            return ((cap->flags & (XG_CAPACITY_EXACT_COUNT | XG_CAPACITY_LOOP_APPEND)) != 0)
+                       ? XAOT_CAPACITY_RESERVE_ONCE
+                       : XAOT_CAPACITY_CHECKED_GROW;
+        default:
+            return XAOT_CAPACITY_REJECT;
+    }
+}
+
+static uint8_t capacity_reason_for(const XgCapacityOpSummary *cap) {
+    if (!cap || !sequence_kind_valid(cap->sequence_kind) || !capacity_op_kind_valid(cap->op_kind))
+        return XAOT_CAPACITY_UNPROVEN_INVALID_KIND;
+    if (cap->receiver_type_key == 0)
+        return XAOT_CAPACITY_UNPROVEN_MISSING_RECEIVER_TYPE;
+    if (capacity_action_for(cap) == XAOT_CAPACITY_CHECKED_GROW)
+        return XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN;
+    return XAOT_CAPACITY_UNPROVEN_NONE;
+}
+
+static uint32_t capacity_evidence_for(const XgCapacityOpSummary *cap) {
+    uint32_t bits = XAOT_CAPACITY_EV_GLOBAL_ROW;
+    if (!cap)
+        return bits;
+    if (cap->receiver_type_key != 0)
+        bits |= XAOT_CAPACITY_EV_RECEIVER_TYPE;
+    if (cap->elem_type_key != 0)
+        bits |= XAOT_CAPACITY_EV_ELEM_TYPE;
+    if ((cap->flags & XG_CAPACITY_EXACT_COUNT) != 0)
+        bits |= XAOT_CAPACITY_EV_EXACT_COUNT;
+    if ((cap->flags & XG_CAPACITY_LOOP_APPEND) != 0)
+        bits |= XAOT_CAPACITY_EV_LOOP_APPEND;
+    if ((cap->flags & XG_CAPACITY_MAY_GROW) != 0)
+        bits |= XAOT_CAPACITY_EV_MAY_GROW;
+    return bits;
+}
+
+static bool xaot_bundle_add_capacity_plan(XaotBundle *bundle, const XgCapacityOpSummary *cap) {
+    XaotCapacityPlan *plan;
+    if (!bundle || !cap)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->capacity_plans, &bundle->capacity_plan_cap,
+                            bundle->ncapacity_plans + 1, sizeof(XaotCapacityPlan), 8))
+        return false;
+    plan = &bundle->capacity_plans[bundle->ncapacity_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->op_id = cap->op_id;
+    plan->owner_func_id = cap->owner_func_id;
+    plan->source_span_id = cap->source_span_id;
+    plan->body_ordinal = cap->body_ordinal;
+    plan->sequence_kind = cap->sequence_kind;
+    plan->op_kind = cap->op_kind;
+    plan->receiver_type_key = cap->receiver_type_key;
+    plan->elem_type_key = cap->elem_type_key;
+    plan->count_expr_id = cap->count_expr_id;
+    plan->loop_id = cap->loop_id;
+    plan->action = capacity_action_for(cap);
+    plan->evidence = capacity_evidence_for(cap);
+    plan->unproven_reason = capacity_reason_for(cap);
+    return true;
+}
+
+static bool xaot_bundle_add_capacity_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->ncapacity_ops; i++) {
+        if (!xaot_bundle_add_capacity_plan(bundle, &evidence->capacity_ops[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool bulk_op_kind_valid(uint8_t kind) {
+    switch ((XgBulkOpKind) kind) {
+        case XG_BULK_COPY:
+        case XG_BULK_FILL:
+        case XG_BULK_COMPARE:
+        case XG_BULK_REPEAT:
+        case XG_BULK_COPY_WITHIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t bulk_action_for(const XgBulkOpSummary *bulk) {
+    if (!bulk || !bulk_op_kind_valid(bulk->op_kind))
+        return XAOT_BULK_REJECT;
+    if (bulk->length_expr_id == 0)
+        return XAOT_BULK_RUNTIME_HELPER;
+    if ((bulk->flags & XG_BULK_WRITE_BARRIER) != 0)
+        return XAOT_BULK_TYPED_LOOP;
+    if ((bulk->flags & XG_BULK_POD) == 0)
+        return XAOT_BULK_TYPED_LOOP;
+    switch ((XgBulkOpKind) bulk->op_kind) {
+        case XG_BULK_COPY:
+            return (bulk->flags & XG_BULK_OVERLAP_POSSIBLE) != 0 ? XAOT_BULK_INLINE_MEMMOVE
+                                                                 : XAOT_BULK_INLINE_MEMCPY;
+        case XG_BULK_COPY_WITHIN:
+            return XAOT_BULK_INLINE_MEMMOVE;
+        case XG_BULK_FILL:
+            return XAOT_BULK_INLINE_MEMSET;
+        case XG_BULK_COMPARE:
+            return XAOT_BULK_INLINE_MEMCMP;
+        case XG_BULK_REPEAT:
+            return XAOT_BULK_TYPED_LOOP;
+        default:
+            return XAOT_BULK_REJECT;
+    }
+}
+
+static uint8_t bulk_reason_for(const XgBulkOpSummary *bulk) {
+    if (!bulk || !bulk_op_kind_valid(bulk->op_kind))
+        return XAOT_BULK_UNPROVEN_INVALID_KIND;
+    if (bulk->length_expr_id == 0)
+        return XAOT_BULK_UNPROVEN_LENGTH_UNKNOWN;
+    if ((bulk->flags & XG_BULK_WRITE_BARRIER) != 0)
+        return XAOT_BULK_UNPROVEN_WRITE_BARRIER;
+    if ((bulk->flags & XG_BULK_POD) == 0)
+        return XAOT_BULK_UNPROVEN_NON_POD;
+    return XAOT_BULK_UNPROVEN_NONE;
+}
+
+static uint32_t bulk_evidence_for(const XgBulkOpSummary *bulk) {
+    uint32_t bits = XAOT_BULK_EV_GLOBAL_ROW;
+    if (!bulk)
+        return bits;
+    if ((bulk->flags & XG_BULK_POD) != 0)
+        bits |= XAOT_BULK_EV_POD;
+    if ((bulk->flags & XG_BULK_OVERLAP_POSSIBLE) != 0)
+        bits |= XAOT_BULK_EV_OVERLAP_POSSIBLE;
+    if ((bulk->flags & XG_BULK_READONLY_SRC) != 0)
+        bits |= XAOT_BULK_EV_READONLY_SRC;
+    if ((bulk->flags & XG_BULK_WRITE_BARRIER) != 0)
+        bits |= XAOT_BULK_EV_WRITE_BARRIER;
+    if (bulk->length_expr_id != 0)
+        bits |= XAOT_BULK_EV_LENGTH_EXPR;
+    return bits;
+}
+
+static bool xaot_bundle_add_bulk_plan(XaotBundle *bundle, const XgBulkOpSummary *bulk) {
+    XaotBulkPlan *plan;
+    if (!bundle || !bulk)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->bulk_plans, &bundle->bulk_plan_cap,
+                            bundle->nbulk_plans + 1, sizeof(XaotBulkPlan), 8))
+        return false;
+    plan = &bundle->bulk_plans[bundle->nbulk_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->op_id = bulk->op_id;
+    plan->owner_func_id = bulk->owner_func_id;
+    plan->source_span_id = bulk->source_span_id;
+    plan->body_ordinal = bulk->body_ordinal;
+    plan->op_kind = bulk->op_kind;
+    plan->elem_type_key = bulk->elem_type_key;
+    plan->src_type_key = bulk->src_type_key;
+    plan->dst_type_key = bulk->dst_type_key;
+    plan->length_expr_id = bulk->length_expr_id;
+    plan->action = bulk_action_for(bulk);
+    plan->evidence = bulk_evidence_for(bulk);
+    plan->unproven_reason = bulk_reason_for(bulk);
+    return true;
+}
+
+static bool xaot_bundle_add_bulk_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nbulk_ops; i++) {
+        if (!xaot_bundle_add_bulk_plan(bundle, &evidence->bulk_ops[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool encoding_op_kind_valid(uint8_t kind) {
+    switch ((XgEncodingOpKind) kind) {
+        case XG_ENCODING_STRING_TO_BYTES:
+        case XG_ENCODING_BYTES_TO_STRING:
+        case XG_ENCODING_UTF8_VALIDATE:
+        case XG_ENCODING_UTF8_COUNT:
+        case XG_ENCODING_UTF16_ENCODE:
+        case XG_ENCODING_UTF16_DECODE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t encoding_action_for(const XgEncodingOpSummary *enc) {
+    if (!enc || !encoding_op_kind_valid(enc->op_kind))
+        return XAOT_ENCODING_REJECT;
+    switch ((XgEncodingOpKind) enc->op_kind) {
+        case XG_ENCODING_STRING_TO_BYTES:
+            return (enc->flags & XG_ENCODING_KNOWN_UTF8) != 0 ? XAOT_ENCODING_VALIDATE_ELIDED
+                                                              : XAOT_ENCODING_RUNTIME_VALIDATE;
+        case XG_ENCODING_BYTES_TO_STRING:
+        case XG_ENCODING_UTF8_COUNT:
+            if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
+                return XAOT_ENCODING_VALIDATE_ELIDED;
+            if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
+                return XAOT_ENCODING_VALIDATE_ONCE;
+            return XAOT_ENCODING_RUNTIME_VALIDATE;
+        case XG_ENCODING_UTF8_VALIDATE:
+            return XAOT_ENCODING_RUNTIME_VALIDATE;
+        case XG_ENCODING_UTF16_ENCODE:
+        case XG_ENCODING_UTF16_DECODE:
+            return XAOT_ENCODING_TRANSCODE;
+        default:
+            return XAOT_ENCODING_REJECT;
+    }
+}
+
+static uint8_t encoding_reason_for(const XgEncodingOpSummary *enc) {
+    if (!enc || !encoding_op_kind_valid(enc->op_kind))
+        return XAOT_ENCODING_UNPROVEN_INVALID_KIND;
+    if (encoding_action_for(enc) == XAOT_ENCODING_RUNTIME_VALIDATE &&
+        (enc->op_kind == XG_ENCODING_BYTES_TO_STRING || enc->op_kind == XG_ENCODING_UTF8_COUNT))
+        return XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN;
+    return XAOT_ENCODING_UNPROVEN_NONE;
+}
+
+static uint32_t encoding_evidence_for(const XgEncodingOpSummary *enc) {
+    uint32_t bits = XAOT_ENCODING_EV_GLOBAL_ROW;
+    if (!enc)
+        return bits;
+    if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
+        bits |= XAOT_ENCODING_EV_KNOWN_UTF8;
+    if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
+        bits |= XAOT_ENCODING_EV_VALIDATED_ONCE;
+    if ((enc->flags & XG_ENCODING_SCALAR_BOUNDARY) != 0)
+        bits |= XAOT_ENCODING_EV_SCALAR_BOUNDARY;
+    if ((enc->flags & XG_ENCODING_STATIC_LITERAL) != 0)
+        bits |= XAOT_ENCODING_EV_STATIC_LITERAL;
+    if (enc->input_type_key != 0)
+        bits |= XAOT_ENCODING_EV_INPUT_TYPE;
+    if (enc->output_type_key != 0)
+        bits |= XAOT_ENCODING_EV_OUTPUT_TYPE;
+    return bits;
+}
+
+static bool xaot_bundle_add_encoding_plan(XaotBundle *bundle, const XgEncodingOpSummary *enc) {
+    XaotEncodingPlan *plan;
+    if (!bundle || !enc)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->encoding_plans, &bundle->encoding_plan_cap,
+                            bundle->nencoding_plans + 1, sizeof(XaotEncodingPlan), 8))
+        return false;
+    plan = &bundle->encoding_plans[bundle->nencoding_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->op_id = enc->op_id;
+    plan->owner_func_id = enc->owner_func_id;
+    plan->source_span_id = enc->source_span_id;
+    plan->body_ordinal = enc->body_ordinal;
+    plan->op_kind = enc->op_kind;
+    plan->input_type_key = enc->input_type_key;
+    plan->output_type_key = enc->output_type_key;
+    plan->action = encoding_action_for(enc);
+    plan->evidence = encoding_evidence_for(enc);
+    plan->unproven_reason = encoding_reason_for(enc);
+    return true;
+}
+
+static bool xaot_bundle_add_encoding_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nencoding_ops; i++) {
+        if (!xaot_bundle_add_encoding_plan(bundle, &evidence->encoding_ops[i]))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
     if (profile == XG_BUILD_FREESTANDING) {
         switch (metadata) {
@@ -2658,6 +3096,22 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_key_access_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT Map/Set key access plan";
+        return false;
+    }
+    if (!xaot_bundle_add_sequence_access_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT sequence access plan";
+        return false;
+    }
+    if (!xaot_bundle_add_capacity_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT capacity plan";
+        return false;
+    }
+    if (!xaot_bundle_add_bulk_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT bulk plan";
+        return false;
+    }
+    if (!xaot_bundle_add_encoding_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT encoding plan";
         return false;
     }
     if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
@@ -3310,6 +3764,49 @@ XR_FUNC const XaotHashEqPlan *xaot_bundle_find_hash_eq_plan(const XaotBundle *bu
     for (uint32_t i = 0; i < bundle->nhash_eq_plans; i++) {
         if (bundle->hash_eq_plans[i].type_key == type_key)
             return &bundle->hash_eq_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotSequenceAccessPlan *
+xaot_bundle_find_sequence_access_plan(const XaotBundle *bundle, XgSequenceAccessId access_id) {
+    if (!bundle || access_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nsequence_access_plans; i++) {
+        if (bundle->sequence_access_plans[i].access_id == access_id)
+            return &bundle->sequence_access_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotCapacityPlan *xaot_bundle_find_capacity_plan(const XaotBundle *bundle,
+                                                               XgCapacityOpId op_id) {
+    if (!bundle || op_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ncapacity_plans; i++) {
+        if (bundle->capacity_plans[i].op_id == op_id)
+            return &bundle->capacity_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotBulkPlan *xaot_bundle_find_bulk_plan(const XaotBundle *bundle, XgBulkOpId op_id) {
+    if (!bundle || op_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nbulk_plans; i++) {
+        if (bundle->bulk_plans[i].op_id == op_id)
+            return &bundle->bulk_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotEncodingPlan *xaot_bundle_find_encoding_plan(const XaotBundle *bundle,
+                                                               XgEncodingOpId op_id) {
+    if (!bundle || op_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nencoding_plans; i++) {
+        if (bundle->encoding_plans[i].op_id == op_id)
+            return &bundle->encoding_plans[i];
     }
     return NULL;
 }
@@ -4623,6 +5120,225 @@ static const char *map_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *sequence_access_action_name(uint8_t action) {
+    switch ((XaotSequenceAccessAction) action) {
+        case XAOT_SEQUENCE_ACCESS_CHECKED_INDEX:
+            return "checked_index";
+        case XAOT_SEQUENCE_ACCESS_DIRECT_LENGTH:
+            return "direct_length";
+        case XAOT_SEQUENCE_ACCESS_CHECKED_SLICE:
+            return "checked_slice";
+        case XAOT_SEQUENCE_ACCESS_ITER_HELPER:
+            return "iter_helper";
+        case XAOT_SEQUENCE_ACCESS_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *sequence_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_SEQUENCE_UNPROVEN_NONE:
+            return "none";
+        case XAOT_SEQUENCE_UNPROVEN_INVALID_KIND:
+            return "invalid_kind";
+        case XAOT_SEQUENCE_UNPROVEN_MISSING_RECEIVER_TYPE:
+            return "missing_receiver_type";
+        case XAOT_SEQUENCE_UNPROVEN_COMPUTED_INDEX:
+            return "computed_index";
+        case XAOT_SEQUENCE_UNPROVEN_NEGATIVE_INDEX:
+            return "negative_index";
+        case XAOT_SEQUENCE_UNPROVEN_DYNAMIC_LENGTH:
+            return "dynamic_length";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_sequence_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_SEQUENCE_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_SEQUENCE_EV_RECEIVER_TYPE, "receiver_type");
+    PRINT_BIT(XAOT_SEQUENCE_EV_ELEM_TYPE, "elem_type");
+    PRINT_BIT(XAOT_SEQUENCE_EV_CONST_INDEX, "const_index");
+    PRINT_BIT(XAOT_SEQUENCE_EV_LENGTH_EXPR, "length_expr");
+    PRINT_BIT(XAOT_SEQUENCE_EV_MUTATING, "mutating");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static const char *capacity_action_name(uint8_t action) {
+    switch ((XaotCapacityAction) action) {
+        case XAOT_CAPACITY_CHECKED_GROW:
+            return "checked_grow";
+        case XAOT_CAPACITY_RESERVE_ONCE:
+            return "reserve_once";
+        case XAOT_CAPACITY_CLEAR_DIRECT:
+            return "clear_direct";
+        case XAOT_CAPACITY_BUILDER_FINISH:
+            return "builder_finish";
+        case XAOT_CAPACITY_RUNTIME_HELPER:
+            return "runtime_helper";
+        case XAOT_CAPACITY_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *capacity_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_CAPACITY_UNPROVEN_NONE:
+            return "none";
+        case XAOT_CAPACITY_UNPROVEN_INVALID_KIND:
+            return "invalid_kind";
+        case XAOT_CAPACITY_UNPROVEN_MISSING_RECEIVER_TYPE:
+            return "missing_receiver_type";
+        case XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN:
+            return "count_unknown";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_capacity_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_CAPACITY_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_CAPACITY_EV_RECEIVER_TYPE, "receiver_type");
+    PRINT_BIT(XAOT_CAPACITY_EV_ELEM_TYPE, "elem_type");
+    PRINT_BIT(XAOT_CAPACITY_EV_EXACT_COUNT, "exact_count");
+    PRINT_BIT(XAOT_CAPACITY_EV_LOOP_APPEND, "loop_append");
+    PRINT_BIT(XAOT_CAPACITY_EV_MAY_GROW, "may_grow");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static const char *bulk_action_name(uint8_t action) {
+    switch ((XaotBulkAction) action) {
+        case XAOT_BULK_INLINE_MEMCPY:
+            return "inline_memcpy";
+        case XAOT_BULK_INLINE_MEMMOVE:
+            return "inline_memmove";
+        case XAOT_BULK_INLINE_MEMSET:
+            return "inline_memset";
+        case XAOT_BULK_INLINE_MEMCMP:
+            return "inline_memcmp";
+        case XAOT_BULK_TYPED_LOOP:
+            return "typed_loop";
+        case XAOT_BULK_RUNTIME_HELPER:
+            return "runtime_helper";
+        case XAOT_BULK_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *bulk_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_BULK_UNPROVEN_NONE:
+            return "none";
+        case XAOT_BULK_UNPROVEN_INVALID_KIND:
+            return "invalid_kind";
+        case XAOT_BULK_UNPROVEN_NON_POD:
+            return "non_pod";
+        case XAOT_BULK_UNPROVEN_WRITE_BARRIER:
+            return "write_barrier";
+        case XAOT_BULK_UNPROVEN_LENGTH_UNKNOWN:
+            return "length_unknown";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_bulk_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_BULK_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_BULK_EV_POD, "pod");
+    PRINT_BIT(XAOT_BULK_EV_OVERLAP_POSSIBLE, "overlap_possible");
+    PRINT_BIT(XAOT_BULK_EV_READONLY_SRC, "readonly_src");
+    PRINT_BIT(XAOT_BULK_EV_WRITE_BARRIER, "write_barrier");
+    PRINT_BIT(XAOT_BULK_EV_LENGTH_EXPR, "length_expr");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static const char *encoding_action_name(uint8_t action) {
+    switch ((XaotEncodingAction) action) {
+        case XAOT_ENCODING_VALIDATE_ELIDED:
+            return "validate_elided";
+        case XAOT_ENCODING_VALIDATE_ONCE:
+            return "validate_once";
+        case XAOT_ENCODING_RUNTIME_VALIDATE:
+            return "runtime_validate";
+        case XAOT_ENCODING_TRANSCODE:
+            return "transcode";
+        case XAOT_ENCODING_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *encoding_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_ENCODING_UNPROVEN_NONE:
+            return "none";
+        case XAOT_ENCODING_UNPROVEN_INVALID_KIND:
+            return "invalid_kind";
+        case XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN:
+            return "raw_bytes_unknown";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_encoding_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_ENCODING_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_ENCODING_EV_KNOWN_UTF8, "known_utf8");
+    PRINT_BIT(XAOT_ENCODING_EV_VALIDATED_ONCE, "validated_once");
+    PRINT_BIT(XAOT_ENCODING_EV_SCALAR_BOUNDARY, "scalar_boundary");
+    PRINT_BIT(XAOT_ENCODING_EV_STATIC_LITERAL, "static_literal");
+    PRINT_BIT(XAOT_ENCODING_EV_INPUT_TYPE, "input_type");
+    PRINT_BIT(XAOT_ENCODING_EV_OUTPUT_TYPE, "output_type");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static const char *static_data_action_name(uint32_t action) {
     switch ((XaotStaticDataAction) action) {
         case XAOT_STATIC_DATA_ACTION_PROVE:
@@ -5551,6 +6267,57 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 kp->receiver_shape_id, key_access_action_name(kp->action), kp->receiver_type_key,
                 kp->key_type_key, kp->value_type_key, kp->key_const_id, kp->key_prehash,
                 kp->evidence, map_unproven_reason_name(kp->unproven_reason));
+    }
+
+    for (uint32_t si = 0; si < bundle->nsequence_access_plans; si++) {
+        const XaotSequenceAccessPlan *sp = &bundle->sequence_access_plans[si];
+        fprintf(out,
+                "sequence-access-plan %u id=%u func=%u span=%u ordinal=%u kind=%s access=%s "
+                "action=%s receiver_type=%u elem_type=%u index_expr=%u length_expr=%u evidence=",
+                si, sp->access_id, sp->owner_func_id, sp->source_span_id, sp->body_ordinal,
+                xg_sequence_kind_name(sp->sequence_kind),
+                xg_sequence_access_kind_name(sp->access_kind),
+                sequence_access_action_name(sp->action), sp->receiver_type_key, sp->elem_type_key,
+                sp->index_expr_id, sp->length_expr_id);
+        print_sequence_evidence_bits(out, sp->evidence);
+        fprintf(out, " reason=%s\n", sequence_unproven_reason_name(sp->unproven_reason));
+    }
+
+    for (uint32_t ci = 0; ci < bundle->ncapacity_plans; ci++) {
+        const XaotCapacityPlan *cp = &bundle->capacity_plans[ci];
+        fprintf(out,
+                "capacity-plan %u id=%u func=%u span=%u ordinal=%u kind=%s op=%s action=%s "
+                "receiver_type=%u elem_type=%u count_expr=%u loop=%u evidence=",
+                ci, cp->op_id, cp->owner_func_id, cp->source_span_id, cp->body_ordinal,
+                xg_sequence_kind_name(cp->sequence_kind), xg_capacity_op_kind_name(cp->op_kind),
+                capacity_action_name(cp->action), cp->receiver_type_key, cp->elem_type_key,
+                cp->count_expr_id, cp->loop_id);
+        print_capacity_evidence_bits(out, cp->evidence);
+        fprintf(out, " reason=%s\n", capacity_unproven_reason_name(cp->unproven_reason));
+    }
+
+    for (uint32_t bi = 0; bi < bundle->nbulk_plans; bi++) {
+        const XaotBulkPlan *bp = &bundle->bulk_plans[bi];
+        fprintf(out,
+                "bulk-plan %u id=%u func=%u span=%u ordinal=%u op=%s action=%s elem_type=%u "
+                "src_type=%u dst_type=%u length_expr=%u evidence=",
+                bi, bp->op_id, bp->owner_func_id, bp->source_span_id, bp->body_ordinal,
+                xg_bulk_op_kind_name(bp->op_kind), bulk_action_name(bp->action), bp->elem_type_key,
+                bp->src_type_key, bp->dst_type_key, bp->length_expr_id);
+        print_bulk_evidence_bits(out, bp->evidence);
+        fprintf(out, " reason=%s\n", bulk_unproven_reason_name(bp->unproven_reason));
+    }
+
+    for (uint32_t ei = 0; ei < bundle->nencoding_plans; ei++) {
+        const XaotEncodingPlan *ep = &bundle->encoding_plans[ei];
+        fprintf(out,
+                "encoding-plan %u id=%u func=%u span=%u ordinal=%u op=%s action=%s "
+                "input_type=%u output_type=%u evidence=",
+                ei, ep->op_id, ep->owner_func_id, ep->source_span_id, ep->body_ordinal,
+                xg_encoding_op_kind_name(ep->op_kind), encoding_action_name(ep->action),
+                ep->input_type_key, ep->output_type_key);
+        print_encoding_evidence_bits(out, ep->evidence);
+        fprintf(out, " reason=%s\n", encoding_unproven_reason_name(ep->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {
