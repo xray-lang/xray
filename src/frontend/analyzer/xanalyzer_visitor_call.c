@@ -58,6 +58,112 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
+static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *node,
+                                                  CallExprNode *call, const char *class_name,
+                                                  XaSymbolLinks *class_links,
+                                                  XrClassInfo *class_info) {
+    if (!ctx || !ctx->analyzer || !class_info)
+        return xr_type_new_unknown(NULL);
+
+    bool is_value_type = class_links && class_links->type && class_links->type->is_value_type;
+    int type_param_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+    if (call && type_param_count > 0) {
+        if (call->type_arg_count > 0) {
+            if (call->type_arg_count != type_param_count) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Generic class '%s' expects %d type argument(s), but got %d",
+                         class_name ? class_name : "class", type_param_count, call->type_arg_count);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+            } else {
+                XrType *resolved_buf[8] = {0};
+                XrType **resolved =
+                    (call->type_arg_count <= 8)
+                        ? resolved_buf
+                        : xr_malloc(sizeof(XrType *) * (size_t) call->type_arg_count);
+                if (resolved) {
+                    for (int i = 0; i < call->type_arg_count; i++) {
+                        resolved[i] =
+                            call->type_args[i]
+                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
+                                : xr_type_new_unknown(NULL);
+                    }
+                    xa_check_span_generic_class_type_args(ctx, node, class_name, resolved,
+                                                          call->type_arg_count);
+                    XrType *inst =
+                        xr_type_new_generic_instance(ctx->analyzer->isolate, class_name, class_info,
+                                                     resolved, call->type_arg_count);
+                    if (inst && is_value_type)
+                        inst->is_value_type = true;
+                    if (resolved != resolved_buf)
+                        xr_free(resolved);
+                    if (inst)
+                        return inst;
+                }
+            }
+        } else if (call->arg_count > 0) {
+            XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+            XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+            XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
+            if (ctor_type && XR_TYPE_IS_FUNCTION(ctor_type)) {
+                XrType *inferred_buf[8] = {0};
+                XrType **inferred = (type_param_count <= 8)
+                                        ? inferred_buf
+                                        : xr_calloc((size_t) type_param_count, sizeof(XrType *));
+                if (inferred) {
+                    bool all_inferred = true;
+                    for (int ti = 0; ti < type_param_count; ti++) {
+                        const char *tp_name = xa_symbol_links_get_type_param_name(class_links, ti);
+                        if (!tp_name) {
+                            all_inferred = false;
+                            break;
+                        }
+                        for (int pi = 0;
+                             pi < ctor_type->function.param_count && pi < call->arg_count; pi++) {
+                            XrType *pt = ctor_type->function.param_types
+                                             ? ctor_type->function.param_types[pi]
+                                             : NULL;
+                            XrType *arg_type = call->arguments[pi]
+                                                   ? xa_visit_infer_expr(ctx, call->arguments[pi])
+                                                   : NULL;
+                            inferred[ti] = xa_infer_type_param_from_arg(pt, arg_type, tp_name, 0);
+                            if (inferred[ti])
+                                break;
+                        }
+                        if (!inferred[ti]) {
+                            all_inferred = false;
+                            break;
+                        }
+                    }
+                    if (all_inferred) {
+                        xa_check_span_generic_class_type_args(ctx, node, class_name, inferred,
+                                                              type_param_count);
+                        XrType *inst =
+                            xr_type_new_generic_instance(ctx->analyzer->isolate, class_name,
+                                                         class_info, inferred, type_param_count);
+                        if (inst && is_value_type)
+                            inst->is_value_type = true;
+                        if (inferred != inferred_buf)
+                            xr_free(inferred);
+                        if (inst)
+                            return inst;
+                    }
+                    if (inferred != inferred_buf)
+                        xr_free(inferred);
+                }
+            }
+        }
+    }
+
+    XrType *inst = xr_type_new_instance(ctx->analyzer->isolate, class_info);
+    if (inst && is_value_type)
+        inst->is_value_type = true;
+    return inst;
+}
+
 static XaSymbol *xa_raw_pointer_of_arg_symbol(XaInferContext *ctx, AstNode *arg) {
     if (!ctx || !ctx->analyzer || !arg || arg->type != AST_VARIABLE)
         return NULL;
@@ -1885,7 +1991,8 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
 
     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
     if (member_links && member_links->class_info)
-        return xr_type_new_instance(ctx->analyzer->isolate, member_links->class_info);
+        return xa_class_constructor_instance_type(ctx, callee, call, ma->name, member_links,
+                                                  member_links->class_info);
     if (!is_quoted && strcmp(mod_name, "sync") == 0)
         return xa_sync_runtime_construct_type(ctx, ma->name, call);
     return NULL;
@@ -2846,7 +2953,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         "use structs or explicit raw-memory APIs in this profile");
                     if (xa_freestanding_profile_enabled(ctx->analyzer))
                         return xr_type_new_unknown(NULL);
-                    return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
+                    return xa_class_constructor_instance_type(ctx, node, call, name, links,
+                                                              links->class_info);
                 }
                 if (xa_symbol_is_sync_runtime_class(ctx, sym, name))
                     return xa_sync_runtime_construct_type(ctx, name, call);
@@ -2910,7 +3018,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         "use structs or explicit raw-memory APIs in this profile");
                     if (xa_freestanding_profile_enabled(ctx->analyzer))
                         return xr_type_new_unknown(NULL);
-                    return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
+                    return xa_class_constructor_instance_type(ctx, node, call, class_name, links,
+                                                              links->class_info);
                 }
                 if (xa_symbol_is_sync_runtime_class(ctx, class_sym, class_name))
                     return xa_sync_runtime_construct_type(ctx, class_name, call);
