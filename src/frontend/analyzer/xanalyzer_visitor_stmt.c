@@ -989,10 +989,43 @@ static bool xa_lifecycle_lint_loop_always_enters(XaInferContext *ctx, AstNode *s
     return false;
 }
 
-static bool xa_lifecycle_lint_positive_int_literal(AstNode *expr) {
+static bool xa_lifecycle_lint_const_int_expr(XaInferContext *ctx, AstNode *expr, int64_t *out) {
     expr = xa_thread_lint_unwrap_expr(expr);
-    return expr && expr->type == AST_LITERAL_INT && !expr->as.literal.int_overflows_i64 &&
-           expr->as.literal.raw_value.int_val > 0;
+    if (!expr)
+        return false;
+    if (expr->type == AST_LITERAL_INT && !expr->as.literal.int_overflows_i64) {
+        if (out)
+            *out = expr->as.literal.raw_value.int_val;
+        return true;
+    }
+    if (!ctx || !ctx->analyzer)
+        return false;
+    XrCtValue value = {0};
+    const char *err = NULL;
+    if (!xa_consteval_expr(ctx->analyzer, expr, &value, &err))
+        return false;
+    if (value.kind != XR_CT_INT)
+        return false;
+    if (out)
+        *out = value.as.int_val;
+    return true;
+}
+
+static bool xa_lifecycle_lint_positive_int_expr(XaInferContext *ctx, AstNode *expr) {
+    int64_t value = 0;
+    return xa_lifecycle_lint_const_int_expr(ctx, expr, &value) && value > 0;
+}
+
+static bool xa_lifecycle_lint_non_empty_range(XaInferContext *ctx, AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || expr->type != AST_RANGE)
+        return false;
+    int64_t start = 0;
+    int64_t end = 0;
+    if (!xa_lifecycle_lint_const_int_expr(ctx, expr->as.range.start, &start) ||
+        !xa_lifecycle_lint_const_int_expr(ctx, expr->as.range.end, &end))
+        return false;
+    return expr->as.range.inclusive_end ? start <= end : start < end;
 }
 
 static bool xa_lifecycle_lint_literal_has_non_spread_element(AstNode **elements, int count) {
@@ -1006,14 +1039,17 @@ static bool xa_lifecycle_lint_literal_has_non_spread_element(AstNode **elements,
     return false;
 }
 
-static bool xa_lifecycle_lint_non_empty_literal_collection(AstNode *expr) {
+static bool xa_lifecycle_lint_non_empty_collection_expr(XaInferContext *ctx, AstNode *expr) {
     expr = xa_thread_lint_unwrap_expr(expr);
     if (!expr)
         return false;
     switch (expr->type) {
+        case AST_RANGE:
+            return xa_lifecycle_lint_non_empty_range(ctx, expr);
         case AST_ARRAY_LITERAL:
             if (expr->as.array_literal.is_repeat)
-                return xa_lifecycle_lint_positive_int_literal(expr->as.array_literal.repeat_count);
+                return xa_lifecycle_lint_positive_int_expr(ctx,
+                                                           expr->as.array_literal.repeat_count);
             return xa_lifecycle_lint_literal_has_non_spread_element(expr->as.array_literal.elements,
                                                                     expr->as.array_literal.count);
         case AST_TUPLE_LITERAL:
@@ -1050,7 +1086,7 @@ static XaSymbol *xa_lifecycle_lint_expr_const_symbol(XaInferContext *ctx, AstNod
 static bool xa_lifecycle_lint_known_non_empty_collection(XaInferContext *ctx, AstNode *expr,
                                                          int depth) {
     expr = xa_thread_lint_unwrap_expr(expr);
-    if (xa_lifecycle_lint_non_empty_literal_collection(expr))
+    if (xa_lifecycle_lint_non_empty_collection_expr(ctx, expr))
         return true;
     if (depth <= 0)
         return false;
