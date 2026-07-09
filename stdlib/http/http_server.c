@@ -86,16 +86,6 @@ void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char 
 }
 
 /*
- * Add static response route
- */
-void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, const char *path,
-                           const char *response, size_t response_len) {
-    if (!server || !server->router || !path || !response)
-        return;
-    xr_router_add_static(server->router, method, path, response, response_len);
-}
-
-/*
  * Stop server
  */
 void xr_http_server_stop(XrHttpServer *server) {
