@@ -5,15 +5,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * http_parser.h - High-performance zero-copy HTTP parser
+ * http_parser_internal.h - Internal HTTP/1.x parser native boundary
  *
  * KEY CONCEPT:
- *   Zero-copy design referencing original buffer directly. Optional SIMD
- *   acceleration with SSE4.2. Full chunked transfer encoding support.
+ *   Zero-copy parser used by the current native client/listen data-plane.
+ *   User-facing protocol semantics live in stdlib/http/http.xr.
  */
 
-#ifndef XR_STDLIB_HTTP_PARSER_H
-#define XR_STDLIB_HTTP_PARSER_H
+#ifndef XR_STDLIB_HTTP_PARSER_INTERNAL_H
+#define XR_STDLIB_HTTP_PARSER_INTERNAL_H
 
 #include "../../src/base/xdefs.h"
 #include <stddef.h>

@@ -16,7 +16,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "../../../stdlib/http/http_parser.h"
+#include "../../../stdlib/http/http_parser_internal.h"
 
 /* ========== Method Conversion ========== */
 

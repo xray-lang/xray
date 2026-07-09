@@ -13,7 +13,7 @@
 
 #include "http.h"
 #include "http_client_internal.h"
-#include "http_parser.h"
+#include "http_parser_internal.h"
 #include "../net/conn_pool.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/xisolate_internal.h"

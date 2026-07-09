@@ -19,7 +19,7 @@
 
 #include "http_internal.h"
 #include "http_client_internal.h"
-#include "http_parser.h"
+#include "http_parser_internal.h"
 #include "../../src/base/xplatform.h"
 #include "../common.h"
 #include "../../src/runtime/object/xjson_serde.h"

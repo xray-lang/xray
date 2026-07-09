@@ -20,7 +20,7 @@
  */
 
 #include "http_internal.h"
-#include "http_parser.h"
+#include "http_parser_internal.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xworker.h"
 #include "../../src/coro/xsocket.h"
