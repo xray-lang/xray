@@ -1,5 +1,7 @@
 args=--dump-global-evidence
 contains=seq-access
+contains=generic-storage
+regex=generic-storage-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* kind=array action=typed_inline
 contains=kind=array access=index_get
 contains=kind=array access=slice
 contains=kind=array access=length

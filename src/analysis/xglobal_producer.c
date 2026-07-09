@@ -1984,6 +1984,86 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
     return false;
 }
 
+static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
+    static const uint8_t int_widths[] = {XR_TREF_NW_I64,   XR_TREF_NW_BOOL, XR_TREF_NW_I8,
+                                         XR_TREF_NW_I16,   XR_TREF_NW_I32,  XR_TREF_NW_U8,
+                                         XR_TREF_NW_U16,   XR_TREF_NW_U32,  XR_TREF_NW_U64,
+                                         XR_TREF_NW_ISIZE, XR_TREF_NW_USIZE};
+    static const uint8_t float_widths[] = {XR_TREF_NW_F64, XR_TREF_NW_F32};
+    if (type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0) ||
+        type_key == hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0) ||
+        type_key == hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0) ||
+        type_key == hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0))
+        return true;
+    for (uint32_t i = 0; i < sizeof(int_widths) / sizeof(int_widths[0]); i++) {
+        if (type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, int_widths[i]))
+            return true;
+    }
+    for (uint32_t i = 0; i < sizeof(float_widths) / sizeof(float_widths[0]); i++) {
+        if (type_key == hash_synthetic_width_tref32(XR_TREF_FLOAT_WIDTH, float_widths[i]))
+            return true;
+    }
+    return false;
+}
+
+static uint64_t body_generic_storage_hash(uint8_t storage_kind, uint32_t origin_type_key,
+                                          uint32_t specialized_type_key, uint32_t elem_type_key) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, storage_kind);
+    h = fold_u64(h, origin_type_key);
+    h = fold_u64(h, specialized_type_key);
+    h = fold_u64(h, elem_type_key);
+    return h ? h : 1;
+}
+
+static void body_add_generic_array_storage(XgBodyCollect *bc, const XrTypeRef *type,
+                                           uint32_t source_span_id) {
+    XrTypeRef *elem_type;
+    XrTypeRef *type_args[1];
+    XgGenericInstSummary inst;
+    XgGenericStorageSummary storage;
+    uint32_t elem_type_key;
+    uint32_t origin_type_key;
+    uint32_t specialized_type_key;
+    if (!bc || !bc->evidence || !type || type->kind != XR_TREF_GENERIC || !type->name ||
+        strcmp(type->name, "Array") != 0 || !type->children || type->nchildren == 0)
+        return;
+    elem_type = type->children[0];
+    elem_type_key = hash_tref32(elem_type);
+    if (!body_type_key_is_pod_array_lane(elem_type_key))
+        return;
+
+    type_args[0] = elem_type;
+    origin_type_key = hash_named_type_key32("Array", NULL, 0);
+    specialized_type_key = hash_named_type_key32("Array", type_args, 1);
+
+    memset(&inst, 0, sizeof(inst));
+    inst.generic_inst_id = (XgGenericInstId) (bc->evidence->ngeneric_insts + 1);
+    inst.module_id = bc->module_id;
+    inst.name_id = hash_name32("Array");
+    inst.type_key = hash_generic_inst_type_key("Array", type_args, 1, XG_GENERIC_INST_CONTAINER);
+    inst.type_arg_key_start = hash_tref_list32(type_args, 1);
+    inst.type_arg_count = 1;
+    inst.source_span_id = source_span_id;
+    inst.kind = XG_GENERIC_INST_CONTAINER;
+    inst.flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_CONCRETE_STORAGE;
+    if (!xg_global_evidence_add_generic_inst(bc->evidence, &inst))
+        return;
+
+    memset(&storage, 0, sizeof(storage));
+    storage.storage_id = (XgGenericStorageId) (bc->evidence->ngeneric_storages + 1);
+    storage.generic_inst_id = inst.generic_inst_id;
+    storage.module_id = bc->module_id;
+    storage.storage_kind = XG_GENERIC_STORAGE_ARRAY;
+    storage.origin_type_key = origin_type_key;
+    storage.specialized_type_key = specialized_type_key;
+    storage.elem_type_key = elem_type_key;
+    storage.flags = XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD;
+    storage.storage_hash = body_generic_storage_hash(storage.storage_kind, origin_type_key,
+                                                     specialized_type_key, elem_type_key);
+    (void) xg_global_evidence_add_generic_storage(bc->evidence, &storage);
+}
+
 static bool body_type_ref_map_parts(const XrTypeRef *type, uint8_t *out_container_kind,
                                     uint32_t *out_key_type_key, uint32_t *out_value_type_key) {
     if (out_container_kind)
@@ -4048,6 +4128,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
                                          sequence_elem_type_key);
+            body_add_generic_array_storage(bc, node->as.var_decl.type_annotation,
+                                           (uint32_t) node->line);
             break;
         }
         case AST_ASSIGNMENT: {
@@ -4515,6 +4597,7 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
                                          &sequence_kind, &sequence_elem_type_key))
             body_bind_sequence_local(bc, method->parameters ? method->parameters[i] : NULL,
                                      sequence_kind, sequence_elem_type_key);
+        body_add_generic_array_storage(bc, method->param_types ? method->param_types[i] : NULL, 0);
     }
 }
 
@@ -4537,6 +4620,7 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
                                          &sequence_elem_type_key))
             body_bind_sequence_local(bc, param ? param->name : NULL, sequence_kind,
                                      sequence_elem_type_key);
+        body_add_generic_array_storage(bc, param ? param->type : NULL, 0);
     }
 }
 
