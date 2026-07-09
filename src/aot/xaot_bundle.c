@@ -1681,8 +1681,10 @@ static void xaot_bundle_bind_callsite_ids_in_func(XaotBundle *bundle, XiFunc *fu
                 value->xg_callsite_id != XG_NO_ID)
                 continue;
             plan = xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, value);
-            if (plan)
+            if (plan) {
                 value->xg_callsite_id = plan->callsite_id;
+                value->xg_method_id = plan->method_id;
+            }
         }
     }
     for (uint16_t ci = 0; ci < func->nchildren; ci++)
@@ -1816,6 +1818,8 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
             return NULL;
         if (plan->callsite_id != call->xg_callsite_id)
             return NULL;
+        if (call->xg_method_id != XG_NO_ID && plan->method_id != call->xg_method_id)
+            return NULL;
         if (owner_func_id != XG_NO_ID && plan->owner_func_id != owner_func_id)
             return NULL;
         if (call->line != 0 && plan->source_span_id != call->line)
@@ -1835,6 +1839,8 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
         if (plan->source_span_id != call->line)
             continue;
         if (plan->arg_count != arg_count)
+            continue;
+        if (call->xg_method_id != XG_NO_ID && plan->method_id != call->xg_method_id)
             continue;
         if (plan->method_name_id == 0 || plan->method_name_id != method_name_id)
             continue;

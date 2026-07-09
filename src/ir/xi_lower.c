@@ -705,8 +705,10 @@ XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const c
             return;
         match = row;
     }
-    if (match)
+    if (match) {
         call->xg_callsite_id = match->callsite_id;
+        call->xg_method_id = match->method_id;
+    }
 }
 
 /* ========== Method Symbol Resolution ========== */
