@@ -3699,10 +3699,22 @@ static const char *cg_no_alloc_method_call_alloc_detail(const XiValue *v) {
     return cg_no_alloc_method_alloc_detail(receiver_type, method);
 }
 
+static bool cg_no_alloc_value_is_bigint_literal(const XiValue *v) {
+    return v && v->op == XI_CONST && v->type && xr_type_is_named_class(v->type, "BigInt");
+}
+
 static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
                                         const char **kind_out, const char **detail_out) {
     if (!v)
         return false;
+
+    if (cg_no_alloc_value_is_bigint_literal(v)) {
+        if (kind_out)
+            *kind_out = "literal";
+        if (detail_out)
+            *detail_out = "BigInt";
+        return true;
+    }
 
     if (xi_op_is_heap_alloc(v->op) || v->op == XI_CLASS_CREATE || v->op == XI_RANGE) {
         if (kind_out)
