@@ -12,7 +12,6 @@
  */
 
 #include "cluster_internal.h"
-#include "cluster_node.h"
 
 #include <string.h>
 
