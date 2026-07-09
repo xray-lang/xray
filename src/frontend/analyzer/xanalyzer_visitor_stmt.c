@@ -1031,7 +1031,11 @@ xa_thread_lint_find_returned_call_arg(XaThreadHandleLintState *states, AstNode *
         summary->return_param_index >= summary->param_count ||
         summary->return_param_index >= call->arg_count)
         return NULL;
-    return xa_thread_lint_find_by_expr(states, call->arguments[summary->return_param_index]);
+    AstNode *arg = call->arguments[summary->return_param_index];
+    XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, arg);
+    if (!state)
+        state = xa_thread_lint_find_returned_call_arg(states, arg);
+    return state;
 }
 
 static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
@@ -2800,8 +2804,10 @@ xa_os_resource_lint_find_returned_call_arg(XaOsResourceLintState *states, AstNod
     XaOsResourceParamSummary *param = &summary->params[summary->return_param_index];
     if (!param->is_resource)
         return NULL;
-    XaOsResourceLintState *state =
-        xa_os_resource_lint_find_by_expr(states, call->arguments[summary->return_param_index]);
+    AstNode *arg = call->arguments[summary->return_param_index];
+    XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, arg);
+    if (!state)
+        state = xa_os_resource_lint_find_returned_call_arg(states, arg);
     return state && state->kind == param->kind ? state : NULL;
 }
 
