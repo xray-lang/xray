@@ -6866,6 +6866,133 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_interface_object_storage_uses) {
+    setup_parser_session();
+    const char *source = "interface Drawable {\n"
+                         "    draw() -> int\n"
+                         "}\n"
+                         "class Sprite implements Drawable {\n"
+                         "    draw() -> int { return 1 }\n"
+                         "}\n"
+                         "class Icon implements Drawable {\n"
+                         "    draw() -> int { return 2 }\n"
+                         "}\n"
+                         "class Scene {\n"
+                         "    root: Drawable\n"
+                         "    sprites: Array<Drawable>\n"
+                         "}\n"
+                         "fn keep(item: Drawable, items: Array<Drawable>) -> Drawable {\n"
+                         "    var local: Drawable = item\n"
+                         "    var localItems: Array<Drawable> = items\n"
+                         "    var f = fn() -> Drawable { return local }\n"
+                         "    return local\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ninterface_impls, 2);
+    ASSERT_TRUE(ev.ninterface_object_uses >= 6);
+    XgInterfaceId drawable_id = ev.interface_impls[0].interface_id;
+    uint32_t reason_bits = 0;
+    for (uint32_t i = 0; i < ev.ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &ev.interface_object_uses[i];
+        if (use->interface_id == drawable_id)
+            reason_bits |= use->reason;
+    }
+    ASSERT_TRUE((reason_bits & XG_INTERFACE_OBJECT_USE_VALUE) != 0);
+    ASSERT_TRUE((reason_bits & XG_INTERFACE_OBJECT_USE_ARRAY) != 0);
+    ASSERT_TRUE((reason_bits & XG_INTERFACE_OBJECT_USE_FIELD) != 0);
+    ASSERT_TRUE((reason_bits & XG_INTERFACE_OBJECT_USE_RETURN) != 0);
+    ASSERT_TRUE((reason_bits & XG_INTERFACE_OBJECT_USE_CAPTURE) != 0);
+    ASSERT_TRUE((reason_bits & XG_INTERFACE_OBJECT_USE_PARAM) != 0);
+
+    XaotBundle bundle;
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    ASSERT_EQ_UINT(bundle.ninterface_abi_plans, 1);
+    const XaotInterfaceAbiPlan *abi = xaot_bundle_find_interface_abi_plan(&bundle, drawable_id);
+    ASSERT_NOT_NULL(abi);
+    ASSERT_EQ_UINT(abi->callsite_count, 0);
+    ASSERT_EQ_UINT(abi->implementor_count, 2);
+    ASSERT_EQ_UINT(abi->method_slot_count, 1);
+    ASSERT_EQ_UINT(abi->flags, XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT |
+                                   XAOT_INTERFACE_ABI_NEEDS_ITABLE |
+                                   XAOT_INTERFACE_ABI_BOXED_RECEIVER);
+    ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT);
+    ASSERT_TRUE((abi->evidence & XAOT_INTERFACE_ABI_EV_OBJECT_USE) != 0);
+
+    uint32_t storage_use_plans = 0;
+    for (uint32_t i = 0; i < bundle.ninterface_use_plans; i++) {
+        const XaotInterfaceUsePlan *plan = &bundle.interface_use_plans[i];
+        if (plan->interface_id != drawable_id)
+            continue;
+        ASSERT_EQ_UINT(plan->use_site_id, XG_NO_ID);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_VALUE) != 0);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_ARRAY) != 0);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_FIELD) != 0);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_RETURN) != 0);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_CAPTURE) != 0);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_PARAM) != 0);
+        ASSERT_TRUE((plan->flags & XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT) != 0);
+        ASSERT_TRUE((plan->flags & XAOT_INTERFACE_USE_NEEDS_ITABLE) != 0);
+        storage_use_plans++;
+    }
+    ASSERT_EQ_UINT(storage_use_plans, 2);
+
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    char *evidence_dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(evidence_dump);
+    ASSERT_NOT_NULL(strstr(evidence_dump, "interface-object-use"));
+    ASSERT_NOT_NULL(strstr(evidence_dump, "array"));
+    ASSERT_NOT_NULL(strstr(evidence_dump, "field"));
+    ASSERT_NOT_NULL(strstr(evidence_dump, "return"));
+    ASSERT_NOT_NULL(strstr(evidence_dump, "capture"));
+    ASSERT_NOT_NULL(strstr(evidence_dump, "param"));
+    xr_free(evidence_dump);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "interface-use"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=implements+value+array+field+return+capture+param"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "evidence=methods+implementors+object_use"));
+    xr_free(plan_dump);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     setup_parser_session();
     const char *source = "interface Shape {\n"
@@ -7088,7 +7215,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_TRUE(bundle.dispatch_target_cases[0].receiver_class_id !=
                 bundle.dispatch_target_cases[1].receiver_class_id);
-    ASSERT_EQ_UINT(bundle.ninterface_use_plans, 5);
+    ASSERT_EQ_UINT(bundle.ninterface_use_plans, 6);
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(
         &bundle, shape_id, bundle.dispatch_target_cases[0].receiver_class_id, parent_callsite_id));
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(
@@ -7100,11 +7227,12 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(abi->implementor_count, 2);
     ASSERT_EQ_UINT(abi->method_slot_count, 1);
     ASSERT_EQ_UINT(abi->flags, XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT |
+                                   XAOT_INTERFACE_ABI_NEEDS_ITABLE |
                                    XAOT_INTERFACE_ABI_NEEDS_TYPE_SWITCH_TAG |
                                    XAOT_INTERFACE_ABI_BOXED_RECEIVER);
     ASSERT_EQ_UINT(abi->data_source, XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE);
     ASSERT_EQ_UINT(abi->type_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
-    ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_NONE);
+    ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT);
     ASSERT_EQ_UINT(abi->tag_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
     const XaotGenericSpecializationPlan *spec_plan =
         xaot_bundle_find_generic_specialization_plan(&bundle, parent_callsite_id);
@@ -7120,9 +7248,9 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "interface-abi 0 interface="));
     ASSERT_NOT_NULL(strstr(dump, "callsites=1 implementors=2 slots=1"));
-    ASSERT_NOT_NULL(strstr(dump, "flags=iface_object+type_switch_tag+boxed_receiver"));
-    ASSERT_NOT_NULL(
-        strstr(dump, "data=boxed_value type=native_type_id itable=none tag=native_type_id"));
+    ASSERT_NOT_NULL(strstr(dump, "flags=iface_object+itable+type_switch_tag+boxed_receiver"));
+    ASSERT_NOT_NULL(strstr(
+        dump, "data=boxed_value type=native_type_id itable=dispatch_slot tag=native_type_id"));
     ASSERT_NOT_NULL(strstr(dump, "generic-specialization 0 callsite="));
     ASSERT_NOT_NULL(strstr(dump, "action=type_switch dispatch=type_switch"));
     ASSERT_NOT_NULL(strstr(dump, "implementors=2 single=0 targets=2"));
@@ -9551,6 +9679,7 @@ RUN_TEST(global_evidence_producer_marks_native_method_calls_as_native_capability
 RUN_TEST(global_evidence_producer_marks_body_escape_bits);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
+RUN_TEST(global_evidence_producer_records_interface_object_storage_uses);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
 RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
 RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);

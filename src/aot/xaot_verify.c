@@ -1842,7 +1842,8 @@ static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const X
     {
         uint32_t explicit_use_plans = 0;
         for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
-            if (bundle->interface_use_plans[i].use_site_id == XG_NO_ID)
+            if (bundle->interface_use_plans[i].use_site_id == XG_NO_ID &&
+                (bundle->interface_use_plans[i].reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0)
                 explicit_use_plans++;
         }
         if (explicit_use_plans != ev->ninterface_impls)
@@ -2041,6 +2042,60 @@ static bool verify_interface_method_rows(const XgGlobalEvidence *ev, char *errbu
     }
     if (!verify_interface_method_visibility(ev, errbuf, errbuf_len))
         return false;
+    return true;
+}
+
+static uint32_t verify_interface_use_reason_from_object_use(uint32_t reason) {
+    uint32_t out = 0;
+    if ((reason & XG_INTERFACE_OBJECT_USE_VALUE) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_VALUE;
+    if ((reason & XG_INTERFACE_OBJECT_USE_ARRAY) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_ARRAY;
+    if ((reason & XG_INTERFACE_OBJECT_USE_FIELD) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_FIELD;
+    if ((reason & XG_INTERFACE_OBJECT_USE_RETURN) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_RETURN;
+    if ((reason & XG_INTERFACE_OBJECT_USE_CAPTURE) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_CAPTURE;
+    if ((reason & XG_INTERFACE_OBJECT_USE_PARAM) != 0)
+        out |= XAOT_INTERFACE_USE_REASON_PARAM;
+    return out;
+}
+
+static uint32_t verify_interface_object_use_reason_bits(void) {
+    return XG_INTERFACE_OBJECT_USE_VALUE | XG_INTERFACE_OBJECT_USE_ARRAY |
+           XG_INTERFACE_OBJECT_USE_FIELD | XG_INTERFACE_OBJECT_USE_RETURN |
+           XG_INTERFACE_OBJECT_USE_CAPTURE | XG_INTERFACE_OBJECT_USE_PARAM;
+}
+
+static bool verify_interface_object_use_rows(const XgGlobalEvidence *ev, char *errbuf,
+                                             size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence interface object use verifier has no evidence");
+    for (uint32_t i = 0; i < ev->ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &ev->interface_object_uses[i];
+        if (use->use_id == XG_NO_ID || use->interface_id == XG_NO_ID || use->reason == 0 ||
+            use->type_key == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface object use identity is stale");
+        if (!verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE, use->interface_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface object use interface is missing");
+        if ((use->reason & ~verify_interface_object_use_reason_bits()) != 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface object use reason is unknown");
+        if (use->owner_func_id != XG_NO_ID &&
+            !verify_find_evidence_body_by_func(ev, use->owner_func_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface object use owner is missing");
+        for (uint32_t j = i + 1; j < ev->ninterface_object_uses; j++) {
+            const XgInterfaceObjectUseSummary *other = &ev->interface_object_uses[j];
+            if (other->use_id == use->use_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence interface object use id is duplicated");
+        }
+    }
     return true;
 }
 
@@ -2757,11 +2812,25 @@ static uint32_t verify_effective_interface_implementor_count(const XgGlobalEvide
     return count;
 }
 
+static uint32_t verify_interface_object_use_reason_for_interface(const XgGlobalEvidence *ev,
+                                                                 XgInterfaceId interface_id) {
+    uint32_t reason = 0;
+    if (!ev || interface_id == XG_NO_ID)
+        return 0;
+    for (uint32_t i = 0; i < ev->ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &ev->interface_object_uses[i];
+        if (use->interface_id == interface_id)
+            reason |= verify_interface_use_reason_from_object_use(use->reason);
+    }
+    return reason;
+}
+
 static bool verify_interface_abi_plan_rederives(const XgGlobalEvidence *ev,
                                                 const XaotBundle *bundle,
                                                 const XaotInterfaceAbiPlan *plan, char *errbuf,
                                                 size_t errbuf_len) {
     uint32_t callsite_count = 0;
+    uint32_t object_use_count = 0;
     uint32_t flags = 0;
     uint32_t evidence = 0;
     uint8_t data_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
@@ -2796,13 +2865,28 @@ static bool verify_interface_abi_plan_rederives(const XgGlobalEvidence *ev,
             itable_source = XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT;
         }
     }
-    if (callsite_count == 0)
-        return set_error(errbuf, errbuf_len, "AOT interface ABI plan has no callsite");
+    for (uint32_t i = 0; i < ev->ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &ev->interface_object_uses[i];
+        if (use->interface_id != plan->interface_id)
+            continue;
+        object_use_count++;
+        flags |= XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT | XAOT_INTERFACE_ABI_BOXED_RECEIVER;
+        data_source = XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE;
+        type_source = XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID;
+        evidence |= XAOT_INTERFACE_ABI_EV_OBJECT_USE;
+    }
+    if (callsite_count == 0 && object_use_count == 0)
+        return set_error(errbuf, errbuf_len, "AOT interface ABI plan has no use evidence");
 
     if (verify_interface_visible_method_count(ev, plan->interface_id) != 0)
         evidence |= XAOT_INTERFACE_ABI_EV_INTERFACE_METHODS;
     if (verify_effective_interface_implementor_count(ev, plan->interface_id) != 0)
         evidence |= XAOT_INTERFACE_ABI_EV_IMPLEMENTOR_SET;
+    if (object_use_count != 0 &&
+        verify_interface_visible_method_count(ev, plan->interface_id) != 0) {
+        flags |= XAOT_INTERFACE_ABI_NEEDS_ITABLE;
+        itable_source = XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT;
+    }
 
     if (plan->callsite_count != callsite_count)
         return set_error(errbuf, errbuf_len, "AOT interface ABI callsite count mismatches");
@@ -4418,6 +4502,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         return false;
     if (!verify_interface_method_rows(ev, errbuf, errbuf_len))
         return false;
+    if (!verify_interface_object_use_rows(ev, errbuf, errbuf_len))
+        return false;
     if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
         return false;
     if (!verify_generic_inst_rows(ev, errbuf, errbuf_len))
@@ -4529,12 +4615,36 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
 
     for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
         const XaotInterfaceUsePlan *plan = &bundle->interface_use_plans[i];
+        const uint32_t storage_reason_mask =
+            XAOT_INTERFACE_USE_REASON_VALUE | XAOT_INTERFACE_USE_REASON_ARRAY |
+            XAOT_INTERFACE_USE_REASON_FIELD | XAOT_INTERFACE_USE_REASON_RETURN |
+            XAOT_INTERFACE_USE_REASON_CAPTURE | XAOT_INTERFACE_USE_REASON_PARAM;
         if (plan->reason == 0)
             return set_error(errbuf, errbuf_len, "AOT interface-use plan has no reason");
-        if (plan->use_site_id == XG_NO_ID &&
-            !verify_has_interface_impl(ev, plan->interface_id, plan->implementor_class_id))
-            return set_error(errbuf, errbuf_len,
-                             "AOT interface-use plan has no implements evidence");
+        if (plan->use_site_id == XG_NO_ID) {
+            uint32_t storage_reason = plan->reason & storage_reason_mask;
+            uint32_t expected_storage_reason =
+                verify_interface_object_use_reason_for_interface(ev, plan->interface_id);
+            if ((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0 &&
+                !verify_has_interface_impl(ev, plan->interface_id, plan->implementor_class_id))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use plan has no implements evidence");
+            if (storage_reason != 0) {
+                uint32_t expected_flags = XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT;
+                if (!verify_has_effective_interface_impl(ev, plan->interface_id,
+                                                         plan->implementor_class_id))
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT interface-use storage plan has no effective evidence");
+                if ((storage_reason & ~expected_storage_reason) != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT interface-use storage reason does not re-derive");
+                if (verify_interface_visible_method_count(ev, plan->interface_id) != 0)
+                    expected_flags |= XAOT_INTERFACE_USE_NEEDS_ITABLE;
+                if ((plan->flags & expected_flags) != expected_flags)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT interface-use storage flags do not re-derive");
+            }
+        }
         if (plan->use_site_id != XG_NO_ID) {
             const XgCallsiteSummary *call = verify_find_evidence_callsite(ev, plan->use_site_id);
             const XaotMethodDispatchPlan *dispatch =
@@ -4594,6 +4704,33 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         plan = xaot_bundle_find_interface_abi_plan(bundle, call->receiver_static_interface_id);
         if (!plan)
             return set_error(errbuf, errbuf_len, "AOT interface callsite has no ABI plan");
+        if (!verify_interface_abi_plan_rederives(ev, bundle, plan, errbuf, errbuf_len))
+            return false;
+    }
+    for (uint32_t i = 0; i < ev->ninterface_object_uses; i++) {
+        const XgInterfaceObjectUseSummary *use = &ev->interface_object_uses[i];
+        const XaotInterfaceAbiPlan *plan;
+        bool seen = false;
+        if (use->interface_id == XG_NO_ID)
+            continue;
+        for (uint32_t j = 0; j < ev->ncallsites; j++) {
+            const XgCallsiteSummary *call = &ev->callsites[j];
+            if (call->kind == XG_CALL_INTERFACE &&
+                call->receiver_static_interface_id == use->interface_id) {
+                seen = true;
+                break;
+            }
+        }
+        for (uint32_t j = 0; !seen && j < i; j++) {
+            if (ev->interface_object_uses[j].interface_id == use->interface_id)
+                seen = true;
+        }
+        if (seen)
+            continue;
+        expected_interface_abi_plans++;
+        plan = xaot_bundle_find_interface_abi_plan(bundle, use->interface_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT interface object use has no ABI plan");
         if (!verify_interface_abi_plan_rederives(ev, bundle, plan, errbuf, errbuf_len))
             return false;
     }
