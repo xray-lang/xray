@@ -5207,6 +5207,80 @@ static bool evidence_has_equivalent_generic_inst(const XgGlobalEvidence *ev,
     return false;
 }
 
+static uint32_t evidence_body_size_estimate(const XgBodySummary *body) {
+    if (!body)
+        return 1;
+    return 1u + body->callsite_count;
+}
+
+static uint64_t evidence_generic_body_use_hash(const XgGenericInstSummary *inst,
+                                               const XgCallsiteSummary *call,
+                                               const XgBodySummary *origin_body,
+                                               const XgBodySummary *specialized_body) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, inst ? inst->module_id : 0);
+    h = fold_u64(h, inst ? inst->kind : 0);
+    h = fold_u64(h, inst ? inst->name_id : 0);
+    h = fold_u64(h, inst ? inst->type_key : 0);
+    h = fold_u64(h, inst ? inst->type_arg_key_start : 0);
+    h = fold_u64(h, inst ? inst->type_arg_count : 0);
+    h = fold_u64(h, call ? call->callsite_id : 0);
+    h = fold_u64(h, call ? call->static_target_func_id : 0);
+    h = fold_u64(h, origin_body ? origin_body->body_hash : 0);
+    h = fold_u64(h, specialized_body ? specialized_body->body_hash : 0);
+    return h ? h : 1;
+}
+
+static bool evidence_add_generic_function_deepen_rows(XgGlobalEvidence *dst,
+                                                      const XgGenericInstSummary *inst,
+                                                      const XgCallsiteSummary *call,
+                                                      const XgBodySummary *owner_body,
+                                                      const XgBodySummary *origin_body,
+                                                      const XgBodySummary *specialized_body) {
+    XgGenericBodyUseSummary body_use;
+    XgGenericCodeSizeSummary code_size;
+    uint32_t origin_size;
+    uint32_t specialized_size;
+    if (!dst || !inst || !call || !origin_body || !specialized_body ||
+        inst->kind != XG_GENERIC_INST_FUNCTION || call->static_target_func_id == XG_NO_ID ||
+        call->static_target_func_id == origin_body->func_id ||
+        call->static_target_func_id != specialized_body->func_id)
+        return true;
+
+    origin_size = evidence_body_size_estimate(origin_body);
+    specialized_size = evidence_body_size_estimate(specialized_body);
+
+    memset(&body_use, 0, sizeof(body_use));
+    body_use.use_id = (XgGenericBodyUseId) (dst->ngeneric_body_uses + 1);
+    body_use.generic_inst_id = inst->generic_inst_id;
+    body_use.module_id = inst->module_id;
+    body_use.owner_func_id = owner_body ? owner_body->func_id : call->owner_func_id;
+    body_use.origin_body_func_id = origin_body->func_id;
+    body_use.specialized_body_func_id = specialized_body->func_id;
+    body_use.root_callsite_id = call->callsite_id;
+    body_use.type_key = inst->type_key;
+    body_use.type_arg_key_start = inst->type_arg_key_start;
+    body_use.type_arg_count = inst->type_arg_count;
+    body_use.estimated_body_size = specialized_size;
+    body_use.flags = XG_GENERIC_BODY_EXPLICIT_ROOT;
+    body_use.body_use_hash =
+        evidence_generic_body_use_hash(inst, call, origin_body, specialized_body);
+    if (!xg_global_evidence_add_generic_body_use(dst, &body_use))
+        return false;
+
+    memset(&code_size, 0, sizeof(code_size));
+    code_size.code_size_id = (XgGenericCodeSizeId) (dst->ngeneric_code_sizes + 1);
+    code_size.generic_inst_id = inst->generic_inst_id;
+    code_size.module_id = inst->module_id;
+    code_size.body_use_id = body_use.use_id;
+    code_size.origin_body_size_estimate = origin_size;
+    code_size.specialized_body_size_estimate = specialized_size;
+    code_size.instantiation_count = 1;
+    code_size.threshold = 64;
+    code_size.flags = XG_GENERIC_CODESIZE_ALLOW_CLONE;
+    return xg_global_evidence_add_generic_code_size(dst, &code_size) != NULL;
+}
+
 XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
                                                          const XgGlobalEvidence *roots) {
     if (!dst || !roots)
@@ -5230,6 +5304,7 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
             src_call ? evidence_find_body_by_func_id(roots, src_call->owner_func_id) : NULL;
         const XgBodySummary *dst_owner_body = NULL;
         const XgCallsiteSummary *dst_call = NULL;
+        const XgBodySummary *dst_specialized_body = NULL;
 
         mapped.generic_inst_id = (XgGenericInstId) (dst->ngeneric_insts + 1);
         mapped.origin_decl_id = dst_decl ? dst_decl->decl_id : XG_NO_ID;
@@ -5291,10 +5366,23 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
         mapped.specialized_class_id = XG_NO_ID;
         mapped.flags &= ~(XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI |
                           XG_GENERIC_INST_CONCRETE_STORAGE);
+        if (mapped.kind == XG_GENERIC_INST_FUNCTION && dst_call &&
+            dst_call->kind == XG_CALL_DIRECT_FUNC && dst_call->static_target_func_id != XG_NO_ID &&
+            dst_call->static_target_func_id != mapped.origin_func_id) {
+            dst_specialized_body =
+                evidence_find_body_by_func_id(dst, dst_call->static_target_func_id);
+            if (dst_specialized_body) {
+                mapped.specialized_func_id = dst_specialized_body->func_id;
+                mapped.flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
+            }
+        }
 
         if (evidence_has_equivalent_generic_inst(dst, &mapped))
             continue;
         if (!xg_global_evidence_add_generic_inst(dst, &mapped))
+            return false;
+        if (!evidence_add_generic_function_deepen_rows(dst, &mapped, dst_call, dst_owner_body,
+                                                       dst_origin_body, dst_specialized_body))
             return false;
     }
     return true;
