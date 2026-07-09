@@ -22,7 +22,6 @@
  *   - Proxy channels serialize and forward over TCP.
  */
 
-#include "cluster_channel.h"
 #include "cluster_internal.h"
 #include "cluster_serial.h"
 #include "cluster_proto.h"
