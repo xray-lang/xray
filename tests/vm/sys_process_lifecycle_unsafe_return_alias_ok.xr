@@ -1,0 +1,32 @@
+import sys
+import { Pipe, Process } from sys
+
+fn passProcess(p: Process) -> Process {
+    return p
+}
+
+fn passPipe(p: Pipe) -> Pipe {
+    return p
+}
+
+fn makeProcess() -> Process {
+    var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (spawned == null) {
+        return sys.Process.spawn("sh", ["-c", "exit 1"])!
+    }
+    return unsafe { passProcess(spawned!) }
+}
+
+fn makePipe() -> Pipe {
+    var opened = sys.Pipe.open()
+    if (opened == null) {
+        return sys.Pipe.open()!
+    }
+    return unsafe { passPipe(opened!) }
+}
+
+var process = makeProcess()
+print(process.wait())
+
+var pipe = makePipe()
+print(pipe.close())
