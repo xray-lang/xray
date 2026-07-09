@@ -7747,6 +7747,74 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_NOT_NULL(
         strstr(dump, "encoding-op 0 id=1 owner=7 span=103 ordinal=0 op=string_to_bytes"));
     xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nsequence_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.ncapacity_plans, 1);
+    ASSERT_EQ_UINT(bundle.nbulk_plans, 1);
+    ASSERT_EQ_UINT(bundle.nencoding_plans, 1);
+    const XaotSequenceAccessPlan *seq_plan = xaot_bundle_find_sequence_access_plan(&bundle, 1);
+    const XaotCapacityPlan *cap_plan = xaot_bundle_find_capacity_plan(&bundle, 1);
+    const XaotBulkPlan *bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 1);
+    const XaotEncodingPlan *enc_plan = xaot_bundle_find_encoding_plan(&bundle, 1);
+    ASSERT_NOT_NULL(seq_plan);
+    ASSERT_NOT_NULL(cap_plan);
+    ASSERT_NOT_NULL(bulk_plan);
+    ASSERT_NOT_NULL(enc_plan);
+    ASSERT_EQ_UINT(seq_plan->action, XAOT_SEQUENCE_ACCESS_CHECKED_INDEX);
+    ASSERT_EQ_UINT(seq_plan->evidence,
+                   XAOT_SEQUENCE_EV_GLOBAL_ROW | XAOT_SEQUENCE_EV_RECEIVER_TYPE |
+                       XAOT_SEQUENCE_EV_ELEM_TYPE | XAOT_SEQUENCE_EV_CONST_INDEX);
+    ASSERT_EQ_UINT(cap_plan->action, XAOT_CAPACITY_RESERVE_ONCE);
+    ASSERT_EQ_UINT(cap_plan->evidence,
+                   XAOT_CAPACITY_EV_GLOBAL_ROW | XAOT_CAPACITY_EV_RECEIVER_TYPE |
+                       XAOT_CAPACITY_EV_ELEM_TYPE | XAOT_CAPACITY_EV_EXACT_COUNT |
+                       XAOT_CAPACITY_EV_MAY_GROW);
+    ASSERT_EQ_UINT(bulk_plan->action, XAOT_BULK_INLINE_MEMCPY);
+    ASSERT_EQ_UINT(bulk_plan->evidence,
+                   XAOT_BULK_EV_GLOBAL_ROW | XAOT_BULK_EV_POD | XAOT_BULK_EV_LENGTH_EXPR);
+    ASSERT_EQ_UINT(enc_plan->action, XAOT_ENCODING_VALIDATE_ELIDED);
+    ASSERT_EQ_UINT(enc_plan->evidence, XAOT_ENCODING_EV_GLOBAL_ROW | XAOT_ENCODING_EV_KNOWN_UTF8 |
+                                           XAOT_ENCODING_EV_VALIDATED_ONCE |
+                                           XAOT_ENCODING_EV_INPUT_TYPE |
+                                           XAOT_ENCODING_EV_OUTPUT_TYPE);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "sequence-access-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=checked_index"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "capacity-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=reserve_once"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "bulk-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=inline_memcpy"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "encoding-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=validate_elided"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.sequence_access_plans[0].action = XAOT_SEQUENCE_ACCESS_DIRECT_LENGTH;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT sequence access plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
 }
 

@@ -13,3 +13,7 @@ contains=op=fill
 contains=encoding-op
 contains=op=string_to_bytes
 contains=op=bytes_to_string
+contains=sequence-access-plan
+contains=capacity-plan
+contains=bulk-plan
+contains=encoding-plan
