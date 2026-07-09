@@ -646,6 +646,44 @@ typedef struct XaotDerivePlan {
     uint8_t unproven_reason;
 } XaotDerivePlan;
 
+typedef enum XaotDerivedEqHashAction {
+    XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE = 1,
+    XAOT_DERIVED_EQ_HASH_RECURSIVE_DERIVE_INLINE,
+    XAOT_DERIVED_EQ_HASH_DIRECT_GENERATED_CALL,
+    XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE,
+} XaotDerivedEqHashAction;
+
+enum {
+    XAOT_EQ_HASH_EV_EQ_ROW = 1u << 0,
+    XAOT_EQ_HASH_EV_HASH_ROW = 1u << 1,
+    XAOT_EQ_HASH_EV_SAME_TYPE = 1u << 2,
+    XAOT_EQ_HASH_EV_SAME_FIELDS = 1u << 3,
+    XAOT_EQ_HASH_EV_EQ_BODY = 1u << 4,
+    XAOT_EQ_HASH_EV_HASH_BODY = 1u << 5,
+};
+
+enum {
+    XAOT_EQ_HASH_UNPROVEN_NONE = 0,
+    XAOT_EQ_HASH_UNPROVEN_MISSING_EQ = 1,
+    XAOT_EQ_HASH_UNPROVEN_MISSING_HASH = 2,
+    XAOT_EQ_HASH_UNPROVEN_TYPE_MISMATCH = 3,
+    XAOT_EQ_HASH_UNPROVEN_FIELD_MISMATCH = 4,
+};
+
+typedef struct XaotDerivedEqHashPlan {
+    XgDeclId owner_decl_id;
+    uint32_t type_key;
+    XgDeriveId eq_derive_id;
+    XgDeriveId hash_derive_id;
+    uint32_t field_start;
+    uint16_t field_count;
+    XgFuncId eq_body_func_id;
+    XgFuncId hash_body_func_id;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotDerivedEqHashPlan;
+
 typedef enum XaotJsonShapeAction {
     XAOT_JSON_SHAPE_OPEN_DYNAMIC = 1,
     XAOT_JSON_SHAPE_HIDDEN_CLASS,
@@ -899,6 +937,9 @@ typedef struct XaotBundle {
     XaotDerivePlan *derive_plans;
     uint32_t nderive_plans;
     uint32_t derive_plan_cap;
+    XaotDerivedEqHashPlan *derived_eq_hash_plans;
+    uint32_t nderived_eq_hash_plans;
+    uint32_t derived_eq_hash_plan_cap;
     XaotJsonShapePlan *json_shape_plans;
     uint32_t njson_shape_plans;
     uint32_t json_shape_plan_cap;
@@ -964,6 +1005,8 @@ xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
                                             XgGenericInstId generic_inst_id);
 XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
                                                            XgDeriveId derive_id);
+XR_FUNC const XaotDerivedEqHashPlan *
+xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle, uint32_t type_key);
 XR_FUNC const XaotJsonShapePlan *
 xaot_bundle_find_json_shape_plan(const XaotBundle *bundle, XgJsonShapeId json_shape_id);
 XR_FUNC const XaotJsonAccessPlan *
