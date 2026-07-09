@@ -160,6 +160,70 @@ static bool verify_container_plan(const XaotContainerTypePlan *type_plan, char *
     return set_error(errbuf, errbuf_len, "AOT container plan has unknown kind");
 }
 
+static bool verify_enum_plan_payloads_fit_compact_aggregate(const XaotEnumPlan *plan) {
+    const XiEnumData *ed = plan ? plan->enum_data : NULL;
+    if (!plan || !ed || !ed->is_adt || plan->max_payload > XAOT_ENUM_SCALAR_PAYLOAD_CAP)
+        return false;
+    if (plan->member_count > 0 && !plan->members)
+        return false;
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        const XiEnumMemberData *member = plan->members ? &plan->members[i] : NULL;
+        if (member && member->payload_count > XAOT_ENUM_SCALAR_PAYLOAD_CAP)
+            return false;
+    }
+    return true;
+}
+
+static uint8_t verify_enum_scalar_action_for(const XaotEnumPlan *plan) {
+    return verify_enum_plan_payloads_fit_compact_aggregate(plan)
+               ? XAOT_ENUM_SCALAR_COMPACT_AGGREGATE
+               : XAOT_ENUM_SCALAR_RUNTIME_AGGREGATE;
+}
+
+static uint32_t verify_enum_scalar_evidence_for(const XaotEnumPlan *plan) {
+    uint32_t evidence = 0;
+    if (!plan)
+        return 0;
+    if (plan->layout_id != 0)
+        evidence |= XAOT_ENUM_SCALAR_EV_LAYOUT_ID;
+    if (verify_enum_plan_payloads_fit_compact_aggregate(plan)) {
+        evidence |= XAOT_ENUM_SCALAR_EV_PAYLOAD_BOUND | XAOT_ENUM_SCALAR_EV_TYPED_UNION;
+        if (plan->type_arg_count > 0)
+            evidence |= XAOT_ENUM_SCALAR_EV_CONCRETE_TYPES;
+    }
+    return evidence;
+}
+
+static bool verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan, char *errbuf,
+                             size_t errbuf_len) {
+    const XiEnumData *ed;
+    uint16_t expected_max_payload;
+
+    if (!bundle || !plan)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan is NULL");
+    ed = plan->enum_data;
+    if (!ed || !ed->is_adt)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan has no ADT enum");
+    if (plan->module_index >= bundle->nmodules)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan module is out of range");
+    if (!plan->c_type || plan->c_type[0] == '\0')
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan is missing C type");
+    if (plan->member_count != ed->member_count)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan member count is stale");
+    if (plan->layout_id != ed->layout_id)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan layout id is stale");
+    expected_max_payload = ed->max_payload > 0 ? (uint16_t) ed->max_payload : 0;
+    if (plan->max_payload != expected_max_payload)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan payload bound is stale");
+    if (plan->scalar_payload_cap != XAOT_ENUM_SCALAR_PAYLOAD_CAP)
+        return set_error(errbuf, errbuf_len, "AOT enum scalar plan payload cap is stale");
+    if (plan->scalar_action != verify_enum_scalar_action_for(plan))
+        return set_error(errbuf, errbuf_len, "AOT enum scalar action does not re-derive");
+    if (plan->scalar_evidence != verify_enum_scalar_evidence_for(plan))
+        return set_error(errbuf, errbuf_len, "AOT enum scalar evidence is stale");
+    return true;
+}
+
 static bool verify_array_storage_plan(const XaotBundle *bundle, const XaotArrayStoragePlan *plan,
                                       char *errbuf, size_t errbuf_len) {
     const XaotValuePlan *value_plan;
@@ -5268,6 +5332,10 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     }
     for (fi = 0; fi < bundle->ncontainer_plans; fi++) {
         if (!verify_container_plan(&bundle->container_plans[fi], errbuf, errbuf_len))
+            return false;
+    }
+    for (fi = 0; fi < bundle->nenum_plans; fi++) {
+        if (!verify_enum_plan(bundle, &bundle->enum_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->narray_storage_plans; fi++) {

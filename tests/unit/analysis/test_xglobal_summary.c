@@ -5903,6 +5903,66 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
+    XgBuildKey key = {.source_hash = 0x17e,
+                      .compiler_semver_hash = 0x271,
+                      .profile_hash = 0x372,
+                      .imported_summary_hash = 0x473,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XiFunc init_func;
+    XiEnumMemberData members[2];
+    XiEnumData enum_data;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(members, 0, sizeof(members));
+    members[0].name = "Ok";
+    members[0].ordinal = 0;
+    members[0].payload_count = 1;
+    members[1].name = "Err";
+    members[1].ordinal = 1;
+    members[1].payload_count = 1;
+    memset(&enum_data, 0, sizeof(enum_data));
+    enum_data.name = "FastResult";
+    enum_data.member_count = 2;
+    enum_data.is_adt = true;
+    enum_data.max_payload = 1;
+    enum_data.layout_id = 77;
+    enum_data.members = members;
+    memset(&module, 0, sizeof(module));
+    module.path = "enum_scalar.xr";
+    module.name = "enum_scalar";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_enum_plan(&bundle, &enum_data, 0));
+    ASSERT_EQ_UINT(bundle.nenum_plans, 1);
+    ASSERT_EQ_UINT(bundle.enum_plans[0].scalar_action, XAOT_ENUM_SCALAR_COMPACT_AGGREGATE);
+    ASSERT_TRUE((bundle.enum_plans[0].scalar_evidence & XAOT_ENUM_SCALAR_EV_PAYLOAD_BOUND) != 0);
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    bundle.enum_plans[0].scalar_action = XAOT_ENUM_SCALAR_RUNTIME_AGGREGATE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT enum scalar action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     setup_parser_session();
     const char *source = "fn caller() -> int { return unknown(41) }\n";
@@ -9493,5 +9553,6 @@ RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
+RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 TEST_MAIN_END()
