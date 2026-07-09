@@ -410,15 +410,15 @@ XR_FUNC void xr_cluster_topic_handle_publish(XrCluster *c, struct XrClusterNode 
 XR_FUNC void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
 
 /*
- * Topic trie lifecycle. xr_cluster_topics_init must be called once
+ * Topic trie lifecycle. cluster_topics_init must be called once
  * after topics_lock is initialised and before any subscribe path is
- * exposed. xr_cluster_topics_destroy closes every subscriber channel,
+ * exposed. cluster_topics_destroy closes every subscriber channel,
  * recursively frees the trie, and resets topic_root to NULL — call it
  * exactly once from xr_cluster_stop (the function tolerates a NULL
  * root, so double-stop is safe).
  */
-XR_FUNC int xr_cluster_topics_init(XrCluster *c);
-XR_FUNC void xr_cluster_topics_destroy(XrCluster *c);
+int cluster_topics_init(XrCluster *c);
+void cluster_topics_destroy(XrCluster *c);
 
 /* ========== Remote Coroutine Monitoring ========== */
 

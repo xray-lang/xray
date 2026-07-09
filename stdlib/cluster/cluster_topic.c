@@ -293,16 +293,16 @@ static void trie_destroy(XrTopicTrieNode *node) {
     xr_free(node);
 }
 
-/* ========== Public trie-lifecycle helpers (called from cluster.c) ========== */
+/* ========== Internal Trie Lifecycle ========== */
 
-XR_FUNC int xr_cluster_topics_init(XrCluster *c) {
+int cluster_topics_init(XrCluster *c) {
     if (!c)
         return -1;
     c->topic_root = trie_node_new();
     return c->topic_root ? 0 : -1;
 }
 
-XR_FUNC void xr_cluster_topics_destroy(XrCluster *c) {
+void cluster_topics_destroy(XrCluster *c) {
     if (!c)
         return;
     /* Close every subscriber channel first so consumers unblock, then

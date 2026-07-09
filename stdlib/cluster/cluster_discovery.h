@@ -47,9 +47,9 @@ typedef struct XrClusterDiscovery {
     uint64_t cluster_hash;  // hash of secret for filtering
     /*
      * Discovery runs as a native coroutine on the main worker pool.
-     * coro_spawned is set in xr_cluster_discovery_start after
+     * coro_spawned is set in cluster_discovery_start after
      * xr_coro_spawn succeeds; coro_exited is flipped by the coro
-     * itself as its last statement so xr_cluster_discovery_stop can
+     * itself as its last statement so cluster_discovery_stop can
      * spin-wait for clean teardown before closing mcast_fd (whose
      * PollDesc the coro may still hold via netpoll).
      */
@@ -64,11 +64,11 @@ typedef struct XrClusterDiscovery {
  *   2. Receives announces from other nodes and auto-joins them
  * Returns 0 on success, -1 on error.
  */
-XR_FUNC int xr_cluster_discovery_start(struct XrCluster *c);
+int cluster_discovery_start(struct XrCluster *c);
 
 /*
  * Stop discovery and close multicast socket.
  */
-XR_FUNC void xr_cluster_discovery_stop(struct XrCluster *c);
+void cluster_discovery_stop(struct XrCluster *c);
 
 #endif
