@@ -505,7 +505,7 @@ static bool http_response_allows_body(int status) {
 }
 
 // Internal request function (single request, no redirect handling)
-static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
+static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
                                              const char *url_str, bool strip_auth);
 
 // Two URLs share an origin iff scheme (https-ness), host (case-insensitive) and
@@ -549,7 +549,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
 
     while (current_url) {
         // Execute single request
-        result = xr_http_request_internal(X, &redirect_config, current_url, strip_auth);
+        result = http_request_internal(X, &redirect_config, current_url, strip_auth);
 
         // Check if redirect needed
         if (follow_redirects && is_redirect_status(result.status_code) &&
@@ -638,7 +638,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
 }
 
 // Internal request function implementation
-static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
+static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
                                              const char *url_str, bool strip_auth) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
