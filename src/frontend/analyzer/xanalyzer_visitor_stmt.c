@@ -433,6 +433,7 @@ typedef struct XaThreadHandleLintState {
 typedef struct XaThreadHandleLintSnapshot {
     bool finalized;
     bool transferred;
+    XaThreadHandleLintAlias *aliases;
 } XaThreadHandleLintSnapshot;
 
 struct XaThreadHandleLintFnSummary {
@@ -456,15 +457,34 @@ static void xa_thread_lint_free_fn_summaries(XaThreadHandleLintFnSummary *summar
     }
 }
 
+static void xa_thread_lint_free_aliases(XaThreadHandleLintAlias *aliases) {
+    while (aliases) {
+        XaThreadHandleLintAlias *next = aliases->next;
+        xr_free(aliases);
+        aliases = next;
+    }
+}
+
+static XaThreadHandleLintAlias *
+xa_thread_lint_clone_aliases(XaThreadHandleLintAlias *aliases) {
+    XaThreadHandleLintAlias *head = NULL;
+    XaThreadHandleLintAlias **tail = &head;
+    for (XaThreadHandleLintAlias *alias = aliases; alias; alias = alias->next) {
+        XaThreadHandleLintAlias *copy = xr_calloc(1, sizeof(XaThreadHandleLintAlias));
+        if (!copy)
+            break;
+        *copy = *alias;
+        copy->next = NULL;
+        *tail = copy;
+        tail = &copy->next;
+    }
+    return head;
+}
+
 static void xa_thread_lint_free_states(XaThreadHandleLintState *states) {
     while (states) {
         XaThreadHandleLintState *next = states->next;
-        XaThreadHandleLintAlias *alias = states->aliases;
-        while (alias) {
-            XaThreadHandleLintAlias *alias_next = alias->next;
-            xr_free(alias);
-            alias = alias_next;
-        }
+        xa_thread_lint_free_aliases(states->aliases);
         xr_free(states);
         states = next;
     }
@@ -567,8 +587,10 @@ static void xa_thread_lint_snapshot_states(XaThreadHandleLintState *states,
         return;
     int i = 0;
     for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        xa_thread_lint_free_aliases(snapshots[i].aliases);
         snapshots[i].finalized = s->finalized;
         snapshots[i].transferred = s->transferred;
+        snapshots[i].aliases = xa_thread_lint_clone_aliases(s->aliases);
     }
 }
 
@@ -580,7 +602,25 @@ static void xa_thread_lint_restore_states(XaThreadHandleLintState *states,
     for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
         s->finalized = snapshots[i].finalized;
         s->transferred = snapshots[i].transferred;
+        xa_thread_lint_free_aliases(s->aliases);
+        s->aliases = xa_thread_lint_clone_aliases(snapshots[i].aliases);
     }
+}
+
+static void xa_thread_lint_clear_snapshot_array(XaThreadHandleLintSnapshot *snapshots,
+                                                int count) {
+    if (!snapshots)
+        return;
+    for (int i = 0; i < count; i++) {
+        xa_thread_lint_free_aliases(snapshots[i].aliases);
+        memset(&snapshots[i], 0, sizeof(snapshots[i]));
+    }
+}
+
+static void xa_thread_lint_free_snapshot_array(XaThreadHandleLintSnapshot *snapshots,
+                                               int count) {
+    xa_thread_lint_clear_snapshot_array(snapshots, count);
+    xr_free(snapshots);
 }
 
 static bool xa_thread_lint_snapshot_closed(XaThreadHandleLintSnapshot *snapshot) {
@@ -1388,9 +1428,9 @@ static void xa_thread_lint_scan_ternary_expr(XaThreadHandleLintState *states, As
     XaThreadHandleLintSnapshot *true_after = xr_calloc(1, snapshot_size);
     XaThreadHandleLintSnapshot *false_after = xr_calloc(1, snapshot_size);
     if (!before || !true_after || !false_after) {
-        xr_free(before);
-        xr_free(true_after);
-        xr_free(false_after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(true_after, state_count);
+        xa_thread_lint_free_snapshot_array(false_after, state_count);
         xa_thread_lint_scan_expr(states, ternary->true_expr, return_value, false);
         xa_thread_lint_scan_expr(states, ternary->false_expr, return_value, false);
         return;
@@ -1414,9 +1454,9 @@ static void xa_thread_lint_scan_ternary_expr(XaThreadHandleLintState *states, As
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(true_after);
-    xr_free(false_after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(true_after, state_count);
+    xa_thread_lint_free_snapshot_array(false_after, state_count);
 }
 
 static void xa_thread_lint_scan_block(XaThreadHandleLintState *states, AstNode *block,
@@ -1447,9 +1487,9 @@ static void xa_thread_lint_scan_if_stmt(XaThreadHandleLintState *states, AstNode
     XaThreadHandleLintSnapshot *then_after = xr_calloc(1, snapshot_size);
     XaThreadHandleLintSnapshot *else_after = xr_calloc(1, snapshot_size);
     if (!before || !then_after || !else_after) {
-        xr_free(before);
-        xr_free(then_after);
-        xr_free(else_after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(then_after, state_count);
+        xa_thread_lint_free_snapshot_array(else_after, state_count);
         xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, false);
         xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, false);
         return;
@@ -1474,9 +1514,9 @@ static void xa_thread_lint_scan_if_stmt(XaThreadHandleLintState *states, AstNode
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(then_after);
-    xr_free(else_after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(then_after, state_count);
+    xa_thread_lint_free_snapshot_array(else_after, state_count);
 }
 
 static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, AstNode *stmt,
@@ -1504,9 +1544,9 @@ static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, 
     XaThreadHandleLintSnapshot *catch_after = xr_calloc(1, snapshot_size);
     bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
     if (!before || !try_after || !catch_after || !all_paths_closed) {
-        xr_free(before);
-        xr_free(try_after);
-        xr_free(catch_after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(try_after, state_count);
+        xa_thread_lint_free_snapshot_array(catch_after, state_count);
         xr_free(all_paths_closed);
         xa_thread_lint_scan_stmt(states, tc->try_body, false);
         for (int i = 0; i < tc->catch_count; i++) {
@@ -1531,7 +1571,7 @@ static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, 
             continue;
         }
         xa_thread_lint_restore_states(states, before);
-        memset(catch_after, 0, snapshot_size);
+        xa_thread_lint_clear_snapshot_array(catch_after, state_count);
         xa_thread_lint_scan_stmt(states, cc->body, true);
         xa_thread_lint_snapshot_states(states, catch_after);
         for (int i = 0; i < state_count; i++)
@@ -1547,9 +1587,9 @@ static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, 
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(try_after);
-    xr_free(catch_after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(try_after, state_count);
+    xa_thread_lint_free_snapshot_array(catch_after, state_count);
     xr_free(all_paths_closed);
 }
 
@@ -1575,8 +1615,8 @@ static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstN
     XaThreadHandleLintSnapshot *arm_after = xr_calloc(1, snapshot_size);
     bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
     if (!before || !arm_after || !all_paths_closed) {
-        xr_free(before);
-        xr_free(arm_after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(arm_after, state_count);
         xr_free(all_paths_closed);
         for (int i = 0; i < match->arm_count; i++)
             xa_thread_lint_scan_stmt(states, match->arms[i], false);
@@ -1594,7 +1634,7 @@ static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstN
             continue;
         }
         xa_thread_lint_restore_states(states, before);
-        memset(arm_after, 0, snapshot_size);
+        xa_thread_lint_clear_snapshot_array(arm_after, state_count);
         xa_thread_lint_scan_stmt(states, match->arms[ai], true);
         xa_thread_lint_snapshot_states(states, arm_after);
         for (int i = 0; i < state_count; i++)
@@ -1610,8 +1650,8 @@ static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstN
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(arm_after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(arm_after, state_count);
     xr_free(all_paths_closed);
 }
 
@@ -1636,8 +1676,8 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
     XaThreadHandleLintSnapshot *case_after = xr_calloc(1, snapshot_size);
     bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
     if (!before || !case_after || !all_paths_closed) {
-        xr_free(before);
-        xr_free(case_after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(case_after, state_count);
         xr_free(all_paths_closed);
         for (int i = 0; i < select->case_count; i++)
             xa_thread_lint_scan_stmt(states, select->cases[i], false);
@@ -1655,7 +1695,7 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
             continue;
         }
         xa_thread_lint_restore_states(states, before);
-        memset(case_after, 0, snapshot_size);
+        xa_thread_lint_clear_snapshot_array(case_after, state_count);
         xa_thread_lint_scan_stmt(states, select->cases[ci], true);
         xa_thread_lint_snapshot_states(states, case_after);
         for (int i = 0; i < state_count; i++)
@@ -1671,8 +1711,8 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(case_after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(case_after, state_count);
     xr_free(all_paths_closed);
 }
 
@@ -1693,8 +1733,8 @@ static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintSt
     XaThreadHandleLintSnapshot *before = xr_calloc(1, snapshot_size);
     XaThreadHandleLintSnapshot *after = xr_calloc(1, snapshot_size);
     if (!before || !after) {
-        xr_free(before);
-        xr_free(after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(after, state_count);
         return false;
     }
 
@@ -1714,22 +1754,22 @@ static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintSt
             }
             if (!closed)
                 xa_thread_lint_restore_states(states, before);
-            xr_free(before);
-            xr_free(after);
+            xa_thread_lint_free_snapshot_array(before, state_count);
+            xa_thread_lint_free_snapshot_array(after, state_count);
             return closed;
         }
         if (xa_lifecycle_lint_node_skips_loop_tail(child, loop_label)) {
             xa_thread_lint_restore_states(states, before);
-            xr_free(before);
-            xr_free(after);
+            xa_thread_lint_free_snapshot_array(before, state_count);
+            xa_thread_lint_free_snapshot_array(after, state_count);
             return false;
         }
         xa_thread_lint_scan_stmt(states, child, true);
     }
 
     xa_thread_lint_restore_states(states, before);
-    xr_free(before);
-    xr_free(after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(after, state_count);
     return false;
 }
 
@@ -1745,8 +1785,8 @@ static void xa_thread_lint_scan_defer_expr(XaThreadHandleLintState *states, AstN
     XaThreadHandleLintSnapshot *before = xr_calloc(1, snapshot_size);
     XaThreadHandleLintSnapshot *after = xr_calloc(1, snapshot_size);
     if (!before || !after) {
-        xr_free(before);
-        xr_free(after);
+        xa_thread_lint_free_snapshot_array(before, state_count);
+        xa_thread_lint_free_snapshot_array(after, state_count);
         return;
     }
 
@@ -1765,8 +1805,8 @@ static void xa_thread_lint_scan_defer_expr(XaThreadHandleLintState *states, AstN
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(after);
+    xa_thread_lint_free_snapshot_array(before, state_count);
+    xa_thread_lint_free_snapshot_array(after, state_count);
 }
 
 static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
@@ -2297,6 +2337,7 @@ typedef struct XaOsResourceLintSnapshot {
     bool transferred;
     bool pipe_read_closed;
     bool pipe_write_closed;
+    XaOsResourceAlias *aliases;
 } XaOsResourceLintSnapshot;
 
 typedef struct XaOsResourceParamSummary {
@@ -2525,15 +2566,33 @@ static bool xa_expr_is_sys_os_resource_open_call(XaInferContext *ctx, AstNode *e
     return false;
 }
 
+static void xa_os_resource_lint_free_aliases(XaOsResourceAlias *aliases) {
+    while (aliases) {
+        XaOsResourceAlias *next = aliases->next;
+        xr_free(aliases);
+        aliases = next;
+    }
+}
+
+static XaOsResourceAlias *xa_os_resource_lint_clone_aliases(XaOsResourceAlias *aliases) {
+    XaOsResourceAlias *head = NULL;
+    XaOsResourceAlias **tail = &head;
+    for (XaOsResourceAlias *alias = aliases; alias; alias = alias->next) {
+        XaOsResourceAlias *copy = xr_calloc(1, sizeof(XaOsResourceAlias));
+        if (!copy)
+            break;
+        *copy = *alias;
+        copy->next = NULL;
+        *tail = copy;
+        tail = &copy->next;
+    }
+    return head;
+}
+
 static void xa_os_resource_lint_free_states(XaOsResourceLintState *states) {
     while (states) {
         XaOsResourceLintState *next = states->next;
-        XaOsResourceAlias *alias = states->aliases;
-        while (alias) {
-            XaOsResourceAlias *alias_next = alias->next;
-            xr_free(alias);
-            alias = alias_next;
-        }
+        xa_os_resource_lint_free_aliases(states->aliases);
         xr_free(states);
         states = next;
     }
@@ -2657,10 +2716,12 @@ static void xa_os_resource_lint_snapshot_states(XaOsResourceLintState *states,
         return;
     int i = 0;
     for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
+        xa_os_resource_lint_free_aliases(snapshots[i].aliases);
         snapshots[i].finalized = s->finalized;
         snapshots[i].transferred = s->transferred;
         snapshots[i].pipe_read_closed = s->pipe_read_closed;
         snapshots[i].pipe_write_closed = s->pipe_write_closed;
+        snapshots[i].aliases = xa_os_resource_lint_clone_aliases(s->aliases);
     }
 }
 
@@ -2674,7 +2735,25 @@ static void xa_os_resource_lint_restore_states(XaOsResourceLintState *states,
         s->transferred = snapshots[i].transferred;
         s->pipe_read_closed = snapshots[i].pipe_read_closed;
         s->pipe_write_closed = snapshots[i].pipe_write_closed;
+        xa_os_resource_lint_free_aliases(s->aliases);
+        s->aliases = xa_os_resource_lint_clone_aliases(snapshots[i].aliases);
     }
+}
+
+static void xa_os_resource_lint_clear_snapshot_array(XaOsResourceLintSnapshot *snapshots,
+                                                     int count) {
+    if (!snapshots)
+        return;
+    for (int i = 0; i < count; i++) {
+        xa_os_resource_lint_free_aliases(snapshots[i].aliases);
+        memset(&snapshots[i], 0, sizeof(snapshots[i]));
+    }
+}
+
+static void xa_os_resource_lint_free_snapshot_array(XaOsResourceLintSnapshot *snapshots,
+                                                    int count) {
+    xa_os_resource_lint_clear_snapshot_array(snapshots, count);
+    xr_free(snapshots);
 }
 
 static bool xa_os_resource_lint_snapshot_closed(XaOsResourceLintSnapshot *snapshot) {
@@ -3073,8 +3152,8 @@ static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLin
     XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
     XaOsResourceLintSnapshot *after = xr_calloc(1, snapshot_size);
     if (!before || !after) {
-        xr_free(before);
-        xr_free(after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(after, state_count);
         return false;
     }
 
@@ -3094,22 +3173,22 @@ static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLin
             }
             if (!closed)
                 xa_os_resource_lint_restore_states(states, before);
-            xr_free(before);
-            xr_free(after);
+            xa_os_resource_lint_free_snapshot_array(before, state_count);
+            xa_os_resource_lint_free_snapshot_array(after, state_count);
             return closed;
         }
         if (xa_lifecycle_lint_node_skips_loop_tail(child, loop_label)) {
             xa_os_resource_lint_restore_states(states, before);
-            xr_free(before);
-            xr_free(after);
+            xa_os_resource_lint_free_snapshot_array(before, state_count);
+            xa_os_resource_lint_free_snapshot_array(after, state_count);
             return false;
         }
         xa_os_resource_lint_scan_stmt(states, child, true);
     }
 
     xa_os_resource_lint_restore_states(states, before);
-    xr_free(before);
-    xr_free(after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(after, state_count);
     return false;
 }
 
@@ -3125,8 +3204,8 @@ static void xa_os_resource_lint_scan_defer_expr(XaOsResourceLintState *states, A
     XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
     XaOsResourceLintSnapshot *after = xr_calloc(1, snapshot_size);
     if (!before || !after) {
-        xr_free(before);
-        xr_free(after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(after, state_count);
         return;
     }
 
@@ -3151,8 +3230,8 @@ static void xa_os_resource_lint_scan_defer_expr(XaOsResourceLintState *states, A
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(after, state_count);
 }
 
 static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode *expr,
@@ -3426,9 +3505,9 @@ static void xa_os_resource_lint_scan_ternary_expr(XaOsResourceLintState *states,
     XaOsResourceLintSnapshot *true_after = xr_calloc(1, snapshot_size);
     XaOsResourceLintSnapshot *false_after = xr_calloc(1, snapshot_size);
     if (!before || !true_after || !false_after) {
-        xr_free(before);
-        xr_free(true_after);
-        xr_free(false_after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(true_after, state_count);
+        xa_os_resource_lint_free_snapshot_array(false_after, state_count);
         xa_os_resource_lint_scan_expr(states, ternary->true_expr, return_value, false);
         xa_os_resource_lint_scan_expr(states, ternary->false_expr, return_value, false);
         return;
@@ -3452,9 +3531,9 @@ static void xa_os_resource_lint_scan_ternary_expr(XaOsResourceLintState *states,
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(true_after);
-    xr_free(false_after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(true_after, state_count);
+    xa_os_resource_lint_free_snapshot_array(false_after, state_count);
 }
 
 static void xa_os_resource_lint_scan_block(XaOsResourceLintState *states, AstNode *block,
@@ -3487,9 +3566,9 @@ static void xa_os_resource_lint_scan_if_stmt(XaOsResourceLintState *states, AstN
     XaOsResourceLintSnapshot *then_after = xr_calloc(1, snapshot_size);
     XaOsResourceLintSnapshot *else_after = xr_calloc(1, snapshot_size);
     if (!before || !then_after || !else_after) {
-        xr_free(before);
-        xr_free(then_after);
-        xr_free(else_after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(then_after, state_count);
+        xa_os_resource_lint_free_snapshot_array(else_after, state_count);
         xa_os_resource_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, false);
         xa_os_resource_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, false);
         return;
@@ -3521,9 +3600,9 @@ static void xa_os_resource_lint_scan_if_stmt(XaOsResourceLintState *states, AstN
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(then_after);
-    xr_free(else_after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(then_after, state_count);
+    xa_os_resource_lint_free_snapshot_array(else_after, state_count);
 }
 
 static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *states, AstNode *stmt,
@@ -3551,9 +3630,9 @@ static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *state
     XaOsResourceLintSnapshot *catch_after = xr_calloc(1, snapshot_size);
     bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
     if (!before || !try_after || !catch_after || !all_paths_closed) {
-        xr_free(before);
-        xr_free(try_after);
-        xr_free(catch_after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(try_after, state_count);
+        xa_os_resource_lint_free_snapshot_array(catch_after, state_count);
         xr_free(all_paths_closed);
         xa_os_resource_lint_scan_stmt(states, tc->try_body, false);
         for (int i = 0; i < tc->catch_count; i++) {
@@ -3578,7 +3657,7 @@ static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *state
             continue;
         }
         xa_os_resource_lint_restore_states(states, before);
-        memset(catch_after, 0, snapshot_size);
+        xa_os_resource_lint_clear_snapshot_array(catch_after, state_count);
         xa_os_resource_lint_scan_stmt(states, cc->body, true);
         xa_os_resource_lint_snapshot_states(states, catch_after);
         for (int i = 0; i < state_count; i++)
@@ -3594,9 +3673,9 @@ static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *state
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(try_after);
-    xr_free(catch_after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(try_after, state_count);
+    xa_os_resource_lint_free_snapshot_array(catch_after, state_count);
     xr_free(all_paths_closed);
 }
 
@@ -3622,8 +3701,8 @@ static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, A
     XaOsResourceLintSnapshot *arm_after = xr_calloc(1, snapshot_size);
     bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
     if (!before || !arm_after || !all_paths_closed) {
-        xr_free(before);
-        xr_free(arm_after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(arm_after, state_count);
         xr_free(all_paths_closed);
         for (int i = 0; i < match->arm_count; i++)
             xa_os_resource_lint_scan_stmt(states, match->arms[i], false);
@@ -3641,7 +3720,7 @@ static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, A
             continue;
         }
         xa_os_resource_lint_restore_states(states, before);
-        memset(arm_after, 0, snapshot_size);
+        xa_os_resource_lint_clear_snapshot_array(arm_after, state_count);
         xa_os_resource_lint_scan_stmt(states, match->arms[ai], true);
         xa_os_resource_lint_snapshot_states(states, arm_after);
         for (int i = 0; i < state_count; i++)
@@ -3657,8 +3736,8 @@ static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, A
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(arm_after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(arm_after, state_count);
     xr_free(all_paths_closed);
 }
 
@@ -3683,8 +3762,8 @@ static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, 
     XaOsResourceLintSnapshot *case_after = xr_calloc(1, snapshot_size);
     bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
     if (!before || !case_after || !all_paths_closed) {
-        xr_free(before);
-        xr_free(case_after);
+        xa_os_resource_lint_free_snapshot_array(before, state_count);
+        xa_os_resource_lint_free_snapshot_array(case_after, state_count);
         xr_free(all_paths_closed);
         for (int i = 0; i < select->case_count; i++)
             xa_os_resource_lint_scan_stmt(states, select->cases[i], false);
@@ -3702,7 +3781,7 @@ static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, 
             continue;
         }
         xa_os_resource_lint_restore_states(states, before);
-        memset(case_after, 0, snapshot_size);
+        xa_os_resource_lint_clear_snapshot_array(case_after, state_count);
         xa_os_resource_lint_scan_stmt(states, select->cases[ci], true);
         xa_os_resource_lint_snapshot_states(states, case_after);
         for (int i = 0; i < state_count; i++)
@@ -3718,8 +3797,8 @@ static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, 
             s->finalized = true;
     }
 
-    xr_free(before);
-    xr_free(case_after);
+    xa_os_resource_lint_free_snapshot_array(before, state_count);
+    xa_os_resource_lint_free_snapshot_array(case_after, state_count);
     xr_free(all_paths_closed);
 }
 

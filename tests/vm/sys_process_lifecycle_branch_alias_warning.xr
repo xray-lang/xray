@@ -1,0 +1,18 @@
+import sys
+import { Pipe } from sys
+
+var processLeaked = sys.Process.spawn("sh", ["-c", "exit 0"])
+var processJoined = sys.Process.spawn("sh", ["-c", "exit 0"])
+var processHandle = processJoined!
+if (false) {
+    processHandle = processLeaked!
+}
+print(processHandle.wait())
+
+var pipeLeaked = Pipe.open()
+var pipeClosed = Pipe.open()
+var pipeHandle = pipeClosed!
+if (false) {
+    pipeHandle = pipeLeaked!
+}
+print(pipeHandle.close())
