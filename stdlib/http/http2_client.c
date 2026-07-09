@@ -35,7 +35,6 @@ typedef struct XrH2PoolEntry {
     XrTlsConn *tls_conn;
     XrTlsContext *tls_ctx;
     uint64_t last_used;
-    int active_streams;
     bool in_use;
     struct XrH2PoolEntry *next;
 } XrH2PoolEntry;
@@ -115,10 +114,7 @@ static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host
 
     while (entry) {
         if (strcmp(entry->host, host) == 0 && entry->port == port && !entry->in_use) {
-            if (entry->conn &&
-                entry->active_streams <
-                    (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS] &&
-                (now - entry->last_used) <= XR_H2_CONN_IDLE_TIMEOUT) {
+            if (entry->conn && (now - entry->last_used) <= XR_H2_CONN_IDLE_TIMEOUT) {
                 entry->in_use = true;
                 entry->last_used = now;
                 xr_mutex_unlock(&pool->lock);
@@ -397,8 +393,6 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
         return NULL;
     }
 
-    entry->active_streams++;
-
     // Build request headers
     const char *names[32];
     size_t name_lens[32];
@@ -446,7 +440,6 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     bool has_body = req && req->body && req->body_len > 0;
     if (http2_send_headers(entry->conn, stream, names, name_lens, values, value_lens,
                            h2_header_count, !has_body) < 0) {
-        entry->active_streams--;
         h2_pool_discard_entry(pool, entry);
         http_url_free(&parsed);
         return NULL;
@@ -455,7 +448,6 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     // Send DATA frame
     if (has_body) {
         if (http2_send_data(entry->conn, stream, req->body, req->body_len, true) < 0) {
-            entry->active_streams--;
             h2_pool_discard_entry(pool, entry);
             http_url_free(&parsed);
             return NULL;
@@ -465,7 +457,6 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     // Receive response
     XrH2Response *resp = (XrH2Response *) xr_calloc(1, sizeof(XrH2Response));
     if (!resp) {
-        entry->active_streams--;
         http2_client_pool_release(pool, entry);
         http_url_free(&parsed);
         return NULL;
@@ -473,14 +464,12 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
 
     if (http2_recv_stream_data(entry->conn, stream, &resp->body, &resp->body_len) < 0) {
         xr_free(resp);
-        entry->active_streams--;
         h2_pool_discard_entry(pool, entry);
         http_url_free(&parsed);
         return NULL;
     }
     resp->status = stream->status > 0 ? stream->status : 200;
 
-    entry->active_streams--;
     http2_client_pool_release(pool, entry);
     http_url_free(&parsed);
 
