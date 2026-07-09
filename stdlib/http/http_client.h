@@ -92,14 +92,14 @@ typedef struct {
 /*
  * Parse URL
  * Returns: 0 on success, -1 on failure
- * Note: caller must call xr_http_url_free to free
+ * Note: caller must call http_url_free to free
  */
-XR_FUNC int xr_http_url_parse(const char *url, XrHttpUrl *out);
+int http_url_parse(const char *url, XrHttpUrl *out);
 
 /*
  * Free URL structure
  */
-XR_FUNC void xr_http_url_free(XrHttpUrl *url);
+void http_url_free(XrHttpUrl *url);
 
 /*
  * Initialize request config

@@ -356,20 +356,20 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
 
     // Parse URL
     XrHttpUrl parsed;
-    if (xr_http_url_parse(url, &parsed) < 0) {
+    if (http_url_parse(url, &parsed) < 0) {
         return NULL;
     }
 
     // Only support HTTPS (HTTP/2 over TLS)
     if (!parsed.is_https) {
-        xr_http_url_free(&parsed);
+        http_url_free(&parsed);
         return NULL;
     }
 
     // Get connection
     XrH2PoolEntry *entry = http2_client_pool_acquire(pool, parsed.host, parsed.port, true);
     if (!entry) {
-        xr_http_url_free(&parsed);
+        http_url_free(&parsed);
         return NULL;
     }
 
@@ -377,7 +377,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     XrH2Stream *stream = http2_stream_new(entry->conn);
     if (!stream) {
         http2_client_pool_release(pool, entry);
-        xr_http_url_free(&parsed);
+        http_url_free(&parsed);
         return NULL;
     }
 
@@ -432,7 +432,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
                            h2_header_count, !has_body) < 0) {
         entry->active_streams--;
         h2_pool_discard_entry(pool, entry);
-        xr_http_url_free(&parsed);
+        http_url_free(&parsed);
         return NULL;
     }
 
@@ -441,7 +441,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
         if (http2_send_data(entry->conn, stream, req->body, req->body_len, true) < 0) {
             entry->active_streams--;
             h2_pool_discard_entry(pool, entry);
-            xr_http_url_free(&parsed);
+            http_url_free(&parsed);
             return NULL;
         }
     }
@@ -451,7 +451,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     if (!resp) {
         entry->active_streams--;
         http2_client_pool_release(pool, entry);
-        xr_http_url_free(&parsed);
+        http_url_free(&parsed);
         return NULL;
     }
 
@@ -459,14 +459,14 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
         xr_free(resp);
         entry->active_streams--;
         h2_pool_discard_entry(pool, entry);
-        xr_http_url_free(&parsed);
+        http_url_free(&parsed);
         return NULL;
     }
     resp->status = stream->status > 0 ? stream->status : 200;
 
     entry->active_streams--;
     http2_client_pool_release(pool, entry);
-    xr_http_url_free(&parsed);
+    http_url_free(&parsed);
 
     return resp;
 }
