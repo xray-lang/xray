@@ -128,6 +128,7 @@ TOP_CONST_FN_VALUE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_top_cons
 HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_return_alias_join.xr"
 HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_chained_return_alias_join.xr"
 HELPER_FORWARD_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_forward_return_alias_join.xr"
+HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_direct_return_alias_join.xr"
 HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_early_return_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
@@ -164,6 +165,7 @@ expect_output "top_const_fn_value_join" "$TOP_CONST_FN_VALUE_JOIN_SRC" \
 expect_output "helper_return_alias_join" "$HELPER_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_chained_return_alias_join" "$HELPER_CHAINED_RETURN_ALIAS_JOIN_SRC" "42"
 expect_output "helper_forward_return_alias_join" "$HELPER_FORWARD_RETURN_ALIAS_JOIN_SRC" "42"
+expect_output "helper_direct_return_alias_join" "$HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC" "42"
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \
