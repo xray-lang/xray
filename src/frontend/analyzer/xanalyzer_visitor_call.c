@@ -235,6 +235,12 @@ static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *nod
             ctx->expected_type = param_type;
         XrType *arg_type = xa_visit_infer_expr(ctx, arg);
         ctx->expected_type = saved_expected;
+        if (xa_type_contains_span_view(arg_type)) {
+            char context[160];
+            snprintf(context, sizeof(context), "store Span view in enum payload '%s.%s'",
+                     enum_name ? enum_name : "?", variant_name ? variant_name : "?");
+            xa_check_span_value_escape(ctx, arg, arg_type, context);
+        }
         if (!param_type || XR_TYPE_IS_UNKNOWN(param_type) || !arg_type ||
             XR_TYPE_IS_UNKNOWN(arg_type))
             continue;
