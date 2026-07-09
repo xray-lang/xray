@@ -609,6 +609,43 @@ typedef struct XaotGenericInstantiationPlan {
     uint8_t unproven_reason;
 } XaotGenericInstantiationPlan;
 
+typedef enum XaotDeriveAction {
+    XAOT_DERIVE_FIELD_TABLE_SIDECAR = 1,
+    XAOT_DERIVE_INLINE_GENERATED_BODY,
+    XAOT_DERIVE_METADATA_ONLY,
+    XAOT_DERIVE_DCE,
+    XAOT_DERIVE_REJECT,
+} XaotDeriveAction;
+
+enum {
+    XAOT_DERIVE_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_DERIVE_EV_OPT_IN = 1u << 1,
+    XAOT_DERIVE_EV_FIELD_TABLE = 1u << 2,
+    XAOT_DERIVE_EV_GENERATED_METHOD = 1u << 3,
+};
+
+enum {
+    XAOT_DERIVE_UNPROVEN_NONE = 0,
+    XAOT_DERIVE_UNPROVEN_NO_REACHABILITY = 1,
+    XAOT_DERIVE_UNPROVEN_INVALID_KIND = 2,
+};
+
+typedef struct XaotDerivePlan {
+    XgDeriveId derive_id;
+    XgDeclId owner_decl_id;
+    uint32_t type_key;
+    uint8_t derive_kind;
+    uint8_t action;
+    uint32_t field_start;
+    uint16_t field_count;
+    uint32_t method_start;
+    uint16_t method_count;
+    uint32_t sidecar_index;
+    XgFuncId generated_body_func_id;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotDerivePlan;
+
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
     XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
@@ -801,6 +838,9 @@ typedef struct XaotBundle {
     XaotGenericInstantiationPlan *generic_instantiation_plans;
     uint32_t ngeneric_instantiation_plans;
     uint32_t generic_instantiation_plan_cap;
+    XaotDerivePlan *derive_plans;
+    uint32_t nderive_plans;
+    uint32_t derive_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -858,6 +898,8 @@ xaot_bundle_find_generic_specialization_plan(const XaotBundle *bundle, XgCallsit
 XR_FUNC const XaotGenericInstantiationPlan *
 xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
                                             XgGenericInstId generic_inst_id);
+XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
+                                                           XgDeriveId derive_id);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
