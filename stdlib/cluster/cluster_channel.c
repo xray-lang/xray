@@ -228,7 +228,7 @@ static void dist_close(XrChannel *ch) {
     }
 
     // Unregister from cluster
-    xr_cluster_unregister_channel(dc->cluster, dc->name);
+    cluster_channel_unregister(dc->cluster, dc->name);
 }
 
 /* ========== Dist Hook: destroy ========== */
@@ -239,7 +239,7 @@ static void dist_destroy(XrChannel *ch) {
     // XrDistChannel is managed by the cluster registry,
     // unregister_channel will free it
     XrDistChannel *dc = (XrDistChannel *) ch->dist;
-    xr_cluster_unregister_channel(dc->cluster, dc->name);
+    cluster_channel_unregister(dc->cluster, dc->name);
 }
 
 /* ========== Hook Table ========== */
@@ -301,7 +301,7 @@ int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
     if (!c)
         return -1;
 
-    XrDistChannel *dc = xr_cluster_find_channel(c, channel_name);
+    XrDistChannel *dc = cluster_channel_find(c, channel_name);
     if (!dc || !dc->is_owner || !dc->channel)
         return -1;
 
@@ -358,7 +358,7 @@ void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     if (!c || !name)
         return;
 
-    XrDistChannel *dc = xr_cluster_find_channel(c, name);
+    XrDistChannel *dc = cluster_channel_find(c, name);
     if (!dc || !dc->is_owner || !dc->channel)
         return;
     if (dc->subscribers.count <= 0)
@@ -423,7 +423,7 @@ int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
     if (!c)
         return -1;
 
-    XrDistChannel *dc = xr_cluster_find_channel(c, channel_name);
+    XrDistChannel *dc = cluster_channel_find(c, channel_name);
     if (!dc || dc->is_owner)
         return -1;
 
@@ -483,7 +483,7 @@ void cluster_channel_unsubscribe(XrChannel *ch) {
 }
 
 void cluster_channel_handle_close(XrCluster *c, const char *channel_name) {
-    XrDistChannel *dc = xr_cluster_find_channel(c, channel_name);
+    XrDistChannel *dc = cluster_channel_find(c, channel_name);
     if (!dc || !dc->channel)
         return;
 

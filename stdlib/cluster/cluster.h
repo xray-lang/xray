@@ -322,21 +322,21 @@ XR_FUNC void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node);
 /* ========== Named Channel Registry ========== */
 
 // Register a Named Channel (called when Channel(N, "name") is created)
-XR_FUNC void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChannel *ch);
+void cluster_channel_register(XrCluster *c, const char *name, struct XrChannel *ch);
 
 // Lookup a Named Channel by name
-XR_FUNC XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name);
+XrDistChannel *cluster_channel_find(XrCluster *c, const char *name);
 
 // Unregister a Named Channel
-XR_FUNC void xr_cluster_unregister_channel(XrCluster *c, const char *name);
+void cluster_channel_unregister(XrCluster *c, const char *name);
 
 /* ========== Service Registry ========== */
 
 // Register a service (returns request channel)
-XR_FUNC struct XrChannel *xr_cluster_register_service(struct XrVMRuntime *X, const char *name);
+struct XrChannel *cluster_service_register(struct XrVMRuntime *X, const char *name);
 
 // Find a service by name
-XR_FUNC XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name);
+XrServiceEntry *cluster_service_find(XrCluster *c, const char *name);
 
 /* ========== Frame Processing ========== */
 
