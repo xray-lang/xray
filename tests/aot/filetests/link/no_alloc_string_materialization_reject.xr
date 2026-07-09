@@ -24,6 +24,11 @@ fn xray_no_alloc_string_concat_reject(value: string) -> string {
 }
 
 @no_alloc
+fn xray_no_alloc_string_plus_reject(value: string) -> string {
+    return value + "!"
+}
+
+@no_alloc
 fn xray_no_alloc_string_slice_reject(value: string) -> string {
     return value.slice(0, 1)
 }
@@ -97,6 +102,7 @@ print(xray_no_alloc_string_char_at_reject("alpha"))
 print(xray_no_alloc_string_byte_at_reject("alpha"))
 print(xray_no_alloc_string_substring_reject("alpha"))
 print(xray_no_alloc_string_concat_reject("alpha"))
+print(xray_no_alloc_string_plus_reject("alpha"))
 print(xray_no_alloc_string_slice_reject("alpha"))
 print(xray_no_alloc_string_lower_reject("ALPHA"))
 print(xray_no_alloc_string_upper_reject("alpha"))
