@@ -774,7 +774,7 @@ def generate_header(type_results, module_results):
                 is_method = "true" if '(' in m['signature'] else "false"
                 lines.append(
                     f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
-                    f'"{c_string(m["doc"])}", {is_method}, false, false}},')
+                    f'"{c_string(m["doc"])}", {is_method}, false, false, false}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -829,13 +829,13 @@ def generate_header(type_results, module_results):
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
-                        f'{"true" if m.get("is_internal") else "false"}}},')
+                        f'{"true" if m.get("is_internal") else "false"}, false}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:
                         lines.append(
                             f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
-                            f'"{c_string(c["doc"])}", false, false, false}},')
+                            f'"{c_string(c["doc"])}", false, false, false, false}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
                 lines.append("")

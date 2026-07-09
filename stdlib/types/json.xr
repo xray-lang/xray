@@ -24,9 +24,5 @@ class Json {
     iterator() -> Iterator<string>
     entriesIterator() -> Iterator<(string, Json)>
     has(key: string) -> bool
-    get(key: string) -> Json
-    isEmpty() -> bool
-    delete(key: string)
-    clear()
     toString() -> string
 }

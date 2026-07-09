@@ -560,6 +560,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
                 snprintf(buf, sizeof(buf), "0x%" PRIX64, (uint64_t) recv.i);
             return xrt_str_from_cstr(buf);
         }
+        if (sym == XRT_SYM_SQRT) {
+            double value = (double) recv.i;
+            return XR_FROM_FLOAT(value < 0 ? NAN : sqrt(value));
+        }
         /* Bit-manipulation methods (task 153): same shared core as the VM
          * binding (xr_bits_core.h), so both ends agree bit-for-bit. */
         if (sym == XRT_SYM_POPCOUNT)

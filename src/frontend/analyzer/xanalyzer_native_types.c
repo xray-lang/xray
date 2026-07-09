@@ -22,6 +22,7 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/object/xnative_type.h"
 #include "../../runtime/class/xclass.h"
+#include "../../runtime/class/xclass_system.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../os/os_thread.h"
@@ -106,6 +107,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
     int count = 0;
 
     const char *p = source;
+    bool next_member_lowered_only = false;
 
     /* Find "class <Name>" line */
     while (*p) {
@@ -119,6 +121,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
         /* Skip comment lines */
         if (line[0] == '/' && line[1] == '/') {
+            if (strstr(line, "@lowered"))
+                next_member_lowered_only = true;
             p = next_line(p);
             continue;
         }
@@ -156,6 +160,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
             continue;
         }
         if (line[0] == '/' && line[1] == '/') {
+            if (strstr(line, "@lowered"))
+                next_member_lowered_only = true;
             p = next_line(p);
             continue;
         }
@@ -227,6 +233,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_method = is_method;
         members[count].is_static = is_static;
         members[count].is_internal = false;
+        members[count].is_lowered_only = next_member_lowered_only;
+        next_member_lowered_only = false;
         count++;
 
         p = next_line(p);
@@ -427,6 +435,9 @@ typedef struct {
 } TidObjMapping;
 
 static const TidObjMapping tid_obj_map[] = {
+    {XR_TID_BOOL, XR_TBOOL},
+    {XR_TID_INT, XR_TINT},
+    {XR_TID_FLOAT, XR_TFLOAT},
     {XR_TID_STRING, XR_TSTRING},
     {XR_TID_ARRAY, XR_TARRAY},
     {XR_TID_MAP, XR_TMAP},
@@ -444,11 +455,72 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_REGEX, XR_TINSTANCE},
     {XR_TID_PANIC_INFO, XR_TINSTANCE},
     {XR_TID_COROUTINE, XR_TTASK},
+    {XR_TID_ATOMIC, XR_TATOMIC},
     {XR_TID_WEAKMAP, XR_TMAP},
     {XR_TID_WEAKSET, XR_TSET},
 };
 
 #define NUM_TID_OBJ_MAPPINGS (int) (sizeof(tid_obj_map) / sizeof(tid_obj_map[0]))
+
+static XrClass *xa_native_protocol_core_class(XrVMRuntime *X, XrTypeId tid,
+                                              const XaBuiltinMember *mem) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    if (!core)
+        return NULL;
+    switch (tid) {
+        case XR_TID_JSON:
+            return (mem && mem->is_static) ? core->jsonClass : core->jsonInstanceMethodClass;
+        case XR_TID_BIGINT:
+            return core->bigintClass;
+        case XR_TID_STRINGBUILDER:
+            return core->stringBuilderClass;
+        case XR_TID_REGEX:
+            return core->regexClass;
+        case XR_TID_PANIC_INFO:
+            return core->panicInfoClass;
+        case XR_TID_BUFFER:
+            return core->memBufferClass;
+        default:
+            return NULL;
+    }
+}
+
+static bool xa_native_protocol_intrinsic_method(XrTypeId tid, const char *name, bool is_static) {
+    if (!name || is_static)
+        return false;
+    if (tid == XR_TID_CHANNEL) {
+        static const char *channel_methods[] = {
+            "send",        "recv",        "recvOr", "trySend", "tryRecv",
+            "sendTimeout", "recvTimeout", "close",  NULL,
+        };
+        for (int i = 0; channel_methods[i]; i++) {
+            if (strcmp(name, channel_methods[i]) == 0)
+                return true;
+        }
+    }
+    if (tid == XR_TID_COROUTINE) {
+        static const char *task_methods[] = {
+            "cancel", "poll", "awaitResult", "awaitTimeout", NULL,
+        };
+        for (int i = 0; task_methods[i]; i++) {
+            if (strcmp(name, task_methods[i]) == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+static XrClass *xa_native_protocol_runtime_class(XrVMRuntime *X, XrTypeId tid,
+                                                 const XaBuiltinMember *mem) {
+    XrClass *core_cls = xa_native_protocol_core_class(X, tid, mem);
+    if (core_cls)
+        return core_cls;
+    for (int m = 0; m < NUM_TID_OBJ_MAPPINGS; m++) {
+        if (tid_obj_map[m].tid == tid)
+            return xr_isolate_get_native_type_class(X, tid_obj_map[m].obj_type);
+    }
+    return NULL;
+}
 
 XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
     if (!X)
@@ -458,28 +530,28 @@ XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
 
     int mismatches = 0;
 
-    for (int m = 0; m < NUM_TID_OBJ_MAPPINGS; m++) {
-        XrTypeId tid = tid_obj_map[m].tid;
-        uint8_t obj_type = tid_obj_map[m].obj_type;
-
+    for (XrTypeId tid = 0; tid < XR_TID_COUNT; tid++) {
         const XaBuiltinType *bt = &native_builtin_types[tid];
         if (!bt->members || bt->member_count == 0)
             continue;
-
-        XrClass *cls = xr_isolate_get_native_type_class(X, obj_type);
-        if (!cls) {
-            /* Type declared in .xr but not registered at runtime */
-            xr_log_debug("protocol", "@native class '%s' declared but not registered",
-                         bt->name ? bt->name : "?");
-            mismatches++;
-            continue;
-        }
 
         /* Check each declared method exists in the class */
         for (int i = 0; i < bt->member_count; i++) {
             const XaBuiltinMember *mem = &bt->members[i];
             if (!mem->is_method)
                 continue; /* Skip properties — they may be computed */
+            if (mem->is_lowered_only)
+                continue; /* Explicit compiler/VM lowering surface. */
+            if (xa_native_protocol_intrinsic_method(tid, mem->name, mem->is_static))
+                continue; /* Runtime-dispatched by xvm_invoke/bytecode ops, not XrClass. */
+
+            XrClass *cls = xa_native_protocol_runtime_class(X, tid, mem);
+            if (!cls) {
+                xr_log_warning("protocol", "@native class '%s' has no runtime method table for %s",
+                               bt->name ? bt->name : "?", mem->name ? mem->name : "?");
+                mismatches++;
+                continue;
+            }
 
             SymbolId sym = xr_builtin_symbol_from_name(mem->name);
             if (sym == SYMBOL_INVALID) {
@@ -488,15 +560,15 @@ XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
                 sym = xr_symbol_lookup_in_table(xr_isolate_get_symbol_table(X), mem->name);
             }
             if (sym == SYMBOL_INVALID) {
-                xr_log_debug("protocol", "'%s.%s' — symbol not interned", bt->name, mem->name);
+                xr_log_warning("protocol", "'%s.%s' symbol not interned", bt->name, mem->name);
                 mismatches++;
                 continue;
             }
 
             XrMethod *method = xr_class_lookup_method(cls, sym);
             if (!method) {
-                xr_log_debug("protocol", "'%s.%s' declared in .xr but missing in C", bt->name,
-                             mem->name);
+                xr_log_warning("protocol", "'%s.%s' declared in .xr but missing in C", bt->name,
+                               mem->name);
                 mismatches++;
             }
         }

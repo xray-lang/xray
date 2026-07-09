@@ -8,9 +8,6 @@
  * xint_methods.h - Int builtin method implementations.
  *
  * KEY POINTS:
- *   - Math methods (floor / ceil / round) are no-ops on integer
- *     receivers; they return self instead of paying for a float
- *     round-trip the way the legacy dispatcher did.
  *   - sqrt() and pow() promote to float exactly like the legacy
  *     code path, preserving observable return-type behaviour.
  *   - max/min are polymorphic on the argument type: int+int -> int,
@@ -138,6 +135,16 @@ static inline XrValue xr_int_to_hex_method(XrVMRuntime *iso, XrValue self, XrVal
 }
 
 /* int.pow(exponent) -> float. Pure, no GC. */
+static inline XrValue xr_int_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    xr_Number value = (xr_Number) XR_TO_INT(self);
+    if (value < 0)
+        return xr_float(NAN);
+    return xr_float(sqrt(value));
+}
+
 static inline XrValue xr_int_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Number value = (xr_Number) XR_TO_INT(self);

@@ -28,6 +28,7 @@ typedef struct XaBuiltinMember {
     bool is_method;         // true = method, false = property
     bool is_static;         // true = static member
     bool is_internal;       // true = visible only to stdlib implementation modules
+    bool is_lowered_only;   // true = compiler/VM lowering surface, not an XrClass method
 } XaBuiltinMember;
 
 // Built-in type info

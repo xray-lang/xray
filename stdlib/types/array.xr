@@ -8,9 +8,13 @@ class Array<T> {
     isEmpty: bool
     push(value: T)
     pushUnchecked(value: T)
+    // @lowered
     getUnchecked(index: int) -> T
+    // @lowered
     setUnchecked(index: int, value: T)
+    // @lowered
     dataPtrUnchecked() -> RawPtr<T>
+    // @lowered
     dataMutPtrUnchecked() -> RawMut<T>
     pop() -> T?
     shift() -> T?
@@ -18,7 +22,6 @@ class Array<T> {
     clear()
     reserve(capacity: int) -> Array<T>
     resize(length: int, fill: T) -> Array<T>
-    splice(start: int, deleteCount?: int, ...items: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
     indexOf(value: T) -> int
     includes(value: T) -> bool
@@ -33,7 +36,6 @@ class Array<T> {
     findIndex(fn: (item: T) -> bool) -> int
     every(fn: (item: T) -> bool) -> bool
     some(fn: (item: T) -> bool) -> bool
-    flat(depth?: int) -> Array<T>
     fill(value: T, start?: int, end?: int) -> Array<T>
     // Bytes (Array<uint8>) decodes as UTF-8 text — round-trips with
     // string.toBytes(). Other element types render the "[a, b]" form.
