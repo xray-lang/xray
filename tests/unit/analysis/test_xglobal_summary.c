@@ -7073,6 +7073,115 @@ TEST(global_evidence_verifier_rejects_missing_derive_rows) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_producer_records_derived_eq_hash_plan) {
+    setup_parser_session();
+    const char *source = "@derive(Eq, Hash)\n"
+                         "class Key {\n"
+                         "    id: int\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nderives, 2);
+    ASSERT_EQ_UINT(ev.derives[0].derive_kind, XG_DERIVE_EQ);
+    ASSERT_EQ_UINT(ev.derives[1].derive_kind, XG_DERIVE_HASH);
+    ASSERT_EQ_UINT(ev.derives[0].type_key, ev.derives[1].type_key);
+    ASSERT_EQ_UINT(ev.derives[0].field_count, ev.derives[1].field_count);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nderived_eq_hash_plans, 1);
+    const XaotDerivedEqHashPlan *plan =
+        xaot_bundle_find_derived_eq_hash_plan(&bundle, ev.derives[0].type_key);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->eq_derive_id, ev.derives[0].derive_id);
+    ASSERT_EQ_UINT(plan->hash_derive_id, ev.derives[1].derive_id);
+    ASSERT_EQ_UINT(plan->action, XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE);
+    ASSERT_EQ_UINT(plan->unproven_reason, XAOT_EQ_HASH_UNPROVEN_NONE);
+    ASSERT_EQ_UINT(plan->evidence, XAOT_EQ_HASH_EV_EQ_ROW | XAOT_EQ_HASH_EV_HASH_ROW |
+                                       XAOT_EQ_HASH_EV_SAME_TYPE | XAOT_EQ_HASH_EV_SAME_FIELDS);
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "derived-eq-hash-plan 0"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=builtin_fields_inline"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=none"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.derived_eq_hash_plans[0].hash_derive_id = XG_NO_ID;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT derived Eq/Hash plan identity does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_rejects_eq_only_as_hashable_plan) {
+    XgBuildKey key = {.source_hash = 51,
+                      .compiler_semver_hash = 52,
+                      .profile_hash = 53,
+                      .imported_summary_hash = 54,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+    XgDeriveSummary eq = {.derive_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 2,
+                          .source_span_id = 3,
+                          .type_key = 4,
+                          .derive_kind = XG_DERIVE_EQ,
+                          .field_start = 1,
+                          .field_count = 1,
+                          .flags = XG_DERIVE_OPT_IN,
+                          .derive_hash = UINT64_C(0x5152)};
+    ASSERT_NOT_NULL(xg_global_evidence_add_derive(&ev, &eq));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nderived_eq_hash_plans, 1);
+    const XaotDerivedEqHashPlan *plan = xaot_bundle_find_derived_eq_hash_plan(&bundle, 4);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->action, XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE);
+    ASSERT_EQ_UINT(plan->unproven_reason, XAOT_EQ_HASH_UNPROVEN_MISSING_HASH);
+    ASSERT_EQ_UINT(plan->evidence, XAOT_EQ_HASH_EV_EQ_ROW);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_records_json_shape_and_access_plans) {
     XgBuildKey key = {.source_hash = 11,
                       .compiler_semver_hash = 22,
@@ -7681,6 +7790,8 @@ RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_records_derive_rows);
 RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
+RUN_TEST(global_evidence_producer_records_derived_eq_hash_plan);
+RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);

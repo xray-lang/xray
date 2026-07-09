@@ -2575,6 +2575,98 @@ static bool verify_derive_plan_rederives(const XgGlobalEvidence *ev, const XaotD
     return true;
 }
 
+static const XgDeriveSummary *verify_find_derive_for_type_kind(const XgGlobalEvidence *ev,
+                                                               uint32_t type_key,
+                                                               XgDeclId owner_decl_id,
+                                                               uint8_t derive_kind) {
+    if (!ev || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        const XgDeriveSummary *derive = &ev->derives[i];
+        if (derive->type_key == type_key && derive->owner_decl_id == owner_decl_id &&
+            derive->derive_kind == derive_kind)
+            return derive;
+    }
+    return NULL;
+}
+
+static bool verify_eq_hash_fields_match(const XgDeriveSummary *eq,
+                                        const XgDeriveSummary *hash) {
+    return eq && hash && eq->field_start == hash->field_start &&
+           eq->field_count == hash->field_count;
+}
+
+static uint8_t verify_eq_hash_action_for(const XgDeriveSummary *eq,
+                                         const XgDeriveSummary *hash) {
+    if (!eq || !hash || eq->type_key != hash->type_key || !verify_eq_hash_fields_match(eq, hash))
+        return XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE;
+    if (eq->method_count != 0 && hash->method_count != 0)
+        return XAOT_DERIVED_EQ_HASH_DIRECT_GENERATED_CALL;
+    return XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE;
+}
+
+static uint8_t verify_eq_hash_reason_for(const XgDeriveSummary *eq,
+                                         const XgDeriveSummary *hash) {
+    if (!eq)
+        return XAOT_EQ_HASH_UNPROVEN_MISSING_EQ;
+    if (!hash)
+        return XAOT_EQ_HASH_UNPROVEN_MISSING_HASH;
+    if (eq->type_key != hash->type_key)
+        return XAOT_EQ_HASH_UNPROVEN_TYPE_MISMATCH;
+    if (!verify_eq_hash_fields_match(eq, hash))
+        return XAOT_EQ_HASH_UNPROVEN_FIELD_MISMATCH;
+    return XAOT_EQ_HASH_UNPROVEN_NONE;
+}
+
+static uint32_t verify_eq_hash_evidence_for(const XgDeriveSummary *eq,
+                                            const XgDeriveSummary *hash) {
+    uint32_t evidence = 0;
+    if (eq)
+        evidence |= XAOT_EQ_HASH_EV_EQ_ROW;
+    if (hash)
+        evidence |= XAOT_EQ_HASH_EV_HASH_ROW;
+    if (eq && hash && eq->type_key == hash->type_key)
+        evidence |= XAOT_EQ_HASH_EV_SAME_TYPE;
+    if (verify_eq_hash_fields_match(eq, hash))
+        evidence |= XAOT_EQ_HASH_EV_SAME_FIELDS;
+    if (eq && eq->method_count != 0)
+        evidence |= XAOT_EQ_HASH_EV_EQ_BODY;
+    if (hash && hash->method_count != 0)
+        evidence |= XAOT_EQ_HASH_EV_HASH_BODY;
+    return evidence;
+}
+
+static bool verify_derived_eq_hash_plan_rederives(const XgGlobalEvidence *ev,
+                                                  const XaotDerivedEqHashPlan *plan,
+                                                  const XgDeriveSummary *seed, char *errbuf,
+                                                  size_t errbuf_len) {
+    const XgDeriveSummary *eq;
+    const XgDeriveSummary *hash;
+    uint32_t expected_field_start;
+    uint16_t expected_field_count;
+    if (!ev || !plan || !seed)
+        return set_error(errbuf, errbuf_len, "AOT Eq/Hash verifier has incomplete input");
+    eq = verify_find_derive_for_type_kind(ev, seed->type_key, seed->owner_decl_id, XG_DERIVE_EQ);
+    hash =
+        verify_find_derive_for_type_kind(ev, seed->type_key, seed->owner_decl_id, XG_DERIVE_HASH);
+    expected_field_start = eq ? eq->field_start : (hash ? hash->field_start : 0);
+    expected_field_count = eq ? eq->field_count : (hash ? hash->field_count : 0);
+    if (plan->owner_decl_id != seed->owner_decl_id || plan->type_key != seed->type_key ||
+        plan->eq_derive_id != (eq ? eq->derive_id : XG_NO_ID) ||
+        plan->hash_derive_id != (hash ? hash->derive_id : XG_NO_ID) ||
+        plan->field_start != expected_field_start || plan->field_count != expected_field_count)
+        return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash plan identity does not re-derive");
+    if (plan->eq_body_func_id != verify_derive_generated_body_func_id(ev, eq) ||
+        plan->hash_body_func_id != verify_derive_generated_body_func_id(ev, hash))
+        return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash generated body is stale");
+    if (plan->action != verify_eq_hash_action_for(eq, hash) ||
+        plan->unproven_reason != verify_eq_hash_reason_for(eq, hash))
+        return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash action does not re-derive");
+    if (plan->evidence != verify_eq_hash_evidence_for(eq, hash))
+        return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash evidence does not re-derive");
+    return true;
+}
+
 static uint8_t verify_json_shape_action_for(const XgJsonShapeSummary *shape) {
     if (!shape)
         return XAOT_JSON_SHAPE_REJECT;
@@ -2710,6 +2802,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_generic_specialization_plans = 0;
     uint32_t expected_generic_instantiation_plans = 0;
     uint32_t expected_derive_plans = 0;
+    uint32_t expected_derived_eq_hash_plans = 0;
     uint32_t expected_json_shape_plans = 0;
     uint32_t expected_json_access_plans = 0;
     uint32_t expected_metadata_plans = 0;
@@ -2949,6 +3042,32 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nderive_plans != expected_derive_plans)
         return set_error(errbuf, errbuf_len, "AOT derive plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        const XgDeriveSummary *derive = &ev->derives[i];
+        const XaotDerivedEqHashPlan *plan;
+        bool seen = false;
+        if (derive->derive_kind != XG_DERIVE_EQ && derive->derive_kind != XG_DERIVE_HASH)
+            continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const XgDeriveSummary *prev = &ev->derives[j];
+            if ((prev->derive_kind == XG_DERIVE_EQ || prev->derive_kind == XG_DERIVE_HASH) &&
+                prev->owner_decl_id == derive->owner_decl_id && prev->type_key == derive->type_key) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen)
+            continue;
+        expected_derived_eq_hash_plans++;
+        plan = xaot_bundle_find_derived_eq_hash_plan(bundle, derive->type_key);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Eq/Hash derive evidence has no plan");
+        if (!verify_derived_eq_hash_plan_rederives(ev, plan, derive, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nderived_eq_hash_plans != expected_derived_eq_hash_plans)
+        return set_error(errbuf, errbuf_len, "AOT derived Eq/Hash plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->njson_shapes; i++) {
         const XgJsonShapeSummary *shape = &ev->json_shapes[i];
