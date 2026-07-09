@@ -533,7 +533,7 @@ static XiValue *stmt_default_struct_value_depth(XiLower *l, struct XrType *type,
         int field_count =
             info->field_count < layout->field_count ? info->field_count : layout->field_count;
         for (int i = 0; i < field_count; i++) {
-            if (layout->fields[i].native_type != XR_NATIVE_STRUCT)
+            if (layout->fields[i].native_type != XR_NATIVE_NESTED_AGGREGATE)
                 continue;
             XaSymbol *field = info->fields[i];
             XaSymbolLinks *links = field ? xa_analyzer_get_links(l->analyzer, field) : NULL;

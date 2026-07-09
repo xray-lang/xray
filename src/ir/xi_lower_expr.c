@@ -334,7 +334,7 @@ static XrAggregateLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
     if (!parent || v->aux_int < 0 || v->aux_int >= parent->field_count)
         return NULL;
     XrAggregateFieldLayout *field = &parent->fields[v->aux_int];
-    return field->native_type == XR_NATIVE_STRUCT ? field->sub_layout : NULL;
+    return field->native_type == XR_NATIVE_NESTED_AGGREGATE ? field->sub_layout : NULL;
 }
 
 static bool xi_lower_type_needs_value_clone(XiLower *l, struct XrType *type) {

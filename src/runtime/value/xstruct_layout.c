@@ -57,14 +57,14 @@ void xr_aggregate_layout_compute(XrAggregateLayout *layout) {
             // Fixed-size array: size = elem_count * elem_size
             uint8_t es = xr_native_type_size(f->elem_native_type);
             f->size = (uint16_t) (f->elem_count * es);
-        } else if (f->native_type != XR_NATIVE_STRUCT) {
+        } else if (f->native_type != XR_NATIVE_NESTED_AGGREGATE) {
             f->size = xr_native_type_size(f->native_type);
         }
 
         uint32_t field_align;
         if (layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT) {
             field_align = 1;
-        } else if (f->native_type == XR_NATIVE_STRUCT) {
+        } else if (f->native_type == XR_NATIVE_NESTED_AGGREGATE) {
             field_align = f->sub_layout ? f->sub_layout->alignment : 8;
         } else if (f->native_type == XR_NATIVE_ARRAY) {
             field_align = xr_native_type_align(f->elem_native_type);

@@ -37,7 +37,7 @@ TEST(native_type_scalar_sizes_are_stable) {
 }
 
 TEST(native_type_aggregate_sizes_are_stable) {
-    ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_STRUCT), 8);
+    ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_NESTED_AGGREGATE), 8);
     ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_ARRAY), 0);
     ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_ARRAY_REF), 16);
     ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_MAP_REF), 16);

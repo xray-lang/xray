@@ -7141,7 +7141,7 @@ static bool cg_c_export_struct_layout_supported_depth(const XrAggregateLayout *l
         if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
             cg_c_export_native_scalar_supported(field->elem_native_type))
             continue;
-        if (field->native_type == XR_NATIVE_STRUCT &&
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
             cg_c_export_struct_layout_supported_depth(field->sub_layout, depth + 1))
             continue;
         return false;
@@ -7295,7 +7295,7 @@ static void cg_c_export_collect_struct_typedef(const char *prefix, const XrAggre
         !cg_c_export_struct_layout_supported_depth(layout, 0))
         return;
     for (uint16_t i = 0; i < layout->field_count; i++) {
-        if (layout->fields[i].native_type == XR_NATIVE_STRUCT)
+        if (layout->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE)
             cg_c_export_collect_struct_typedef(prefix, layout->fields[i].sub_layout, items, count);
     }
 

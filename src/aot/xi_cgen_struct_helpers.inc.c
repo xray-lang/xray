@@ -151,7 +151,7 @@ static uint64_t cg_struct_layout_hash_depth(const XrAggregateLayout *sl, int dep
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].sub_layout_id;
         h *= UINT64_C(1099511628211);
-        if (sl->fields[i].native_type == XR_NATIVE_STRUCT) {
+        if (sl->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE) {
             h ^= cg_struct_layout_hash_depth(sl->fields[i].sub_layout, depth + 1);
             h *= UINT64_C(1099511628211);
         }
@@ -182,7 +182,7 @@ static bool cg_struct_layout_same_shape_depth(const XrAggregateLayout *a,
             a->fields[i].elem_count != b->fields[i].elem_count ||
             a->fields[i].size != b->fields[i].size)
             return false;
-        if (a->fields[i].native_type == XR_NATIVE_STRUCT &&
+        if (a->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE &&
             !cg_struct_layout_same_shape_depth(a->fields[i].sub_layout, b->fields[i].sub_layout,
                                                depth + 1))
             return false;
@@ -206,7 +206,7 @@ static const XrAggregateLayout *cg_type_struct_layout(const XrType *type);
 static void emit_struct_field_decl(FILE *out, const XrAggregateLayout *sl, int64_t idx,
                                    const char *name, const char *prefix) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
-    if (field && field->native_type == XR_NATIVE_STRUCT && field->sub_layout) {
+    if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout) {
         char tname[128];
         cg_struct_heap_type_name(tname, sizeof(tname), prefix, field->sub_layout);
         fprintf(out, "%s %s", tname, name);
@@ -272,7 +272,7 @@ static void cg_collect_struct_layout(const XrAggregateLayout *sl, const XrAggreg
         *count >= CG_STRUCT_TYPEDEF_MAX)
         return;
     for (uint16_t i = 0; i < sl->field_count; i++) {
-        if (sl->fields[i].native_type == XR_NATIVE_STRUCT)
+        if (sl->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE)
             cg_collect_struct_layout(sl->fields[i].sub_layout, layouts, hashes, count);
     }
     uint64_t hash = cg_struct_layout_hash(sl);
@@ -1939,7 +1939,7 @@ static void emit_struct_inline_field_get_expr(FILE *out, const XrAggregateLayout
                                               const XiValue *origin, int64_t idx,
                                               XrRep result_rep) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
-    if (field && field->native_type == XR_NATIVE_STRUCT) {
+    if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
         fprintf(out, "xr_aggregate_ref(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", (uint16_t)sizeof(");
@@ -2008,7 +2008,7 @@ static void emit_struct_inline_field_set_expr(XiCgenCtx *ctx, FILE *out,
                                               const XrAggregateLayout *sl, const XiValue *origin,
                                               int64_t idx, const XiValue *value) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
-    if (field && field->native_type == XR_NATIVE_STRUCT) {
+    if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
         fprintf(out, "(memcpy(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", ");
@@ -2043,7 +2043,7 @@ static bool cg_value_is_nested_struct_field_ref(const XiValue *v) {
         return false;
     const XrAggregateLayout *sl = (const XrAggregateLayout *) v->aux;
     const XrAggregateFieldLayout *field = cg_struct_field(sl, v->aux_int);
-    return field && field->native_type == XR_NATIVE_STRUCT && field->sub_layout &&
+    return field && field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout &&
            cg_struct_native_heap_supported(sl) &&
            cg_struct_native_heap_supported(field->sub_layout);
 }
@@ -2275,7 +2275,7 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     if (!cg_struct_native_heap_supported(sl) || idx < 0 || idx >= sl->field_count)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
-    if (field && field->native_type == XR_NATIVE_STRUCT) {
+    if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
         fprintf(out, "xr_aggregate_ref(&");
         emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", (uint16_t)sizeof(");
@@ -2328,7 +2328,7 @@ static bool emit_struct_heap_field_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     if (!cg_struct_native_heap_supported(sl) || idx < 0 || idx >= sl->field_count)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
-    if (field && field->native_type == XR_NATIVE_STRUCT) {
+    if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
         fprintf(out, "(memcpy(&");
         emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", ");
