@@ -19,4 +19,40 @@ fn test_h2_options_object() {
     assert_eq(opts.headers["Content-Type"], "application/json")
 }
 
+@test
+fn test_h2_request_rejects_http1_connection_headers() {
+    assert(http.h2Request({
+        url: "https://example.com/api",
+        headers: Json.encode(#{"Connection": "keep-alive"})
+    }) == null)
+
+    assert(http.h2Request({
+        url: "https://example.com/api",
+        headers: Json.encode(#{"Host": "other.example"})
+    }) == null)
+
+    assert(http.h2Request({
+        url: "https://example.com/api",
+        headers: Json.encode(#{"TE": "gzip"})
+    }) == null)
+}
+
+@test
+fn test_h2_request_rejects_invalid_method_and_headers() {
+    assert(http.h2Request({
+        url: "https://example.com/api",
+        method: "BAD METHOD"
+    }) == null)
+
+    assert(http.h2Request({
+        url: "https://example.com/api",
+        headers: Json.encode(#{"X-Bad": "a\r\nInjected: y"})
+    }) == null)
+
+    assert(http.h2Request({
+        url: "https://example.com/api",
+        headers: Json.encode(#{":path": "/override"})
+    }) == null)
+}
+
 print("All http2 client tests passed")

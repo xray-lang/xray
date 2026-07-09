@@ -182,6 +182,7 @@ typedef struct XrH2Pool XrH2Pool;
 
 typedef struct XrH2Request {
     const char *method;
+    size_t method_len;
     XrHttpHeader *headers;
     int header_count;
     const char *body;
