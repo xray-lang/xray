@@ -2803,6 +2803,21 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             }
         }
         if (bt) {
+            if ((strcmp(cn, "Array") == 0 && ne->arg_count >= 2) ||
+                ((strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) && ne->arg_count >= 1)) {
+                int value_slot = strcmp(cn, "Array") == 0 ? 1 : 0;
+                AstNode *value_arg = ne->arguments ? ne->arguments[value_slot] : NULL;
+                XrType *value_type =
+                    value_arg ? xa_analyzer_get_node_type(ctx->analyzer, value_arg) : NULL;
+                if (!value_type && value_arg)
+                    value_type = xa_visit_infer_expr(ctx, value_arg);
+                if (value_type && xa_type_contains_span_view(value_type)) {
+                    char context[96];
+                    snprintf(context, sizeof(context), "store Span view in %s constructor", cn);
+                    xa_check_span_value_escape(ctx, value_arg ? value_arg : node, value_type,
+                                               context);
+                }
+            }
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_validate_hashable_key_type(ctx, bt, NULL, "constructor type", &loc);
             return bt;

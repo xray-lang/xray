@@ -1,0 +1,10 @@
+enum Hold {
+    View(Span<int>)
+}
+
+fn main() {
+    var owner = [1, 2, 3]
+    var view: Span<int> = owner[0:2]
+    var hold = Hold.View(view)
+    print(hold)
+}
