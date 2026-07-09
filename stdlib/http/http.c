@@ -387,11 +387,11 @@ static void http_context_destroy(void *handle) {
         ctx->server = NULL;
     }
 
-    // Free per-isolate connection pools
-    if (ctx->conn_pool) {
-        xr_conn_pool_destroy(ctx->conn_pool);
-        xr_free(ctx->conn_pool);
-        ctx->conn_pool = NULL;
+    // Free per-isolate HTTP connection pools
+    if (ctx->http_conn_pool) {
+        http_conn_pool_destroy(ctx->http_conn_pool);
+        xr_free(ctx->http_conn_pool);
+        ctx->http_conn_pool = NULL;
     }
     if (ctx->h2_client_pool) {
         http2_client_pool_destroy(ctx->h2_client_pool);

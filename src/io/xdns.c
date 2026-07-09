@@ -14,7 +14,7 @@
  *   resolves of the same hostname spread across the resolved IP set.
  *
  *   Higher-level failover (try every address until one connects)
- *   lives in stdlib/net/conn_pool.c — this resolver only deals with
+ *   lives in stdlib/http/http_conn_pool.c — this resolver only deals with
  *   name -> address(es).
  */
 
