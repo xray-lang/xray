@@ -2229,6 +2229,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
             "freestanding-profile/static-import: exporter materializes plain string aggregate const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[2]' \
+            "freestanding-profile/static-import: exporter materializes plain string aggregate fixed-array const"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'const XrValue xray_const__freestanding_static_data_lib_PLAIN_LABELS[2]' \
             "freestanding-profile/static-import: exporter materializes plain string fixed-array const"
     else
@@ -2294,6 +2297,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
             "freestanding-profile/static-import: importer declares plain string aggregate const extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[2]' \
+            "freestanding-profile/static-import: importer declares plain string aggregate fixed-array const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const XrValue xray_const__freestanding_static_data_lib_PLAIN_LABELS[2]' \
             "freestanding-profile/static-import: importer declares plain string fixed-array const extern"
@@ -2394,11 +2400,17 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'xray_const__freestanding_static_data_lib_PLAIN_NAMED.label' \
             "freestanding-profile/static-import: importer reads plain string aggregate field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[_idx].label' \
+            "freestanding-profile/static-import: importer reads plain string aggregate fixed-array field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_PLAIN_LABELS[_idx]' \
             "freestanding-profile/static-import: importer reads plain string fixed-array const element directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
             "freestanding-profile/static-import: importer takes plain string aggregate const address directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            '&xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS' \
+            "freestanding-profile/static-import: importer takes plain string aggregate fixed-array const address directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_LABELS' \
             "freestanding-profile/static-import: importer takes plain string fixed-array const address directly"
@@ -2531,6 +2543,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_pass "freestanding-profile/static-import: weak plain string aggregate data symbol is external"
     else
         record_fail "freestanding-profile/static-import: weak plain string aggregate data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak plain string aggregate fixed-array data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak plain string aggregate fixed-array data symbol missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
