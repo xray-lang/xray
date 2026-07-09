@@ -4,5 +4,11 @@ fn xray_no_alloc_stringbuilder_append_reject(sb: StringBuilder, value: int) -> i
     return sb.length
 }
 
+@no_alloc
+fn xray_no_alloc_stringbuilder_tostring_reject(sb: StringBuilder) -> string {
+    return sb.toString()
+}
+
 var sb = StringBuilder()
 print(xray_no_alloc_stringbuilder_append_reject(sb, 42))
+print(xray_no_alloc_stringbuilder_tostring_reject(sb))
