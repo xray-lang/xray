@@ -1,0 +1,36 @@
+import sys
+import { Pipe, Process } from sys
+
+fn passProcess(p: Process) -> Process {
+    return p
+}
+
+fn passPipe(p: Pipe) -> Pipe {
+    return p
+}
+
+fn run(tag: int) {
+    var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (spawned == null) {
+        print("spawn-failed")
+        return
+    }
+    var process = match (tag) {
+        0 -> passProcess(spawned!),
+        _ -> passProcess(spawned!)
+    }
+    print(process.wait())
+
+    var opened = sys.Pipe.open()
+    if (opened == null) {
+        print(false)
+        return
+    }
+    var pipe = match (tag) {
+        0 -> passPipe(opened!),
+        _ -> passPipe(opened!)
+    }
+    print(pipe.close())
+}
+
+run(1)
