@@ -1,5 +1,5 @@
 import mem
-import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS, PLAIN_HEADER, PLAIN_PAIR, PLAIN_BYTES } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS, PLAIN_HEADER, PLAIN_PAIR, PLAIN_BYTES, PLAIN_BITS, PLAIN_WORD } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
@@ -18,7 +18,8 @@ fn imported_static_sum(i: int) -> int {
         (MATRIX[i][i] as int) + CUBE[i][i][i] + ENTRIES[i].code + (ENTRIES[i].flag as int) +
         (ROWS[i].samples[i] as int) + ROWS[i].weight + GROUPS[i].inner.code +
         GROUPS[i].base + PLAIN_HEADER.magic + PLAIN_HEADER.flags +
-        PLAIN_PAIR.0 + PLAIN_PAIR.1 + (PLAIN_BYTES[i] as int)
+        PLAIN_PAIR.0 + PLAIN_PAIR.1 + (PLAIN_BYTES[i] as int) +
+        (unsafe { PLAIN_BITS.u } as int) + (unsafe { PLAIN_WORD.b }[i] as int)
 }
 
 @c_export("xray_imported_static_strings")
@@ -57,5 +58,7 @@ fn imported_static_addr() -> int {
         mem.addressOf(RawPtr<int?>.of(MAYBE_NONE)) +
         mem.addressOf(RawPtr<PlainHeader>.of(PLAIN_HEADER)) +
         mem.addressOf(RawPtr<(int, int)>.of(PLAIN_PAIR)) +
-        mem.addressOf(RawPtr<[uint8; 2]>.of(PLAIN_BYTES))
+        mem.addressOf(RawPtr<[uint8; 2]>.of(PLAIN_BYTES)) +
+        mem.addressOf(RawPtr<I32Bits>.of(PLAIN_BITS)) +
+        mem.addressOf(RawPtr<U32Bytes>.of(PLAIN_WORD))
 }

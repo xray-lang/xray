@@ -2213,6 +2213,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'const uint8_t xray_const__freestanding_static_data_lib_PLAIN_BYTES[2]' \
             "freestanding-profile/static-import: exporter materializes plain fixed-array const"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'const union { int32_t i; uint32_t u; } xray_const__freestanding_static_data_lib_PLAIN_BITS' \
+            "freestanding-profile/static-import: exporter materializes plain union const"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'const union { uint32_t u; uint8_t b[4]; } xray_const__freestanding_static_data_lib_PLAIN_WORD' \
+            "freestanding-profile/static-import: exporter materializes plain union fixed-array const"
     else
         record_fail "freestanding-profile/static-import: exporter kept C source missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
@@ -2261,6 +2267,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const uint8_t xray_const__freestanding_static_data_lib_PLAIN_BYTES[2]' \
             "freestanding-profile/static-import: importer declares plain fixed-array const extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const union { int32_t i; uint32_t u; } xray_const__freestanding_static_data_lib_PLAIN_BITS' \
+            "freestanding-profile/static-import: importer declares plain union const extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const union { uint32_t u; uint8_t b[4]; } xray_const__freestanding_static_data_lib_PLAIN_WORD' \
+            "freestanding-profile/static-import: importer declares plain union fixed-array const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_MATRIX[_outer_idx][_idx]' \
             "freestanding-profile/static-import: importer reads fixed-array matrix directly"
@@ -2327,6 +2339,18 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_BYTES' \
             "freestanding-profile/static-import: importer takes plain fixed-array const address directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_PLAIN_BITS.u' \
+            "freestanding-profile/static-import: importer reads plain union const field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_PLAIN_WORD.b[_idx]' \
+            "freestanding-profile/static-import: importer reads plain union fixed-array const element directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            '&xray_const__freestanding_static_data_lib_PLAIN_BITS' \
+            "freestanding-profile/static-import: importer takes plain union const address directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            '&xray_const__freestanding_static_data_lib_PLAIN_WORD' \
+            "freestanding-profile/static-import: importer takes plain union fixed-array const address directly"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
             "freestanding-profile/static-import: avoids dynamic property helper"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
@@ -2416,6 +2440,22 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_pass "freestanding-profile/static-import: weak plain fixed-array data symbol is external"
     else
         record_fail "freestanding-profile/static-import: weak plain fixed-array data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_PLAIN_BITS" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak plain union data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak plain union data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_PLAIN_WORD" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak plain union fixed-array data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak plain union fixed-array data symbol missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
