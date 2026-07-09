@@ -688,6 +688,11 @@ static bool cg_key_access_plan_is_dense_index(const XaotKeyAccessPlan *plan) {
 
 typedef struct CgUserHashEqDirectPlan {
     const XaotHashEqPlan *hash_eq_plan;
+    const XiClassData *key_class;
+    const XiFunc *hash_func;
+    const XiFunc *eq_func;
+    const char *hash_prefix;
+    const char *eq_prefix;
 } CgUserHashEqDirectPlan;
 
 static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *key_plan,
@@ -706,18 +711,49 @@ static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan 
                 site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key);
         return false;
     }
-    (void) key_value;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const char *hash_prefix = NULL;
+    const char *eq_prefix = NULL;
+    const XiFunc *hash_func =
+        xaot_bundle_find_body_func(bundle, hash_plan->hash_func_id, &hash_prefix);
+    const XiFunc *eq_func = xaot_bundle_find_body_func(bundle, hash_plan->eq_func_id, &eq_prefix);
+    const XrType *key_type = key_value ? key_value->type : NULL;
+    if (!key_type && hash_func && hash_func->nparams > 0 && hash_func->params &&
+        hash_func->params[0])
+        key_type = hash_func->params[0]->type;
+    const XiClassData *key_class = cg_class_native_data_for_abi_type(ctx, key_type);
+    if (!key_class || !hash_func || !eq_func || hash_func->nparams < 1 || eq_func->nparams < 2) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: specialized key-access plan for %s cannot resolve verified "
+                "Hash/Eq direct targets (key_access=%u type=%u hash_func=%u eq_func=%u)\n",
+                site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key,
+                hash_plan->hash_func_id, hash_plan->eq_func_id);
+        return false;
+    }
     out->hash_eq_plan = hash_plan;
+    out->key_class = key_class;
+    out->hash_func = hash_func;
+    out->eq_func = eq_func;
+    out->hash_prefix = hash_prefix;
+    out->eq_prefix = eq_prefix;
     return true;
 }
 
 static bool cg_emit_user_hash_eq_direct_args(XiCgenCtx *ctx, FILE *out,
                                              const CgUserHashEqDirectPlan *plan) {
-    if (!plan || !plan->hash_eq_plan)
+    if (!ctx || !out || !plan || !plan->hash_eq_plan || !plan->key_class || !plan->hash_func ||
+        !plan->eq_func)
         return false;
-    (void) ctx;
     fprintf(out, ", ");
-    cg_emit_user_hash_eq_name_pair(out, plan->hash_eq_plan);
+    if (!emit_class_native_type_id_expr(ctx, out, plan->key_class)) {
+        cg_ctx_set_error(ctx);
+        return false;
+    }
+    fprintf(out, ", (xrt_user_hash_fn_t)");
+    emit_fname(ctx, out, plan->hash_prefix, plan->hash_func);
+    fprintf(out, ", (xrt_user_eq_fn_t)");
+    emit_fname(ctx, out, plan->eq_prefix, plan->eq_func);
     return true;
 }
 
