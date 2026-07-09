@@ -15,7 +15,7 @@
  *   no_context_takeover: each received message is independently inflated.
  */
 
-#include "ws_deflate.h"
+#include "ws_internal.h"
 
 /* xr_deflate_sync_flush / xr_inflate_bounded live in compress_zlib.c,
  * which the build system only compiles when system zlib is available
