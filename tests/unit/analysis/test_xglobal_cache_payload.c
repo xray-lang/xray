@@ -17,6 +17,8 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     XgDeclSummary decl = {0};
     XgBodySummary body = {0};
     XgCallsiteSummary call = {0};
+    XgLinkDependencySummary link = {0};
+    XgGenericInstSummary inst = {0};
 
     decl.decl_id = 1;
     decl.module_id = 7;
@@ -47,12 +49,143 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     call.static_target_func_id = body.func_id;
     call.method_name_id = xg_name_id("entry");
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(ev, &call));
+
+    link.link_id = 2;
+    link.module_id = 7;
+    link.decl_id = decl.decl_id;
+    link.source_span_id = 5;
+    link.name_id = xg_name_id("mem.copy");
+    link.kind = XG_LINK_DEP_STDLIB_SYMBOL;
+    link.flags = 0x2;
+    snprintf(link.name, sizeof(link.name), "%s", "mem.copy");
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(ev, &link));
+
+    inst.generic_inst_id = 3;
+    inst.module_id = 7;
+    inst.origin_decl_id = decl.decl_id;
+    inst.origin_func_id = body.func_id;
+    inst.specialized_func_id = 31;
+    inst.root_callsite_id = call.callsite_id;
+    inst.name_id = xg_name_id("box");
+    inst.type_key = 400;
+    inst.type_arg_key_start = 401;
+    inst.type_arg_count = 1;
+    inst.source_span_id = 6;
+    inst.kind = XG_GENERIC_INST_FUNCTION;
+    inst.flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_SPECIALIZED_BODY;
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(ev, &inst));
+}
+
+static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
+    XgDeclSummary decl = {0};
+    XgClassSummary cls = {0};
+    XgMethodSummary method = {0};
+    XgInterfaceImplSummary impl = {0};
+    XgInterfaceExtendsSummary edge = {0};
+    XgInterfaceMethodSummary iface_method = {0};
+    XgDeriveSummary derive = {0};
+    XgDerivedFieldSummary field = {0};
+    XgDerivedMethodSummary derived_method = {0};
+
+    decl.decl_id = 10;
+    decl.module_id = 7;
+    decl.kind = XG_DECL_CLASS;
+    decl.flags = XG_DECL_FINAL | XG_DECL_DERIVE;
+    decl.name_id = xg_name_id("Box");
+    decl.type_key = 900;
+    decl.signature_key = 901;
+    decl.source_span_id = 8;
+    decl.derive_flags = XG_DERIVE_OPT_IN;
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(ev, &decl));
+
+    cls.class_id = 20;
+    cls.module_id = 7;
+    cls.decl_id = decl.decl_id;
+    cls.name_id = decl.name_id;
+    cls.flags = XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL;
+    cls.method_start = 30;
+    cls.method_count = 1;
+    cls.interface_start = 40;
+    cls.interface_count = 1;
+    cls.generic_origin_class_id = 19;
+    cls.generic_origin_name_id = xg_name_id("Box");
+    cls.generic_type_key = 900;
+    cls.generic_type_arg_key_start = 910;
+    cls.generic_type_arg_count = 1;
+    cls.decl_kind = XG_DECL_CLASS;
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &cls));
+
+    method.method_id = 30;
+    method.owner_class_id = cls.class_id;
+    method.name_id = xg_name_id("value");
+    method.signature_key = 920;
+    method.root_method_id = method.method_id;
+    method.flags = XG_METHOD_DIRECT_ONLY;
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(ev, &method));
+
+    impl.implementor_class_id = cls.class_id;
+    impl.interface_id = 41;
+    impl.name_id = xg_name_id("Readable");
+    impl.type_key = 930;
+    impl.source_span_id = 9;
+    impl.flags = 0x4;
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(ev, &impl));
+
+    edge.child_interface_id = 42;
+    edge.parent_interface_id = 41;
+    edge.name_id = xg_name_id("Parent");
+    edge.type_key = 931;
+    edge.source_span_id = 10;
+    edge.flags = 0x5;
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(ev, &edge));
+
+    iface_method.interface_method_id = 50;
+    iface_method.owner_interface_id = 41;
+    iface_method.name_id = method.name_id;
+    iface_method.signature_key = method.signature_key;
+    iface_method.ordinal = 0;
+    iface_method.source_span_id = 11;
+    iface_method.flags = 0x6;
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(ev, &iface_method));
+
+    derive.derive_id = 60;
+    derive.module_id = 7;
+    derive.owner_decl_id = decl.decl_id;
+    derive.source_span_id = 12;
+    derive.type_key = decl.type_key;
+    derive.derive_kind = XG_DERIVE_HASH;
+    derive.field_start = 70;
+    derive.field_count = 1;
+    derive.method_start = 80;
+    derive.method_count = 1;
+    derive.flags = XG_DERIVE_OPT_IN | XG_DERIVE_REACHABLE;
+    derive.derive_hash = UINT64_C(0x8888);
+    ASSERT_NOT_NULL(xg_global_evidence_add_derive(ev, &derive));
+
+    field.field_id = 70;
+    field.derive_id = derive.derive_id;
+    field.field_ordinal = 0;
+    field.name_id = xg_name_id("item");
+    field.type_key = 940;
+    field.source_field_id = 71;
+    field.flags = XG_DERIVED_FIELD_PUBLIC;
+    ASSERT_NOT_NULL(xg_global_evidence_add_derived_field(ev, &field));
+
+    derived_method.method_id = 80;
+    derived_method.derive_id = derive.derive_id;
+    derived_method.method_kind = XG_DERIVED_METHOD_HASH;
+    derived_method.generated_body_func_id = 81;
+    derived_method.signature_key = 950;
+    derived_method.flags = XG_DERIVED_METHOD_NO_ALLOC | XG_DERIVED_METHOD_PURE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_derived_method(ev, &derived_method));
 }
 
 TEST(cache_payload_parse_exposes_validated_body) {
     XgGlobalEvidence ev = {0};
+    XgGlobalEvidence materialized = {0};
     XgEvidenceCachePayloadInfo info;
     XgEvidenceCacheKey expected;
+    XgEvidenceCacheKey materialized_key;
     char *payload;
 
     ev.key.module_id = 7;
@@ -73,7 +206,87 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "body id=11"));
     ASSERT(xg_evidence_cache_payload_matches(payload, &expected));
+    ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.nbodies, 1);
+    ASSERT_EQ_UINT(materialized.ncallsites, 1);
+    ASSERT_EQ_UINT(materialized.nlink_deps, 1);
+    ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
+    ASSERT_EQ_UINT(materialized.bodies[0].func_id, 11);
+    ASSERT_EQ_UINT(materialized.callsites[0].callsite_id, 1);
+    ASSERT_STR_EQ(materialized.link_deps[0].name, "mem.copy");
+    ASSERT_EQ_UINT(materialized.generic_insts[0].specialized_func_id, 31);
 
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(cache_payload_materializes_declaration_summary) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence materialized = {0};
+    XgEvidenceCacheKey expected;
+    XgEvidenceCacheKey materialized_key;
+    char *payload;
+
+    ev.key.module_id = 7;
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    ev.key.compiler_semver_hash = UINT64_C(0x1111);
+    ev.key.profile_hash = UINT64_C(0x2222);
+    ev.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_body_summary(&ev);
+
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT_NOT_NULL(payload);
+    expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.ndecls, 1);
+    ASSERT_EQ_UINT(materialized.decls[0].decl_id, 1);
+    ASSERT_EQ_UINT(materialized.decls[0].signature_key, 101);
+
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(cache_payload_materializes_semantic_graph_summary) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence materialized = {0};
+    XgEvidenceCacheKey expected;
+    XgEvidenceCacheKey materialized_key;
+    char *payload;
+
+    ev.key.module_id = 7;
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    ev.key.compiler_semver_hash = UINT64_C(0x1111);
+    ev.key.profile_hash = UINT64_C(0x2222);
+    ev.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_semantic_summary(&ev);
+
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    ASSERT_NOT_NULL(payload);
+    expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    materialized_key =
+        xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.ndecls, 1);
+    ASSERT_EQ_UINT(materialized.nclasses, 1);
+    ASSERT_EQ_UINT(materialized.nmethods, 1);
+    ASSERT_EQ_UINT(materialized.ninterface_impls, 1);
+    ASSERT_EQ_UINT(materialized.ninterface_extends, 1);
+    ASSERT_EQ_UINT(materialized.ninterface_methods, 1);
+    ASSERT_EQ_UINT(materialized.nderives, 1);
+    ASSERT_EQ_UINT(materialized.nderived_fields, 1);
+    ASSERT_EQ_UINT(materialized.nderived_methods, 1);
+    ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_count, 1);
+    ASSERT_EQ_UINT(materialized.methods[0].root_method_id, 30);
+    ASSERT_EQ_UINT(materialized.derives[0].derive_hash, UINT64_C(0x8888));
+
+    xg_global_evidence_free(&materialized);
     xr_free(payload);
     xg_global_evidence_free(&ev);
 }
@@ -112,11 +325,28 @@ TEST(cache_payload_matches_rejects_wrong_phase_key) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(cache_payload_materialize_rejects_global_count_only_payload) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence materialized = {0};
+    char *payload;
+
+    add_sample_body_summary(&ev);
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    ASSERT(!xg_evidence_cache_payload_materialize(payload, &materialized));
+
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Global Evidence Cache Payload");
 RUN_TEST(cache_payload_parse_exposes_validated_body);
+RUN_TEST(cache_payload_materializes_declaration_summary);
+RUN_TEST(cache_payload_materializes_semantic_graph_summary);
 RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
+RUN_TEST(cache_payload_materialize_rejects_global_count_only_payload);
 
 TEST_MAIN_END()

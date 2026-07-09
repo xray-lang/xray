@@ -2141,6 +2141,17 @@ static bool xaot_read_evidence_cache_payload(const char *path, const XgEvidenceC
         return false;
     (void) size;
     ok = xg_evidence_cache_payload_matches(text, expected);
+    if (ok && expected->phase != XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE) {
+        XgGlobalEvidence materialized;
+        XgEvidenceCacheKey materialized_key;
+        memset(&materialized, 0, sizeof(materialized));
+        ok = xg_evidence_cache_payload_materialize(text, &materialized);
+        if (ok) {
+            materialized_key = xg_global_evidence_cache_key(&materialized, expected->phase);
+            ok = xg_evidence_cache_key_matches(&materialized_key, expected);
+        }
+        xg_global_evidence_free(&materialized);
+    }
     xr_free(text);
     return ok;
 }
