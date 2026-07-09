@@ -128,6 +128,11 @@ fn test_utf16_empty() {
 }
 
 @test
+fn test_utf16_odd_length_invalid() {
+    assert_eq(encoding.utf16Decode(Bytes(1)), null)
+}
+
+@test
 fn test_endian_constants() {
     assert_eq(encoding.LE, 0)
     assert_eq(encoding.BE, 1)

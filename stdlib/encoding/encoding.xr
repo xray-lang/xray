@@ -21,13 +21,13 @@ fn hexVal(c: int) -> int {
 
 fn hexEncode(data: string) -> string {
     var src = data.toBytes()
-    var out = ""
+    var out = StringBuilder()
     for (var i = 0; i < src.length; i++) {
         var b = src[i]
-        out = out + HEX.charAt(b >> 4)
-        out = out + HEX.charAt(b & 15)
+        out.append(HEX.charAt(b >> 4))
+        out.append(HEX.charAt(b & 15))
     }
-    return out
+    return out.toString()
 }
 
 fn hexDecode(hex: string) -> Bytes? {
@@ -182,7 +182,7 @@ fn putUtf8(out: Bytes, oi: int, cp: int) -> int {
 // FF FE = LE); without a BOM the `endian` argument selects byte order.
 fn utf16Decode(data: Bytes, endian: int = 0, stripBom: bool = true) -> string? {
     var n = data.length
-    if (n == 0) { return "" }
+    if (n % 2 != 0) { return null }
 
     var e = endian
     var start = 0

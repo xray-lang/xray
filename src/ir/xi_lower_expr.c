@@ -43,7 +43,7 @@
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
-#include "../shared/xr_encoding_core.h"
+#include "../shared/xr_encoding_constants.h"
 
 #include <string.h>
 #include <stdio.h>
