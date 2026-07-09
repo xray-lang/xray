@@ -3349,12 +3349,16 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     // Visit operand to ensure it's analyzed (side effects, narrowing). `as`
     // is an explicit conversion, so do not use the target as assignment
     // context; casts such as `2147483648 as int32` intentionally truncate.
-    xa_visit_infer_expr(ctx, node->as.as_expr.expr);
+    XrType *source = xa_visit_infer_expr(ctx, node->as.as_expr.expr);
     XrType *target = node->as.as_expr.type
                          ? xr_tref_resolve_in_analyzer(ctx->analyzer, node->as.as_expr.type)
                          : NULL;
     if (!target)
         return xr_type_new_unknown(NULL);
+    if (xa_type_contains_span_view(source) && !xa_type_contains_span_view(target)) {
+        xa_check_span_value_escape(ctx, node->as.as_expr.expr ? node->as.as_expr.expr : node,
+                                   source, "erase Span view with cast");
+    }
     return target;
 }
 

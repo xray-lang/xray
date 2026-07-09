@@ -947,6 +947,11 @@ static void xa_summary_walk_function_expr(XaParamEscapeSummary *summary, AstNode
     summary->alias_count = saved_alias_count;
 }
 
+static bool xa_summary_return_type_escapes_borrowed_value(XrType *return_type) {
+    return !return_type || XR_TYPE_IS_UNKNOWN(return_type) ||
+           xa_type_needs_borrow_escape_guard(return_type);
+}
+
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
     if (!summary || !node)
         return;
@@ -979,7 +984,7 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
         case AST_RETURN_STMT: {
             ReturnStmtNode *ret = &node->as.return_stmt;
             for (int i = 0; i < ret->value_count; i++) {
-                if (xa_type_needs_borrow_escape_guard(summary->return_type))
+                if (xa_summary_return_type_escapes_borrowed_value(summary->return_type))
                     xa_summary_mark_expr(summary, ret->values[i]);
                 xa_summary_walk(summary, ret->values[i]);
             }

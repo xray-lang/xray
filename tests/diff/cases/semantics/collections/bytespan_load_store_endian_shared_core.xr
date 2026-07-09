@@ -1,19 +1,21 @@
 // anchor: bytespan-load-store-endian-shared-core
-var bytes = Bytes(12)
-var view: ByteSpan = bytes[:]
+fn main() {
+    var bytes = Bytes(12)
+    var view: ByteSpan = bytes[:]
+    view.store<uint16>(0, 4660, Endian.LE)
+    view.store<uint16>(2, 4660, Endian.BE)
+    view.store<uint32>(4, 16909060, Endian.BE)
+    view.store<uint16>(8, 2569)
+    print(bytes[0])
+    print(bytes[1])
+    print(bytes[2])
+    print(bytes[3])
+    print(bytes[4])
+    print(bytes[7])
+    print(int(view.load<uint16>(0, Endian.LE)))
+    print(int(view.load<uint16>(2, Endian.BE)))
+    print(int(view.load<uint32>(4, Endian.BE)))
+    print(int(view.load<uint16>(8)))
+}
 
-view.store<uint16>(0, 0x1234, Endian.LE)
-view.store<uint16>(2, 0x1234, Endian.BE)
-view.store<uint32>(4, 0x01020304, Endian.BE)
-view.store<uint16>(8, 0x0a09)
-
-print(bytes[0])
-print(bytes[1])
-print(bytes[2])
-print(bytes[3])
-print(bytes[4])
-print(bytes[7])
-print(int(view.load<uint16>(0, Endian.LE)))
-print(int(view.load<uint16>(2, Endian.BE)))
-print(int(view.load<uint32>(4, Endian.BE)))
-print(int(view.load<uint16>(8)))
+main()

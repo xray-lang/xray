@@ -1,13 +1,16 @@
 // anchor: slice-array-string-negative-parity
-var arr = [1, 2, 3, 4]
-var str = "abcd"
+fn main() {
+    var arr = [1, 2, 3, 4]
+    var str = "abcd"
+    var arrTail: Span<int> = arr[-2:]
+    print(arrTail)
+    print(str[-2:])
+    var arrDropLast: Span<int> = arr[:-1]
+    print(arrDropLast)
+    print(str[:-1])
+    var arrMiddle: Span<int> = arr[-3:-1]
+    print(arrMiddle)
+    print(str[-3:-1])
+}
 
-var arrTail: Span<int> = arr[-2:]
-print(arrTail)
-print(str[-2:])
-var arrDropLast: Span<int> = arr[:-1]
-print(arrDropLast)
-print(str[:-1])
-var arrMiddle: Span<int> = arr[-3:-1]
-print(arrMiddle)
-print(str[-3:-1])
+main()

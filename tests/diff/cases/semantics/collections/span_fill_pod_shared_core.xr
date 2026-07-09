@@ -1,27 +1,28 @@
 // anchor: span-fill-pod-shared-core
-var words = Array<uint32>(4, 0)
-var wordSpan: Span<uint32> = words[:]
-var wordWindow: Span<uint32> = wordSpan[1:3]
-var filledWords: Span<uint32> = wordWindow.fill(9)
-print(filledWords.length)
-print(int(words[0]))
-print(int(words[1]))
-print(int(words[2]))
-print(int(words[3]))
+fn main() {
+    var words = Array<uint32>(4, 0)
+    var wordSpan: Span<uint32> = words[:]
+    var wordWindow: Span<uint32> = wordSpan[1:3]
+    var filledWords: Span<uint32> = wordWindow.fill(9)
+    print(filledWords.length)
+    print(int(words[0]))
+    print(int(words[1]))
+    print(int(words[2]))
+    print(int(words[3]))
+    var flags = Array<bool>(3, false)
+    var flagSpan: Span<bool> = flags[:]
+    flagSpan.fill(true)
+    print(flags[0])
+    print(flags[1])
+    print(flags[2])
+    var chars = Array<char>(3, 'a')
+    var charSpan: Span<char> = chars[:]
+    charSpan.fill('z')
+    print(chars[0].toString() + chars[1].toString() + chars[2].toString())
+    var zeros = Array<uint16>(3, 7)
+    var zeroSpan: Span<uint16> = zeros[:]
+    zeroSpan.fill(0)
+    print(int(zeros[0]) + int(zeros[1]) + int(zeros[2]))
+}
 
-var flags = Array<bool>(3, false)
-var flagSpan: Span<bool> = flags[:]
-flagSpan.fill(true)
-print(flags[0])
-print(flags[1])
-print(flags[2])
-
-var chars = Array<char>(3, 'a')
-var charSpan: Span<char> = chars[:]
-charSpan.fill('z')
-print(chars[0].toString() + chars[1].toString() + chars[2].toString())
-
-var zeros = Array<uint16>(3, 7)
-var zeroSpan: Span<uint16> = zeros[:]
-zeroSpan.fill(0)
-print(int(zeros[0]) + int(zeros[1]) + int(zeros[2]))
+main()

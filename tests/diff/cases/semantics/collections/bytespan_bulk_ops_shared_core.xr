@@ -1,53 +1,50 @@
 // anchor: bytespan-bulk-ops-shared-core
-var dst = Bytes(8)
-var src = Bytes(4)
+fn main() {
+    var dst = Bytes(8)
+    var src = Bytes(4)
+    var dstView: ByteSpan = dst[:]
+    var srcView: ByteSpan = src[:]
+    dstView.fill(1)
+    srcView.fill(7)
+    srcView.store<uint16>(1, 2312, Endian.LE)
+    var copiedWindow: ByteSpan = dstView[2:6]
+    var copied: ByteSpan = copiedWindow.copyFrom(srcView)
+    print(dst[0])
+    print(dst[1])
+    print(dst[2])
+    print(dst[3])
+    print(dst[4])
+    print(dst[5])
+    print(dst[6])
+    print(dst[7])
+    print(copied.length)
+    var dstMid: ByteSpan = dstView[2:6]
+    var dstHead: ByteSpan = dstView[0:4]
+    print(dstMid.compare(srcView))
+    print(dstHead.compare(srcView))
+    print(srcView.compare(dstHead))
+    var prefix: ByteSpan = dstView[2:5]
+    print(prefix.compare(srcView))
+    print(srcView.compare(prefix))
+    var dstPrefixFull: ByteSpan = dstView[2:6]
+    var dstPrefixShort: ByteSpan = dstView[2:5]
+    var dstEmpty: ByteSpan = dstView[0:0]
+    print(dstPrefixFull.commonPrefix(srcView))
+    print(dstPrefixShort.commonPrefix(srcView))
+    print(dstHead.commonPrefix(srcView))
+    print(dstEmpty.commonPrefix(srcView))
+    var rep = Bytes(10)
+    var repView: ByteSpan = rep[:]
+    repView.store<uint16>(0, 16961, Endian.LE)
+    repView.repeatFrom(2, 2, 6)
+    print(rep[0])
+    print(rep[1])
+    print(rep[2])
+    print(rep[3])
+    print(rep[4])
+    print(rep[5])
+    print(rep[6])
+    print(rep[7])
+}
 
-var dstView: ByteSpan = dst[:]
-var srcView: ByteSpan = src[:]
-
-dstView.fill(1)
-srcView.fill(7)
-srcView.store<uint16>(1, 0x0908, Endian.LE)
-
-var copiedWindow: ByteSpan = dstView[2:6]
-var copied: ByteSpan = copiedWindow.copyFrom(srcView)
-print(dst[0])
-print(dst[1])
-print(dst[2])
-print(dst[3])
-print(dst[4])
-print(dst[5])
-print(dst[6])
-print(dst[7])
-print(copied.length)
-
-var dstMid: ByteSpan = dstView[2:6]
-var dstHead: ByteSpan = dstView[0:4]
-print(dstMid.compare(srcView))
-print(dstHead.compare(srcView))
-print(srcView.compare(dstHead))
-
-var prefix: ByteSpan = dstView[2:5]
-print(prefix.compare(srcView))
-print(srcView.compare(prefix))
-
-var dstPrefixFull: ByteSpan = dstView[2:6]
-var dstPrefixShort: ByteSpan = dstView[2:5]
-var dstEmpty: ByteSpan = dstView[0:0]
-print(dstPrefixFull.commonPrefix(srcView))
-print(dstPrefixShort.commonPrefix(srcView))
-print(dstHead.commonPrefix(srcView))
-print(dstEmpty.commonPrefix(srcView))
-
-var rep = Bytes(10)
-var repView: ByteSpan = rep[:]
-repView.store<uint16>(0, 0x4241, Endian.LE)
-repView.repeatFrom(2, 2, 6)
-print(rep[0])
-print(rep[1])
-print(rep[2])
-print(rep[3])
-print(rep[4])
-print(rep[5])
-print(rep[6])
-print(rep[7])
+main()
