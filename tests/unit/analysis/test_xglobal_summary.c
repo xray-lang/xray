@@ -9277,11 +9277,11 @@ TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     setup_parser_session();
     const char *source = "fn readAlias() -> int {\n"
                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
-                         "    var alias = scores\n"
-                         "    alias[\"ada\"] = 8\n"
+                         "    var alias = (scores)\n"
+                         "    (alias)[\"ada\"] = 8\n"
                          "    var assigned: Map<string, int> = #{}\n"
-                         "    assigned = alias\n"
-                         "    return assigned[\"ada\"]\n"
+                         "    assigned = (alias)\n"
+                         "    return (assigned)[\"ada\"]\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
