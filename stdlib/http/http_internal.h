@@ -12,7 +12,7 @@
 #define XR_STDLIB_HTTP_INTERNAL_H
 
 #include "http.h"
-#include "http_client.h"
+#include "http_client_internal.h"
 #include "http_parser.h"
 #include "../net/conn_pool.h"
 #include "../../src/coro/xyieldable.h"

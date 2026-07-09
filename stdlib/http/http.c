@@ -18,7 +18,7 @@
  */
 
 #include "http_internal.h"
-#include "http_client.h"
+#include "http_client_internal.h"
 #include "http_parser.h"
 #include "../../src/base/xplatform.h"
 #include "../common.h"

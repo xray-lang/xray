@@ -23,7 +23,7 @@
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 
-#include "../../stdlib/http/http_client.h"
+#include "../../stdlib/http/http_client_internal.h"
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
 #include "../../stdlib/crypto/crypto.h"
 #endif
