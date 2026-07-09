@@ -13,11 +13,19 @@ c_contains=[2] = XR_FROM_FLOAT(0x1p-1),
 c_contains=[3] = XR_FROM_CHAR(UINT32_C(65)),
 c_contains=[4] = XR_NULL_VAL,
 c_contains=[5] = {.tag = XR_TAG_STR, .ptr = (void *) &xrt_shared_init_str_5},
+c_contains=[6] = XR_FROM_INT(INT64_C(-3)),
+c_contains=[7] = XR_FROM_FLOAT(-0x1p-2),
+c_contains=[8] = XR_FROM_INT(INT64_C(-5)),
+c_contains=[9] = XR_FROM_INT(INT64_C(8)),
 c_contains=xray_top_var_static
 c_contains=xrt_shared[0]
 c_contains=xrt_shared[1]
 c_contains=xrt_shared[0] =
 c_not_contains=xrt_shared[0] = XR_FROM_INT(INT64_C(1))
+c_not_contains=xrt_shared[6] = XR_FROM_INT(INT64_C(-3))
+c_not_contains=xrt_shared[7] = XR_FROM_FLOAT(-0x1p-2)
+c_not_contains=xrt_shared[8] = XR_FROM_INT(INT64_C(-5))
+c_not_contains=xrt_shared[9] = XR_FROM_INT(INT64_C(8))
 c_not_contains=#include "xrt.h"
 not_contains=xray_rt_coro
 not_contains=xray_core

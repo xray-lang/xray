@@ -2293,31 +2293,62 @@ static void cg_emit_xrvalue_literal_initializer(FILE *out, const XiConstLiteral 
     }
 }
 
+static bool cg_const_int_value_matches_bits(const XiValue *value, uint64_t bits) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || !v->type || v->type->kind != XR_KIND_INT)
+        return false;
+    if (v->op == XI_CONST)
+        return (uint64_t) v->aux_int == bits;
+    if (v->op == XI_NEG && v->nargs >= 1) {
+        const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+        return arg && arg->op == XI_CONST && arg->type && arg->type->kind == XR_KIND_INT &&
+               (UINT64_C(0) - (uint64_t) arg->aux_int) == bits;
+    }
+    return false;
+}
+
+static bool cg_const_float_value_matches_literal(const XiValue *value, double expected) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || !v->type || v->type->kind != XR_KIND_FLOAT)
+        return false;
+    double actual = 0.0;
+    if (v->op == XI_CONST) {
+        memcpy(&actual, &v->aux_int, sizeof(double));
+    } else if (v->op == XI_NEG && v->nargs >= 1) {
+        const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+        if (!arg || arg->op != XI_CONST || !arg->type || arg->type->kind != XR_KIND_FLOAT)
+            return false;
+        memcpy(&actual, &arg->aux_int, sizeof(double));
+        actual = -actual;
+    } else {
+        return false;
+    }
+    return memcmp(&actual, &expected, sizeof(double)) == 0;
+}
+
 static bool cg_const_value_matches_literal(const XiValue *value, const XiConstLiteral *lit) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->op != XI_CONST || !v->type || !cg_shared_initializer_literal_supported(lit))
+    if (!v || !v->type || !cg_shared_initializer_literal_supported(lit))
         return false;
     switch (lit->kind) {
         case XI_CONST_LITERAL_INT:
-            return v->type->kind == XR_KIND_INT && v->aux_int == lit->int_value;
-        case XI_CONST_LITERAL_FLOAT: {
-            double value_f = 0.0;
-            if (v->type->kind != XR_KIND_FLOAT)
-                return false;
-            memcpy(&value_f, &v->aux_int, sizeof(double));
-            return memcmp(&value_f, &lit->float_value, sizeof(double)) == 0;
-        }
+            return cg_const_int_value_matches_bits(v, (uint64_t) lit->int_value);
+        case XI_CONST_LITERAL_FLOAT:
+            return cg_const_float_value_matches_literal(v, lit->float_value);
         case XI_CONST_LITERAL_BOOL:
-            return v->type->kind == XR_KIND_BOOL && (v->aux_int != 0) == lit->bool_value;
+            return v->op == XI_CONST && v->type->kind == XR_KIND_BOOL &&
+                   (v->aux_int != 0) == lit->bool_value;
         case XI_CONST_LITERAL_CHAR:
-            return v->type->kind == XR_KIND_CHAR && v->aux_int == lit->int_value;
+            return v->op == XI_CONST && v->type->kind == XR_KIND_CHAR &&
+                   v->aux_int == lit->int_value;
         case XI_CONST_LITERAL_STRING: {
             const char *value_s = v->aux ? (const char *) v->aux : "";
             const char *lit_s = lit->string_value ? lit->string_value : "";
-            return v->type->kind == XR_KIND_STRING && strcmp(value_s, lit_s) == 0;
+            return v->op == XI_CONST && v->type->kind == XR_KIND_STRING &&
+                   strcmp(value_s, lit_s) == 0;
         }
         case XI_CONST_LITERAL_NULL:
-            return v->type->kind == XR_KIND_NULL;
+            return v->op == XI_CONST && v->type->kind == XR_KIND_NULL;
         default:
             return false;
     }

@@ -1403,6 +1403,24 @@ static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *typ
             out->type = type ? type : l->type_float;
             out->float_value = expr->as.literal.raw_value.float_val;
             return true;
+        case AST_UNARY_NEG: {
+            AstNode *operand = expr->as.unary.operand;
+            if (!operand)
+                return false;
+            if (operand->type == AST_LITERAL_INT) {
+                out->kind = XI_CONST_LITERAL_INT;
+                out->type = type ? type : l->type_int;
+                out->int_value = (int64_t) (0u - (uint64_t) operand->as.literal.raw_value.int_val);
+                return true;
+            }
+            if (operand->type == AST_LITERAL_FLOAT) {
+                out->kind = XI_CONST_LITERAL_FLOAT;
+                out->type = type ? type : l->type_float;
+                out->float_value = -operand->as.literal.raw_value.float_val;
+                return true;
+            }
+            return false;
+        }
         case AST_LITERAL_TRUE:
             out->kind = XI_CONST_LITERAL_BOOL;
             out->type = type ? type : l->type_bool;
