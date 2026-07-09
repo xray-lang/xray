@@ -2585,6 +2585,22 @@ static void body_bind_map_shape_local(XgBodyCollect *bc, const char *name, XgMap
     row->map_value_type_key = value_type_key;
 }
 
+static void body_bind_map_shape_local_from_source(XgBodyCollect *bc, const char *name,
+                                                  const XgLocalType *source) {
+    XgLocalType *target;
+    if (!bc || !name || !source || source->map_shape_id == XG_NO_ID)
+        return;
+    target = body_find_local(bc, name);
+    if (!target)
+        return;
+    if (target->type_key != 0 && source->map_receiver_type_key != 0 &&
+        target->type_key != source->map_receiver_type_key)
+        return;
+    body_bind_map_shape_local(bc, name, source->map_shape_id, source->map_container_kind,
+                              source->map_receiver_type_key, source->map_key_type_key,
+                              source->map_value_type_key);
+}
+
 static void body_clear_map_shape_local(XgBodyCollect *bc, const char *name) {
     XgLocalType *row;
     if (!bc || !name)
@@ -3463,6 +3479,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t map_receiver_type_key = 0;
             uint32_t map_key_type_key = 0;
             uint32_t map_value_type_key = 0;
+            XgLocalType *source_map_local = NULL;
             uint8_t sequence_kind = 0;
             uint32_t sequence_elem_type_key = 0;
             XgClassId class_id =
@@ -3477,6 +3494,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.var_decl.initializer);
             source_json_shape_id = body_lookup_local_json_shape(bc, node->as.var_decl.initializer,
                                                                 &source_json_literal);
+            source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
@@ -3525,6 +3543,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_bind_map_shape_local(bc, node->as.var_decl.name, map_shape_id,
                                           map_container_kind, map_receiver_type_key,
                                           map_key_type_key, map_value_type_key);
+            } else if (source_map_local) {
+                body_bind_map_shape_local_from_source(bc, node->as.var_decl.name, source_map_local);
             }
             if (sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
@@ -3539,6 +3559,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *source_json_literal = NULL;
             XgJsonShapeId source_json_shape_id =
                 body_lookup_local_json_shape(bc, node->as.assignment.value, &source_json_literal);
+            XgLocalType *source_map_local =
+                body_lookup_local_map_shape(bc, node->as.assignment.value);
             XgClassId class_id;
             XgInterfaceId interface_id;
             uint32_t type_key;
@@ -3563,6 +3585,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_bind_json_shape_local(bc, node->as.assignment.name, source_json_shape_id,
                                            source_json_literal);
             }
+            if (source_map_local)
+                body_bind_map_shape_local_from_source(bc, node->as.assignment.name,
+                                                      source_map_local);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }

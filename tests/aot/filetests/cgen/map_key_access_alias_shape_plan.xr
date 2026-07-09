@@ -1,0 +1,10 @@
+fn updateAlias() -> int {
+    var scores = #{"ada": 7, "lin": 9}
+    var alias = scores
+    alias["ada"] = 8
+    var assigned: Map<string, int> = #{}
+    assigned = alias
+    return assigned["ada"]
+}
+
+print(updateAlias())
