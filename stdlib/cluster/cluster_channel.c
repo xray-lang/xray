@@ -23,7 +23,7 @@
  */
 
 #include "cluster_channel.h"
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "cluster_serial.h"
 #include "cluster_proto.h"
 #include "../../src/coro/xchannel.h"

@@ -26,7 +26,7 @@
  */
 
 #include "cluster_discovery.h"
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "cluster_node.h"
 #include "../net/io.h"
 #include "../../src/base/xhash.h"

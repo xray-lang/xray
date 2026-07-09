@@ -36,7 +36,7 @@
  *   the parser but unlikely to match real topics; avoid them.
  */
 
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "cluster_serial.h"
 #include "cluster_node.h"
 #include "../../src/coro/xchannel.h"

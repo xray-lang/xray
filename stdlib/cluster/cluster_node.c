@@ -14,7 +14,7 @@
  */
 
 #include "cluster_node.h"
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "../crypto/crypto.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xcoroutine.h"

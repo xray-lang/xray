@@ -12,7 +12,7 @@
  *   when a node disconnects or a remote coroutine exits.
  */
 
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "cluster_node.h"
 #include "cluster_proto.h"
 #include "../../src/coro/xchannel.h"
