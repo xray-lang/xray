@@ -559,7 +559,8 @@ static bool xaot_bundle_add_class_hierarchy_plan(XaotBundle *bundle,
     plan->parent_class_id = summary->parent_class_id;
     plan->flags =
         summary->flags & (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_HAS_SUBCLASS |
-                          XG_CLASS_INFERRED_FINAL | XG_CLASS_NATIVE | XG_CLASS_RUNTIME_ONLY);
+                          XG_CLASS_INFERRED_FINAL | XG_CLASS_NATIVE | XG_CLASS_RUNTIME_ONLY |
+                          XG_CLASS_GENERIC_SKELETON | XG_CLASS_MONOMORPHIZED);
     plan->evidence = XAOT_CLASS_HIER_EV_GLOBAL_SUMMARY | XAOT_CLASS_HIER_EV_FINALITY_DERIVED;
     if (summary->parent_class_id != XG_NO_ID)
         plan->evidence |= XAOT_CLASS_HIER_EV_PARENT_RESOLVED;

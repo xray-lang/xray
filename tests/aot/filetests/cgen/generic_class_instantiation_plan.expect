@@ -1,2 +1,5 @@
+args=--dump-global-evidence
+contains=xglobal-evidence v1 profile=native_release
 contains=xaot-plan v0
+regex=class [0-9]+ id=[1-9][0-9]* module=[1-9][0-9]* decl=[1-9][0-9]* name=[1-9][0-9]* parent=0 kind=class flags=0x44 fields=[0-9]+\+[0-9]+ methods=[0-9]+\+[0-9]+ interfaces=0\+0 generic_origin=[1-9][0-9]* generic_name=[1-9][0-9]* generic_type=[1-9][0-9]* generic_args=[1-9][0-9]*\+1
 regex=generic-instantiation [0-9]+ id=[1-9][0-9]* module=[1-9][0-9]* kind=class origin_decl=[1-9][0-9]* origin_func=0 origin_method=0 origin_class=[1-9][0-9]* specialized_func=0 specialized_class=[1-9][0-9]* root_callsite=0 constraint_iface=0 name=[1-9][0-9]* type=[1-9][0-9]* type_args=[1-9][0-9]*\+1 action=specialized_storage evidence=row\+types\+origin\+abi\+storage reason=none

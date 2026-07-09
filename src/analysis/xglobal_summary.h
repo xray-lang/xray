@@ -69,6 +69,8 @@ enum {
     XG_CLASS_INFERRED_FINAL = 1u << 2,
     XG_CLASS_NATIVE = 1u << 3,
     XG_CLASS_RUNTIME_ONLY = 1u << 4,
+    XG_CLASS_GENERIC_SKELETON = 1u << 5,
+    XG_CLASS_MONOMORPHIZED = 1u << 6,
 };
 
 enum {
@@ -213,6 +215,11 @@ typedef struct XgClassSummary {
     uint32_t method_count;
     uint32_t interface_start;
     uint32_t interface_count;
+    XgClassId generic_origin_class_id;
+    uint32_t generic_origin_name_id;
+    uint32_t generic_type_key;
+    uint32_t generic_type_arg_key_start;
+    uint16_t generic_type_arg_count;
     uint8_t decl_kind;
 } XgClassSummary;
 

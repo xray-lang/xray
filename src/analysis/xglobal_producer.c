@@ -2675,6 +2675,21 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;
     if (cls->is_native)
         csum.flags |= XG_CLASS_NATIVE;
+    if (cls->is_generic_skeleton)
+        csum.flags |= XG_CLASS_GENERIC_SKELETON;
+    if (cls->is_monomorphized) {
+        const char *origin_name = cls->generic_origin_name;
+        csum.flags |= XG_CLASS_MONOMORPHIZED;
+        csum.generic_origin_class_id = producer_lookup_class(p, origin_name);
+        csum.generic_origin_name_id = hash_name32(origin_name);
+        csum.generic_type_key = hash_generic_inst_name_type_key(
+            origin_name, cls->mono_type_arg_names, cls->mono_type_arg_count, XG_GENERIC_INST_CLASS);
+        csum.generic_type_arg_key_start =
+            hash_name_list32(cls->mono_type_arg_names, cls->mono_type_arg_count);
+        csum.generic_type_arg_count =
+            (uint16_t) (cls->mono_type_arg_count < UINT16_MAX ? cls->mono_type_arg_count
+                                                              : UINT16_MAX);
+    }
     csum.field_start = cls->field_count > 0 ? p->field_cursor + 1 : 0;
     csum.field_count = (uint32_t) cls->field_count;
     csum.method_start = method_count > 0 ? method_start : 0;
