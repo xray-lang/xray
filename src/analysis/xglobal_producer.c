@@ -17,6 +17,7 @@
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
 #include "../shared/xr_derive_flags.h"
+#include "../shared/xr_hash_core.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -2376,13 +2377,41 @@ static uint32_t body_const_expr_id(const AstNode *expr) {
     }
 }
 
-static uint64_t body_map_const_prehash(uint32_t type_key, uint32_t const_id) {
-    uint64_t h = XR_FNV64_OFFSET_BASIS;
-    if (type_key == 0 || const_id == 0)
+static uint32_t body_map_runtime_hash_f64(double value) {
+    uint64_t bits;
+    if (value == 0.0)
+        value = 0.0;
+    memcpy(&bits, &value, sizeof(bits));
+    return (uint32_t) xr_hash_core_mix_u64(bits);
+}
+
+static uint64_t body_map_const_prehash(const AstNode *expr) {
+    const char *s;
+    uint32_t string_hash;
+    if (!expr)
         return 0;
-    h = fold_u64(h, type_key);
-    h = fold_u64(h, const_id);
-    return h ? h : 1;
+    switch (expr->type) {
+        case AST_LITERAL_STRING:
+            s = expr->as.literal.raw_value.string_val;
+            if (!s)
+                return 0;
+            string_hash = xr_hash_core_str_hash_bytes(s, strlen(s));
+            return (uint32_t) xr_hash_core_mix_u64((uint64_t) string_hash);
+        case AST_LITERAL_INT:
+            return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.int_bits);
+        case AST_LITERAL_FLOAT:
+            return body_map_runtime_hash_f64(expr->as.literal.raw_value.float_val);
+        case AST_LITERAL_CHAR:
+            return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.raw_value.char_val);
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+            return (uint32_t) xr_hash_core_mix_u64(
+                (uint64_t) (expr->as.literal.raw_value.bool_val ? 1 : 0));
+        case AST_LITERAL_NULL:
+            return (uint32_t) xr_hash_core_mix_u64(UINT64_C(0x9e3779b97f4a7c15));
+        default:
+            return 0;
+    }
 }
 
 static uint32_t body_map_receiver_type_key(uint8_t container_kind, uint32_t key_type_key,
@@ -2542,7 +2571,7 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
         entry.entry_ordinal = (uint32_t) i;
         entry.key_const_id = key_const_id;
         entry.value_const_id = value_const_id;
-        entry.prehash = body_map_const_prehash(key_type_key, key_const_id);
+        entry.prehash = body_map_const_prehash(keys[i]);
         if (key_const_id != 0)
             entry.flags |= XG_MAP_ENTRY_CONST_KEY;
         if (value_const_id != 0)
@@ -2674,7 +2703,7 @@ static void body_add_map_key_access_row(XgBodyCollect *bc, const AstNode *node,
     row.key_type_key = local->map_key_type_key;
     row.value_type_key = local->map_value_type_key;
     row.key_const_id = key_const_id;
-    row.key_prehash = body_map_const_prehash(local->map_key_type_key, key_const_id);
+    row.key_prehash = body_map_const_prehash(key);
     if (key_const_id != 0)
         row.flags |= XG_KEY_ACCESS_CONST_KEY;
     if (missing_panics)

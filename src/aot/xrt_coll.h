@@ -1422,6 +1422,7 @@ static inline uint64_t xrt_hash_value(XrValue v) {
     switch (tag) {
         case XR_TAG_I64:
         case XR_TAG_BOOL:
+        case XR_TAG_CHAR:
             return xr_hash_core_mix_u64((uint64_t) v.i);
         case XR_TAG_F64:
             return xrt_hash_f64(v.f);
@@ -1808,8 +1809,19 @@ static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
+static inline XrValue xrt_map_get_prehashed(xrt_map_t *m, XrValue key, uint32_t hash) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_get(m, key);
+    int32_t eidx = xrt_map_find_entry(m, key, hash, xrt_value_type_tag(key));
+    return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
+}
+
 static inline XrValue xrt_map_get_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get(m, key));
+}
+
+static inline XrValue xrt_map_get_prehashed_owned(xrt_map_t *m, XrValue key, uint32_t hash) {
+    return xrt_value_to_owned(xrt_map_get_prehashed(m, key, hash));
 }
 
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
@@ -1855,6 +1867,41 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     }
     uint8_t key_tt = xrt_value_type_tag(key);
     uint32_t hash = xrt_hash32_value(key);
+    int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
+    if (eidx >= 0) {
+        if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+            if (XR_IS_ARRAY_REF(val))
+                val = xrt_value_to_owned(val);
+            xrt_release(key);
+            xrt_release(m->entries[eidx].value);
+        }
+        m->entries[eidx].value = val;
+        return;
+    }
+    if (m->nentries >= m->entries_cap)
+        xrt_map_resize_tagged(m, m->count + 1);
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        if (XR_IS_ARRAY_REF(key))
+            key = xrt_value_to_owned(key);
+        if (XR_IS_ARRAY_REF(val))
+            val = xrt_value_to_owned(val);
+    }
+    eidx = (int32_t) m->nentries++;
+    XrMapEntry *entry = &m->entries[eidx];
+    entry->key = key;
+    entry->value = val;
+    entry->hash = hash;
+    entry->key_tt = key_tt;
+    m->count++;
+    xr_swiss_indices_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
+}
+
+static inline void xrt_map_set_prehashed(xrt_map_t *m, XrValue key, XrValue val, uint32_t hash) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m)) {
+        xrt_map_set(m, key, val);
+        return;
+    }
+    uint8_t key_tt = xrt_value_type_tag(key);
     int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
     if (eidx >= 0) {
         if (!(m->flags & XR_MAP_FLAG_WEAK)) {
