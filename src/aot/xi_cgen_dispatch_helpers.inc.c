@@ -2546,6 +2546,37 @@ static void xicgen_reject_unsupported(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     emit_codegen_abort_expr(out);
 }
 
+static bool xicgen_verify_json_direct_index_access(XiCgenCtx *ctx, const XiValue *v,
+                                                   uint8_t expected_kind) {
+    const XaotBundle *bundle;
+    const XaotJsonAccessPlan *plan;
+    if (!v || v->xg_json_access_id == 0)
+        return true;
+    bundle = cg_ctx_aot_bundle(ctx);
+    plan = xaot_bundle_find_json_access_plan(bundle, v->xg_json_access_id);
+    if (!plan) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: missing verified Json access plan for Xi value v%u "
+                "(json_access=%u)\n",
+                v->id, v->xg_json_access_id);
+        return false;
+    }
+    if (plan->action != XAOT_JSON_ACCESS_DIRECT_INDEX || plan->access_kind != expected_kind ||
+        plan->field_ordinal != (uint16_t) v->aux_int) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: stale Json direct-index plan for Xi value v%u "
+                "(json_access=%u action=%u kind=%u field=%u)\n",
+                v->id, v->xg_json_access_id, (unsigned) plan->action, (unsigned) plan->access_kind,
+                (unsigned) plan->field_ordinal);
+        return false;
+    }
+    return true;
+}
+
 static void xicgen_chan_recv_status(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                     const char *prefix) {
     (void) ctx;
@@ -2557,8 +2588,13 @@ static void xicgen_chan_recv_status(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     fprintf(out, ")");
 }
 
-static void xicgen_emit_json_set_field_expr(FILE *out, const XiValue *v) {
+static void xicgen_emit_json_set_field_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     XR_DCHECK(v->nargs >= 2, "xicgen_emit_json_set_field_expr: missing operands");
+    if (v->op == XI_JSON_SET_F &&
+        !xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_SET)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out, "xrt_json_set_field(");
     emit_vref(out, v->args[0]);
     fprintf(out, ", %d, ", (int) v->aux_int);
@@ -2617,18 +2653,20 @@ static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
 
 static void xicgen_json_init_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
-    xicgen_emit_json_set_field_expr(out, v);
+    xicgen_emit_json_set_field_expr(ctx, out, v);
 }
 
 static void xicgen_json_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_json_get_f: missing object");
+    if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out, "xrt_json_get_field(");
     emit_vref(out, v->args[0]);
     fprintf(out, ", %d)", (int) v->aux_int);
@@ -2636,10 +2674,9 @@ static void xicgen_json_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 
 static void xicgen_json_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
-    xicgen_emit_json_set_field_expr(out, v);
+    xicgen_emit_json_set_field_expr(ctx, out, v);
 }
 
 static int64_t xicgen_capacity_arg_or_default(const XiValue *v, int64_t fallback) {
@@ -3260,8 +3297,12 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "json_new") == 0) {
         xicgen_emit_json_new_expr(out, v);
     } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
-        xicgen_emit_json_set_field_expr(out, v);
+        xicgen_emit_json_set_field_expr(ctx, out, v);
     } else if (strcmp(bn, "json_get_f") == 0) {
+        if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET)) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
         fprintf(out, "xrt_json_get_field(");
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d)", (int) v->aux_int);

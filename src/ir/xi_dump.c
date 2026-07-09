@@ -146,6 +146,10 @@ static void dump_value(FILE *out, const XiValue *v) {
     } else if (v->op == XI_AGG_NEW && v->aux) {
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
+    } else if (v->op == XI_JSON_GET_F || v->op == XI_JSON_SET_F || v->op == XI_JSON_INIT_F) {
+        fprintf(out, " [field=%" PRId64 "]", v->aux_int);
+        if (v->xg_json_access_id != 0)
+            fprintf(out, " [json_access=%u]", v->xg_json_access_id);
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
                v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {

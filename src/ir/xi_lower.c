@@ -711,6 +711,36 @@ XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const c
     }
 }
 
+XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
+                                          uint32_t source_span_id, uint16_t field_ordinal,
+                                          uint8_t access_kind) {
+    const XgGlobalEvidence *ev;
+    const XgJsonAccessSummary *match = NULL;
+    uint32_t key_name_id;
+    if (!l || !access || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
+        (access->op != XI_JSON_GET_F && access->op != XI_JSON_SET_F))
+        return;
+    key_name_id = field_name ? xg_name_id(field_name) : 0;
+    if (key_name_id == 0)
+        return;
+    ev = l->global_evidence;
+    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
+        const XgJsonAccessSummary *row = &ev->json_accesses[i];
+        if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id)
+            continue;
+        if (!xi_lower_evidence_module_matches(l, row->module_id))
+            continue;
+        if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
+            row->field_ordinal != field_ordinal || row->access_kind != access_kind)
+            continue;
+        if (match)
+            return;
+        match = row;
+    }
+    if (match)
+        access->xg_json_access_id = match->json_access_id;
+}
+
 /* ========== Method Symbol Resolution ========== */
 
 XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
