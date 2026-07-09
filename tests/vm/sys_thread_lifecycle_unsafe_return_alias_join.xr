@@ -1,0 +1,15 @@
+import sys
+
+fn passThread(t: Thread<int>) -> Thread<int> {
+    return t
+}
+
+fn makeThread() -> Thread<int> {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    return unsafe { passThread(t) }
+}
+
+var t = makeThread()
+print(t.join())

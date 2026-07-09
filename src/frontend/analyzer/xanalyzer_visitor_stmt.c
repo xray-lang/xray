@@ -1076,12 +1076,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         return;
 
     if (return_value && can_escape) {
-        XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, expr);
-        if (state) {
-            state->transferred = true;
-            return;
-        }
-        state = xa_thread_lint_find_returned_call_arg(states, expr);
+        XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, expr);
         if (state) {
             state->transferred = true;
             return;
@@ -3063,12 +3058,7 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         return;
 
     if (return_value && can_escape) {
-        XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, expr);
-        if (state) {
-            state->transferred = true;
-            return;
-        }
-        state = xa_os_resource_lint_find_returned_call_arg(states, expr);
+        XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, expr);
         if (state) {
             state->transferred = true;
             return;
