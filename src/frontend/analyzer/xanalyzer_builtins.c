@@ -641,33 +641,37 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 // These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
-    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false},
-    {"stats", "(): Json", "Get coroutine statistics", true, true, false},
-    {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true, false},
-    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true, false},
+    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false},
+    {"stats", "(): Json", "Get coroutine statistics", true, true, false, false},
+    {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true, false,
+     false},
+    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true, false, false},
     {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true,
+     false, false},
+    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true, false, false},
+    {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true, false,
      false},
-    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true, false},
-    {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true,
+    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false, false},
+    {"lockThread", "(): ()", "Lock current thread", true, true, false, false},
+    {"unlockThread", "(): ()", "Unlock current thread", true, true, false, false},
+    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false, false},
+    {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true, false,
      false},
-    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false},
-    {"lockThread", "(): ()", "Lock current thread", true, true, false},
-    {"unlockThread", "(): ()", "Unlock current thread", true, true, false},
-    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false},
-    {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true, false},
-    {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false},
+    {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false,
+     false},
     {"monitor", "(name: string): Channel", "Monitor named coroutine, returns Channel", true, true,
+     false, false},
+    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true, false, false},
+    {"self", "(): string?", "Get current coroutine name", true, true, false, false},
+    {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true, false,
      false},
-    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true, false},
-    {"self", "(): string?", "Get current coroutine name", true, true, false},
-    {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true, false},
 };
 #define RT_CORO_FUNCTION_COUNT                                                                     \
     ((int) (sizeof(g_rt_coro_functions) / sizeof(g_rt_coro_functions[0])))
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
-    {"submit", "(fn: function): Json", "Submit task to pool", true, false, false},
-    {"close", "(): ()", "Close the pool", true, false, false},
+    {"submit", "(fn: function): Json", "Submit task to pool", true, false, false, false},
+    {"close", "(): ()", "Close the pool", true, false, false, false},
 };
 #define RT_COROPOOL_FUNCTION_COUNT                                                                 \
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))

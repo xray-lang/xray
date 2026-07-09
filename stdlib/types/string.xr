@@ -44,6 +44,7 @@ class string {
     // Owned UTF-8 byte bridge — round-trips with Bytes.toString().
     toBytes() -> Bytes
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
+    // @lowered
     bytes() -> ByteSpan
     translate(table: Map<string, string>) -> string
     // Iteration protocol — iterator() yields each character, while

@@ -20,6 +20,7 @@ void xr_int_register_native_type(XrVMRuntime *isolate) {
         {"min", xr_int_min_method, 0},
         {"toFloat", xr_int_to_float_method, 0},
         {"toHex", xr_int_to_hex_method, 0},
+        {"sqrt", xr_int_sqrt_method, 0},
         {"pow", xr_int_pow_method, 0},
         {"checkedAdd", xr_int_checked_add_method, 0},
         {"checkedSub", xr_int_checked_sub_method, 0},

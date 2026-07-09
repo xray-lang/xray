@@ -18,6 +18,7 @@
 #include "xiterator.h"
 #include "xpanic_info.h"
 #include "xstring.h"
+#include "../closure/xclosure.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../value/xtype_names.h"
@@ -25,7 +26,9 @@
 #include "../xerror_codes.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
+#include "../../vm/xvm_closure.h"
 #include "../../vm/xvm.h"
+#include "../xvm_call.h"
 
 static inline XrSet *set_self(XrValue self) {
     XR_DCHECK(XR_IS_SET(self), "set method: receiver is not a Set");
@@ -155,6 +158,29 @@ static XrValue xr_set_method_to_array(XrVMRuntime *iso, XrValue self, XrValue *a
     return xr_value_from_array(arr);
 }
 
+static XrValue xr_set_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
+    struct XrClosure *cb = xr_vm_closure_from_arg(iso, args[0], "Set.forEach");
+    if (!cb)
+        return xr_null();
+    XrSet *s = set_self(self);
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
+    if (xr_set_isdummy(s))
+        return xr_null();
+
+    XrValue cb_args[1];
+    for (uint32_t i = 0; i < s->nentries; i++) {
+        XrSetEntry *e = &s->entries[i];
+        if (e->val_tt == XR_SET_ENTRY_NIL)
+            continue;
+        cb_args[0] = e->value;
+        xr_vm_call_closure(iso, cb, cb_args, 1);
+    }
+    return xr_null();
+}
+
 static XrValue xr_set_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -191,6 +217,7 @@ void xr_set_register_native_type(XrVMRuntime *isolate) {
         {"isSuperset", xr_set_method_is_superset, 0},
         {"toArray", xr_set_method_to_array, 0},
         {"values", xr_set_method_to_array, 0},
+        {"forEach", xr_set_method_foreach, 1},
         {"iterator", xr_set_method_iterator, 0},
         {"toString", xr_set_method_to_string, 0},
         {NULL, NULL, 0},
