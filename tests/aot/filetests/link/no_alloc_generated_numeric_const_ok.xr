@@ -1,0 +1,16 @@
+import math
+import mem
+
+@no_alloc
+fn xray_no_alloc_generated_numeric_const_ok() -> int {
+    var flag = 0
+    if (math.MAX_INT > 0) {
+        flag = flag + 1
+    }
+    if (mem.PROT_READ == 1 && mem.PROT_WRITE == 2) {
+        flag = flag + 2
+    }
+    return flag
+}
+
+print(xray_no_alloc_generated_numeric_const_ok())
