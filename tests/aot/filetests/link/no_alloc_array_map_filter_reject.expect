@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_array_map_reject' allocates via method 'Array.map'
+contains=@no_alloc function 'xray_no_alloc_array_filter_reject' allocates via method 'Array.filter'
+not_contains=CRASH
