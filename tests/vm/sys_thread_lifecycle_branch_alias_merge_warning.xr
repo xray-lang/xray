@@ -1,0 +1,19 @@
+import sys
+
+fn branchAliasMerge(flag: bool) {
+    var target = sys.Thread.spawn(fn() -> int {
+        return 7
+    })
+    var other = sys.Thread.spawn(fn() -> int {
+        return 8
+    })
+    var handle = other
+    if (flag) {
+        handle = target
+    } else {
+        handle = target
+    }
+    print(handle.join())
+}
+
+branchAliasMerge(true)
