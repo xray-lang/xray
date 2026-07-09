@@ -1,0 +1,6 @@
+fn readAge() -> int {
+    var user = { name: "ada", age: 1 }
+    return user.age
+}
+
+print(readAge())
