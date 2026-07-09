@@ -1536,6 +1536,21 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].base" \
             "freestanding-profile/top-const-aggregate: reads struct-array nested sibling field directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "const struct { struct { XrValue label; int64_t code; } inner; int64_t base; } xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[2]" \
+            "freestanding-profile/top-const-aggregate: materializes struct-array nested string data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[2] XRT_ATTR_SECTION(\"__DATA,.xray_lgroups\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits attrs on struct-array nested string data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].inner.label" \
+            "freestanding-profile/top-const-aggregate: reads struct-array nested string field directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].inner.code" \
+            "freestanding-profile/top-const-aggregate: reads struct-array nested string sibling scalar directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].base" \
+            "freestanding-profile/top-const-aggregate: reads struct-array nested string base directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_str_lit(&_xstr_" \
             "freestanding-profile/top-const-aggregate: reads string const through literal header"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue f0" \

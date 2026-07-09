@@ -147,6 +147,24 @@ const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
 ]
 
+struct LabelInner {
+    label: string
+    code: int
+}
+
+struct LabelGroup {
+    inner: LabelInner
+    base: int
+}
+
+@section("__DATA,.xray_lgroups")
+@weak
+@used
+const LABEL_GROUPS: [LabelGroup; 2] = comptime [
+    LabelGroup{inner: LabelInner{label: LABEL, code: TABLE[0]}, base: TABLE[1]},
+    LabelGroup{inner: LabelInner{label: "done", code: TABLE[2]}, base: TABLE[3]},
+]
+
 packed struct PackedPair {
     tag: uint8
     value: uint32
@@ -372,6 +390,12 @@ fn xray_top_const_struct_array_string_fixed_field_print(row: int, col: int) -> i
 @c_export("xray_top_const_struct_array_nested_field_runtime")
 fn xray_top_const_struct_array_nested_field_runtime(i: int) -> int {
     return GROUPS[i].inner.code + GROUPS[i].base
+}
+
+@c_export("xray_top_const_struct_array_nested_string_field_print")
+fn xray_top_const_struct_array_nested_string_field_print(i: int) -> int {
+    print(LABEL_GROUPS[i].inner.label)
+    return LABEL_GROUPS[i].inner.code + LABEL_GROUPS[i].base
 }
 
 @c_export("xray_top_const_packed_struct_runtime")
