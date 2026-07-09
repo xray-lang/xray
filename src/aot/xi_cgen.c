@@ -4003,6 +4003,16 @@ static const char *cg_no_alloc_method_call_alloc_detail(const XiValue *v) {
     return cg_no_alloc_method_alloc_detail(receiver_type, method);
 }
 
+static const char *cg_no_alloc_slice_alloc_detail(const XiValue *v) {
+    if (!v || v->op != XI_SLICE || !v->type)
+        return NULL;
+    if (v->type->kind == XR_KIND_STRING)
+        return "string.slice";
+    if (v->type->kind == XR_KIND_VIEW)
+        return "Array.slice";
+    return NULL;
+}
+
 static bool cg_no_alloc_value_is_bigint_literal(const XiValue *v) {
     return v && v->op == XI_CONST && v->type && xr_type_is_named_class(v->type, "BigInt");
 }
@@ -4034,6 +4044,17 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         if (detail_out)
             *detail_out = "typename";
         return true;
+    }
+
+    if (v->op == XI_SLICE) {
+        const char *slice_detail = cg_no_alloc_slice_alloc_detail(v);
+        if (slice_detail) {
+            if (kind_out)
+                *kind_out = "method";
+            if (detail_out)
+                *detail_out = slice_detail;
+            return true;
+        }
     }
 
     if (v->op == XI_CALL_BUILTIN) {
