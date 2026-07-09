@@ -35,10 +35,14 @@ typedef struct {
     int count;
 } XrRouteParams;
 
-/* ========== Route Handler ========== */
+/* ========== Route Endpoint ========== */
 
-struct XrHttpConn;
-typedef void (*XrRouteHandler)(struct XrHttpConn *conn, void *user_data, XrRouteParams *params);
+typedef enum {
+    XR_ROUTE_NONE = 0,
+    XR_ROUTE_DYNAMIC,
+    XR_ROUTE_STATIC,
+    XR_ROUTE_WEBSOCKET,
+} XrRouteKind;
 
 /* ========== Route Node ========== */
 
@@ -46,8 +50,8 @@ typedef struct XrRouterNode {
     char *path;  // Path segment
     size_t path_len;
 
-    XrRouteHandler handler;  // Handler function
-    void *user_data;         // User data
+    XrRouteKind kind;
+    void *user_data;  // Closure or websocket user data.
 
     // Static response body owned by this route node.
     char *static_response;
@@ -64,9 +68,8 @@ typedef struct XrRouterNode {
     char *param_name;  // Parameter name (for :param node)
     size_t param_name_len;
 
-    bool is_param;      // Is parameter node
-    bool is_wildcard;   // Is wildcard node
-    bool is_websocket;  // WebSocket upgrade route
+    bool is_param;     // Is parameter node
+    bool is_wildcard;  // Is wildcard node
 } XrRouterNode;
 
 /* ========== Router ========== */
@@ -96,7 +99,7 @@ XR_FUNC void xr_router_free(XrRouter *router);
  *   /files/{*filepath}  - Wildcard path
  */
 XR_FUNC bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path,
-                           XrRouteHandler handler, void *user_data);
+                           void *user_data);
 
 /*
  * Add static response route
@@ -107,19 +110,16 @@ XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const c
 /*
  * Find route
  *
- * Returns: matched handler, NULL if not found
+ * Returns: matched route kind, XR_ROUTE_NONE if not found
  * params: output parameters, can be NULL
  */
-XR_FUNC XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method, const char *path,
-                                      size_t path_len, XrRouteParams *params, void **user_data,
-                                      const char **static_response, size_t *static_response_len);
+XR_FUNC XrRouteKind xr_router_find(XrRouter *router, XrHttpMethod method, const char *path,
+                                   size_t path_len, XrRouteParams *params, void **user_data,
+                                   const char **static_response, size_t *static_response_len);
 
 /*
  * Add WebSocket upgrade route (handler receives upgraded WS connection).
- * Sentinel handler value distinguishes WS from HTTP routes in find results.
  */
-#define XR_ROUTE_HANDLER_WEBSOCKET ((XrRouteHandler) 2)
-
 XR_FUNC bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data);
 
 #endif
