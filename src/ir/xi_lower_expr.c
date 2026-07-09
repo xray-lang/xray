@@ -3724,9 +3724,8 @@ static XiValue *lower_raw_pointer_static_call(XiLower *l, AstNode *node, CallExp
             v->line = (uint32_t) node->line;
         return v;
     }
-    if (strcmp(ma->name, "of") != 0 || ptr_type->ptr_is_mut || call->arg_count != 1 ||
-        call->type_arg_count != 0 || !call->arguments || !call->arguments[0] ||
-        call->arguments[0]->type != AST_VARIABLE)
+    if (strcmp(ma->name, "of") != 0 || call->arg_count != 1 || call->type_arg_count != 0 ||
+        !call->arguments || !call->arguments[0] || call->arguments[0]->type != AST_VARIABLE)
         return NULL;
 
     AstNode *arg = call->arguments[0];

@@ -1,0 +1,8 @@
+import mem
+
+var COUNTER = 1
+
+@c_export("xray_rawmut_of_scalar_var_reject")
+fn rawmutOfScalarVarReject() -> int {
+    return mem.addressOf(RawMut<int>.of(COUNTER))
+}

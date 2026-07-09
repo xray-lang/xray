@@ -116,6 +116,11 @@ static inline bool xa_freestanding_type_requires_tagged_value(const XrType *type
     }
 }
 
+static inline bool xa_type_has_fixed_layout_data_object(const XrType *type) {
+    return type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+           type->instance.class_ref && type->instance.class_ref->struct_layout;
+}
+
 static inline void xa_freestanding_report_tagged_type_unavailable(XaInferContext *ctx,
                                                                   AstNode *node, const XrType *type,
                                                                   const char *context) {

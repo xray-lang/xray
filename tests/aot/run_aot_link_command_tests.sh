@@ -1944,6 +1944,56 @@ else
     sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_RAWMUT_TOP_VAR_AGG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_top_var_aggregate_addr.xr"
+FREESTANDING_RAWMUT_TOP_VAR_AGG_OBJ="$WORK/freestanding_rawmut_of_top_var_aggregate_addr.o"
+FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG="$WORK/freestanding_rawmut_of_top_var_aggregate_addr.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_RAWMUT_TOP_VAR_AGG_OBJ" \
+        "$FREESTANDING_RAWMUT_TOP_VAR_AGG_SRC" >"$FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG" 2>&1; then
+    FREESTANDING_RAWMUT_TOP_VAR_AGG_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" ]; then
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: materializes mutable struct as static data"
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" ".value =" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: writes struct field directly"
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" \
+            "&_xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: takes mutable static address directly"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" \
+            "const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: keeps storage non-const"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" "xrt_shared[0] =" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" "xrt_arc_alloc" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" "xr_aggregate_ref" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: avoids runtime aggregate refs"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_AGG_C" "#include \"xrt.h\"" \
+            "freestanding-profile/rawmut-top-var-aggregate-addr: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/rawmut-top-var-aggregate-addr: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_RAWMUT_TOP_VAR_AGG_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_RAWMUT_TOP_VAR_AGG_OBJ")"
+    FREESTANDING_RAWMUT_TOP_VAR_AGG_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_RAWMUT_TOP_VAR_AGG_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_RAWMUT_TOP_VAR_AGG_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/rawmut-top-var-aggregate-addr: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/rawmut-top-var-aggregate-addr: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_RAWMUT_TOP_VAR_AGG_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/rawmut-top-var-aggregate-addr: object build failed"
+    sed 's/^/      /' "$FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_VAR_DEFAULT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_default.xr"
 FREESTANDING_TOP_VAR_DEFAULT_OBJ="$WORK/freestanding_top_var_default.o"
 FREESTANDING_TOP_VAR_DEFAULT_LOG="$WORK/freestanding_top_var_default.log"
@@ -3011,7 +3061,14 @@ expect_freestanding_reject \
     "$WORK/freestanding_rawmut_of_static_reject" \
     "$WORK/freestanding_rawmut_of_static_reject.log" \
     "freestanding-profile/static-address: rejects RawMut.of static const" \
-    "RawMut.of is not supported for static const data"
+    "RawMut.of can only take the name of a top-level mutable aggregate static object"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_scalar_var_reject.xr" \
+    "$WORK/freestanding_rawmut_of_scalar_var_reject" \
+    "$WORK/freestanding_rawmut_of_scalar_var_reject.log" \
+    "freestanding-profile/static-address: rejects RawMut.of scalar var" \
+    "RawMut.of can only take the name of a top-level mutable aggregate static object"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_heap_constructs_reject.xr" \
