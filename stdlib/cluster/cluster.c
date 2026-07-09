@@ -261,7 +261,7 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
 }
 
 int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
-                        const XrClusterTlsOptions *tls) {
+                          const XrClusterTlsOptions *tls) {
     if (X->cluster)
         return -1;  // already running
     if (!name || name[0] == '\0')
@@ -702,16 +702,16 @@ XrDistChannel *cluster_channel_find(XrCluster *c, const char *name) {
     return NULL;
 }
 
-bool xr_cluster_vm_is_running(XrVMRuntime *X) {
+bool cluster_bridge_is_running(XrVMRuntime *X) {
     return X && cluster_runtime_is_running((XrCluster *) X->cluster);
 }
 
-struct XrChannel *xr_cluster_find_channel_local(XrVMRuntime *X, const char *name) {
+struct XrChannel *cluster_bridge_find_channel_local(XrVMRuntime *X, const char *name) {
     XrDistChannel *dc = cluster_channel_find(X ? (XrCluster *) X->cluster : NULL, name);
     return dc ? dc->channel : NULL;
 }
 
-void xr_cluster_register_channel_local(XrVMRuntime *X, const char *name, struct XrChannel *ch) {
+void cluster_bridge_register_channel_local(XrVMRuntime *X, const char *name, struct XrChannel *ch) {
     cluster_channel_register(X ? (XrCluster *) X->cluster : NULL, name, ch);
 }
 
@@ -1396,7 +1396,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
                             rsp_payload[8] = 1;  // has_value = true
                             memcpy(rsp_payload + 9, sbuf.data, sbuf.len);
                             cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload,
-                                                       9 + (uint32_t) sbuf.len);
+                                                    9 + (uint32_t) sbuf.len);
                         }
                         cluster_serial_buf_free(&sbuf);
                     } else {
@@ -1421,8 +1421,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
                 // Decode args
                 XrValue decoded_args;
-                if (cluster_decode_value(c->isolate, sc.args_data, sc.args_len, &decoded_args) !=
-                    0)
+                if (cluster_decode_value(c->isolate, sc.args_data, sc.args_len, &decoded_args) != 0)
                     break;
 
                 // Build request Json: {id: int, from: string, args: value}
@@ -1457,7 +1456,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     // Decode result and deliver to waiting caller
                     XrValue result;
                     if (cluster_decode_value(c->isolate, reply.result_data, reply.result_len,
-                                                &result) == 0) {
+                                             &result) == 0) {
                         xr_channel_try_send(rsp_ch, result);
                     } else {
                         xr_channel_close(rsp_ch);
@@ -1508,7 +1507,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
                             uint32_t val_offset = 2 + topic_len;
                             uint32_t val_len = payload_len - val_offset;
                             cluster_topic_handle_publish(c, node, topic, recv_buf + val_offset,
-                                                            val_len, hop_limit);
+                                                         val_len, hop_limit);
                         }
                     }
                 }
