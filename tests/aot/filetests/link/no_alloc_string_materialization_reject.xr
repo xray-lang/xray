@@ -1,3 +1,8 @@
+import regex
+
+var xray_no_alloc_string_materialization_pattern = regex.compile("[a-z]+")
+var xray_no_alloc_string_materialization_translate: Map<string, string> = #{"a": "b"}
+
 @no_alloc
 fn xray_no_alloc_string_char_at_reject(value: string) -> string {
     return value.charAt(0)
@@ -14,8 +19,38 @@ fn xray_no_alloc_string_substring_reject(value: string) -> string {
 }
 
 @no_alloc
+fn xray_no_alloc_string_concat_reject(value: string) -> string {
+    return value.concat("!")
+}
+
+@no_alloc
+fn xray_no_alloc_string_slice_reject(value: string) -> string {
+    return value.slice(0, 1)
+}
+
+@no_alloc
 fn xray_no_alloc_string_lower_reject(value: string) -> string {
     return value.toLowerCase()
+}
+
+@no_alloc
+fn xray_no_alloc_string_upper_reject(value: string) -> string {
+    return value.toUpperCase()
+}
+
+@no_alloc
+fn xray_no_alloc_string_trim_start_reject(value: string) -> string {
+    return value.trimStart()
+}
+
+@no_alloc
+fn xray_no_alloc_string_trim_end_reject(value: string) -> string {
+    return value.trimEnd()
+}
+
+@no_alloc
+fn xray_no_alloc_string_replace_reject(value: string) -> string {
+    return value.replace("a", "b")
 }
 
 @no_alloc
@@ -43,12 +78,36 @@ fn xray_no_alloc_string_pad_start_reject(value: string) -> string {
     return value.padStart(4, "0")
 }
 
+@no_alloc
+fn xray_no_alloc_string_pad_end_reject(value: string) -> string {
+    return value.padEnd(4, "0")
+}
+
+@no_alloc
+fn xray_no_alloc_string_match_reject(value: string) -> Array<string>? {
+    return value.match(xray_no_alloc_string_materialization_pattern)
+}
+
+@no_alloc
+fn xray_no_alloc_string_translate_reject(value: string) -> string {
+    return value.translate(xray_no_alloc_string_materialization_translate)
+}
+
 print(xray_no_alloc_string_char_at_reject("alpha"))
 print(xray_no_alloc_string_byte_at_reject("alpha"))
 print(xray_no_alloc_string_substring_reject("alpha"))
+print(xray_no_alloc_string_concat_reject("alpha"))
+print(xray_no_alloc_string_slice_reject("alpha"))
 print(xray_no_alloc_string_lower_reject("ALPHA"))
+print(xray_no_alloc_string_upper_reject("alpha"))
+print(xray_no_alloc_string_trim_start_reject("  alpha"))
+print(xray_no_alloc_string_trim_end_reject("alpha  "))
+print(xray_no_alloc_string_replace_reject("alpha"))
 print(xray_no_alloc_string_replace_all_reject("alpha"))
 print(xray_no_alloc_string_split_reject("a,b"))
 print(xray_no_alloc_string_repeat_reject("ha"))
 print(xray_no_alloc_string_reverse_reject("abc"))
 print(xray_no_alloc_string_pad_start_reject("7"))
+print(xray_no_alloc_string_pad_end_reject("7"))
+print(xray_no_alloc_string_match_reject("alpha") != null)
+print(xray_no_alloc_string_translate_reject("alpha"))
