@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+regex=derive-plan [0-9]+ id=[0-9]+ decl=[0-9]+ type=[0-9]+ kind=clone action=field_table_sidecar fields=[0-9]+\+1 methods=0\+0 sidecar=[0-9]+ body=0 evidence=0x7 reason=none
+c_not_contains=Snapshot_inspect_fields
+c_not_contains=XrtInspectField
+c_not_contains=xrt_type_set_derive(
+c_not_contains=Reflect
+c_not_contains=need_reflection

@@ -889,6 +889,8 @@ static uint32_t verify_derive_kind_flag(uint8_t kind) {
             return XR_DERIVE_EQ;
         case XG_DERIVE_HASH:
             return XR_DERIVE_HASH;
+        case XG_DERIVE_CLONE:
+            return XR_DERIVE_CLONE;
         default:
             return 0;
     }
@@ -1027,6 +1029,9 @@ static bool verify_derive_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         if ((decl->derive_flags & XR_DERIVE_HASH) != 0 &&
             !verify_decl_has_derive_row(ev, decl->decl_id, XG_DERIVE_HASH))
             return set_error(errbuf, errbuf_len, "AOT Hash derive row is missing");
+        if ((decl->derive_flags & XR_DERIVE_CLONE) != 0 &&
+            !verify_decl_has_derive_row(ev, decl->decl_id, XG_DERIVE_CLONE))
+            return set_error(errbuf, errbuf_len, "AOT Clone derive row is missing");
     }
     return true;
 }

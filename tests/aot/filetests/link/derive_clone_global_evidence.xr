@@ -1,0 +1,11 @@
+@derive(Clone)
+class Packet {
+    id: int
+
+    constructor(id: int) {
+        this.id = id
+    }
+}
+
+var packet = Packet(7)
+print(packet.id)

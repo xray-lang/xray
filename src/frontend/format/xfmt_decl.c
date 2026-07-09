@@ -116,6 +116,12 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
                 if (!first)
                     xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, "Hash");
+                first = false;
+            }
+            if (attr->derive_flags & XR_DERIVE_CLONE) {
+                if (!first)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, "Clone");
             }
             xfmt_write_char(ctx, ')');
             break;

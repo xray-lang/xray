@@ -151,6 +151,10 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
         *bit_out = XR_DERIVE_HASH;
         return true;
     }
+    if (token.length == 5 && memcmp(token.start, "Clone", 5) == 0) {
+        *bit_out = XR_DERIVE_CLONE;
+        return true;
+    }
     return false;
 }
 
@@ -286,8 +290,8 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         attr->kind = ATTR_DERIVE;
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
         if (xr_parser_check(parser, TK_RPAREN)) {
-            xr_parser_error(parser,
-                            "@derive requires at least one target: Inspect, Json, Eq, or Hash");
+            xr_parser_error(
+                parser, "@derive requires at least one target: Inspect, Json, Eq, Hash, or Clone");
         } else {
             uint32_t seen_flags = 0;
             do {
@@ -303,7 +307,7 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
                     char msg[160];
                     snprintf(msg, sizeof(msg),
                              "unknown derive target '%s'; expected Inspect, Json, "
-                             "Eq, or Hash",
+                             "Eq, Hash, or Clone",
                              name_buf);
                     xr_parser_error(parser, msg);
                 } else if ((seen_flags & bit) != 0) {

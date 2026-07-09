@@ -1,0 +1,11 @@
+@derive(Clone)
+class Snapshot {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+var snapshot = Snapshot(42)
+print(snapshot.value)

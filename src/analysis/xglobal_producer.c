@@ -1599,6 +1599,9 @@ static bool derive_kind_from_flag(uint32_t flag, uint8_t *out_kind) {
         case XR_DERIVE_HASH:
             *out_kind = XG_DERIVE_HASH;
             return true;
+        case XR_DERIVE_CLONE:
+            *out_kind = XG_DERIVE_CLONE;
+            return true;
         default:
             return false;
     }
@@ -1668,10 +1671,7 @@ static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDec
                                       uint32_t derive_flags, const ClassDeclNode *cls,
                                       uint32_t source_field_start) {
     static const uint32_t ordered_flags[] = {
-        XR_DERIVE_JSON,
-        XR_DERIVE_INSPECT,
-        XR_DERIVE_EQ,
-        XR_DERIVE_HASH,
+        XR_DERIVE_JSON, XR_DERIVE_INSPECT, XR_DERIVE_EQ, XR_DERIVE_HASH, XR_DERIVE_CLONE,
     };
     uint32_t type_key = hash_named_type_key32(type_name, NULL, 0);
     if (!p || !p->evidence || derive_flags == 0)
