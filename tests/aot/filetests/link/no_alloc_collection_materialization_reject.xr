@@ -40,8 +40,43 @@ fn xray_no_alloc_map_entries_iterator_reject(values: Map<int, int>) -> bool {
 }
 
 @no_alloc
+fn xray_no_alloc_map_tostring_reject(values: Map<int, int>) -> string {
+    return values.toString()
+}
+
+@no_alloc
+fn xray_no_alloc_set_toarray_reject(values: Set<int>) -> int {
+    return values.toArray().length
+}
+
+@no_alloc
+fn xray_no_alloc_set_union_reject(values: Set<int>, other: Set<int>) -> int {
+    return values.union(other).length
+}
+
+@no_alloc
+fn xray_no_alloc_set_intersection_reject(values: Set<int>, other: Set<int>) -> int {
+    return values.intersection(other).length
+}
+
+@no_alloc
+fn xray_no_alloc_set_difference_reject(values: Set<int>, other: Set<int>) -> int {
+    return values.difference(other).length
+}
+
+@no_alloc
+fn xray_no_alloc_set_symmetric_difference_reject(values: Set<int>, other: Set<int>) -> int {
+    return values.symmetricDifference(other).length
+}
+
+@no_alloc
 fn xray_no_alloc_set_iterator_reject(values: Set<int>) -> bool {
     return values.iterator().hasNext()
+}
+
+@no_alloc
+fn xray_no_alloc_set_tostring_reject(values: Set<int>) -> string {
+    return values.toString()
 }
 
 var xray_no_alloc_collection_array: Array<int> = [1, 2, 3]
@@ -49,6 +84,8 @@ var xray_no_alloc_collection_map: Map<int, int> = #{}
 xray_no_alloc_collection_map.set(1, 2)
 var xray_no_alloc_collection_set: Set<int> = #[]
 xray_no_alloc_collection_set.add(1)
+var xray_no_alloc_collection_set_other: Set<int> = #[]
+xray_no_alloc_collection_set_other.add(2)
 
 print(xray_no_alloc_array_unshift_reject(xray_no_alloc_collection_array))
 print(xray_no_alloc_array_tostring_reject(xray_no_alloc_collection_array))
@@ -58,4 +95,15 @@ print(xray_no_alloc_map_keys_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_values_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_iterator_reject(xray_no_alloc_collection_map))
 print(xray_no_alloc_map_entries_iterator_reject(xray_no_alloc_collection_map))
+print(xray_no_alloc_map_tostring_reject(xray_no_alloc_collection_map))
+print(xray_no_alloc_set_toarray_reject(xray_no_alloc_collection_set))
+print(xray_no_alloc_set_union_reject(xray_no_alloc_collection_set,
+                                     xray_no_alloc_collection_set_other))
+print(xray_no_alloc_set_intersection_reject(xray_no_alloc_collection_set,
+                                            xray_no_alloc_collection_set_other))
+print(xray_no_alloc_set_difference_reject(xray_no_alloc_collection_set,
+                                          xray_no_alloc_collection_set_other))
+print(xray_no_alloc_set_symmetric_difference_reject(xray_no_alloc_collection_set,
+                                                    xray_no_alloc_collection_set_other))
 print(xray_no_alloc_set_iterator_reject(xray_no_alloc_collection_set))
+print(xray_no_alloc_set_tostring_reject(xray_no_alloc_collection_set))
