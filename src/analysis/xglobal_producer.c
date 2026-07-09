@@ -2051,6 +2051,101 @@ static uint64_t body_json_shape_hash(const ObjectLiteralNode *obj) {
     return h ? h : 1;
 }
 
+static const XrTypeRef *body_type_alias_record_type_ref(const TypeAliasNode *alias) {
+    if (!alias || !alias->resolved_type || alias->resolved_type->kind != XR_TREF_OBJECT)
+        return NULL;
+    return alias->resolved_type;
+}
+
+static int body_type_alias_record_field_count(const TypeAliasNode *alias) {
+    const XrTypeRef *record_type;
+    if (!alias)
+        return 0;
+    if (alias->field_count > 0 && alias->field_names)
+        return alias->field_count;
+    record_type = body_type_alias_record_type_ref(alias);
+    if (!record_type || !record_type->field_names || !record_type->children)
+        return 0;
+    return (int) record_type->nchildren;
+}
+
+static const char *body_type_alias_record_field_name(const TypeAliasNode *alias, int index) {
+    const XrTypeRef *record_type;
+    if (!alias || index < 0)
+        return NULL;
+    if (alias->field_names && index < alias->field_count)
+        return alias->field_names[index];
+    record_type = body_type_alias_record_type_ref(alias);
+    if (!record_type || !record_type->field_names || index >= (int) record_type->nchildren)
+        return NULL;
+    return record_type->field_names[index];
+}
+
+static const XrTypeRef *body_type_alias_record_field_type(const TypeAliasNode *alias, int index) {
+    const XrTypeRef *record_type;
+    if (!alias || index < 0)
+        return NULL;
+    if (alias->field_types && index < alias->field_count)
+        return alias->field_types[index];
+    record_type = body_type_alias_record_type_ref(alias);
+    if (!record_type || !record_type->children || index >= (int) record_type->nchildren)
+        return NULL;
+    return record_type->children[index];
+}
+
+static bool body_type_alias_record_field_optional(const TypeAliasNode *alias, int index) {
+    return alias && alias->field_optional && index >= 0 && index < alias->field_count &&
+           alias->field_optional[index];
+}
+
+static bool body_type_alias_record_field_readonly(const TypeAliasNode *alias, int index) {
+    const XrTypeRef *record_type = body_type_alias_record_type_ref(alias);
+    return record_type && record_type->field_readonly && index >= 0 &&
+           index < (int) record_type->nchildren && record_type->field_readonly[index];
+}
+
+static uint64_t body_type_alias_record_shape_hash(const TypeAliasNode *alias) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    int count = body_type_alias_record_field_count(alias);
+    h = fold_u64(h, (uint64_t) count);
+    for (int i = 0; i < count; i++) {
+        const char *name = body_type_alias_record_field_name(alias, i);
+        uint32_t name_id = name ? hash_name32(name) : 0;
+        const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
+        uint32_t type_key = field_type ? hash_tref32(field_type) : 0;
+        bool optional = body_type_alias_record_field_optional(alias, i);
+        bool readonly = body_type_alias_record_field_readonly(alias, i);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, type_key);
+        h = fold_u64(h, optional ? 1 : 0);
+        h = fold_u64(h, readonly ? 1 : 0);
+    }
+    return h ? h : 1;
+}
+
+static uint32_t body_type_alias_field_name_start(const TypeAliasNode *alias) {
+    return (uint32_t) (body_type_alias_record_shape_hash(alias) & UINT32_MAX);
+}
+
+static uint32_t body_type_alias_record_type_key(const TypeAliasNode *alias) {
+    const XrTypeRef *record_type = body_type_alias_record_type_ref(alias);
+    if (record_type)
+        return hash_tref32(record_type);
+    return alias && alias->name ? hash_named_type_key32(alias->name, NULL, 0) : 0;
+}
+
+static const XgJsonShapeSummary *
+body_find_json_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_t shape_kind) {
+    if (!bc || !bc->evidence || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bc->evidence->njson_shapes; i++) {
+        const XgJsonShapeSummary *shape = &bc->evidence->json_shapes[i];
+        if (shape->type_key == type_key && shape->shape_kind == shape_kind)
+            return shape;
+    }
+    return NULL;
+}
+
 static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
                                                      const ObjectLiteralNode *obj,
                                                      uint32_t source_span_id, uint32_t type_key) {
@@ -2080,6 +2175,30 @@ static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
         row.flags |= XG_JSON_SHAPE_HAS_COMPUTED_KEYS;
     row.shape_hash = body_json_shape_hash(obj);
     return xg_global_evidence_add_json_shape(bc->evidence, &row) ? row.json_shape_id : XG_NO_ID;
+}
+
+static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(XgGlobalEvidence *evidence,
+                                                                      XgModuleId module_id,
+                                                                      const TypeAliasNode *alias,
+                                                                      uint32_t source_span_id) {
+    XgJsonShapeSummary row;
+    uint32_t type_key;
+    int field_count = body_type_alias_record_field_count(alias);
+    if (!evidence || !alias || !alias->name || field_count <= 0)
+        return XG_NO_ID;
+    type_key = body_type_alias_record_type_key(alias);
+    memset(&row, 0, sizeof(row));
+    row.json_shape_id = (XgJsonShapeId) (evidence->njson_shapes + 1);
+    row.module_id = module_id;
+    row.owner_func_id = XG_NO_ID;
+    row.source_span_id = source_span_id;
+    row.type_key = type_key;
+    row.field_name_start = body_type_alias_field_name_start(alias);
+    row.field_count = (uint16_t) (field_count < UINT16_MAX ? field_count : UINT16_MAX);
+    row.shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE;
+    row.flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE;
+    row.shape_hash = body_type_alias_record_shape_hash(alias);
+    return xg_global_evidence_add_json_shape(evidence, &row) ? row.json_shape_id : XG_NO_ID;
 }
 
 static void body_bind_json_shape_local(XgBodyCollect *bc, const char *name, XgJsonShapeId shape_id,
@@ -2276,6 +2395,13 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
         if (call->type_arg_count > 0 && call->type_args && call->type_args[0]) {
             row.target_type_key = hash_tref32(call->type_args[0]);
             row.flags |= XG_JSON_CODEC_HAS_TARGET_TYPE;
+            const XgJsonShapeSummary *target_shape = body_find_json_shape_for_type_key(
+                bc, row.target_type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+            if (target_shape) {
+                row.output_shape_id = target_shape->json_shape_id;
+                row.field_count = target_shape->field_count;
+                row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
+            }
         }
         if (arg0) {
             const ObjectLiteralNode *literal = NULL;
@@ -2284,7 +2410,7 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
                 const XgJsonShapeSummary *shape =
                     xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
                 row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
-                if (shape)
+                if (shape && row.field_count == 0)
                     row.field_count = shape->field_count;
             }
         }
@@ -2353,6 +2479,31 @@ static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
         XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
     row.shape_hash = body_json_shape_hash(obj);
     return xg_global_evidence_add_record_shape(bc->evidence, &row) ? row.record_shape_id : XG_NO_ID;
+}
+
+static XgRecordShapeId body_add_record_shape_for_type_alias(XgGlobalEvidence *evidence,
+                                                            XgModuleId module_id,
+                                                            const TypeAliasNode *alias,
+                                                            uint32_t source_span_id) {
+    XgRecordShapeSummary row;
+    uint32_t type_key;
+    int field_count = body_type_alias_record_field_count(alias);
+    if (!evidence || !alias || !alias->name || field_count <= 0)
+        return XG_NO_ID;
+    type_key = body_type_alias_record_type_key(alias);
+    memset(&row, 0, sizeof(row));
+    row.record_shape_id = (XgRecordShapeId) (evidence->nrecord_shapes + 1);
+    row.module_id = module_id;
+    row.owner_func_id = XG_NO_ID;
+    row.source_span_id = source_span_id;
+    row.type_key = type_key;
+    row.field_name_start = body_type_alias_field_name_start(alias);
+    row.field_count = (uint16_t) (field_count < UINT16_MAX ? field_count : UINT16_MAX);
+    row.shape_kind = XG_RECORD_SHAPE_STATIC;
+    row.flags =
+        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
+    row.shape_hash = body_type_alias_record_shape_hash(alias);
+    return xg_global_evidence_add_record_shape(evidence, &row) ? row.record_shape_id : XG_NO_ID;
 }
 
 static void body_bind_record_shape_local(XgBodyCollect *bc, const char *name,
@@ -4480,6 +4631,23 @@ static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, co
     return true;
 }
 
+static bool add_type_alias_record_shape(XgProducer *p, XgModuleId module_id, const AstNode *node) {
+    const TypeAliasNode *alias;
+    if (!p || !p->evidence || !node || node->type != AST_TYPE_ALIAS)
+        return true;
+    alias = &node->as.type_alias;
+    if (!alias->name || alias->type_param_count > 0 ||
+        body_type_alias_record_field_count(alias) <= 0)
+        return true;
+    if (body_add_record_shape_for_type_alias(p->evidence, module_id, alias,
+                                             (uint32_t) node->line) == XG_NO_ID)
+        return false;
+    if (body_add_json_record_bridge_shape_for_type_alias(p->evidence, module_id, alias,
+                                                         (uint32_t) node->line) == XG_NO_ID)
+        return false;
+    return true;
+}
+
 static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     if (!stmt)
         return false;
@@ -4524,6 +4692,8 @@ static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstN
             return add_enum_decl(p, module_id, stmt);
         case AST_IMPORT_STMT:
             return add_import_link_dependencies(p, module_id, stmt);
+        case AST_TYPE_ALIAS:
+            return add_type_alias_record_shape(p, module_id, stmt);
         default:
             if (handled)
                 *handled = false;

@@ -8164,14 +8164,15 @@ TEST(global_evidence_producer_records_explicit_json_shape_access) {
 
 TEST(global_evidence_producer_records_json_codec_calls) {
     setup_parser_session();
-    const char *source = "type User = { name: string, age: int }\n"
-                         "fn main() {\n"
-                         "    var data: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\")\n"
-                         "    var user: User = Json.decode<User>(data)\n"
-                         "    var encoded: Json = Json.encode(user)\n"
-                         "    var shaped: Json = { name: \"A\", age: 1 }\n"
-                         "    var text: string = Json.stringify(shaped)\n"
-                         "}\n";
+    const char *source =
+        "type User = { name: string, age: int }\n"
+        "fn main() {\n"
+        "    var data: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\")\n"
+        "    var user: User = Json.decode<User>(data)\n"
+        "    var encoded: Json = Json.encode(user)\n"
+        "    var shaped: Json = { name: \"A\", age: 1 }\n"
+        "    var text: string = Json.stringify(shaped)\n"
+        "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -8189,12 +8190,25 @@ TEST(global_evidence_producer_records_json_codec_calls) {
 
     XgGlobalEvidence ev;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
+    ASSERT_EQ_UINT(ev.record_shapes[0].shape_kind, XG_RECORD_SHAPE_STATIC);
+    ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0);
+    ASSERT_EQ_UINT(ev.njson_shapes, 2);
+    const XgJsonShapeSummary *bridge_shape = NULL;
+    for (uint32_t i = 0; i < ev.njson_shapes; i++) {
+        if (ev.json_shapes[i].shape_kind == XG_JSON_SHAPE_RECORD_BRIDGE)
+            bridge_shape = &ev.json_shapes[i];
+    }
+    ASSERT_NOT_NULL(bridge_shape);
     ASSERT_EQ_UINT(ev.njson_codecs, 4);
     ASSERT_EQ_UINT(ev.json_codecs[0].codec_kind, XG_JSON_CODEC_PARSE);
     ASSERT_TRUE((ev.json_codecs[0].flags & XG_JSON_CODEC_STATIC_TEXT) != 0);
     ASSERT_EQ_UINT(ev.json_codecs[1].codec_kind, XG_JSON_CODEC_DECODE);
     ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0);
+    ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0);
     ASSERT_NE(ev.json_codecs[1].target_type_key, 0);
+    ASSERT_EQ_UINT(ev.json_codecs[1].output_shape_id, bridge_shape->json_shape_id);
+    ASSERT_EQ_UINT(ev.json_codecs[1].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[2].codec_kind, XG_JSON_CODEC_ENCODE);
     ASSERT_NE(ev.json_codecs[2].input_type_key, 0);
     ASSERT_EQ_UINT(ev.json_codecs[3].codec_kind, XG_JSON_CODEC_STRINGIFY);
