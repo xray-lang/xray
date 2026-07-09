@@ -177,7 +177,7 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
     if (!ctx)
         return xr_null();
     if (!ctx->h2_client_pool) {
-        ctx->h2_client_pool = xr_h2_pool_create();
+        ctx->h2_client_pool = http2_client_pool_create();
         if (!ctx->h2_client_pool)
             return xr_null();
     }
@@ -199,7 +199,7 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
         req.header_count = hcount;
     }
 
-    XrH2Response *resp = xr_h2_request(ctx->h2_client_pool, url, &req);
+    XrH2Response *resp = http2_client_request(ctx->h2_client_pool, url, &req);
 
     if (headers)
         xr_free(headers);
@@ -211,6 +211,6 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
     }
 
     XrValue result = h2_response_to_json(X, resp);
-    xr_h2_response_free(resp);
+    http2_client_response_free(resp);
     return result;
 }
