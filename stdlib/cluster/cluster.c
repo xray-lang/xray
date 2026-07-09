@@ -1519,7 +1519,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 char coro_name[XR_CORO_NAME_MAX + 1];
                 if (xr_frame_decode_coro_monitor(recv_buf, payload_len, coro_name,
                                                  sizeof(coro_name)) == 0) {
-                    xr_cluster_handle_coro_monitor(c, node, coro_name);
+                    cluster_monitor_handle_coro_request(c, node, coro_name);
                 }
                 break;
             }
@@ -1529,7 +1529,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 char reason[128];
                 if (xr_frame_decode_coro_exit(recv_buf, payload_len, coro_name, sizeof(coro_name),
                                               reason, sizeof(reason)) == 0) {
-                    xr_cluster_handle_coro_exit(c, coro_name, reason);
+                    cluster_monitor_handle_coro_exit(c, coro_name, reason);
                 }
                 break;
             }
@@ -1546,7 +1546,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     // Node disconnected — cleanup subscribers before monitors
     xr_free(recv_buf);
     xr_cluster_remove_all_subscribers_for_node(c, node);
-    xr_cluster_fire_monitors(c, node->name);
+    cluster_monitor_fire(c, node->name);
     xr_cluster_remove_node(c, node);
     xr_cluster_node_free(node);
 }
@@ -1725,7 +1725,7 @@ static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) 
     if (argc == 1) {
         // Node-level monitor: cluster.monitor("node_name")
         XrString *name_str = XR_TO_STRING(args[0]);
-        XrChannel *ch = xr_cluster_monitor_node(X, name_str->data);
+        XrChannel *ch = cluster_monitor_node(X, name_str->data);
         if (!ch)
             return xr_null();
         return xr_value_from_channel(ch);
@@ -1737,7 +1737,7 @@ static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) 
     XrString *node_str = XR_TO_STRING(args[0]);
     XrString *coro_str = XR_TO_STRING(args[1]);
 
-    XrChannel *ch = xr_cluster_monitor_coro(X, node_str->data, coro_str->data);
+    XrChannel *ch = cluster_monitor_coro(X, node_str->data, coro_str->data);
     if (!ch)
         return xr_null();
     return xr_value_from_channel(ch);

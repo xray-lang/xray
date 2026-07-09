@@ -32,7 +32,7 @@
  * Delivery policy — AT-MOST-ONCE (buffered(8), drop on overflow):
  *
  *   - The returned channel has a fixed capacity of 8. Each
- *     xr_cluster_fire_monitors invocation pushes ONE message (the
+ *     cluster_monitor_fire invocation pushes ONE message (the
  *     dead node's name) via try_send. If the channel is full at
  *     that instant, the notification is DROPPED silently.
  *
@@ -57,7 +57,7 @@
  * unbounded memory. Callers that need a larger buffer can subscribe
  * to cluster_info() metrics instead.
  */
-XrChannel *xr_cluster_monitor_node(XrVMRuntime *X, const char *node_name) {
+XrChannel *cluster_monitor_node(XrVMRuntime *X, const char *node_name) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !node_name)
         return NULL;
@@ -87,7 +87,7 @@ XrChannel *xr_cluster_monitor_node(XrVMRuntime *X, const char *node_name) {
     return ch;
 }
 
-void xr_cluster_fire_monitors(XrCluster *c, const char *node_name) {
+void cluster_monitor_fire(XrCluster *c, const char *node_name) {
     if (!c || !node_name)
         return;
 
@@ -131,7 +131,7 @@ void xr_cluster_fire_monitors(XrCluster *c, const char *node_name) {
 
 /* ========== Remote Coroutine Monitor ========== */
 
-XrChannel *xr_cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const char *coro_name) {
+XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const char *coro_name) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !node_name || !coro_name)
         return NULL;
@@ -205,7 +205,8 @@ static void coro_monitor_fwd_loop(void *arg) {
     xr_free(ctx);
 }
 
-void xr_cluster_handle_coro_monitor(XrCluster *c, XrClusterNode *node, const char *coro_name) {
+void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node,
+                                         const char *coro_name) {
     // Remote node wants to monitor a local coroutine.
     // Register a local monitor; on exit, send CORO_EXIT frame back.
     if (!c || !c->isolate)
@@ -246,7 +247,7 @@ void xr_cluster_handle_coro_monitor(XrCluster *c, XrClusterNode *node, const cha
     }
 }
 
-void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason) {
+void cluster_monitor_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason) {
     // Received CORO_EXIT from remote node — notify local monitors
     if (!c || !c->isolate)
         return;

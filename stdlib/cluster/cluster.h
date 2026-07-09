@@ -365,10 +365,10 @@ typedef struct XrNodeMonitor {
 
 // Monitor a specific node. Returns a Channel that receives the node name
 // as a string when that node disconnects. Use "*" to monitor all nodes.
-XR_FUNC struct XrChannel *xr_cluster_monitor_node(struct XrVMRuntime *X, const char *node_name);
+struct XrChannel *cluster_monitor_node(struct XrVMRuntime *X, const char *node_name);
 
 // Fire monitors for a disconnected node (called internally)
-XR_FUNC void xr_cluster_fire_monitors(XrCluster *c, const char *node_name);
+void cluster_monitor_fire(XrCluster *c, const char *node_name);
 
 /* ========== Topic Pub/Sub ========== */
 
@@ -433,15 +433,15 @@ typedef struct XrRemoteCoroMonitor {
 // Monitor a coroutine on a remote node. Returns a Channel that receives
 // exit reason string when the remote coroutine terminates.
 // cluster.monitor("node_name", "coro_name")
-XR_FUNC struct XrChannel *xr_cluster_monitor_coro(struct XrVMRuntime *X, const char *node_name,
-                                                  const char *coro_name);
+struct XrChannel *cluster_monitor_coro(struct XrVMRuntime *X, const char *node_name,
+                                       const char *coro_name);
 
 // Handle incoming CORO_EXIT frame from a remote node
-XR_FUNC void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason);
+void cluster_monitor_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason);
 
 // Handle incoming CORO_MONITOR request from a remote node
-XR_FUNC void xr_cluster_handle_coro_monitor(XrCluster *c, struct XrClusterNode *node,
-                                            const char *coro_name);
+void cluster_monitor_handle_coro_request(XrCluster *c, struct XrClusterNode *node,
+                                         const char *coro_name);
 
 /* ========== Subscriber Management (for select push model) ========== */
 
