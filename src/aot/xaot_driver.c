@@ -812,11 +812,14 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     XaotPrepareStats prepare_stats;
     char *plan_dump = NULL;
     char *global_evidence_dump = NULL;
+    XgEvidenceCacheManifest evidence_cache_manifest;
+    bool evidence_cache_manifest_valid = false;
     char *c_export_header = NULL;
     XaotLinkManifest link_manifest;
     bool link_manifest_initialized = false;
     memset(&aot_bundle, 0, sizeof(aot_bundle));
     memset(&global_evidence, 0, sizeof(global_evidence));
+    memset(&evidence_cache_manifest, 0, sizeof(evidence_cache_manifest));
     memset(&prepare_stats, 0, sizeof(prepare_stats));
     memset(&link_manifest, 0, sizeof(link_manifest));
     if (!pres_arr || !ir_funcs || !modules) {
@@ -890,6 +893,9 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
     xg_global_evidence_free(&pre_mono_generic_evidence);
     pre_mono_generic_evidence_initialized = false;
+    evidence_cache_manifest = xg_global_evidence_cache_manifest(&global_evidence);
+    evidence_cache_manifest_valid =
+        evidence_cache_manifest.phase_mask == ((1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u);
     if (emit_global_evidence_dump) {
         global_evidence_dump = xg_global_evidence_dump(&global_evidence);
         if (!global_evidence_dump) {
@@ -1077,6 +1083,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     plan_dump = NULL;
     result->global_evidence_dump = global_evidence_dump;
     global_evidence_dump = NULL;
+    result->evidence_cache_manifest = evidence_cache_manifest;
+    result->has_evidence_cache_manifest = evidence_cache_manifest_valid;
     result->c_export_header = c_export_header;
     c_export_header = NULL;
     result->link_manifest = link_manifest;
