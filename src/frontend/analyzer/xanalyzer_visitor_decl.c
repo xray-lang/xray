@@ -722,8 +722,6 @@ static bool xa_summary_method_stores_argument(const char *method_name, int slot)
          strcmp(method_name, "sendTimeout") == 0) &&
         slot == 0)
         return true;
-    if (strcmp(method_name, "setUnchecked") == 0 && slot == 1)
-        return true;
     return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
 }
 

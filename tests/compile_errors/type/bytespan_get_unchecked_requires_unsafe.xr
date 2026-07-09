@@ -1,3 +1,3 @@
 fn bad(src: ByteSpan) -> int {
-    return int(src.getUnchecked(0))
+    return int(src.get(0))
 }

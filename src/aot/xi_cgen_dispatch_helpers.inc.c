@@ -1530,7 +1530,7 @@ static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t 
     if (!user || (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || !user->aux)
         return false;
     const char *method = (const char *) user->aux;
-    if (arg_index == 0 && (strcmp(method, "getUnchecked") == 0 || strcmp(method, "load") == 0 ||
+    if (arg_index == 0 && (strcmp(method, "get") == 0 || strcmp(method, "load") == 0 ||
                            strcmp(method, "store") == 0 || strcmp(method, "commonPrefix") == 0 ||
                            strcmp(method, "repeatFrom") == 0 || strcmp(method, "copyFrom") == 0 ||
                            strcmp(method, "compare") == 0 || strcmp(method, "fill") == 0))
@@ -3484,7 +3484,7 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
     if (nargs == 1 && method && strcmp(method, "push") == 0 &&
         emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
         return true;
-    if (nargs == 2 && method && strcmp(method, "setUnchecked") == 0 &&
+    if (nargs == 2 && method && strcmp(method, "set") == 0 &&
         emit_typed_array_set_unchecked_expr(ctx, out, f, prefix, v))
         return true;
     if (method && strcmp(method, "reserve") == 0 && nargs == 1 &&

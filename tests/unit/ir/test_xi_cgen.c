@@ -2047,8 +2047,8 @@ TEST(cgen_parallel_for_loop_body_closure_uses_scoped_stack_env) {
                       "    while (r < rounds) {\n"
                       "        parallel for i in 0..n workers 2 worker wid {\n"
                       "            unsafe {\n"
-                      "                var old = sums.getUnchecked(0)\n"
-                      "                sums.setUnchecked(0, old + i + wid)\n"
+                      "                var old = sums.get(0)\n"
+                      "                sums.set(0, old + i + wid)\n"
                       "            }\n"
                       "        }\n"
                       "        r = r + 1\n"
@@ -2088,8 +2088,8 @@ TEST(cgen_parallel_for_upval_array_unchecked_uses_raw_storage) {
                       "    sums.push(0)\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
                       "        unsafe {\n"
-                      "            var old = sums.getUnchecked(wid)\n"
-                      "            sums.setUnchecked(wid, old + i)\n"
+                      "            var old = sums.get(wid)\n"
+                      "            sums.set(wid, old + i)\n"
                       "        }\n"
                       "    }\n"
                       "}\n"
@@ -2105,11 +2105,11 @@ TEST(cgen_parallel_for_upval_array_unchecked_uses_raw_storage) {
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "captured array body should still use the AOT runtime executor");
     assert(contains(code, "((int64_t*)") && contains(code, "->data)[") &&
-           "captured Array<int>.getUnchecked/setUnchecked should use raw i64 storage");
+           "captured Array<int>.get/set should use raw i64 storage");
     assert(!contains(code, "xrt_index_get(") &&
-           "captured Array<int>.getUnchecked should not fall back to dynamic index get");
+           "captured Array<int>.get should not fall back to dynamic index get");
     assert(!contains(code, "xrt_index_set(") &&
-           "captured Array<int>.setUnchecked should not fall back to dynamic index set");
+           "captured Array<int>.set should not fall back to dynamic index set");
 
     xr_free(code);
     xi_func_free(ir);
@@ -2200,7 +2200,7 @@ TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
-                      "        var out = outs.getUnchecked(wid)\n"
+                      "        var out = outs.get(wid)\n"
                       "        out.resize(0)\n"
                       "        out.appendFrom(src[0:2])\n"
                       "    }\n"
@@ -2220,7 +2220,7 @@ TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     assert(contains(code, "_src.guard != _dst") &&
            "appendFrom should expose the non-alias fast path");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
-           "borrow-only Array<Bytes>.getUnchecked slot loads should not retain every item");
+           "borrow-only Array<Bytes>.get slot loads should not retain every item");
     assert(!contains(code, "xrt_method_1(") &&
            "appendFrom must not fall back to dynamic method dispatch");
     const char *body = strstr(code, "static XR_AINLINE void test_run_parallel_for_");
@@ -2228,7 +2228,7 @@ TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     assert(body != NULL && body_end != NULL && "parallel for body should be bounded");
     assert(count_between(body, body_end, "XR_TO_INT(v") == 0 &&
            count_between(body, body_end, "XR_FROM_INT(v") == 0 &&
-           "Array<Bytes>.getUnchecked(wid) should keep the worker id as a native index");
+           "Array<Bytes>.get(wid) should keep the worker id as a native index");
 
     xr_free(code);
     xi_func_free(ir);
@@ -2257,7 +2257,7 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
                       "    shared outs: Array<Bytes> = []\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        var out = outs.getUnchecked(0)\n"
+                      "        var out = outs.get(0)\n"
                       "        out.resize(0)\n"
                       "        var result = writePrepared(src, out)\n"
                       "        match (result) {\n"
@@ -2285,7 +2285,7 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
     assert(contains(code, "_src.guard != _dst") &&
            "prepared helper should keep the inline Bytes+ByteSpan append fast path");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
-           "borrow-only Array<Bytes>.getUnchecked should survive through prepared helper calls");
+           "borrow-only Array<Bytes>.get should survive through prepared helper calls");
 
     xr_free(code);
     xi_func_free(ir);
@@ -2316,7 +2316,7 @@ TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
                       "    shared outs: Array<Bytes> = []\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        var out = outs.getUnchecked(0)\n"
+                      "        var out = outs.get(0)\n"
                       "        out.resize(0)\n"
                       "        var result = appendRange(src, out, 0, src.length)\n"
                       "        match (result) {\n"
@@ -2525,7 +2525,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
                       "    bytes.push(300)\n"
                       "    unsafe {\n"
                       "        var value = 42\n"
-                      "        bytes.setUnchecked(0, value as uint8)\n"
+                      "        bytes.set(0, value as uint8)\n"
                       "    }\n"
                       "    return bytes[0] + bytes.length\n"
                       "}\n"
@@ -2552,7 +2552,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     assert(!contains(code, "xrt_index_get(") &&
            "Array<uint8> index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_index_set(") &&
-           "Array<uint8>.setUnchecked must not fall back to runtime index dispatch");
+           "Array<uint8>.set must not fall back to runtime index dispatch");
 
     printf("  Generated typed byte array fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -2564,7 +2564,7 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
                       "    var values = Array<uint32>(8, 7)\n"
                       "    values.fill(0, 0, 8)\n"
                       "    unsafe {\n"
-                      "        return int(values.getUnchecked(1)) + int(values.getUnchecked(6))\n"
+                      "        return int(values.get(1)) + int(values.get(6))\n"
                       "    }\n"
                       "}\n"
                       "print(run())\n";
@@ -2811,12 +2811,12 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
                       "    out.resize(2)\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
-                      "        var p = out.dataMutPtrUnchecked()\n"
+                      "        var p = out.mutPtr()\n"
                       "        p[0] = 0\n"
-                      "        var sp = src.dataPtrUnchecked()\n"
+                      "        var sp = src.ptr()\n"
                       "        p.copyFromNonOverlappingUnchecked(sp, 2)\n"
                       "        var view: ByteSpan = out\n"
-                      "        var rp = view.dataPtrUnchecked()\n"
+                      "        var rp = view.ptr()\n"
                       "        sum = int(rp[0]) + int(rp[1])\n"
                       "    }\n"
                       "    return sum\n"
@@ -2830,8 +2830,8 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "Array/Span data pointer lowering should generate");
-    assert(contains(code, "->data)") && "dataPtrUnchecked must lower to raw array data");
-    assert(!contains(code, "dataMutPtrUnchecked") && !contains(code, "dataPtrUnchecked") &&
+    assert(contains(code, "->data)") && "ptr must lower to raw array data");
+    assert(!contains(code, "mutPtr") && !contains(code, "ptr") &&
            "data pointer methods must not survive as dynamic method names");
     assert(!contains(code, "xrt_method_0(") &&
            "data pointer methods must not fall back to dynamic method dispatch");
@@ -2876,7 +2876,7 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
                       "    slots.push(0)\n"
                       "    slots.push(0)\n"
                       "    unsafe {\n"
-                      "        shared p = slots.dataMutPtrUnchecked()\n"
+                      "        shared p = slots.mutPtr()\n"
                       "        parallel for i in 0..n workers 2 worker wid {\n"
                       "            var first = p[wid]\n"
                       "            print(first + i + wid)\n"
@@ -2918,7 +2918,7 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
     CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
     CHECK_RAWPTR_PAR_CAPTURE(
         release > par_for,
-        "Array owner borrowed by dataMutPtrUnchecked must outlive RawMut parallel capture");
+        "Array owner borrowed by mutPtr must outlive RawMut parallel capture");
 
     printf("  Generated RawMut parallel capture owner-lifetime path %zu bytes of C code\n",
            strlen(code));
@@ -3094,7 +3094,7 @@ TEST(cgen_rawptr_load_le_unchecked_uses_pointer_helper) {
                       "    var view: ByteSpan = src\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
-                      "        var p = view.dataPtrUnchecked()\n"
+                      "        var p = view.ptr()\n"
                       "        var v16: uint16 = p.loadLEUnchecked<uint16>(1)\n"
                       "        var v32: uint32 = p.loadLEUnchecked<uint32>(0)\n"
                       "        var v64: uint64 = p.loadLEUnchecked<uint64>(0)\n"
@@ -3162,7 +3162,7 @@ TEST(cgen_rawmut_store_le_unchecked_uses_pointer_helper) {
     const char *src = "fn write(dst: Bytes) {\n"
                       "    var view: ByteSpan = dst[:]\n"
                       "    unsafe {\n"
-                      "        var p = view.dataMutPtrUnchecked()\n"
+                      "        var p = view.mutPtr()\n"
                       "        p.storeLEUnchecked<uint16>(1, 0x1234)\n"
                       "        p.storeLEUnchecked<uint32>(4, 0x01020304)\n"
                       "        p.storeLEUnchecked<uint64>(8, 0x0102030405060708)\n"
@@ -3218,7 +3218,7 @@ TEST(cgen_rawmut_store_le_unchecked_uses_pointer_helper) {
 TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     const char *src = "fn readByteAt(src: in ByteSpan, pos: int) -> int {\n"
                       "    unsafe {\n"
-                      "        return int(src.dataPtrUnchecked().offset(pos)[0])\n"
+                      "        return int(src.ptr().offset(pos)[0])\n"
                       "    }\n"
                       "}\n"
                       "fn callWindow(bytes: Bytes) -> int {\n"
@@ -3255,7 +3255,7 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
 TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
     const char *src = "fn leakPtr(src: in ByteSpan) -> RawPtr<uint8> {\n"
                       "    unsafe {\n"
-                      "        return src.dataPtrUnchecked()\n"
+                      "        return src.ptr()\n"
                       "    }\n"
                       "}\n"
                       "fn callWindow(bytes: Bytes) -> int {\n"

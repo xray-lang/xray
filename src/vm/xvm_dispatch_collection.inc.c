@@ -937,8 +937,7 @@ vmcase(OP_ARRAY_DATA_PTR) {
         vmbreak;
     }
     if (!XR_IS_ARRAY(R(b))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Array.dataPtrUnchecked() expects an array or span receiver");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.ptr() expects an array or span receiver");
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     R(a) = xr_int((xr_Integer) (intptr_t) arr->data);

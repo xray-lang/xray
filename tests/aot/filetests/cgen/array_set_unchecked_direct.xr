@@ -1,7 +1,7 @@
 fn patch(values: Array<uint32>) {
     unsafe {
-        values.setUnchecked(0, 11)
-        values.setUnchecked(1, 31)
+        values.set(0, 11)
+        values.set(1, 31)
     }
 }
 

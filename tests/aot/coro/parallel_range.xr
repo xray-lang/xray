@@ -12,18 +12,18 @@ while (w < 3) {
 
 parallel range begin, end in 0..10 workers 3 worker wid {
     unsafe {
-        starts.setUnchecked(wid, begin)
-        ends.setUnchecked(wid, end)
-        counts.setUnchecked(wid, counts.getUnchecked(wid) + 1)
+        starts.set(wid, begin)
+        ends.set(wid, end)
+        counts.set(wid, counts.get(wid) + 1)
     }
 }
 
 unsafe {
-    print(starts.getUnchecked(0))
-    print(ends.getUnchecked(0))
-    print(starts.getUnchecked(1))
-    print(ends.getUnchecked(1))
-    print(starts.getUnchecked(2))
-    print(ends.getUnchecked(2))
-    print(counts.getUnchecked(0) + counts.getUnchecked(1) + counts.getUnchecked(2))
+    print(starts.get(0))
+    print(ends.get(0))
+    print(starts.get(1))
+    print(ends.get(1))
+    print(starts.get(2))
+    print(ends.get(2))
+    print(counts.get(0) + counts.get(1) + counts.get(2))
 }

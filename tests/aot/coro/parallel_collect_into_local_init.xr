@@ -11,12 +11,12 @@ fn main() {
         collect into (values, marks) {
         unsafe {
             buf.push(i)
-            table.setUnchecked(0, table.getUnchecked(0) + 1)
+            table.set(0, table.get(0) + 1)
         }
         acc = acc + 1
         var tag = 0
         unsafe {
-            tag = buf.length + table.getUnchecked(0)
+            tag = buf.length + table.get(0)
         }
         (i + acc, tag)
     }

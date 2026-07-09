@@ -4,7 +4,7 @@ fn appendThenRead(src: Bytes) -> int {
 
     var tail: uint8 = 0
     unsafe {
-        tail = src.getUnchecked(2)
+        tail = src.get(2)
     }
     return int(tail) + out.length
 }

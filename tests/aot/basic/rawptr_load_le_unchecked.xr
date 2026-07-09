@@ -3,7 +3,7 @@ fn readRaw(src: ByteSpan) -> int {
     var value32: uint32 = 0
     var value64: uint64 = 0
     unsafe {
-        var p = src.dataPtrUnchecked()
+        var p = src.ptr()
         value16 = p.loadLEUnchecked<uint16>(1)
         value32 = p.loadLEUnchecked<uint32>(0)
         value64 = p.loadLEUnchecked<uint64>(0)

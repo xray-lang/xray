@@ -1,2 +1,2 @@
 var values = Array<int>(2, 0)
-print(values.getUnchecked(0))
+print(values.get(0))

@@ -1,6 +1,6 @@
 fn pair(src: ByteSpan) -> int {
     unsafe {
-        return int(src.getUnchecked(1)) + int(src.getUnchecked(2))
+        return int(src.get(1)) + int(src.get(2))
     }
 }
 

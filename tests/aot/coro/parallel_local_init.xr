@@ -24,7 +24,7 @@ fn main() {
             i = i + 1
         }
         unsafe {
-            partials.setUnchecked(wid, acc)
+            partials.set(wid, acc)
         }
     }
 
@@ -32,7 +32,7 @@ fn main() {
     w = 0
     while (w < 4) {
         unsafe {
-            total = total + partials.getUnchecked(w)
+            total = total + partials.get(w)
         }
         w = w + 1
     }

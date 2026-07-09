@@ -1,6 +1,6 @@
 fn read(src: ByteSpan) -> int {
     unsafe {
-        var p = src.dataPtrUnchecked()
+        var p = src.ptr()
         return int(p.loadLEUnchecked(0))
     }
 }

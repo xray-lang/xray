@@ -1,0 +1,3 @@
+fn read(src: ByteSpan) -> int {
+    unsafe { return int(src.getUnchecked(0)) }
+}

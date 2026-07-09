@@ -1,7 +1,7 @@
 fn touch(values: Array<int>) -> int {
     unsafe {
-        values.setUnchecked(1, 41)
-        return values.getUnchecked(1) + values.getUnchecked(2)
+        values.set(1, 41)
+        return values.get(1) + values.get(2)
     }
 }
 
