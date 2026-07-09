@@ -99,6 +99,8 @@ typedef struct XgLocalType {
     uint32_t map_receiver_type_key;
     uint32_t map_key_type_key;
     uint32_t map_value_type_key;
+    uint8_t sequence_kind;
+    uint32_t sequence_elem_type_key;
     bool inferred;
 } XgLocalType;
 
@@ -122,6 +124,10 @@ typedef struct XgBodyCollect {
     uint32_t callsite_start;
     uint32_t callsite_count;
     uint32_t key_access_count;
+    uint32_t sequence_access_count;
+    uint32_t capacity_op_count;
+    uint32_t bulk_op_count;
+    uint32_t encoding_op_count;
     uint32_t effect_bits;
     uint32_t escape_bits;
     uint32_t capability_bits;
@@ -1006,6 +1012,8 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->map_receiver_type_key = 0;
     row->map_key_type_key = 0;
     row->map_value_type_key = 0;
+    row->sequence_kind = 0;
+    row->sequence_elem_type_key = 0;
     row->inferred = inferred;
     return true;
 }
@@ -1893,6 +1901,71 @@ static bool body_type_ref_is_json(const XrTypeRef *type) {
     return type && type->kind == XR_TREF_NAMED && type->name && strcmp(type->name, "Json") == 0;
 }
 
+static uint32_t body_uint8_type_key(void) {
+    return hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+}
+
+static uint32_t body_char_type_key(void) {
+    return hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0);
+}
+
+static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_sequence_kind,
+                                         uint32_t *out_elem_type_key) {
+    if (out_sequence_kind)
+        *out_sequence_kind = 0;
+    if (out_elem_type_key)
+        *out_elem_type_key = 0;
+    if (!type)
+        return false;
+    if (type->kind == XR_TREF_STRING) {
+        if (out_sequence_kind)
+            *out_sequence_kind = XG_SEQ_STRING;
+        if (out_elem_type_key)
+            *out_elem_type_key = body_char_type_key();
+        return true;
+    }
+    if (type->kind == XR_TREF_NAMED && type->name) {
+        if (strcmp(type->name, "Bytes") == 0) {
+            if (out_sequence_kind)
+                *out_sequence_kind = XG_SEQ_BYTES;
+            if (out_elem_type_key)
+                *out_elem_type_key = body_uint8_type_key();
+            return true;
+        }
+        if (strcmp(type->name, "ByteSpan") == 0) {
+            if (out_sequence_kind)
+                *out_sequence_kind = XG_SEQ_BYTE_SPAN;
+            if (out_elem_type_key)
+                *out_elem_type_key = body_uint8_type_key();
+            return true;
+        }
+        if (strcmp(type->name, "StringBuilder") == 0) {
+            if (out_sequence_kind)
+                *out_sequence_kind = XG_SEQ_STRING_BUILDER;
+            if (out_elem_type_key)
+                *out_elem_type_key = body_char_type_key();
+            return true;
+        }
+    }
+    if (type->kind == XR_TREF_GENERIC && type->name && type->children && type->nchildren > 0) {
+        if (strcmp(type->name, "Array") == 0) {
+            if (out_sequence_kind)
+                *out_sequence_kind = XG_SEQ_ARRAY;
+            if (out_elem_type_key)
+                *out_elem_type_key = hash_tref32(type->children[0]);
+            return true;
+        }
+        if (strcmp(type->name, "Span") == 0) {
+            if (out_sequence_kind)
+                *out_sequence_kind = XG_SEQ_SPAN;
+            if (out_elem_type_key)
+                *out_elem_type_key = hash_tref32(type->children[0]);
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool body_type_ref_map_parts(const XrTypeRef *type, uint8_t *out_container_kind,
                                     uint32_t *out_key_type_key, uint32_t *out_value_type_key) {
     if (out_container_kind)
@@ -2526,6 +2599,37 @@ static void body_clear_map_shape_local(XgBodyCollect *bc, const char *name) {
     row->map_value_type_key = 0;
 }
 
+static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_t sequence_kind,
+                                     uint32_t elem_type_key) {
+    XgLocalType *row;
+    if (!bc || !name || sequence_kind == 0)
+        return;
+    row = body_find_local(bc, name);
+    if (!row)
+        return;
+    row->sequence_kind = sequence_kind;
+    row->sequence_elem_type_key = elem_type_key;
+}
+
+static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
+    XgLocalType *row;
+    if (!bc || !name)
+        return;
+    row = body_find_local(bc, name);
+    if (!row)
+        return;
+    row->sequence_kind = 0;
+    row->sequence_elem_type_key = 0;
+}
+
+static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode *expr) {
+    XgLocalType *row;
+    if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return NULL;
+    row = body_find_local(bc, expr->as.variable.name);
+    return row && row->sequence_kind != 0 ? row : NULL;
+}
+
 static XgLocalType *body_lookup_local_map_shape(XgBodyCollect *bc, const AstNode *expr) {
     XgLocalType *row;
     if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
@@ -2650,6 +2754,251 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
     if (op == 0)
         return;
     body_add_map_key_access_row(bc, node, local, key, op, mutating, false);
+}
+
+static uint32_t body_sequence_receiver_type_key(uint8_t sequence_kind, uint32_t elem_type_key) {
+    switch ((XgSequenceKind) sequence_kind) {
+        case XG_SEQ_ARRAY:
+            return hash_named_type_key32("Array", NULL, 0) ^ elem_type_key;
+        case XG_SEQ_BYTES:
+            return hash_named_type_key32("Bytes", NULL, 0);
+        case XG_SEQ_STRING:
+            return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
+        case XG_SEQ_SPAN:
+            return hash_named_type_key32("Span", NULL, 0) ^ elem_type_key;
+        case XG_SEQ_BYTE_SPAN:
+            return hash_named_type_key32("ByteSpan", NULL, 0);
+        case XG_SEQ_STRING_BUILDER:
+            return hash_named_type_key32("StringBuilder", NULL, 0);
+        default:
+            return 0;
+    }
+}
+
+static void body_add_sequence_access_row(XgBodyCollect *bc, const AstNode *node,
+                                         const XgLocalType *local, uint8_t access_kind,
+                                         const AstNode *index, const AstNode *length,
+                                         bool mutating) {
+    XgSequenceAccessSummary row;
+    if (!bc || !node || !local || local->sequence_kind == 0)
+        return;
+    memset(&row, 0, sizeof(row));
+    row.access_id = (XgSequenceAccessId) (bc->evidence->nsequence_accesses + 1);
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = bc->sequence_access_count++;
+    row.sequence_kind = local->sequence_kind;
+    row.access_kind = access_kind;
+    row.receiver_type_key =
+        local->type_key
+            ? local->type_key
+            : body_sequence_receiver_type_key(local->sequence_kind, local->sequence_elem_type_key);
+    row.elem_type_key = local->sequence_elem_type_key;
+    row.index_expr_id = body_const_expr_id(index);
+    row.length_expr_id = body_const_expr_id(length);
+    if (mutating)
+        row.flags |= XG_SEQ_ACCESS_MUTATING;
+    if (row.index_expr_id != 0)
+        row.flags |= XG_SEQ_ACCESS_CONST_INDEX;
+    if (access_kind == XG_SEQ_ACCESS_SLICE)
+        row.flags |= XG_SEQ_ACCESS_SLICE_NORMALIZED;
+    if (local->sequence_kind == XG_SEQ_SPAN || local->sequence_kind == XG_SEQ_BYTE_SPAN)
+        row.flags |= XG_SEQ_ACCESS_FROM_SPAN;
+    (void) xg_global_evidence_add_sequence_access(bc->evidence, &row);
+}
+
+static void body_add_sequence_index_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
+    const AstNode *receiver;
+    const AstNode *index;
+    XgLocalType *local;
+    if (!bc || !node)
+        return;
+    if (node->type == AST_INDEX_GET) {
+        receiver = node->as.index_get.array;
+        index = node->as.index_get.index;
+    } else if (node->type == AST_INDEX_SET) {
+        receiver = node->as.index_set.array;
+        index = node->as.index_set.index;
+    } else {
+        return;
+    }
+    local = body_lookup_local_sequence(bc, receiver);
+    if (!local)
+        return;
+    body_add_sequence_access_row(bc, node, local,
+                                 mutating ? XG_SEQ_ACCESS_INDEX_SET : XG_SEQ_ACCESS_INDEX_GET,
+                                 index, NULL, mutating);
+}
+
+static void body_add_sequence_slice_access(XgBodyCollect *bc, const AstNode *node) {
+    XgLocalType *local;
+    if (!bc || !node || node->type != AST_SLICE_EXPR)
+        return;
+    local = body_lookup_local_sequence(bc, node->as.slice_expr.source);
+    if (!local)
+        return;
+    body_add_sequence_access_row(bc, node, local, XG_SEQ_ACCESS_SLICE, node->as.slice_expr.start,
+                                 node->as.slice_expr.end, false);
+}
+
+static void body_add_sequence_length_access(XgBodyCollect *bc, const AstNode *node) {
+    const MemberAccessNode *member;
+    XgLocalType *local;
+    if (!bc || !node || node->type != AST_MEMBER_ACCESS)
+        return;
+    member = &node->as.member_access;
+    if (!member->name || strcmp(member->name, "length") != 0)
+        return;
+    local = body_lookup_local_sequence(bc, member->object);
+    if (!local)
+        return;
+    body_add_sequence_access_row(bc, node, local, XG_SEQ_ACCESS_LENGTH, NULL, NULL, false);
+}
+
+static void body_add_capacity_op(XgBodyCollect *bc, const AstNode *node, const XgLocalType *local,
+                                 uint8_t op_kind, const AstNode *count_expr, bool may_grow) {
+    XgCapacityOpSummary row;
+    if (!bc || !node || !local || local->sequence_kind == 0)
+        return;
+    memset(&row, 0, sizeof(row));
+    row.op_id = (XgCapacityOpId) (bc->evidence->ncapacity_ops + 1);
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = bc->capacity_op_count++;
+    row.sequence_kind = local->sequence_kind;
+    row.op_kind = op_kind;
+    row.receiver_type_key =
+        local->type_key
+            ? local->type_key
+            : body_sequence_receiver_type_key(local->sequence_kind, local->sequence_elem_type_key);
+    row.elem_type_key = local->sequence_elem_type_key;
+    row.count_expr_id = body_const_expr_id(count_expr);
+    if (may_grow)
+        row.flags |= XG_CAPACITY_MAY_GROW;
+    if (row.count_expr_id != 0)
+        row.flags |= XG_CAPACITY_EXACT_COUNT;
+    if (op_kind == XG_CAPACITY_TO_STRING)
+        row.flags |= XG_CAPACITY_BUILDER_FINAL;
+    (void) xg_global_evidence_add_capacity_op(bc->evidence, &row);
+}
+
+static void body_add_bulk_op(XgBodyCollect *bc, const AstNode *node, uint8_t op_kind,
+                             const XgLocalType *dst_local, const AstNode *src_expr,
+                             const AstNode *length_expr, bool overlap_possible) {
+    XgBulkOpSummary row;
+    if (!bc || !node || !dst_local)
+        return;
+    memset(&row, 0, sizeof(row));
+    row.op_id = (XgBulkOpId) (bc->evidence->nbulk_ops + 1);
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = bc->bulk_op_count++;
+    row.op_kind = op_kind;
+    row.elem_type_key = dst_local->sequence_elem_type_key;
+    row.src_type_key = body_expr_type_key(bc, src_expr);
+    row.dst_type_key = dst_local->type_key
+                           ? dst_local->type_key
+                           : body_sequence_receiver_type_key(dst_local->sequence_kind,
+                                                             dst_local->sequence_elem_type_key);
+    row.length_expr_id = body_const_expr_id(length_expr);
+    if (dst_local->sequence_elem_type_key == body_uint8_type_key() ||
+        dst_local->sequence_elem_type_key == body_char_type_key())
+        row.flags |= XG_BULK_POD;
+    if (overlap_possible)
+        row.flags |= XG_BULK_OVERLAP_POSSIBLE;
+    if (dst_local->sequence_kind == XG_SEQ_ARRAY)
+        row.flags |= XG_BULK_WRITE_BARRIER;
+    (void) xg_global_evidence_add_bulk_op(bc->evidence, &row);
+}
+
+static void body_add_encoding_op(XgBodyCollect *bc, const AstNode *node, uint8_t op_kind,
+                                 const AstNode *input_expr, uint32_t output_type_key,
+                                 uint32_t flags) {
+    XgEncodingOpSummary row;
+    if (!bc || !node)
+        return;
+    memset(&row, 0, sizeof(row));
+    row.op_id = (XgEncodingOpId) (bc->evidence->nencoding_ops + 1);
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = bc->encoding_op_count++;
+    row.op_kind = op_kind;
+    row.input_type_key = body_expr_type_key(bc, input_expr);
+    row.output_type_key = output_type_key;
+    row.flags = flags;
+    if (input_expr && input_expr->type == AST_LITERAL_STRING)
+        row.flags |= XG_ENCODING_STATIC_LITERAL | XG_ENCODING_KNOWN_UTF8;
+    (void) xg_global_evidence_add_encoding_op(bc->evidence, &row);
+}
+
+static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *node) {
+    const CallExprNode *call;
+    const MemberAccessNode *member;
+    XgLocalType *local;
+    const AstNode *arg0;
+    if (!bc || !node || node->type != AST_CALL_EXPR)
+        return;
+    call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return;
+    member = &call->callee->as.member_access;
+    if (!member->name)
+        return;
+    local = body_lookup_local_sequence(bc, member->object);
+    arg0 = call->arguments && call->arg_count > 0 ? call->arguments[0] : NULL;
+
+    if (local) {
+        if (strcmp(member->name, "push") == 0 && call->arg_count == 1) {
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_PUSH, arg0, true);
+            return;
+        }
+        if ((strcmp(member->name, "append") == 0 || strcmp(member->name, "extend") == 0) &&
+            call->arg_count >= 1) {
+            body_add_capacity_op(bc, node, local,
+                                 strcmp(member->name, "extend") == 0 ? XG_CAPACITY_EXTEND
+                                                                     : XG_CAPACITY_APPEND,
+                                 arg0, true);
+            return;
+        }
+        if (strcmp(member->name, "reserve") == 0 && call->arg_count == 1) {
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_RESERVE, arg0, true);
+            return;
+        }
+        if (strcmp(member->name, "clear") == 0 && call->arg_count == 0) {
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_CLEAR, NULL, false);
+            return;
+        }
+        if (strcmp(member->name, "toString") == 0 && call->arg_count == 0) {
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_TO_STRING, NULL, false);
+            if (local->sequence_kind == XG_SEQ_BYTES ||
+                local->sequence_kind == XG_SEQ_STRING_BUILDER)
+                body_add_encoding_op(bc, node, XG_ENCODING_BYTES_TO_STRING, member->object,
+                                     hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0),
+                                     XG_ENCODING_VALIDATED_ONCE | XG_ENCODING_SCALAR_BOUNDARY);
+            return;
+        }
+        if (strcmp(member->name, "appendFrom") == 0 && call->arg_count >= 1) {
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_APPEND, arg0, true);
+            body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, NULL, false);
+            return;
+        }
+        if (strcmp(member->name, "copyFrom") == 0 && call->arg_count >= 1) {
+            body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, NULL, true);
+            return;
+        }
+        if (strcmp(member->name, "fill") == 0 && call->arg_count >= 1) {
+            body_add_bulk_op(bc, node, XG_BULK_FILL, local, arg0, NULL, false);
+            return;
+        }
+    }
+
+    if (strcmp(member->name, "toBytes") == 0 && call->arg_count == 0 &&
+        body_expr_type_key(bc, member->object) ==
+            hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0)) {
+        uint32_t output_type_key = hash_named_type_key32("Bytes", NULL, 0);
+        body_add_encoding_op(bc, node, XG_ENCODING_STRING_TO_BYTES, member->object, output_type_key,
+                             XG_ENCODING_KNOWN_UTF8 | XG_ENCODING_SCALAR_BOUNDARY);
+    }
 }
 
 static void body_add_generic_inst(XgBodyCollect *bc, uint8_t kind, const char *name,
@@ -3047,6 +3396,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_CALL_EXPR:
             body_add_map_method_key_access(bc, node);
+            body_add_sequence_method_evidence(bc, node);
             collect_callsite(bc, node);
             walk_body_for_calls(bc, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
@@ -3113,11 +3463,15 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t map_receiver_type_key = 0;
             uint32_t map_key_type_key = 0;
             uint32_t map_value_type_key = 0;
+            uint8_t sequence_kind = 0;
+            uint32_t sequence_elem_type_key = 0;
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             XgInterfaceId interface_id = producer_lookup_interface_from_tref(
                 bc->producer, node->as.var_decl.type_annotation);
             bool inferred = false;
+            (void) body_type_ref_sequence_parts(node->as.var_decl.type_annotation, &sequence_kind,
+                                                &sequence_elem_type_key);
             bc->capability_bits |=
                 body_capabilities_for_type_ref(node->as.var_decl.type_annotation);
             walk_body_for_calls(bc, node->as.var_decl.initializer);
@@ -3172,6 +3526,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                           map_container_kind, map_receiver_type_key,
                                           map_key_type_key, map_value_type_key);
             }
+            if (sequence_kind != 0)
+                body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
+                                         sequence_elem_type_key);
             break;
         }
         case AST_ASSIGNMENT: {
@@ -3192,6 +3549,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             body_clear_json_shape_local(bc, node->as.assignment.name);
             body_clear_record_shape_local(bc, node->as.assignment.name);
             body_clear_map_shape_local(bc, node->as.assignment.name);
+            body_clear_sequence_local(bc, node->as.assignment.name);
             body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
                               interface_id, type_key);
             if (json_literal) {
@@ -3220,6 +3578,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             body_add_json_member_access(bc, node, false);
             body_add_record_member_access(bc, node, false);
+            body_add_sequence_length_access(bc, node);
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
         }
@@ -3235,12 +3594,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             body_add_json_index_access(bc, node, false);
             body_add_map_index_key_access(bc, node, false);
+            body_add_sequence_index_access(bc, node, false);
             walk_body_for_calls(bc, node->as.index_get.array);
             walk_body_for_calls(bc, node->as.index_get.index);
             break;
         case AST_INDEX_SET:
             body_add_json_index_access(bc, node, true);
             body_add_map_index_key_access(bc, node, true);
+            body_add_sequence_index_access(bc, node, true);
             walk_body_for_calls(bc, node->as.index_set.array);
             walk_body_for_calls(bc, node->as.index_set.index);
             walk_body_for_calls(bc, node->as.index_set.value);
@@ -3249,6 +3610,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_SLICE_EXPR:
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
+            body_add_sequence_slice_access(bc, node);
             walk_body_for_calls(bc, node->as.slice_expr.source);
             walk_body_for_calls(bc, node->as.slice_expr.start);
             walk_body_for_calls(bc, node->as.slice_expr.end);
@@ -3615,10 +3977,16 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
             bc->producer, method->param_types ? method->param_types[i] : NULL);
         uint32_t type_key =
             method->param_types && method->param_types[i] ? hash_tref32(method->param_types[i]) : 0;
+        uint8_t sequence_kind = 0;
+        uint32_t sequence_elem_type_key = 0;
         bc->capability_bits |=
             body_capabilities_for_type_ref(method->param_types ? method->param_types[i] : NULL);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
                                interface_id, type_key, false);
+        if (body_type_ref_sequence_parts(method->param_types ? method->param_types[i] : NULL,
+                                         &sequence_kind, &sequence_elem_type_key))
+            body_bind_sequence_local(bc, method->parameters ? method->parameters[i] : NULL,
+                                     sequence_kind, sequence_elem_type_key);
     }
 }
 
@@ -3632,9 +4000,15 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
         XgInterfaceId interface_id =
             producer_lookup_interface_from_tref(bc->producer, param ? param->type : NULL);
         uint32_t type_key = param && param->type ? hash_tref32(param->type) : 0;
+        uint8_t sequence_kind = 0;
+        uint32_t sequence_elem_type_key = 0;
         bc->capability_bits |= body_capabilities_for_type_ref(param ? param->type : NULL);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key, false);
+        if (body_type_ref_sequence_parts(param ? param->type : NULL, &sequence_kind,
+                                         &sequence_elem_type_key))
+            body_bind_sequence_local(bc, param ? param->name : NULL, sequence_kind,
+                                     sequence_elem_type_key);
     }
 }
 

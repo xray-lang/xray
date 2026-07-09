@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=7 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=8 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=7 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=7 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=7 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=7 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=8 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=8 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=8 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=8 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=7 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=8 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -7676,6 +7676,168 @@ TEST(global_evidence_records_map_set_key_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
+    XgBuildKey key = {.source_hash = 31,
+                      .compiler_semver_hash = 32,
+                      .profile_hash = 33,
+                      .imported_summary_hash = 34,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgSequenceAccessSummary seq = {.access_id = 1,
+                                   .owner_func_id = 7,
+                                   .source_span_id = 100,
+                                   .body_ordinal = 0,
+                                   .sequence_kind = XG_SEQ_ARRAY,
+                                   .access_kind = XG_SEQ_ACCESS_INDEX_GET,
+                                   .receiver_type_key = 200,
+                                   .elem_type_key = 201,
+                                   .index_expr_id = 1,
+                                   .length_expr_id = 0,
+                                   .flags = XG_SEQ_ACCESS_CONST_INDEX};
+    XgCapacityOpSummary cap = {.op_id = 1,
+                               .owner_func_id = 7,
+                               .source_span_id = 101,
+                               .body_ordinal = 0,
+                               .sequence_kind = XG_SEQ_STRING_BUILDER,
+                               .op_kind = XG_CAPACITY_APPEND,
+                               .receiver_type_key = 300,
+                               .elem_type_key = 301,
+                               .count_expr_id = 2,
+                               .loop_id = 0,
+                               .flags = XG_CAPACITY_MAY_GROW | XG_CAPACITY_EXACT_COUNT};
+    XgBulkOpSummary bulk = {.op_id = 1,
+                            .owner_func_id = 7,
+                            .source_span_id = 102,
+                            .body_ordinal = 0,
+                            .op_kind = XG_BULK_COPY,
+                            .elem_type_key = 401,
+                            .src_type_key = 402,
+                            .dst_type_key = 403,
+                            .length_expr_id = 3,
+                            .flags = XG_BULK_POD};
+    XgEncodingOpSummary enc = {.op_id = 1,
+                               .owner_func_id = 7,
+                               .source_span_id = 103,
+                               .body_ordinal = 0,
+                               .op_kind = XG_ENCODING_STRING_TO_BYTES,
+                               .input_type_key = 501,
+                               .output_type_key = 502,
+                               .flags = XG_ENCODING_KNOWN_UTF8 | XG_ENCODING_VALIDATED_ONCE};
+    ASSERT_NOT_NULL(xg_global_evidence_add_sequence_access(&ev, &seq));
+    ASSERT_NOT_NULL(xg_global_evidence_add_capacity_op(&ev, &cap));
+    ASSERT_NOT_NULL(xg_global_evidence_add_bulk_op(&ev, &bulk));
+    ASSERT_NOT_NULL(xg_global_evidence_add_encoding_op(&ev, &enc));
+    ASSERT_NOT_NULL(xg_global_evidence_find_sequence_access(&ev, 1));
+    ASSERT_NOT_NULL(xg_global_evidence_find_capacity_op(&ev, 1));
+    ASSERT_NOT_NULL(xg_global_evidence_find_bulk_op(&ev, 1));
+    ASSERT_NOT_NULL(xg_global_evidence_find_encoding_op(&ev, 1));
+    ASSERT_NE(xg_global_evidence_hash(&ev), 0);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "seq-access 0 id=1 owner=7 span=100 ordinal=0 kind=array"));
+    ASSERT_NOT_NULL(strstr(dump, "access=index_get"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "capacity-op 0 id=1 owner=7 span=101 ordinal=0 kind=string_builder"));
+    ASSERT_NOT_NULL(strstr(dump, "op=append"));
+    ASSERT_NOT_NULL(strstr(dump, "bulk-op 0 id=1 owner=7 span=102 ordinal=0 op=copy"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "encoding-op 0 id=1 owner=7 span=103 ordinal=0 op=string_to_bytes"));
+    xr_free(dump);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
+    setup_parser_session();
+    const char *source = "fn touch(xs: Array<int>, b: Bytes, s: string, span: ByteSpan, "
+                         "sb: StringBuilder) -> int {\n"
+                         "    xs.push(1)\n"
+                         "    var first = xs[0]\n"
+                         "    var part = xs[0:1]\n"
+                         "    var n = xs.length\n"
+                         "    b.appendFrom(span)\n"
+                         "    b.copyFrom(span)\n"
+                         "    var text = b.toString()\n"
+                         "    var bytes = s.toBytes()\n"
+                         "    return n\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nsequence_accesses, 3);
+    ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
+    ASSERT_EQ_UINT(ev.nbulk_ops, 2);
+    ASSERT_EQ_UINT(ev.nencoding_ops, 2);
+
+    bool saw_index = false;
+    bool saw_slice = false;
+    bool saw_length = false;
+    for (uint32_t i = 0; i < ev.nsequence_accesses; i++) {
+        if (ev.sequence_accesses[i].access_kind == XG_SEQ_ACCESS_INDEX_GET)
+            saw_index = true;
+        if (ev.sequence_accesses[i].access_kind == XG_SEQ_ACCESS_SLICE)
+            saw_slice = true;
+        if (ev.sequence_accesses[i].access_kind == XG_SEQ_ACCESS_LENGTH)
+            saw_length = true;
+    }
+    ASSERT_TRUE(saw_index);
+    ASSERT_TRUE(saw_slice);
+    ASSERT_TRUE(saw_length);
+
+    bool saw_push = false;
+    bool saw_append = false;
+    bool saw_to_string = false;
+    for (uint32_t i = 0; i < ev.ncapacity_ops; i++) {
+        if (ev.capacity_ops[i].op_kind == XG_CAPACITY_PUSH)
+            saw_push = true;
+        if (ev.capacity_ops[i].op_kind == XG_CAPACITY_APPEND)
+            saw_append = true;
+        if (ev.capacity_ops[i].op_kind == XG_CAPACITY_TO_STRING)
+            saw_to_string = true;
+    }
+    ASSERT_TRUE(saw_push);
+    ASSERT_TRUE(saw_append);
+    ASSERT_TRUE(saw_to_string);
+
+    bool saw_string_to_bytes = false;
+    bool saw_bytes_to_string = false;
+    for (uint32_t i = 0; i < ev.nencoding_ops; i++) {
+        if (ev.encoding_ops[i].op_kind == XG_ENCODING_STRING_TO_BYTES)
+            saw_string_to_bytes = true;
+        if (ev.encoding_ops[i].op_kind == XG_ENCODING_BYTES_TO_STRING)
+            saw_bytes_to_string = true;
+    }
+    ASSERT_TRUE(saw_string_to_bytes);
+    ASSERT_TRUE(saw_bytes_to_string);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "seq-access"));
+    ASSERT_NOT_NULL(strstr(dump, "capacity-op"));
+    ASSERT_NOT_NULL(strstr(dump, "bulk-op"));
+    ASSERT_NOT_NULL(strstr(dump, "encoding-op"));
+    xr_free(dump);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_explicit_json_shape_access) {
     setup_parser_session();
     const char *source = "fn readName() -> string {\n"
@@ -8769,6 +8931,8 @@ RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
+RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
+RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_records_json_computed_key_access);
 RUN_TEST(global_evidence_producer_records_json_static_key_index_access);

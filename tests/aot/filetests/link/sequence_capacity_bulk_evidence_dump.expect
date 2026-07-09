@@ -1,0 +1,15 @@
+args=--dump-global-evidence
+contains=seq-access
+contains=kind=array access=index_get
+contains=kind=array access=slice
+contains=kind=array access=length
+contains=capacity-op
+contains=kind=array op=push
+contains=kind=bytes op=append
+contains=kind=bytes op=to_string
+contains=bulk-op
+contains=op=copy
+contains=op=fill
+contains=encoding-op
+contains=op=string_to_bytes
+contains=op=bytes_to_string

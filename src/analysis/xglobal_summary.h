@@ -30,6 +30,10 @@ typedef uint32_t XgGenericInstId;
 typedef uint32_t XgGenericBodyUseId;
 typedef uint32_t XgGenericStorageId;
 typedef uint32_t XgGenericCodeSizeId;
+typedef uint32_t XgSequenceAccessId;
+typedef uint32_t XgCapacityOpId;
+typedef uint32_t XgBulkOpId;
+typedef uint32_t XgEncodingOpId;
 typedef uint32_t XgDeriveId;
 typedef uint32_t XgDerivedFieldId;
 typedef uint32_t XgDerivedMethodId;
@@ -46,7 +50,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 7,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 8,
 };
 
 typedef enum XgBuildProfile {
@@ -132,6 +136,50 @@ typedef enum XgGenericStorageKind {
     XG_GENERIC_STORAGE_CLASS,
     XG_GENERIC_STORAGE_STRUCT,
 } XgGenericStorageKind;
+
+typedef enum XgSequenceKind {
+    XG_SEQ_ARRAY = 1,
+    XG_SEQ_BYTES,
+    XG_SEQ_STRING,
+    XG_SEQ_SPAN,
+    XG_SEQ_BYTE_SPAN,
+    XG_SEQ_STRING_BUILDER,
+} XgSequenceKind;
+
+typedef enum XgSequenceAccessKind {
+    XG_SEQ_ACCESS_INDEX_GET = 1,
+    XG_SEQ_ACCESS_INDEX_SET,
+    XG_SEQ_ACCESS_SLICE,
+    XG_SEQ_ACCESS_ITER,
+    XG_SEQ_ACCESS_LENGTH,
+} XgSequenceAccessKind;
+
+typedef enum XgCapacityOpKind {
+    XG_CAPACITY_PUSH = 1,
+    XG_CAPACITY_APPEND,
+    XG_CAPACITY_EXTEND,
+    XG_CAPACITY_RESERVE,
+    XG_CAPACITY_CONCAT,
+    XG_CAPACITY_TO_STRING,
+    XG_CAPACITY_CLEAR,
+} XgCapacityOpKind;
+
+typedef enum XgBulkOpKind {
+    XG_BULK_COPY = 1,
+    XG_BULK_FILL,
+    XG_BULK_COMPARE,
+    XG_BULK_REPEAT,
+    XG_BULK_COPY_WITHIN,
+} XgBulkOpKind;
+
+typedef enum XgEncodingOpKind {
+    XG_ENCODING_STRING_TO_BYTES = 1,
+    XG_ENCODING_BYTES_TO_STRING,
+    XG_ENCODING_UTF8_VALIDATE,
+    XG_ENCODING_UTF8_COUNT,
+    XG_ENCODING_UTF16_ENCODE,
+    XG_ENCODING_UTF16_DECODE,
+} XgEncodingOpKind;
 
 typedef enum XgDeriveKind {
     XG_DERIVE_JSON = 1,
@@ -299,6 +347,35 @@ enum {
     XG_GENERIC_CODESIZE_SHARE_CANONICAL_BODY = 1u << 1,
     XG_GENERIC_CODESIZE_FORCE_CLONE = 1u << 2,
     XG_GENERIC_CODESIZE_PROFILE_IGNORED = 1u << 3,
+};
+
+enum {
+    XG_SEQ_ACCESS_MUTATING = 1u << 0,
+    XG_SEQ_ACCESS_NEGATIVE_INDEX = 1u << 1,
+    XG_SEQ_ACCESS_SLICE_NORMALIZED = 1u << 2,
+    XG_SEQ_ACCESS_FROM_SPAN = 1u << 3,
+    XG_SEQ_ACCESS_CONST_INDEX = 1u << 4,
+};
+
+enum {
+    XG_CAPACITY_MAY_GROW = 1u << 0,
+    XG_CAPACITY_EXACT_COUNT = 1u << 1,
+    XG_CAPACITY_LOOP_APPEND = 1u << 2,
+    XG_CAPACITY_BUILDER_FINAL = 1u << 3,
+};
+
+enum {
+    XG_BULK_POD = 1u << 0,
+    XG_BULK_OVERLAP_POSSIBLE = 1u << 1,
+    XG_BULK_READONLY_SRC = 1u << 2,
+    XG_BULK_WRITE_BARRIER = 1u << 3,
+};
+
+enum {
+    XG_ENCODING_KNOWN_UTF8 = 1u << 0,
+    XG_ENCODING_VALIDATED_ONCE = 1u << 1,
+    XG_ENCODING_SCALAR_BOUNDARY = 1u << 2,
+    XG_ENCODING_STATIC_LITERAL = 1u << 3,
 };
 
 enum {
@@ -601,6 +678,58 @@ typedef struct XgGenericCodeSizeSummary {
     uint32_t flags;
 } XgGenericCodeSizeSummary;
 
+typedef struct XgSequenceAccessSummary {
+    XgSequenceAccessId access_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint8_t sequence_kind;
+    uint8_t access_kind;
+    uint32_t receiver_type_key;
+    uint32_t elem_type_key;
+    uint32_t index_expr_id;
+    uint32_t length_expr_id;
+    uint32_t flags;
+} XgSequenceAccessSummary;
+
+typedef struct XgCapacityOpSummary {
+    XgCapacityOpId op_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint8_t sequence_kind;
+    uint8_t op_kind;
+    uint32_t receiver_type_key;
+    uint32_t elem_type_key;
+    uint32_t count_expr_id;
+    uint32_t loop_id;
+    uint32_t flags;
+} XgCapacityOpSummary;
+
+typedef struct XgBulkOpSummary {
+    XgBulkOpId op_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint8_t op_kind;
+    uint32_t elem_type_key;
+    uint32_t src_type_key;
+    uint32_t dst_type_key;
+    uint32_t length_expr_id;
+    uint32_t flags;
+} XgBulkOpSummary;
+
+typedef struct XgEncodingOpSummary {
+    XgEncodingOpId op_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint8_t op_kind;
+    uint32_t input_type_key;
+    uint32_t output_type_key;
+    uint32_t flags;
+} XgEncodingOpSummary;
+
 typedef struct XgDeriveSummary {
     XgDeriveId derive_id;
     XgModuleId module_id;
@@ -756,6 +885,10 @@ typedef struct XgGlobalEvidence {
     XgGenericBodyUseSummary *generic_body_uses;
     XgGenericStorageSummary *generic_storages;
     XgGenericCodeSizeSummary *generic_code_sizes;
+    XgSequenceAccessSummary *sequence_accesses;
+    XgCapacityOpSummary *capacity_ops;
+    XgBulkOpSummary *bulk_ops;
+    XgEncodingOpSummary *encoding_ops;
     XgDeriveSummary *derives;
     XgDerivedFieldSummary *derived_fields;
     XgDerivedMethodSummary *derived_methods;
@@ -781,6 +914,10 @@ typedef struct XgGlobalEvidence {
     uint32_t ngeneric_body_uses;
     uint32_t ngeneric_storages;
     uint32_t ngeneric_code_sizes;
+    uint32_t nsequence_accesses;
+    uint32_t ncapacity_ops;
+    uint32_t nbulk_ops;
+    uint32_t nencoding_ops;
     uint32_t nderives;
     uint32_t nderived_fields;
     uint32_t nderived_methods;
@@ -806,6 +943,10 @@ typedef struct XgGlobalEvidence {
     uint32_t generic_body_use_cap;
     uint32_t generic_storage_cap;
     uint32_t generic_code_size_cap;
+    uint32_t sequence_access_cap;
+    uint32_t capacity_op_cap;
+    uint32_t bulk_op_cap;
+    uint32_t encoding_op_cap;
     uint32_t derive_cap;
     uint32_t derived_field_cap;
     uint32_t derived_method_cap;
@@ -826,6 +967,11 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_storage_kind_name(uint8_t kind);
+XR_FUNC const char *xg_sequence_kind_name(uint8_t kind);
+XR_FUNC const char *xg_sequence_access_kind_name(uint8_t kind);
+XR_FUNC const char *xg_capacity_op_kind_name(uint8_t kind);
+XR_FUNC const char *xg_bulk_op_kind_name(uint8_t kind);
+XR_FUNC const char *xg_encoding_op_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derive_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derived_method_kind_name(uint8_t kind);
 XR_FUNC const char *xg_json_shape_kind_name(uint8_t kind);
@@ -871,6 +1017,11 @@ XR_FUNC bool xg_global_evidence_reserve_generic_storages(XgGlobalEvidence *evide
                                                          uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_generic_code_sizes(XgGlobalEvidence *evidence,
                                                            uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_sequence_accesses(XgGlobalEvidence *evidence,
+                                                          uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_capacity_ops(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_bulk_ops(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_encoding_ops(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_derives(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_derived_fields(XgGlobalEvidence *evidence,
                                                        uint32_t capacity);
@@ -922,6 +1073,15 @@ xg_global_evidence_add_generic_storage(XgGlobalEvidence *evidence,
 XR_FUNC XgGenericCodeSizeSummary *
 xg_global_evidence_add_generic_code_size(XgGlobalEvidence *evidence,
                                          const XgGenericCodeSizeSummary *summary);
+XR_FUNC XgSequenceAccessSummary *
+xg_global_evidence_add_sequence_access(XgGlobalEvidence *evidence,
+                                       const XgSequenceAccessSummary *summary);
+XR_FUNC XgCapacityOpSummary *xg_global_evidence_add_capacity_op(XgGlobalEvidence *evidence,
+                                                                const XgCapacityOpSummary *summary);
+XR_FUNC XgBulkOpSummary *xg_global_evidence_add_bulk_op(XgGlobalEvidence *evidence,
+                                                        const XgBulkOpSummary *summary);
+XR_FUNC XgEncodingOpSummary *xg_global_evidence_add_encoding_op(XgGlobalEvidence *evidence,
+                                                                const XgEncodingOpSummary *summary);
 XR_FUNC XgDeriveSummary *xg_global_evidence_add_derive(XgGlobalEvidence *evidence,
                                                        const XgDeriveSummary *summary);
 XR_FUNC XgDerivedFieldSummary *
@@ -962,6 +1122,15 @@ xg_global_evidence_find_generic_storage(const XgGlobalEvidence *evidence,
 XR_FUNC const XgGenericCodeSizeSummary *
 xg_global_evidence_find_generic_code_size(const XgGlobalEvidence *evidence,
                                           XgGenericCodeSizeId code_size_id);
+XR_FUNC const XgSequenceAccessSummary *
+xg_global_evidence_find_sequence_access(const XgGlobalEvidence *evidence,
+                                        XgSequenceAccessId access_id);
+XR_FUNC const XgCapacityOpSummary *
+xg_global_evidence_find_capacity_op(const XgGlobalEvidence *evidence, XgCapacityOpId op_id);
+XR_FUNC const XgBulkOpSummary *xg_global_evidence_find_bulk_op(const XgGlobalEvidence *evidence,
+                                                               XgBulkOpId op_id);
+XR_FUNC const XgEncodingOpSummary *
+xg_global_evidence_find_encoding_op(const XgGlobalEvidence *evidence, XgEncodingOpId op_id);
 XR_FUNC const XgJsonShapeSummary *
 xg_global_evidence_find_json_shape(const XgGlobalEvidence *evidence, XgJsonShapeId json_shape_id);
 XR_FUNC const XgRecordShapeSummary *
