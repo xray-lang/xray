@@ -2204,6 +2204,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'xray_const__freestanding_static_data_lib_LABEL_GROUPS[2] XRT_ATTR_SECTION("__DATA,.xr_ilgrp") XRT_ATTR_WEAK XRT_ATTR_USED' \
             "freestanding-profile/static-import: exporter keeps struct-array nested string section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
+            "freestanding-profile/static-import: exporter materializes plain aggregate const"
     else
         record_fail "freestanding-profile/static-import: exporter kept C source missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
@@ -2243,6 +2246,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct { struct { XrValue label; int64_t code; } inner; int64_t base; } xray_const__freestanding_static_data_lib_LABEL_GROUPS[2]' \
             "freestanding-profile/static-import: importer declares struct-array nested string extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
+            "freestanding-profile/static-import: importer declares plain aggregate const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_MATRIX[_outer_idx][_idx]' \
             "freestanding-profile/static-import: importer reads fixed-array matrix directly"
@@ -2291,6 +2297,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].base' \
             "freestanding-profile/static-import: importer reads struct-array nested string base field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_PLAIN_HEADER.magic' \
+            "freestanding-profile/static-import: importer reads plain aggregate const field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            '&xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
+            "freestanding-profile/static-import: importer takes plain aggregate const address directly"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
             "freestanding-profile/static-import: avoids dynamic property helper"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
@@ -2356,6 +2368,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_pass "freestanding-profile/static-import: weak struct data symbol is external"
     else
         record_fail "freestanding-profile/static-import: weak struct data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_PLAIN_HEADER" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak plain aggregate data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak plain aggregate data symbol missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
