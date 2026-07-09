@@ -16,6 +16,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
+#include "../shared/xr_derive_flags.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -1545,6 +1546,129 @@ static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
     return flags;
 }
 
+static bool derive_kind_from_flag(uint32_t flag, uint8_t *out_kind) {
+    if (!out_kind)
+        return false;
+    switch (flag) {
+        case XR_DERIVE_JSON:
+            *out_kind = XG_DERIVE_JSON;
+            return true;
+        case XR_DERIVE_INSPECT:
+            *out_kind = XG_DERIVE_INSPECT;
+            return true;
+        case XR_DERIVE_EQ:
+            *out_kind = XG_DERIVE_EQ;
+            return true;
+        case XR_DERIVE_HASH:
+            *out_kind = XG_DERIVE_HASH;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint32_t derived_field_flags(const FieldDeclNode *field) {
+    uint32_t flags = 0;
+    if (!field)
+        return 0;
+    if (field->is_private)
+        flags |= XG_DERIVED_FIELD_PRIVATE;
+    else if (field->is_protected)
+        flags |= XG_DERIVED_FIELD_PROTECTED;
+    else
+        flags |= XG_DERIVED_FIELD_PUBLIC;
+    if (field->is_static)
+        flags |= XG_DERIVED_FIELD_STATIC;
+    if (field->is_final || field->is_const)
+        flags |= XG_DERIVED_FIELD_READONLY;
+    return flags;
+}
+
+static uint64_t hash_derive_decl(uint32_t type_key, uint8_t derive_kind, const ClassDeclNode *cls) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, type_key);
+    h = fold_u64(h, derive_kind);
+    if (!cls || cls->field_count <= 0 || !cls->fields)
+        return h ? h : 1;
+    h = fold_u64(h, (uint64_t) cls->field_count);
+    for (int i = 0; i < cls->field_count; i++) {
+        const AstNode *field_node = cls->fields[i];
+        const FieldDeclNode *field =
+            field_node && field_node->type == AST_FIELD_DECL ? &field_node->as.field_decl : NULL;
+        h = fold_u64(h, (uint64_t) i);
+        h = fold_u64(h, field ? hash_name32(field->name) : 0);
+        h = fold_u64(h, field ? hash_tref32(field->field_type) : 0);
+        h = fold_u64(h, derived_field_flags(field));
+    }
+    return h ? h : 1;
+}
+
+static bool producer_add_derive_fields(XgProducer *p, XgDeriveId derive_id,
+                                       const ClassDeclNode *cls, uint32_t source_field_start) {
+    if (!p || !p->evidence || !cls || cls->field_count <= 0)
+        return true;
+    for (int i = 0; i < cls->field_count; i++) {
+        const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
+        const FieldDeclNode *field =
+            field_node && field_node->type == AST_FIELD_DECL ? &field_node->as.field_decl : NULL;
+        XgDerivedFieldSummary row;
+        memset(&row, 0, sizeof(row));
+        row.field_id = (XgDerivedFieldId) (p->evidence->nderived_fields + 1);
+        row.derive_id = derive_id;
+        row.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
+        row.name_id = field ? hash_name32(field->name) : 0;
+        row.type_key = field ? hash_tref32(field->field_type) : 0;
+        row.source_field_id = source_field_start != 0 ? source_field_start + (uint32_t) i : 0;
+        row.flags = derived_field_flags(field);
+        if (!xg_global_evidence_add_derived_field(p->evidence, &row))
+            return false;
+    }
+    return true;
+}
+
+static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDeclId owner_decl_id,
+                                      uint32_t source_span_id, const char *type_name,
+                                      uint32_t derive_flags, const ClassDeclNode *cls,
+                                      uint32_t source_field_start) {
+    static const uint32_t ordered_flags[] = {
+        XR_DERIVE_JSON,
+        XR_DERIVE_INSPECT,
+        XR_DERIVE_EQ,
+        XR_DERIVE_HASH,
+    };
+    uint32_t type_key = hash_named_type_key32(type_name, NULL, 0);
+    if (!p || !p->evidence || derive_flags == 0)
+        return true;
+    for (uint32_t i = 0; i < (uint32_t) (sizeof(ordered_flags) / sizeof(ordered_flags[0])); i++) {
+        uint32_t flag = ordered_flags[i];
+        uint8_t kind = 0;
+        XgDeriveSummary row;
+        XgDeriveId derive_id;
+        if ((derive_flags & flag) == 0 || !derive_kind_from_flag(flag, &kind))
+            continue;
+        derive_id = (XgDeriveId) (p->evidence->nderives + 1);
+        memset(&row, 0, sizeof(row));
+        row.derive_id = derive_id;
+        row.module_id = module_id;
+        row.owner_decl_id = owner_decl_id;
+        row.source_span_id = source_span_id;
+        row.type_key = type_key;
+        row.derive_kind = kind;
+        row.field_start = cls && cls->field_count > 0 ? p->evidence->nderived_fields + 1 : 0;
+        row.field_count =
+            cls && cls->field_count > 0
+                ? (uint16_t) (cls->field_count < UINT16_MAX ? cls->field_count : UINT16_MAX)
+                : 0;
+        row.flags = XG_DERIVE_OPT_IN;
+        row.derive_hash = hash_derive_decl(type_key, kind, cls);
+        if (!xg_global_evidence_add_derive(p->evidence, &row))
+            return false;
+        if (!producer_add_derive_fields(p, derive_id, cls, source_field_start))
+            return false;
+    }
+    return true;
+}
+
 static XrAttribute *attrs_find(XrAttribute **attrs, int count, AttributeKind kind) {
     for (int i = 0; i < count; i++) {
         if (attrs[i] && attrs[i]->kind == kind)
@@ -2855,6 +2979,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     }
     if (!xg_global_evidence_add_class(p->evidence, &csum))
         return false;
+    if (!producer_add_decl_derives(p, module_id, decl_id, (uint32_t) node->line, cls->name,
+                                   derive_flags, cls, csum.field_start))
+        return false;
     if (!add_monomorphized_class_instantiation(p, module_id, node, cls, class_id))
         return false;
     return producer_register_class(p, cls->name, cls->super_name, class_id,
@@ -2921,7 +3048,10 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
-    return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
+    if (!xg_global_evidence_add_decl(p->evidence, &decl))
+        return false;
+    return producer_add_decl_derives(p, module_id, decl.decl_id, (uint32_t) node->line, e->name,
+                                     derive_flags, NULL, 0);
 }
 
 static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, const AstNode *node) {
