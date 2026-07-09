@@ -462,6 +462,7 @@ enum {
     XG_MAP_SHAPE_DENSE_INT = 1u << 3,
     XG_MAP_SHAPE_READONLY = 1u << 4,
     XG_MAP_SHAPE_STATIC = 1u << 5,
+    XG_MAP_SHAPE_BOOL_DIRECT = 1u << 6,
 };
 
 enum {
@@ -469,6 +470,7 @@ enum {
     XG_MAP_ENTRY_CONST_VALUE = 1u << 1,
     XG_MAP_ENTRY_DUPLICATE_KEY = 1u << 2,
     XG_MAP_ENTRY_INT_KEY = 1u << 3,
+    XG_MAP_ENTRY_BOOL_KEY = 1u << 4,
 };
 
 enum {

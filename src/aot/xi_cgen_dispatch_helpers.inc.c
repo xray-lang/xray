@@ -7167,6 +7167,10 @@ static bool xicgen_map_index_plan_is_prehashed(const XaotKeyAccessPlan *plan) {
     return plan && plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP && plan->key_prehash != 0;
 }
 
+static bool xicgen_map_index_plan_is_bool_direct(const XaotKeyAccessPlan *plan) {
+    return plan && plan->action == XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
+}
+
 static bool xicgen_map_index_plan_is_small_scan(const XaotKeyAccessPlan *plan) {
     return plan && plan->action == XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
 }
@@ -7193,6 +7197,22 @@ static bool xicgen_emit_map_index_get_prehashed(XiCgenCtx *ctx, FILE *out, const
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) plan->key_prehash);
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool xicgen_emit_map_index_get_bool_direct(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                  const XaotKeyAccessPlan *plan) {
+    if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_MAP || !xicgen_map_index_plan_is_bool_direct(plan))
+        return false;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_boolmap_get_v((xrt_boolmap_t*)");
+    xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -7313,6 +7333,8 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_span_index_get_expr(ctx, out, f, v) ||
         emit_typed_array_index_get_expr(ctx, out, f, v, prefix) ||
         emit_class_native_array_index_get_expr(ctx, out, f, v))
+        return;
+    if (xicgen_emit_map_index_get_bool_direct(ctx, out, v, key_plan))
         return;
     if (xicgen_emit_map_index_get_dense_index(ctx, out, v, key_plan))
         return;

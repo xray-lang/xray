@@ -1,0 +1,14 @@
+contains=xaot-plan v0
+regex=map-shape-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ container=map source=literal action=bool_direct key_type=[0-9]+ value_type=[0-9]+ entries=[0-9]+\+2 literal_count=2 hash=[0-9a-f]+ evidence=0xc3 reason=none
+regex=map-shape-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ container=set source=literal action=bool_direct key_type=[0-9]+ value_type=0 entries=[0-9]+\+2 literal_count=2 hash=[0-9a-f]+ evidence=0xc3 reason=none
+regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=index_get shape=[0-9]+ action=bool_direct_lookup receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=0 prehash=0000000000000000 evidence=0xdd reason=none
+regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=has shape=[0-9]+ action=bool_direct_lookup receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0xdd reason=none
+c_contains=xrt_boolmap_get_v
+c_contains=xrt_boolmap_has_v
+c_not_contains=xrt_map_get_dense_i64_owned
+c_not_contains=xrt_map_has_dense_i64
+c_not_contains=xrt_map_get_small_owned
+c_not_contains=xrt_map_has_small
+c_not_contains=xrt_map_get_prehashed_owned
+c_not_contains=xrt_map_has_prehashed
+c_not_contains=xrt_index_get(

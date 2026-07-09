@@ -1482,6 +1482,24 @@ static bool verify_map_rows(const XgGlobalEvidence *ev, char *errbuf, size_t err
                                          "AOT dense Map/Set shape has duplicate key evidence");
                 }
             }
+            if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0) {
+                uint8_t seen = 0;
+                for (uint32_t ei = 0; ei < shape->entry_count; ei++) {
+                    const XgMapEntrySummary *entry = &ev->map_entries[start - 1 + ei];
+                    if ((entry->flags & XG_MAP_ENTRY_BOOL_KEY) == 0)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT bool-direct Map/Set shape has non-bool key evidence");
+                    if (entry->key_i64 != 0 && entry->key_i64 != 1)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT bool-direct Map/Set shape key domain is stale");
+                    if ((seen & (uint8_t) (1u << entry->key_i64)) != 0 ||
+                        (entry->flags & XG_MAP_ENTRY_DUPLICATE_KEY) != 0)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT bool-direct Map/Set shape has duplicate key evidence");
+                    seen |= (uint8_t) (1u << entry->key_i64);
+                }
+            }
         }
         for (uint32_t j = i + 1; j < ev->nmap_shapes; j++) {
             if (ev->map_shapes[j].shape_id == shape->shape_id)
@@ -3900,6 +3918,8 @@ static uint8_t verify_map_shape_action_for(const XgMapShapeSummary *shape) {
         return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
     if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
         return XAOT_MAP_SHAPE_DENSE_INT_TABLE;
+    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+        return XAOT_MAP_SHAPE_BOOL_DIRECT;
     if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
         return XAOT_MAP_SHAPE_SMALL_INLINE;
     if ((shape->flags & XG_MAP_SHAPE_LITERAL) != 0 || shape->source == XG_MAP_SHAPE_SRC_LITERAL)
@@ -3924,6 +3944,8 @@ static uint32_t verify_map_shape_evidence_for(const XgMapShapeSummary *shape) {
         evidence |= XAOT_MAP_EV_DENSE_DOMAIN;
     if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
         evidence |= XAOT_MAP_EV_SMALL;
+    if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+        evidence |= XAOT_MAP_EV_BOOL_DOMAIN;
     return evidence;
 }
 
@@ -4015,6 +4037,9 @@ static uint8_t verify_key_access_action_for(const XgGlobalEvidence *ev,
             return XAOT_KEY_ACCESS_REJECT;
         bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
                          access->op == XG_KEY_ACCESS_HAS;
+        if (lookup_op && access->container_kind == XG_MAP_CONTAINER_MAP &&
+            (shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+            return XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
         if (lookup_op && (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
         if (lookup_op && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
@@ -4064,6 +4089,8 @@ static uint32_t verify_key_access_evidence_for(const XgGlobalEvidence *ev,
             bits |= XAOT_MAP_EV_DENSE_DOMAIN;
         if ((shape->flags & XG_MAP_SHAPE_SMALL) != 0)
             bits |= XAOT_MAP_EV_SMALL;
+        if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0)
+            bits |= XAOT_MAP_EV_BOOL_DOMAIN;
     }
     hash_eq = xg_global_evidence_find_hash_eq(ev, access->key_type_key);
     if (hash_eq && verify_hash_eq_action_for(hash_eq) != XAOT_HASH_EQ_DYNAMIC_REJECT)

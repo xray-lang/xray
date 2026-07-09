@@ -9023,6 +9023,69 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_bool_direct_map_set_shape) {
+    setup_parser_session();
+    const char *source = "fn boolLookup(flag: bool) -> int {\n"
+                         "    var scores: Map<bool, int> = #{true: 7, false: 3}\n"
+                         "    var seen: Set<bool> = #[true, false]\n"
+                         "    var total = scores[flag]\n"
+                         "    if (scores.has(true)) {\n"
+                         "        if (seen.has(false)) { return total }\n"
+                         "    }\n"
+                         "    return 0\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 4);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) != 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_SMALL) != 0);
+    for (uint32_t i = 0; i < ev.nmap_entries; i++) {
+        ASSERT_TRUE((ev.map_entries[i].flags & XG_MAP_ENTRY_BOOL_KEY) != 0);
+        ASSERT_TRUE(ev.map_entries[i].key_i64 == 0 || ev.map_entries[i].key_i64 == 1);
+    }
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotMapShapePlan *map_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
+    const XaotMapShapePlan *set_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[1].shape_id);
+    ASSERT_NOT_NULL(map_shape_plan);
+    ASSERT_NOT_NULL(set_shape_plan);
+    ASSERT_EQ_UINT(map_shape_plan->action, XAOT_MAP_SHAPE_BOOL_DIRECT);
+    ASSERT_EQ_UINT(set_shape_plan->action, XAOT_MAP_SHAPE_BOOL_DIRECT);
+    ASSERT_TRUE((map_shape_plan->evidence & XAOT_MAP_EV_BOOL_DOMAIN) != 0);
+    ASSERT_TRUE((set_shape_plan->evidence & XAOT_MAP_EV_BOOL_DOMAIN) != 0);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "key_i64=1"));
+    ASSERT_NOT_NULL(strstr(dump, "key_i64=0"));
+    xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     setup_parser_session();
     const char *source = "fn readAlias() -> int {\n"
@@ -9707,6 +9770,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
+RUN_TEST(global_evidence_producer_records_bool_direct_map_set_shape);
 RUN_TEST(global_evidence_producer_propagates_map_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);

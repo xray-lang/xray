@@ -327,6 +327,7 @@ static bool cg_key_access_plan_action_has_backend(XiCgenCtx *ctx, const XaotKeyA
         return true;
     switch ((XaotKeyAccessAction) plan->action) {
         case XAOT_KEY_ACCESS_PREHASHED_LOOKUP:
+        case XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP:
         case XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP:
         case XAOT_KEY_ACCESS_GENERIC_HASH_LOOKUP:
         case XAOT_KEY_ACCESS_INLINE_SMALL_SCAN:
@@ -352,6 +353,7 @@ static bool cg_key_access_plan_action_allows_hash_helper(XiCgenCtx *ctx,
     if (!plan)
         return true;
     return plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP ||
+           plan->action == XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP ||
            plan->action == XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP;
 }
 
