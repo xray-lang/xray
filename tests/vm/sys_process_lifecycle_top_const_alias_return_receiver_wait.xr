@@ -1,0 +1,19 @@
+import sys
+import { Process } from sys
+
+fn passProcess(p: Process) -> Process {
+    return p
+}
+
+const aliasProcess = passProcess
+
+fn run() {
+    var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (spawned == null) {
+        print("spawn-failed")
+        return
+    }
+    print(aliasProcess(spawned!).wait())
+}
+
+run()
