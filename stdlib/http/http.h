@@ -8,48 +8,19 @@
  * http.h - HTTP module public interface
  *
  * KEY CONCEPT:
- *   Provides HTTP client and server functionality with support for
- *   HTTP/1.1 and HTTP/2. Cookie parsing and jars live in pure Xray.
- *   Each Isolate has its own XrHttpContext for multi-instance support.
- *
- * NOTE: WebSocket has been moved to separate 'ws' module.
+ *   Public C entrypoint for registering the HTTP module. Native HTTP
+ *   client/server internals live in http_internal.h and the narrower
+ *   subsystem headers.
  */
 
 #ifndef XR_STDLIB_HTTP_H
 #define XR_STDLIB_HTTP_H
 
-#include "../../src/runtime/xisolate_internal.h"
-#include "../../src/module/xmodule.h"
-#include "http_server.h"
-#include "http2_client.h"
-#include "../net/conn_pool.h"
+#include "../../src/base/xdefs.h"
 
-// Per-Isolate HTTP module context, stored in module's native_handle
-typedef struct XrHttpContext {
-    /* === Server === */
-    struct XrHttpServer *server;
-    XrVMRuntime *server_isolate;
+struct XrVMRuntime;
+struct XrModule;
 
-    /* === Server Runtime State === */
-    _Atomic int current_conns;  // Current connection count
-
-    /* === Connection Pools (per-isolate) === */
-    XrConnPool *conn_pool;     // TCP/TLS connection pool (net layer)
-    XrH2Pool *h2_client_pool;  // HTTP/2 client connection pool
-
-} XrHttpContext;
-
-// Get or create HTTP context for this Isolate
-XrHttpContext *http_get_context(XrVMRuntime *X);
-
-// Load HTTP module
-XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate);
-
-/* ========== Pure C Listen + Connection Handler (http_listen.c) ========== */
-
-#include "../../src/coro/xyieldable.h"
-
-// http.listen(port) -> bool (yieldable, accept loop + conn handler spawn)
-XrCFuncResult http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result);
+XR_FUNC struct XrModule *xr_load_module_http(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_HTTP_H
