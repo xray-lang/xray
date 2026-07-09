@@ -1,4 +1,5 @@
 contains=enum 0 name=PairResult
+regex=enum-scalar-plan [0-9]+ enum=[0-9]+ action=compact_aggregate evidence=0x[0-9a-f]+ payload_cap=16
 contains=layout_id=
 contains=c_type=xrt_enum_adt_match_multi_payload_aggregate_PairResult_
 c_contains=PairResult

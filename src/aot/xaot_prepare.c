@@ -3087,29 +3087,13 @@ static bool value_rep_is_propagating_aggregate(XaotValueRep rep) {
            (rep.flags & (XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_ENUM)) != 0;
 }
 
-enum {
-    XAOT_PREPARE_ENUM_AGG_PAYLOAD_CAP = 16
-};
-
-static bool prepare_adt_enum_plan_can_use_compact_value(const XaotEnumPlan *plan) {
-    const XiEnumData *ed = plan ? plan->enum_data : NULL;
-    if (!plan || !ed || !ed->is_adt || plan->max_payload > XAOT_PREPARE_ENUM_AGG_PAYLOAD_CAP)
-        return false;
-    for (uint32_t i = 0; i < plan->member_count; i++) {
-        const XiEnumMemberData *member = plan->members ? &plan->members[i] : NULL;
-        if (member && member->payload_count > XAOT_PREPARE_ENUM_AGG_PAYLOAD_CAP)
-            return false;
-    }
-    return true;
-}
-
 static bool prepare_compact_adt_value_rep_for_type(const XaotBundle *bundle, const XrType *type,
                                                    XaotValueRep *out_rep) {
     const XaotEnumPlan *plan;
     if (!bundle || !type || !out_rep)
         return false;
     plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
-    if (!prepare_adt_enum_plan_can_use_compact_value(plan))
+    if (!plan || plan->scalar_action != XAOT_ENUM_SCALAR_COMPACT_AGGREGATE)
         return false;
     memset(out_rep, 0, sizeof(*out_rep));
     out_rep->kind = XAOT_VALUE_AGGREGATE;
