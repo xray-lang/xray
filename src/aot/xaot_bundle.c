@@ -3536,6 +3536,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->bounds_plans);
     xr_free(bundle->span_access_plans);
     xr_free(bundle->alias_plans);
+    xr_free(bundle->allocation_plans);
     xr_free(bundle->closure_plans);
     xr_free(bundle->transfer_plans);
     xaot_bundle_clear_global_lowered_plans(bundle);
@@ -3549,6 +3550,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xaot_ptr_index_free(&bundle->bounds_index);
     xaot_ptr_index_free(&bundle->span_access_index);
     xaot_ptr_index_free(&bundle->alias_index);
+    xaot_ptr_index_free(&bundle->allocation_index);
     xaot_ptr_index_free(&bundle->closure_index);
     memset(bundle, 0, sizeof(*bundle));
 }
@@ -4881,6 +4883,55 @@ XR_FUNC const XaotAliasPlan *xaot_bundle_find_alias_plan(const XaotBundle *bundl
     return NULL;
 }
 
+XR_FUNC XaotAllocationPlan *xaot_bundle_add_allocation_plan(XaotBundle *bundle, const XiFunc *func,
+                                                            const XiValue *value,
+                                                            const XgBodySummary *body,
+                                                            uint8_t action, uint16_t original_op,
+                                                            uint8_t escape, uint32_t evidence) {
+    XaotAllocationPlan *plan;
+
+    if (!bundle || !func || !value || !body || body->func_id == XG_NO_ID || action == 0 ||
+        original_op == 0 || evidence == 0)
+        return NULL;
+    plan = (XaotAllocationPlan *) xaot_bundle_find_allocation_plan(bundle, value);
+    if (plan)
+        return plan;
+    if (!reserve_plan_array((void **) &bundle->allocation_plans, &bundle->allocation_plan_cap,
+                            bundle->nallocation_plans + 1, sizeof(XaotAllocationPlan), 16))
+        return NULL;
+    plan = &bundle->allocation_plans[bundle->nallocation_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->func = func;
+    plan->value = value;
+    plan->body_func_id = body->func_id;
+    plan->body_effect_bits = body->effect_bits;
+    plan->body_escape_bits = body->escape_bits;
+    plan->body_evidence = XAOT_PLAN_BODY_EV_BODY_SUMMARY;
+    plan->original_op = original_op;
+    plan->escape = escape;
+    plan->action = action;
+    plan->evidence = evidence;
+    if (!xaot_ptr_index_put(&bundle->allocation_index, value, bundle->nallocation_plans - 1)) {
+        bundle->nallocation_plans--;
+        memset(plan, 0, sizeof(*plan));
+        bundle->error_msg = "failed to index AOT allocation plan";
+        return NULL;
+    }
+    return plan;
+}
+
+XR_FUNC const XaotAllocationPlan *xaot_bundle_find_allocation_plan(const XaotBundle *bundle,
+                                                                   const XiValue *value) {
+    uint32_t idx;
+
+    if (!bundle || !value)
+        return NULL;
+    if (xaot_ptr_index_get(&bundle->allocation_index, value, &idx) &&
+        idx < bundle->nallocation_plans)
+        return &bundle->allocation_plans[idx];
+    return NULL;
+}
+
 XR_FUNC XaotClosurePlan *
 xaot_bundle_add_closure_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
                              const XiFunc *target_func, uint16_t capture_count,
@@ -6159,6 +6210,19 @@ static const char *closure_representation_name(uint8_t representation) {
     }
 }
 
+static const char *allocation_action_name(uint8_t action) {
+    switch ((XaotAllocationAction) action) {
+        case XAOT_ALLOC_ACTION_NONE:
+            return "none";
+        case XAOT_ALLOC_ACTION_STACK:
+            return "stack";
+        case XAOT_ALLOC_ACTION_SROA:
+            return "sroa";
+        default:
+            return "unknown";
+    }
+}
+
 static const char *closure_unproven_reason_name(uint8_t reason) {
     switch (reason) {
         case XAOT_CLOSURE_UNPROVEN_NONE:
@@ -6863,6 +6927,19 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 (ap->evidence & XAOT_ALIAS_EV_USE_WHITELIST) ? "+whitelist" : "",
                 (ap->evidence & XAOT_ALIAS_EV_SOLE_CACHE) ? "+sole" : "", ap->body_func_id,
                 ap->body_effect_bits, ap->body_escape_bits, ap->body_evidence);
+    }
+
+    for (uint32_t ai = 0; ai < bundle->nallocation_plans; ai++) {
+        const XaotAllocationPlan *ap = &bundle->allocation_plans[ai];
+        char value_buf[32];
+        value_ref(value_buf, sizeof(value_buf), ap->value);
+        fprintf(out,
+                "allocation-plan %u func=%s value=%s action=%s original=%s escape=%u "
+                "evidence=0x%x body=%u effect=0x%x body_escape=0x%x body_evidence=0x%x\n",
+                ai, safe_str(ap->func ? ap->func->name : NULL), value_buf,
+                allocation_action_name(ap->action), xi_op_name(ap->original_op),
+                (unsigned) ap->escape, ap->evidence, ap->body_func_id, ap->body_effect_bits,
+                ap->body_escape_bits, ap->body_evidence);
     }
 
     for (uint32_t ci = 0; ci < bundle->nclosure_plans; ci++) {
