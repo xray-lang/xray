@@ -1462,18 +1462,6 @@ static XrValue ws_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_null();
 }
 
-/*
- * ws.isServerRunning() -> bool
- */
-static XrValue ws_is_server_running(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrWsContext *ctx = get_ws_context(X);
-    if (!ctx)
-        return xr_bool(false);
-    return xr_bool(ctx->server_running);
-}
-
 /* ========== HTTP Server Integration ========== */
 
 /*

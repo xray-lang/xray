@@ -3561,11 +3561,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Check if connection is open",
     },
     {
-        .name = "isServerRunning",
-        .signature = "(): bool",
-        .summary = "Check if the WebSocket server is running",
-    },
-    {
         .name = "isValidCloseCode",
         .signature = "(code: int): bool",
         .summary = "",
@@ -6310,7 +6305,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.frame` | `(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes` |  |\n"
             "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
-            "| `ws.isServerRunning` | `(): bool` | Check if the WebSocket server is running |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Bytes, key: Bytes): Bytes` |  |\n"
             "| `ws.parseClosePayload` | `(payload: Bytes): ClosePayload?` |  |\n"

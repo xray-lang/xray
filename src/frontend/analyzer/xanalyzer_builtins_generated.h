@@ -490,9 +490,8 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
     {"isOpen", "(conn: WsConn): bool", "Check if connection is open", true, false, false, false},
     {"serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", true, false, false, false},
     {"stopServer", "(): ()", "Stop the WebSocket server", true, false, false, false},
-    {"isServerRunning", "(): bool", "Check if the WebSocket server is running", true, false, false, false},
 };
-#define GEN_WS_FUNCTION_COUNT 10
+#define GEN_WS_FUNCTION_COUNT 9
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
