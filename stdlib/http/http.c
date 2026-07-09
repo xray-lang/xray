@@ -21,7 +21,6 @@
 #include "http_client.h"
 #include "http_parser.h"
 #include "http_router.h"
-#include "http_server.h"
 #include "../../src/base/xplatform.h"
 #include "../common.h"
 #include "../../src/runtime/object/xjson_serde.h"

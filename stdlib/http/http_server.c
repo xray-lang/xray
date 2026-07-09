@@ -15,7 +15,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
-#include "http_server.h"
+#include "http_internal.h"
 
 #include "../../src/os/os_net.h"
 
