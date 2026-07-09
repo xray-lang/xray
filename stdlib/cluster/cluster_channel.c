@@ -78,8 +78,8 @@ static int dist_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
         return XR_CHAN_CLOSED;
     }
 
-    int flen = xr_frame_encode_channel_send(frame, frame_size + 16, dc->name, sbuf.data,
-                                            (uint32_t) sbuf.len);
+    int flen = cluster_frame_encode_channel_send(frame, frame_size + 16, dc->name, sbuf.data,
+                                                 (uint32_t) sbuf.len);
     cluster_serial_buf_free(&sbuf);
 
     if (flen < 0) {
@@ -203,7 +203,7 @@ static void dist_close(XrChannel *ch) {
             return;
 
         uint8_t frame[256];
-        int flen = xr_frame_encode_channel_close(frame, sizeof(frame), dc->name);
+        int flen = cluster_frame_encode_channel_close(frame, sizeof(frame), dc->name);
         if (flen < 0)
             return;
 
@@ -220,7 +220,7 @@ static void dist_close(XrChannel *ch) {
         // Proxy closing: notify Owner via output queue
         if (dc->owner_node && dc->owner_node->state == XR_NODE_CONNECTED) {
             uint8_t frame[256];
-            int flen = xr_frame_encode_channel_close(frame, sizeof(frame), dc->name);
+            int flen = cluster_frame_encode_channel_close(frame, sizeof(frame), dc->name);
             if (flen > 0) {
                 cluster_node_enqueue(dc->owner_node, frame, (uint32_t) flen);
             }
@@ -407,8 +407,8 @@ void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
         return;
     }
 
-    int flen =
-        xr_frame_encode_channel_push(frame, frame_size + 16, name, sbuf.data, (uint32_t) sbuf.len);
+    int flen = cluster_frame_encode_channel_push(frame, frame_size + 16, name, sbuf.data,
+                                                 (uint32_t) sbuf.len);
     cluster_serial_buf_free(&sbuf);
 
     if (flen > 0) {
@@ -458,7 +458,7 @@ void cluster_channel_subscribe(XrChannel *ch) {
         return;
 
     uint8_t frame[256];
-    int flen = xr_frame_encode_channel_subscribe(frame, sizeof(frame), dc->name);
+    int flen = cluster_frame_encode_channel_subscribe(frame, sizeof(frame), dc->name);
     if (flen > 0) {
         cluster_node_enqueue(dc->owner_node, frame, (uint32_t) flen);
     }
@@ -476,7 +476,7 @@ void cluster_channel_unsubscribe(XrChannel *ch) {
         return;
 
     uint8_t frame[256];
-    int flen = xr_frame_encode_channel_unsubscribe(frame, sizeof(frame), dc->name);
+    int flen = cluster_frame_encode_channel_unsubscribe(frame, sizeof(frame), dc->name);
     if (flen > 0) {
         cluster_node_enqueue(dc->owner_node, frame, (uint32_t) flen);
     }

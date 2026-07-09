@@ -161,7 +161,7 @@ XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const cha
 
     // Send CORO_MONITOR frame to remote node
     uint8_t buf[256];
-    int len = xr_frame_encode_coro_monitor(buf, sizeof(buf), XR_FRAME_CORO_MONITOR, coro_name);
+    int len = cluster_frame_encode_coro_monitor(buf, sizeof(buf), XR_FRAME_CORO_MONITOR, coro_name);
     if (len > 0) {
         cluster_node_enqueue(node, buf, (uint32_t) len);
     }
@@ -196,7 +196,7 @@ static void coro_monitor_fwd_loop(void *arg) {
     // Send CORO_EXIT frame to the requesting remote node
     if (ctx->node && ctx->node->state == XR_NODE_CONNECTED) {
         uint8_t buf[256];
-        int len = xr_frame_encode_coro_exit(buf, sizeof(buf), ctx->coro_name, reason);
+        int len = cluster_frame_encode_coro_exit(buf, sizeof(buf), ctx->coro_name, reason);
         if (len > 0) {
             cluster_node_enqueue(ctx->node, buf, (uint32_t) len);
         }
@@ -221,7 +221,7 @@ void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node,
     if (!mon_ch) {
         // Could not set up monitor — send immediate CORO_EXIT with "noproc"
         uint8_t buf[256];
-        int len = xr_frame_encode_coro_exit(buf, sizeof(buf), coro_name, "noproc");
+        int len = cluster_frame_encode_coro_exit(buf, sizeof(buf), coro_name, "noproc");
         if (len > 0) {
             cluster_node_enqueue(node, buf, (uint32_t) len);
         }

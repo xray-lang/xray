@@ -52,7 +52,8 @@ static inline int64_t get_i64(const uint8_t *p) {
 
 /* ========== Raw Frame Write ========== */
 
-int xr_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload, uint32_t payload_len) {
+int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
+                        uint32_t payload_len) {
     uint32_t total_payload = 1 + payload_len;  // type + payload
     put_u32(buf, total_payload);
     buf[4] = frame_type;
@@ -64,8 +65,8 @@ int xr_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload, uin
 
 /* ========== Frame Header Read ========== */
 
-int xr_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,
-                         uint32_t *payload_len) {
+int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,
+                              uint32_t *payload_len) {
     if (data_len < 5)
         return -1;
     uint32_t total = get_u32(data);
@@ -82,7 +83,8 @@ int xr_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_ty
  * HANDSHAKE_REQ payload:
  *   [version 1B] [name_len 1B] [name ...] [nonce 16B] [flags 4B]
  */
-int xr_frame_encode_handshake_req(uint8_t *buf, size_t buf_size, const XrFrameHandshakeReq *req) {
+int cluster_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
+                                       const XrFrameHandshakeReq *req) {
     uint8_t name_len = (uint8_t) strlen(req->name);
     uint32_t payload_len = 1 + 1 + name_len + XR_NONCE_SIZE + 4;
     uint32_t frame_size = 4 + 1 + payload_len;
@@ -99,10 +101,11 @@ int xr_frame_encode_handshake_req(uint8_t *buf, size_t buf_size, const XrFrameHa
     p += XR_NONCE_SIZE;
     put_u32(p, req->flags);
 
-    return xr_frame_write(buf, XR_FRAME_HANDSHAKE_REQ, payload, payload_len);
+    return cluster_frame_write(buf, XR_FRAME_HANDSHAKE_REQ, payload, payload_len);
 }
 
-int xr_frame_decode_handshake_req(const uint8_t *payload, uint32_t len, XrFrameHandshakeReq *req) {
+int cluster_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
+                                       XrFrameHandshakeReq *req) {
     if (len < 1 + 1 + XR_NONCE_SIZE + 4)
         return -1;
     const uint8_t *p = payload;
@@ -125,7 +128,8 @@ int xr_frame_decode_handshake_req(const uint8_t *payload, uint32_t len, XrFrameH
  * HANDSHAKE_ACK payload:
  *   [version 1B] [name_len 1B] [name ...] [nonce 16B] [proof 32B] [flags 4B]
  */
-int xr_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size, const XrFrameHandshakeAck *ack) {
+int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
+                                       const XrFrameHandshakeAck *ack) {
     uint8_t name_len = (uint8_t) strlen(ack->name);
     uint32_t payload_len = 1 + 1 + name_len + XR_NONCE_SIZE + XR_PROOF_SIZE + 4;
     uint32_t frame_size = 4 + 1 + payload_len;
@@ -144,10 +148,11 @@ int xr_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size, const XrFrameHa
     p += XR_PROOF_SIZE;
     put_u32(p, ack->flags);
 
-    return xr_frame_write(buf, XR_FRAME_HANDSHAKE_ACK, payload, payload_len);
+    return cluster_frame_write(buf, XR_FRAME_HANDSHAKE_ACK, payload, payload_len);
 }
 
-int xr_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len, XrFrameHandshakeAck *ack) {
+int cluster_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
+                                       XrFrameHandshakeAck *ack) {
     if (len < 1 + 1 + XR_NONCE_SIZE + XR_PROOF_SIZE + 4)
         return -1;
     const uint8_t *p = payload;
@@ -171,16 +176,16 @@ int xr_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len, XrFrameH
 /*
  * HANDSHAKE_DONE payload: [proof 32B]
  */
-int xr_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
-                                   const XrFrameHandshakeDone *done) {
+int cluster_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
+                                        const XrFrameHandshakeDone *done) {
     uint32_t frame_size = 4 + 1 + XR_PROOF_SIZE;
     if (buf_size < frame_size)
         return -1;
-    return xr_frame_write(buf, XR_FRAME_HANDSHAKE_DONE, done->proof, XR_PROOF_SIZE);
+    return cluster_frame_write(buf, XR_FRAME_HANDSHAKE_DONE, done->proof, XR_PROOF_SIZE);
 }
 
-int xr_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
-                                   XrFrameHandshakeDone *done) {
+int cluster_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
+                                        XrFrameHandshakeDone *done) {
     if (len < XR_PROOF_SIZE)
         return -1;
     memcpy(done->proof, payload, XR_PROOF_SIZE);
@@ -192,16 +197,16 @@ int xr_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
 /*
  * HEARTBEAT payload: [timestamp 8B]
  */
-int xr_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, int64_t timestamp) {
+int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, int64_t timestamp) {
     uint32_t frame_size = 4 + 1 + 8;
     if (buf_size < frame_size)
         return -1;
     uint8_t payload[8];
     put_u64(payload, (uint64_t) timestamp);
-    return xr_frame_write(buf, type, payload, 8);
+    return cluster_frame_write(buf, type, payload, 8);
 }
 
-int xr_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t *timestamp) {
+int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t *timestamp) {
     if (len < 8)
         return -1;
     *timestamp = get_i64(payload);
@@ -214,8 +219,8 @@ int xr_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t *tim
  * CHANNEL_SEND payload:
  *   [name_len 1B] [name ...] [value_data ...]
  */
-int xr_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *channel_name,
-                                 const uint8_t *value_data, uint32_t value_len) {
+int cluster_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *channel_name,
+                                      const uint8_t *value_data, uint32_t value_len) {
     uint8_t name_len = (uint8_t) strlen(channel_name);
     if (name_len > XR_CHANNEL_NAME_MAX)
         return -1;
@@ -233,7 +238,8 @@ int xr_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *chan
     return (int) frame_size;
 }
 
-int xr_frame_decode_channel_send(const uint8_t *payload, uint32_t len, XrFrameChannelSend *out) {
+int cluster_frame_decode_channel_send(const uint8_t *payload, uint32_t len,
+                                      XrFrameChannelSend *out) {
     if (len < 1)
         return -1;
     uint8_t name_len = payload[0];
@@ -254,7 +260,7 @@ int xr_frame_decode_channel_send(const uint8_t *payload, uint32_t len, XrFrameCh
 /*
  * CHANNEL_CLOSE payload: [name_len 1B] [name ...]
  */
-int xr_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *channel_name) {
+int cluster_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *channel_name) {
     uint8_t name_len = (uint8_t) strlen(channel_name);
     if (name_len > XR_CHANNEL_NAME_MAX)
         return -1;
@@ -266,11 +272,11 @@ int xr_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *cha
     uint8_t payload[256];
     payload[0] = name_len;
     memcpy(payload + 1, channel_name, name_len);
-    return xr_frame_write(buf, XR_FRAME_CHANNEL_CLOSE, payload, payload_len);
+    return cluster_frame_write(buf, XR_FRAME_CHANNEL_CLOSE, payload, payload_len);
 }
 
-int xr_frame_decode_channel_close(const uint8_t *payload, uint32_t len, char *channel_name,
-                                  size_t name_size) {
+int cluster_frame_decode_channel_close(const uint8_t *payload, uint32_t len, char *channel_name,
+                                       size_t name_size) {
     if (len < 1)
         return -1;
     uint8_t name_len = payload[0];
@@ -289,9 +295,9 @@ int xr_frame_decode_channel_close(const uint8_t *payload, uint32_t len, char *ch
  * SERVICE_CALL payload:
  *   [request_id 8B] [name_len 1B] [name ...] [args_data ...]
  */
-int xr_frame_encode_service_call(uint8_t *buf, size_t buf_size, uint64_t request_id,
-                                 const char *service_name, const uint8_t *args_data,
-                                 uint32_t args_len) {
+int cluster_frame_encode_service_call(uint8_t *buf, size_t buf_size, uint64_t request_id,
+                                      const char *service_name, const uint8_t *args_data,
+                                      uint32_t args_len) {
     uint8_t name_len = (uint8_t) strlen(service_name);
     if (name_len > XR_SERVICE_NAME_MAX)
         return -1;
@@ -309,7 +315,8 @@ int xr_frame_encode_service_call(uint8_t *buf, size_t buf_size, uint64_t request
     return (int) frame_size;
 }
 
-int xr_frame_decode_service_call(const uint8_t *payload, uint32_t len, XrFrameServiceCall *out) {
+int cluster_frame_decode_service_call(const uint8_t *payload, uint32_t len,
+                                      XrFrameServiceCall *out) {
     if (len < 9)
         return -1;
     out->request_id = get_u64(payload);
@@ -332,8 +339,9 @@ int xr_frame_decode_service_call(const uint8_t *payload, uint32_t len, XrFrameSe
  * SERVICE_REPLY payload:
  *   [request_id 8B] [is_error 1B] [result_data ...]
  */
-int xr_frame_encode_service_reply(uint8_t *buf, size_t buf_size, uint64_t request_id, bool is_error,
-                                  const uint8_t *result_data, uint32_t result_len) {
+int cluster_frame_encode_service_reply(uint8_t *buf, size_t buf_size, uint64_t request_id,
+                                       bool is_error, const uint8_t *result_data,
+                                       uint32_t result_len) {
     uint32_t payload_len = 8 + 1 + result_len;
     uint32_t frame_size = 4 + 1 + payload_len;
     if (buf_size < frame_size)
@@ -349,7 +357,8 @@ int xr_frame_encode_service_reply(uint8_t *buf, size_t buf_size, uint64_t reques
     return (int) frame_size;
 }
 
-int xr_frame_decode_service_reply(const uint8_t *payload, uint32_t len, XrFrameServiceReply *out) {
+int cluster_frame_decode_service_reply(const uint8_t *payload, uint32_t len,
+                                       XrFrameServiceReply *out) {
     if (len < 9)
         return -1;
     out->request_id = get_u64(payload);
@@ -364,7 +373,8 @@ int xr_frame_decode_service_reply(const uint8_t *payload, uint32_t len, XrFrameS
 /*
  * CHANNEL_SUBSCRIBE payload: [name_len 1B] [name ...]
  */
-int xr_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size, const char *channel_name) {
+int cluster_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size,
+                                           const char *channel_name) {
     uint8_t name_len = (uint8_t) strlen(channel_name);
     if (name_len > XR_CHANNEL_NAME_MAX)
         return -1;
@@ -376,11 +386,11 @@ int xr_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size, const char 
     uint8_t payload[256];
     payload[0] = name_len;
     memcpy(payload + 1, channel_name, name_len);
-    return xr_frame_write(buf, XR_FRAME_CHANNEL_SUBSCRIBE, payload, payload_len);
+    return cluster_frame_write(buf, XR_FRAME_CHANNEL_SUBSCRIBE, payload, payload_len);
 }
 
-int xr_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
-                                      XrFrameChannelSubscribe *out) {
+int cluster_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
+                                           XrFrameChannelSubscribe *out) {
     if (len < 1)
         return -1;
     uint8_t name_len = payload[0];
@@ -399,7 +409,8 @@ int xr_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
 /*
  * CHANNEL_UNSUBSCRIBE payload: [name_len 1B] [name ...]
  */
-int xr_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size, const char *channel_name) {
+int cluster_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
+                                             const char *channel_name) {
     uint8_t name_len = (uint8_t) strlen(channel_name);
     if (name_len > XR_CHANNEL_NAME_MAX)
         return -1;
@@ -411,11 +422,11 @@ int xr_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size, const cha
     uint8_t payload[256];
     payload[0] = name_len;
     memcpy(payload + 1, channel_name, name_len);
-    return xr_frame_write(buf, XR_FRAME_CHANNEL_UNSUBSCRIBE, payload, payload_len);
+    return cluster_frame_write(buf, XR_FRAME_CHANNEL_UNSUBSCRIBE, payload, payload_len);
 }
 
-int xr_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len, char *channel_name,
-                                        size_t name_size) {
+int cluster_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len,
+                                             char *channel_name, size_t name_size) {
     if (len < 1)
         return -1;
     uint8_t name_len = payload[0];
@@ -433,8 +444,8 @@ int xr_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len, ch
 /*
  * CHANNEL_PUSH payload: [name_len 1B] [name ...] [value_data ...]
  */
-int xr_frame_encode_channel_push(uint8_t *buf, size_t buf_size, const char *channel_name,
-                                 const uint8_t *value_data, uint32_t value_len) {
+int cluster_frame_encode_channel_push(uint8_t *buf, size_t buf_size, const char *channel_name,
+                                      const uint8_t *value_data, uint32_t value_len) {
     uint8_t name_len = (uint8_t) strlen(channel_name);
     if (name_len > XR_CHANNEL_NAME_MAX)
         return -1;
@@ -452,7 +463,8 @@ int xr_frame_encode_channel_push(uint8_t *buf, size_t buf_size, const char *chan
     return (int) frame_size;
 }
 
-int xr_frame_decode_channel_push(const uint8_t *payload, uint32_t len, XrFrameChannelPush *out) {
+int cluster_frame_decode_channel_push(const uint8_t *payload, uint32_t len,
+                                      XrFrameChannelPush *out) {
     if (len < 1)
         return -1;
     uint8_t name_len = payload[0];
@@ -473,8 +485,8 @@ int xr_frame_decode_channel_push(const uint8_t *payload, uint32_t len, XrFrameCh
 /*
  * CORO_MONITOR / CORO_DEMONITOR payload: [name_len 1B] [name ...]
  */
-int xr_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_type,
-                                 const char *coro_name) {
+int cluster_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_type,
+                                      const char *coro_name) {
     uint8_t name_len = (uint8_t) strlen(coro_name);
     if (name_len > XR_CORO_NAME_MAX)
         return -1;
@@ -486,11 +498,11 @@ int xr_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_ty
     uint8_t payload[256];
     payload[0] = name_len;
     memcpy(payload + 1, coro_name, name_len);
-    return xr_frame_write(buf, frame_type, payload, payload_len);
+    return cluster_frame_write(buf, frame_type, payload, payload_len);
 }
 
-int xr_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len, char *coro_name,
-                                 size_t name_size) {
+int cluster_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len, char *coro_name,
+                                      size_t name_size) {
     if (len < 1)
         return -1;
     uint8_t name_len = payload[0];
@@ -506,8 +518,8 @@ int xr_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len, char *cor
 /*
  * CORO_EXIT payload: [name_len 1B] [name ...] [reason_len 1B] [reason ...]
  */
-int xr_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_name,
-                              const char *reason) {
+int cluster_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_name,
+                                   const char *reason) {
     uint8_t name_len = (uint8_t) strlen(coro_name);
     uint8_t reason_len = (uint8_t) strlen(reason);
     if (name_len > XR_CORO_NAME_MAX)
@@ -522,11 +534,11 @@ int xr_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_na
     memcpy(payload + 1, coro_name, name_len);
     payload[1 + name_len] = reason_len;
     memcpy(payload + 2 + name_len, reason, reason_len);
-    return xr_frame_write(buf, XR_FRAME_CORO_EXIT, payload, payload_len);
+    return cluster_frame_write(buf, XR_FRAME_CORO_EXIT, payload, payload_len);
 }
 
-int xr_frame_decode_coro_exit(const uint8_t *payload, uint32_t len, char *coro_name,
-                              size_t name_size, char *reason, size_t reason_size) {
+int cluster_frame_decode_coro_exit(const uint8_t *payload, uint32_t len, char *coro_name,
+                                   size_t name_size, char *reason, size_t reason_size) {
     if (len < 2)
         return -1;
     uint8_t name_len = payload[0];

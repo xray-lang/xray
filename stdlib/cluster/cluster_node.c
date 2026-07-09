@@ -420,7 +420,7 @@ int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8
     if (frame_size <= 4096) {
         // Small frame: encode to stack, copy into queue
         uint8_t stack_buf[4096];
-        int wrote = xr_frame_write(stack_buf, frame_type, payload, payload_len);
+        int wrote = cluster_frame_write(stack_buf, frame_type, payload, payload_len);
         if (wrote < 0)
             return -1;
         return cluster_node_enqueue(node, stack_buf, (uint32_t) wrote);
@@ -429,7 +429,7 @@ int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8
         uint8_t *frame = (uint8_t *) xr_malloc(frame_size);
         if (!frame)
             return -1;
-        int wrote = xr_frame_write(frame, frame_type, payload, payload_len);
+        int wrote = cluster_frame_write(frame, frame_type, payload, payload_len);
         if (wrote < 0) {
             xr_free(frame);
             return -1;
@@ -455,7 +455,7 @@ int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_
         return -1;
 
     uint32_t total_payload;
-    if (xr_frame_read_header(header, 5, frame_type_out, &total_payload) != 0)
+    if (cluster_frame_read_header(header, 5, frame_type_out, &total_payload) != 0)
         return -1;
 
     // total_payload is payload size (after type byte)
@@ -697,7 +697,7 @@ bool cluster_node_is_slow(XrClusterNode *node) {
 int cluster_node_send_ping(XrClusterNode *node) {
     int64_t now = cluster_now_ms();
     uint8_t frame[32];
-    int len = xr_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, now);
+    int len = cluster_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, now);
     if (len < 0)
         return -1;
 
@@ -775,7 +775,7 @@ int cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     req.flags = 0x01;
 
     uint8_t frame_buf[512];
-    int flen = xr_frame_encode_handshake_req(frame_buf, sizeof(frame_buf), &req);
+    int flen = cluster_frame_encode_handshake_req(frame_buf, sizeof(frame_buf), &req);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t) flen) != flen) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
         cluster_node_close(node);
@@ -797,7 +797,7 @@ int cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     }
 
     XrFrameHandshakeAck ack;
-    if (xr_frame_decode_handshake_ack(recv_buf, payload_len, &ack) != 0 ||
+    if (cluster_frame_decode_handshake_ack(recv_buf, payload_len, &ack) != 0 ||
         ack.version != XR_CLUSTER_HANDSHAKE_VERSION) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
         cluster_node_close(node);
@@ -828,7 +828,7 @@ int cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     XrFrameHandshakeDone done;
     cluster_compute_proof(cluster->secret, ack.nonce, done.proof);
 
-    flen = xr_frame_encode_handshake_done(frame_buf, sizeof(frame_buf), &done);
+    flen = cluster_frame_encode_handshake_done(frame_buf, sizeof(frame_buf), &done);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t) flen) != flen) {
         xr_secure_wipe(&done, sizeof(done));
         xr_secure_wipe(expected_proof, sizeof(expected_proof));
@@ -889,7 +889,7 @@ XrClusterNode *cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     }
 
     XrFrameHandshakeReq req;
-    if (xr_frame_decode_handshake_req(recv_buf, payload_len, &req) != 0 ||
+    if (cluster_frame_decode_handshake_req(recv_buf, payload_len, &req) != 0 ||
         req.version != XR_CLUSTER_HANDSHAKE_VERSION) {
         cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
@@ -905,7 +905,7 @@ XrClusterNode *cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     ack.flags = 0x01;
 
     uint8_t frame_buf[512];
-    int flen = xr_frame_encode_handshake_ack(frame_buf, sizeof(frame_buf), &ack);
+    int flen = cluster_frame_encode_handshake_ack(frame_buf, sizeof(frame_buf), &ack);
     if (flen < 0 || xr_io_write_all(conn, frame_buf, (size_t) flen) != flen) {
         cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
@@ -920,7 +920,7 @@ XrClusterNode *cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     }
 
     XrFrameHandshakeDone done;
-    if (xr_frame_decode_handshake_done(recv_buf, payload_len, &done) != 0) {
+    if (cluster_frame_decode_handshake_done(recv_buf, payload_len, &done) != 0) {
         cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }

@@ -455,7 +455,7 @@ void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value)
  *   [hop_limit 1B] [topic_len 1B] [topic ...] [value_data ...]
  *
  * Returns 0 on success, -1 on alloc failure. On success the caller
- * owns fb and must free with xr_frame_buf_free.
+ * owns fb and must free with cluster_frame_buf_free.
  */
 static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const XrValue *value,
                                      uint8_t hop_limit, XrFrameBuf *fb_out) {
@@ -471,7 +471,7 @@ static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const Xr
 
     uint8_t topic_len = (uint8_t) strlen(topic);
     uint32_t payload_len = 2 + topic_len + (uint32_t) sbuf.len;
-    xr_frame_buf_init(fb_out, payload_len);
+    cluster_frame_buf_init(fb_out, payload_len);
     if (!fb_out->data) {
         cluster_serial_buf_free(&sbuf);
         return -1;
@@ -504,8 +504,8 @@ static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const ui
 }
 
 void cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char *topic,
-                                     const uint8_t *value_data, uint32_t value_len,
-                                     uint8_t hop_limit) {
+                                  const uint8_t *value_data, uint32_t value_len,
+                                  uint8_t hop_limit) {
     if (!c || !topic)
         return;
 
@@ -551,7 +551,7 @@ void cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char 
         return;
 
     topic_broadcast_frame(c, from, fb.data, (uint32_t) payload_len);
-    xr_frame_buf_free(&fb);
+    cluster_frame_buf_free(&fb);
 }
 
 int cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
@@ -576,6 +576,6 @@ int cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
     // Forward to all connected nodes (no split-horizon — we are the
     // origin, so every peer is a valid destination).
     topic_broadcast_frame(c, NULL, fb.data, (uint32_t) payload_len);
-    xr_frame_buf_free(&fb);
+    cluster_frame_buf_free(&fb);
     return 0;
 }
