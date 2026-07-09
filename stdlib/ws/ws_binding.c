@@ -237,7 +237,7 @@ void xr_ws_module_context_free(XrWsContext *ctx) {
         for (int i = 0; i < ctx->array_capacity; i++) {
             XrWebSocket *ws = ctx->conn_array[i];
             if (ws) {
-                xr_ws_close(ws, WS_CLOSE_GOING_AWAY, NULL);
+                ws_conn_close(ws, WS_CLOSE_GOING_AWAY, NULL);
                 ws_free(ws);
             }
         }
@@ -553,7 +553,7 @@ static XrCFuncResult ws_send_step(XrVMRuntime *X, WsSendState *state, XrValue *r
     }
 
     XrWsOpcode opcode = state->binary ? WS_OPCODE_BINARY : WS_OPCODE_TEXT;
-    int ret = xr_ws_send_frame_try(ws, opcode, state->data, state->len);
+    int ret = ws_conn_send_frame_try(ws, opcode, state->data, state->len);
 
     if (ret == 0) {
         if (ctx) {
@@ -633,7 +633,7 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     }
 
     XrWsOpcode opcode = binary ? WS_OPCODE_BINARY : WS_OPCODE_TEXT;
-    int ret = xr_ws_send_frame_try(ws, opcode, msg, msg_len);
+    int ret = ws_conn_send_frame_try(ws, opcode, msg, msg_len);
 
     if (ret == 0) {
         ctx->total_msgs_sent++;
@@ -696,7 +696,7 @@ static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *w
     XrJson *result = xr_json_new(coro);
     if (!result) {
         if (msg)
-            xr_ws_message_free(msg);
+            ws_message_free(msg);
         return xr_null();
     }
 
@@ -721,7 +721,7 @@ static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *w
             }
             data_val = bytes_arr ? xr_value_from_array(bytes_arr) : xr_null();
         }
-        xr_ws_message_free(msg);
+        ws_message_free(msg);
     } else {
         const char *err_msg =
             (!ws || ws->state != WS_STATE_OPEN) ? "Connection closed" : "Receive failed";
@@ -773,7 +773,7 @@ static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *r
     }
 
     bool need_more = false;
-    XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
+    XrWsMessage *msg = ws_conn_recv_try(ws, &need_more);
 
     if (msg) {
         if (ctx) {
@@ -842,7 +842,7 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     // Fast path: try recv without allocating state or yielding
     if (ws->state == WS_STATE_OPEN) {
         bool need_more = false;
-        XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
+        XrWsMessage *msg = ws_conn_recv_try(ws, &need_more);
 
         if (msg) {
             ctx->total_msgs_recv++;
@@ -936,7 +936,7 @@ static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
     // This prevents stale XrPollDesc from being reused when the fd is recycled by the OS.
     // Without this, the next connection using the same fd number would inherit
     // the old XrPollDesc with stale coroutine pointers, causing hangs or crashes.
-    // NOTE: xr_ws_recv_try may have already set state to CLOSED but leaves fd open
+    // NOTE: ws_conn_recv_try may have already set state to CLOSED but leaves fd open
     // for us to clean up here.
     if (ws->fd >= 0) {
         XrRuntime *runtime = X ? (XrRuntime *) X->vm.scheduler : NULL;
@@ -948,8 +948,8 @@ static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
         }
     }
 
-    // xr_ws_close sends close frame if state is OPEN, otherwise no-op
-    xr_ws_close(ws, code, reason);
+    // ws_conn_close sends close frame if state is OPEN, otherwise no-op
+    ws_conn_close(ws, code, reason);
     ws_free(ws);
     remove_ws(ctx, id);
 
@@ -983,7 +983,7 @@ static XrValue ws_ping(XrVMRuntime *X, XrValue *args, int argc) {
     if (!ws)
         return xr_bool(false);
 
-    return xr_bool(xr_ws_ping(ws) == WS_OK);
+    return xr_bool(ws_conn_ping(ws) == WS_OK);
 }
 
 /* ========== WebSocket Server API Implementation ========== */
@@ -1154,7 +1154,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
 
         ctx->conn = conn_val;
         if (XR_IS_NULL(ctx->conn)) {
-            xr_ws_close(ws, WS_CLOSE_SERVER_ERROR, NULL);
+            ws_conn_close(ws, WS_CLOSE_SERVER_ERROR, NULL);
             ws_free(ws);
             goto cleanup;
         }
@@ -1203,7 +1203,7 @@ static XrCFuncResult ws_conn_handler_done(XrVMRuntime *X, int status, XrValue re
                     if (pd)
                         xr_netpoll_close(&ctx->runtime->netpoll, pd);
                 }
-                xr_ws_close(w, WS_CLOSE_NORMAL, NULL);
+                ws_conn_close(w, WS_CLOSE_NORMAL, NULL);
                 ws_free(w);
                 remove_ws(ws_ctx, id);
             }
