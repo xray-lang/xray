@@ -2046,13 +2046,16 @@ static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNo
     return row->json_shape_id;
 }
 
+static bool body_local_type_is_json(const XgLocalType *row) {
+    return row && row->type_key == hash_named_type_key32("Json", NULL, 0);
+}
+
 static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *expr) {
     XgLocalType *row;
     if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return false;
     row = body_find_local(bc, expr->as.variable.name);
-    return row && row->json_shape_id == XG_NO_ID &&
-           row->type_key == hash_named_type_key32("Json", NULL, 0);
+    return row && row->json_shape_id == XG_NO_ID && body_local_type_is_json(row);
 }
 
 static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
@@ -3085,6 +3088,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *record_literal =
                 !json_literal ? body_static_object_literal(node->as.var_decl.initializer) : NULL;
             XgJsonShapeId json_shape_id = XG_NO_ID;
+            XgJsonShapeId source_json_shape_id = XG_NO_ID;
+            const ObjectLiteralNode *source_json_literal = NULL;
             XgRecordShapeId record_shape_id = XG_NO_ID;
             XgMapShapeId map_shape_id = XG_NO_ID;
             uint8_t map_container_kind = 0;
@@ -3099,6 +3104,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->capability_bits |=
                 body_capabilities_for_type_ref(node->as.var_decl.type_annotation);
             walk_body_for_calls(bc, node->as.var_decl.initializer);
+            source_json_shape_id = body_lookup_local_json_shape(bc, node->as.var_decl.initializer,
+                                                                &source_json_literal);
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
@@ -3132,6 +3139,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 json_shape_id = body_add_json_shape_for_literal(bc, json_literal,
                                                                 (uint32_t) node->line, type_key);
                 body_bind_json_shape_local(bc, node->as.var_decl.name, json_shape_id, json_literal);
+            } else if (source_json_shape_id != XG_NO_ID &&
+                       body_local_type_is_json(body_find_local(bc, node->as.var_decl.name))) {
+                body_bind_json_shape_local(bc, node->as.var_decl.name, source_json_shape_id,
+                                           source_json_literal);
             }
             if (record_literal) {
                 record_shape_id = body_add_record_shape_for_literal(
@@ -3147,6 +3158,13 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         }
         case AST_ASSIGNMENT: {
+            XgLocalType *target_row = body_find_local(bc, node->as.assignment.name);
+            bool target_is_json = body_local_type_is_json(target_row);
+            const ObjectLiteralNode *json_literal =
+                target_is_json ? body_static_object_literal(node->as.assignment.value) : NULL;
+            const ObjectLiteralNode *source_json_literal = NULL;
+            XgJsonShapeId source_json_shape_id =
+                body_lookup_local_json_shape(bc, node->as.assignment.value, &source_json_literal);
             XgClassId class_id;
             XgInterfaceId interface_id;
             uint32_t type_key;
@@ -3159,6 +3177,17 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             body_clear_map_shape_local(bc, node->as.assignment.name);
             body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
                               interface_id, type_key);
+            if (json_literal) {
+                XgJsonShapeId json_shape_id = body_add_json_shape_for_literal(
+                    bc, json_literal, (uint32_t) node->line,
+                    type_key ? type_key : hash_named_type_key32("Json", NULL, 0));
+                body_bind_json_shape_local(bc, node->as.assignment.name, json_shape_id,
+                                           json_literal);
+            } else if (source_json_shape_id != XG_NO_ID &&
+                       body_local_type_is_json(body_find_local(bc, node->as.assignment.name))) {
+                body_bind_json_shape_local(bc, node->as.assignment.name, source_json_shape_id,
+                                           source_json_literal);
+            }
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }

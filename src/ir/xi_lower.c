@@ -779,6 +779,83 @@ static bool xi_lower_json_access_row_requires_dynamic_lookup(const XgGlobalEvide
            row->field_ordinal >= shape->field_count;
 }
 
+static bool xi_lower_json_access_row_is_direct_index(const XgGlobalEvidence *ev,
+                                                     const XgJsonAccessSummary *row) {
+    if (!row || (row->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0)
+        return false;
+    return !xi_lower_json_access_row_requires_dynamic_lookup(ev, row);
+}
+
+XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *field_name,
+                                                     uint32_t source_span_id, uint8_t access_kind,
+                                                     uint16_t *out_ordinal) {
+    const XgGlobalEvidence *ev;
+    uint32_t key_name_id;
+    XgFuncId owner_func_id = XG_NO_ID;
+    bool owner_seen = false;
+    bool owner_direct_seen = false;
+    bool owner_ambiguous = false;
+    uint16_t owner_ordinal = UINT16_MAX;
+    bool fallback_seen = false;
+    bool fallback_direct_seen = false;
+    bool fallback_ambiguous = false;
+    uint16_t fallback_ordinal = UINT16_MAX;
+    if (!out_ordinal)
+        return false;
+    *out_ordinal = UINT16_MAX;
+    if (!l || !l->global_evidence || !field_name)
+        return false;
+    key_name_id = xg_name_id(field_name);
+    if (key_name_id == 0)
+        return false;
+    ev = l->global_evidence;
+    if (l->func)
+        owner_func_id = (XgFuncId) l->func->xg_body_func_id;
+    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
+        const XgJsonAccessSummary *row = &ev->json_accesses[i];
+        bool direct;
+        if (!xi_lower_evidence_module_matches(l, row->module_id))
+            continue;
+        if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
+            row->access_kind != access_kind)
+            continue;
+        direct = xi_lower_json_access_row_is_direct_index(ev, row);
+        if (owner_func_id != XG_NO_ID && row->owner_func_id == owner_func_id) {
+            owner_seen = true;
+            if (!direct) {
+                owner_ambiguous = true;
+                continue;
+            }
+            if (owner_direct_seen)
+                owner_ambiguous = true;
+            owner_direct_seen = true;
+            owner_ordinal = row->field_ordinal;
+            continue;
+        }
+        fallback_seen = true;
+        if (!direct) {
+            fallback_ambiguous = true;
+            continue;
+        }
+        if (fallback_direct_seen)
+            fallback_ambiguous = true;
+        fallback_direct_seen = true;
+        fallback_ordinal = row->field_ordinal;
+    }
+    if (owner_seen) {
+        if (owner_direct_seen && !owner_ambiguous) {
+            *out_ordinal = owner_ordinal;
+            return true;
+        }
+        return false;
+    }
+    if (fallback_seen && fallback_direct_seen && !fallback_ambiguous) {
+        *out_ordinal = fallback_ordinal;
+        return true;
+    }
+    return false;
+}
+
 XR_FUNC bool xi_lower_json_access_requires_dynamic_lookup(XiLower *l, const char *field_name,
                                                           uint32_t source_span_id,
                                                           uint16_t field_ordinal,

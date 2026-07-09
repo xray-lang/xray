@@ -811,6 +811,62 @@ TEST(json_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_JSON_EVIDENCE
 }
 
+TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
+#define REQUIRE_JSON_ALIAS_EVIDENCE(cond, msg)                                                     \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "json_alias_shape_access_lowers_with_global_evidence_id: %s\n", msg);  \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn readAlias() -> Json {\n"
+                                          "    var a: Json = { name: \"ada\", age: 1 }\n"
+                                          "    var b: Json = a\n"
+                                          "    return b.age\n"
+                                          "}\n"
+                                          "print(readAlias())\n",
+                                          &ev);
+    REQUIRE_JSON_ALIAS_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_JSON_ALIAS_EVIDENCE(ev.njson_accesses == 1,
+                                "producer should record one Json alias field get");
+    XiFunc *read_alias = func_tree_find_func_name(main_func, "readAlias");
+    REQUIRE_JSON_ALIAS_EVIDENCE(read_alias != NULL, "target function should be present");
+
+    uint32_t access_id = 0;
+    uint32_t direct_count = 0;
+    for (uint32_t b = 0; b < read_alias->nblocks; b++) {
+        XiBlock *blk = read_alias->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_JSON_GET_F)
+                continue;
+            direct_count++;
+            REQUIRE_JSON_ALIAS_EVIDENCE(v->aux_int == 1,
+                                        "alias Json direct get should use propagated ordinal");
+            REQUIRE_JSON_ALIAS_EVIDENCE(v->xg_json_access_id != 0,
+                                        "alias Json direct get should bind global access evidence");
+            access_id = v->xg_json_access_id;
+        }
+    }
+    REQUIRE_JSON_ALIAS_EVIDENCE(direct_count == 1,
+                                "alias Json field get should lower to one direct indexed get");
+    REQUIRE_JSON_ALIAS_EVIDENCE(access_id == ev.json_accesses[0].json_access_id,
+                                "bound id should point at propagated alias access row");
+    REQUIRE_JSON_ALIAS_EVIDENCE(ev.json_accesses[0].field_ordinal == 1,
+                                "propagated alias access should keep field ordinal");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_JSON_ALIAS_EVIDENCE
+}
+
 TEST(json_computed_key_access_lowers_with_global_evidence_id) {
 #define REQUIRE_JSON_INDEX_EVIDENCE(cond, msg)                                                     \
     do {                                                                                           \
@@ -2297,6 +2353,7 @@ int main(void) {
     run_try_catch_defer();
     run_object_literal();
     run_json_access_lowers_with_global_evidence_id();
+    run_json_alias_shape_access_lowers_with_global_evidence_id();
     run_json_computed_key_access_lowers_with_global_evidence_id();
     run_json_open_shape_member_access_lowers_to_dynamic_lookup();
     run_record_access_lowers_with_global_evidence_id();

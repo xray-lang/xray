@@ -1475,6 +1475,12 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
      * have NULL holes in the analyzer field table and use name lookup
      * because codegen compacts only the static named fields. */
     int fidx = json_field_index(obj->type, ma->name);
+    if (fidx < 0 && obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        uint16_t evidence_fidx = UINT16_MAX;
+        if (xi_lower_find_json_direct_field_ordinal(l, ma->name, (uint32_t) node->line,
+                                                    XG_JSON_ACCESS_FIELD_GET, &evidence_fidx))
+            fidx = (int) evidence_fidx;
+    }
     if (fidx >= 0 &&
         !xi_lower_json_access_requires_dynamic_lookup(l, ma->name, (uint32_t) node->line,
                                                       (uint16_t) fidx, XG_JSON_ACCESS_FIELD_GET)) {
@@ -1562,6 +1568,12 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
 
     /* Sealed Json with known field → direct indexed store */
     int fidx = json_field_index(obj->type, ms->member);
+    if (fidx < 0 && obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        uint16_t evidence_fidx = UINT16_MAX;
+        if (xi_lower_find_json_direct_field_ordinal(l, ms->member, (uint32_t) node->line,
+                                                    XG_JSON_ACCESS_FIELD_SET, &evidence_fidx))
+            fidx = (int) evidence_fidx;
+    }
     if (fidx >= 0 &&
         !xi_lower_json_access_requires_dynamic_lookup(l, ms->member, (uint32_t) node->line,
                                                       (uint16_t) fidx, XG_JSON_ACCESS_FIELD_SET)) {
