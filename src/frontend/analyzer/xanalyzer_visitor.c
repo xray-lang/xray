@@ -2348,8 +2348,16 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                         builtin_sig =
                             xa_builtin_get_module_func_signature(import->module_name, member->name);
                         if (builtin_sig) {
-                            member_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate,
-                                                                          builtin_sig);
+                            if (builtin_sig[0] == ':') {
+                                const char *type_str = builtin_sig + 1;
+                                while (*type_str == ' ')
+                                    type_str++;
+                                member_type =
+                                    xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                            } else {
+                                member_type = xa_builtin_parse_full_signature(
+                                    ctx->analyzer->isolate, builtin_sig);
+                            }
                         }
                     }
 
