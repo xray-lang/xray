@@ -362,7 +362,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"ws", "isOpen", "(conn: WsConn): bool", "Check if connection is open", "ws_is_open", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
-    {"ws", "isServerRunning", "(): bool", "Check if the WebSocket server is running", "ws_is_server_running", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 

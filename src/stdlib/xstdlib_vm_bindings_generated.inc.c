@@ -351,7 +351,6 @@ static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "isOpen", ws_is_open);
     XRS_EXPORT_YIELDABLE(module, isolate, "serve", ws_serve_yieldable);
     XRS_EXPORT(module, isolate, "stopServer", ws_stop_server);
-    XRS_EXPORT(module, isolate, "isServerRunning", ws_is_server_running);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_WS */
 

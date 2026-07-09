@@ -3673,15 +3673,4 @@ module ws {
     link_object: false
     layer: "runtime"
   }
-
-  fn isServerRunning {
-    signature: "(): bool"
-    doc: "Check if the WebSocket server is running"
-    vm: "ws_is_server_running"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
 }
