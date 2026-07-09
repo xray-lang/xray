@@ -18,9 +18,11 @@ enum {
     XR_DERIVE_JSON = 1u << 1,
     XR_DERIVE_EQ = 1u << 2,
     XR_DERIVE_HASH = 1u << 3,
+    XR_DERIVE_CLONE = 1u << 4,
 };
 
 #define XR_DERIVE_KNOWN_MASK                                                                       \
-    ((uint32_t) (XR_DERIVE_INSPECT | XR_DERIVE_JSON | XR_DERIVE_EQ | XR_DERIVE_HASH))
+    ((uint32_t) (XR_DERIVE_INSPECT | XR_DERIVE_JSON | XR_DERIVE_EQ | XR_DERIVE_HASH |              \
+                 XR_DERIVE_CLONE))
 
 #endif  // XR_DERIVE_FLAGS_H
