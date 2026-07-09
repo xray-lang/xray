@@ -1683,6 +1683,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'xray_const__freestanding_static_data_lib_LABEL_CUBE[2][2][2] XRT_ATTR_SECTION("__DATA,.xr_ilcube") XRT_ATTR_WEAK XRT_ATTR_USED' \
             "freestanding-profile/static-import: exporter keeps string fixed-array cube section/weak/used attrs"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'const struct { struct { int64_t f0; XrValue f1; } f0; struct { XrValue f0; int64_t f1; } f1; } xray_const__freestanding_static_data_lib_NESTED_LABEL' \
+            "freestanding-profile/static-import: exporter materializes nested tuple string lanes"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             "const struct __attribute__((packed, aligned(16)))" \
             "freestanding-profile/static-import: exporter preserves packed/aligned struct layout"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
@@ -1713,6 +1716,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'extern const XrValue xray_const__freestanding_static_data_lib_LABEL_CUBE[2][2][2]' \
             "freestanding-profile/static-import: importer declares string fixed-array cube extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { struct { int64_t f0; XrValue f1; } f0; struct { XrValue f0; int64_t f1; } f1; } xray_const__freestanding_static_data_lib_NESTED_LABEL' \
+            "freestanding-profile/static-import: importer declares nested tuple string extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_HEADER' \
             "freestanding-profile/static-import: importer declares struct extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
@@ -1736,6 +1742,18 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_LABEL_CUBE[_outer_idx][_middle_idx][_idx]' \
             "freestanding-profile/static-import: importer reads string fixed-array cube directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_NESTED_LABEL.f0.f0' \
+            "freestanding-profile/static-import: importer reads nested tuple first scalar lane directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_NESTED_LABEL.f0.f1' \
+            "freestanding-profile/static-import: importer reads nested tuple first string lane directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_NESTED_LABEL.f1.f0' \
+            "freestanding-profile/static-import: importer reads nested tuple second string lane directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_NESTED_LABEL.f1.f1' \
+            "freestanding-profile/static-import: importer reads nested tuple second scalar lane directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_ENTRIES[_idx].code' \
             "freestanding-profile/static-import: importer reads struct-array integer field directly"
@@ -1819,6 +1837,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_pass "freestanding-profile/static-import: weak struct data symbol is external"
     else
         record_fail "freestanding-profile/static-import: weak struct data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_NESTED_LABEL" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak nested tuple string data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak nested tuple string data symbol missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
