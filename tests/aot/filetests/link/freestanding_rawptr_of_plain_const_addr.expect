@@ -1,0 +1,8 @@
+args=--profile freestanding
+c_contains=xray_plain_const_addr
+c_contains=static const int64_t _xctscalar_freestanding_rawptr_of_plain_const_addr_
+c_contains=static const xrt_str_t _xctstr_freestanding_rawptr_of_plain_const_addr_
+c_contains=&_xctscalar_freestanding_rawptr_of_plain_const_addr_
+c_contains=&_xctstr_freestanding_rawptr_of_plain_const_addr_
+c_not_contains=xrt_mem_address_of
+c_not_contains=XR_NULL_VAL /* static const import

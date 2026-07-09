@@ -1895,6 +1895,22 @@ static bool cg_const_literal_has_data_attrs(const XiConstLiteral *lit) {
     return lit && (lit->data_section || lit->data_weak || lit->data_used);
 }
 
+static bool cg_const_literal_is_static_scalar_kind(const XiConstLiteral *lit) {
+    if (!lit)
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_STRING:
+        case XI_CONST_LITERAL_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void cg_emit_static_const_storage(FILE *out, const XiConstLiteral *lit) {
     fprintf(out, "%s", lit && lit->data_weak ? "const " : "static const ");
 }
@@ -2027,19 +2043,45 @@ static void cg_emit_static_value_const_name(XiCgenCtx *ctx, FILE *out, const XiM
 }
 
 static bool cg_const_literal_is_static_scalar_object(const XiConstLiteral *lit) {
-    if (!cg_const_literal_has_data_attrs(lit))
+    return cg_const_literal_has_data_attrs(lit) && cg_const_literal_is_static_scalar_kind(lit);
+}
+
+static bool cg_func_tree_takes_static_addr_slot(const XiFunc *func, int64_t slot) {
+    if (!func || slot < 0)
         return false;
-    switch (lit->kind) {
-        case XI_CONST_LITERAL_INT:
-        case XI_CONST_LITERAL_FLOAT:
-        case XI_CONST_LITERAL_BOOL:
-        case XI_CONST_LITERAL_CHAR:
-        case XI_CONST_LITERAL_STRING:
-        case XI_CONST_LITERAL_NULL:
-            return true;
-        default:
-            return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v && v->op == XI_STATIC_ADDR && v->aux_int == slot)
+                return true;
+        }
     }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (cg_func_tree_takes_static_addr_slot(func->children[ci], slot))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_module_slot_is_import(const XiModule *module, int64_t slot) {
+    return module && module->slot_imports && slot >= 0 && slot < module->nslots &&
+           module->slot_imports[slot];
+}
+
+static bool cg_freestanding_static_scalar_slot_is_materialized(XiCgenCtx *ctx,
+                                                               const XiModule *module, int64_t slot,
+                                                               const XiConstLiteral *lit) {
+    if (!ctx || !ctx->freestanding_profile || !module ||
+        !cg_const_literal_is_static_scalar_kind(lit))
+        return false;
+    if (cg_const_literal_has_data_attrs(lit))
+        return true;
+    if (module != ctx->module || cg_module_slot_is_import(module, slot))
+        return false;
+    return cg_func_tree_takes_static_addr_slot(module->init, slot);
 }
 
 static bool cg_freestanding_static_scalar_const_literal_in_module(XiCgenCtx *ctx,
@@ -2052,7 +2094,7 @@ static bool cg_freestanding_static_scalar_const_literal_in_module(XiCgenCtx *ctx
         slot >= module->nslots)
         return false;
     const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (!cg_const_literal_is_static_scalar_object(lit))
+    if (!cg_freestanding_static_scalar_slot_is_materialized(ctx, module, slot, lit))
         return false;
     if (out_lit)
         *out_lit = lit;
@@ -2089,7 +2131,7 @@ static bool cg_emit_freestanding_static_scalar_const_defs(XiCgenCtx *ctx, FILE *
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
         const XiConstLiteral *lit = &module->slot_const_literals[slot];
-        if (!cg_const_literal_is_static_scalar_object(lit))
+        if (!cg_freestanding_static_scalar_slot_is_materialized(ctx, module, slot, lit))
             continue;
         switch (lit->kind) {
             case XI_CONST_LITERAL_INT:
@@ -2164,7 +2206,8 @@ static bool cg_emit_freestanding_static_scalar_const_ref_in_module(XiCgenCtx *ct
                                                                    const XiModule *module,
                                                                    int64_t slot, const XiValue *v,
                                                                    const XiConstLiteral *lit) {
-    if (!ctx || !out || !v || !lit || !cg_const_literal_is_static_scalar_object(lit))
+    if (!ctx || !out || !v ||
+        !cg_freestanding_static_scalar_slot_is_materialized(ctx, module, slot, lit))
         return false;
     XrRep from_rep = cg_static_scalar_const_source_rep(lit);
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
