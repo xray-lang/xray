@@ -1604,7 +1604,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_shared_aggregate_reject.log" \
     "freestanding-profile/shared: rejects aggregate shared storage" \
     "freestanding profile rejects shared declaration" \
-    "only int/float/bool/char/string/null consteval initializers are supported as static shared storage"
+    "only int/float/bool/char/string/null consteval initializers or recursively scalar struct/union consteval initializers are supported as static shared storage"
 
 FREESTANDING_SHARED_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_scalar_static.xr"
 FREESTANDING_SHARED_SCALAR_OBJ="$WORK/freestanding_shared_scalar_static.o"
@@ -1648,6 +1648,65 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
 else
     record_fail "freestanding-profile/shared-scalar-static: object build failed"
     sed 's/^/      /' "$FREESTANDING_SHARED_SCALAR_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_SHARED_AGG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_aggregate_static.xr"
+FREESTANDING_SHARED_AGG_OBJ="$WORK/freestanding_shared_aggregate_static.o"
+FREESTANDING_SHARED_AGG_LOG="$WORK/freestanding_shared_aggregate_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_SHARED_AGG_OBJ" \
+        "$FREESTANDING_SHARED_AGG_SRC" >"$FREESTANDING_SHARED_AGG_LOG" 2>&1; then
+    FREESTANDING_SHARED_AGG_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_SHARED_AGG_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_SHARED_AGG_C" ]; then
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" \
+            "const struct { int64_t left; int64_t right; } _xctstruct_freestanding_shared_aggregate_static_" \
+            "freestanding-profile/shared-aggregate-static: materializes shared struct as static data"
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" \
+            "const struct { union { int32_t i; uint32_t u; } bits; int64_t base; } _xctstruct_freestanding_shared_aggregate_static_" \
+            "freestanding-profile/shared-aggregate-static: materializes nested union as static data"
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".left" \
+            "freestanding-profile/shared-aggregate-static: reads left field directly"
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".right" \
+            "freestanding-profile/shared-aggregate-static: reads right field directly"
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".bits.u" \
+            "freestanding-profile/shared-aggregate-static: reads union lane directly"
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".base" \
+            "freestanding-profile/shared-aggregate-static: reads sibling field directly"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "xrt_shared[0] =" \
+            "freestanding-profile/shared-aggregate-static: elides first aggregate slot write"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "xrt_shared[1] =" \
+            "freestanding-profile/shared-aggregate-static: elides second aggregate slot write"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "xrt_arc_alloc" \
+            "freestanding-profile/shared-aggregate-static: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "xrt_value_clone_for_coro" \
+            "freestanding-profile/shared-aggregate-static: avoids shared aggregate clone"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "xr_aggregate_ref" \
+            "freestanding-profile/shared-aggregate-static: avoids runtime aggregate refs"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "XR_NATIVE_UNION" \
+            "freestanding-profile/shared-aggregate-static: keeps union under aggregate layout"
+        expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "#include \"xrt.h\"" \
+            "freestanding-profile/shared-aggregate-static: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/shared-aggregate-static: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_SHARED_AGG_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_SHARED_AGG_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_SHARED_AGG_OBJ")"
+    FREESTANDING_SHARED_AGG_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_SHARED_AGG_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_SHARED_AGG_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/shared-aggregate-static: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/shared-aggregate-static: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_SHARED_AGG_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/shared-aggregate-static: object build failed"
+    sed 's/^/      /' "$FREESTANDING_SHARED_AGG_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_SHARED_LITERALS_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_literals_static.xr"
