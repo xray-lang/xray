@@ -1,0 +1,10 @@
+import sys
+
+var flag = true
+var t = flag ? sys.Thread.spawn(fn() -> int {
+    return 1
+}) : sys.Thread.spawn(fn() -> int {
+    return 2
+})
+
+print("conditional-factory-thread")

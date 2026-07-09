@@ -1,0 +1,12 @@
+import sys
+
+var flag = true
+var p = flag ? sys.Process.spawn("sh", ["-c", "exit 0"]) : sys.Process.spawn("sh", ["-c", "exit 0"])
+
+var tag = 1
+var pipe = match (tag) {
+    0 -> sys.Pipe.open(),
+    _ -> sys.Pipe.open()
+}
+
+print("conditional-factory-process-pipe")
