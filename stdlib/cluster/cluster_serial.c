@@ -37,14 +37,14 @@
 
 #define SERIAL_BUF_INIT_CAP 256
 
-void xr_serial_buf_init(XrSerialBuf *buf) {
+void cluster_serial_buf_init(XrSerialBuf *buf) {
     buf->data = (uint8_t *) xr_malloc(SERIAL_BUF_INIT_CAP);
     buf->len = 0;
     buf->cap = SERIAL_BUF_INIT_CAP;
     buf->error = (buf->data == NULL);
 }
 
-void xr_serial_buf_free(XrSerialBuf *buf) {
+void cluster_serial_buf_free(XrSerialBuf *buf) {
     if (buf->data) {
         xr_free(buf->data);
         buf->data = NULL;
@@ -278,9 +278,9 @@ static int encode_value(XrVMRuntime *X, XrValue value, XrSerialBuf *buf, int dep
     }
 }
 
-/* ========== Public Encode API ========== */
+/* ========== Cluster Encode API ========== */
 
-int xr_cluster_encode(XrVMRuntime *X, XrValue value, XrSerialBuf *buf) {
+int cluster_encode(XrVMRuntime *X, XrValue value, XrSerialBuf *buf) {
     buf_put_u8(buf, XR_SERIAL_VERSION);
     int rc = encode_value(X, value, buf, 0);
     if (buf->error)
@@ -302,7 +302,7 @@ int xr_cluster_encode(XrVMRuntime *X, XrValue value, XrSerialBuf *buf) {
 
 /* ========== Decode Helpers ========== */
 
-void xr_serial_reader_init(XrSerialReader *r, XrVMRuntime *X, const uint8_t *data, size_t len) {
+void cluster_serial_reader_init(XrSerialReader *r, XrVMRuntime *X, const uint8_t *data, size_t len) {
     r->data = data;
     r->len = len;
     r->pos = 0;
@@ -611,9 +611,9 @@ static int decode_value(XrSerialReader *r, XrValue *out) {
     }
 }
 
-/* ========== Public Decode API ========== */
+/* ========== Cluster Decode API ========== */
 
-int xr_cluster_decode(XrSerialReader *r, XrValue *out) {
+int cluster_decode(XrSerialReader *r, XrValue *out) {
     // Need at least version(1) + tag(1) + crc(4)
     if (r->len < 6)
         return -1;

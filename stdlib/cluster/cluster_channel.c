@@ -61,9 +61,9 @@ static int dist_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
         return XR_CHAN_CLOSED;
 
     XrSerialBuf sbuf;
-    xr_serial_buf_init(&sbuf);
-    if (xr_cluster_encode(c->isolate, value, &sbuf) != 0) {
-        xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_init(&sbuf);
+    if (cluster_encode(c->isolate, value, &sbuf) != 0) {
+        cluster_serial_buf_free(&sbuf);
         return XR_CHAN_CLOSED;
     }
 
@@ -74,13 +74,13 @@ static int dist_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
                          ? stack_frame
                          : (uint8_t *) xr_malloc(frame_size + 16);
     if (!frame) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return XR_CHAN_CLOSED;
     }
 
     int flen = xr_frame_encode_channel_send(frame, frame_size + 16, dc->name, sbuf.data,
                                             (uint32_t) sbuf.len);
-    xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_free(&sbuf);
 
     if (flen < 0) {
         if (frame != stack_frame)
@@ -307,7 +307,7 @@ int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
 
     // Decode the value
     XrValue value;
-    if (xr_cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
+    if (cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
         return -1;
 
     // Write directly into the Owner channel's local buffer.
@@ -372,9 +372,9 @@ void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
 
     // Serialize the value
     XrSerialBuf sbuf;
-    xr_serial_buf_init(&sbuf);
-    if (xr_cluster_encode(c->isolate, val, &sbuf) != 0) {
-        xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_init(&sbuf);
+    if (cluster_encode(c->isolate, val, &sbuf) != 0) {
+        cluster_serial_buf_free(&sbuf);
         // Drop per at-most-once policy documented above — no retry,
         // no error surface. Callers that need at-least-once must
         // add their own ack / reply channel.
@@ -392,7 +392,7 @@ void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     xr_amutex_unlock(&c->channels_lock);
 
     if (!target_node || target_node->state != XR_NODE_CONNECTED) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return;
     }
 
@@ -403,13 +403,13 @@ void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
                          ? stack_frame
                          : (uint8_t *) xr_malloc(frame_size + 16);
     if (!frame) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return;
     }
 
     int flen =
         xr_frame_encode_channel_push(frame, frame_size + 16, name, sbuf.data, (uint32_t) sbuf.len);
-    xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_free(&sbuf);
 
     if (flen > 0) {
         xr_cluster_node_enqueue(target_node, frame, (uint32_t) flen);
@@ -433,7 +433,7 @@ int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
 
     // Decode the value
     XrValue value;
-    if (xr_cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
+    if (cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
         return -1;
 
     // Write into Proxy channel's local buffer

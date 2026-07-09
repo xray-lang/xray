@@ -463,9 +463,9 @@ static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const Xr
         return -1;
 
     XrSerialBuf sbuf;
-    xr_serial_buf_init(&sbuf);
-    if (xr_cluster_encode(X, *value, &sbuf) != 0) {
-        xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_init(&sbuf);
+    if (cluster_encode(X, *value, &sbuf) != 0) {
+        cluster_serial_buf_free(&sbuf);
         return -1;
     }
 
@@ -473,14 +473,14 @@ static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const Xr
     uint32_t payload_len = 2 + topic_len + (uint32_t) sbuf.len;
     xr_frame_buf_init(fb_out, payload_len);
     if (!fb_out->data) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return -1;
     }
     fb_out->data[0] = hop_limit;
     fb_out->data[1] = topic_len;
     memcpy(fb_out->data + 2, topic, topic_len);
     memcpy(fb_out->data + 2 + topic_len, sbuf.data, sbuf.len);
-    xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_free(&sbuf);
 
     return (int) payload_len;
 }
@@ -511,7 +511,7 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const ch
 
     // Decode the value
     XrValue value;
-    if (xr_cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
+    if (cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
         return;
 
     // Deliver to every matching local subscription — this happens

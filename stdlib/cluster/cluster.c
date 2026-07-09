@@ -1103,9 +1103,9 @@ static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
     // Serialize result
     XrSerialBuf sbuf;
-    xr_serial_buf_init(&sbuf);
-    if (xr_cluster_encode(X, result, &sbuf) != 0) {
-        xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_init(&sbuf);
+    if (cluster_encode(X, result, &sbuf) != 0) {
+        cluster_serial_buf_free(&sbuf);
         return xr_bool(0);
     }
 
@@ -1116,13 +1116,13 @@ static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
                          ? stack_frame
                          : (uint8_t *) xr_malloc(frame_size + 16);
     if (!frame) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return xr_bool(0);
     }
 
     int flen = xr_frame_encode_service_reply(frame, frame_size + 16, request_id, false, sbuf.data,
                                              (uint32_t) sbuf.len);
-    xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_free(&sbuf);
 
     if (flen < 0) {
         if (frame != stack_frame)
@@ -1179,9 +1179,9 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
     // Remote service: serialize args
     XrSerialBuf sbuf;
-    xr_serial_buf_init(&sbuf);
-    if (xr_cluster_encode(X, call_args, &sbuf) != 0) {
-        xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_init(&sbuf);
+    if (cluster_encode(X, call_args, &sbuf) != 0) {
+        cluster_serial_buf_free(&sbuf);
         return xr_null();
     }
 
@@ -1197,14 +1197,14 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     xr_amutex_unlock(&c->nodes_lock);
 
     if (!target || !target->conn) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return xr_null();
     }
 
     // Register pending request BEFORE sending (avoid race)
     XrChannel *rsp_ch = cluster_node_add_pending(target, req_id, X, c->max_pending_requests);
     if (!rsp_ch) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return xr_null();
     }
 
@@ -1215,13 +1215,13 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
                          ? stack_frame
                          : (uint8_t *) xr_malloc(frame_size + 16);
     if (!frame) {
-        xr_serial_buf_free(&sbuf);
+        cluster_serial_buf_free(&sbuf);
         return xr_null();
     }
 
     int flen = xr_frame_encode_service_call(frame, frame_size + 16, req_id, service_name->data,
                                             sbuf.data, (uint32_t) sbuf.len);
-    xr_serial_buf_free(&sbuf);
+    cluster_serial_buf_free(&sbuf);
 
     if (flen < 0) {
         if (frame != stack_frame)
@@ -1352,7 +1352,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     xr_channel_close(rsp_ch);
                 } else {
                     XrValue val;
-                    if (xr_cluster_decode_value(c->isolate, recv_buf + 9, payload_len - 9, &val) ==
+                    if (cluster_decode_value(c->isolate, recv_buf + 9, payload_len - 9, &val) ==
                         0) {
                         xr_channel_try_send(rsp_ch, val);
                     } else {
@@ -1391,14 +1391,14 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     out = xr_channel_try_recv(dc->channel, &ok);
                     if (ok) {
                         XrSerialBuf sbuf;
-                        xr_serial_buf_init(&sbuf);
-                        if (xr_cluster_encode(c->isolate, out, &sbuf) == 0) {
+                        cluster_serial_buf_init(&sbuf);
+                        if (cluster_encode(c->isolate, out, &sbuf) == 0) {
                             rsp_payload[8] = 1;  // has_value = true
                             memcpy(rsp_payload + 9, sbuf.data, sbuf.len);
                             xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload,
                                                        9 + (uint32_t) sbuf.len);
                         }
-                        xr_serial_buf_free(&sbuf);
+                        cluster_serial_buf_free(&sbuf);
                     } else {
                         rsp_payload[8] = 0;  // has_value = false
                         xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
@@ -1421,7 +1421,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
                 // Decode args
                 XrValue decoded_args;
-                if (xr_cluster_decode_value(c->isolate, sc.args_data, sc.args_len, &decoded_args) !=
+                if (cluster_decode_value(c->isolate, sc.args_data, sc.args_len, &decoded_args) !=
                     0)
                     break;
 
@@ -1456,7 +1456,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 } else {
                     // Decode result and deliver to waiting caller
                     XrValue result;
-                    if (xr_cluster_decode_value(c->isolate, reply.result_data, reply.result_len,
+                    if (cluster_decode_value(c->isolate, reply.result_data, reply.result_len,
                                                 &result) == 0) {
                         xr_channel_try_send(rsp_ch, result);
                     } else {
