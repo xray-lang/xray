@@ -1,0 +1,28 @@
+import sys
+
+fn runProcess() {
+    const indices = [0]
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    if (p == null) {
+        print("spawn-failed")
+        return
+    }
+    for (i in indices) {
+        print(p!.wait())
+    }
+}
+
+fn runPipe() {
+    const indices = [0]
+    var p = sys.Pipe.open()
+    if (p == null) {
+        print(false)
+        return
+    }
+    for (i in indices) {
+        print(p!.close())
+    }
+}
+
+runProcess()
+runPipe()
