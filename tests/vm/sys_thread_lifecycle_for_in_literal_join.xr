@@ -1,0 +1,12 @@
+import sys
+
+fn run() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    for (i in [0]) {
+        print(t.join())
+    }
+}
+
+run()
