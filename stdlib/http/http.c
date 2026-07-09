@@ -377,8 +377,9 @@ XrHttpContext *xr_http_get_context(XrVMRuntime *X) {
     return ctx;
 }
 
-// Free HTTP module context
-void xr_http_module_context_free(XrHttpContext *ctx) {
+// Free HTTP module context.
+static void http_context_destroy(void *handle) {
+    XrHttpContext *ctx = (XrHttpContext *) handle;
     if (!ctx)
         return;
 
@@ -563,6 +564,7 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "http");
     if (!mod)
         return NULL;
+    mod->native_handle_destroy = http_context_destroy;
 
     xr_stdlib_vm_bind_http_generated(isolate, mod);
 

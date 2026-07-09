@@ -37,8 +37,8 @@
 //
 // Historically a process-global `g_http_pool` was used, which leaked across
 // Isolates and caused cross-Isolate fd/TLS reuse. We now store the pool on
-// XrHttpContext so each Isolate has its own, and it is freed by
-// xr_http_module_context_free() during Isolate teardown.
+// XrHttpContext so each Isolate has its own, and it is freed by the HTTP
+// module native-handle destructor during Isolate teardown.
 static XrConnPool *http_client_pool(XrVMRuntime *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)

@@ -228,6 +228,28 @@ static XrWsContext *get_ws_context(XrVMRuntime *X) {
     return ctx;
 }
 
+// Free WebSocket module context.
+static void ws_context_destroy(void *handle) {
+    XrWsContext *ctx = (XrWsContext *) handle;
+    if (!ctx)
+        return;
+
+    if (ctx->conn_array) {
+        for (int i = 0; i < ctx->array_capacity; i++) {
+            XrWebSocket *ws = ctx->conn_array[i];
+            if (ws) {
+                ws_conn_close(ws, WS_CLOSE_GOING_AWAY, NULL);
+                ws_free(ws);
+            }
+        }
+        xr_free(ctx->conn_array);
+    }
+
+    xr_free(ctx->free_ids);
+    xr_mutex_destroy(&ctx->conn_mutex);
+    xr_free(ctx);
+}
+
 // Grow connection array when needed
 static bool ws_conn_array_grow(XrWsContext *ctx, int needed_id) {
     if (needed_id < ctx->array_capacity)
@@ -1417,6 +1439,7 @@ XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "ws");
     if (!mod)
         return NULL;
+    mod->native_handle_destroy = ws_context_destroy;
 
 #if WS_PROFILE
     if (!ws_prof_registered) {
