@@ -2314,6 +2314,15 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (!verify_generic_inst_rows(ev, errbuf, errbuf_len))
         return false;
 
+    for (uint32_t di = 0; di < ev->ndecls; di++) {
+        const XgDeclSummary *decl = &ev->decls[di];
+        bool has_derive_flag = (decl->flags & XG_DECL_DERIVE) != 0;
+        bool has_derive_bits = decl->derive_flags != 0;
+        if (has_derive_flag != has_derive_bits)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence derive flags do not re-derive");
+    }
+
     for (uint32_t i = 0; i < ev->nclasses; i++) {
         const XgClassSummary *cls = &ev->classes[i];
         const XaotClassHierarchyPlan *hier;
@@ -2515,7 +2524,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
                 body_count++;
         }
         for (uint32_t di = 0; di < ev->ndecls; di++) {
-            if (bit == XG_METADATA_DERIVE && (ev->decls[di].flags & XG_DECL_DERIVE) != 0)
+            if (bit == XG_METADATA_DERIVE && ev->decls[di].derive_flags != 0)
                 decl_count++;
         }
         plan = xaot_bundle_find_metadata_plan(bundle, bit);
