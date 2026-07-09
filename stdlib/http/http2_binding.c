@@ -65,6 +65,94 @@ static const char *json_get_string(XrVMRuntime *X, XrJson *json, const char *key
     return s->data;
 }
 
+static bool ascii_ieq(const char *a, size_t a_len, const char *b) {
+    size_t b_len = strlen(b);
+    if (a_len != b_len)
+        return false;
+    for (size_t i = 0; i < a_len; i++) {
+        unsigned char ca = (unsigned char) a[i];
+        unsigned char cb = (unsigned char) b[i];
+        if (ca >= 'A' && ca <= 'Z')
+            ca = (unsigned char) (ca + ('a' - 'A'));
+        if (cb >= 'A' && cb <= 'Z')
+            cb = (unsigned char) (cb + ('a' - 'A'));
+        if (ca != cb)
+            return false;
+    }
+    return true;
+}
+
+static bool h2_token_char(unsigned char c) {
+    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '!' ||
+           c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
+           c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+}
+
+static bool h2_method_valid(const char *method, size_t len) {
+    if (!method)
+        return true;
+    if (len == 0)
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        if (!h2_token_char((unsigned char) method[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool h2_header_name_valid(const char *name, size_t len) {
+    if (!name || len == 0 || name[0] == ':')
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        if (!h2_token_char((unsigned char) name[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool h2_header_value_valid(const char *value, size_t len) {
+    if (!value && len > 0)
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) value[i];
+        if (c == '\t')
+            continue;
+        if (c < 0x20 || c == 0x7F)
+            return false;
+    }
+    return true;
+}
+
+static bool h2_custom_header_allowed(const XrHttpHeader *h) {
+    if (!h2_header_name_valid(h->name, h->name_len) ||
+        !h2_header_value_valid(h->value, h->value_len))
+        return false;
+
+    if (ascii_ieq(h->name, h->name_len, "connection") ||
+        ascii_ieq(h->name, h->name_len, "keep-alive") ||
+        ascii_ieq(h->name, h->name_len, "proxy-connection") ||
+        ascii_ieq(h->name, h->name_len, "transfer-encoding") ||
+        ascii_ieq(h->name, h->name_len, "upgrade") || ascii_ieq(h->name, h->name_len, "host"))
+        return false;
+
+    if (ascii_ieq(h->name, h->name_len, "te") && !ascii_ieq(h->value, h->value_len, "trailers"))
+        return false;
+
+    return true;
+}
+
+static bool h2_request_options_valid(const XrH2Request *req) {
+    if (!req)
+        return true;
+    if (!h2_method_valid(req->method, req->method_len))
+        return false;
+    for (int i = 0; i < req->header_count; i++) {
+        if (!h2_custom_header_allowed(&req->headers[i]))
+            return false;
+    }
+    return true;
+}
+
 /* ========== Header Extraction (Json/Map -> XrHttpHeader[]) ========== */
 
 /*
@@ -188,7 +276,7 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     XrH2Request req = {0};
-    req.method = json_get_string(X, opts, "method", NULL);
+    req.method = json_get_string(X, opts, "method", &req.method_len);
     req.body = json_get_string(X, opts, "body", &req.body_len);
 
     int hcount = 0;
@@ -196,6 +284,12 @@ XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
     if (hcount > 0) {
         req.headers = headers;
         req.header_count = hcount;
+    }
+
+    if (!h2_request_options_valid(&req)) {
+        if (headers)
+            xr_free(headers);
+        return xr_null();
     }
 
     XrH2Response *resp = http2_client_request(X, ctx->h2_client_pool, url, &req);

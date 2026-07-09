@@ -405,7 +405,7 @@ XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *u
     names[h2_header_count] = ":method";
     name_lens[h2_header_count] = 7;
     values[h2_header_count] = req && req->method ? req->method : "GET";
-    value_lens[h2_header_count] = strlen(values[h2_header_count]);
+    value_lens[h2_header_count] = req && req->method ? req->method_len : 3;
     h2_header_count++;
 
     names[h2_header_count] = ":path";
