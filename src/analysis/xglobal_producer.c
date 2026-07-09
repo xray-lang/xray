@@ -3532,7 +3532,21 @@ static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode 
 
 static XgLocalType *body_lookup_local_map_shape(XgBodyCollect *bc, const AstNode *expr) {
     XgLocalType *row;
-    if (!bc || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+    if (!bc || !expr)
+        return NULL;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_lookup_local_map_shape(bc, expr->as.grouping);
+        case AST_MOVE_EXPR:
+            return body_lookup_local_map_shape(bc, expr->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return body_lookup_local_map_shape(bc, expr->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return body_lookup_local_map_shape(bc, expr->as.unary.operand);
+        default:
+            break;
+    }
+    if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return NULL;
     row = body_find_local(bc, expr->as.variable.name);
     return row && row->map_shape_id != XG_NO_ID ? row : NULL;
