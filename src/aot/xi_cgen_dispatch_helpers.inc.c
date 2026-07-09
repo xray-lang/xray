@@ -5281,6 +5281,18 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_codegen_abort_expr(out);
         return;
     }
+    if (emit_tagged_map_method_key_access_expr(ctx, out, v))
+        return;
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (emit_tagged_set_method_key_access_expr(ctx, out, v))
+        return;
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (!xicgen_key_access_runtime_method_preflight(ctx, out, v, method, nargs))
         return;
     if (!xicgen_runtime_method_plan_allows_helper(ctx, out, v, method, nargs, dispatch_plan))
