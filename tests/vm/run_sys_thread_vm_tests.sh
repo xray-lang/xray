@@ -116,6 +116,7 @@ TERNARY_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_ternary_warning.xr"
 DESTRUCTURE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_destructure_join.xr"
 DESTRUCTURE_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_destructure_alias_join.xr"
 DESTRUCTURE_HELPER_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_destructure_helper_return_alias_join.xr"
+DESTRUCTURE_FACTORY_RETURN_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_destructure_factory_return_join.xr"
 ASSIGNMENT_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_assignment_alias_join.xr"
 LOOP_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_loop_join.xr"
 CONST_TRUE_LOOP_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_const_true_loop_join.xr"
@@ -166,6 +167,7 @@ HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_help
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_control_exit_warning.xr"
 HELPER_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_factory_return_warning.xr"
 HELPER_FACTORY_DISCARD_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_factory_discard_warning.xr"
+DESTRUCTURE_FACTORY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_destructure_factory_return_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -185,6 +187,7 @@ expect_output "destructure_join" "$DESTRUCTURE_JOIN_SRC" "42"
 expect_output "destructure_alias_join" "$DESTRUCTURE_ALIAS_JOIN_SRC" "42"
 expect_output "destructure_helper_return_alias_join" \
     "$DESTRUCTURE_HELPER_RETURN_ALIAS_JOIN_SRC" "42"
+expect_output "destructure_factory_return_join" "$DESTRUCTURE_FACTORY_RETURN_JOIN_SRC" "42"
 expect_output "assignment_alias_join" "$ASSIGNMENT_ALIAS_JOIN_SRC" "42"
 expect_output "loop_join" "$LOOP_JOIN_SRC" "42"
 expect_output "const_true_loop_join" "$CONST_TRUE_LOOP_JOIN_SRC" "42"
@@ -275,6 +278,9 @@ expect_warning "helper_factory_return_warning" "$HELPER_FACTORY_RETURN_WARNING_S
 expect_warning "helper_factory_discard_warning" "$HELPER_FACTORY_DISCARD_WARNING_SRC" \
     "helper-factory-discard-thread" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
+expect_warning "destructure_factory_return_warning" "$DESTRUCTURE_FACTORY_RETURN_WARNING_SRC" \
+    "destructure-factory-thread" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]THREAD_SPAWN[[:space:]]' "$WORK/join.dump"; then

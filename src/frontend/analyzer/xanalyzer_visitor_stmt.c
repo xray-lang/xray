@@ -2385,6 +2385,15 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
     }
 }
 
+static XaThreadHandleLintState **xa_thread_lint_append_spawn_state(XaInferContext *ctx,
+                                                                   AstNode *decl_stmt,
+                                                                   XaSymbol *sym,
+                                                                   XaThreadHandleLintState **tail);
+
+static XaThreadHandleLintState **xa_thread_lint_collect_destructure_spawn_states(
+    XaInferContext *ctx, AstNode *decl_stmt, XrDestructurePattern *pattern, AstNode *initializer,
+    XaThreadHandleLintFnSummary *fn_summaries, XaThreadHandleLintState **tail);
+
 static XaThreadHandleLintState *
 xa_thread_lint_collect_spawn_states(XaInferContext *ctx, AstNode **statements, int count,
                                     XaThreadHandleLintFnSummary *fn_summaries) {
@@ -2394,27 +2403,84 @@ xa_thread_lint_collect_spawn_states(XaInferContext *ctx, AstNode **statements, i
     XaThreadHandleLintState **tail = &states;
     for (int i = 0; i < count; i++) {
         AstNode *stmt = statements[i];
-        if (!stmt || (stmt->type != AST_VAR_DECL && stmt->type != AST_CONST_DECL))
+        if (!stmt)
             continue;
-        VarDeclNode *var = &stmt->as.var_decl;
-        if (!var->name || !var->initializer ||
-            (!xa_expr_is_sys_thread_spawn_call(var->initializer) &&
-             !xa_thread_lint_expr_returns_new_handle(ctx, fn_summaries, var->initializer)))
+        if (stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL) {
+            VarDeclNode *var = &stmt->as.var_decl;
+            if (!var->name || !var->initializer ||
+                (!xa_expr_is_sys_thread_spawn_call(var->initializer) &&
+                 !xa_thread_lint_expr_returns_new_handle(ctx, fn_summaries, var->initializer)))
+                continue;
+            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
+            tail = xa_thread_lint_append_spawn_state(ctx, stmt, sym, tail);
             continue;
-        XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
-        if (!xa_symbol_is_local_thread_handle(sym, ctx->analyzer->current_scope))
+        }
+        if (stmt->type == AST_DESTRUCTURE_DECL) {
+            tail = xa_thread_lint_collect_destructure_spawn_states(
+                ctx, stmt, stmt->as.destructure_decl.pattern, stmt->as.destructure_decl.initializer,
+                fn_summaries, tail);
             continue;
-        XaThreadHandleLintState *state = xr_calloc(1, sizeof(XaThreadHandleLintState));
-        if (!state)
-            continue;
-        state->ctx = ctx;
-        state->root = sym;
-        state->decl_stmt = stmt;
-        xa_thread_lint_add_alias(state, sym);
-        *tail = state;
-        tail = &state->next;
+        }
     }
     return states;
+}
+
+static XaThreadHandleLintState **xa_thread_lint_append_spawn_state(XaInferContext *ctx,
+                                                                   AstNode *decl_stmt,
+                                                                   XaSymbol *sym,
+                                                                   XaThreadHandleLintState **tail) {
+    if (!ctx || !tail || !sym)
+        return tail;
+    if (!xa_symbol_is_local_thread_handle(sym, ctx->analyzer->current_scope))
+        return tail;
+    XaThreadHandleLintState *state = xr_calloc(1, sizeof(XaThreadHandleLintState));
+    if (!state)
+        return tail;
+    state->ctx = ctx;
+    state->root = sym;
+    state->decl_stmt = decl_stmt;
+    xa_thread_lint_add_alias(state, sym);
+    *tail = state;
+    return &state->next;
+}
+
+static XaThreadHandleLintState **xa_thread_lint_collect_destructure_spawn_states(
+    XaInferContext *ctx, AstNode *decl_stmt, XrDestructurePattern *pattern, AstNode *initializer,
+    XaThreadHandleLintFnSummary *fn_summaries, XaThreadHandleLintState **tail) {
+    if (!ctx || !ctx->analyzer || !pattern || !initializer || !tail)
+        return tail;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER: {
+            if (!xa_thread_lint_expr_returns_new_handle(ctx, fn_summaries, initializer))
+                return tail;
+            XaSymbol *sym = NULL;
+            if (pattern->as.identifier.symbol_id != 0)
+                sym = xa_scope_lookup_by_id(ctx->analyzer->current_scope,
+                                            pattern->as.identifier.symbol_id);
+            if (!sym && pattern->as.identifier.name)
+                sym = xa_scope_lookup(ctx->analyzer->current_scope, pattern->as.identifier.name);
+            return xa_thread_lint_append_spawn_state(ctx, decl_stmt, sym, tail);
+        }
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++) {
+                tail = xa_thread_lint_collect_destructure_spawn_states(
+                    ctx, decl_stmt, pattern->as.array.elements[i],
+                    xa_lifecycle_lint_destructure_source_at(initializer, i), fn_summaries, tail);
+            }
+            return tail;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++) {
+                tail = xa_thread_lint_collect_destructure_spawn_states(
+                    ctx, decl_stmt, pattern->as.object.patterns[i],
+                    xa_lifecycle_lint_object_source_for_field(initializer,
+                                                              pattern->as.object.field_names[i]),
+                    fn_summaries, tail);
+            }
+            return tail;
+        default:
+            return tail;
+    }
 }
 
 static void xa_thread_lint_collect_sequence_aliases(XaInferContext *ctx,
@@ -2784,7 +2850,7 @@ static void xa_warn_sys_thread_lifecycle_in_sequence(XaInferContext *ctx, AstNod
         if (!state->root || !state->decl_stmt || state->finalized || state->transferred)
             continue;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, state->root);
-        if (!links || links->ref_count == 0)
+        if ((!links || links->ref_count == 0) && state->decl_stmt->type != AST_DESTRUCTURE_DECL)
             continue;
         char msg[224];
         snprintf(msg, sizeof(msg),
@@ -5156,6 +5222,15 @@ static void xa_os_resource_lint_attach_fn_summaries(XaOsResourceLintState *state
         s->fn_summaries = summaries;
 }
 
+static XaOsResourceLintState **xa_os_resource_lint_append_state(XaInferContext *ctx,
+                                                                AstNode *decl_stmt, XaSymbol *sym,
+                                                                XaOsResourceKind kind,
+                                                                XaOsResourceLintState **tail);
+
+static XaOsResourceLintState **xa_os_resource_lint_collect_destructure_states(
+    XaInferContext *ctx, AstNode *decl_stmt, XrDestructurePattern *pattern, AstNode *initializer,
+    XaOsResourceLintFnSummary *fn_summaries, XaOsResourceLintState **tail);
+
 static XaOsResourceLintState *
 xa_os_resource_lint_collect_states(XaInferContext *ctx, AstNode **statements, int count,
                                    XaOsResourceLintFnSummary *fn_summaries) {
@@ -5165,30 +5240,89 @@ xa_os_resource_lint_collect_states(XaInferContext *ctx, AstNode **statements, in
     XaOsResourceLintState **tail = &states;
     for (int i = 0; i < count; i++) {
         AstNode *stmt = statements[i];
-        if (!stmt || (stmt->type != AST_VAR_DECL && stmt->type != AST_CONST_DECL))
+        if (!stmt)
             continue;
-        VarDeclNode *var = &stmt->as.var_decl;
-        XaOsResourceKind kind = XA_OS_RESOURCE_PROCESS;
-        if (!var->name || !var->initializer ||
-            (!xa_expr_is_sys_os_resource_open_call(ctx, var->initializer, &kind) &&
-             !xa_os_resource_lint_expr_returns_new_resource(ctx, fn_summaries, var->initializer,
-                                                            &kind)))
+        if (stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL) {
+            VarDeclNode *var = &stmt->as.var_decl;
+            XaOsResourceKind kind = XA_OS_RESOURCE_PROCESS;
+            if (!var->name || !var->initializer ||
+                (!xa_expr_is_sys_os_resource_open_call(ctx, var->initializer, &kind) &&
+                 !xa_os_resource_lint_expr_returns_new_resource(ctx, fn_summaries, var->initializer,
+                                                                &kind)))
+                continue;
+            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
+            tail = xa_os_resource_lint_append_state(ctx, stmt, sym, kind, tail);
             continue;
-        XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
-        if (!xa_symbol_is_local_os_resource_handle(sym, ctx->analyzer->current_scope, kind))
+        }
+        if (stmt->type == AST_DESTRUCTURE_DECL) {
+            tail = xa_os_resource_lint_collect_destructure_states(
+                ctx, stmt, stmt->as.destructure_decl.pattern, stmt->as.destructure_decl.initializer,
+                fn_summaries, tail);
             continue;
-        XaOsResourceLintState *state = xr_calloc(1, sizeof(XaOsResourceLintState));
-        if (!state)
-            continue;
-        state->ctx = ctx;
-        state->kind = kind;
-        state->root = sym;
-        state->decl_stmt = stmt;
-        xa_os_resource_lint_add_alias(state, sym);
-        *tail = state;
-        tail = &state->next;
+        }
     }
     return states;
+}
+
+static XaOsResourceLintState **xa_os_resource_lint_append_state(XaInferContext *ctx,
+                                                                AstNode *decl_stmt, XaSymbol *sym,
+                                                                XaOsResourceKind kind,
+                                                                XaOsResourceLintState **tail) {
+    if (!ctx || !tail || !sym)
+        return tail;
+    if (!xa_symbol_is_local_os_resource_handle(sym, ctx->analyzer->current_scope, kind))
+        return tail;
+    XaOsResourceLintState *state = xr_calloc(1, sizeof(XaOsResourceLintState));
+    if (!state)
+        return tail;
+    state->ctx = ctx;
+    state->kind = kind;
+    state->root = sym;
+    state->decl_stmt = decl_stmt;
+    xa_os_resource_lint_add_alias(state, sym);
+    *tail = state;
+    return &state->next;
+}
+
+static XaOsResourceLintState **xa_os_resource_lint_collect_destructure_states(
+    XaInferContext *ctx, AstNode *decl_stmt, XrDestructurePattern *pattern, AstNode *initializer,
+    XaOsResourceLintFnSummary *fn_summaries, XaOsResourceLintState **tail) {
+    if (!ctx || !ctx->analyzer || !pattern || !initializer || !tail)
+        return tail;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER: {
+            XaOsResourceKind kind = XA_OS_RESOURCE_PROCESS;
+            if (!xa_os_resource_lint_expr_returns_new_resource(ctx, fn_summaries, initializer,
+                                                               &kind))
+                return tail;
+            XaSymbol *sym = NULL;
+            if (pattern->as.identifier.symbol_id != 0)
+                sym = xa_scope_lookup_by_id(ctx->analyzer->current_scope,
+                                            pattern->as.identifier.symbol_id);
+            if (!sym && pattern->as.identifier.name)
+                sym = xa_scope_lookup(ctx->analyzer->current_scope, pattern->as.identifier.name);
+            return xa_os_resource_lint_append_state(ctx, decl_stmt, sym, kind, tail);
+        }
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++) {
+                tail = xa_os_resource_lint_collect_destructure_states(
+                    ctx, decl_stmt, pattern->as.array.elements[i],
+                    xa_lifecycle_lint_destructure_source_at(initializer, i), fn_summaries, tail);
+            }
+            return tail;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++) {
+                tail = xa_os_resource_lint_collect_destructure_states(
+                    ctx, decl_stmt, pattern->as.object.patterns[i],
+                    xa_lifecycle_lint_object_source_for_field(initializer,
+                                                              pattern->as.object.field_names[i]),
+                    fn_summaries, tail);
+            }
+            return tail;
+        default:
+            return tail;
+    }
 }
 
 static void xa_warn_unused_os_resource_decl(XaInferContext *ctx, AstNode *stmt,
@@ -5269,7 +5403,7 @@ static void xa_warn_os_resource_lifecycle_in_sequence(XaInferContext *ctx, AstNo
         if (!state->root || !state->decl_stmt || state->finalized || state->transferred)
             continue;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, state->root);
-        if (!links || links->ref_count == 0)
+        if ((!links || links->ref_count == 0) && state->decl_stmt->type != AST_DESTRUCTURE_DECL)
             continue;
         char msg[224];
         snprintf(msg, sizeof(msg), "%s handle '%s' from %s is not %s before leaving scope",

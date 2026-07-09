@@ -1,0 +1,10 @@
+import sys
+
+fn makeThread() -> Thread<int> {
+    return sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+}
+
+var (t,) = (makeThread(),)
+print("destructure-factory-thread")

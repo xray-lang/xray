@@ -1,0 +1,32 @@
+import sys
+import { Pipe, Process } from sys
+
+fn makeProcess() -> Process? {
+    return sys.Process.spawn("sh", ["-c", "exit 0"])
+}
+
+fn wrapProcess() -> Process? {
+    return makeProcess()
+}
+
+fn makePipe() -> Pipe? {
+    return sys.Pipe.open()
+}
+
+fn wrapPipe() -> Pipe? {
+    return makePipe()
+}
+
+var (p,) = (wrapProcess(),)
+if (p != null) {
+    print(p!.wait())
+} else {
+    print(-1)
+}
+
+var (pipe,) = (wrapPipe(),)
+if (pipe != null) {
+    print(pipe!.close())
+} else {
+    print(false)
+}
