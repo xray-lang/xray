@@ -1,30 +1,30 @@
 // Pure-Xray HTTP helper exports layered on the native HTTP module.
 
 import http
-import { urlEncode, urlDecode, response, responseText } from http
+import { urlEncode, urlDecode, responseText } from http
 
 print(http.urlEncode("a b+张"))
 print(urlEncode(":/?#[]@!$&'()*+,;="))
 print(http.urlDecode("a+b%2Bc%ZZ%"))
 print(urlDecode("%E5%BC%A0%E4%B8%89"))
 
-var text = response(200, "hello")
+var text = responseText(200, "hello")!
 print(text.includes("HTTP/1.1 200 OK\r\n"))
 print(text.includes("Content-Type: text/plain; charset=utf-8\r\n"))
 print(text.includes("Content-Length: 5\r\n"))
 print(text.endsWith("\r\n\r\nhello"))
 
-var unicode = http.response(200, "é")
+var unicode = http.responseText(200, "é")!
 print(unicode.includes("Content-Length: 2\r\n"))
 print(unicode.endsWith("\r\n\r\né"))
 
-var json = http.response(404, {error: "no"})
+var json = http.responseText(404, Json.stringify({error: "no"}), "application/json; charset=utf-8")!
 print(json.includes("HTTP/1.1 404 Not Found\r\n"))
 print(json.includes("Content-Type: application/json; charset=utf-8\r\n"))
 print(json.includes("Content-Length: 14\r\n"))
 print(json.endsWith("{\"error\":\"no\"}"))
 
-var empty = response(204)
+var empty = responseText(204)!
 print(empty.includes("HTTP/1.1 204 No Content\r\n"))
 print(empty.includes("Content-Length: 0\r\n"))
 print(empty.endsWith("\r\n\r\n"))

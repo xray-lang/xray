@@ -1638,23 +1638,6 @@ fn urlDecode(s: string) -> string {
     return decodeForm(s)
 }
 
-// response - Format a complete HTTP/1.1 response string.
-fn response(status: int, body: unknown = null) -> string {
-    var bodyText = ""
-    var contentType = "text/plain; charset=utf-8"
-
-    if (body != null) {
-        if (typename(body) == "string") {
-            bodyText = string(body)
-        } else {
-            bodyText = Json.stringify(body)
-            contentType = "application/json; charset=utf-8"
-        }
-    }
-
-    return responseText(status, bodyText, contentType)!
-}
-
 // responseText - Format a complete HTTP/1.1 response with explicit headers.
 fn responseText(
     status: int,
@@ -1716,7 +1699,6 @@ export {
     router,
     urlEncode,
     urlDecode,
-    response,
     responseText,
     requestText,
     parseResponseHead,

@@ -1,7 +1,7 @@
 // HTTP pure-Xray helper surface.
 
 import http
-import { urlEncode, urlDecode, response, responseText } from http
+import { urlEncode, urlDecode, responseText } from http
 
 @test
 fn test_url_encode_namespace() {
@@ -15,7 +15,7 @@ fn test_url_decode_named_import() {
 
 @test
 fn test_response_text() {
-    var resp = response(200, "hello")
+    var resp = responseText(200, "hello")!
     assert(resp.includes("HTTP/1.1 200 OK\r\n"))
     assert(resp.includes("Content-Type: text/plain; charset=utf-8\r\n"))
     assert(resp.includes("Content-Length: 5\r\n"))
@@ -24,7 +24,7 @@ fn test_response_text() {
 
 @test
 fn test_response_json() {
-    var resp = http.response(404, {error: "no"})
+    var resp = responseText(404, Json.stringify({error: "no"}), "application/json; charset=utf-8")!
     assert(resp.includes("HTTP/1.1 404 Not Found\r\n"))
     assert(resp.includes("Content-Type: application/json; charset=utf-8\r\n"))
     assert(resp.includes("Content-Length: 14\r\n"))
@@ -33,14 +33,14 @@ fn test_response_json() {
 
 @test
 fn test_response_unicode_byte_length() {
-    var resp = response(200, "é")
+    var resp = responseText(200, "é")!
     assert(resp.includes("Content-Length: 2\r\n"))
     assert(resp.endsWith("\r\n\r\né"))
 }
 
 @test
 fn test_response_empty_body() {
-    var resp = response(204)
+    var resp = responseText(204)!
     assert(resp.includes("HTTP/1.1 204 No Content\r\n"))
     assert(resp.includes("Content-Length: 0\r\n"))
     assert(resp.endsWith("\r\n\r\n"))
