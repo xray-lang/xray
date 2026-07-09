@@ -409,7 +409,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
 
     names[h2_header_count] = ":path";
     name_lens[h2_header_count] = 5;
-    values[h2_header_count] = req && req->path ? req->path : parsed.path;
+    values[h2_header_count] = parsed.path;
     value_lens[h2_header_count] = strlen(values[h2_header_count]);
     h2_header_count++;
 
@@ -480,14 +480,6 @@ void http2_client_response_free(XrH2Response *resp) {
     if (!resp)
         return;
 
-    if (resp->headers) {
-        for (int i = 0; i < resp->header_count; i++) {
-            xr_free((void *) resp->headers[i].name);
-            xr_free((void *) resp->headers[i].value);
-        }
-        xr_free(resp->headers);
-    }
     xr_free(resp->body);
-    xr_free(resp->error_msg);
     xr_free(resp);
 }
