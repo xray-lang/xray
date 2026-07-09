@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects enum.toString
+contains=use ordinal or match in freestanding code
+not_contains=CRASH
+not_contains=unsupported AOT
