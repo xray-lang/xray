@@ -351,6 +351,31 @@ static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
     return 0;
 }
 
+int ws_write_all(struct XrVMRuntime *X, int fd, const char *buf, size_t len) {
+    if (fd < 0 || !buf)
+        return -1;
+
+    size_t sent = 0;
+    while (sent < len) {
+        int n;
+        if (X) {
+            n = xr_socket_write(X, fd, buf + sent, len - sent);
+        } else {
+            ssize_t w = write(fd, buf + sent, len - sent);
+            if (w < 0) {
+                if (errno == EINTR)
+                    continue;
+                return -1;
+            }
+            n = (int) w;
+        }
+        if (n <= 0)
+            return -1;
+        sent += (size_t) n;
+    }
+    return 0;
+}
+
 /* ========== Optimized Frame Send with writev ========== */
 
 // Build frame header into provided buffer (max 14 bytes)
@@ -2081,8 +2106,8 @@ static char *ws_get_sec_key(const char *request_headers) {
     return key;
 }
 
-static int ws_send_upgrade_response(int fd, const char *sec_key, const char *protocol,
-                                    bool deflate_ok) {
+static int ws_send_upgrade_response(struct XrVMRuntime *X, int fd, const char *sec_key,
+                                    const char *protocol, bool deflate_ok) {
     if (fd < 0 || !sec_key)
         return -1;
 
@@ -2128,18 +2153,9 @@ static int ws_send_upgrade_response(int fd, const char *sec_key, const char *pro
 
     xr_free(accept_key);
 
-    // Send response (retry on EINTR)
-    size_t total_sent = 0;
-    while (total_sent < (size_t) len) {
-        ssize_t n = write(fd, response + total_sent, len - total_sent);
-        if (n < 0) {
-            if (errno == EINTR)
-                continue;
-            return -1;
-        }
-        total_sent += n;
-    }
-    return 0;
+    if (len <= 0 || len >= (int) sizeof(response))
+        return -1;
+    return ws_write_all(X, fd, response, (size_t) len);
 }
 
 /*
@@ -2173,7 +2189,7 @@ static bool ws_origin_allowed(const char *origin, const char **allowlist) {
  * Send a minimal HTTP error response (used for Origin rejection) then
  * return. Caller is responsible for closing fd.
  */
-static void ws_send_simple_response(int fd, int status, const char *reason) {
+static void ws_send_simple_response(struct XrVMRuntime *X, int fd, int status, const char *reason) {
     char resp[256];
     int n = snprintf(resp, sizeof(resp),
                      "HTTP/1.1 %d %s\r\n"
@@ -2181,10 +2197,8 @@ static void ws_send_simple_response(int fd, int status, const char *reason) {
                      "Connection: close\r\n"
                      "\r\n",
                      status, reason ? reason : "");
-    if (n > 0) {
-        ssize_t w = write(fd, resp, (size_t) n);
-        (void) w;
-    }
+    if (n > 0 && n < (int) sizeof(resp))
+        (void) ws_write_all(X, fd, resp, (size_t) n);
 }
 
 static char *ws_pick_subprotocol(const char *request_headers, const char **server_protocols) {
@@ -2244,7 +2258,7 @@ XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *requ
             origin = origin_val;
         }
         if (!ws_origin_allowed(origin, opts->allowed_origins)) {
-            ws_send_simple_response(fd, 403, "Forbidden");
+            ws_send_simple_response(isolate, fd, 403, "Forbidden");
             return NULL;
         }
     }
@@ -2273,7 +2287,7 @@ XrWebSocket *ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *requ
     }
 
     // Send upgrade response (with deflate + picked subprotocol if any)
-    if (ws_send_upgrade_response(fd, sec_key, picked_proto, client_deflate) < 0) {
+    if (ws_send_upgrade_response(isolate, fd, sec_key, picked_proto, client_deflate) < 0) {
         xr_free(sec_key);
         xr_free(picked_proto);
         return NULL;
