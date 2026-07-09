@@ -1,1 +1,1 @@
-RawPtr.of/RawMut.of is not supported yet
+RawPtr.of is only supported in freestanding AOT profile for static const data
