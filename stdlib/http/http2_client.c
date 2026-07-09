@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   - ALPN automatic negotiation
  *   - Connection pool reuse
- *   - HTTP/2 request/response
+ *   - HTTPS HTTP/2 request/response
  */
 
 #include "../../src/base/xmalloc.h"
@@ -42,9 +42,7 @@ typedef struct XrH2PoolEntry {
 
 struct XrH2Pool {
     XrH2PoolEntry *hosts[XR_H2_POOL_MAX_HOSTS];
-    int host_count;
     xr_mutex_t lock;
-    bool initialized;
 };
 
 // ALPN protocol list: h2, http/1.1
@@ -60,7 +58,6 @@ XrH2Pool *http2_client_pool_create(void) {
         return NULL;
 
     xr_mutex_init(&pool->lock);
-    pool->initialized = true;
     return pool;
 }
 
@@ -92,23 +89,21 @@ void http2_client_pool_destroy(XrH2Pool *pool) {
         pool->hosts[i] = NULL;
     }
 
-    pool->host_count = 0;
     xr_mutex_unlock(&pool->lock);
     xr_mutex_destroy(&pool->lock);
     xr_free(pool);
 }
 
 // Forward declarations
-static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_https);
+static XrH2PoolEntry *create_h2_connection(const char *host, int port);
 static uint64_t get_time_ms(void);
 static unsigned int hash_host(const char *host, int port);
 static void h2_pool_entry_free(XrH2PoolEntry *entry);
 static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target);
 
 // Acquire connection from per-isolate pool
-static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port,
-                                                bool is_https) {
-    if (!pool || !pool->initialized || !host)
+static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host, int port) {
+    if (!pool || !host)
         return NULL;
 
     xr_mutex_lock(&pool->lock);
@@ -157,7 +152,7 @@ static XrH2PoolEntry *http2_client_pool_acquire(XrH2Pool *pool, const char *host
     xr_mutex_unlock(&pool->lock);
 
     // Create new connection
-    entry = create_h2_connection(host, port, is_https);
+    entry = create_h2_connection(host, port);
     if (!entry)
         return NULL;
 
@@ -239,8 +234,8 @@ static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target) {
     xr_mutex_unlock(&pool->lock);
 }
 
-// Create new HTTP/2 connection
-static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_https) {
+// Create new HTTPS HTTP/2 connection
+static XrH2PoolEntry *create_h2_connection(const char *host, int port) {
     XrH2PoolEntry *entry = (XrH2PoolEntry *) xr_calloc(1, sizeof(XrH2PoolEntry));
     if (!entry)
         return NULL;
@@ -291,51 +286,49 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
         return NULL;
     }
 
-    if (is_https) {
-        // TLS handshake
-        entry->tls_ctx = xr_tls_context_new_client();
-        if (!entry->tls_ctx) {
-            xr_closesocket(fd);
-            xr_free(entry->host);
-            xr_free(entry);
-            return NULL;
-        }
+    // TLS handshake
+    entry->tls_ctx = xr_tls_context_new_client();
+    if (!entry->tls_ctx) {
+        xr_closesocket(fd);
+        xr_free(entry->host);
+        xr_free(entry);
+        return NULL;
+    }
 
-        // Set ALPN
-        xr_tls_context_set_alpn(entry->tls_ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
+    // Set ALPN
+    xr_tls_context_set_alpn(entry->tls_ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
 
-        entry->tls_conn = xr_tls_conn_new(entry->tls_ctx, fd);
-        if (!entry->tls_conn) {
-            xr_tls_context_free(entry->tls_ctx);
-            xr_closesocket(fd);
-            xr_free(entry->host);
-            xr_free(entry);
-            return NULL;
-        }
+    entry->tls_conn = xr_tls_conn_new(entry->tls_ctx, fd);
+    if (!entry->tls_conn) {
+        xr_tls_context_free(entry->tls_ctx);
+        xr_closesocket(fd);
+        xr_free(entry->host);
+        xr_free(entry);
+        return NULL;
+    }
 
-        xr_tls_conn_set_hostname(entry->tls_conn, host);
+    xr_tls_conn_set_hostname(entry->tls_conn, host);
 
-        if (xr_tls_conn_handshake_client(NULL, entry->tls_conn) != XR_TLS_OK) {
-            xr_tls_conn_free(entry->tls_conn);
-            xr_tls_context_free(entry->tls_ctx);
-            xr_closesocket(fd);
-            xr_free(entry->host);
-            xr_free(entry);
-            return NULL;
-        }
+    if (xr_tls_conn_handshake_client(NULL, entry->tls_conn) != XR_TLS_OK) {
+        xr_tls_conn_free(entry->tls_conn);
+        xr_tls_context_free(entry->tls_ctx);
+        xr_closesocket(fd);
+        xr_free(entry->host);
+        xr_free(entry);
+        return NULL;
+    }
 
-        // Check ALPN negotiation result
-        const char *alpn = xr_tls_conn_get_alpn(entry->tls_conn);
-        if (!alpn || strcmp(alpn, "h2") != 0) {
-            // HTTP/2 not supported, close connection
-            xr_tls_conn_close(entry->tls_conn);
-            xr_tls_conn_free(entry->tls_conn);
-            xr_tls_context_free(entry->tls_ctx);
-            xr_closesocket(fd);
-            xr_free(entry->host);
-            xr_free(entry);
-            return NULL;
-        }
+    // Check ALPN negotiation result
+    const char *alpn = xr_tls_conn_get_alpn(entry->tls_conn);
+    if (!alpn || strcmp(alpn, "h2") != 0) {
+        // HTTP/2 not supported, close connection
+        xr_tls_conn_close(entry->tls_conn);
+        xr_tls_conn_free(entry->tls_conn);
+        xr_tls_context_free(entry->tls_ctx);
+        xr_closesocket(fd);
+        xr_free(entry->host);
+        xr_free(entry);
+        return NULL;
     }
 
     // Create HTTP/2 connection
@@ -390,7 +383,7 @@ XrH2Response *http2_client_request(XrH2Pool *pool, const char *url, const XrH2Re
     }
 
     // Get connection
-    XrH2PoolEntry *entry = http2_client_pool_acquire(pool, parsed.host, parsed.port, true);
+    XrH2PoolEntry *entry = http2_client_pool_acquire(pool, parsed.host, parsed.port);
     if (!entry) {
         http_url_free(&parsed);
         return NULL;
