@@ -914,7 +914,6 @@ void http2_conn_free(XrH2Conn *conn) {
     // Free stream hash table
     http2_stream_hash_free(&conn->stream_hash);
 
-    xr_free(conn->recv_buf);
     xr_free(conn);
 }
 
@@ -1148,7 +1147,7 @@ static XrH2Stream *http2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
 // and for the payload, so a short read was silently mis-classified as
 // "connection broken" and aborted every HTTP/2 request whose first TLS
 // record split the header. Looping fixes that and is also correct for
-// the plaintext-h2c fallback.
+// any non-TLS connection path.
 static int h2_recv(XrH2Conn *conn, void *buf, size_t len) {
     uint8_t *p = (uint8_t *) buf;
     size_t total = 0;
@@ -1569,15 +1568,6 @@ XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
 
     conn->next_stream_id = is_client ? 1 : 2;
     conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
-
-    conn->recv_cap = 65536;
-    conn->recv_buf = (char *) xr_malloc(conn->recv_cap);
-    if (!conn->recv_buf) {
-        http2_hpack_free(&conn->encoder_table);
-        http2_hpack_free(&conn->decoder_table);
-        xr_free(conn);
-        return NULL;
-    }
 
     return conn;
 }
