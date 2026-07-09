@@ -1,0 +1,14 @@
+import sys
+import { Pipe } from sys
+
+var processOriginal = sys.Process.spawn("sh", ["-c", "exit 0"])
+var processReplacement = sys.Process.spawn("sh", ["-c", "exit 0"])
+var processHandle = processOriginal!
+processHandle = processReplacement!
+print(processHandle.wait())
+
+var pipeOriginal = Pipe.open()
+var pipeReplacement = Pipe.open()
+var pipeHandle = pipeOriginal!
+pipeHandle = pipeReplacement!
+print(pipeHandle.close())

@@ -142,6 +142,7 @@ HELPER_DIRECT_RETURN_ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_
 HELPER_FINALIZER_RETURN_ARG_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_finalizer_return_arg_join.xr"
 CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_const_alias_return_receiver_join.xr"
 TOP_CONST_ALIAS_RETURN_RECEIVER_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_top_const_alias_return_receiver_join.xr"
+REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_reassigned_alias_warning.xr"
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_move_alias_warning.xr"
 HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_helper_control_exit_warning.xr"
@@ -220,6 +221,9 @@ expect_warning "loop_try_continue_warning" "$LOOP_TRY_CONTINUE_WARNING_SRC" "42"
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "move_alias_warning" "$MOVE_ALIAS_WARNING_SRC" "moved" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "reassigned_alias_warning" "$REASSIGNED_ALIAS_WARNING_SRC" $'2\n4' \
+    "Thread handle 'original' from sys.Thread.spawn is not joined or detached before leaving scope" \
+    "Thread handle 'first' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "helper_early_return_warning" "$HELPER_EARLY_RETURN_WARNING_SRC" "helper-skip" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "helper_control_exit_warning" "$HELPER_CONTROL_EXIT_WARNING_SRC" \

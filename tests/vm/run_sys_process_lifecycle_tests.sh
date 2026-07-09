@@ -137,6 +137,8 @@ PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_
 PIPE_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_const_alias_return_receiver_close.xr"
 PROCESS_TOP_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_top_const_alias_return_receiver_wait.xr"
 PIPE_TOP_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_top_const_alias_return_receiver_close.xr"
+REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_reassigned_alias_warning.xr"
+DESTRUCTURE_REASSIGNED_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_destructure_reassigned_alias_warning.xr"
 MOVE_ALIAS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_move_alias_warning.xr"
 PROCESS_HELPER_EARLY_RETURN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_early_return_warning.xr"
 HELPER_CONTROL_EXIT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_control_exit_warning.xr"
@@ -234,6 +236,14 @@ expect_warning "process_pipe_move_alias_warning" "$MOVE_ALIAS_WARNING_SRC" \
     $'process-moved\npipe-moved' \
     "Process handle 'spawned' from sys.Process.spawn is not waited before leaving scope" \
     "Pipe handle 'opened' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_reassigned_alias_warning" "$REASSIGNED_ALIAS_WARNING_SRC" \
+    $'0\ntrue' \
+    "Process handle 'processOriginal' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'pipeOriginal' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "process_pipe_destructure_reassigned_alias_warning" \
+    "$DESTRUCTURE_REASSIGNED_ALIAS_WARNING_SRC" $'0\ntrue' \
+    "Process handle 'processFirst' from sys.Process.spawn is not waited before leaving scope" \
+    "Pipe handle 'pipeFirst' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC" "true" \
