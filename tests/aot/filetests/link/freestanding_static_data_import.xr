@@ -1,5 +1,5 @@
 import mem
-import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS, PLAIN_HEADER, PLAIN_PAIR, PLAIN_BYTES, PLAIN_BITS, PLAIN_WORD } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, NESTED_LABEL, BITS, WORD_BYTES, BIT_ROWS, WORD_ROWS, BIT_HOLDER, BIT_GROUPS, WORD_HOLDER, WORD_GROUPS, LABEL, ADDR_ONLY_BYTES, MAYBE_NONE, LABEL_MATRIX, LABEL_CUBE, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS, LABEL_GROUPS, PLAIN_HEADER, PLAIN_PAIR, PLAIN_BYTES, PLAIN_BITS, PLAIN_WORD, PLAIN_LABEL, PLAIN_LABELED } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
@@ -35,9 +35,11 @@ fn imported_static_strings(i: int) -> int {
     print(LABELED_ROWS[i].0)
     print(LABEL_ROWS[i].labels[i])
     print(LABEL_GROUPS[i].inner.label)
+    print(PLAIN_LABEL)
+    print(PLAIN_LABELED.0)
     return NAMED.code + LABELED.1 + NESTED_LABEL.0.0 + NESTED_LABEL.1.1 +
         LABELED_ROWS[i].1 + LABEL_ROWS[i].code + LABEL_GROUPS[i].inner.code +
-        LABEL_GROUPS[i].base
+        LABEL_GROUPS[i].base + PLAIN_LABELED.1
 }
 
 @c_export("xray_imported_static_addr")
@@ -60,5 +62,7 @@ fn imported_static_addr() -> int {
         mem.addressOf(RawPtr<(int, int)>.of(PLAIN_PAIR)) +
         mem.addressOf(RawPtr<[uint8; 2]>.of(PLAIN_BYTES)) +
         mem.addressOf(RawPtr<I32Bits>.of(PLAIN_BITS)) +
-        mem.addressOf(RawPtr<U32Bytes>.of(PLAIN_WORD))
+        mem.addressOf(RawPtr<U32Bytes>.of(PLAIN_WORD)) +
+        mem.addressOf(RawPtr<string>.of(PLAIN_LABEL)) +
+        mem.addressOf(RawPtr<(string, int)>.of(PLAIN_LABELED))
 }
