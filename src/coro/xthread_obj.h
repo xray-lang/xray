@@ -92,6 +92,7 @@ XR_FUNC void xr_thread_obj_detach(XrThread *thread);
  * Xray containers and are pruned by each ThreadLocal instance on access. */
 XR_FUNC void xr_thread_obj_threadlocal_enter_current(void);
 XR_FUNC void xr_thread_obj_threadlocal_leave_current(void);
+XR_FUNC uint64_t xr_thread_obj_threadlocal_current_id(void);
 XR_FUNC bool xr_thread_obj_threadlocal_id_alive(uint64_t id);
 
 /* Wait until all VM sys.Thread entries owned by `isolate` have left their OS

@@ -246,7 +246,8 @@ static atomic_int g_threadlocal_test_stage;
 static void *threadlocal_live_test_entry(void *arg) {
     (void) arg;
     xrt_threadlocal_enter_current();
-    atomic_store_explicit(&g_threadlocal_test_id, xr_thread_current_id(), memory_order_release);
+    atomic_store_explicit(&g_threadlocal_test_id, (uint64_t) XR_TO_INT(xrt_sys_thread_local_id()),
+                          memory_order_release);
     atomic_store_explicit(&g_threadlocal_test_stage, 1, memory_order_release);
     while (atomic_load_explicit(&g_threadlocal_test_stage, memory_order_acquire) == 1)
         xr_thread_yield();
@@ -266,17 +267,18 @@ static void test_xrt_threadlocal_live_registry(void) {
         xr_thread_yield();
 
     uint64_t id = atomic_load_explicit(&g_threadlocal_test_id, memory_order_acquire);
-    ASSERT_TRUE_MSG(id != 0 && id != xr_thread_current_id(),
-                    "threadlocal live registry captures child thread id");
+    uint64_t current_id = (uint64_t) XR_TO_INT(xrt_sys_thread_local_id());
+    ASSERT_TRUE_MSG(id != 0 && id != current_id,
+                    "threadlocal live registry captures child thread token");
     ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) id)), true,
-                "running sys.Thread id is alive");
+                "running sys.Thread token is alive");
 
     atomic_store_explicit(&g_threadlocal_test_stage, 2, memory_order_release);
     xr_thread_join(thread, NULL);
     ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) id)), false,
-                "exited sys.Thread id is not alive");
-    ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) xr_thread_current_id())), true,
-                "current thread id is always alive");
+                "exited sys.Thread token is not alive");
+    ASSERT_BOOL(xrt_sys_thread_local_alive(XR_FROM_INT((int64_t) current_id)), true,
+                "current thread token is always alive");
 }
 
 int main(void) {

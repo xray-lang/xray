@@ -43,6 +43,8 @@ static bool thread_join_can_yield(XrVMRuntime *isolate) {
 
 static atomic_flag g_threadlocal_live_lock = ATOMIC_FLAG_INIT;
 static _Atomic bool g_threadlocal_live_fail_open = false;
+static _Atomic uint64_t g_threadlocal_next_id = 1;
+static XR_THREAD_LOCAL uint64_t g_threadlocal_current_id = 0;
 static uint64_t *g_threadlocal_live_ids = NULL;
 static size_t g_threadlocal_live_count = 0;
 static size_t g_threadlocal_live_cap = 0;
@@ -57,6 +59,13 @@ static void threadlocal_live_lock(void) {
 
 static void threadlocal_live_unlock(void) {
     atomic_flag_clear_explicit(&g_threadlocal_live_lock, memory_order_release);
+}
+
+static uint64_t threadlocal_alloc_id(void) {
+    uint64_t id = atomic_fetch_add_explicit(&g_threadlocal_next_id, 1, memory_order_relaxed);
+    if (id == 0)
+        id = atomic_fetch_add_explicit(&g_threadlocal_next_id, 1, memory_order_relaxed);
+    return id;
 }
 
 static size_t threadlocal_find_unlocked(const uint64_t *ids, size_t count, uint64_t id) {
@@ -96,7 +105,11 @@ static void threadlocal_remove_unlocked(uint64_t *ids, size_t *count, uint64_t i
 }
 
 void xr_thread_obj_threadlocal_enter_current(void) {
-    uint64_t id = xr_thread_current_id();
+    uint64_t id = g_threadlocal_current_id;
+    if (id == 0) {
+        id = threadlocal_alloc_id();
+        g_threadlocal_current_id = id;
+    }
     if (id == 0)
         return;
 
@@ -110,7 +123,7 @@ void xr_thread_obj_threadlocal_enter_current(void) {
 }
 
 void xr_thread_obj_threadlocal_leave_current(void) {
-    uint64_t id = xr_thread_current_id();
+    uint64_t id = g_threadlocal_current_id;
     if (id == 0)
         return;
 
@@ -121,21 +134,26 @@ void xr_thread_obj_threadlocal_leave_current(void) {
         atomic_store_explicit(&g_threadlocal_live_fail_open, true, memory_order_release);
     }
     threadlocal_live_unlock();
+    g_threadlocal_current_id = 0;
+}
+
+uint64_t xr_thread_obj_threadlocal_current_id(void) {
+    if (g_threadlocal_current_id == 0)
+        xr_thread_obj_threadlocal_enter_current();
+    return g_threadlocal_current_id;
 }
 
 bool xr_thread_obj_threadlocal_id_alive(uint64_t id) {
     if (id == 0)
         return false;
-    if (id == xr_thread_current_id())
+    if (id == g_threadlocal_current_id)
         return true;
     if (atomic_load_explicit(&g_threadlocal_live_fail_open, memory_order_acquire))
         return true;
 
     threadlocal_live_lock();
-    bool alive = threadlocal_find_unlocked(g_threadlocal_live_ids, g_threadlocal_live_count, id) !=
-                     SIZE_MAX ||
-                 threadlocal_find_unlocked(g_threadlocal_exited_ids, g_threadlocal_exited_count,
-                                           id) == SIZE_MAX;
+    bool alive =
+        threadlocal_find_unlocked(g_threadlocal_live_ids, g_threadlocal_live_count, id) != SIZE_MAX;
     threadlocal_live_unlock();
     return alive;
 }

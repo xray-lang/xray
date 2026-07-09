@@ -617,7 +617,7 @@ static XrValue sys_thread_local_id(XrVMRuntime *isolate, XrValue *args, int argc
     (void) isolate;
     (void) args;
     (void) argc;
-    return xr_int((int64_t) xr_thread_current_id());
+    return xr_int((int64_t) xr_thread_obj_threadlocal_current_id());
 }
 
 static XrValue sys_thread_local_alive(XrVMRuntime *isolate, XrValue *args, int argc) {
