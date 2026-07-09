@@ -1126,6 +1126,14 @@ static int json_field_index(struct XrType *type, const char *name) {
     return -1;
 }
 
+static const char *lower_static_string_key(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    if (!node || node->type != AST_LITERAL_STRING)
+        return NULL;
+    return node->as.literal.raw_value.string_val;
+}
+
 static const XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
     while (v &&
            (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX || v->op == XI_UNBOX ||
@@ -1845,6 +1853,11 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->args[0] = obj;
     v->args[1] = idx;
     v->line = (uint32_t) node->line;
+    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        const char *static_key = lower_static_string_key(ig->index);
+        xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
+                                     XG_JSON_ACCESS_INDEX_GET);
+    }
     xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, key_access_ordinal,
                                 XG_KEY_ACCESS_INDEX_GET);
 
@@ -1916,6 +1929,11 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     v->args[2] = val;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        const char *static_key = lower_static_string_key(is_node->index);
+        xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
+                                     XG_JSON_ACCESS_INDEX_SET);
+    }
     xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, key_access_ordinal, XG_KEY_ACCESS_SET);
     return v;
 }

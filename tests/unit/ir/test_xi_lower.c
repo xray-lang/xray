@@ -811,6 +811,57 @@ TEST(json_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_JSON_EVIDENCE
 }
 
+TEST(json_computed_key_access_lowers_with_global_evidence_id) {
+#define REQUIRE_JSON_INDEX_EVIDENCE(cond, msg)                                                     \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "json_computed_key_access_lowers_with_global_evidence_id: %s\n", msg); \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn readKey(k: string) -> Json {\n"
+                                          "    var j: Json = { name: \"ada\", age: 1 }\n"
+                                          "    return j[k]\n"
+                                          "}\n"
+                                          "print(readKey(\"name\"))\n",
+                                          &ev);
+    REQUIRE_JSON_INDEX_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_JSON_INDEX_EVIDENCE(ev.njson_accesses == 1,
+                                "producer should record computed Json index get");
+    XiFunc *read_key = func_tree_find_func_name(main_func, "readKey");
+    REQUIRE_JSON_INDEX_EVIDENCE(read_key != NULL, "target function should be present");
+
+    uint32_t access_id = 0;
+    for (uint32_t b = 0; b < read_key->nblocks; b++) {
+        XiBlock *blk = read_key->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_INDEX_GET)
+                continue;
+            REQUIRE_JSON_INDEX_EVIDENCE(v->xg_json_access_id != 0,
+                                        "Json computed index should bind global access evidence");
+            access_id = v->xg_json_access_id;
+        }
+    }
+    REQUIRE_JSON_INDEX_EVIDENCE(access_id == ev.json_accesses[0].json_access_id,
+                                "bound id should point at computed-key access row");
+    REQUIRE_JSON_INDEX_EVIDENCE(ev.json_accesses[0].access_kind == XG_JSON_ACCESS_INDEX_GET,
+                                "row should describe index_get");
+    REQUIRE_JSON_INDEX_EVIDENCE((ev.json_accesses[0].flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0,
+                                "row should keep computed-key evidence");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_JSON_INDEX_EVIDENCE
+}
+
 TEST(record_access_lowers_with_global_evidence_id) {
 #define REQUIRE_RECORD_EVIDENCE(cond, msg)                                                         \
     do {                                                                                           \
@@ -2192,6 +2243,7 @@ int main(void) {
     run_try_catch_defer();
     run_object_literal();
     run_json_access_lowers_with_global_evidence_id();
+    run_json_computed_key_access_lowers_with_global_evidence_id();
     run_record_access_lowers_with_global_evidence_id();
     run_map_key_access_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();

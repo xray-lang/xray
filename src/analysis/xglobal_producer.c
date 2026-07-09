@@ -1957,6 +1957,14 @@ static int body_object_literal_static_field_index(const ObjectLiteralNode *obj, 
     return -1;
 }
 
+static const char *body_static_string_key(const AstNode *expr) {
+    while (expr && expr->type == AST_GROUPING)
+        expr = expr->as.grouping;
+    if (!expr || expr->type != AST_LITERAL_STRING)
+        return NULL;
+    return expr->as.literal.raw_value.string_val;
+}
+
 static uint64_t body_json_shape_hash(const ObjectLiteralNode *obj) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     int count = obj ? obj->count : 0;
@@ -2071,6 +2079,46 @@ static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, 
     row.field_ordinal = (uint16_t) field_index;
     row.access_kind = mutating ? XG_JSON_ACCESS_FIELD_SET : XG_JSON_ACCESS_FIELD_GET;
     row.flags = XG_JSON_ACCESS_STATIC_KEY | XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
+    if (mutating)
+        row.flags |= XG_JSON_ACCESS_MUTATING;
+    (void) xg_global_evidence_add_json_access(bc->evidence, &row);
+}
+
+static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
+    const AstNode *receiver;
+    const AstNode *key;
+    const char *static_key;
+    XgJsonShapeId shape_id;
+    XgJsonAccessSummary row;
+    if (!bc || !node)
+        return;
+    if (node->type == AST_INDEX_GET) {
+        receiver = node->as.index_get.array;
+        key = node->as.index_get.index;
+    } else if (node->type == AST_INDEX_SET) {
+        receiver = node->as.index_set.array;
+        key = node->as.index_set.index;
+    } else {
+        return;
+    }
+    shape_id = body_lookup_local_json_shape(bc, receiver, NULL);
+    if (shape_id == XG_NO_ID)
+        return;
+    static_key = body_static_string_key(key);
+    if (static_key)
+        return;
+    memset(&row, 0, sizeof(row));
+    row.json_access_id = (XgJsonAccessId) (bc->evidence->njson_accesses + 1);
+    row.module_id = bc->module_id;
+    row.owner_func_id = bc->owner_func_id;
+    row.receiver_shape_id = shape_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.key_name_id = 0;
+    row.result_type_key = 0;
+    row.field_ordinal = UINT16_MAX;
+    row.access_kind = mutating ? XG_JSON_ACCESS_INDEX_SET : XG_JSON_ACCESS_INDEX_GET;
+    row.flags = XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
+    row.flags |= XG_JSON_ACCESS_COMPUTED_KEY;
     if (mutating)
         row.flags |= XG_JSON_ACCESS_MUTATING;
     (void) xg_global_evidence_add_json_access(bc->evidence, &row);
@@ -3123,11 +3171,13 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_INDEX_GET:
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
+            body_add_json_index_access(bc, node, false);
             body_add_map_index_key_access(bc, node, false);
             walk_body_for_calls(bc, node->as.index_get.array);
             walk_body_for_calls(bc, node->as.index_get.index);
             break;
         case AST_INDEX_SET:
+            body_add_json_index_access(bc, node, true);
             body_add_map_index_key_access(bc, node, true);
             walk_body_for_calls(bc, node->as.index_set.array);
             walk_body_for_calls(bc, node->as.index_set.index);
