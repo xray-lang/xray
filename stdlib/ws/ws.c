@@ -592,7 +592,7 @@ static int ws_send_frame_drain(XrWebSocket *ws) {
 // mandatory because a client mask cannot be re-derived on retry and a TLS
 // SSL_write must resend the identical bytes. The binding re-calls this with the
 // same args on resume; a pending drain ignores the args and continues.
-int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, size_t len) {
+int ws_conn_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN)
         return -1;
 
@@ -900,10 +900,10 @@ void ws_free(XrWebSocket *ws) {
         return;
 
     if (ws->state == WS_STATE_OPEN) {
-        xr_ws_close(ws, WS_CLOSE_GOING_AWAY, NULL);
+        ws_conn_close(ws, WS_CLOSE_GOING_AWAY, NULL);
     }
 
-    // Clean up TLS resources (may already be freed by xr_ws_close)
+    // Clean up TLS resources (may already be freed by ws_conn_close)
     if (ws->tls_conn) {
         xr_tls_conn_close((XrTlsConn *) ws->tls_conn);
         xr_tls_conn_free((XrTlsConn *) ws->tls_conn);
@@ -1282,7 +1282,7 @@ int ws_connect_pump(XrWebSocket *ws) {
     return -WS_ERR_CONNECT;
 }
 
-XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
+XrWsError ws_conn_close(XrWebSocket *ws, int code, const char *reason) {
     if (!ws || ws->state == WS_STATE_CLOSED)
         return WS_OK;
 
@@ -1341,7 +1341,7 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
     return WS_OK;
 }
 
-XrWsError xr_ws_ping(XrWebSocket *ws) {
+XrWsError ws_conn_ping(XrWebSocket *ws) {
     if (!ws || ws->state != WS_STATE_OPEN)
         return WS_ERR_CLOSED;
 
@@ -1351,7 +1351,7 @@ XrWsError xr_ws_ping(XrWebSocket *ws) {
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
-static XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
+static XrWsError ws_pong(XrWebSocket *ws, const void *data, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN)
         return WS_ERR_CLOSED;
 
@@ -1420,7 +1420,7 @@ static ssize_t ws_rbuf_fill(XrWebSocket *ws) {
 // Non-blocking recv for yieldable integration
 // Design: flat rbuf + dynamic msg_buf, zero spill buffer
 // Returns message if complete, NULL if need_more or error
-XrWsMessage *xr_ws_recv_try(XrWebSocket *ws, bool *need_more) {
+XrWsMessage *ws_conn_recv_try(XrWebSocket *ws, bool *need_more) {
     if (need_more)
         *need_more = false;
     if (!ws || ws->state != WS_STATE_OPEN)
@@ -1441,12 +1441,12 @@ XrWsMessage *xr_ws_recv_try(XrWebSocket *ws, bool *need_more) {
         if (ws->ping_in_flight) {
             if (ws->config.pong_timeout_ms > 0 &&
                 now - ws->last_ping_sent_ms > (uint64_t) ws->config.pong_timeout_ms) {
-                xr_ws_close(ws, WS_CLOSE_GOING_AWAY, "pong timeout");
+                ws_conn_close(ws, WS_CLOSE_GOING_AWAY, "pong timeout");
                 return NULL;
             }
         } else {
             if (now - ws->last_pong_recv_ms > (uint64_t) ws->config.ping_interval_ms) {
-                xr_ws_ping(ws);
+                ws_conn_ping(ws);
                 ws->last_ping_sent_ms = now;
                 ws->ping_in_flight = true;
             }
@@ -1712,7 +1712,7 @@ process_frame:
     }
 
     if (ws->frame_opcode == WS_OPCODE_PING) {
-        xr_ws_pong(ws, payload, payload_len_actual);
+        ws_pong(ws, payload, payload_len_actual);
         if (ws->rbuf_len > 0)
             goto parse_header;
         if (need_more)
@@ -1870,7 +1870,7 @@ process_frame:
     return msg;
 }
 
-void xr_ws_message_free(XrWsMessage *msg) {
+void ws_message_free(XrWsMessage *msg) {
     if (!msg)
         return;
     if (!(msg->_flags & XR_WS_MSG_DATA_INPLACE)) {
