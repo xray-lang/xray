@@ -1,8 +1,22 @@
 import regex
 
+var xray_no_alloc_regex_digits = regex.compile("(\\d+)")
+
 @no_alloc
 fn xray_no_alloc_regex_is_valid_reject(pattern: string) -> bool {
     return regex.isValid(pattern)
 }
 
+@no_alloc
+fn xray_no_alloc_regex_test_reject(text: string) -> bool {
+    return regex.test(xray_no_alloc_regex_digits, text)
+}
+
+@no_alloc
+fn xray_no_alloc_regex_count_reject(text: string) -> int {
+    return regex.count(xray_no_alloc_regex_digits, text)
+}
+
 print(xray_no_alloc_regex_is_valid_reject("\\d+"))
+print(xray_no_alloc_regex_test_reject("abc123"))
+print(xray_no_alloc_regex_count_reject("a1 b22"))

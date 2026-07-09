@@ -1,4 +1,8 @@
 status=fail
 contains=@no_alloc function 'xray_no_alloc_regex_is_valid_reject' allocates via stdlib 'regex.isValid'
+contains=@no_alloc function 'xray_no_alloc_regex_test_reject' allocates via stdlib 'regex.test'
+contains=@no_alloc function 'xray_no_alloc_regex_count_reject' allocates via stdlib 'regex.count'
 contains=xray_no_alloc_regex_is_valid_reject
+contains=xray_no_alloc_regex_test_reject
+contains=xray_no_alloc_regex_count_reject
 not_contains=CRASH
