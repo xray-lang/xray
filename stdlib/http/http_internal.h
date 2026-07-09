@@ -122,11 +122,8 @@ typedef struct XrH2Stream {
     int32_t window_size;
     int status;
 
-    char *headers_buf;
-    size_t headers_len;
     char *data_buf;
     size_t data_len;
-    size_t data_cap;
 
     struct XrH2Stream *next;
 } XrH2Stream;
