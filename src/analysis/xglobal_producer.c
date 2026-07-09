@@ -2146,6 +2146,18 @@ body_find_json_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_t 
     return NULL;
 }
 
+static const XgRecordShapeSummary *
+body_find_record_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_t shape_kind) {
+    if (!bc || !bc->evidence || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bc->evidence->nrecord_shapes; i++) {
+        const XgRecordShapeSummary *shape = &bc->evidence->record_shapes[i];
+        if (shape->type_key == type_key && shape->shape_kind == shape_kind)
+            return shape;
+    }
+    return NULL;
+}
+
 static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
                                                      const ObjectLiteralNode *obj,
                                                      uint32_t source_span_id, uint32_t type_key) {
@@ -2419,8 +2431,13 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
         if (arg0) {
             const ObjectLiteralNode *literal = NULL;
             row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
-            if (row.input_shape_id != XG_NO_ID)
+            if (row.input_shape_id != XG_NO_ID) {
+                const XgJsonShapeSummary *shape =
+                    xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
                 row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
+                if (shape)
+                    row.field_count = shape->field_count;
+            }
         }
     } else if (strcmp(method, "stringify") == 0) {
         row.codec_kind = XG_JSON_CODEC_STRINGIFY;
@@ -2517,6 +2534,20 @@ static void body_bind_record_shape_local(XgBodyCollect *bc, const char *name,
         return;
     row->record_shape_id = shape_id;
     row->record_shape_literal = literal;
+}
+
+static void body_bind_record_bridge_shapes_for_type_key(XgBodyCollect *bc, const char *name,
+                                                        uint32_t type_key) {
+    const XgJsonShapeSummary *json_shape;
+    const XgRecordShapeSummary *record_shape;
+    if (!bc || !name || type_key == 0)
+        return;
+    json_shape = body_find_json_shape_for_type_key(bc, type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+    if (json_shape)
+        body_bind_json_shape_local(bc, name, json_shape->json_shape_id, NULL);
+    record_shape = body_find_record_shape_for_type_key(bc, type_key, XG_RECORD_SHAPE_STATIC);
+    if (record_shape && (record_shape->flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0)
+        body_bind_record_shape_local(bc, name, record_shape->record_shape_id, NULL);
 }
 
 static void body_clear_record_shape_local(XgBodyCollect *bc, const char *name) {
@@ -3787,6 +3818,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 type_key = body_record_type_key(record_literal);
             (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
                                    class_id, interface_id, type_key, inferred);
+            body_bind_record_bridge_shapes_for_type_key(bc, node->as.var_decl.name, type_key);
             if (json_literal) {
                 json_shape_id = body_add_json_shape_for_literal(bc, json_literal,
                                                                 (uint32_t) node->line, type_key);
@@ -3837,6 +3869,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             body_clear_sequence_local(bc, node->as.assignment.name);
             body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
                               interface_id, type_key);
+            target_row = body_find_local(bc, node->as.assignment.name);
+            body_bind_record_bridge_shapes_for_type_key(
+                bc, node->as.assignment.name,
+                target_row && target_row->type_key != 0 ? target_row->type_key : type_key);
             if (json_literal) {
                 XgJsonShapeId json_shape_id = body_add_json_shape_for_literal(
                     bc, json_literal, (uint32_t) node->line,
