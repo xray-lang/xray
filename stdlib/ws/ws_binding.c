@@ -238,7 +238,7 @@ void xr_ws_module_context_free(XrWsContext *ctx) {
             XrWebSocket *ws = ctx->conn_array[i];
             if (ws) {
                 xr_ws_close(ws, WS_CLOSE_GOING_AWAY, NULL);
-                xr_ws_free(ws);
+                ws_free(ws);
             }
         }
         xr_free(ctx->conn_array);
@@ -370,7 +370,7 @@ static XrCFuncResult ws_connect_finish_err(XrVMRuntime *X, WsConnectState *state
         xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
     }
     *result = xr_json_value(r);
-    xr_ws_free(state->ws);
+    ws_free(state->ws);
     xr_free(state->url);
     xr_free(state);
     return XR_CFUNC_DONE;
@@ -382,7 +382,7 @@ static XrCFuncResult ws_connect_continue(XrVMRuntime *X, int status, XrValue res
 // Advance the handshake; finish on success/error, otherwise yield for the next
 // I/O event the phase machine is waiting on.
 static XrCFuncResult ws_connect_drive(XrVMRuntime *X, WsConnectState *state, XrValue *result) {
-    int ev = xr_ws_connect_pump(state->ws);
+    int ev = ws_connect_pump(state->ws);
     if (ev == 0)
         return ws_connect_finish_ok(X, state, result);
     if (ev < 0)
@@ -435,7 +435,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     url_copy[url_len] = '\0';
 
     XrWsConfig config;
-    xr_ws_config_init(&config);
+    ws_config_init(&config);
     config.url = url_copy;
 
     if (argc >= 2 && XR_IS_PTR(args[1])) {
@@ -468,7 +468,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
         return XR_CFUNC_DONE;
     }
 
-    XrWebSocket *ws = xr_ws_new(&config);
+    XrWebSocket *ws = ws_new(&config);
     xr_free(url_copy);
 
     if (!ws) {
@@ -481,11 +481,11 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     }
 
     // Bind the scheduler isolate so the handshake cooperates with netpoll.
-    xr_ws_set_isolate(ws, X);
+    ws_set_isolate(ws, X);
 
     WsConnectState *state = (WsConnectState *) xr_malloc(sizeof(WsConnectState));
     if (!state) {
-        xr_ws_free(ws);
+        ws_free(ws);
         *result = xr_null();
         return XR_CFUNC_ERROR;
     }
@@ -493,7 +493,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     state->url_len = url_len;
     state->url = (char *) xr_malloc(url_len + 1);
     if (!state->url) {
-        xr_ws_free(ws);
+        ws_free(ws);
         xr_free(state);
         *result = xr_null();
         return XR_CFUNC_ERROR;
@@ -502,7 +502,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     state->url[url_len] = '\0';
     state->timeout_ms = config.connect_timeout_ms > 0 ? config.connect_timeout_ms : 10000;
 
-    int ev = xr_ws_connect_start(ws);
+    int ev = ws_connect_start(ws);
     if (ev < 0)
         return ws_connect_finish_err(X, state, (XrWsError) (-ev), result);
     return xr_yield_for_io(X, ws->fd, ev, state->timeout_ms, ws_connect_continue, state, result);
@@ -950,7 +950,7 @@ static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
 
     // xr_ws_close sends close frame if state is OPEN, otherwise no-op
     xr_ws_close(ws, code, reason);
-    xr_ws_free(ws);
+    ws_free(ws);
     remove_ws(ctx, id);
 
     xr_json_set(X, conn, ctx->sym_state, xrs_string_value_c(X, "closed"));
@@ -1155,7 +1155,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue re
         ctx->conn = conn_val;
         if (XR_IS_NULL(ctx->conn)) {
             xr_ws_close(ws, WS_CLOSE_SERVER_ERROR, NULL);
-            xr_ws_free(ws);
+            ws_free(ws);
             goto cleanup;
         }
 
@@ -1204,7 +1204,7 @@ static XrCFuncResult ws_conn_handler_done(XrVMRuntime *X, int status, XrValue re
                         xr_netpoll_close(&ctx->runtime->netpoll, pd);
                 }
                 xr_ws_close(w, WS_CLOSE_NORMAL, NULL);
-                xr_ws_free(w);
+                ws_free(w);
                 remove_ws(ws_ctx, id);
             }
         }
