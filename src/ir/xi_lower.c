@@ -1454,6 +1454,7 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
         case XI_CONST_LITERAL_FLOAT:
         case XI_CONST_LITERAL_BOOL:
         case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_STRING:
         case XI_CONST_LITERAL_NULL:
             *out = lit;
             return true;

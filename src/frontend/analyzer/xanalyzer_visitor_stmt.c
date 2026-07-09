@@ -4992,6 +4992,7 @@ static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ct
         case XR_CT_FLOAT:
         case XR_CT_BOOL:
         case XR_CT_CHAR:
+        case XR_CT_STRING:
         case XR_CT_NULL:
             return true;
         default:
@@ -6287,7 +6288,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         !xa_freestanding_shared_static_initializer_allowed(ctx, var)) {
         xa_freestanding_report_unavailable(
             ctx, node, "shared declaration",
-            "only int/float/bool/char/null consteval initializers are supported as static "
+            "only int/float/bool/char/string/null consteval initializers are supported as static "
             "shared storage in the current freestanding slice");
     } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
                xa_is_module_level_scope(ctx->analyzer) && node->type != AST_SHARED_DECL &&

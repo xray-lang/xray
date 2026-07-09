@@ -1,0 +1,7 @@
+shared BOOT_LABEL: string = "boot"
+
+@c_export("xray_shared_label")
+fn xray_shared_label() -> int {
+    print(BOOT_LABEL)
+    return 4
+}
