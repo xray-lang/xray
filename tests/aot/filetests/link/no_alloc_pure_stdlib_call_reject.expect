@@ -1,4 +1,8 @@
 status=fail
 contains=@no_alloc function 'xray_no_alloc_pure_stdlib_call_reject' allocates via call 'encode'
 contains=xray_no_alloc_pure_stdlib_call_reject
+contains=@no_alloc function 'xray_no_alloc_pure_stdlib_scalar_call_reject' allocates via call 'isValid'
+contains=@no_alloc function 'xray_no_alloc_pure_stdlib_selective_call_reject' allocates via call 'isValid'
+not_contains=unresolved AOT import
+not_contains=unsupported AOT indirect call
 not_contains=CRASH
