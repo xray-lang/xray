@@ -1476,6 +1476,8 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         v->line = (uint32_t) node->line;
         xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, (uint16_t) fidx,
                                      XG_JSON_ACCESS_FIELD_GET);
+        xi_lower_bind_record_access_id(l, v, ma->name, (uint32_t) node->line, (uint16_t) fidx,
+                                       XG_RECORD_ACCESS_FIELD_GET);
         return v;
     }
 
@@ -1561,6 +1563,8 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         v->line = (uint32_t) node->line;
         xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, (uint16_t) fidx,
                                      XG_JSON_ACCESS_FIELD_SET);
+        xi_lower_bind_record_access_id(l, v, ms->member, (uint32_t) node->line, (uint16_t) fidx,
+                                       XG_RECORD_ACCESS_FIELD_SET);
         return v;
     }
 

@@ -811,6 +811,62 @@ TEST(json_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_JSON_EVIDENCE
 }
 
+TEST(record_access_lowers_with_global_evidence_id) {
+#define REQUIRE_RECORD_EVIDENCE(cond, msg)                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "record_access_lowers_with_global_evidence_id: %s\n", msg);            \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn readAge() -> int {\n"
+                                          "    var user = { name: \"ada\", age: 1 }\n"
+                                          "    return user.age\n"
+                                          "}\n"
+                                          "print(readAge())\n",
+                                          &ev);
+    REQUIRE_RECORD_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_RECORD_EVIDENCE(ev.njson_accesses == 0,
+                            "bare object literal should not produce Json access evidence");
+    REQUIRE_RECORD_EVIDENCE(ev.nrecord_accesses == 1, "producer should record Record field get");
+    XiFunc *read = func_tree_find_func_name(main_func, "readAge");
+    REQUIRE_RECORD_EVIDENCE(read != NULL, "target function should be present");
+
+    uint32_t get_id = 0;
+    uint32_t json_bound_count = 0;
+    for (uint32_t b = 0; b < read->nblocks; b++) {
+        XiBlock *blk = read->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_JSON_GET_F)
+                continue;
+            if (v->xg_json_access_id != 0)
+                json_bound_count++;
+            if (v->xg_record_access_id != 0)
+                get_id = v->xg_record_access_id;
+        }
+    }
+    REQUIRE_RECORD_EVIDENCE(json_bound_count == 0, "Record access should not bind Json id");
+    REQUIRE_RECORD_EVIDENCE(get_id != 0, "Record field get should bind global access evidence");
+    REQUIRE_RECORD_EVIDENCE(ev.record_accesses[0].record_access_id == get_id,
+                            "bound id should point at Record access row");
+    REQUIRE_RECORD_EVIDENCE(ev.record_accesses[0].access_kind == XG_RECORD_ACCESS_FIELD_GET,
+                            "bound id should point at field_get row");
+    REQUIRE_RECORD_EVIDENCE(ev.record_accesses[0].field_ordinal == 1,
+                            "bound id should preserve field ordinal");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_RECORD_EVIDENCE
+}
+
 TEST(map_key_access_lowers_with_global_evidence_id) {
 #define REQUIRE_KEY_EVIDENCE(cond, msg)                                                            \
     do {                                                                                           \
@@ -2136,6 +2192,7 @@ int main(void) {
     run_try_catch_defer();
     run_object_literal();
     run_json_access_lowers_with_global_evidence_id();
+    run_record_access_lowers_with_global_evidence_id();
     run_map_key_access_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
     run_nested_function();
