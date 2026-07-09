@@ -425,10 +425,16 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     XgEvidenceCacheKey stale_schema = base_decl;
     XgEvidenceCacheKey parsed;
     XgEvidenceCacheKey parsed_stale;
+    XgEvidenceCacheManifest manifest;
+    XgEvidenceCacheManifest body_manifest;
+    XgEvidenceCacheManifest parsed_manifest;
+    XgEvidenceCacheManifest incomplete_manifest;
     char encoded[256];
     char encoded_newline[320];
     char stale_encoded[256];
     char tampered[256];
+    char manifest_text[1400];
+    char manifest_tampered[1400];
     char tiny[16];
 
     ASSERT_TRUE(
@@ -455,6 +461,43 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     snprintf(tampered, sizeof(tampered), "%s", encoded);
     tampered[strlen(tampered) - 1] = tampered[strlen(tampered) - 1] == '0' ? '1' : '0';
     ASSERT_TRUE(!xg_evidence_cache_key_parse(tampered, &parsed));
+
+    manifest = xg_global_evidence_cache_manifest(&base);
+    body_manifest = xg_global_evidence_cache_manifest(&body_changed);
+    ASSERT_NOT_NULL(xg_evidence_cache_manifest_find(&manifest, XG_EVIDENCE_CACHE_DECLARATIONS));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&manifest, &base_decl));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&manifest, &body_decl));
+    ASSERT_TRUE(!xg_evidence_cache_manifest_phase_matches(&manifest, &body_body));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&body_manifest, &body_body));
+    ASSERT_TRUE(xg_evidence_cache_manifest_format(&manifest, manifest_text, sizeof(manifest_text)));
+    ASSERT_NOT_NULL(strstr(manifest_text, "xg-cache-manifest v1 phases=0xf"));
+    ASSERT_TRUE(xg_evidence_cache_manifest_parse(manifest_text, &parsed_manifest));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&parsed_manifest, &base_decl));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&parsed_manifest, &base_semantic));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&parsed_manifest, &base_body));
+    ASSERT_TRUE(xg_evidence_cache_manifest_phase_matches(&parsed_manifest, &base_global));
+    ASSERT_TRUE(!xg_evidence_cache_manifest_format(&manifest, tiny, sizeof(tiny)));
+    incomplete_manifest = manifest;
+    incomplete_manifest.phase_mask &= ~(1u << (XG_EVIDENCE_CACHE_PHASE_COUNT - 1));
+    ASSERT_TRUE(!xg_evidence_cache_manifest_format(&incomplete_manifest, manifest_text,
+                                                   sizeof(manifest_text)));
+    snprintf(manifest_tampered, sizeof(manifest_tampered), "%s", manifest_text);
+    ASSERT_TRUE(!xg_evidence_cache_manifest_parse("bad-cache-manifest", &parsed_manifest));
+    ASSERT_TRUE(
+        xg_evidence_cache_manifest_format(&manifest, manifest_tampered, sizeof(manifest_tampered)));
+    {
+        size_t len = strlen(manifest_tampered);
+        if (len > 0 && manifest_tampered[len - 1] == '\n')
+            len--;
+        ASSERT_TRUE(len > 0);
+        manifest_tampered[len - 1] = manifest_tampered[len - 1] == '0' ? '1' : '0';
+    }
+    ASSERT_TRUE(!xg_evidence_cache_manifest_parse(manifest_tampered, &parsed_manifest));
+    ASSERT_TRUE(
+        xg_evidence_cache_manifest_format(&manifest, manifest_tampered, sizeof(manifest_tampered)));
+    ASSERT_TRUE(strncat(manifest_tampered, "junk",
+                        sizeof(manifest_tampered) - strlen(manifest_tampered) - 1) != NULL);
+    ASSERT_TRUE(!xg_evidence_cache_manifest_parse(manifest_tampered, &parsed_manifest));
 
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &body_decl));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_semantic, &body_semantic));
