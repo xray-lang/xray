@@ -2076,119 +2076,7 @@ cg_key_access_direct_user_hash_eq_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *
     return plan;
 }
 
-static void cg_emit_user_hash_eq_hash_name(FILE *out, const XaotHashEqPlan *plan) {
-    fprintf(out, "xrt_user_hash_eq_%08" PRIx32 "_hash", plan ? (uint32_t) plan->type_key : 0u);
-}
-
-static void cg_emit_user_hash_eq_eq_name(FILE *out, const XaotHashEqPlan *plan) {
-    fprintf(out, "xrt_user_hash_eq_%08" PRIx32 "_eq", plan ? (uint32_t) plan->type_key : 0u);
-}
-
-static void cg_emit_user_hash_eq_name_pair(FILE *out, const XaotHashEqPlan *plan) {
-    cg_emit_user_hash_eq_hash_name(out, plan);
-    fprintf(out, ", ");
-    cg_emit_user_hash_eq_eq_name(out, plan);
-}
-
 #include "xi_cgen_class_native_helpers.inc.c"
-
-typedef struct CgUserHashEqClassData {
-    const XaotHashEqPlan *plan;
-    const XiClassData *class_data;
-    const XiFunc *hash_func;
-    const XiFunc *eq_func;
-    const char *hash_prefix;
-    const char *eq_prefix;
-} CgUserHashEqClassData;
-
-static bool cg_user_hash_eq_resolve(XiCgenCtx *ctx, const XaotHashEqPlan *plan,
-                                    CgUserHashEqClassData *out) {
-    if (out)
-        memset(out, 0, sizeof(*out));
-    if (!ctx || !plan || !out || plan->action != XAOT_HASH_EQ_DIRECT_CALL ||
-        plan->hash_func_id == XG_NO_ID || plan->eq_func_id == XG_NO_ID)
-        return false;
-    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    const char *hash_prefix = NULL;
-    const char *eq_prefix = NULL;
-    const XiFunc *hash_func = xaot_bundle_find_body_func(bundle, plan->hash_func_id, &hash_prefix);
-    const XiFunc *eq_func = xaot_bundle_find_body_func(bundle, plan->eq_func_id, &eq_prefix);
-    const XrType *receiver_type =
-        hash_func && hash_func->nparams > 0 && hash_func->params && hash_func->params[0]
-            ? hash_func->params[0]->type
-            : NULL;
-    const XiClassData *class_data = cg_class_native_data_for_abi_type(ctx, receiver_type);
-    if (!class_data || !hash_func || !eq_func)
-        return false;
-    out->plan = plan;
-    out->class_data = class_data;
-    out->hash_func = hash_func;
-    out->eq_func = eq_func;
-    out->hash_prefix = hash_prefix;
-    out->eq_prefix = eq_prefix;
-    return true;
-}
-
-static void cg_emit_user_hash_eq_wrapper_defs(XiCgenCtx *ctx, FILE *out) {
-    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    if (!ctx || !out || !bundle)
-        return;
-    for (uint32_t i = 0; i < bundle->nhash_eq_plans; i++) {
-        const XaotHashEqPlan *plan = &bundle->hash_eq_plans[i];
-        if (!plan || plan->action != XAOT_HASH_EQ_DIRECT_CALL || plan->hash_func_id == XG_NO_ID ||
-            plan->eq_func_id == XG_NO_ID)
-            continue;
-        CgUserHashEqClassData data;
-        if (!cg_user_hash_eq_resolve(ctx, plan, &data)) {
-            cg_ctx_set_error(ctx);
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: cannot emit user Hash/Eq wrapper for type=%u "
-                    "hash_func=%u eq_func=%u\n",
-                    plan->type_key, plan->hash_func_id, plan->eq_func_id);
-            continue;
-        }
-        const char *type_prefix = cg_class_native_prefix_for_data(ctx, data.class_data, NULL);
-
-        fprintf(out, "static uint32_t ");
-        cg_emit_user_hash_eq_hash_name(out, plan);
-        fprintf(out, "(XrValue value) {\n");
-        fprintf(out, "    if (!(value.tag == XR_TAG_PTR && value.heap_type == XR_TINSTANCE && "
-                     "value.ptr && xrt_instanceof(value, (uint16_t)");
-        emit_class_native_type_id_expr(ctx, out, data.class_data);
-        fprintf(out, ")))\n");
-        fprintf(out, "        return xrt_hash32_value(value);\n");
-        fprintf(out, "    return (uint32_t)");
-        emit_fname(ctx, out, data.hash_prefix, data.hash_func);
-        fprintf(out, "(NULL, (");
-        emit_class_native_type_name(out, type_prefix, data.class_data->class_name);
-        fprintf(out, "*)value.ptr);\n");
-        fprintf(out, "}\n\n");
-
-        fprintf(out, "static int ");
-        cg_emit_user_hash_eq_eq_name(out, plan);
-        fprintf(out, "(XrValue a, XrValue b) {\n");
-        fprintf(out, "    int a_exact = a.tag == XR_TAG_PTR && a.heap_type == XR_TINSTANCE && "
-                     "a.ptr && xrt_instanceof(a, (uint16_t)");
-        emit_class_native_type_id_expr(ctx, out, data.class_data);
-        fprintf(out, ");\n");
-        fprintf(out, "    int b_exact = b.tag == XR_TAG_PTR && b.heap_type == XR_TINSTANCE && "
-                     "b.ptr && xrt_instanceof(b, (uint16_t)");
-        emit_class_native_type_id_expr(ctx, out, data.class_data);
-        fprintf(out, ");\n");
-        fprintf(out, "    if (a_exact && b_exact)\n");
-        fprintf(out, "        return ");
-        emit_fname(ctx, out, data.eq_prefix, data.eq_func);
-        fprintf(out, "(NULL, (");
-        emit_class_native_type_name(out, type_prefix, data.class_data->class_name);
-        fprintf(out, "*)a.ptr, (");
-        emit_class_native_type_name(out, type_prefix, data.class_data->class_name);
-        fprintf(out, "*)b.ptr) != 0;\n");
-        fprintf(out, "    if (a_exact || b_exact)\n");
-        fprintf(out, "        return 0;\n");
-        fprintf(out, "    return xrt_eq(a, b) != 0;\n");
-        fprintf(out, "}\n\n");
-    }
-}
 
 #include "xi_cgen_array_helpers.inc.c"
 
@@ -3591,6 +3479,18 @@ static bool cg_no_alloc_signature_return_allocates(const char *signature) {
     return cg_no_alloc_type_name_allocates(ret);
 }
 
+static bool cg_no_alloc_const_signature_allocates(const char *signature) {
+    if (!signature)
+        return false;
+    const char *ret = strchr(signature, ':');
+    if (!ret)
+        return false;
+    ret++;
+    while (*ret == ' ')
+        ret++;
+    return cg_no_alloc_type_name_allocates(ret);
+}
+
 static const char *cg_no_alloc_owned_stdlib_detail(XiCgenCtx *ctx, const char *module,
                                                    const char *name) {
     if (!ctx || !module || !name)
@@ -3626,6 +3526,25 @@ static const char *cg_no_alloc_generated_stdlib_alloc_detail(XiCgenCtx *ctx, con
             continue;
         bool alloc_effect = entry->layer && strcmp(entry->layer, "alloc") == 0;
         if (!alloc_effect && !cg_no_alloc_signature_return_allocates(entry->signature))
+            continue;
+        if (entry->link_object && entry->link_object[0])
+            return entry->link_object;
+        return cg_no_alloc_owned_stdlib_detail(ctx, module, name);
+    }
+    return NULL;
+}
+
+static const char *cg_no_alloc_generated_stdlib_const_alloc_detail(XiCgenCtx *ctx,
+                                                                   const char *module,
+                                                                   const char *name) {
+    if (!module || !name)
+        return NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_CONST_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibConstDefEntry *entry = &xr_stdlib_const_def_entries[i];
+        if (!entry->module || !entry->name || strcmp(entry->module, module) != 0 ||
+            strcmp(entry->name, name) != 0)
+            continue;
+        if (!cg_no_alloc_const_signature_allocates(entry->signature))
             continue;
         if (entry->link_object && entry->link_object[0])
             return entry->link_object;
@@ -3815,6 +3734,20 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         return false;
     }
 
+    {
+        const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v);
+        const char *detail = ref ? cg_no_alloc_generated_stdlib_const_alloc_detail(
+                                       ctx, ref->module_path, ref->member_name)
+                                 : NULL;
+        if (detail) {
+            if (kind_out)
+                *kind_out = "stdlib";
+            if (detail_out)
+                *detail_out = detail;
+            return true;
+        }
+    }
+
     if (v->op == XI_CONVERT && v->type && v->type->kind == XR_KIND_STRING) {
         const XiValue *src = v->nargs >= 1 ? v->args[0] : NULL;
         if (src && src->type && src->type->kind == XR_KIND_STRING)
@@ -3869,6 +3802,18 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         const XiValue *receiver = v->args[0];
         const XrType *receiver_type = receiver ? receiver->type : NULL;
         const char *field = (const char *) v->aux;
+        const XiImportRef *ref = cg_import_ref_for_value(ctx, f, receiver);
+        const char *stdlib_const_detail =
+            ref && !ref->member_name
+                ? cg_no_alloc_generated_stdlib_const_alloc_detail(ctx, ref->module_path, field)
+                : NULL;
+        if (stdlib_const_detail) {
+            if (kind_out)
+                *kind_out = "stdlib";
+            if (detail_out)
+                *detail_out = stdlib_const_detail;
+            return true;
+        }
         if (receiver_type && receiver_type->kind == XR_KIND_ENUM && strcmp(field, "name") == 0) {
             if (kind_out)
                 *kind_out = "property";

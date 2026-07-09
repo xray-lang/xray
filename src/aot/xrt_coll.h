@@ -1621,15 +1621,29 @@ static inline int xrt_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t v
     return e->val_tt == val_tt && xrt_eq(e->value, value) != 0;
 }
 
-typedef uint32_t (*xrt_user_hash_fn_t)(XrValue value);
-typedef int (*xrt_user_eq_fn_t)(XrValue a, XrValue b);
+typedef struct xrt_closure xrt_closure_t;
 
-static inline uint32_t xrt_user_hash_value(XrValue value, xrt_user_hash_fn_t hash_fn) {
-    return hash_fn ? hash_fn(value) : xrt_hash32_value(value);
+typedef int64_t (*xrt_user_hash_fn_t)(xrt_closure_t *closure, void *value);
+typedef uint8_t (*xrt_user_eq_fn_t)(xrt_closure_t *closure, void *a, void *b);
+
+static inline uint32_t xrt_user_hash_value(XrValue value, uint16_t expected_type_id,
+                                           xrt_user_hash_fn_t hash_fn) {
+    if (hash_fn && xrt_instance_exact_type(value, expected_type_id))
+        return (uint32_t) hash_fn(NULL, value.ptr);
+    return xrt_hash32_value(value);
 }
 
-static inline int xrt_user_eq_value(XrValue a, XrValue b, xrt_user_eq_fn_t eq_fn) {
-    return eq_fn ? eq_fn(a, b) != 0 : xrt_eq(a, b) != 0;
+static inline int xrt_user_eq_value(XrValue a, XrValue b, uint16_t expected_type_id,
+                                    xrt_user_eq_fn_t eq_fn) {
+    if (a.tag != b.tag)
+        return 0;
+    int a_exact = xrt_instance_exact_type(a, expected_type_id);
+    int b_exact = xrt_instance_exact_type(b, expected_type_id);
+    if (a_exact && b_exact)
+        return eq_fn ? eq_fn(NULL, a.ptr, b.ptr) != 0 : xrt_eq(a, b) != 0;
+    if (a_exact || b_exact)
+        return 0;
+    return xrt_eq(a, b) != 0;
 }
 
 static inline uint32_t xrt_map_find_entry_slot(xrt_map_t *m, XrValue key, uint32_t hash,
@@ -1644,8 +1658,8 @@ static inline int32_t xrt_map_find_entry(xrt_map_t *m, XrValue key, uint32_t has
 }
 
 static inline uint32_t xrt_map_find_entry_slot_user_eq(xrt_map_t *m, XrValue key, uint32_t hash,
-                                                       uint8_t key_tt, xrt_user_eq_fn_t eq,
-                                                       int32_t *out_eidx) {
+                                                       uint8_t key_tt, uint16_t expected_type_id,
+                                                       xrt_user_eq_fn_t eq, int32_t *out_eidx) {
     if (!m || !eq || m->indices_size == 0)
         return UINT32_MAX;
     uint32_t mask = m->indices_size - 1u;
@@ -1661,7 +1675,8 @@ static inline uint32_t xrt_map_find_entry_slot_user_eq(xrt_map_t *m, XrValue key
             int32_t ix = m->indices[slot];
             if (ix >= 0) {
                 XrMapEntry *e = &m->entries[ix];
-                if (e->hash == hash && e->key_tt == key_tt && xrt_user_eq_value(e->key, key, eq)) {
+                if (e->hash == hash && e->key_tt == key_tt &&
+                    xrt_user_eq_value(e->key, key, expected_type_id, eq)) {
                     if (out_eidx)
                         *out_eidx = ix;
                     return slot;
@@ -1677,10 +1692,10 @@ static inline uint32_t xrt_map_find_entry_slot_user_eq(xrt_map_t *m, XrValue key
 }
 
 static inline int32_t xrt_map_find_entry_user_eq(xrt_map_t *m, XrValue key, uint32_t hash,
-                                                 xrt_user_eq_fn_t eq) {
+                                                 uint16_t expected_type_id, xrt_user_eq_fn_t eq) {
     int32_t eidx = -1;
-    return xrt_map_find_entry_slot_user_eq(m, key, hash, xrt_value_type_tag(key), eq, &eidx) ==
-                   UINT32_MAX
+    return xrt_map_find_entry_slot_user_eq(m, key, hash, xrt_value_type_tag(key), expected_type_id,
+                                           eq, &eidx) == UINT32_MAX
                ? -1
                : eidx;
 }
@@ -1870,12 +1885,12 @@ static inline XrValue xrt_map_get_prehashed(xrt_map_t *m, XrValue key, uint32_t 
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
-static inline XrValue xrt_map_get_user_hash_eq(xrt_map_t *m, XrValue key,
+static inline XrValue xrt_map_get_user_hash_eq(xrt_map_t *m, XrValue key, uint16_t expected_type_id,
                                                xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_get(m, key);
-    uint32_t hash = xrt_user_hash_value(key, hash_fn);
-    int32_t eidx = xrt_map_find_entry_user_eq(m, key, hash, eq_fn);
+    uint32_t hash = xrt_user_hash_value(key, expected_type_id, hash_fn);
+    int32_t eidx = xrt_map_find_entry_user_eq(m, key, hash, expected_type_id, eq_fn);
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
@@ -1888,9 +1903,10 @@ static inline XrValue xrt_map_get_prehashed_owned(xrt_map_t *m, XrValue key, uin
 }
 
 static inline XrValue xrt_map_get_user_hash_eq_owned(xrt_map_t *m, XrValue key,
+                                                     uint16_t expected_type_id,
                                                      xrt_user_hash_fn_t hash_fn,
                                                      xrt_user_eq_fn_t eq_fn) {
-    return xrt_value_to_owned(xrt_map_get_user_hash_eq(m, key, hash_fn, eq_fn));
+    return xrt_value_to_owned(xrt_map_get_user_hash_eq(m, key, expected_type_id, hash_fn, eq_fn));
 }
 
 static inline int32_t xrt_map_find_entry_small(xrt_map_t *m, XrValue key) {
@@ -1970,11 +1986,12 @@ static inline int xrt_map_has_prehashed(xrt_map_t *m, XrValue key, uint32_t hash
     return xrt_map_find_entry(m, key, hash, xrt_value_type_tag(key)) >= 0;
 }
 
-static inline int xrt_map_has_user_hash_eq(xrt_map_t *m, XrValue key, xrt_user_hash_fn_t hash_fn,
-                                           xrt_user_eq_fn_t eq_fn) {
+static inline int xrt_map_has_user_hash_eq(xrt_map_t *m, XrValue key, uint16_t expected_type_id,
+                                           xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_has(m, key);
-    return xrt_map_find_entry_user_eq(m, key, xrt_user_hash_value(key, hash_fn), eq_fn) >= 0;
+    return xrt_map_find_entry_user_eq(m, key, xrt_user_hash_value(key, expected_type_id, hash_fn),
+                                      expected_type_id, eq_fn) >= 0;
 }
 
 static inline int xrt_map_has_small(xrt_map_t *m, XrValue key) {
@@ -2033,14 +2050,15 @@ static inline int xrt_map_delete_prehashed(xrt_map_t *m, XrValue key, uint32_t h
     return 1;
 }
 
-static inline int xrt_map_delete_user_hash_eq(xrt_map_t *m, XrValue key, xrt_user_hash_fn_t hash_fn,
-                                              xrt_user_eq_fn_t eq_fn) {
+static inline int xrt_map_delete_user_hash_eq(xrt_map_t *m, XrValue key, uint16_t expected_type_id,
+                                              xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_delete(m, key);
     uint8_t key_tt = xrt_value_type_tag(key);
     int32_t eidx = -1;
-    uint32_t hash = xrt_user_hash_value(key, hash_fn);
-    uint32_t slot = xrt_map_find_entry_slot_user_eq(m, key, hash, key_tt, eq_fn, &eidx);
+    uint32_t hash = xrt_user_hash_value(key, expected_type_id, hash_fn);
+    uint32_t slot =
+        xrt_map_find_entry_slot_user_eq(m, key, hash, key_tt, expected_type_id, eq_fn, &eidx);
     if (slot == UINT32_MAX)
         return 0;
     m->entries[eidx].key_tt = XR_MAP_ENTRY_NIL_KEY;
@@ -2132,14 +2150,15 @@ static inline void xrt_map_set_prehashed(xrt_map_t *m, XrValue key, XrValue val,
 }
 
 static inline void xrt_map_set_user_hash_eq(xrt_map_t *m, XrValue key, XrValue val,
-                                            xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+                                            uint16_t expected_type_id, xrt_user_hash_fn_t hash_fn,
+                                            xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m)) {
         xrt_map_set(m, key, val);
         return;
     }
     uint8_t key_tt = xrt_value_type_tag(key);
-    uint32_t hash = xrt_user_hash_value(key, hash_fn);
-    int32_t eidx = xrt_map_find_entry_user_eq(m, key, hash, eq_fn);
+    uint32_t hash = xrt_user_hash_value(key, expected_type_id, hash_fn);
+    int32_t eidx = xrt_map_find_entry_user_eq(m, key, hash, expected_type_id, eq_fn);
     if (eidx >= 0) {
         if (!(m->flags & XR_MAP_FLAG_WEAK)) {
             if (XR_IS_ARRAY_REF(val))
@@ -2260,8 +2279,8 @@ static inline int32_t xrt_set_find_entry(xrt_set_t *s, XrValue value, uint32_t h
 }
 
 static inline uint32_t xrt_set_find_entry_slot_user_eq(xrt_set_t *s, XrValue value, uint32_t hash,
-                                                       uint8_t val_tt, xrt_user_eq_fn_t eq,
-                                                       int32_t *out_eidx) {
+                                                       uint8_t val_tt, uint16_t expected_type_id,
+                                                       xrt_user_eq_fn_t eq, int32_t *out_eidx) {
     if (!s || !eq || s->indices_size == 0)
         return UINT32_MAX;
     uint32_t mask = s->indices_size - 1u;
@@ -2278,7 +2297,7 @@ static inline uint32_t xrt_set_find_entry_slot_user_eq(xrt_set_t *s, XrValue val
             if (ix >= 0) {
                 XrSetEntry *e = &s->entries[ix];
                 if (e->hash == hash && e->val_tt == val_tt &&
-                    xrt_user_eq_value(e->value, value, eq)) {
+                    xrt_user_eq_value(e->value, value, expected_type_id, eq)) {
                     if (out_eidx)
                         *out_eidx = ix;
                     return slot;
@@ -2294,10 +2313,10 @@ static inline uint32_t xrt_set_find_entry_slot_user_eq(xrt_set_t *s, XrValue val
 }
 
 static inline int32_t xrt_set_find_entry_user_eq(xrt_set_t *s, XrValue value, uint32_t hash,
-                                                 xrt_user_eq_fn_t eq) {
+                                                 uint16_t expected_type_id, xrt_user_eq_fn_t eq) {
     int32_t eidx = -1;
-    return xrt_set_find_entry_slot_user_eq(s, value, hash, xrt_value_type_tag(value), eq, &eidx) ==
-                   UINT32_MAX
+    return xrt_set_find_entry_slot_user_eq(s, value, hash, xrt_value_type_tag(value),
+                                           expected_type_id, eq, &eidx) == UINT32_MAX
                ? -1
                : eidx;
 }
@@ -2591,11 +2610,13 @@ static inline int xrt_set_has_prehashed(xrt_set_t *s, XrValue value, uint32_t ha
     return xrt_set_has(s, value);
 }
 
-static inline int xrt_set_has_user_hash_eq(xrt_set_t *s, XrValue value, xrt_user_hash_fn_t hash_fn,
-                                           xrt_user_eq_fn_t eq_fn) {
+static inline int xrt_set_has_user_hash_eq(xrt_set_t *s, XrValue value, uint16_t expected_type_id,
+                                           xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
         return xrt_set_has(s, value);
-    return xrt_set_find_entry_user_eq(s, value, xrt_user_hash_value(value, hash_fn), eq_fn) >= 0;
+    return xrt_set_find_entry_user_eq(s, value,
+                                      xrt_user_hash_value(value, expected_type_id, hash_fn),
+                                      expected_type_id, eq_fn) >= 0;
 }
 
 static inline int32_t xrt_set_find_entry_small(xrt_set_t *s, XrValue value) {
@@ -2702,12 +2723,12 @@ static inline int xrt_set_add_prehashed(xrt_set_t *s, XrValue value, uint32_t ha
     return 1;
 }
 
-static inline int xrt_set_add_user_hash_eq(xrt_set_t *s, XrValue value, xrt_user_hash_fn_t hash_fn,
-                                           xrt_user_eq_fn_t eq_fn) {
+static inline int xrt_set_add_user_hash_eq(xrt_set_t *s, XrValue value, uint16_t expected_type_id,
+                                           xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
         return xrt_set_add(s, value);
-    uint32_t hash = xrt_user_hash_value(value, hash_fn);
-    if (xrt_set_find_entry_user_eq(s, value, hash, eq_fn) >= 0) {
+    uint32_t hash = xrt_user_hash_value(value, expected_type_id, hash_fn);
+    if (xrt_set_find_entry_user_eq(s, value, hash, expected_type_id, eq_fn) >= 0) {
         if (!(s->flags & XR_SET_FLAG_WEAK))
             xrt_release(value);
         return 0;
@@ -2767,13 +2788,14 @@ static inline int xrt_set_delete_prehashed(xrt_set_t *s, XrValue value, uint32_t
 }
 
 static inline int xrt_set_delete_user_hash_eq(xrt_set_t *s, XrValue value,
-                                              xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+                                              uint16_t expected_type_id, xrt_user_hash_fn_t hash_fn,
+                                              xrt_user_eq_fn_t eq_fn) {
     if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
         return xrt_set_delete(s, value);
     int32_t eidx = -1;
-    uint32_t hash = xrt_user_hash_value(value, hash_fn);
-    uint32_t slot =
-        xrt_set_find_entry_slot_user_eq(s, value, hash, xrt_value_type_tag(value), eq_fn, &eidx);
+    uint32_t hash = xrt_user_hash_value(value, expected_type_id, hash_fn);
+    uint32_t slot = xrt_set_find_entry_slot_user_eq(s, value, hash, xrt_value_type_tag(value),
+                                                    expected_type_id, eq_fn, &eidx);
     if (slot == UINT32_MAX)
         return 0;
     if (!(s->flags & XR_SET_FLAG_WEAK))
@@ -3957,11 +3979,11 @@ static inline void xrt_record_merge(XrValue dst_val, XrValue src_val) {
  * Closure runtime
  * ========================================================================= */
 
-typedef struct xrt_closure {
+struct xrt_closure {
     void *fn;          // C function pointer
     int nupvals;       // number of captured upvalues
     XrValue upvals[];  // captured values (flexible array)
-} xrt_closure_t;
+};
 
 static inline size_t xrt_closure_object_size(int nupvals) {
     if (nupvals < 0)
