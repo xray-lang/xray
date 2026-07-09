@@ -837,6 +837,8 @@ static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstN
                                            bool can_escape);
 static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, AstNode *stmt,
                                             bool can_escape);
+static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleLintState *states,
+                                                                 AstNode *expr);
 
 static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstNode **nodes,
                                            int count, bool return_value, bool can_escape) {
@@ -846,14 +848,30 @@ static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstN
         xa_thread_lint_scan_expr(states, nodes[i], return_value, can_escape);
 }
 
+static XaThreadHandleLintState *xa_thread_lint_find_alias_source(XaThreadHandleLintState *states,
+                                                                 AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!states || !expr)
+        return NULL;
+    if (expr->type == AST_TERNARY) {
+        XaThreadHandleLintState *true_state =
+            xa_thread_lint_find_alias_source(states, expr->as.ternary.true_expr);
+        XaThreadHandleLintState *false_state =
+            xa_thread_lint_find_alias_source(states, expr->as.ternary.false_expr);
+        return true_state && true_state == false_state ? true_state : NULL;
+    }
+    XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, expr);
+    if (!state)
+        state = xa_thread_lint_find_returned_call_arg(states, expr);
+    return state;
+}
+
 static void xa_thread_lint_note_var_alias(XaThreadHandleLintState *states, VarDeclNode *var) {
     if (!states || !var || var->symbol_id == 0 || !var->initializer)
         return;
     if (var->storage_mode != XR_STORAGE_NORMAL)
         return;
-    XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, var->initializer);
-    if (!state)
-        state = xa_thread_lint_find_returned_call_arg(states, var->initializer);
+    XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, var->initializer);
     if (state)
         xa_thread_lint_add_alias_id(state, var->symbol_id);
 }
@@ -862,9 +880,7 @@ static void xa_thread_lint_note_assignment_alias(XaThreadHandleLintState *states
                                                  AssignmentNode *assignment) {
     if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
         return;
-    XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, assignment->value);
-    if (!state)
-        state = xa_thread_lint_find_returned_call_arg(states, assignment->value);
+    XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, assignment->value);
     if (state)
         xa_thread_lint_add_alias_id(state, assignment->symbol_id);
 }
@@ -912,9 +928,7 @@ static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *sta
         case PATTERN_IDENTIFIER: {
             if (pattern->as.identifier.symbol_id == 0)
                 return;
-            XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, initializer);
-            if (!state)
-                state = xa_thread_lint_find_returned_call_arg(states, initializer);
+            XaThreadHandleLintState *state = xa_thread_lint_find_alias_source(states, initializer);
             if (state)
                 xa_thread_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
             return;
@@ -2625,6 +2639,8 @@ static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, A
                                                 bool can_escape);
 static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, AstNode *stmt,
                                                  bool can_escape);
+static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
+    XaOsResourceLintState *states, AstNode *expr);
 
 static void xa_os_resource_lint_scan_expr_array(XaOsResourceLintState *states, AstNode **nodes,
                                                 int count, bool return_value, bool can_escape) {
@@ -2643,13 +2659,29 @@ static void xa_os_resource_lint_scan_parallel_locals(XaOsResourceLintState *stat
         xa_os_resource_lint_scan_expr(states, locals[i].source, false, can_escape);
 }
 
+static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(
+    XaOsResourceLintState *states, AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!states || !expr)
+        return NULL;
+    if (expr->type == AST_TERNARY) {
+        XaOsResourceLintState *true_state =
+            xa_os_resource_lint_find_alias_source(states, expr->as.ternary.true_expr);
+        XaOsResourceLintState *false_state =
+            xa_os_resource_lint_find_alias_source(states, expr->as.ternary.false_expr);
+        return true_state && true_state == false_state ? true_state : NULL;
+    }
+    XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, expr);
+    if (!state)
+        state = xa_os_resource_lint_find_returned_call_arg(states, expr);
+    return state;
+}
+
 static void xa_os_resource_lint_note_var_alias(XaOsResourceLintState *states, VarDeclNode *var) {
     if (!states || !var || var->symbol_id == 0 || !var->initializer ||
         var->storage_mode != XR_STORAGE_NORMAL)
         return;
-    XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, var->initializer);
-    if (!state)
-        state = xa_os_resource_lint_find_returned_call_arg(states, var->initializer);
+    XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, var->initializer);
     if (state)
         xa_os_resource_lint_add_alias_id(state, var->symbol_id);
 }
@@ -2658,9 +2690,8 @@ static void xa_os_resource_lint_note_assignment_alias(XaOsResourceLintState *sta
                                                       AssignmentNode *assignment) {
     if (!states || !assignment || assignment->symbol_id == 0 || !assignment->value)
         return;
-    XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, assignment->value);
-    if (!state)
-        state = xa_os_resource_lint_find_returned_call_arg(states, assignment->value);
+    XaOsResourceLintState *state =
+        xa_os_resource_lint_find_alias_source(states, assignment->value);
     if (state)
         xa_os_resource_lint_add_alias_id(state, assignment->symbol_id);
 }
@@ -2674,9 +2705,8 @@ static void xa_os_resource_lint_note_destructure_aliases(XaOsResourceLintState *
         case PATTERN_IDENTIFIER: {
             if (pattern->as.identifier.symbol_id == 0)
                 return;
-            XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, initializer);
-            if (!state)
-                state = xa_os_resource_lint_find_returned_call_arg(states, initializer);
+            XaOsResourceLintState *state =
+                xa_os_resource_lint_find_alias_source(states, initializer);
             if (state)
                 xa_os_resource_lint_add_alias_id(state, pattern->as.identifier.symbol_id);
             return;
