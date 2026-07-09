@@ -655,7 +655,7 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
 
 /* ========== Named Channel Registry ========== */
 
-void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChannel *ch) {
+void cluster_channel_register(XrCluster *c, const char *name, struct XrChannel *ch) {
     if (!c || !name || !ch)
         return;
 
@@ -683,7 +683,7 @@ void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChanne
     xr_amutex_unlock(&c->channels_lock);
 }
 
-XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name) {
+XrDistChannel *cluster_channel_find(XrCluster *c, const char *name) {
     if (!c || !name)
         return NULL;
 
@@ -707,15 +707,15 @@ bool xr_cluster_vm_is_running(XrVMRuntime *X) {
 }
 
 struct XrChannel *xr_cluster_find_channel_local(XrVMRuntime *X, const char *name) {
-    XrDistChannel *dc = xr_cluster_find_channel(X ? (XrCluster *) X->cluster : NULL, name);
+    XrDistChannel *dc = cluster_channel_find(X ? (XrCluster *) X->cluster : NULL, name);
     return dc ? dc->channel : NULL;
 }
 
 void xr_cluster_register_channel_local(XrVMRuntime *X, const char *name, struct XrChannel *ch) {
-    xr_cluster_register_channel(X ? (XrCluster *) X->cluster : NULL, name, ch);
+    cluster_channel_register(X ? (XrCluster *) X->cluster : NULL, name, ch);
 }
 
-void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
+void cluster_channel_unregister(XrCluster *c, const char *name) {
     if (!c || !name)
         return;
 
@@ -743,7 +743,7 @@ void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
 
 /* ========== Service Registry ========== */
 
-XrChannel *xr_cluster_register_service(XrVMRuntime *X, const char *name) {
+XrChannel *cluster_service_register(XrVMRuntime *X, const char *name) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !name)
         return NULL;
@@ -773,7 +773,7 @@ XrChannel *xr_cluster_register_service(XrVMRuntime *X, const char *name) {
     return se->request_ch;
 }
 
-XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name) {
+XrServiceEntry *cluster_service_find(XrCluster *c, const char *name) {
     if (!c || !name)
         return NULL;
 
@@ -1022,7 +1022,7 @@ static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
     // If cluster running, return the existing distributed channel registration.
     if (xr_cluster_is_running(c)) {
-        XrDistChannel *existing = xr_cluster_find_channel(c, name_str->data);
+        XrDistChannel *existing = cluster_channel_find(c, name_str->data);
         if (existing && existing->channel) {
             return xr_value_from_channel(existing->channel);
         }
@@ -1033,7 +1033,7 @@ static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     if (xr_cluster_is_running(c)) {
-        xr_cluster_register_channel(c, name_str->data, ch);
+        cluster_channel_register(c, name_str->data, ch);
     }
 
     return xr_value_from_channel(ch);
@@ -1045,7 +1045,7 @@ static XrValue cluster_serve_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     XrString *name_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = xr_cluster_register_service(X, name_str->data);
+    XrChannel *ch = cluster_service_register(X, name_str->data);
     if (!ch)
         return xr_null();
 
@@ -1152,7 +1152,7 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) argc;  // timeout not yet used for pending approach
 
     // Check if service is local
-    XrServiceEntry *se = xr_cluster_find_service(c, service_name->data);
+    XrServiceEntry *se = cluster_service_find(c, service_name->data);
     if (se && se->request_ch) {
         // Local service: directly send to request channel
         uint64_t req_id = atomic_fetch_add(&c->next_request_id, 1);
@@ -1384,7 +1384,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     recv_req_id >>= 8;
                 }
 
-                XrDistChannel *dc = xr_cluster_find_channel(c, ch_name);
+                XrDistChannel *dc = cluster_channel_find(c, ch_name);
                 if (dc && dc->is_owner && dc->channel) {
                     XrValue out;
                     bool ok = false;
@@ -1415,7 +1415,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 if (xr_frame_decode_service_call(recv_buf, payload_len, &sc) != 0)
                     break;
 
-                XrServiceEntry *se = xr_cluster_find_service(c, sc.service_name);
+                XrServiceEntry *se = cluster_service_find(c, sc.service_name);
                 if (!se || !se->request_ch)
                     break;
 
