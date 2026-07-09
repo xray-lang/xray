@@ -1,0 +1,9 @@
+shared xray_no_alloc_atomic_compare_exchange_value = Atomic(10)
+
+@no_alloc
+fn xray_no_alloc_atomic_compare_exchange_reject(counter: Atomic<int>) -> bool {
+    var (old, ok) = counter.compareExchange(10, 11, Ordering.Relaxed)
+    return ok && old == 10
+}
+
+print(xray_no_alloc_atomic_compare_exchange_reject(xray_no_alloc_atomic_compare_exchange_value))
