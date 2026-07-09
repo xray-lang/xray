@@ -8162,7 +8162,7 @@ TEST(global_evidence_records_options_bag_plans) {
                                            .source_span_id = 111,
                                            .type_key = 211,
                                            .field_name_start = 320,
-                                           .field_count = 2,
+                                           .field_count = 3,
                                            .shape_kind = XG_RECORD_SHAPE_LITERAL,
                                            .flags =
                                                XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
@@ -8286,6 +8286,41 @@ TEST(global_evidence_records_options_bag_plans) {
     ASSERT_NOT_NULL(strstr(err, "AOT options evidence action does not re-derive"));
 
     xaot_bundle_free(&stale_action_bundle);
+
+    XaotBundle owner_mismatch_bundle;
+    ev.options_bags[0].action = XG_OPTIONS_DEFAULT_ELIDED;
+    ev.options_bags[0].owner_func_id = 99;
+    memset(&owner_mismatch_bundle, 0, sizeof(owner_mismatch_bundle));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&owner_mismatch_bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotOptionsPlan *owner_mismatch_plan =
+        xaot_bundle_find_options_plan(&owner_mismatch_bundle, 1);
+    ASSERT_NOT_NULL(owner_mismatch_plan);
+    ASSERT_EQ_UINT(owner_mismatch_plan->action, XAOT_OPTIONS_REJECT);
+    ASSERT_EQ_UINT(owner_mismatch_plan->unproven_reason, XAOT_OPTIONS_UNPROVEN_OWNER_MISMATCH);
+    owner_mismatch_bundle.modules = modules;
+    owner_mismatch_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&owner_mismatch_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&owner_mismatch_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT options evidence action does not re-derive"));
+    xaot_bundle_free(&owner_mismatch_bundle);
+
+    XaotBundle duplicate_id_bundle;
+    ev.options_bags[0].owner_func_id = 7;
+    ev.options_bags[1].options_id = 1;
+    memset(&duplicate_id_bundle, 0, sizeof(duplicate_id_bundle));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&duplicate_id_bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    duplicate_id_bundle.modules = modules;
+    duplicate_id_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_id_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&duplicate_id_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT options evidence id is duplicated"));
+    xaot_bundle_free(&duplicate_id_bundle);
+
     xg_global_evidence_free(&ev);
 }
 
