@@ -35,6 +35,8 @@ extern int xr_socket_read(struct XrVMRuntime *X, int fd, char *buf, size_t len);
 extern void xr_socket_set_read_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
 extern void xr_socket_set_write_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
 
+static void cluster_node_close(XrClusterNode *node);
+
 /* ========== Time Utility ========== */
 
 int64_t cluster_now_ms(void) {
@@ -359,7 +361,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
      */
     atomic_store(&node->writer_running, false);
     cluster_outq_close_write_end(&node->outq);
-    xr_cluster_node_close(node);
+    cluster_node_close(node);
 
     if (node->isolate) {
         // Writer was spawned — wait for the exit flag it flips on return.
@@ -387,7 +389,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
     xr_free(node);
 }
 
-void xr_cluster_node_close(XrClusterNode *node) {
+static void cluster_node_close(XrClusterNode *node) {
     if (!node)
         return;
     if (node->conn) {
@@ -474,7 +476,7 @@ int xr_cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uin
 
 #define XR_WRITER_MAX_IOV 64
 
-void xr_cluster_node_writer_loop(void *arg) {
+static void cluster_node_writer_loop(void *arg) {
     XrClusterNode *node = (XrClusterNode *) arg;
     if (!node)
         return;
@@ -607,7 +609,7 @@ void xr_cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
     node->isolate = X;
     atomic_store(&node->writer_running, true);
     XrCoroutine *coro =
-        xr_coro_create_native(X, xr_cluster_node_writer_loop, node, "cluster_writer");
+        xr_coro_create_native(X, cluster_node_writer_loop, node, "cluster_writer");
     if (coro) {
         xr_coro_spawn(X, coro);
     } else {
@@ -776,7 +778,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     int flen = xr_frame_encode_handshake_req(frame_buf, sizeof(frame_buf), &req);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t) flen) != flen) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
-        xr_cluster_node_close(node);
+        cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
@@ -789,7 +791,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
             0 ||
         frame_type != XR_FRAME_HANDSHAKE_ACK) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
-        xr_cluster_node_close(node);
+        cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
@@ -798,7 +800,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     if (xr_frame_decode_handshake_ack(recv_buf, payload_len, &ack) != 0 ||
         ack.version != XR_CLUSTER_HANDSHAKE_VERSION) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
-        xr_cluster_node_close(node);
+        cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
@@ -812,7 +814,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
         xr_secure_wipe(&req, sizeof(req));
         xr_secure_wipe(&ack, sizeof(ack));
         cluster_handshake_set_deadline(cluster, node->conn, 0);
-        xr_cluster_node_close(node);
+        cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
@@ -833,7 +835,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
         xr_secure_wipe(&req, sizeof(req));
         xr_secure_wipe(&ack, sizeof(ack));
         cluster_handshake_set_deadline(cluster, node->conn, 0);
-        xr_cluster_node_close(node);
+        cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }

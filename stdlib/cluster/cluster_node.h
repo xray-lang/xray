@@ -217,17 +217,11 @@ XR_FUNC int xr_cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_
 // Send heartbeat ping
 XR_FUNC int xr_cluster_node_send_ping(XrClusterNode *node);
 
-// Close node connection gracefully
-XR_FUNC void xr_cluster_node_close(XrClusterNode *node);
-
 /* ========== Writer Coroutine ========== */
 
 // Start the dedicated writer coroutine for a connected node.
 // Must be called after handshake completes.
 XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntime *X);
-
-// Writer loop function (runs as native coroutine)
-XR_FUNC void xr_cluster_node_writer_loop(void *arg);
 
 /* ========== Reader Coroutine ========== */
 
