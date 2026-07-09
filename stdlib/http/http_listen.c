@@ -1224,21 +1224,6 @@ static XrCFuncResult http_conn_read_request(XrVMRuntime *X, int status, XrValue 
 
 dispatch:
     ctx->header_end = header_end;
-
-    // Try prebuilt route (zero-alloc fast path)
-    {
-        const char *resp = NULL;
-        size_t resp_len = 0;
-        if (xr_http_try_prebuilt(ctx->router, ctx->read_buf, ctx->buf_used, &resp, &resp_len)) {
-            ctx->request_count++;
-            ctx->batch_count++;
-            if (ctx->http_ctx)
-                atomic_fetch_add(&ctx->http_ctx->total_requests, 1);
-            return http_conn_start_write(X, ctx, resp, resp_len, http_conn_loop, result);
-        }
-    }
-
-    // Dynamic route
     return handle_dynamic_route(X, ctx, result);
 }
 

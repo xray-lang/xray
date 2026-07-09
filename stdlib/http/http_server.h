@@ -64,19 +64,4 @@ XR_FUNC void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, co
 // Stop server
 XR_FUNC void xr_http_server_stop(XrHttpServer *server);
 
-/* ========== Internal Functions ========== */
-
-/*
- * Try to find a prebuilt response for raw HTTP data.
- * Quick-parses method+path (no full header parsing), does route lookup.
- * Returns prebuilt response pointer via out params, or NULL if not prebuilt.
- *
- * WHY THIS DESIGN:
- *   Separates route lookup from I/O. The caller writes the response via
- *   coroutine-safe net.writeFast, avoiding blocking worker threads.
- *   Zero GC allocation: only stack variables used for route lookup.
- */
-XR_FUNC bool xr_http_try_prebuilt(XrRouter *router, const char *raw_data, size_t data_len,
-                                  const char **out_resp, size_t *out_len);
-
 #endif  // XR_STDLIB_HTTP_SERVER_H
