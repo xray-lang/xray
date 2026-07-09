@@ -1,0 +1,11 @@
+struct Pair {
+    left: int
+    right: int
+}
+
+shared PAIR = Pair{left: 1, right: 2}
+
+@c_export("xray_shared_aggregate_reject")
+fn xray_shared_aggregate_reject() -> int {
+    return PAIR.left + PAIR.right
+}

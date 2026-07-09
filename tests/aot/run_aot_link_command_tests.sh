@@ -1598,6 +1598,14 @@ else
         "freestanding-profile: rejects shared declarations"
 fi
 
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_aggregate_reject.xr" \
+    "$WORK/freestanding_shared_aggregate_reject" \
+    "$WORK/freestanding_shared_aggregate_reject.log" \
+    "freestanding-profile/shared: rejects aggregate shared storage" \
+    "freestanding profile rejects shared declaration" \
+    "only int/float/bool/char/string/null consteval initializers are supported as static shared storage"
+
 FREESTANDING_SHARED_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_scalar_static.xr"
 FREESTANDING_SHARED_SCALAR_OBJ="$WORK/freestanding_shared_scalar_static.o"
 FREESTANDING_SHARED_SCALAR_LOG="$WORK/freestanding_shared_scalar_static.log"
@@ -1918,6 +1926,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-const-aggregate: materializes scalar struct as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xctstruct_" \
             "freestanding-profile/top-const-aggregate: names scalar struct static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_top_const_plain_struct_runtime" \
+            "freestanding-profile/top-const-aggregate: accepts plain aggregate const literal"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_HEADER" \
             "freestanding-profile/top-const-aggregate: weak struct uses stable external data symbol"
