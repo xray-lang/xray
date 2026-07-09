@@ -346,14 +346,14 @@ XR_FUNC void xr_cluster_process_node(XrCluster *c, XrClusterNode *node);
 /* ========== Health & Robustness ========== */
 
 // Check all nodes for heartbeat timeout, disconnect dead ones
-XR_FUNC void xr_cluster_check_heartbeats(XrCluster *c);
+void cluster_health_check_heartbeats(XrCluster *c);
 
 // Send heartbeat pings to all connected nodes
-XR_FUNC void xr_cluster_send_heartbeats(XrCluster *c);
+void cluster_health_send_heartbeats(XrCluster *c);
 
 // Dead node tombstone management
-XR_FUNC void xr_cluster_mark_dead(XrCluster *c, const char *name);
-XR_FUNC bool xr_cluster_is_dead(XrCluster *c, const char *name);
+void cluster_health_mark_dead(XrCluster *c, const char *name);
+bool cluster_health_is_dead(XrCluster *c, const char *name);
 
 /* ========== Node Monitor (CSP-style fault detection) ========== */
 

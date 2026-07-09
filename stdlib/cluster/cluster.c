@@ -93,7 +93,7 @@ bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
 /* ========== Heartbeat Coroutine ========== */
 
 /*
- * Drive xr_cluster_send_heartbeats + xr_cluster_check_heartbeats at a
+ * Drive cluster_health_send_heartbeats + cluster_health_check_heartbeats at a
  * steady cadence. Runs as a native coroutine on the normal worker
  * pool so the cluster stays on one scheduling model end-to-end — no
  * more stray pthread with its own sleep granularity.
@@ -119,8 +119,8 @@ static void cluster_heartbeat_coro(void *arg) {
         if (!xr_cluster_sleep_interruptible(c, sleep_ms))
             break;
 
-        xr_cluster_send_heartbeats(c);
-        xr_cluster_check_heartbeats(c);
+        cluster_health_send_heartbeats(c);
+        cluster_health_check_heartbeats(c);
     }
 
     atomic_store(&c->heartbeat_running, false);
@@ -190,7 +190,7 @@ static void cluster_accept_loop(void *arg) {
 
         /* Tombstone check: reject nodes that were recently dead. They
          * must wait out the tombstone window before rejoining. */
-        if (xr_cluster_is_dead(c, node->name)) {
+        if (cluster_health_is_dead(c, node->name)) {
             xr_cluster_node_free(node);
             continue;
         }

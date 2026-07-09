@@ -21,7 +21,7 @@
 // Phi threshold: 8.0 is recommended by Akka (low false-positive rate)
 #define XR_PHI_THRESHOLD 8.0
 
-void xr_cluster_check_heartbeats(XrCluster *c) {
+void cluster_health_check_heartbeats(XrCluster *c) {
     if (!c)
         return;
 
@@ -97,7 +97,7 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
 
     for (int i = 0; i < remove_count; i++) {
         XrClusterNode *dead = to_remove[i];
-        xr_cluster_mark_dead(c, dead->name);
+        cluster_health_mark_dead(c, dead->name);
         xr_cluster_remove_all_subscribers_for_node(c, dead);
         xr_cluster_fire_monitors(c, dead->name);
         xr_cluster_remove_node(c, dead);
@@ -108,7 +108,7 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
         xr_free(to_remove);
 }
 
-void xr_cluster_send_heartbeats(XrCluster *c) {
+void cluster_health_send_heartbeats(XrCluster *c) {
     if (!c)
         return;
 
@@ -125,7 +125,7 @@ void xr_cluster_send_heartbeats(XrCluster *c) {
 
 /* ========== Tombstone Management ========== */
 
-void xr_cluster_mark_dead(XrCluster *c, const char *name) {
+void cluster_health_mark_dead(XrCluster *c, const char *name) {
     if (!c || !name)
         return;
 
@@ -155,7 +155,7 @@ void xr_cluster_mark_dead(XrCluster *c, const char *name) {
     xr_amutex_unlock(&c->dead_nodes_lock);
 }
 
-bool xr_cluster_is_dead(XrCluster *c, const char *name) {
+bool cluster_health_is_dead(XrCluster *c, const char *name) {
     if (!c || !name)
         return false;
 
