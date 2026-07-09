@@ -167,7 +167,7 @@ static inline void ws_rbuf_compact(XrWebSocket *ws) {
 static char *generate_sec_key(void) {
     unsigned char key[16];
     xr_random_bytes(key, 16);
-    return xr_base64_encode(key, 16, NULL);
+    return base64_encode_alloc(key, 16, NULL);
 }
 
 // Calculate Sec-WebSocket-Accept
@@ -178,7 +178,7 @@ static char *compute_accept_key(const char *sec_key) {
     unsigned char hash[20];
     SHA1((unsigned char *) concat, strlen(concat), hash);
 
-    return xr_base64_encode(hash, 20, NULL);
+    return base64_encode_alloc(hash, 20, NULL);
 }
 
 /*
@@ -1990,7 +1990,7 @@ static bool ws_valid_sec_key_value(const char *key) {
     if (!key || !key[0])
         return false;
     size_t decoded_len = 0;
-    unsigned char *decoded = xr_base64_decode(key, strlen(key), &decoded_len);
+    unsigned char *decoded = base64_decode_alloc(key, strlen(key), &decoded_len);
     if (!decoded)
         return false;
     bool ok = decoded_len == 16;
@@ -2099,7 +2099,7 @@ static int ws_send_upgrade_response(int fd, const char *sec_key, const char *pro
     unsigned char hash[20];
     SHA1((unsigned char *) concat, strlen(concat), hash);
 
-    char *accept_key = xr_base64_encode(hash, 20, NULL);
+    char *accept_key = base64_encode_alloc(hash, 20, NULL);
     if (!accept_key)
         return -1;
 

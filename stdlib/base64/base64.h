@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * base64.h - Base64 encoding/decoding module
+ * base64.h - Base64 native helpers and module loader
  *
  * KEY CONCEPT:
- *   Provides standard Base64 and URL-safe Base64 encoding/decoding.
- *   Both C-level API and xray module interface are available.
+ *   Public module functions live in stdlib/base64/base64.xr. This header
+ *   exposes only native helper calls needed by WS internals plus the loader.
  */
 
 #ifndef XR_STDLIB_BASE64_H
@@ -17,22 +17,22 @@
 
 #include "../../src/base/xdefs.h"
 
-/* ========== C-level API ========== */
+/* ========== Native helpers ========== */
 
 // Encode data to standard Base64 (caller must free with xr_free)
-XR_FUNC char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
+char *base64_encode_alloc(const unsigned char *data, size_t len, size_t *out_len);
 
 // URL-safe Base64 encoding (+ -> -, / -> _, no padding; caller must free with xr_free)
-XR_FUNC char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len);
+char *base64_encode_url_alloc(const unsigned char *data, size_t len, size_t *out_len);
 
 // Decode standard Base64 to binary data (caller must free with xr_free)
-XR_FUNC unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len);
+unsigned char *base64_decode_alloc(const char *data, size_t len, size_t *out_len);
 
 // Decode URL-safe Base64 to binary data (caller must free with xr_free)
-XR_FUNC unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len);
+unsigned char *base64_decode_url_alloc(const char *data, size_t len, size_t *out_len);
 
 // Validate Base64 string (checks characters and length)
-XR_FUNC bool xr_base64_is_valid(const char *data, size_t len);
+bool base64_is_valid_bytes(const char *data, size_t len);
 
 /* ========== Module Loader ========== */
 

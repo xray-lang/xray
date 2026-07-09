@@ -16,18 +16,18 @@
 #include "base/xmalloc.h"
 #include "shared/xr_base64_core.h"
 
-// C-level API from stdlib (forward declare to avoid pulling in module deps)
-char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
-char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len);
-unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len);
-unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len);
-bool xr_base64_is_valid(const char *data, size_t len);
+// Native helpers from stdlib/base64 (forward declare to avoid pulling in module deps)
+char *base64_encode_alloc(const unsigned char *data, size_t len, size_t *out_len);
+char *base64_encode_url_alloc(const unsigned char *data, size_t len, size_t *out_len);
+unsigned char *base64_decode_alloc(const char *data, size_t len, size_t *out_len);
+unsigned char *base64_decode_url_alloc(const char *data, size_t len, size_t *out_len);
+bool base64_is_valid_bytes(const char *data, size_t len);
 
 /* ========== Standard Base64 Encode ========== */
 
 TEST(base64_encode_empty) {
     size_t out_len;
-    char *result = xr_base64_encode((const unsigned char *) "", 0, &out_len);
+    char *result = base64_encode_alloc((const unsigned char *) "", 0, &out_len);
     ASSERT_NOT_NULL(result);
     ASSERT_EQ_UINT(out_len, 0);
     xr_free(result);
@@ -37,26 +37,26 @@ TEST(base64_encode_basic) {
     size_t out_len;
 
     // RFC 4648 test vectors
-    char *r1 = xr_base64_encode((const unsigned char *) "f", 1, &out_len);
+    char *r1 = base64_encode_alloc((const unsigned char *) "f", 1, &out_len);
     ASSERT_STR_EQ(r1, "Zg==");
     xr_free(r1);
 
-    char *r2 = xr_base64_encode((const unsigned char *) "fo", 2, &out_len);
+    char *r2 = base64_encode_alloc((const unsigned char *) "fo", 2, &out_len);
     ASSERT_STR_EQ(r2, "Zm8=");
     xr_free(r2);
 
-    char *r3 = xr_base64_encode((const unsigned char *) "foo", 3, &out_len);
+    char *r3 = base64_encode_alloc((const unsigned char *) "foo", 3, &out_len);
     ASSERT_STR_EQ(r3, "Zm9v");
     xr_free(r3);
 
-    char *r4 = xr_base64_encode((const unsigned char *) "foobar", 6, &out_len);
+    char *r4 = base64_encode_alloc((const unsigned char *) "foobar", 6, &out_len);
     ASSERT_STR_EQ(r4, "Zm9vYmFy");
     xr_free(r4);
 }
 
 TEST(base64_encode_hello) {
     size_t out_len;
-    char *result = xr_base64_encode((const unsigned char *) "Hello, World!", 13, &out_len);
+    char *result = base64_encode_alloc((const unsigned char *) "Hello, World!", 13, &out_len);
     ASSERT_NOT_NULL(result);
     ASSERT_STR_EQ(result, "SGVsbG8sIFdvcmxkIQ==");
     xr_free(result);
@@ -66,7 +66,7 @@ TEST(base64_encode_hello) {
 
 TEST(base64_decode_empty) {
     size_t out_len;
-    unsigned char *result = xr_base64_decode("", 0, &out_len);
+    unsigned char *result = base64_decode_alloc("", 0, &out_len);
     ASSERT_NOT_NULL(result);
     ASSERT_EQ_UINT(out_len, 0);
     xr_free(result);
@@ -75,17 +75,17 @@ TEST(base64_decode_empty) {
 TEST(base64_decode_basic) {
     size_t out_len;
 
-    unsigned char *r1 = xr_base64_decode("Zg==", 4, &out_len);
+    unsigned char *r1 = base64_decode_alloc("Zg==", 4, &out_len);
     ASSERT_EQ_UINT(out_len, 1);
     ASSERT_TRUE(memcmp(r1, "f", 1) == 0);
     xr_free(r1);
 
-    unsigned char *r2 = xr_base64_decode("Zm9v", 4, &out_len);
+    unsigned char *r2 = base64_decode_alloc("Zm9v", 4, &out_len);
     ASSERT_EQ_UINT(out_len, 3);
     ASSERT_TRUE(memcmp(r2, "foo", 3) == 0);
     xr_free(r2);
 
-    unsigned char *r3 = xr_base64_decode("Zm9vYmFy", 8, &out_len);
+    unsigned char *r3 = base64_decode_alloc("Zm9vYmFy", 8, &out_len);
     ASSERT_EQ_UINT(out_len, 6);
     ASSERT_TRUE(memcmp(r3, "foobar", 6) == 0);
     xr_free(r3);
@@ -93,7 +93,7 @@ TEST(base64_decode_basic) {
 
 TEST(base64_decode_hello) {
     size_t out_len;
-    unsigned char *result = xr_base64_decode("SGVsbG8sIFdvcmxkIQ==", 20, &out_len);
+    unsigned char *result = base64_decode_alloc("SGVsbG8sIFdvcmxkIQ==", 20, &out_len);
     ASSERT_NOT_NULL(result);
     ASSERT_EQ_UINT(out_len, 13);
     ASSERT_TRUE(memcmp(result, "Hello, World!", 13) == 0);
@@ -110,10 +110,10 @@ TEST(base64_roundtrip) {
         size_t enc_len, dec_len;
         size_t in_len = strlen(inputs[i]);
 
-        char *encoded = xr_base64_encode((const unsigned char *) inputs[i], in_len, &enc_len);
+        char *encoded = base64_encode_alloc((const unsigned char *) inputs[i], in_len, &enc_len);
         ASSERT_NOT_NULL(encoded);
 
-        unsigned char *decoded = xr_base64_decode(encoded, enc_len, &dec_len);
+        unsigned char *decoded = base64_decode_alloc(encoded, enc_len, &dec_len);
         ASSERT_NOT_NULL(decoded);
         ASSERT_EQ_UINT(dec_len, in_len);
         ASSERT_TRUE(memcmp(decoded, inputs[i], in_len) == 0);
@@ -129,7 +129,7 @@ TEST(base64_url_encode) {
     size_t out_len;
     // Data that would produce + and / in standard base64
     unsigned char data[] = {0xFB, 0xFF, 0xFE};
-    char *result = xr_base64_encode_url(data, 3, &out_len);
+    char *result = base64_encode_url_alloc(data, 3, &out_len);
     ASSERT_NOT_NULL(result);
     // URL-safe should not contain + or /
     for (size_t i = 0; i < out_len; i++) {
@@ -143,10 +143,10 @@ TEST(base64_url_roundtrip) {
     const unsigned char data[] = {0x00, 0xFF, 0x80, 0x7F, 0xFE, 0x01};
     size_t enc_len, dec_len;
 
-    char *encoded = xr_base64_encode_url(data, 6, &enc_len);
+    char *encoded = base64_encode_url_alloc(data, 6, &enc_len);
     ASSERT_NOT_NULL(encoded);
 
-    unsigned char *decoded = xr_base64_decode_url(encoded, enc_len, &dec_len);
+    unsigned char *decoded = base64_decode_url_alloc(encoded, enc_len, &dec_len);
     ASSERT_NOT_NULL(decoded);
     ASSERT_EQ_UINT(dec_len, 6);
     ASSERT_TRUE(memcmp(decoded, data, 6) == 0);
@@ -158,14 +158,14 @@ TEST(base64_url_roundtrip) {
 /* ========== Validation ========== */
 
 TEST(base64_is_valid) {
-    ASSERT_TRUE(xr_base64_is_valid("Zm9v", 4));
-    ASSERT_TRUE(xr_base64_is_valid("Zg==", 4));
-    ASSERT_TRUE(xr_base64_is_valid("Zm8=", 4));
-    ASSERT_TRUE(xr_base64_is_valid("", 0));
+    ASSERT_TRUE(base64_is_valid_bytes("Zm9v", 4));
+    ASSERT_TRUE(base64_is_valid_bytes("Zg==", 4));
+    ASSERT_TRUE(base64_is_valid_bytes("Zm8=", 4));
+    ASSERT_TRUE(base64_is_valid_bytes("", 0));
 
     // Note: "Zg=" has odd padding but implementation accepts it (lenient)
-    // ASSERT_FALSE(xr_base64_is_valid("Zg=", 3));
-    ASSERT_FALSE(xr_base64_is_valid("!!!!", 4));
+    // ASSERT_FALSE(base64_is_valid_bytes("Zg=", 3));
+    ASSERT_FALSE(base64_is_valid_bytes("!!!!", 4));
 }
 
 /* ========== Binary Data ========== */
@@ -176,10 +176,10 @@ TEST(base64_binary_data) {
         binary[i] = (unsigned char) i;
 
     size_t enc_len, dec_len;
-    char *encoded = xr_base64_encode(binary, 256, &enc_len);
+    char *encoded = base64_encode_alloc(binary, 256, &enc_len);
     ASSERT_NOT_NULL(encoded);
 
-    unsigned char *decoded = xr_base64_decode(encoded, enc_len, &dec_len);
+    unsigned char *decoded = base64_decode_alloc(encoded, enc_len, &dec_len);
     ASSERT_NOT_NULL(decoded);
     ASSERT_EQ_UINT(dec_len, 256);
     ASSERT_TRUE(memcmp(decoded, binary, 256) == 0);

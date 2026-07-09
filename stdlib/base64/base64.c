@@ -5,14 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * base64.c - Base64 C API + pure-Xray module loader
+ * base64.c - Base64 native helpers + pure-Xray module loader
  *
  * KEY CONCEPT:
  *   The base64 module's user-facing functions (encode/decode/encodeUrl/...) are
  *   pure Xray, defined in stdlib/base64/base64.xr. This file keeps only the
- *   C-level xr_base64_* API (built on xr_base64_core) that other C modules
- *   (ws) links against, plus the loader that registers the pure-Xray
- *   module so `import base64` resolves as stdlib.
+ *   Internal C helpers (built on xr_base64_core) used by WS native
+ *   handshake code, plus the loader that registers the pure-Xray module so
+ *   `import base64` resolves as stdlib.
  */
 
 #include "base64.h"
@@ -57,26 +57,26 @@ static unsigned char *base64_decode_internal(const char *data, size_t len, size_
     return output;
 }
 
-/* ========== C-level API (linked by ws) ========== */
+/* ========== Native helpers (linked by ws) ========== */
 
-XR_FUNC char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len) {
+char *base64_encode_alloc(const unsigned char *data, size_t len, size_t *out_len) {
     return base64_encode_internal(data, len, false, true, out_len);
 }
 
-XR_FUNC char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len) {
+char *base64_encode_url_alloc(const unsigned char *data, size_t len, size_t *out_len) {
     return base64_encode_internal(data, len, true, false, out_len);
 }
 
-XR_FUNC unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len) {
+unsigned char *base64_decode_alloc(const char *data, size_t len, size_t *out_len) {
     return base64_decode_internal(data, len, out_len);
 }
 
-XR_FUNC unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len) {
+unsigned char *base64_decode_url_alloc(const char *data, size_t len, size_t *out_len) {
     // The decode table already handles both standard (+/) and URL-safe (-_).
     return base64_decode_internal(data, len, out_len);
 }
 
-XR_FUNC bool xr_base64_is_valid(const char *data, size_t len) {
+bool base64_is_valid_bytes(const char *data, size_t len) {
     return xr_base64_core_is_valid(data, len);
 }
 
