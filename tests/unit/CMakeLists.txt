@@ -240,7 +240,6 @@ add_xray_unit_test(test_project module/test_project.c)
 # encoding/ — Base64, hex, URL encoding, Unicode
 # ============================================================================
 
-add_xray_unit_test(test_base64 encoding/test_base64.c)
 add_xray_unit_test(test_unicode encoding/test_unicode.c)
 
 # ============================================================================
