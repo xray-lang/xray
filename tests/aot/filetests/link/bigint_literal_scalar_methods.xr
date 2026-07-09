@@ -1,0 +1,32 @@
+fn xray_bigint_literal_scalar_methods() -> int {
+    var a = 12345678901234567890n
+    var b = -42n
+    var z = 0n
+    var score = a.sign()
+    if (a.isPositive()) {
+        score = score + 10
+    }
+    if (!a.isNegative()) {
+        score = score + 20
+    }
+    if (!a.isZero()) {
+        score = score + 30
+    }
+    score = score + (b.toInt() ?? 0)
+    if (a.toFloat() > 0.0) {
+        score = score + 40
+    }
+    if (z.isZero()) {
+        score = score + 50
+    }
+    score = score + (9223372036854775808n.toInt() ?? 70)
+    if (123n == 123n) {
+        score = score + 80
+    }
+    if (123n != 124n) {
+        score = score + 90
+    }
+    return score
+}
+
+print(xray_bigint_literal_scalar_methods())

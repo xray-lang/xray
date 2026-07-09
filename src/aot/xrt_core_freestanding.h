@@ -161,6 +161,7 @@ typedef struct XrValue {
 #define XR_TAG_SYS_ONCE 32
 #define XR_TAG_THREAD 33
 #define XR_TAG_BUFFER 34
+#define XR_TAG_BIGINT 35
 
 #define XR_NATIVE_I64 0
 #define XR_NATIVE_F64 1

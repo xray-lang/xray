@@ -1,0 +1,7 @@
+status=pass
+contains=xray_bigint_literal_scalar_methods
+c_contains=XR_TAG_BIGINT
+c_contains=_xr_bigint_lit_
+c_contains=xrt_eq
+c_contains=(int8_t)-1
+c_not_contains=XR_NULL_VAL /* unknown const kind */

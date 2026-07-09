@@ -1429,6 +1429,8 @@ static inline uint64_t xrt_hash_value(XrValue v) {
             return xrt_hash_f64(v.f);
         case XR_TAG_STR:
             return xr_hash_core_mix_u64(xrt_str_hash(v));
+        case XR_TAG_BIGINT:
+            return xrt_bigint_hash_value(v);
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
         case XR_TAG_AGG_REF:

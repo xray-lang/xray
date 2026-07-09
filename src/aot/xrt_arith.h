@@ -210,6 +210,11 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
         case XR_TAG_NULL:
             xrt_fmt_cstr(sb, "null");
             return;
+        case XR_TAG_BIGINT: {
+            char buf[64];
+            xrt_fmt_cstr(sb, xr_to_cstr(v, buf, sizeof(buf)));
+            return;
+        }
         case XR_TAG_ENUM: {
             const char *enum_name = NULL;
             const char *member_name = NULL;
@@ -432,6 +437,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 31; /* XR_TID_RANGE */
         case XR_TAG_ENUM:
             return 25; /* XR_TID_ENUM_VALUE */
+        case XR_TAG_BIGINT:
+            return 19; /* XR_TID_BIGINT */
         default:
             return 17; /* XR_TID_INSTANCE */
     }
@@ -454,6 +461,7 @@ static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_range, "Range");
     XRT_STR_LIT_DEF(xs_json, "Json");
     XRT_STR_LIT_DEF(xs_record, "Record");
+    XRT_STR_LIT_DEF(xs_bigint, "BigInt");
     XRT_STR_LIT_DEF(xs_object, "object");
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
@@ -493,6 +501,8 @@ static inline XrValue xrt_typename(XrValue v) {
                        ? xr_box_str(enum_name)
                        : xr_str_lit(&xs_object);
         }
+        case XR_TAG_BIGINT:
+            return xr_str_lit(&xs_bigint);
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
                 const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
