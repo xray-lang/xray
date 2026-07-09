@@ -5,5 +5,7 @@ closure_noescape|closure_noescape/direct_symbol_loop.xr|299985
 static_data|static_data/static_table_loop.xr|149999
 json_direct_index|json_shape/direct_index_loop.xr|1
 json_dynamic_lookup|json_shape/dynamic_lookup_loop.xr|1
+json_computed_key_guard|json_shape/computed_key_guard_loop.xr|1
+json_open_shape_guard|json_shape/open_shape_guard_loop.xr|1
 map_static_key|map_set/static_key_prehash_loop.xr|20000
 map_dynamic_key|map_set/dynamic_key_lookup_loop.xr|20000
