@@ -966,6 +966,22 @@ static bool xa_lifecycle_lint_node_exits_current_scope(AstNode *node, const char
     return xa_lifecycle_lint_node_skips_loop_tail(node, loop_label);
 }
 
+static bool xa_lifecycle_lint_branch_tail_breaks_loop(AstNode *branch, const char *loop_label) {
+    if (!branch)
+        return false;
+    if (xa_lifecycle_lint_break_targets_loop(branch, loop_label))
+        return true;
+    AstNode **statements = NULL;
+    int count = 0;
+    if (!xa_block_node_statements(branch, &statements, &count) || count <= 0)
+        return false;
+    for (int i = 0; i + 1 < count; i++) {
+        if (xa_lifecycle_lint_node_exits_current_scope(statements[i], loop_label))
+            return false;
+    }
+    return xa_lifecycle_lint_branch_tail_breaks_loop(statements[count - 1], loop_label);
+}
+
 static bool xa_lifecycle_lint_body_has_non_tail_exit(AstNode *body) {
     AstNode **statements = NULL;
     int count = 0;
@@ -3775,7 +3791,7 @@ static bool xa_os_resource_lint_try_wait_break_stmt(XaOsResourceLintState *state
         then_is_reaped ? stmt->as.if_stmt.then_branch : stmt->as.if_stmt.else_branch;
     AstNode *running_branch =
         then_is_reaped ? stmt->as.if_stmt.else_branch : stmt->as.if_stmt.then_branch;
-    if (!xa_lifecycle_lint_branch_is_loop_break(reaped_branch, loop_label))
+    if (!xa_lifecycle_lint_branch_tail_breaks_loop(reaped_branch, loop_label))
         return false;
     if (xa_lifecycle_lint_node_exits_current_scope(running_branch, loop_label))
         return false;
