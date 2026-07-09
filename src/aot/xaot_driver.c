@@ -42,6 +42,7 @@
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
 #include "../analysis/xglobal_producer.h"
+#include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
@@ -831,6 +832,51 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         goto fail_free_graph;
     }
 
+    /* Canonicalize before building final global evidence so lowering-time ids
+     * are derived from the same AST shape that Xi lowering consumes. */
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        XrCompilerSessionScope canon_scope;
+        bool has_canon_scope;
+        if (!spec->ast || !spec->source_path)
+            continue;
+        has_canon_scope = spec->ast->type == AST_PROGRAM && spec->ast->as.program.arena &&
+                          xr_compiler_session_push_arena(session, spec->ast->as.program.arena,
+                                                         spec->source_path, &canon_scope);
+        xr_canon_program((AstNode *) spec->ast, shared_analyzer, session);
+        if (has_canon_scope)
+            xr_compiler_session_pop_arena(&canon_scope);
+    }
+
+    if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph,
+                                                    profile == XAOT_BUILD_PROFILE_FREESTANDING
+                                                        ? XG_BUILD_FREESTANDING
+                                                        : XG_BUILD_NATIVE_RELEASE)) {
+        fprintf(stderr, "Error: failed to build global evidence\n");
+        goto fail_free_ir;
+    }
+    global_evidence_initialized = true;
+    if (!xg_global_evidence_merge_generic_inst_roots(&global_evidence,
+                                                     &pre_mono_generic_evidence)) {
+        fprintf(stderr, "Error: failed to merge generic instantiation evidence\n");
+        goto fail_free_ir;
+    }
+    xg_global_evidence_free(&pre_mono_generic_evidence);
+    pre_mono_generic_evidence_initialized = false;
+    evidence_cache_manifest = xg_global_evidence_cache_manifest(&global_evidence);
+    evidence_cache_manifest_valid =
+        evidence_cache_manifest.phase_mask == ((1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u);
+    if (emit_global_evidence_dump) {
+        global_evidence_dump = xg_global_evidence_dump(&global_evidence);
+        if (!global_evidence_dump) {
+            fprintf(stderr, "Error: failed to dump global evidence\n");
+            goto fail_free_ir;
+        }
+    }
+    cfg.run_canonicalize = false;
+    cfg.global_evidence = &global_evidence;
+
     int total_funcs = 0;
     for (int ti = 0; ti < nmodules; ti++) {
         int idx = graph->topo_order[ti];
@@ -842,6 +888,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         }
 
         /* Compile using the shared analyzer (has cross-module type info) */
+        cfg.source_file = spec->source_path;
+        cfg.global_evidence_module_id = (uint32_t) (ti + 1);
         pres_arr[ti] = xi_pipeline_compile_program((AstNode *) spec->ast, shared_analyzer, X, &cfg);
         if (pres_arr[ti].status != XI_PIPE_OK) {
             fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n", paths[ti],
@@ -878,31 +926,6 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
 
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
-    if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph,
-                                                    profile == XAOT_BUILD_PROFILE_FREESTANDING
-                                                        ? XG_BUILD_FREESTANDING
-                                                        : XG_BUILD_NATIVE_RELEASE)) {
-        fprintf(stderr, "Error: failed to build global evidence\n");
-        goto fail_free_ir;
-    }
-    global_evidence_initialized = true;
-    if (!xg_global_evidence_merge_generic_inst_roots(&global_evidence,
-                                                     &pre_mono_generic_evidence)) {
-        fprintf(stderr, "Error: failed to merge generic instantiation evidence\n");
-        goto fail_free_ir;
-    }
-    xg_global_evidence_free(&pre_mono_generic_evidence);
-    pre_mono_generic_evidence_initialized = false;
-    evidence_cache_manifest = xg_global_evidence_cache_manifest(&global_evidence);
-    evidence_cache_manifest_valid =
-        evidence_cache_manifest.phase_mask == ((1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u);
-    if (emit_global_evidence_dump) {
-        global_evidence_dump = xg_global_evidence_dump(&global_evidence);
-        if (!global_evidence_dump) {
-            fprintf(stderr, "Error: failed to dump global evidence\n");
-            goto fail_free_ir;
-        }
-    }
     if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
         fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
         goto fail_free_ir;

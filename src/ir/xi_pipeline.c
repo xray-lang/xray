@@ -107,6 +107,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_escape = true;
     cfg.run_arc = true;
     cfg.run_emit = true;
+    cfg.run_canonicalize = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.budget_ns = XI_BUDGET_OPT_NS;
@@ -126,6 +127,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_escape = true;
     cfg.run_arc = true;
     cfg.run_emit = false;
+    cfg.run_canonicalize = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_native_boundary();
@@ -312,7 +314,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
     }
 
     /* Canonicalize AST before lowering */
-    xr_canon_func(func_node, analyzer, session);
+    if (cfg->run_canonicalize)
+        xr_canon_func(func_node, analyzer, session);
 
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
 
@@ -340,17 +343,20 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     XrCompilerSessionScope canon_scope;
-    bool has_canon_scope = program_node->type == AST_PROGRAM && program_node->as.program.arena &&
+    bool has_canon_scope = cfg->run_canonicalize && program_node->type == AST_PROGRAM &&
+                           program_node->as.program.arena &&
                            xr_compiler_session_push_arena(session, program_node->as.program.arena,
                                                           cfg->source_file, &canon_scope);
 
     /* Canonicalize AST before lowering */
-    xr_canon_program(program_node, analyzer, session);
+    if (cfg->run_canonicalize)
+        xr_canon_program(program_node, analyzer, session);
 
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
 
-    XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode);
+    XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode,
+                                     cfg->global_evidence, cfg->global_evidence_module_id);
 
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
