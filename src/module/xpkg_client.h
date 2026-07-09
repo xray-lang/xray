@@ -35,14 +35,6 @@ typedef struct XrPkgClientConfig {
     bool verbose;
 } XrPkgClientConfig;
 
-typedef struct XrPkgResponse {
-    int status_code;
-    char *body;
-    size_t body_len;
-    char *error;
-    bool success;
-} XrPkgResponse;
-
 typedef struct XrPkgSearchResult {
     char **names;
     char **descriptions;
@@ -101,13 +93,5 @@ XR_FUNC bool xr_pkg_client_publish(const char *tarball_path, const char *auth_to
 XR_FUNC bool xr_pkg_client_login(char **token_out);
 XR_FUNC bool xr_pkg_client_save_token(const char *token);
 XR_FUNC bool xr_pkg_client_load_token(char **token_out);
-
-/* ========== Low-level HTTP API ========== */
-
-XR_FUNC XrPkgResponse *xr_pkg_http_get(const char *url);
-XR_FUNC XrPkgResponse *xr_pkg_http_post(const char *url, const char *body,
-                                        const char *content_type);
-XR_FUNC bool xr_pkg_http_download_file(const char *url, const char *dest_path);
-XR_FUNC void xr_pkg_response_free(XrPkgResponse *response);
 
 #endif  // XPKG_CLIENT_H

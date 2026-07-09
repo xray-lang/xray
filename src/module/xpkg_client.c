@@ -42,6 +42,14 @@
 static XR_THREAD_LOCAL XrPkgClientConfig tls_config = {
     .registry_url = PKG_REGISTRY_URL, .auth_token = NULL, .timeout_ms = 30000, .verbose = false};
 
+typedef struct XrPkgResponse {
+    int status_code;
+    char *body;
+    size_t body_len;
+    char *error;
+    bool success;
+} XrPkgResponse;
+
 /*
  * Create directory recursively (like mkdir -p).
  * Safe implementation without shell command injection.
@@ -349,29 +357,7 @@ static XrHttpResult pkg_http_request_get(const char *url) {
     return http_client_request(tls_isolate, &config);
 }
 
-static XrHttpResult pkg_http_request_post(const char *url, const char *body, size_t body_len,
-                                          const char *content_type) {
-    XrHttpRequestConfig config;
-    http_client_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_POST;
-    config.body = body;
-    config.body_len = body_len;
-
-    XrHttpHeader headers[1];
-    if (content_type) {
-        headers[0].name = "Content-Type";
-        headers[0].name_len = 12;
-        headers[0].value = content_type;
-        headers[0].value_len = strlen(content_type);
-        config.headers = headers;
-        config.header_count = 1;
-    }
-
-    return http_client_request(tls_isolate, &config);
-}
-
-XrPkgResponse *xr_pkg_http_get(const char *url) {
+static XrPkgResponse *pkg_http_get(const char *url) {
     XR_DCHECK(url != NULL, "pkg_http_get: NULL url");
     XrPkgResponse *resp = (XrPkgResponse *) xr_calloc(1, sizeof(XrPkgResponse));
     if (!resp)
@@ -414,42 +400,7 @@ XrPkgResponse *xr_pkg_http_get(const char *url) {
     return resp;
 }
 
-XrPkgResponse *xr_pkg_http_post(const char *url, const char *body, const char *content_type) {
-    XrPkgResponse *resp = (XrPkgResponse *) xr_calloc(1, sizeof(XrPkgResponse));
-    if (!resp)
-        return NULL;
-
-    if (tls_config.verbose) {
-        printf("POST: %s\n", url);
-    }
-
-    const char *ct = content_type ? content_type : "application/json";
-    size_t body_len = body ? strlen(body) : 0;
-
-    XrHttpResult result = pkg_http_request_post(url, body, body_len, ct);
-
-    resp->status_code = result.status_code;
-    resp->success =
-        (result.error == XR_HTTP_OK && result.status_code >= 200 && result.status_code < 300);
-
-    if (result.body && result.body_len > 0) {
-        resp->body = xr_strdup(result.body);
-        resp->body_len = result.body_len;
-    }
-
-    if (!resp->success) {
-        if (result.error_msg) {
-            resp->error = xr_strdup(result.error_msg);
-        } else if (result.error != XR_HTTP_OK) {
-            resp->error = xr_strdup(http_client_error_string(result.error));
-        }
-    }
-
-    http_client_result_free(&result);
-    return resp;
-}
-
-bool xr_pkg_http_download_file(const char *url, const char *dest_path) {
+static bool pkg_http_download_file(const char *url, const char *dest_path) {
     XR_DCHECK(url != NULL, "pkg_http_download_file: NULL url");
     XR_DCHECK(dest_path != NULL, "pkg_http_download_file: NULL dest_path");
     if (tls_config.verbose) {
@@ -483,7 +434,7 @@ bool xr_pkg_http_download_file(const char *url, const char *dest_path) {
     return true;
 }
 
-void xr_pkg_response_free(XrPkgResponse *response) {
+static void pkg_response_free(XrPkgResponse *response) {
     if (!response)
         return;
     xr_free(response->body);
@@ -500,13 +451,13 @@ XrPackageInfo *xr_pkg_client_get_info(const char *owner, const char *name) {
     char url[512];
     snprintf(url, sizeof(url), "%s/api/packages/%s/%s", tls_config.registry_url, owner, name);
 
-    XrPkgResponse *resp = xr_pkg_http_get(url);
+    XrPkgResponse *resp = pkg_http_get(url);
     if (!resp || !resp->success) {
         if (resp) {
             if (tls_config.verbose && resp->error) {
                 fprintf(stderr, "Failed to get package info: %s\n", resp->error);
             }
-            xr_pkg_response_free(resp);
+            pkg_response_free(resp);
         }
         return NULL;
     }
@@ -514,7 +465,7 @@ XrPackageInfo *xr_pkg_client_get_info(const char *owner, const char *name) {
     // Parse JSON response
     XrPackageInfo *info = (XrPackageInfo *) xr_calloc(1, sizeof(XrPackageInfo));
     if (!info) {
-        xr_pkg_response_free(resp);
+        pkg_response_free(resp);
         return NULL;
     }
 
@@ -573,7 +524,7 @@ XrPackageInfo *xr_pkg_client_get_info(const char *owner, const char *name) {
         xjson_free(root);
     }
 
-    xr_pkg_response_free(resp);
+    pkg_response_free(resp);
     return info;
 }
 
@@ -585,16 +536,16 @@ bool xr_pkg_client_get_versions(const char *owner, const char *name, char ***ver
     snprintf(url, sizeof(url), "%s/api/packages/%s/%s/versions", tls_config.registry_url, owner,
              name);
 
-    XrPkgResponse *resp = xr_pkg_http_get(url);
+    XrPkgResponse *resp = pkg_http_get(url);
     if (!resp || !resp->success) {
         if (resp)
-            xr_pkg_response_free(resp);
+            pkg_response_free(resp);
         return false;
     }
 
     *versions = json_get_string_array(resp->body, "versions", count);
 
-    xr_pkg_response_free(resp);
+    pkg_response_free(resp);
     return *versions != NULL;
 }
 
@@ -605,23 +556,23 @@ XrPkgSearchResult *xr_pkg_client_search(const char *query) {
     char url[512];
     snprintf(url, sizeof(url), "%s/api/search?q=%s", tls_config.registry_url, query);
 
-    XrPkgResponse *resp = xr_pkg_http_get(url);
+    XrPkgResponse *resp = pkg_http_get(url);
     if (!resp || !resp->success) {
         if (resp)
-            xr_pkg_response_free(resp);
+            pkg_response_free(resp);
         return NULL;
     }
 
     XrPkgSearchResult *result = (XrPkgSearchResult *) xr_calloc(1, sizeof(XrPkgSearchResult));
     if (!result) {
-        xr_pkg_response_free(resp);
+        pkg_response_free(resp);
         return NULL;
     }
 
     result->names = json_get_string_array(resp->body, "packages", &result->count);
     result->descriptions = json_get_string_array(resp->body, "descriptions", &result->count);
 
-    xr_pkg_response_free(resp);
+    pkg_response_free(resp);
     return result;
 }
 
@@ -656,7 +607,7 @@ bool xr_pkg_client_download(const char *owner, const char *name, const char *ver
     char dest_path[512];
     snprintf(dest_path, sizeof(dest_path), "%s/%s-%s.tar.gz", dest_dir, name, version);
 
-    return xr_pkg_http_download_file(url, dest_path);
+    return pkg_http_download_file(url, dest_path);
 }
 
 bool xr_pkg_client_install(const char *owner, const char *name, const char *version,
@@ -691,7 +642,7 @@ bool xr_pkg_client_install(const char *owner, const char *name, const char *vers
     snprintf(url, sizeof(url), "%s/api/packages/%s/%s/%s/download", tls_config.registry_url, owner,
              name, version);
 
-    if (!xr_pkg_http_download_file(url, tarball)) {
+    if (!pkg_http_download_file(url, tarball)) {
         fprintf(stderr, "Download failed: %s\n", url);
         return false;
     }
@@ -1097,25 +1048,6 @@ bool xr_pkg_client_save_token(const char *token) {
 bool xr_pkg_client_load_token(char **token_out) {
     (void) token_out;
     return false;
-}
-
-XrPkgResponse *xr_pkg_http_get(const char *url) {
-    (void) url;
-    return NULL;
-}
-XrPkgResponse *xr_pkg_http_post(const char *url, const char *body, const char *ct) {
-    (void) url;
-    (void) body;
-    (void) ct;
-    return NULL;
-}
-bool xr_pkg_http_download_file(const char *url, const char *dest) {
-    (void) url;
-    (void) dest;
-    return false;
-}
-void xr_pkg_response_free(XrPkgResponse *resp) {
-    (void) resp;
 }
 
 #endif  // XR_HAS_NETWORK
