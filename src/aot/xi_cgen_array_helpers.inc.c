@@ -45,6 +45,12 @@ typedef struct CgStaticFixedStructArrayInfo {
     uint16_t count;
 } CgStaticFixedStructArrayInfo;
 
+typedef struct CgStaticFixedMatrixInfo {
+    CgFixedArrayLaneInfo lane;
+    uint16_t outer_count;
+    uint16_t inner_count;
+} CgStaticFixedMatrixInfo;
+
 static bool cg_fixed_array_lane_info_from_type(const XrType *type, CgFixedArrayLaneInfo *out) {
     if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
         type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX || !out)
@@ -183,6 +189,138 @@ static bool cg_freestanding_static_fixed_array_value(XiCgenCtx *ctx, const XiVal
                                                      CgFixedArrayLaneInfo *out_info,
                                                      int64_t *out_slot) {
     return cg_freestanding_static_fixed_array_value_ex(ctx, value, out_info, out_slot, NULL);
+}
+
+static bool cg_static_fixed_matrix_info_from_type(const XrType *type,
+                                                  CgStaticFixedMatrixInfo *out) {
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX)
+        return false;
+    const XrType *row_type = type->fixed_array.element_type;
+    if (!row_type || row_type->kind != XR_KIND_FIXED_ARRAY || row_type->fixed_array.length <= 0 ||
+        row_type->fixed_array.length > UINT16_MAX)
+        return false;
+    CgFixedArrayLaneInfo lane;
+    if (!cg_fixed_array_lane_info_from_type(row_type, &lane) || lane.rep == XR_REP_TAGGED)
+        return false;
+    if (out)
+        *out = (CgStaticFixedMatrixInfo) {
+            .lane = lane,
+            .outer_count = (uint16_t) type->fixed_array.length,
+            .inner_count = (uint16_t) row_type->fixed_array.length,
+        };
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_matrix_literal_in_module(XiCgenCtx *ctx,
+                                                                  const XiModule *module,
+                                                                  int64_t slot,
+                                                                  CgStaticFixedMatrixInfo *out_info,
+                                                                  const XrCtValue **out_value) {
+    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
+        slot >= module->nslots)
+        return false;
+    const XiConstLiteral *lit = &module->slot_const_literals[slot];
+    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+        lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
+        lit->type->kind != XR_KIND_FIXED_ARRAY)
+        return false;
+    CgStaticFixedMatrixInfo info;
+    if (!cg_static_fixed_matrix_info_from_type(lit->type, &info))
+        return false;
+    const XrCtFixedArrayValue *outer = &lit->ct_value->as.fixed_array_val;
+    if (outer->count != (int) info.outer_count || outer->count <= 0 || !outer->elements)
+        return false;
+    for (int row = 0; row < outer->count; row++) {
+        const XrCtValue *row_value = &outer->elements[row];
+        if (!row_value || row_value->kind != XR_CT_FIXED_ARRAY)
+            return false;
+        const XrCtFixedArrayValue *inner = &row_value->as.fixed_array_val;
+        if (inner->count != (int) info.inner_count || inner->count <= 0 || !inner->elements)
+            return false;
+        for (int col = 0; col < inner->count; col++) {
+            if (!cg_ct_static_fixed_array_value_supported(&inner->elements[col], &info.lane))
+                return false;
+        }
+    }
+    if (out_info)
+        *out_info = info;
+    if (out_value)
+        *out_value = lit->ct_value;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_matrix_literal(XiCgenCtx *ctx, int64_t slot,
+                                                        CgStaticFixedMatrixInfo *out_info,
+                                                        const XrCtValue **out_value) {
+    return cg_freestanding_static_fixed_matrix_literal_in_module(ctx, ctx ? ctx->module : NULL,
+                                                                 slot, out_info, out_value);
+}
+
+static bool cg_freestanding_static_fixed_matrix_value_ex(XiCgenCtx *ctx, const XiValue *value,
+                                                         CgStaticFixedMatrixInfo *out_info,
+                                                         int64_t *out_slot,
+                                                         const XiModule **out_module) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (out_module)
+        *out_module = NULL;
+    if (!v)
+        return false;
+
+    const XiModule *module = ctx ? ctx->module : NULL;
+    int64_t slot = -1;
+    if (v->op == XI_GET_SHARED) {
+        slot = v->aux_int;
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit =
+            cg_import_slot_const_literal(ctx, NULL, (int) slot, &import_module, &import_slot);
+        if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+            module = import_module;
+            slot = import_slot;
+        }
+    } else if (v->op == XI_IMPORT_REF && v->aux) {
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit = cg_import_ref_target_const_literal(
+            ctx, (const XiImportRef *) v->aux, &import_module, &import_slot);
+        if (!import_lit || import_lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE)
+            return false;
+        module = import_module;
+        slot = import_slot;
+    } else {
+        return false;
+    }
+
+    if (!cg_freestanding_static_fixed_matrix_literal_in_module(ctx, module, slot, out_info, NULL))
+        return false;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
+        cg_report_imported_static_const_requires_weak(ctx, module, slot);
+        ctx->error = true;
+        return false;
+    }
+    if (out_slot)
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_matrix_index_value(XiCgenCtx *ctx, const XiValue *value,
+                                                            CgStaticFixedMatrixInfo *out_info,
+                                                            int64_t *out_slot,
+                                                            const XiModule **out_module,
+                                                            const XiValue **out_index) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
+        return false;
+    if (!cg_freestanding_static_fixed_matrix_value_ex(ctx, v->args[0], out_info, out_slot,
+                                                      out_module))
+        return false;
+    if (out_index)
+        *out_index = v->args[1];
+    return true;
 }
 
 static bool cg_static_fixed_struct_array_info_from_type(const XrType *type,
@@ -408,6 +546,103 @@ static bool cg_value_is_elided_static_fixed_array_const_ref(XiCgenCtx *ctx, cons
     return cg_static_fixed_array_ref_safe_uses(ctx, f, v, 0);
 }
 
+static bool cg_static_fixed_matrix_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if (v->op == XI_INDEX_GET && a == 0)
+                    continue;
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_matrix_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_static_fixed_matrix_const_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if (v->op == XI_INDEX_GET && a == 0 &&
+                    cg_freestanding_static_fixed_matrix_index_value(ctx, v, NULL, NULL, NULL,
+                                                                    NULL)) {
+                    if (!cg_static_fixed_matrix_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_matrix_const_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_value_is_elided_static_fixed_matrix_index_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                             const XiValue *v) {
+    if (!cg_freestanding_static_fixed_matrix_index_value(ctx, v, NULL, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_matrix_index_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool cg_value_is_elided_static_fixed_matrix_const_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                             const XiValue *v) {
+    if (!cg_freestanding_static_fixed_matrix_value_ex(ctx, v, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_matrix_const_ref_safe_uses(ctx, f, v, 0);
+}
+
 static void cg_emit_static_fixed_array_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
                                             int64_t slot) {
     cg_emit_static_const_data_name(ctx, out, module, slot, "_xctarr");
@@ -470,6 +705,44 @@ static bool cg_emit_freestanding_static_fixed_array_defs(XiCgenCtx *ctx, FILE *o
             if (i > 0)
                 fprintf(out, ", ");
             cg_emit_static_fixed_array_value(ctx, out, &info, &array->elements[i]);
+        }
+        fprintf(out, "};\n");
+        emitted = true;
+    }
+    if (emitted)
+        fprintf(out, "\n");
+    return emitted;
+}
+
+static bool cg_emit_freestanding_static_fixed_matrix_defs(XiCgenCtx *ctx, FILE *out,
+                                                          const XiModule *module) {
+    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+        return false;
+    bool emitted = false;
+    for (uint16_t slot = 0; slot < module->nslots; slot++) {
+        CgStaticFixedMatrixInfo info;
+        const XrCtValue *value = NULL;
+        if (!cg_freestanding_static_fixed_matrix_literal(ctx, slot, &info, &value))
+            continue;
+        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XrCtFixedArrayValue *outer = &value->as.fixed_array_val;
+        cg_emit_static_const_storage(out, lit);
+        fprintf(out, "%s ", info.lane.ctype);
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        fprintf(out, "[%u][%u]", (unsigned) info.outer_count, (unsigned) info.inner_count);
+        emit_aot_const_data_attrs(out, lit);
+        fprintf(out, " = {");
+        for (int row = 0; row < outer->count; row++) {
+            const XrCtFixedArrayValue *inner = &outer->elements[row].as.fixed_array_val;
+            if (row > 0)
+                fprintf(out, ", ");
+            fprintf(out, "{");
+            for (int col = 0; col < inner->count; col++) {
+                if (col > 0)
+                    fprintf(out, ", ");
+                cg_emit_static_fixed_array_value(ctx, out, &info.lane, &inner->elements[col]);
+            }
+            fprintf(out, "}");
         }
         fprintf(out, "};\n");
         emitted = true;
@@ -1025,6 +1298,18 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         (static_struct_field->elem_count != info.count ||
          cg_struct_native_rep(static_struct_field->elem_native_type) != info.rep))
         static_struct_field_read = false;
+    CgStaticFixedMatrixInfo static_matrix_info;
+    int64_t static_matrix_slot = -1;
+    const XiModule *static_matrix_module = NULL;
+    const XiValue *static_matrix_outer_index = NULL;
+    const XiValue *static_matrix_access = cg_unwrap_identity_value(v->args[0]);
+    bool static_matrix_read = cg_freestanding_static_fixed_matrix_index_value(
+        ctx, v->args[0], &static_matrix_info, &static_matrix_slot, &static_matrix_module,
+        &static_matrix_outer_index);
+    if (static_matrix_read &&
+        (static_matrix_info.inner_count != info.count || static_matrix_info.lane.rep != info.rep ||
+         static_matrix_info.lane.native_type != info.native_type))
+        static_matrix_read = false;
     CgStaticFixedStructArrayInfo static_struct_array_info;
     int64_t static_struct_array_slot = -1;
     int64_t static_struct_array_field_idx = -1;
@@ -1042,6 +1327,48 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         static_struct_array_field_read = false;
     bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
+    if (static_matrix_read) {
+        bool outer_unchecked = cg_fixed_array_index_bounds_proven(static_matrix_access,
+                                                                  static_matrix_info.outer_count);
+        bool guarded = !outer_unchecked || !unchecked;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        if (guarded)
+            fprintf(out, "({ ");
+        if (!outer_unchecked) {
+            fprintf(out, "int64_t _outer_idx = ");
+            emit_value_as_rep_ctx(ctx, out, static_matrix_outer_index, XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_outer_idx < 0 || _outer_idx >= %u)) "
+                    "xrt_fixed_index_oob(_outer_idx, %u); ",
+                    (unsigned) static_matrix_info.outer_count,
+                    (unsigned) static_matrix_info.outer_count);
+        }
+        if (!unchecked) {
+            fprintf(out, "int64_t _idx = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) "
+                    "xrt_fixed_index_oob(_idx, %u); ",
+                    (unsigned) info.count, (unsigned) info.count);
+        }
+        emit_fixed_array_lane_load_prefix(out, &info, target_rep);
+        cg_emit_static_fixed_array_name(ctx, out, static_matrix_module, static_matrix_slot);
+        fprintf(out, "[");
+        if (outer_unchecked)
+            emit_array_i64_arg(out, static_matrix_outer_index);
+        else
+            fprintf(out, "_outer_idx");
+        fprintf(out, "][");
+        if (unchecked)
+            emit_array_i64_arg(out, v->args[1]);
+        else
+            fprintf(out, "_idx");
+        fprintf(out, "]");
+        if (guarded)
+            fprintf(out, "; })");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     if (static_struct_array_field_read) {
         bool outer_unchecked = cg_fixed_array_index_bounds_proven(static_struct_array_access,
                                                                   static_struct_array_info.count);
