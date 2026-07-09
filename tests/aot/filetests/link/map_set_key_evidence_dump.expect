@@ -6,6 +6,13 @@ contains=hash-eq
 contains=kind=builtin
 contains=key-access
 contains=op=index_get
+contains=op=get
+contains=op=has
+contains=op=delete
+contains=op=set
+contains=op=add
+contains=op=clear
+contains=container=set
 contains=map-shape-plan
 contains=action=prealloc_hash
 contains=hash-eq-plan

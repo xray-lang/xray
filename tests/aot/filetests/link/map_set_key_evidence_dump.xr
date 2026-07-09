@@ -1,6 +1,17 @@
 fn readScore() -> int {
     var scores = #{"ada": 7, "lin": 9}
-    return scores["ada"]
+    var seen: Set<string> = #["ada"]
+    var score = scores["ada"]
+    scores.get("ada")
+    scores.has("lin")
+    scores.delete("lin")
+    scores.set("ada", 8)
+    seen.has("ada")
+    seen.add("lin")
+    seen.delete("ada")
+    seen.clear()
+    scores.clear()
+    return score
 }
 
 print(readScore())
