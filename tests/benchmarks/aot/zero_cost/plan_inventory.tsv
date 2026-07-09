@@ -16,6 +16,7 @@ metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive
 derived_eq_hash|covered|kind=hash|tests/aot/filetests/link|Derived Eq/Hash evidence has global evidence coverage.
 json_shape_direct_index|covered|json-access-plan .*action=direct_index|tests/aot/filetests/cgen|Json static member/key access direct-index path is covered.
 json_dynamic_fallback|covered|json-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
+json_parse_dom_bridge_plan|covered|action=parse_dom_bridge|tests/unit/analysis|Json.parse remains an explicit verified DOM bridge plan until runtime-direct AOT parsing is implemented.
 json_decode_plan|covered|json-codec-plan .*kind=decode action=decode_validate_copy|tests/aot/filetests/cgen|Json.decode<Record> consumes a verified codec plan instead of assembling shape checks ad hoc.
 json_encode_field_table|covered|json-codec-plan .*kind=encode action=encode_field_table|tests/aot/filetests/cgen|Json.encode consumes verified field-table codec evidence.
 record_json_bridge|covered|XG_JSON_SHAPE_RECORD_BRIDGE|tests/unit/analysis|Record type aliases produce Json bridge shape and codec evidence.
