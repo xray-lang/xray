@@ -175,6 +175,18 @@ expect_evidence_phase() {
     fi
 }
 
+corrupt_evidence_phase() {
+    local cache="$1" phase="$2" name="$3" file count
+    file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | head -n 1)"
+    count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | wc -l | tr -d ' ')"
+    if [ -n "$file" ] && [ "$count" = "1" ]; then
+        printf 'tampered-cache\n' >"$file"
+        record_pass "$name: corrupted $phase sidecar"
+    else
+        record_fail "$name: expected one $phase sidecar, found ${count:-0}"
+    fi
+}
+
 run_basic_modules() {
     local dir="$WORK/basic"
     local cache="$dir/.cache"
@@ -271,6 +283,16 @@ XR_EOF
         build_log "$cache" "$app" "$dir/ev2" "$dir/log2" || return 1
     expect_evidence_summary "$dir/log2" 4 0 "evidence-warm"
     expect_output "$dir/ev2" "7" "evidence-warm"
+
+    corrupt_evidence_phase "$cache" body_summary "evidence-corrupt"
+    require_build "evidence-corrupt" "$dir/log_corrupt" \
+        build_log "$cache" "$app" "$dir/ev_corrupt" "$dir/log_corrupt" || return 1
+    expect_evidence_phase "$dir/log_corrupt" declarations hit "evidence-corrupt"
+    expect_evidence_phase "$dir/log_corrupt" semantic_graph hit "evidence-corrupt"
+    expect_evidence_phase "$dir/log_corrupt" body_summary miss "evidence-corrupt"
+    expect_evidence_phase "$dir/log_corrupt" global_evidence hit "evidence-corrupt"
+    expect_evidence_summary "$dir/log_corrupt" 3 1 "evidence-corrupt"
+    expect_output "$dir/ev_corrupt" "7" "evidence-corrupt"
 
     cat >"$app" <<'XR_EOF'
 fn id(x: int) -> int {
