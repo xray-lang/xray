@@ -693,7 +693,7 @@ static XrHpackEntry *hpack_table_get(XrHpackTable *table, int index) {
 /* ========== HPACK Encoding ========== */
 
 int http2_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, const char *value,
-                    size_t value_len, uint8_t *buf, size_t buf_len) {
+                       size_t value_len, uint8_t *buf, size_t buf_len) {
     (void) table;
     // Simplified: use literal without indexing
     if (buf_len < 1)
@@ -744,9 +744,9 @@ int http2_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, c
 /* ========== HPACK Decoding ========== */
 
 int http2_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
-                    void (*callback)(const char *name, size_t name_len, const char *value,
-                                     size_t value_len, void *user_data),
-                    void *user_data) {
+                       void (*callback)(const char *name, size_t name_len, const char *value,
+                                        size_t value_len, void *user_data),
+                       void *user_data) {
     size_t pos = 0;
 
     while (pos < buf_len) {
@@ -1096,8 +1096,6 @@ static void http2_stream_hash_free(XrH2StreamHash *hash) {
             XrH2Stream *stream = hash->buckets[i];
             while (stream) {
                 XrH2Stream *next = stream->next;
-                // Free stream resources
-                xr_free(stream->headers_buf);
                 xr_free(stream->data_buf);
                 xr_free(stream);
                 stream = next;
@@ -1268,7 +1266,8 @@ static int http2_recv(XrH2Conn *conn) {
             }
             // Decode HPACK headers to extract :status pseudo-header
             if (stream && hdr_ptr && hdr_len > 0) {
-                http2_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len, h2_header_callback, stream);
+                http2_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len, h2_header_callback,
+                                   stream);
             }
             if (stream && header.flags & XR_H2_FLAG_END_STREAM) {
                 stream->state = XR_H2_STREAM_HALF_CLOSED_REMOTE;
@@ -1415,9 +1414,9 @@ int http2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
     int headers_len = 0;
 
     for (int i = 0; i < count; i++) {
-        int len =
-            http2_hpack_encode(&conn->encoder_table, names[i], name_lens[i], values[i], value_lens[i],
-                            headers_buf + headers_len, sizeof(headers_buf) - headers_len);
+        int len = http2_hpack_encode(&conn->encoder_table, names[i], name_lens[i], values[i],
+                                     value_lens[i], headers_buf + headers_len,
+                                     sizeof(headers_buf) - headers_len);
         if (len < 0)
             return -1;
         headers_len += len;
