@@ -164,6 +164,17 @@ expect_evidence_summary() {
     fi
 }
 
+expect_evidence_phase() {
+    local log="$1" phase="$2" state="$3" name="$4"
+    local pattern="evidence cache $phase: $state "
+    if grep -q "$pattern" "$log"; then
+        record_pass "$name: $phase $state"
+    else
+        record_fail "$name: expected $phase $state"
+        show_evidence_cache_lines "$log"
+    fi
+}
+
 run_basic_modules() {
     local dir="$WORK/basic"
     local cache="$dir/.cache"
@@ -261,10 +272,27 @@ XR_EOF
     expect_evidence_summary "$dir/log2" 4 0 "evidence-warm"
     expect_output "$dir/ev2" "7" "evidence-warm"
 
-    require_build "evidence-rebuild" "$dir/log3" \
-        build_log "$cache" "$app" "$dir/ev3" "$dir/log3" --rebuild || return 1
-    expect_evidence_summary "$dir/log3" 0 4 "evidence-rebuild" " rebuild"
-    expect_output "$dir/ev3" "7" "evidence-rebuild"
+    cat >"$app" <<'XR_EOF'
+fn id(x: int) -> int {
+    return x + 1
+}
+
+print(id(7))
+XR_EOF
+
+    require_build "evidence-body-change" "$dir/log3" \
+        build_log "$cache" "$app" "$dir/ev3" "$dir/log3" || return 1
+    expect_evidence_phase "$dir/log3" declarations hit "evidence-body-change"
+    expect_evidence_phase "$dir/log3" semantic_graph hit "evidence-body-change"
+    expect_evidence_phase "$dir/log3" body_summary miss "evidence-body-change"
+    expect_evidence_phase "$dir/log3" global_evidence miss "evidence-body-change"
+    expect_evidence_summary "$dir/log3" 2 2 "evidence-body-change"
+    expect_output "$dir/ev3" "8" "evidence-body-change"
+
+    require_build "evidence-rebuild" "$dir/log4" \
+        build_log "$cache" "$app" "$dir/ev4" "$dir/log4" --rebuild || return 1
+    expect_evidence_summary "$dir/log4" 0 4 "evidence-rebuild" " rebuild"
+    expect_output "$dir/ev4" "8" "evidence-rebuild"
 }
 
 run_class_symbols() {
