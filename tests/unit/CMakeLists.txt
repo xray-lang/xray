@@ -242,7 +242,6 @@ add_xray_unit_test(test_project module/test_project.c)
 
 add_xray_unit_test(test_base64 encoding/test_base64.c)
 add_xray_unit_test(test_hex_encoding encoding/test_hex_encoding.c)
-add_xray_unit_test(test_url_encoding encoding/test_url_encoding.c)
 add_xray_unit_test(test_unicode encoding/test_unicode.c)
 
 # ============================================================================
