@@ -3345,7 +3345,10 @@ static uint8_t verify_json_access_action_for(const XgGlobalEvidence *ev,
     const XgJsonShapeSummary *shape;
     if (!access || !verify_json_access_kind_valid(access->access_kind))
         return XAOT_JSON_ACCESS_REJECT;
-    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || access->key_name_id == 0)
+    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0)
+        return access->receiver_shape_id != XG_NO_ID ? XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD
+                                                     : XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
+    if (access->key_name_id == 0)
         return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
     if (access->receiver_shape_id == XG_NO_ID)
         return XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
@@ -3364,7 +3367,10 @@ static uint8_t verify_json_access_reason_for(const XgGlobalEvidence *ev,
     const XgJsonShapeSummary *shape;
     if (!access || !verify_json_access_kind_valid(access->access_kind))
         return XAOT_JSON_UNPROVEN_INVALID_KIND;
-    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || access->key_name_id == 0)
+    if ((access->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0)
+        return access->receiver_shape_id != XG_NO_ID ? XAOT_JSON_UNPROVEN_NONE
+                                                     : XAOT_JSON_UNPROVEN_COMPUTED_KEY;
+    if (access->key_name_id == 0)
         return XAOT_JSON_UNPROVEN_COMPUTED_KEY;
     if (access->receiver_shape_id == XG_NO_ID)
         return XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;

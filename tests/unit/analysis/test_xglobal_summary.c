@@ -8277,14 +8277,14 @@ TEST(global_evidence_producer_records_json_computed_key_access) {
     const XaotJsonAccessPlan *access_plan =
         xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_COMPUTED_KEY);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD);
+    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
     ASSERT_EQ_UINT(access_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_RECEIVER_SHAPE);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=dynamic_lookup"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=computed_key"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=computed_key_guard"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=none"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);

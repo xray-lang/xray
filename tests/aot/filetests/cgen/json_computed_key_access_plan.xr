@@ -3,4 +3,5 @@ fn readKey(k: string) -> Json {
     return j[k]
 }
 
-print(readKey("name"))
+var key = "name"
+print(readKey(key))

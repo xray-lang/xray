@@ -2624,6 +2624,33 @@ static const XaotJsonAccessPlan *xicgen_json_shape_guard_plan(XiCgenCtx *ctx, co
     return NULL;
 }
 
+static const XaotJsonAccessPlan *
+xicgen_json_computed_key_guard_plan(XiCgenCtx *ctx, const XiValue *v, uint8_t expected_kind) {
+    const XaotJsonAccessPlan *plan = xicgen_find_json_access_plan(ctx, v);
+    if (!plan)
+        return NULL;
+    if (plan->access_kind != expected_kind) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: stale Json computed-key plan kind for Xi value v%u "
+                "(json_access=%u action=%u kind=%u)\n",
+                v->id, v->xg_json_access_id, (unsigned) plan->action, (unsigned) plan->access_kind);
+        return NULL;
+    }
+    if (plan->action == XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD)
+        return plan;
+    if (plan->action == XAOT_JSON_ACCESS_REJECT) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: rejected Json computed-key plan for Xi value v%u "
+                "(json_access=%u)\n",
+                v->id, v->xg_json_access_id);
+    }
+    return NULL;
+}
+
 static bool xicgen_verify_record_direct_field_access(XiCgenCtx *ctx, const XiValue *v,
                                                      uint8_t expected_kind) {
     const XaotBundle *bundle;
@@ -2737,6 +2764,30 @@ static void xicgen_emit_json_shape_guard_set(XiCgenCtx *ctx, FILE *out, const Xi
     emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
     fprintf(out, ", %u, ", (unsigned) plan->field_ordinal);
     xicgen_emit_c_string_literal(out, field ? field : "?");
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+static void xicgen_emit_json_computed_key_guard_get(XiCgenCtx *ctx, FILE *out,
+                                                    const XiValue *receiver, const XiValue *key,
+                                                    const XrType *result_type, XrRep result_rep) {
+    const char *conv_suffix = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
+    fprintf(out, "xrt_json_get_computed_key_guard_owned(");
+    emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, key, XR_REP_TAGGED);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
+static void xicgen_emit_json_computed_key_guard_set(XiCgenCtx *ctx, FILE *out,
+                                                    const XiValue *receiver, const XiValue *key,
+                                                    const XiValue *value) {
+    fprintf(out, "xrt_json_set_computed_key_guard(");
+    emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, key, XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     fprintf(out, ")");
@@ -6744,13 +6795,19 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             static_key ? xicgen_json_shape_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_GET,
                                                       XG_JSON_ACCESS_FIELD_GET)
                        : NULL;
+        if (!static_key)
+            json_plan = xicgen_json_computed_key_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_GET);
         if (ctx && ctx->error) {
             emit_codegen_abort_expr(out);
             return;
         }
         if (json_plan) {
-            xicgen_emit_json_shape_guard_get(ctx, out, v->args[0], json_plan, static_key, v->type,
-                                             cg_value_plan_storage_rep(ctx, v));
+            if (static_key)
+                xicgen_emit_json_shape_guard_get(ctx, out, v->args[0], json_plan, static_key,
+                                                 v->type, cg_value_plan_storage_rep(ctx, v));
+            else
+                xicgen_emit_json_computed_key_guard_get(ctx, out, v->args[0], v->args[1], v->type,
+                                                        cg_value_plan_storage_rep(ctx, v));
             return;
         }
     }
@@ -6790,13 +6847,19 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             static_key ? xicgen_json_shape_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_SET,
                                                       XG_JSON_ACCESS_FIELD_SET)
                        : NULL;
+        if (!static_key)
+            json_plan = xicgen_json_computed_key_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_SET);
         if (ctx && ctx->error) {
             emit_codegen_abort_expr(out);
             return;
         }
         if (json_plan) {
-            xicgen_emit_json_shape_guard_set(ctx, out, v->args[0], v->args[2], json_plan,
-                                             static_key);
+            if (static_key)
+                xicgen_emit_json_shape_guard_set(ctx, out, v->args[0], v->args[2], json_plan,
+                                                 static_key);
+            else
+                xicgen_emit_json_computed_key_guard_set(ctx, out, v->args[0], v->args[1],
+                                                        v->args[2]);
             return;
         }
     }
