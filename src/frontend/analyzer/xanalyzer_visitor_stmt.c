@@ -1932,6 +1932,27 @@ static void xa_thread_lint_collect_scope_fn_summaries(XaInferContext *ctx, XaSco
             }
         }
     }
+    int symbol_count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &symbol_count);
+    for (int i = 0; i < symbol_count; i++) {
+        XaSymbol *sym = symbols ? symbols[i] : NULL;
+        if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const || sym->is_shared ||
+            sym->is_imported || !sym->name)
+            continue;
+        if (xa_thread_lint_fn_summary_exists(*head, sym->id, sym->name))
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        AstNode *initializer = links ? xa_thread_lint_unwrap_expr(links->const_initializer) : NULL;
+        if (!initializer || initializer->type != AST_FUNCTION_EXPR)
+            continue;
+        XaThreadHandleLintFnSummary *summary =
+            xa_thread_lint_summarize_function_node(ctx, initializer, sym->name, sym->id);
+        if (summary) {
+            **tail = summary;
+            *tail = &summary->next;
+        }
+    }
+    xr_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
         xa_thread_lint_collect_scope_fn_summaries(ctx, scope->children[i], head, tail);
 }
@@ -3607,6 +3628,27 @@ static void xa_os_resource_lint_collect_scope_fn_summaries(XaInferContext *ctx, 
             }
         }
     }
+    int symbol_count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &symbol_count);
+    for (int i = 0; i < symbol_count; i++) {
+        XaSymbol *sym = symbols ? symbols[i] : NULL;
+        if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const || sym->is_shared ||
+            sym->is_imported || !sym->name)
+            continue;
+        if (xa_os_resource_lint_fn_summary_exists(*head, sym->id, sym->name))
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        AstNode *initializer = links ? xa_thread_lint_unwrap_expr(links->const_initializer) : NULL;
+        if (!initializer || initializer->type != AST_FUNCTION_EXPR)
+            continue;
+        XaOsResourceLintFnSummary *summary =
+            xa_os_resource_lint_summarize_function_node(ctx, initializer, sym->name, sym->id);
+        if (summary) {
+            **tail = summary;
+            *tail = &summary->next;
+        }
+    }
+    xr_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
         xa_os_resource_lint_collect_scope_fn_summaries(ctx, scope->children[i], head, tail);
 }
