@@ -460,7 +460,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
         size_t response_len;
         const char *response = xrs_string_arg(handler_arg, &response_len);
         if (response) {
-            xr_router_add_static(ctx->server->router, method, path_copy, response, response_len);
+            http_router_add_static(ctx->server->router, method, path_copy, response, response_len);
         }
         xr_free(path_copy);
     } else if (xr_value_is_json(handler_arg)) {
@@ -468,7 +468,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
         size_t json_len = 0;
         char *json_str = xr_json_stringify_to_cstr(X, handler_arg, &json_len);
         if (json_str && json_len > 0) {
-            xr_router_add_static(ctx->server->router, method, path_copy, json_str, json_len);
+            http_router_add_static(ctx->server->router, method, path_copy, json_str, json_len);
             xr_free(json_str);
             xr_free(path_copy);
         } else {
@@ -531,7 +531,7 @@ static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
     }
     ctx->server->route_closures[ctx->server->route_closure_count++] = closure;
 
-    xr_router_add_websocket(ctx->server->router, path_copy, (void *) closure);
+    http_router_add_websocket(ctx->server->router, path_copy, (void *) closure);
     return xr_null();
 }
 

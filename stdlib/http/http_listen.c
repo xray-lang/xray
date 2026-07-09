@@ -646,8 +646,8 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
     const char *static_resp = NULL;
     size_t static_len = 0;
 
-    XrRouteKind route_kind = xr_router_find(ctx->router, method, path_str, pure_path_len, &params,
-                                            &user_data, &static_resp, &static_len);
+    XrRouteKind route_kind = http_router_find(ctx->router, method, path_str, pure_path_len, &params,
+                                              &user_data, &static_resp, &static_len);
 
     if (route_kind == XR_ROUTE_STATIC && static_resp) {
         HttpRawResponse r =

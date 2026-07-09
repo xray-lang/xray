@@ -75,17 +75,17 @@ typedef struct {
     XrRouterNode *trees[XR_HTTP_METHOD_UNKNOWN + 1];  // One tree per method
 } XrRouter;
 
-/* ========== API ========== */
+/* ========== Internal Router API ========== */
 
 /*
  * Create router
  */
-XR_FUNC XrRouter *xr_router_new(void);
+XrRouter *http_router_new(void);
 
 /*
  * Free router
  */
-XR_FUNC void xr_router_free(XrRouter *router);
+void http_router_free(XrRouter *router);
 
 /*
  * Add route
@@ -95,14 +95,13 @@ XR_FUNC void xr_router_free(XrRouter *router);
  *   /user/:id         - Parameter path
  *   /files/{*filepath}  - Wildcard path
  */
-XR_FUNC bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path,
-                           void *user_data);
+bool http_router_add(XrRouter *router, XrHttpMethod method, const char *path, void *user_data);
 
 /*
  * Add static response route
  */
-XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
-                                  const char *response, size_t response_len);
+bool http_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
+                            const char *response, size_t response_len);
 
 /*
  * Find route
@@ -110,13 +109,13 @@ XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const c
  * Returns: matched route kind, XR_ROUTE_NONE if not found
  * params: output parameters, can be NULL
  */
-XR_FUNC XrRouteKind xr_router_find(XrRouter *router, XrHttpMethod method, const char *path,
-                                   size_t path_len, XrRouteParams *params, void **user_data,
-                                   const char **static_response, size_t *static_response_len);
+XrRouteKind http_router_find(XrRouter *router, XrHttpMethod method, const char *path,
+                             size_t path_len, XrRouteParams *params, void **user_data,
+                             const char **static_response, size_t *static_response_len);
 
 /*
  * Add WebSocket upgrade route (handler receives upgraded WS connection).
  */
-XR_FUNC bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data);
+bool http_router_add_websocket(XrRouter *router, const char *path, void *user_data);
 
 #endif
