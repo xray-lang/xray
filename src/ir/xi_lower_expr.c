@@ -1475,7 +1475,9 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
      * have NULL holes in the analyzer field table and use name lookup
      * because codegen compacts only the static named fields. */
     int fidx = json_field_index(obj->type, ma->name);
-    if (fidx >= 0) {
+    if (fidx >= 0 &&
+        !xi_lower_json_access_requires_dynamic_lookup(l, ma->name, (uint32_t) node->line,
+                                                      (uint16_t) fidx, XG_JSON_ACCESS_FIELD_GET)) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, result_type, 1);
         if (!v)
             return NULL;
@@ -1560,7 +1562,9 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
 
     /* Sealed Json with known field → direct indexed store */
     int fidx = json_field_index(obj->type, ms->member);
-    if (fidx >= 0) {
+    if (fidx >= 0 &&
+        !xi_lower_json_access_requires_dynamic_lookup(l, ms->member, (uint32_t) node->line,
+                                                      (uint16_t) fidx, XG_JSON_ACCESS_FIELD_SET)) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, result_type, 2);
         if (!v)
             return NULL;
