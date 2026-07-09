@@ -1,0 +1,13 @@
+import sys
+
+fn run() {
+    const indices = [0]
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    for (i in indices) {
+        print(t.join())
+    }
+}
+
+run()

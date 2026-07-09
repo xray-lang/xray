@@ -1,0 +1,15 @@
+import sys
+
+fn run() {
+    var empty: Array<int> = []
+    const indices = [...empty]
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    for (i in indices) {
+        print(t.join())
+    }
+    print("const-spread-empty")
+}
+
+run()

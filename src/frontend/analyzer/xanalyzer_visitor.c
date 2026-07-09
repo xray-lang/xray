@@ -2140,7 +2140,8 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     if (links) {
         links->const_initializer = var->initializer;
         links->file_path = ctx->file_path;
-        links->is_definitely_assigned = var->initializer != NULL;
+        AstNode *initializer = xa_discard_lint_unwrap_expr(var->initializer);
+        links->is_definitely_assigned = initializer && initializer->type != AST_FUNCTION_EXPR;
     }
 }
 

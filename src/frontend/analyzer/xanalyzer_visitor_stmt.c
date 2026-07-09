@@ -1022,9 +1022,38 @@ static bool xa_lifecycle_lint_non_empty_literal_collection(AstNode *expr) {
     }
 }
 
-static bool xa_lifecycle_lint_for_in_always_enters(AstNode *stmt) {
+static XaSymbol *xa_lifecycle_lint_expr_const_symbol(XaInferContext *ctx, AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *sym = NULL;
+    if (expr->as.variable.symbol_id != 0)
+        sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, expr->as.variable.symbol_id);
+    if (!sym && expr->as.variable.name)
+        sym = xa_lookup_visible_symbol(ctx, expr->as.variable.name);
+    if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const || sym->is_rebindable ||
+        sym->is_shared || sym->is_imported)
+        return NULL;
+    return sym;
+}
+
+static bool xa_lifecycle_lint_known_non_empty_collection(XaInferContext *ctx, AstNode *expr,
+                                                         int depth) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (xa_lifecycle_lint_non_empty_literal_collection(expr))
+        return true;
+    if (depth <= 0)
+        return false;
+    XaSymbol *sym = xa_lifecycle_lint_expr_const_symbol(ctx, expr);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    if (!links || !links->const_initializer)
+        return false;
+    return xa_lifecycle_lint_known_non_empty_collection(ctx, links->const_initializer, depth - 1);
+}
+
+static bool xa_lifecycle_lint_for_in_always_enters(XaInferContext *ctx, AstNode *stmt) {
     return stmt && stmt->type == AST_FOR_IN_STMT &&
-           xa_lifecycle_lint_non_empty_literal_collection(stmt->as.for_in_stmt.collection);
+           xa_lifecycle_lint_known_non_empty_collection(ctx, stmt->as.for_in_stmt.collection, 4);
 }
 
 static AstNode *xa_lifecycle_lint_loop_body(AstNode *stmt) {
@@ -2058,7 +2087,7 @@ static bool xa_thread_lint_mark_linear_finalizer_break_loop(XaThreadHandleLintSt
 
 static bool xa_thread_lint_mark_nonempty_for_in_finalizer_loop(XaThreadHandleLintState *states,
                                                                AstNode *stmt) {
-    if (!states || !xa_lifecycle_lint_for_in_always_enters(stmt))
+    if (!states || !xa_lifecycle_lint_for_in_always_enters(states->ctx, stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
@@ -3702,7 +3731,7 @@ static bool xa_os_resource_lint_mark_linear_finalizer_break_loop(XaOsResourceLin
 
 static bool xa_os_resource_lint_mark_nonempty_for_in_finalizer_loop(XaOsResourceLintState *states,
                                                                     AstNode *stmt) {
-    if (!states || !xa_lifecycle_lint_for_in_always_enters(stmt))
+    if (!states || !xa_lifecycle_lint_for_in_always_enters(states->ctx, stmt))
         return false;
     AstNode **statements = NULL;
     int count = 0;
@@ -4937,6 +4966,27 @@ static bool xa_freestanding_top_const_allowed(XaInferContext *ctx, VarDeclNode *
     if (!xa_consteval_expr(ctx->analyzer, var->initializer, &value, &err))
         return false;
     return xa_freestanding_top_const_ct_value_allowed(&value);
+}
+
+static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ctx,
+                                                              VarDeclNode *var) {
+    if (!ctx || !ctx->analyzer || !var || !var->initializer)
+        return false;
+    XrCtValue value = {0};
+    const char *err = NULL;
+    (void) err;
+    if (!xa_consteval_expr(ctx->analyzer, var->initializer, &value, &err))
+        return false;
+    switch (value.kind) {
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_CHAR:
+        case XR_CT_NULL:
+            return true;
+        default:
+            return false;
+    }
 }
 
 XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
@@ -6223,13 +6273,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         links->ct_value = (XrCtValue) {0};
         links->is_comptime_local = ctx->comptime_block_depth > 0;
     }
-    if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL) {
+    if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL &&
+        !xa_freestanding_shared_static_initializer_allowed(ctx, var)) {
         xa_freestanding_report_unavailable(
             ctx, node, "shared declaration",
-            "shared storage still requires module initialization; only explicit const data "
-            "static objects are supported in the current freestanding slice");
+            "only int/float/bool/char/null consteval initializers are supported as static "
+            "shared storage in the current freestanding slice");
     } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
-               xa_is_module_level_scope(ctx->analyzer) &&
+               xa_is_module_level_scope(ctx->analyzer) && node->type != AST_SHARED_DECL &&
                !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var))) {
         xa_freestanding_report_unavailable(
             ctx, node,
