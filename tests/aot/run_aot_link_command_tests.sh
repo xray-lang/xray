@@ -1315,6 +1315,94 @@ else
         "freestanding-profile: rejects shared declarations"
 fi
 
+FREESTANDING_SHARED_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_scalar_static.xr"
+FREESTANDING_SHARED_SCALAR_OBJ="$WORK/freestanding_shared_scalar_static.o"
+FREESTANDING_SHARED_SCALAR_LOG="$WORK/freestanding_shared_scalar_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_SHARED_SCALAR_OBJ" \
+        "$FREESTANDING_SHARED_SCALAR_SRC" >"$FREESTANDING_SHARED_SCALAR_LOG" 2>&1; then
+    FREESTANDING_SHARED_SCALAR_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_SHARED_SCALAR_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_SHARED_SCALAR_C" ]; then
+        expect_log_contains "$FREESTANDING_SHARED_SCALAR_C" \
+            "static XrValue xrt_shared[2] = {" \
+            "freestanding-profile/shared-scalar-static: materializes shared slots as static data"
+        expect_log_contains "$FREESTANDING_SHARED_SCALAR_C" \
+            "[0] = XR_FROM_INT(INT64_C(41))," \
+            "freestanding-profile/shared-scalar-static: initializes scalar shared slot statically"
+        expect_log_contains "$FREESTANDING_SHARED_SCALAR_C" "xrt_shared[0]" \
+            "freestanding-profile/shared-scalar-static: reads shared slot storage"
+        expect_log_not_contains "$FREESTANDING_SHARED_SCALAR_C" \
+            "xrt_shared[0] = XR_FROM_INT(INT64_C(41))" \
+            "freestanding-profile/shared-scalar-static: elides module-init scalar write"
+        expect_log_not_contains "$FREESTANDING_SHARED_SCALAR_C" "#include \"xrt.h\"" \
+            "freestanding-profile/shared-scalar-static: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/shared-scalar-static: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_SHARED_SCALAR_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_SHARED_SCALAR_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_SHARED_SCALAR_OBJ")"
+    FREESTANDING_SHARED_SCALAR_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_SHARED_SCALAR_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_SHARED_SCALAR_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/shared-scalar-static: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/shared-scalar-static: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_SHARED_SCALAR_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/shared-scalar-static: object build failed"
+    sed 's/^/      /' "$FREESTANDING_SHARED_SCALAR_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_SHARED_STRING_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_string_static.xr"
+FREESTANDING_SHARED_STRING_OBJ="$WORK/freestanding_shared_string_static.o"
+FREESTANDING_SHARED_STRING_LOG="$WORK/freestanding_shared_string_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_SHARED_STRING_OBJ" \
+        "$FREESTANDING_SHARED_STRING_SRC" >"$FREESTANDING_SHARED_STRING_LOG" 2>&1; then
+    FREESTANDING_SHARED_STRING_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_SHARED_STRING_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_SHARED_STRING_C" ]; then
+        expect_log_contains "$FREESTANDING_SHARED_STRING_C" \
+            "static const xrt_str_t xrt_shared_init_str_0 = {INT64_C(4)" \
+            "freestanding-profile/shared-string-static: materializes string literal header"
+        expect_log_contains "$FREESTANDING_SHARED_STRING_C" \
+            "[0] = {.tag = XR_TAG_STR, .ptr = (void *) &xrt_shared_init_str_0}" \
+            "freestanding-profile/shared-string-static: initializes string shared slot statically"
+        expect_log_contains "$FREESTANDING_SHARED_STRING_C" "xrt_shared[0]" \
+            "freestanding-profile/shared-string-static: reads shared slot storage"
+        expect_log_not_contains "$FREESTANDING_SHARED_STRING_C" \
+            "xrt_shared[0] = {.tag = XR_TAG_STR" \
+            "freestanding-profile/shared-string-static: elides module-init string write"
+        expect_log_not_contains "$FREESTANDING_SHARED_STRING_C" "#include \"xrt.h\"" \
+            "freestanding-profile/shared-string-static: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/shared-string-static: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_SHARED_STRING_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_SHARED_STRING_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_SHARED_STRING_OBJ")"
+    FREESTANDING_SHARED_STRING_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_SHARED_STRING_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_SHARED_STRING_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/shared-string-static: undefined symbols stay in write-hook/memcpy family"
+    else
+        record_fail "freestanding-profile/shared-string-static: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_SHARED_STRING_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/shared-string-static: object build failed"
+    sed 's/^/      /' "$FREESTANDING_SHARED_STRING_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_CONST_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_scalar.xr"
 FREESTANDING_TOP_CONST_SCALAR_OBJ="$WORK/freestanding_top_const_scalar.o"
 FREESTANDING_TOP_CONST_SCALAR_LOG="$WORK/freestanding_top_const_scalar.log"
