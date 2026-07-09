@@ -1248,6 +1248,58 @@ else
     sed 's/^/      /' "$FREESTANDING_MATH_CONST_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_MATH_ALLOWLIST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_allowlist.xr"
+FREESTANDING_MATH_ALLOWLIST_OBJ="$WORK/freestanding_math_allowlist.o"
+FREESTANDING_MATH_ALLOWLIST_LOG="$WORK/freestanding_math_allowlist.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MATH_ALLOWLIST_OBJ" \
+        "$FREESTANDING_MATH_ALLOWLIST_SRC" >"$FREESTANDING_MATH_ALLOWLIST_LOG" 2>&1; then
+    FREESTANDING_MATH_ALLOWLIST_KEPT_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_MATH_ALLOWLIST_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" \
+            "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/math-allowlist: generated C uses freestanding prelude"
+        expect_log_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" \
+            "XR_FROM_FLOAT(3.14159265358979323846)" \
+            "freestanding-profile/math-allowlist: lowers math constants without libm"
+        expect_log_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" \
+            "INT64_C(9223372036854775807)" \
+            "freestanding-profile/math-allowlist: lowers math.MAX_INT statically"
+        expect_log_not_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" "#include <math.h>" \
+            "freestanding-profile/math-allowlist: avoids libm header"
+        expect_log_not_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" "xrt_math_" \
+            "freestanding-profile/math-allowlist: avoids hosted math helper"
+        expect_log_not_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" "fmin(" \
+            "freestanding-profile/math-allowlist: keeps int min in local lowering"
+        expect_log_not_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" "fmax(" \
+            "freestanding-profile/math-allowlist: keeps int max in local lowering"
+        expect_log_not_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" "isnan(" \
+            "freestanding-profile/math-allowlist: avoids float clamp/libm semantics"
+        expect_log_not_contains "$FREESTANDING_MATH_ALLOWLIST_KEPT_C" "#include \"xrt.h\"" \
+            "freestanding-profile/math-allowlist: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/math-allowlist: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MATH_ALLOWLIST_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MATH_ALLOWLIST_UNDEFINED="$(nm_undefined_normalized \
+        "$FREESTANDING_MATH_ALLOWLIST_OBJ")"
+    FREESTANDING_MATH_ALLOWLIST_UNEXPECTED="$(printf '%s\n' \
+        "$FREESTANDING_MATH_ALLOWLIST_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic)$' || true)"
+    if [ -z "$FREESTANDING_MATH_ALLOWLIST_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/math-allowlist: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/math-allowlist: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_MATH_ALLOWLIST_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/math-allowlist: object build failed"
+    sed 's/^/      /' "$FREESTANDING_MATH_ALLOWLIST_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_SCALAR_COMPARE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_scalar_compare.xr"
 FREESTANDING_SCALAR_COMPARE_OBJ="$WORK/freestanding_scalar_compare.o"
 FREESTANDING_SCALAR_COMPARE_LOG="$WORK/freestanding_scalar_compare.log"
