@@ -1,0 +1,10 @@
+class Holder {
+    view: ByteSpan? = null
+}
+
+fn main() {
+    var h = Holder()
+    print(h.view == null)
+}
+
+main()

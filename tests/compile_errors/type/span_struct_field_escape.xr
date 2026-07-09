@@ -1,0 +1,9 @@
+struct Holder {
+    view: ByteSpan
+}
+
+fn main() {
+    print(1)
+}
+
+main()

@@ -2846,6 +2846,16 @@ skip_interfaces:
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
             }
+            if (xa_type_contains_span_view(field_links->type)) {
+                XrLocation loc = {.file = ctx->file_path, .line = field->line};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "cannot store Span view in %s field '%s'; Span is a borrowed view and "
+                         "cannot live in long-lived storage",
+                         decl_label ? decl_label : "class", fd->name ? fd->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
             xa_class_info_add_field(info, field_sym);
         }
     }
