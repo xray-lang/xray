@@ -1858,6 +1858,23 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        const char *static_key = lower_static_string_key(ig->index);
+        uint16_t evidence_fidx = UINT16_MAX;
+        if (static_key &&
+            xi_lower_find_json_direct_field_ordinal(l, static_key, (uint32_t) node->line,
+                                                    XG_JSON_ACCESS_INDEX_GET, &evidence_fidx)) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, result_type, 1);
+            if (!v)
+                return NULL;
+            v->args[0] = obj;
+            v->aux_int = evidence_fidx;
+            v->line = (uint32_t) node->line;
+            xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, evidence_fidx,
+                                         XG_JSON_ACCESS_INDEX_GET);
+            return v;
+        }
+    }
     if (obj->type && XR_TYPE_IS_MAP(obj->type))
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
     struct XrType *elem_type = xi_get_container_elem_type(obj->type);
@@ -1917,6 +1934,26 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
         v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         v->line = (uint32_t) node->line;
         return v;
+    }
+
+    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        const char *static_key = lower_static_string_key(is_node->index);
+        uint16_t evidence_fidx = UINT16_MAX;
+        if (static_key &&
+            xi_lower_find_json_direct_field_ordinal(l, static_key, (uint32_t) node->line,
+                                                    XG_JSON_ACCESS_INDEX_SET, &evidence_fidx)) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, val->type, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = obj;
+            v->args[1] = val;
+            v->aux_int = evidence_fidx;
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, evidence_fidx,
+                                         XG_JSON_ACCESS_INDEX_SET);
+            return v;
+        }
     }
 
     if (obj->type && XR_TYPE_IS_MAP(obj->type)) {

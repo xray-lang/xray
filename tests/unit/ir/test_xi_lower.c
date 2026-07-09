@@ -918,6 +918,93 @@ TEST(json_computed_key_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_JSON_INDEX_EVIDENCE
 }
 
+TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
+#define REQUIRE_JSON_STATIC_INDEX_EVIDENCE(cond, msg)                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr,                                                                        \
+                    "json_static_key_index_lowers_to_direct_field_with_global_evidence_id: %s\n",  \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("fn updateKey() -> Json {\n"
+                                          "    var j: Json = { name: \"ada\", age: 1 }\n"
+                                          "    j[\"age\"] = 2\n"
+                                          "    return j[\"age\"]\n"
+                                          "}\n"
+                                          "print(updateKey())\n",
+                                          &ev);
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(ev.njson_accesses == 2,
+                                       "producer should record static-key get and set");
+    XiFunc *update_key = func_tree_find_func_name(main_func, "updateKey");
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(update_key != NULL, "target function should be present");
+
+    uint32_t get_id = 0;
+    uint32_t set_id = 0;
+    uint32_t generic_index_count = 0;
+    for (uint32_t b = 0; b < update_key->nblocks; b++) {
+        XiBlock *blk = update_key->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET)
+                generic_index_count++;
+            if (v->op == XI_JSON_GET_F) {
+                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->aux_int == 1,
+                                                   "static-key get should use field ordinal");
+                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->xg_json_access_id != 0,
+                                                   "static-key get should bind evidence");
+                get_id = v->xg_json_access_id;
+            }
+            if (v->op == XI_JSON_SET_F) {
+                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->aux_int == 1,
+                                                   "static-key set should use field ordinal");
+                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->xg_json_access_id != 0,
+                                                   "static-key set should bind evidence");
+                set_id = v->xg_json_access_id;
+            }
+        }
+    }
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(generic_index_count == 0,
+                                       "static-key Json access should not use generic index ops");
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(get_id != 0 && set_id != 0,
+                                       "both static-key direct ops should be present");
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(get_id != set_id,
+                                       "static-key get and set should use distinct access rows");
+
+    bool matched_get = false;
+    bool matched_set = false;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *row = &ev.json_accesses[i];
+        if (row->json_access_id == get_id) {
+            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(row->access_kind == XG_JSON_ACCESS_INDEX_GET,
+                                               "bound get id should point at index_get row");
+            matched_get = true;
+        }
+        if (row->json_access_id == set_id) {
+            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(row->access_kind == XG_JSON_ACCESS_INDEX_SET,
+                                               "bound set id should point at index_set row");
+            matched_set = true;
+        }
+    }
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(matched_get && matched_set,
+                                       "bound ids should re-derive from static-key evidence");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_JSON_STATIC_INDEX_EVIDENCE
+}
+
 TEST(json_open_shape_member_access_lowers_to_dynamic_lookup) {
 #define REQUIRE_JSON_OPEN_EVIDENCE(cond, msg)                                                      \
     do {                                                                                           \
@@ -2355,6 +2442,7 @@ int main(void) {
     run_json_access_lowers_with_global_evidence_id();
     run_json_alias_shape_access_lowers_with_global_evidence_id();
     run_json_computed_key_access_lowers_with_global_evidence_id();
+    run_json_static_key_index_lowers_to_direct_field_with_global_evidence_id();
     run_json_open_shape_member_access_lowers_to_dynamic_lookup();
     run_record_access_lowers_with_global_evidence_id();
     run_map_key_access_lowers_with_global_evidence_id();
