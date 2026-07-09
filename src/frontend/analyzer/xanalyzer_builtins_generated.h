@@ -132,12 +132,11 @@ static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
     {"body", "string", true},
     {"contentLength", "int", true},
     {"params", "Json", true},
-    {"streaming", "bool", true},
 };
 
 static const XaBuiltinHandle g_gen_http_handles[] = {
     {"HttpResponse", g_gen_http_httpresponse_fields, 6, NULL, 0},
-    {"HttpRequest", g_gen_http_httprequest_fields, 8, NULL, 0},
+    {"HttpRequest", g_gen_http_httprequest_fields, 7, NULL, 0},
 };
 #define GEN_HTTP_HANDLE_COUNT 2
 

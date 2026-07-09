@@ -908,11 +908,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
-        .name = "HttpRequest.streaming",
-        .signature = "const bool",
-        .summary = "Handle field",
-    },
-    {
         .name = "HttpResponse",
         .signature = "HttpResponse",
         .summary = "Native handle type",
@@ -5474,7 +5469,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpRequest.params` | `const Json` | Handle field |\n"
             "| `http.HttpRequest.path` | `const string` | Handle field |\n"
             "| `http.HttpRequest.query` | `const Json` | Handle field |\n"
-            "| `http.HttpRequest.streaming` | `const bool` | Handle field |\n"
             "| `http.HttpResponse` | `HttpResponse` | Native handle type |\n"
             "| `http.HttpResponse.body` | `const string` | Handle field |\n"
             "| `http.HttpResponse.error` | `const string` | Handle field |\n"

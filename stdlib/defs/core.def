@@ -3333,7 +3333,7 @@ module http {
   }
 
   handle HttpRequest {
-    fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json, const streaming: bool"
+    fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json"
   }
 
   fn request {
