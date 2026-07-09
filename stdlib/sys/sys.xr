@@ -231,9 +231,11 @@ class ThreadLocal<T> {
         try {
             value = init()
         } catch (e) {
-            this._lock.lock()
-            this._initializing.delete(key)
-            this._lock.unlock()
+            {
+                this._lock.lock()
+                defer { this._lock.unlock() }
+                this._initializing.delete(key)
+            }
             throw e
         }
         var result: unknown = null
