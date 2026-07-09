@@ -91,6 +91,14 @@ const PACKED_ALIGNED = comptime PackedAligned{tag: 6, value: 36}
 @weak
 const PAIR = comptime (HEADER.magic, PACKET.base)
 
+@section("__DATA,.xr_ipair_rows")
+@weak
+@used
+const PAIR_ROWS: [(int, int); 2] = comptime [
+    (TABLE[0], TABLE[1]),
+    (TABLE[2], TABLE[3]),
+]
+
 @weak
 const NESTED = comptime ((TABLE[0], HEADER.flags), (PACKET.base, TABLE[3]))
 
@@ -135,6 +143,14 @@ const NAMED = comptime Named{label: LABEL, code: TABLE[1]}
 @weak
 const LABELED = comptime (LABEL, TABLE[0])
 
+@section("__DATA,.xr_iltup")
+@weak
+@used
+const LABELED_ROWS: [(string, int); 2] = comptime [
+    (LABEL, TABLE[0]),
+    ("done", TABLE[1]),
+]
+
 struct Entry {
     code: int
     flag: bool
@@ -174,4 +190,4 @@ const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
 ]
 
-export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, ENTRIES, ROWS, LABEL_ROWS }
+export { MAGIC, TABLE, BYTES, MATRIX, CUBE, HEADER, PACKET, OUTER, GROUPS, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, PAIR_ROWS, NESTED, BITS, WORD_BYTES, LABEL, LABEL_MATRIX, LABELS, NAMED, LABELED, LABELED_ROWS, ENTRIES, ROWS, LABEL_ROWS }

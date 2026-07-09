@@ -61,6 +61,13 @@ const GROUPS: [Outer; 2] = comptime [
 @weak
 @used
 const PAIR = comptime (HEADER.magic, TABLE[2], WEIGHTS[1])
+@section("__DATA,.xray_pair_rows")
+@weak
+@used
+const PAIR_ROWS: [(int, int); 2] = comptime [
+    (TABLE[0], TABLE[1]),
+    (TABLE[2], TABLE[3]),
+]
 const LABEL = comptime "score"
 @section("__DATA,.xray_lmat")
 @weak
@@ -72,6 +79,13 @@ const LABEL_MATRIX: [[string; 2]; 2] = comptime [
 const LABELED = comptime (LABEL, TABLE[0])
 const NESTED = comptime ((TABLE[0], LABEL), (WEIGHTS[2], TABLE[3]))
 const LABELS: [string; 2] = comptime ["level", LABEL]
+@section("__DATA,.xray_ltuple")
+@weak
+@used
+const LABELED_ROWS: [(string, int); 2] = comptime [
+    (LABEL, TABLE[0]),
+    ("done", TABLE[1]),
+]
 
 struct Named {
     label: string
@@ -215,6 +229,11 @@ fn xray_top_const_tuple_float_runtime() -> float {
     return PAIR.2
 }
 
+@c_export("xray_top_const_tuple_array_runtime")
+fn xray_top_const_tuple_array_runtime(i: int) -> int {
+    return PAIR_ROWS[i].0 + PAIR_ROWS[i].1
+}
+
 @c_export("xray_top_const_nested_tuple_runtime")
 fn xray_top_const_nested_tuple_runtime() -> int {
     return NESTED.0.0 + NESTED.1.1
@@ -235,6 +254,12 @@ fn xray_top_const_string_print() -> int {
 fn xray_top_const_tuple_string_print() -> int {
     print(LABELED.0)
     return LABELED.1
+}
+
+@c_export("xray_top_const_tuple_array_string_print")
+fn xray_top_const_tuple_array_string_print(i: int) -> int {
+    print(LABELED_ROWS[i].0)
+    return LABELED_ROWS[i].1
 }
 
 @c_export("xray_top_const_nested_tuple_string_print")

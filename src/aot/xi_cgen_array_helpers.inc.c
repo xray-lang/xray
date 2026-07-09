@@ -45,6 +45,11 @@ typedef struct CgStaticFixedStructArrayInfo {
     uint16_t count;
 } CgStaticFixedStructArrayInfo;
 
+typedef struct CgStaticFixedTupleArrayInfo {
+    XrType *tuple_type;
+    uint16_t count;
+} CgStaticFixedTupleArrayInfo;
+
 typedef struct CgStaticFixedMatrixInfo {
     CgFixedArrayLaneInfo lane;
     uint16_t outer_count;
@@ -666,6 +671,473 @@ static bool cg_emit_imported_static_fixed_struct_array_const_decl(XiCgenCtx *ctx
     cg_emit_static_fixed_array_name(ctx, out, module, slot);
     fprintf(out, "[%u];\n", (unsigned) info.count);
     return true;
+}
+
+static bool cg_static_fixed_tuple_array_info_from_type(const XrType *type,
+                                                       CgStaticFixedTupleArrayInfo *out) {
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX)
+        return false;
+    XrType *tuple_type = type->fixed_array.element_type;
+    if (!tuple_type || tuple_type->kind != XR_KIND_TUPLE ||
+        cg_static_tuple_type_count(tuple_type) <= 0)
+        return false;
+    if (out)
+        *out = (CgStaticFixedTupleArrayInfo) {
+            .tuple_type = tuple_type,
+            .count = (uint16_t) type->fixed_array.length,
+        };
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_tuple_array_literal_in_module(
+    XiCgenCtx *ctx, const XiModule *module, int64_t slot, CgStaticFixedTupleArrayInfo *out_info,
+    const XrCtValue **out_value) {
+    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
+        slot >= module->nslots)
+        return false;
+    const XiConstLiteral *lit = &module->slot_const_literals[slot];
+    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+        lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
+        lit->type->kind != XR_KIND_FIXED_ARRAY)
+        return false;
+    CgStaticFixedTupleArrayInfo info;
+    if (!cg_static_fixed_tuple_array_info_from_type(lit->type, &info))
+        return false;
+    const XrCtFixedArrayValue *array = &lit->ct_value->as.fixed_array_val;
+    if (array->count != (int) info.count || array->count <= 0 || !array->elements)
+        return false;
+    for (int i = 0; i < array->count; i++) {
+        const XrCtValue *elem = &array->elements[i];
+        if (!elem || elem->kind != XR_CT_TUPLE ||
+            !cg_static_tuple_type_supported_depth(info.tuple_type, &elem->as.tuple_val, 0))
+            return false;
+    }
+    if (out_info)
+        *out_info = info;
+    if (out_value)
+        *out_value = lit->ct_value;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_tuple_array_value_ex(XiCgenCtx *ctx, const XiValue *value,
+                                                              CgStaticFixedTupleArrayInfo *out_info,
+                                                              int64_t *out_slot,
+                                                              const XiModule **out_module) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (out_module)
+        *out_module = NULL;
+    if (!v)
+        return false;
+
+    const XiModule *module = ctx ? ctx->module : NULL;
+    int64_t slot = -1;
+    if (v->op == XI_GET_SHARED) {
+        slot = v->aux_int;
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit =
+            cg_import_slot_const_literal(ctx, NULL, (int) slot, &import_module, &import_slot);
+        if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+            module = import_module;
+            slot = import_slot;
+        }
+    } else if (v->op == XI_IMPORT_REF && v->aux) {
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit = cg_import_ref_target_const_literal(
+            ctx, (const XiImportRef *) v->aux, &import_module, &import_slot);
+        if (!import_lit || import_lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE)
+            return false;
+        module = import_module;
+        slot = import_slot;
+    } else {
+        return false;
+    }
+
+    if (!cg_freestanding_static_fixed_tuple_array_literal_in_module(ctx, module, slot, out_info,
+                                                                    NULL))
+        return false;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
+        cg_report_imported_static_const_requires_weak(ctx, module, slot);
+        ctx->error = true;
+        return false;
+    }
+    if (out_slot)
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_tuple_array_index_value(
+    XiCgenCtx *ctx, const XiValue *value, CgStaticFixedTupleArrayInfo *out_info, int64_t *out_slot,
+    const XiModule **out_module, const XiValue **out_index) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
+        return false;
+    if (!cg_freestanding_static_fixed_tuple_array_value_ex(ctx, v->args[0], out_info, out_slot,
+                                                           out_module))
+        return false;
+    if (out_index)
+        *out_index = v->args[1];
+    return true;
+}
+
+static void cg_emit_static_fixed_tuple_array_type(FILE *out, XrType *tuple_type) {
+    fprintf(out, "struct { ");
+    int count = cg_static_tuple_type_count(tuple_type);
+    for (uint16_t i = 0; i < (uint16_t) count; i++)
+        cg_emit_static_tuple_field_decl(out, tuple_type, i);
+    fprintf(out, "}");
+}
+
+static bool cg_emit_freestanding_static_fixed_tuple_array_defs(XiCgenCtx *ctx, FILE *out,
+                                                               const XiModule *module) {
+    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+        return false;
+    bool emitted = false;
+    for (uint16_t slot = 0; slot < module->nslots; slot++) {
+        CgStaticFixedTupleArrayInfo info;
+        const XrCtValue *value = NULL;
+        if (!cg_freestanding_static_fixed_tuple_array_literal_in_module(ctx, module, slot, &info,
+                                                                        &value))
+            continue;
+        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+        cg_emit_static_const_storage(out, lit);
+        cg_emit_static_fixed_tuple_array_type(out, info.tuple_type);
+        fprintf(out, " ");
+        cg_emit_static_fixed_array_name(ctx, out, module, slot);
+        fprintf(out, "[%u]", (unsigned) info.count);
+        emit_aot_const_data_attrs(out, lit);
+        fprintf(out, " = {");
+        for (int i = 0; i < array->count; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            cg_emit_static_tuple_initializer(ctx, out, info.tuple_type,
+                                             &array->elements[i].as.tuple_val);
+        }
+        fprintf(out, "};\n");
+        emitted = true;
+    }
+    if (emitted)
+        fprintf(out, "\n");
+    return emitted;
+}
+
+static bool cg_emit_imported_static_fixed_tuple_array_const_decl(XiCgenCtx *ctx, FILE *out,
+                                                                 const XiModule *module,
+                                                                 int64_t slot,
+                                                                 const XiConstLiteral *lit) {
+    if (!ctx || !out || !module || !lit || !lit->data_weak)
+        return false;
+    CgStaticFixedTupleArrayInfo info;
+    if (!cg_freestanding_static_fixed_tuple_array_literal_in_module(ctx, module, slot, &info, NULL))
+        return false;
+    fprintf(out, "extern const ");
+    cg_emit_static_fixed_tuple_array_type(out, info.tuple_type);
+    fprintf(out, " ");
+    cg_emit_static_fixed_array_name(ctx, out, module, slot);
+    fprintf(out, "[%u];\n", (unsigned) info.count);
+    return true;
+}
+
+#define CG_STATIC_FIXED_TUPLE_ARRAY_PATH_MAX CG_STATIC_TUPLE_PATH_MAX
+
+typedef struct CgStaticFixedTupleArrayPath {
+    const XiModule *module;
+    int64_t slot;
+    const XiValue *access;
+    const XiValue *index;
+    XrType *type;
+    uint16_t count;
+    uint16_t depth;
+    int64_t fields[CG_STATIC_FIXED_TUPLE_ARRAY_PATH_MAX];
+} CgStaticFixedTupleArrayPath;
+
+static bool cg_static_fixed_tuple_array_path_append_field(CgStaticFixedTupleArrayPath *path,
+                                                          int64_t field_idx) {
+    if (!path || !path->type || path->depth >= CG_STATIC_FIXED_TUPLE_ARRAY_PATH_MAX ||
+        field_idx < 0 || field_idx >= cg_static_tuple_type_count(path->type))
+        return false;
+    XrType *elem_type = cg_static_tuple_type_element(path->type, (int) field_idx);
+    if (!elem_type || elem_type->kind != XR_KIND_TUPLE)
+        return false;
+    path->fields[path->depth++] = field_idx;
+    path->type = elem_type;
+    return true;
+}
+
+static bool cg_freestanding_static_fixed_tuple_array_object_path_depth(
+    XiCgenCtx *ctx, const XiValue *value, CgStaticFixedTupleArrayPath *out_path, int depth) {
+    if (!ctx || !value || depth > CG_STATIC_FIXED_TUPLE_ARRAY_PATH_MAX)
+        return false;
+    const XiValue *v = cg_unwrap_identity_value(value);
+    CgStaticFixedTupleArrayInfo info;
+    int64_t slot = -1;
+    const XiModule *module = NULL;
+    const XiValue *index = NULL;
+    if (cg_freestanding_static_fixed_tuple_array_index_value(ctx, v, &info, &slot, &module,
+                                                             &index)) {
+        if (out_path)
+            *out_path = (CgStaticFixedTupleArrayPath) {
+                .module = module,
+                .slot = slot,
+                .access = v,
+                .index = index,
+                .type = info.tuple_type,
+                .count = info.count,
+                .depth = 0,
+            };
+        return true;
+    }
+    if (!v || (v->op != XI_TUPLE_GET && v->op != XI_LOAD_FIELD) || v->nargs < 1)
+        return false;
+    CgStaticFixedTupleArrayPath parent = {0};
+    if (!cg_freestanding_static_fixed_tuple_array_object_path_depth(ctx, v->args[0], &parent,
+                                                                    depth + 1))
+        return false;
+    int64_t field_idx = -1;
+    if (!cg_static_tuple_field_access_index(v, &field_idx) ||
+        !cg_static_fixed_tuple_array_path_append_field(&parent, field_idx))
+        return false;
+    if (out_path)
+        *out_path = parent;
+    return true;
+}
+
+static bool
+cg_freestanding_static_fixed_tuple_array_object_path(XiCgenCtx *ctx, const XiValue *value,
+                                                     CgStaticFixedTupleArrayPath *out_path) {
+    return cg_freestanding_static_fixed_tuple_array_object_path_depth(ctx, value, out_path, 0);
+}
+
+static void cg_emit_static_fixed_tuple_array_path_lvalue(XiCgenCtx *ctx, FILE *out,
+                                                         const CgStaticFixedTupleArrayPath *path,
+                                                         const char *tmp_index) {
+    if (!path)
+        return;
+    cg_emit_static_fixed_array_name(ctx, out, path->module, path->slot);
+    fprintf(out, "[");
+    if (tmp_index)
+        fprintf(out, "%s", tmp_index);
+    else
+        emit_array_i64_arg(out, path->index);
+    fprintf(out, "]");
+    for (uint16_t i = 0; i < path->depth; i++)
+        fprintf(out, ".f%" PRId64, path->fields[i]);
+}
+
+static void cg_emit_static_fixed_tuple_array_oob_fallback(FILE *out, XrRep rep) {
+    if (rep == XR_REP_F64)
+        fprintf(out, "0.0");
+    else if (rep == XR_REP_TAGGED)
+        fprintf(out, "XR_NULL_VAL");
+    else
+        fprintf(out, "0");
+}
+
+static bool emit_static_fixed_tuple_array_get_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || (v->op != XI_TUPLE_GET && v->op != XI_LOAD_FIELD) || v->nargs < 1)
+        return false;
+    CgStaticFixedTupleArrayPath receiver = {0};
+    int64_t field_idx = -1;
+    if (!cg_freestanding_static_fixed_tuple_array_object_path(ctx, v->args[0], &receiver) ||
+        !cg_static_tuple_field_access_index(v, &field_idx) || field_idx < 0 ||
+        field_idx >= cg_static_tuple_type_count(receiver.type))
+        return false;
+    XrType *elem_type = cg_static_tuple_type_element(receiver.type, (int) field_idx);
+    if (elem_type && elem_type->kind == XR_KIND_TUPLE) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: freestanding static tuple-array nested tuple value must be "
+                "consumed through scalar/string .N fields before runtime lowering\n");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    uint8_t native_type = XR_NATIVE_VALUE;
+    if (!cg_static_tuple_native_for_type(elem_type, &native_type))
+        return false;
+    XrRep elem_rep = cg_struct_native_rep(native_type);
+    bool unchecked = cg_fixed_array_index_bounds_proven(receiver.access, receiver.count);
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, elem_rep, cg_value_plan_storage_rep(ctx, v));
+    if (!unchecked) {
+        fprintf(out, "({ int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, receiver.index, XR_REP_I64);
+        fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < %u) ? ", (unsigned) receiver.count);
+    }
+    if (elem_rep == XR_REP_F64)
+        fprintf(out, "(double)");
+    else if (elem_rep == XR_REP_I64)
+        fprintf(out, "(int64_t)");
+    cg_emit_static_fixed_tuple_array_path_lvalue(ctx, out, &receiver, unchecked ? NULL : "_idx");
+    fprintf(out, ".f%" PRId64, field_idx);
+    if (!unchecked) {
+        fprintf(out, " : (xrt_fixed_index_oob(_idx, %u), ", (unsigned) receiver.count);
+        cg_emit_static_fixed_tuple_array_oob_fallback(out, elem_rep);
+        fprintf(out, "); })");
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool cg_static_fixed_tuple_array_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiValue *target, int depth);
+static bool cg_static_fixed_tuple_array_tuple_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiValue *target, int depth);
+
+static bool cg_static_fixed_tuple_array_const_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if (v->op == XI_INDEX_GET && a == 0 &&
+                    cg_freestanding_static_fixed_tuple_array_index_value(ctx, v, NULL, NULL, NULL,
+                                                                         NULL)) {
+                    if (!cg_static_fixed_tuple_array_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_tuple_array_const_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_static_fixed_tuple_array_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if ((v->op == XI_TUPLE_GET || v->op == XI_LOAD_FIELD) && a == 0) {
+                    if (cg_freestanding_static_fixed_tuple_array_object_path(ctx, v, NULL) &&
+                        !cg_static_fixed_tuple_array_tuple_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_tuple_array_index_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_static_fixed_tuple_array_tuple_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiValue *target, int depth) {
+    if (!ctx || !f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if ((v->op == XI_TUPLE_GET || v->op == XI_LOAD_FIELD) && a == 0) {
+                    if (cg_freestanding_static_fixed_tuple_array_object_path(ctx, v, NULL) &&
+                        !cg_static_fixed_tuple_array_tuple_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_static_const_ref_alias(v) && a == 0) {
+                    if (!cg_static_fixed_tuple_array_tuple_ref_safe_uses(ctx, f, v, depth + 1))
+                        return false;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_value_is_elided_static_fixed_tuple_array_const_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                                  const XiValue *v) {
+    if (!cg_freestanding_static_fixed_tuple_array_value_ex(ctx, v, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_tuple_array_const_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool cg_value_is_elided_static_fixed_tuple_array_index_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                                  const XiValue *v) {
+    if (!cg_freestanding_static_fixed_tuple_array_index_value(ctx, v, NULL, NULL, NULL, NULL))
+        return false;
+    return cg_static_fixed_tuple_array_index_ref_safe_uses(ctx, f, v, 0);
+}
+
+static bool cg_value_is_elided_static_fixed_tuple_array_tuple_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                                  const XiValue *v) {
+    if (!cg_freestanding_static_fixed_tuple_array_object_path(ctx, v, NULL))
+        return false;
+    return cg_static_fixed_tuple_array_tuple_ref_safe_uses(ctx, f, v, 0);
 }
 
 static bool cg_static_fixed_array_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
