@@ -24,14 +24,14 @@
 #if XR_HAS_ZLIB
 #include "../compress/compress.h"
 
-int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
-                             size_t *out_len) {
+int ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                          size_t *out_len) {
     return xr_inflate_bounded(in, in_len, max_out, out, out_len);
 }
 #else
 // Stubs when system zlib is not available
-int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
-                             size_t *out_len) {
+int ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                          size_t *out_len) {
     (void) in;
     (void) in_len;
     (void) max_out;
