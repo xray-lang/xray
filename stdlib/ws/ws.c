@@ -12,7 +12,6 @@
  */
 
 #include "ws_internal.h"
-#include "ws_deflate.h"
 #include "../../src/os/os_net.h"
 #include "../../src/os/os_random.h"
 #include "../../src/base/xmalloc.h"
