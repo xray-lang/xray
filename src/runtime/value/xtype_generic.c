@@ -319,6 +319,31 @@ static bool type_arg_match(XrType *expected, XrType *actual) {
     return xr_type_assignable(expected, actual);
 }
 
+static bool interface_type_matches_constraint(XrType *type, XrType *constraint) {
+    if (!type || !constraint || type->kind != XR_KIND_INTERFACE ||
+        constraint->kind != XR_KIND_INTERFACE)
+        return false;
+    const char *type_name = type->instance.class_name;
+    const char *constraint_name = constraint->instance.class_name;
+    if (!type_name || !constraint_name || strcmp(type_name, constraint_name) != 0)
+        return false;
+    int constraint_arg_count = constraint->instance.type_arg_count;
+    int type_arg_count = type->instance.type_arg_count;
+    if (constraint_arg_count <= 0)
+        return true;
+    if (type_arg_count != constraint_arg_count)
+        return false;
+    XrType **type_args = type->instance.type_args;
+    XrType **constraint_args = constraint->instance.type_args;
+    if (!type_args || !constraint_args)
+        return false;
+    for (int i = 0; i < constraint_arg_count; i++) {
+        if (!type_arg_match(constraint_args[i], type_args[i]))
+            return false;
+    }
+    return true;
+}
+
 // Check if type satisfies a constraint (for generics)
 bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
     if (!constraint)
@@ -333,6 +358,8 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
         const char *iface_name = constraint->instance.class_name;
         int targs = constraint->instance.type_arg_count;
         XrType **args = constraint->instance.type_args;
+        if (interface_type_matches_constraint(type, constraint))
+            return true;
         if (iface_name) {
             if (strcmp(iface_name, "Iterable") == 0) {
                 if (xr_kind_is_builtin_iterable(type->kind)) {
