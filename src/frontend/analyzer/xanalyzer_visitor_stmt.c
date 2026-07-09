@@ -1008,6 +1008,8 @@ static bool xa_thread_lint_scan_helper_finalizer_call(XaThreadHandleLintState *s
             continue;
         XaThreadHandleLintState *state = xa_thread_lint_find_by_expr(states, call->arguments[i]);
         if (!state)
+            state = xa_thread_lint_find_returned_call_arg(states, call->arguments[i]);
+        if (!state)
             continue;
         state->finalized = true;
         applied = true;
@@ -2760,6 +2762,8 @@ static bool xa_os_resource_lint_scan_helper_finalizer_call(XaOsResourceLintState
         if (!param->is_resource)
             continue;
         XaOsResourceLintState *state = xa_os_resource_lint_find_by_expr(states, call->arguments[i]);
+        if (!state)
+            state = xa_os_resource_lint_find_returned_call_arg(states, call->arguments[i]);
         if (!state || state->kind != param->kind)
             continue;
         if (param->finalized)

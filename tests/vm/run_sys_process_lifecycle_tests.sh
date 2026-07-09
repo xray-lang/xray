@@ -119,6 +119,8 @@ PROCESS_HELPER_FORWARD_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_
 PIPE_HELPER_FORWARD_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_forward_return_alias_close.xr"
 PROCESS_HELPER_DIRECT_RETURN_ALIAS_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_direct_return_alias_wait.xr"
 PIPE_HELPER_DIRECT_RETURN_ALIAS_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_direct_return_alias_close.xr"
+PROCESS_HELPER_FINALIZER_RETURN_ARG_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_helper_finalizer_return_arg_wait.xr"
+PIPE_HELPER_FINALIZER_RETURN_ARG_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_helper_finalizer_return_arg_close.xr"
 PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_const_alias_return_receiver_wait.xr"
 PIPE_CONST_ALIAS_RETURN_RECEIVER_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_const_alias_return_receiver_close.xr"
 PROCESS_TOP_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_top_const_alias_return_receiver_wait.xr"
@@ -161,6 +163,10 @@ expect_output "process_helper_direct_return_alias_wait" \
     "$PROCESS_HELPER_DIRECT_RETURN_ALIAS_WAIT_SRC" "0"
 expect_output "pipe_helper_direct_return_alias_close" \
     "$PIPE_HELPER_DIRECT_RETURN_ALIAS_CLOSE_SRC" "true"
+expect_output "process_helper_finalizer_return_arg_wait" \
+    "$PROCESS_HELPER_FINALIZER_RETURN_ARG_WAIT_SRC" "0"
+expect_output "pipe_helper_finalizer_return_arg_close" \
+    "$PIPE_HELPER_FINALIZER_RETURN_ARG_CLOSE_SRC" "true"
 expect_output "process_const_alias_return_receiver_wait" \
     "$PROCESS_CONST_ALIAS_RETURN_RECEIVER_WAIT_SRC" "0"
 expect_output "pipe_const_alias_return_receiver_close" \
