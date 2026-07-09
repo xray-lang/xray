@@ -114,14 +114,18 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len, 
         }
 
         if (!node->param_child) {
-            node->param_child = node_new(NULL, 0);
-            node->param_child->is_param = true;
-            node->param_child->param_name = (char *) xr_malloc(param_end);
-            if (!node->param_child->param_name)
+            XrRouterNode *param_child = node_new(NULL, 0);
+            if (!param_child)
                 return false;
-            memcpy(node->param_child->param_name, path + 1, param_end - 1);
-            node->param_child->param_name[param_end - 1] = '\0';
-            node->param_child->param_name_len = param_end - 1;
+            param_child->param_name = (char *) xr_malloc(param_end);
+            if (!param_child->param_name) {
+                node_free(param_child);
+                return false;
+            }
+            memcpy(param_child->param_name, path + 1, param_end - 1);
+            param_child->param_name[param_end - 1] = '\0';
+            param_child->param_name_len = param_end - 1;
+            node->param_child = param_child;
         }
 
         if (param_end >= path_len) {
@@ -137,17 +141,21 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len, 
     // Check wildcard route *wildcard
     if (path[0] == '*') {
         if (!node->wildcard_child) {
-            node->wildcard_child = node_new(NULL, 0);
-            node->wildcard_child->is_wildcard = true;
+            XrRouterNode *wildcard_child = node_new(NULL, 0);
+            if (!wildcard_child)
+                return false;
 
             if (path_len > 1) {
-                node->wildcard_child->param_name = (char *) xr_malloc(path_len);
-                if (!node->wildcard_child->param_name)
+                wildcard_child->param_name = (char *) xr_malloc(path_len);
+                if (!wildcard_child->param_name) {
+                    node_free(wildcard_child);
                     return false;
-                memcpy(node->wildcard_child->param_name, path + 1, path_len - 1);
-                node->wildcard_child->param_name[path_len - 1] = '\0';
-                node->wildcard_child->param_name_len = path_len - 1;
+                }
+                memcpy(wildcard_child->param_name, path + 1, path_len - 1);
+                wildcard_child->param_name[path_len - 1] = '\0';
+                wildcard_child->param_name_len = path_len - 1;
             }
+            node->wildcard_child = wildcard_child;
         }
 
         node_set_endpoint(node->wildcard_child, kind, user_data, static_response,
@@ -378,6 +386,8 @@ bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path, void
     // Create root node
     if (!router->trees[method]) {
         router->trees[method] = node_new("/", 1);
+        if (!router->trees[method])
+            return false;
     }
 
     // Insert route (skip leading /)
@@ -396,6 +406,8 @@ bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *pat
 
     if (!router->trees[method]) {
         router->trees[method] = node_new("/", 1);
+        if (!router->trees[method])
+            return false;
     }
 
     char *body = (char *) xr_malloc(response_len + 1);
@@ -449,6 +461,8 @@ bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data
 
     if (!router->trees[XR_HTTP_METHOD_GET]) {
         router->trees[XR_HTTP_METHOD_GET] = node_new("/", 1);
+        if (!router->trees[XR_HTTP_METHOD_GET])
+            return false;
     }
 
     return insert_route(router->trees[XR_HTTP_METHOD_GET], path + 1, strlen(path) - 1,

@@ -67,9 +67,6 @@ typedef struct XrRouterNode {
 
     char *param_name;  // Parameter name (for :param node)
     size_t param_name_len;
-
-    bool is_param;     // Is parameter node
-    bool is_wildcard;  // Is wildcard node
 } XrRouterNode;
 
 /* ========== Router ========== */
