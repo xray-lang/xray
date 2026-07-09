@@ -1,0 +1,5 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_string_slice_syntax_reject' allocates via method 'string.slice'
+contains=@no_alloc function 'xray_no_alloc_view_slice_reject' allocates via method 'Array.slice'
+not_contains=@no_alloc function 'xray_no_alloc_span_slice_ok' allocates
+not_contains=CRASH
