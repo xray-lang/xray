@@ -176,23 +176,38 @@ static XaSymbol *xa_raw_pointer_of_arg_symbol(XaInferContext *ctx, AstNode *arg)
     return arg->as.variable.name ? xa_lookup_visible_symbol(ctx, arg->as.variable.name) : NULL;
 }
 
-static void xa_check_raw_pointer_of_static_const_arg(XaInferContext *ctx, AstNode *node,
-                                                     CallExprNode *call, XrType *ptr_type) {
-    if (!ctx || !ctx->analyzer || !node || !call || !ptr_type || ptr_type->ptr_is_mut ||
+static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *node,
+                                               CallExprNode *call, XrType *ptr_type) {
+    if (!ctx || !ctx->analyzer || !node || !call || !ptr_type ||
         !xa_freestanding_profile_enabled(ctx->analyzer))
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     if (call->arg_count != 1 || !call->arguments || !call->arguments[0] ||
         call->arguments[0]->type != AST_VARIABLE) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "RawPtr.of requires exactly one top-level const name", &loc);
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            ptr_type->ptr_is_mut ? "RawMut.of requires exactly one top-level mutable static name"
+                                 : "RawPtr.of requires exactly one top-level const name",
+            &loc);
         return;
     }
     AstNode *arg = call->arguments[0];
     XaSymbol *sym = xa_raw_pointer_of_arg_symbol(ctx, arg);
+    XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
+    if (ptr_type->ptr_is_mut) {
+        XrType *sym_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
+        if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->scope ||
+            sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared ||
+            !xa_type_has_fixed_layout_data_object(sym_type)) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "RawMut.of can only take the name of a top-level mutable aggregate static object",
+                &aloc);
+        }
+        return;
+    }
     if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const || !sym->scope ||
         sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared) {
-        XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             "RawPtr.of can only take the name of a top-level const static object", &aloc);
@@ -2794,7 +2809,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (!fn_links)
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         if (raw_pointer_namespace_type && method_name && strcmp(method_name, "of") == 0)
-            xa_check_raw_pointer_of_static_const_arg(ctx, node, call, raw_pointer_namespace_type);
+            xa_check_raw_pointer_of_static_arg(ctx, node, call, raw_pointer_namespace_type);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {

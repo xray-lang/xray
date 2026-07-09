@@ -8530,7 +8530,7 @@ static const char *cg_ffi_ptr_le_store_helper(uint8_t code) {
 /* Unsafe Array<T>/Span<T> data pointer borrow. VM/tagged values keep the address
  * as an integer; AOT hot code carries RawPtr/RawMut as a non-owning C pointer. */
 static const XiConstLiteral *xicgen_static_addr_resolve_literal(XiCgenCtx *ctx, const XiFunc *f,
-                                                                int64_t slot,
+                                                                int64_t slot, bool want_mutable,
                                                                 const XiModule **out_module,
                                                                 int64_t *out_slot) {
     if (out_module)
@@ -8545,15 +8545,19 @@ static const XiConstLiteral *xicgen_static_addr_resolve_literal(XiCgenCtx *ctx, 
     const XiConstLiteral *lit = NULL;
     const XiModule *import_module = NULL;
     int64_t import_slot = -1;
-    if (slot <= INT_MAX)
+    if (!want_mutable && slot <= INT_MAX)
         lit = cg_import_slot_const_literal(ctx, f, (int) slot, &import_module, &import_slot);
     if (lit && import_module && import_slot >= 0) {
         module = import_module;
         target_slot = import_slot;
+    } else if (want_mutable) {
+        lit = cg_module_shared_initializer_literal(module, target_slot);
     } else {
         lit = cg_module_const_literal(module, target_slot);
     }
     if (!lit || lit->kind == XI_CONST_LITERAL_NONE)
+        return NULL;
+    if (want_mutable && !lit->data_mutable)
         return NULL;
     if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
         cg_report_imported_static_const_requires_weak(ctx, module, target_slot);
@@ -8568,7 +8572,8 @@ static const XiConstLiteral *xicgen_static_addr_resolve_literal(XiCgenCtx *ctx, 
 }
 
 static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
-                                                int64_t slot, const XiConstLiteral *lit) {
+                                                int64_t slot, const XiConstLiteral *lit,
+                                                bool want_mutable) {
     const XiConstLiteral *static_lit = NULL;
     if (cg_freestanding_static_scalar_const_literal_in_module(ctx, module, slot, &static_lit)) {
         switch (static_lit->kind) {
@@ -8630,8 +8635,9 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
     }
 
     fprintf(stderr,
-            "[xi_cgen] ERROR: RawPtr.of requires a materialized freestanding static const "
-            "object; '%s.%s' is not addressable\n",
+            "[xi_cgen] ERROR: %s requires a materialized freestanding static %sobject; "
+            "'%s.%s' is not addressable\n",
+            want_mutable ? "RawMut.of" : "RawPtr.of", want_mutable ? "mutable " : "const ",
             module && module->name ? module->name : "?",
             cg_module_const_slot_name(module, slot) ? cg_module_const_slot_name(module, slot)
                                                     : "?");
@@ -8646,12 +8652,13 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     (void) prefix;
     const XiModule *module = NULL;
     int64_t slot = -1;
-    const XiConstLiteral *lit =
-        xicgen_static_addr_resolve_literal(ctx, f, v ? v->aux_int : -1, &module, &slot);
+    bool want_mutable = v && v->type && XR_TYPE_IS_POINTER(v->type) && v->type->ptr_is_mut;
+    const XiConstLiteral *lit = xicgen_static_addr_resolve_literal(ctx, f, v ? v->aux_int : -1,
+                                                                   want_mutable, &module, &slot);
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_RAWPTR,
                                                      cg_value_plan_storage_rep(ctx, v));
     fprintf(out, "(void *)(&");
-    if (!lit || !xicgen_emit_static_addr_symbol_name(ctx, out, module, slot, lit))
+    if (!lit || !xicgen_emit_static_addr_symbol_name(ctx, out, module, slot, lit, want_mutable))
         fprintf(out, "((char *)0)[0]");
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);

@@ -644,15 +644,10 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
         if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                "RawPtr.of is only supported in freestanding AOT profile for static const data",
-                &loc);
-            return xr_type_new_unknown(ctx->analyzer->isolate);
-        }
-        if (ptr_type->ptr_is_mut) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                "RawMut.of is not supported for static const data; use RawPtr.of for read-only "
-                "addresses",
+                ptr_type->ptr_is_mut
+                    ? "RawMut.of is only supported in freestanding AOT profile for static data"
+                    : "RawPtr.of is only supported in freestanding AOT profile for static const "
+                      "data",
                 &loc);
             return xr_type_new_unknown(ctx->analyzer->isolate);
         }

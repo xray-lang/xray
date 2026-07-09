@@ -39,11 +39,6 @@ static bool xa_var_has_static_data_attr(const VarDeclNode *var) {
            xa_var_attr(var, ATTR_USED);
 }
 
-static bool xa_type_has_fixed_layout_data_object(const XrType *type) {
-    return type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
-           type->instance.class_ref && type->instance.class_ref->struct_layout;
-}
-
 static bool xa_type_supports_const_static_data_object(const XrType *type) {
     if (!type)
         return false;

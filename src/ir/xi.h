@@ -177,7 +177,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
- *  XI_STATIC_ADDR   —                    shared slot index for static const data
+ *  XI_STATIC_ADDR   —                    shared slot index for freestanding static data
  *  XI_PTR_LOAD      —                    XrFFIType width of pointee | optional ptr-load flags
  *  XI_PTR_STORE     —                    XrFFIType width of pointee
  *  XI_JSON_NEW      char** field_names   field count
@@ -310,7 +310,7 @@ typedef enum {
     XI_BYTES_COPY_FROM,
     XI_BYTES_REPEAT_FROM,
     XI_ARRAY_DATA_PTR, /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
-    XI_STATIC_ADDR,    /* aux_int=shared slot; result RawPtr<T> to static const object */
+    XI_STATIC_ADDR,    /* aux_int=shared slot; result RawPtr<T>/RawMut<T> to static data */
 
     /* FFI raw-pointer memory access. The address is an address-width int
      * (RawPtr<T>/RawMut<T> value). aux_int carries an XrFFIType width code in
