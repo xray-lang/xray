@@ -1,9 +1,7 @@
 var bytes = Bytes.withCapacity(4)
-unsafe {
-    bytes.pushUnchecked(7)
-    bytes.pushUnchecked(9)
-    bytes.pushUnchecked(11)
-}
+bytes.push(7)
+bytes.push(9)
+bytes.push(11)
 
 print(bytes.length)
 print(bytes.capacity)

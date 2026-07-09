@@ -1075,8 +1075,7 @@ static bool xi_await_all_task_array_pushes_go(XiFunc *f, XiValue *user, XiValue 
         return unwrap_unique_task_go_for_aggregate_set(user->args[2]) != NULL;
     if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) && user->nargs >= 2 &&
         xi_task_array_values_same(f, user->args[0], arr) &&
-        (xi_opt_method_name_is(user, "push", SYMBOL_PUSH) ||
-         xi_opt_method_name_is(user, "pushUnchecked", SYMBOL_PUSH_UNCHECKED))) {
+        xi_opt_method_name_is(user, "push", SYMBOL_PUSH)) {
         return unwrap_unique_task_go_for_aggregate_set(user->args[1]) != NULL;
     }
     return false;
@@ -1948,10 +1947,9 @@ static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {
         !v->args[0] || !sr_value_has_static_typed_array_storage(v->args[0]) || !v->aux)
         return false;
     const char *method = (const char *) v->aux;
-    return strcmp(method, "push") == 0 || strcmp(method, "pushUnchecked") == 0 ||
-           strcmp(method, "reserve") == 0 || strcmp(method, "resize") == 0 ||
-           strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0 ||
-           strcmp(method, "fill") == 0;
+    return strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
+           strcmp(method, "resize") == 0 || strcmp(method, "appendFrom") == 0 ||
+           strcmp(method, "repeatFrom") == 0 || strcmp(method, "fill") == 0;
 }
 
 static bool sr_type_is_named_instance(const XrType *type, const char *name) {

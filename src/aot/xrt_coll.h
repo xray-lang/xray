@@ -449,18 +449,6 @@ static inline void xrt_array_push(XrValue arr, XrValue val) {
     XR_ARRAY_MARK_MUTATED(a);
 }
 
-static inline void xrt_array_push_unchecked(XrValue arr, XrValue val) {
-    xrt_array_t *a = (xrt_array_t *) arr.ptr;
-    xrt_array_check_store_or_abort(a, val, "xrt_array_push_unchecked");
-    if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
-    if (XR_UNLIKELY(a->length >= a->capacity))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Array.pushUnchecked capacity exceeded");
-    xr_typed_set(a->data, (int32_t) a->length, val, a->elem_type);
-    a->length++;
-    XR_ARRAY_MARK_MUTATED(a);
-}
-
 static inline XrValue xrt_array_clear_value(XrValue arr) {
     if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return XR_NULL_VAL;

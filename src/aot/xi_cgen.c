@@ -4042,8 +4042,7 @@ static bool cg_method_receiver_accepts_borrowed_ref(const XiValue *user, uint16_
     const char *method = (const char *) user->aux;
     return strcmp(method, "resize") == 0 || strcmp(method, "reserve") == 0 ||
            strcmp(method, "clear") == 0 || strcmp(method, "appendFrom") == 0 ||
-           strcmp(method, "repeatFrom") == 0 || strcmp(method, "pushUnchecked") == 0 ||
-           strcmp(method, "repeatUnchecked") == 0;
+           strcmp(method, "repeatFrom") == 0 || strcmp(method, "repeatUnchecked") == 0;
 }
 
 static bool cg_borrowed_array_slot_alias_uses_are_borrowed(XiCgenCtx *ctx, const XiFunc *f,
@@ -5099,7 +5098,7 @@ static bool cg_await_all_value_is_array_push(const XiValue *v, const XiValue *ar
     } else if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 2 &&
                cg_inline_await_all_value_traces_to_array(v->args[0], array)) {
         const char *method = (const char *) v->aux;
-        if (method && (strcmp(method, "push") == 0 || strcmp(method, "pushUnchecked") == 0))
+        if (method && strcmp(method, "push") == 0)
             task = v->args[1];
     }
     if (!task)
@@ -5257,7 +5256,7 @@ static bool cg_await_all_inline_literal_value_is_elided(const XiFunc *f, const X
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 2 &&
         v->args[0]) {
         const char *method = (const char *) v->aux;
-        if (method && (strcmp(method, "push") == 0 || strcmp(method, "pushUnchecked") == 0))
+        if (method && strcmp(method, "push") == 0)
             return cg_await_all_inline_literal_array_is_elided(f, v->args[0]);
     }
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 && v->args[0])
@@ -5835,7 +5834,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_value_generated_line_reset(ctx, out, v);
         return;
     }
-    if (v && v->uses == 0 && cg_array_call_is_unchecked_bytes_trusted_nothrow(ctx, f, v)) {
+    if (v && v->uses == 0 && cg_array_call_is_direct_bytes_mutator_trusted_nothrow(ctx, f, v)) {
         fprintf(out, "    ");
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");

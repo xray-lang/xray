@@ -4373,13 +4373,6 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return true;
     }
 
-    const XaotArrayStoragePlan *storage =
-        xaot_bundle_find_array_storage_plan(cg_ctx_aot_bundle(ctx), cg_unwrap_identity_value(recv));
-    if (storage && cg_unwrap_identity_value(storage->origin) &&
-        cg_unwrap_identity_value(storage->origin)->op == XI_PARAM) {
-        return false;
-    }
-
     fprintf(out, "({ xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
     {
@@ -4394,22 +4387,6 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_typed_array_store_value(out, &info, arg);
     if (info.rep == XR_REP_TAGGED)
         fprintf(out, "; XR_ARRAY_MARK_MUTATED(_a)");
-    fprintf(out, "; XR_NULL_VAL; })");
-    return true;
-}
-
-static bool emit_typed_array_push_unchecked_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                 const char *prefix, const XiValue *recv,
-                                                 const XiValue *arg) {
-    CgArrayElemInfo info;
-    if (!cg_array_value_storage_info(ctx, f, recv, &info, CG_ARRAY_STORAGE_MUTABLE))
-        return false;
-    if (info.rep == XR_REP_TAGGED)
-        return false;
-    fprintf(out, "({ xrt_array_t *_a = ");
-    emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
-    fprintf(out, "; ((%s*)_a->data)[_a->length++] = ", info.ctype);
-    emit_typed_array_store_value(out, &info, arg);
     fprintf(out, "; XR_NULL_VAL; })");
     return true;
 }
@@ -4565,15 +4542,15 @@ static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
     return true;
 }
 
-static bool cg_array_call_is_unchecked_bytes_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
-                                                             const XiValue *call) {
+static bool cg_array_call_is_direct_bytes_mutator_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
+                                                                  const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux)
         return false;
 
     const char *method = (const char *) v->aux;
     CgArrayElemInfo dst_info;
-    if (strcmp(method, "pushUnchecked") == 0 && v->nargs == 2) {
+    if (strcmp(method, "push") == 0 && v->nargs == 2) {
         return (cg_array_value_storage_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
                 cg_array_elem_info_is_u8(&dst_info)) ||
@@ -4683,11 +4660,11 @@ static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue 
     return cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX, XAOT_SPAN_DROP_HELPER);
 }
 
-static bool cg_array_err_check_after_unchecked_bytes_trusted(XiCgenCtx *ctx, const XiFunc *f,
-                                                             const XiValue *check) {
+static bool cg_array_err_check_after_direct_bytes_mutator_trusted(XiCgenCtx *ctx, const XiFunc *f,
+                                                                  const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_call_is_unchecked_bytes_trusted_nothrow(
+    return cg_array_call_is_direct_bytes_mutator_trusted_nothrow(
         ctx, f, cg_class_native_prev_error_source_value(check));
 }
 

@@ -56,7 +56,7 @@ fn show_bytes_load_oob() {
 fn show_bytes_copy_within_oob() {
     var bytes = Bytes.withCapacity(4)
     unsafe {
-        bytes.pushUnchecked(1)
+        bytes.push(1)
     }
     try {
         bytes.repeatFrom(2, 4)

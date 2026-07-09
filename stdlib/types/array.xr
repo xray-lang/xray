@@ -7,7 +7,6 @@ class Array<T> {
     capacity: int
     isEmpty: bool
     push(value: T)
-    pushUnchecked(value: T)
     // @lowered
     getUnchecked(index: int) -> T
     // @lowered

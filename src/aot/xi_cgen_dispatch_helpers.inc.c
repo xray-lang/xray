@@ -3484,9 +3484,6 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
     if (nargs == 1 && method && strcmp(method, "push") == 0 &&
         emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
         return true;
-    if (nargs == 1 && method && strcmp(method, "pushUnchecked") == 0 &&
-        emit_typed_array_push_unchecked_expr(ctx, out, f, prefix, v->args[0], v->args[1]))
-        return true;
     if (nargs == 2 && method && strcmp(method, "setUnchecked") == 0 &&
         emit_typed_array_set_unchecked_expr(ctx, out, f, prefix, v))
         return true;
@@ -4205,7 +4202,7 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
 
     if (xicgen_atomic_call_is_i64_direct_nothrow(v))
         return true;
-    if (cg_array_call_is_unchecked_bytes_trusted_nothrow(ctx, current, v))
+    if (cg_array_call_is_direct_bytes_mutator_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, v))
         return true;
@@ -8491,7 +8488,7 @@ static const XiValue *xicgen_find_par_for_unsupported_call_value(XiCgenCtx *ctx,
 
     if (xicgen_atomic_call_is_i64_direct_nothrow(call))
         return NULL;
-    if (cg_array_call_is_unchecked_bytes_trusted_nothrow(ctx, current, call))
+    if (cg_array_call_is_direct_bytes_mutator_trusted_nothrow(ctx, current, call))
         return NULL;
     if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, call))
         return NULL;
@@ -8571,7 +8568,7 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (cg_array_err_check_after_index_get_trusted(ctx, body, value))
                 continue;
-            if (cg_array_err_check_after_unchecked_bytes_trusted(ctx, body, value))
+            if (cg_array_err_check_after_direct_bytes_mutator_trusted(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_bytes_append_trusted(ctx, body, value))
                 continue;

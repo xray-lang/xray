@@ -7,7 +7,7 @@ fn patchFirst(outputs: Array<Bytes>) {
 
 var block = Bytes.withCapacity(1)
 unsafe {
-    block.pushUnchecked(0)
+    block.push(0)
 }
 var outputs: Array<Bytes> = []
 outputs.push(block)

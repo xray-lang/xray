@@ -8,7 +8,7 @@ fn readSlot(outputs: Array<Bytes>, index: int) -> int {
 
 var block = Bytes.withCapacity(1)
 unsafe {
-    block.pushUnchecked(7)
+    block.push(7)
 }
 var outputs: Array<Bytes> = []
 outputs.push(block)

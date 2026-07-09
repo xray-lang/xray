@@ -1673,8 +1673,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_int(NULL);
     }
     if (XR_TYPE_IS_ARRAY(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
-        (strcmp(ma->name, "pushUnchecked") == 0 || strcmp(ma->name, "getUnchecked") == 0 ||
-         strcmp(ma->name, "setUnchecked") == 0 || strcmp(ma->name, "dataPtrUnchecked") == 0 ||
+        (strcmp(ma->name, "getUnchecked") == 0 || strcmp(ma->name, "setUnchecked") == 0 ||
+         strcmp(ma->name, "dataPtrUnchecked") == 0 ||
          strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];

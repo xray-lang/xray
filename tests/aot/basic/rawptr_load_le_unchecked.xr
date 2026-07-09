@@ -13,14 +13,14 @@ fn readRaw(src: ByteSpan) -> int {
 
 var bytes = Bytes.withCapacity(8)
 unsafe {
-    bytes.pushUnchecked(1)
-    bytes.pushUnchecked(2)
-    bytes.pushUnchecked(3)
-    bytes.pushUnchecked(4)
-    bytes.pushUnchecked(5)
-    bytes.pushUnchecked(6)
-    bytes.pushUnchecked(7)
-    bytes.pushUnchecked(8)
+    bytes.push(1)
+    bytes.push(2)
+    bytes.push(3)
+    bytes.push(4)
+    bytes.push(5)
+    bytes.push(6)
+    bytes.push(7)
+    bytes.push(8)
 }
 
 var view: ByteSpan = bytes[:]
