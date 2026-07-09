@@ -1333,11 +1333,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "response",
-        .signature = "(status: int, body: unknown = null): string",
-        .summary = "",
-    },
-    {
         .name = "responseText",
         .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?",
         .summary = "",
@@ -5564,7 +5559,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
-            "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.router` | `(): Router` |  |\n"
