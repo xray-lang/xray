@@ -1,0 +1,29 @@
+// anchor: sys-threadlocal-init-throw-retry
+// A failed lazy initializer must not leave a pending per-thread slot behind;
+// the next get() on the same OS thread should retry initialization.
+
+import sys
+
+enum InitErr {
+    Failed
+}
+
+var fail = true
+var calls = 0
+var local = sys.ThreadLocal<int>(fn() -> int {
+    calls = calls + 1
+    if (fail) {
+        throw InitErr.Failed
+    }
+    return 42
+})
+
+try {
+    print(local.get())
+} catch (e) {
+    print("failed")
+}
+
+fail = false
+print(local.get())
+print(calls)

@@ -1,0 +1,18 @@
+// anchor: sys-threadlocal-recursive-init
+// Recursive lazy initialization on the same OS thread is a programmer error,
+// but it must fail deterministically instead of recursing until stack overflow.
+
+import { ThreadLocal } from sys
+
+shared local = ThreadLocal<int>(fn() -> int {
+    return local.get()
+})
+
+try {
+    print(local.get())
+} catch (e) {
+    print("recursive")
+}
+
+local.set(7)
+print(local.get())
