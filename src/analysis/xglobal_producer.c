@@ -5628,11 +5628,27 @@ static bool evidence_has_equivalent_generic_inst(const XgGlobalEvidence *ev,
         return false;
     for (uint32_t i = 0; i < ev->ngeneric_insts; i++) {
         const XgGenericInstSummary *row = &ev->generic_insts[i];
-        if (row->module_id == inst->module_id && row->kind == inst->kind &&
-            row->name_id == inst->name_id && row->type_key == inst->type_key &&
-            row->type_arg_key_start == inst->type_arg_key_start &&
-            row->type_arg_count == inst->type_arg_count &&
-            row->root_callsite_id == inst->root_callsite_id)
+        if (row->module_id != inst->module_id || row->kind != inst->kind ||
+            row->name_id != inst->name_id || row->type_key != inst->type_key ||
+            row->type_arg_key_start != inst->type_arg_key_start ||
+            row->type_arg_count != inst->type_arg_count ||
+            row->origin_decl_id != inst->origin_decl_id ||
+            row->origin_func_id != inst->origin_func_id ||
+            row->origin_method_id != inst->origin_method_id ||
+            row->origin_class_id != inst->origin_class_id ||
+            row->constraint_interface_id != inst->constraint_interface_id)
+            continue;
+        if (inst->specialized_func_id != XG_NO_ID || row->specialized_func_id != XG_NO_ID) {
+            if (row->specialized_func_id == inst->specialized_func_id)
+                return true;
+            continue;
+        }
+        if (inst->specialized_class_id != XG_NO_ID || row->specialized_class_id != XG_NO_ID) {
+            if (row->specialized_class_id == inst->specialized_class_id)
+                return true;
+            continue;
+        }
+        if (row->root_callsite_id == inst->root_callsite_id)
             return true;
     }
     return false;
