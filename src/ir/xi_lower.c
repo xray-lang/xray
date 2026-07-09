@@ -1476,6 +1476,36 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
     }
 }
 
+static bool shared_default_initializer_from_type(struct XrType *type, XiConstLiteral *out) {
+    if (!type || !out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->type = type;
+    if (type->is_nullable) {
+        out->kind = XI_CONST_LITERAL_NULL;
+        return true;
+    }
+    switch (type->kind) {
+        case XR_KIND_INT:
+            out->kind = XI_CONST_LITERAL_INT;
+            out->int_value = 0;
+            return true;
+        case XR_KIND_FLOAT:
+            out->kind = XI_CONST_LITERAL_FLOAT;
+            out->float_value = 0.0;
+            return true;
+        case XR_KIND_BOOL:
+            out->kind = XI_CONST_LITERAL_BOOL;
+            out->bool_value = false;
+            return true;
+        case XR_KIND_NULL:
+            out->kind = XI_CONST_LITERAL_NULL;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrCtValue *copy_ct_value_to_func(XiFunc *func, const XrCtValue *src) {
     if (!func || !src)
         return NULL;
@@ -1781,6 +1811,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                    s->as.var_decl.initializer) {
             XiConstLiteral lit;
             if (shared_static_initializer_from_decl(l, s, type, &lit))
+                slot_meta.shared_initializers[next_shared] = lit;
+        } else if (s && s->type == AST_VAR_DECL && !s->as.var_decl.initializer) {
+            XiConstLiteral lit;
+            if (shared_default_initializer_from_type(type, &lit))
                 slot_meta.shared_initializers[next_shared] = lit;
         }
         if (is_exported)

@@ -1801,6 +1801,68 @@ else
     sed 's/^/      /' "$FREESTANDING_TOP_VAR_STATIC_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_TOP_VAR_DEFAULT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_default.xr"
+FREESTANDING_TOP_VAR_DEFAULT_OBJ="$WORK/freestanding_top_var_default.o"
+FREESTANDING_TOP_VAR_DEFAULT_LOG="$WORK/freestanding_top_var_default.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_VAR_DEFAULT_OBJ" \
+        "$FREESTANDING_TOP_VAR_DEFAULT_SRC" >"$FREESTANDING_TOP_VAR_DEFAULT_LOG" 2>&1; then
+    FREESTANDING_TOP_VAR_DEFAULT_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_VAR_DEFAULT_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_VAR_DEFAULT_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "static XrValue xrt_shared[5] = {" \
+            "freestanding-profile/top-var-default: materializes default mutable slots as static data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "[0] = XR_FROM_INT(INT64_C(0))," \
+            "freestanding-profile/top-var-default: initializes integer var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "[1] = XR_FROM_FLOAT(0x0p+0)," \
+            "freestanding-profile/top-var-default: initializes float var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "[2] = XR_FALSE_VAL," \
+            "freestanding-profile/top-var-default: initializes bool var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "[3] = XR_NULL_VAL," \
+            "freestanding-profile/top-var-default: initializes nullable var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" "xrt_shared[0] =" \
+            "freestanding-profile/top-var-default: keeps runtime writes to mutable storage"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "xrt_shared[0] = XR_FROM_INT(INT64_C(0))" \
+            "freestanding-profile/top-var-default: elides module-init integer default write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "xrt_shared[1] = XR_FROM_FLOAT(0x0p+0)" \
+            "freestanding-profile/top-var-default: elides module-init float default write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "xrt_shared[2] = XR_FALSE_VAL" \
+            "freestanding-profile/top-var-default: elides module-init bool default write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" \
+            "xrt_shared[3] = XR_NULL_VAL" \
+            "freestanding-profile/top-var-default: elides module-init nullable default write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_DEFAULT_C" "#include \"xrt.h\"" \
+            "freestanding-profile/top-var-default: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/top-var-default: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_DEFAULT_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_VAR_DEFAULT_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_VAR_DEFAULT_OBJ")"
+    FREESTANDING_TOP_VAR_DEFAULT_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_VAR_DEFAULT_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_TOP_VAR_DEFAULT_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-var-default: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/top-var-default: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_VAR_DEFAULT_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/top-var-default: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_VAR_DEFAULT_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_CONST_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_scalar.xr"
 FREESTANDING_TOP_CONST_SCALAR_OBJ="$WORK/freestanding_top_const_scalar.o"
 FREESTANDING_TOP_CONST_SCALAR_LOG="$WORK/freestanding_top_const_scalar.log"
@@ -2765,7 +2827,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_top_var_reject.log" \
     "freestanding-profile: rejects top-level var declarations" \
     "freestanding profile rejects top-level var declaration" \
-    "only int/float/bool/char/string/null consteval initializers are supported as static mutable module storage"
+    "only int/float/bool/char/string/null consteval initializers, or typed scalar/string/null nullable defaults, are supported as static mutable module storage"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \

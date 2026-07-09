@@ -5616,8 +5616,32 @@ static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ct
 }
 
 static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *ctx,
-                                                               VarDeclNode *var) {
-    return xa_freestanding_shared_static_initializer_allowed(ctx, var);
+                                                               VarDeclNode *var,
+                                                               XrType *declared_type) {
+    if (!var)
+        return false;
+    if (var->initializer)
+        return xa_freestanding_shared_static_initializer_allowed(ctx, var);
+    if (!declared_type || XR_TYPE_IS_UNKNOWN(declared_type) ||
+        !xa_type_is_default_initializable(ctx, declared_type))
+        return false;
+    XrType *base = declared_type->is_nullable
+                       ? xr_type_non_nullable(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL,
+                                              declared_type)
+                       : declared_type;
+    if (!base)
+        return false;
+    switch (base->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+        case XR_KIND_STRING:
+        case XR_KIND_NULL:
+            return true;
+        default:
+            return false;
+    }
 }
 
 XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
@@ -6961,7 +6985,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                xa_is_module_level_scope(ctx->analyzer) && node->type != AST_SHARED_DECL &&
                !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var)) &&
                !(node->type == AST_VAR_DECL &&
-                 xa_freestanding_top_var_static_initializer_allowed(ctx, var))) {
+                 xa_freestanding_top_var_static_initializer_allowed(
+                     ctx, var, links ? links->declared_type : NULL))) {
         xa_freestanding_report_unavailable(
             ctx, node,
             node->type == AST_CONST_DECL ? "top-level const declaration"
@@ -6971,8 +6996,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                   "fixed-array lanes, and recursively scalar fixed-array/tuple/struct "
                   "initializers are allowed as erased or static data objects in the current "
                   "freestanding slice"
-                : "only int/float/bool/char/string/null consteval initializers are supported as "
-                  "static mutable module storage in the current freestanding slice");
+                : "only int/float/bool/char/string/null consteval initializers, or typed "
+                  "scalar/string/null nullable defaults, are supported as static mutable module "
+                  "storage in the current freestanding slice");
     }
 
     // Variable declarations must have a type annotation or initializer.

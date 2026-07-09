@@ -1,0 +1,13 @@
+var COUNTER: int
+var SCALE: float
+var ENABLED: bool
+var MAYBE: int?
+
+@c_export("xray_top_var_default")
+fn xray_top_var_default() -> int {
+    COUNTER = COUNTER + 7
+    if (SCALE == 0.0 && ENABLED == false && MAYBE == null) {
+        return COUNTER
+    }
+    return 0
+}
