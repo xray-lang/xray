@@ -32,6 +32,7 @@ array_t_concrete_storage|covered|generic-storage-plan .*kind=array action=typed_
 generic_code_size_policy|covered|generic-code-size-plan .*action=allow_clone|tests/aot/filetests/cgen|Generic clone decisions include a verified static code-size policy plan.
 interface_object_storage|covered|interface-abi .*iface_object.*itable.*boxed_receiver|tests/aot/filetests/cgen|Interface object ABI is covered by boxed receiver storage with verified itable metadata.
 itable_emitter|covered|xrt_itable_method|tests/aot/filetests/cgen|Verified itable backend emission is covered by generated C lookup and installed class itables.
+interface_object_use_evidence|covered|interface-object-use|tests/unit/analysis|Interface object value/array/field/return/capture/param uses have schema, dump, hash, and cache payload evidence.
 json_shape_guard|covered|json-access-plan .*action=shape_guard_index|tests/aot/filetests/cgen|Json open-shape static-key access emits shape guard plus fallback helpers.
 json_computed_key_guard|covered|json-access-plan .*action=computed_key_guard|tests/aot/filetests/cgen|Json computed-key access consumes receiver-shape guarded lookup helpers in generated C.
 map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/aot/filetests/cgen|Small Map/Set literal lookup consumes inline scan plans in generated C.
