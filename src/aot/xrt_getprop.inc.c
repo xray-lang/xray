@@ -46,8 +46,6 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(xrt_range_length_ptr(r) == 0);
     }
-    if (obj.tag == XR_TAG_DATETIME)
-        return xrt_datetime_getprop(obj, (int) symbol_id);
     if (obj.tag == XR_TAG_BUFFER)
         return xrt_buffer_method_0(obj, (int) symbol_id);
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0) {

@@ -21,7 +21,6 @@
 #include "xrt_mem.h"
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
-#include "xrt_datetime.h"
 #include "xrt_arith.h"  // xrt_value_to_string for container/tuple toString
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"   // int.popcount/rotate* (task 153)
@@ -534,8 +533,6 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_0(recv, sym);
-    if (recv.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_0(recv, sym);
     if (recv.tag == XR_TAG_BUFFER)
         return xrt_buffer_method_0(recv, sym);
     if (recv.tag == XR_TAG_SYS_MUTEX)
@@ -914,8 +911,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_1(recv, sym, arg0);
-    if (recv.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_BUFFER)
         return xrt_buffer_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_SYS_CONDVAR)
@@ -1066,8 +1061,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         xrt_map_set(m, arg0, arg1);
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
-    if (recv.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_2(recv, sym, arg0, arg1);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 

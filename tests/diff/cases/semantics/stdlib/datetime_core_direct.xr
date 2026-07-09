@@ -1,4 +1,4 @@
-// AOT DateTime light object must match VM DateTime semantics without VM runtime dispatch.
+// Pure-Xray DateTime must match between VM and AOT without a native DateTime shadow.
 
 import datetime
 

@@ -161,7 +161,6 @@ typedef struct XrValue {
 #define XR_TAG_ENUM 24        /* AOT bridged enum key */
 #define XR_TAG_ITERATOR 25    /* AOT map/set iterator (for-in over the iterator protocol) */
 #define XR_TAG_REGEX 26       /* AOT compiled regex handle */
-#define XR_TAG_DATETIME 27    /* AOT DateTime light object */
 #define XR_TAG_SYS_MUTEX 28   /* AOT sys.Mutex OS-domain handle */
 #define XR_TAG_SYS_RWLOCK 29  /* AOT sys.RwLock OS-domain handle */
 #define XR_TAG_SYS_CONDVAR 30 /* AOT sys.Condvar OS-domain handle */
