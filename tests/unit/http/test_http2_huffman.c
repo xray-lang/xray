@@ -48,6 +48,15 @@ static void collect_header(const char *name, size_t name_len, const char *value,
     c->count++;
 }
 
+static void write_setting(uint8_t out[6], uint16_t id, uint32_t value) {
+    out[0] = (uint8_t) (id >> 8);
+    out[1] = (uint8_t) id;
+    out[2] = (uint8_t) (value >> 24);
+    out[3] = (uint8_t) (value >> 16);
+    out[4] = (uint8_t) (value >> 8);
+    out[5] = (uint8_t) value;
+}
+
 /* ========== RFC 7541 C.4.1: First Request with Huffman ========== */
 
 // :method = GET            indexed 2:      0x82
@@ -194,6 +203,80 @@ TEST(hpack_index_zero_rejected) {
     http2_hpack_free(&table);
 }
 
+/* ========== HTTP/2 SETTINGS validation ========== */
+
+TEST(settings_payload_applies_valid_values) {
+    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    ASSERT_NOT_NULL(conn);
+
+    uint8_t payload[12];
+    write_setting(payload, XR_H2_SETTINGS_MAX_FRAME_SIZE, 32768);
+    write_setting(payload + 6, XR_H2_SETTINGS_ENABLE_PUSH, 1);
+
+    ASSERT_EQ_INT((int) http2_apply_settings_payload(conn, payload, sizeof(payload)),
+                  XR_H2_NO_ERROR);
+    ASSERT_EQ_UINT(conn->remote_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE], 32768U);
+    ASSERT_EQ_UINT(conn->remote_settings[XR_H2_SETTINGS_ENABLE_PUSH], 1U);
+
+    http2_conn_free(conn);
+}
+
+TEST(settings_payload_rejects_partial_setting) {
+    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    ASSERT_NOT_NULL(conn);
+
+    uint8_t payload[5] = {0};
+    ASSERT_EQ_INT((int) http2_apply_settings_payload(conn, payload, sizeof(payload)),
+                  XR_H2_FRAME_SIZE_ERROR);
+
+    http2_conn_free(conn);
+}
+
+TEST(settings_payload_rejects_invalid_max_frame_without_mutation) {
+    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    ASSERT_NOT_NULL(conn);
+
+    uint32_t before = conn->remote_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE];
+    uint8_t payload[6];
+    write_setting(payload, XR_H2_SETTINGS_MAX_FRAME_SIZE, 0);
+
+    ASSERT_EQ_INT((int) http2_apply_settings_payload(conn, payload, sizeof(payload)),
+                  XR_H2_PROTOCOL_ERROR);
+    ASSERT_EQ_UINT(conn->remote_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE], before);
+
+    http2_conn_free(conn);
+}
+
+TEST(settings_payload_rejects_initial_window_overflow_without_mutation) {
+    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    ASSERT_NOT_NULL(conn);
+
+    uint32_t before = conn->remote_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE];
+    uint8_t payload[6];
+    write_setting(payload, XR_H2_SETTINGS_INITIAL_WINDOW_SIZE, 0x80000000U);
+
+    ASSERT_EQ_INT((int) http2_apply_settings_payload(conn, payload, sizeof(payload)),
+                  XR_H2_FLOW_CONTROL_ERROR);
+    ASSERT_EQ_UINT(conn->remote_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE], before);
+
+    http2_conn_free(conn);
+}
+
+TEST(settings_payload_rejects_invalid_enable_push_without_mutation) {
+    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    ASSERT_NOT_NULL(conn);
+
+    uint32_t before = conn->remote_settings[XR_H2_SETTINGS_ENABLE_PUSH];
+    uint8_t payload[6];
+    write_setting(payload, XR_H2_SETTINGS_ENABLE_PUSH, 2);
+
+    ASSERT_EQ_INT((int) http2_apply_settings_payload(conn, payload, sizeof(payload)),
+                  XR_H2_PROTOCOL_ERROR);
+    ASSERT_EQ_UINT(conn->remote_settings[XR_H2_SETTINGS_ENABLE_PUSH], before);
+
+    http2_conn_free(conn);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -210,5 +293,12 @@ RUN_TEST(huffman_rfc7541_c_6_3_gzip);
 RUN_TEST_SUITE("HPACK Huffman - Padding / Error Cases");
 RUN_TEST(huffman_invalid_padding_rejected);
 RUN_TEST(hpack_index_zero_rejected);
+
+RUN_TEST_SUITE("HTTP/2 SETTINGS validation");
+RUN_TEST(settings_payload_applies_valid_values);
+RUN_TEST(settings_payload_rejects_partial_setting);
+RUN_TEST(settings_payload_rejects_invalid_max_frame_without_mutation);
+RUN_TEST(settings_payload_rejects_initial_window_overflow_without_mutation);
+RUN_TEST(settings_payload_rejects_invalid_enable_push_without_mutation);
 
 TEST_MAIN_END()
