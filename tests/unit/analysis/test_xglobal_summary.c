@@ -488,7 +488,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=5 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=6 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -705,15 +705,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=5 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=5 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=5 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=5 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=6 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=6 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=6 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=6 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=5 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=6 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -7288,6 +7288,95 @@ TEST(global_evidence_records_json_shape_and_access_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_record_shape_and_access_plans) {
+    XgBuildKey key = {.source_hash = 31,
+                      .compiler_semver_hash = 32,
+                      .profile_hash = 33,
+                      .imported_summary_hash = 34,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgRecordShapeSummary shape = {.record_shape_id = 1,
+                                  .module_id = 1,
+                                  .owner_func_id = 7,
+                                  .source_span_id = 100,
+                                  .type_key = 200,
+                                  .field_name_start = 300,
+                                  .field_count = 2,
+                                  .shape_kind = XG_RECORD_SHAPE_LITERAL,
+                                  .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS |
+                                           XG_RECORD_SHAPE_JSON_BRIDGEABLE,
+                                  .shape_hash = UINT64_C(0x2345)};
+    XgRecordAccessSummary access = {.record_access_id = 1,
+                                    .module_id = 1,
+                                    .owner_func_id = 7,
+                                    .receiver_shape_id = 1,
+                                    .source_span_id = 101,
+                                    .field_name_id = xg_name_id("x"),
+                                    .result_type_key = 201,
+                                    .field_ordinal = 0,
+                                    .access_kind = XG_RECORD_ACCESS_FIELD_GET,
+                                    .flags = XG_RECORD_ACCESS_STATIC_FIELD |
+                                             XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN};
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_access(&ev, &access));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "record-shape 0 id=1 module=1 func=7 type=200 kind=literal"));
+    ASSERT_NOT_NULL(strstr(dump, "record-access 0 id=1 module=1 func=7 shape=1 kind=field_get"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nrecord_shape_plans, 1);
+    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 1);
+    const XaotRecordShapePlan *shape_plan = xaot_bundle_find_record_shape_plan(&bundle, 1);
+    const XaotRecordAccessPlan *access_plan = xaot_bundle_find_record_access_plan(&bundle, 1);
+    ASSERT_NOT_NULL(shape_plan);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(shape_plan->action, XAOT_RECORD_SHAPE_SEALED_RECORD);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    ASSERT_EQ_UINT(access_plan->evidence, XAOT_RECORD_EV_GLOBAL_ROW | XAOT_RECORD_EV_STATIC_FIELD |
+                                              XAOT_RECORD_EV_RECEIVER_SHAPE |
+                                              XAOT_RECORD_EV_FIELD_INDEX);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "record-shape-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=sealed_record"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "record-access-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=direct_field"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.record_access_plans[0].action = XAOT_RECORD_ACCESS_CHECKED_FIELD;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Record access plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_records_map_set_key_plans) {
     XgBuildKey key = {.source_hash = 21,
                       .compiler_semver_hash = 22,
@@ -7455,6 +7544,60 @@ TEST(global_evidence_producer_records_explicit_json_shape_access) {
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "json-shape 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "json-access 0 id=1"));
+    xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_records_record_shape_access) {
+    setup_parser_session();
+    const char *source = "fn readX() -> int {\n"
+                         "    var p = { x: 1, y: 2 }\n"
+                         "    return p.x\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.njson_shapes, 0);
+    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
+    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
+    ASSERT_EQ_UINT(ev.record_shapes[0].shape_kind, XG_RECORD_SHAPE_LITERAL);
+    ASSERT_EQ_UINT(ev.record_shapes[0].field_count, 2);
+    ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_SEALED) != 0);
+    ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_STATIC_KEYS) != 0);
+    ASSERT_EQ_UINT(ev.record_accesses[0].receiver_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 0);
+    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotRecordAccessPlan *access_plan =
+        xaot_bundle_find_record_access_plan(&bundle, ev.record_accesses[0].record_access_id);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "record-shape 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "record-access 0 id=1"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -8141,8 +8284,10 @@ RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
 RUN_TEST(global_evidence_producer_records_derived_eq_hash_plan);
 RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
+RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
+RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);

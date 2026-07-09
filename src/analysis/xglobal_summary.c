@@ -309,6 +309,36 @@ static uint64_t hash_json_access_summary(uint64_t hash, const XgJsonAccessSummar
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_record_shape_summary(uint64_t hash, const XgRecordShapeSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->record_shape_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u32(hash, row->field_name_start);
+    hash = hash_u32(hash, row->field_count);
+    hash = hash_u8(hash, row->shape_kind);
+    hash = hash_u32(hash, row->flags);
+    return hash_u64(hash, row->shape_hash);
+}
+
+static uint64_t hash_record_access_summary(uint64_t hash, const XgRecordAccessSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->record_access_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->receiver_shape_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->field_name_id);
+    hash = hash_u32(hash, row->result_type_key);
+    hash = hash_u32(hash, row->field_ordinal);
+    hash = hash_u8(hash, row->access_kind);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_map_shape_summary(uint64_t hash, const XgMapShapeSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -538,6 +568,34 @@ XR_FUNC const char *xg_json_access_kind_name(uint8_t kind) {
             return "index_set";
         case XG_JSON_ACCESS_GET_DEFAULT:
             return "get_default";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_record_shape_kind_name(uint8_t kind) {
+    switch ((XgRecordShapeKind) kind) {
+        case XG_RECORD_SHAPE_LITERAL:
+            return "literal";
+        case XG_RECORD_SHAPE_OPTIONS:
+            return "options";
+        case XG_RECORD_SHAPE_SPREAD:
+            return "spread";
+        case XG_RECORD_SHAPE_STATIC:
+            return "static";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_record_access_kind_name(uint8_t kind) {
+    switch ((XgRecordAccessKind) kind) {
+        case XG_RECORD_ACCESS_FIELD_GET:
+            return "field_get";
+        case XG_RECORD_ACCESS_FIELD_SET:
+            return "field_set";
+        case XG_RECORD_ACCESS_DESTRUCTURE:
+            return "destructure";
         default:
             return "unknown";
     }
@@ -827,6 +885,8 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->derived_methods);
     xr_free(evidence->json_shapes);
     xr_free(evidence->json_accesses);
+    xr_free(evidence->record_shapes);
+    xr_free(evidence->record_accesses);
     xr_free(evidence->map_shapes);
     xr_free(evidence->map_entries);
     xr_free(evidence->key_accesses);
@@ -920,6 +980,20 @@ XR_FUNC bool xg_global_evidence_reserve_json_accesses(XgGlobalEvidence *evidence
                                                       uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->json_accesses, &evidence->json_access_cap,
                                      capacity, sizeof(XgJsonAccessSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_record_shapes(XgGlobalEvidence *evidence,
+                                                      uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->record_shapes, &evidence->record_shape_cap, capacity,
+                         sizeof(XgRecordShapeSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *evidence,
+                                                        uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->record_accesses, &evidence->record_access_cap,
+                         capacity, sizeof(XgRecordAccessSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_map_shapes(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1117,6 +1191,30 @@ xg_global_evidence_add_json_access(XgGlobalEvidence *evidence, const XgJsonAcces
     return row;
 }
 
+XR_FUNC XgRecordShapeSummary *
+xg_global_evidence_add_record_shape(XgGlobalEvidence *evidence,
+                                    const XgRecordShapeSummary *summary) {
+    XgRecordShapeSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_record_shapes(evidence, evidence->nrecord_shapes + 1))
+        return NULL;
+    row = &evidence->record_shapes[evidence->nrecord_shapes++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgRecordAccessSummary *
+xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
+                                     const XgRecordAccessSummary *summary) {
+    XgRecordAccessSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_record_accesses(evidence, evidence->nrecord_accesses + 1))
+        return NULL;
+    row = &evidence->record_accesses[evidence->nrecord_accesses++];
+    *row = *summary;
+    return row;
+}
+
 XR_FUNC XgMapShapeSummary *xg_global_evidence_add_map_shape(XgGlobalEvidence *evidence,
                                                             const XgMapShapeSummary *summary) {
     XgMapShapeSummary *row;
@@ -1191,6 +1289,18 @@ xg_global_evidence_find_json_shape(const XgGlobalEvidence *evidence, XgJsonShape
     for (uint32_t i = 0; i < evidence->njson_shapes; i++) {
         if (evidence->json_shapes[i].json_shape_id == json_shape_id)
             return &evidence->json_shapes[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgRecordShapeSummary *
+xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
+                                     XgRecordShapeId record_shape_id) {
+    if (!evidence || record_shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
+        if (evidence->record_shapes[i].record_shape_id == record_shape_id)
+            return &evidence->record_shapes[i];
     }
     return NULL;
 }
@@ -1652,6 +1762,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->nderived_methods, sizeof(evidence->nderived_methods));
     hash = hash_mix(hash, &evidence->njson_shapes, sizeof(evidence->njson_shapes));
     hash = hash_mix(hash, &evidence->njson_accesses, sizeof(evidence->njson_accesses));
+    hash = hash_mix(hash, &evidence->nrecord_shapes, sizeof(evidence->nrecord_shapes));
+    hash = hash_mix(hash, &evidence->nrecord_accesses, sizeof(evidence->nrecord_accesses));
     hash = hash_mix(hash, &evidence->nmap_shapes, sizeof(evidence->nmap_shapes));
     hash = hash_mix(hash, &evidence->nmap_entries, sizeof(evidence->nmap_entries));
     hash = hash_mix(hash, &evidence->nkey_accesses, sizeof(evidence->nkey_accesses));
@@ -1686,6 +1798,10 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_json_shape_summary(hash, &evidence->json_shapes[i]);
     for (uint32_t i = 0; i < evidence->njson_accesses; i++)
         hash = hash_json_access_summary(hash, &evidence->json_accesses[i]);
+    for (uint32_t i = 0; i < evidence->nrecord_shapes; i++)
+        hash = hash_record_shape_summary(hash, &evidence->record_shapes[i]);
+    for (uint32_t i = 0; i < evidence->nrecord_accesses; i++)
+        hash = hash_record_access_summary(hash, &evidence->record_accesses[i]);
     for (uint32_t i = 0; i < evidence->nmap_shapes; i++)
         hash = hash_map_shape_summary(hash, &evidence->map_shapes[i]);
     for (uint32_t i = 0; i < evidence->nmap_entries; i++)
@@ -2093,13 +2209,15 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
             "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u "
             "derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
-            "json_accesses=%u map_shapes=%u map_entries=%u key_accesses=%u hash_eqs=%u\n",
+            "json_accesses=%u record_shapes=%u record_accesses=%u map_shapes=%u map_entries=%u "
+            "key_accesses=%u hash_eqs=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods, evidence->nbodies,
             evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts,
             evidence->nderives, evidence->nderived_fields, evidence->nderived_methods,
-            evidence->njson_shapes, evidence->njson_accesses, evidence->nmap_shapes,
-            evidence->nmap_entries, evidence->nkey_accesses, evidence->nhash_eqs);
+            evidence->njson_shapes, evidence->njson_accesses, evidence->nrecord_shapes,
+            evidence->nrecord_accesses, evidence->nmap_shapes, evidence->nmap_entries,
+            evidence->nkey_accesses, evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -2246,6 +2364,24 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 "result_type=%u field=%u flags=0x%x\n",
                 i, a->json_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
                 xg_json_access_kind_name(a->access_kind), a->source_span_id, a->key_name_id,
+                a->result_type_key, (unsigned) a->field_ordinal, a->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
+        const XgRecordShapeSummary *s = &evidence->record_shapes[i];
+        fprintf(out,
+                "record-shape %u id=%u module=%u func=%u type=%u kind=%s span=%u fields=%u+%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                i, s->record_shape_id, s->module_id, s->owner_func_id, s->type_key,
+                xg_record_shape_kind_name(s->shape_kind), s->source_span_id, s->field_name_start,
+                (unsigned) s->field_count, s->flags, s->shape_hash);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_accesses; i++) {
+        const XgRecordAccessSummary *a = &evidence->record_accesses[i];
+        fprintf(out,
+                "record-access %u id=%u module=%u func=%u shape=%u kind=%s span=%u field_name=%u "
+                "result_type=%u field=%u flags=0x%x\n",
+                i, a->record_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
+                xg_record_access_kind_name(a->access_kind), a->source_span_id, a->field_name_id,
                 a->result_type_key, (unsigned) a->field_ordinal, a->flags);
     }
     for (uint32_t i = 0; i < evidence->nmap_shapes; i++) {

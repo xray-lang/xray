@@ -1092,6 +1092,66 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
     return true;
 }
 
+static bool verify_record_shape_kind_valid(uint8_t kind) {
+    switch ((XgRecordShapeKind) kind) {
+        case XG_RECORD_SHAPE_LITERAL:
+        case XG_RECORD_SHAPE_OPTIONS:
+        case XG_RECORD_SHAPE_SPREAD:
+        case XG_RECORD_SHAPE_STATIC:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_record_access_kind_valid(uint8_t kind) {
+    switch ((XgRecordAccessKind) kind) {
+        case XG_RECORD_ACCESS_FIELD_GET:
+        case XG_RECORD_ACCESS_FIELD_SET:
+        case XG_RECORD_ACCESS_DESTRUCTURE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_record_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len, "AOT global evidence Record verifier has no evidence");
+    for (uint32_t i = 0; i < ev->nrecord_shapes; i++) {
+        const XgRecordShapeSummary *shape = &ev->record_shapes[i];
+        if (shape->record_shape_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Record shape evidence has no id");
+        if (!verify_record_shape_kind_valid(shape->shape_kind))
+            return set_error(errbuf, errbuf_len, "AOT Record shape evidence has invalid kind");
+        for (uint32_t j = i + 1; j < ev->nrecord_shapes; j++) {
+            if (ev->record_shapes[j].record_shape_id == shape->record_shape_id)
+                return set_error(errbuf, errbuf_len, "AOT Record shape evidence id is duplicated");
+        }
+    }
+    for (uint32_t i = 0; i < ev->nrecord_accesses; i++) {
+        const XgRecordAccessSummary *access = &ev->record_accesses[i];
+        const XgRecordShapeSummary *shape;
+        if (access->record_access_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Record access evidence has no id");
+        if (!verify_record_access_kind_valid(access->access_kind))
+            return set_error(errbuf, errbuf_len, "AOT Record access evidence has invalid kind");
+        for (uint32_t j = i + 1; j < ev->nrecord_accesses; j++) {
+            if (ev->record_accesses[j].record_access_id == access->record_access_id)
+                return set_error(errbuf, errbuf_len, "AOT Record access evidence id is duplicated");
+        }
+        if (access->receiver_shape_id == XG_NO_ID)
+            continue;
+        shape = xg_global_evidence_find_record_shape(ev, access->receiver_shape_id);
+        if (!shape)
+            return set_error(errbuf, errbuf_len, "AOT Record access references missing shape");
+        if ((access->flags & XG_RECORD_ACCESS_STATIC_FIELD) != 0 && access->field_name_id != 0 &&
+            access->field_ordinal >= shape->field_count)
+            return set_error(errbuf, errbuf_len, "AOT Record access field ordinal is stale");
+    }
+    return true;
+}
+
 static bool verify_map_container_kind_valid(uint8_t kind) {
     return kind == XG_MAP_CONTAINER_MAP || kind == XG_MAP_CONTAINER_SET;
 }
@@ -2943,6 +3003,132 @@ static bool verify_json_access_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static uint8_t verify_record_shape_action_for(const XgRecordShapeSummary *shape) {
+    if (!shape)
+        return XAOT_RECORD_SHAPE_REJECT;
+    switch ((XgRecordShapeKind) shape->shape_kind) {
+        case XG_RECORD_SHAPE_LITERAL:
+            return XAOT_RECORD_SHAPE_SEALED_RECORD;
+        case XG_RECORD_SHAPE_OPTIONS:
+            return XAOT_RECORD_SHAPE_OPTIONS_BAG;
+        case XG_RECORD_SHAPE_SPREAD:
+            return XAOT_RECORD_SHAPE_SPREAD_RESULT;
+        case XG_RECORD_SHAPE_STATIC:
+            return XAOT_RECORD_SHAPE_STATIC_RECORD;
+        default:
+            return XAOT_RECORD_SHAPE_REJECT;
+    }
+}
+
+static uint8_t verify_record_shape_reason_for(const XgRecordShapeSummary *shape) {
+    return shape && verify_record_shape_kind_valid(shape->shape_kind)
+               ? XAOT_RECORD_UNPROVEN_NONE
+               : XAOT_RECORD_UNPROVEN_INVALID_KIND;
+}
+
+static uint32_t verify_record_shape_evidence_for(const XgRecordShapeSummary *shape) {
+    uint32_t evidence = XAOT_RECORD_EV_GLOBAL_ROW;
+    if (!shape)
+        return evidence;
+    if ((shape->flags & XG_RECORD_SHAPE_SEALED) != 0)
+        evidence |= XAOT_RECORD_EV_SEALED;
+    if ((shape->flags & XG_RECORD_SHAPE_STATIC_KEYS) != 0)
+        evidence |= XAOT_RECORD_EV_STATIC_FIELD;
+    if ((shape->flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0)
+        evidence |= XAOT_RECORD_EV_JSON_BRIDGE;
+    return evidence;
+}
+
+static bool verify_record_shape_plan_rederives(const XaotRecordShapePlan *plan,
+                                               const XgRecordShapeSummary *shape, char *errbuf,
+                                               size_t errbuf_len) {
+    if (!plan || !shape)
+        return set_error(errbuf, errbuf_len, "AOT Record shape verifier has incomplete input");
+    if (plan->record_shape_id != shape->record_shape_id || plan->module_id != shape->module_id ||
+        plan->owner_func_id != shape->owner_func_id || plan->type_key != shape->type_key ||
+        plan->field_name_start != shape->field_name_start ||
+        plan->field_count != shape->field_count || plan->shape_kind != shape->shape_kind ||
+        plan->shape_hash != shape->shape_hash)
+        return set_error(errbuf, errbuf_len, "AOT Record shape plan identity does not re-derive");
+    if (plan->action != verify_record_shape_action_for(shape) ||
+        plan->unproven_reason != verify_record_shape_reason_for(shape))
+        return set_error(errbuf, errbuf_len, "AOT Record shape plan action does not re-derive");
+    if (plan->evidence != verify_record_shape_evidence_for(shape))
+        return set_error(errbuf, errbuf_len, "AOT Record shape plan evidence does not re-derive");
+    return true;
+}
+
+static uint8_t verify_record_access_action_for(const XgGlobalEvidence *ev,
+                                               const XgRecordAccessSummary *access) {
+    const XgRecordShapeSummary *shape;
+    if (!access || !verify_record_access_kind_valid(access->access_kind))
+        return XAOT_RECORD_ACCESS_REJECT;
+    if ((access->flags & XG_RECORD_ACCESS_STATIC_FIELD) == 0 || access->field_name_id == 0)
+        return XAOT_RECORD_ACCESS_REJECT;
+    if (access->receiver_shape_id == XG_NO_ID)
+        return XAOT_RECORD_ACCESS_CHECKED_FIELD;
+    shape = xg_global_evidence_find_record_shape(ev, access->receiver_shape_id);
+    if (!shape || access->field_ordinal >= shape->field_count)
+        return XAOT_RECORD_ACCESS_REJECT;
+    if (access->access_kind == XG_RECORD_ACCESS_DESTRUCTURE)
+        return XAOT_RECORD_ACCESS_COPY_DESTRUCTURE;
+    return (access->flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
+               ? XAOT_RECORD_ACCESS_DIRECT_FIELD
+               : XAOT_RECORD_ACCESS_CHECKED_FIELD;
+}
+
+static uint8_t verify_record_access_reason_for(const XgGlobalEvidence *ev,
+                                               const XgRecordAccessSummary *access) {
+    const XgRecordShapeSummary *shape;
+    if (!access || !verify_record_access_kind_valid(access->access_kind))
+        return XAOT_RECORD_UNPROVEN_INVALID_KIND;
+    if ((access->flags & XG_RECORD_ACCESS_STATIC_FIELD) == 0 || access->field_name_id == 0)
+        return XAOT_RECORD_UNPROVEN_DYNAMIC_FIELD;
+    if (access->receiver_shape_id == XG_NO_ID)
+        return XAOT_RECORD_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
+    shape = xg_global_evidence_find_record_shape(ev, access->receiver_shape_id);
+    if (!shape || access->field_ordinal >= shape->field_count)
+        return XAOT_RECORD_UNPROVEN_STALE_SHAPE;
+    return XAOT_RECORD_UNPROVEN_NONE;
+}
+
+static uint32_t verify_record_access_evidence_for(const XgGlobalEvidence *ev,
+                                                  const XgRecordAccessSummary *access) {
+    const XgRecordShapeSummary *shape;
+    uint32_t evidence = XAOT_RECORD_EV_GLOBAL_ROW;
+    if (!access)
+        return evidence;
+    if ((access->flags & XG_RECORD_ACCESS_STATIC_FIELD) != 0 && access->field_name_id != 0)
+        evidence |= XAOT_RECORD_EV_STATIC_FIELD;
+    if (access->receiver_shape_id != XG_NO_ID)
+        evidence |= XAOT_RECORD_EV_RECEIVER_SHAPE;
+    shape = xg_global_evidence_find_record_shape(ev, access->receiver_shape_id);
+    if (shape && access->field_ordinal < shape->field_count)
+        evidence |= XAOT_RECORD_EV_FIELD_INDEX;
+    return evidence;
+}
+
+static bool verify_record_access_plan_rederives(const XgGlobalEvidence *ev,
+                                                const XaotRecordAccessPlan *plan,
+                                                const XgRecordAccessSummary *access, char *errbuf,
+                                                size_t errbuf_len) {
+    if (!ev || !plan || !access)
+        return set_error(errbuf, errbuf_len, "AOT Record access verifier has incomplete input");
+    if (plan->record_access_id != access->record_access_id ||
+        plan->module_id != access->module_id || plan->owner_func_id != access->owner_func_id ||
+        plan->receiver_shape_id != access->receiver_shape_id ||
+        plan->field_name_id != access->field_name_id ||
+        plan->result_type_key != access->result_type_key ||
+        plan->field_ordinal != access->field_ordinal || plan->access_kind != access->access_kind)
+        return set_error(errbuf, errbuf_len, "AOT Record access plan identity does not re-derive");
+    if (plan->action != verify_record_access_action_for(ev, access) ||
+        plan->unproven_reason != verify_record_access_reason_for(ev, access))
+        return set_error(errbuf, errbuf_len, "AOT Record access plan action does not re-derive");
+    if (plan->evidence != verify_record_access_evidence_for(ev, access))
+        return set_error(errbuf, errbuf_len, "AOT Record access plan evidence does not re-derive");
+    return true;
+}
+
 static uint8_t verify_map_shape_action_for(const XgMapShapeSummary *shape) {
     if (!shape || !verify_map_container_kind_valid(shape->container_kind) ||
         !verify_map_shape_source_valid(shape->source))
@@ -3163,6 +3349,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_derived_eq_hash_plans = 0;
     uint32_t expected_json_shape_plans = 0;
     uint32_t expected_json_access_plans = 0;
+    uint32_t expected_record_shape_plans = 0;
+    uint32_t expected_record_access_plans = 0;
     uint32_t expected_map_shape_plans = 0;
     uint32_t expected_key_access_plans = 0;
     uint32_t expected_hash_eq_plans = 0;
@@ -3190,6 +3378,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (!verify_derive_rows(ev, errbuf, errbuf_len))
         return false;
     if (!verify_json_rows(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_record_rows(ev, errbuf, errbuf_len))
         return false;
     if (!verify_map_rows(ev, errbuf, errbuf_len))
         return false;
@@ -3458,6 +3648,32 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->njson_access_plans != expected_json_access_plans)
         return set_error(errbuf, errbuf_len, "AOT Json access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nrecord_shapes; i++) {
+        const XgRecordShapeSummary *shape = &ev->record_shapes[i];
+        const XaotRecordShapePlan *plan;
+        expected_record_shape_plans++;
+        plan = xaot_bundle_find_record_shape_plan(bundle, shape->record_shape_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Record shape evidence has no shape plan");
+        if (!verify_record_shape_plan_rederives(plan, shape, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nrecord_shape_plans != expected_record_shape_plans)
+        return set_error(errbuf, errbuf_len, "AOT Record shape plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nrecord_accesses; i++) {
+        const XgRecordAccessSummary *access = &ev->record_accesses[i];
+        const XaotRecordAccessPlan *plan;
+        expected_record_access_plans++;
+        plan = xaot_bundle_find_record_access_plan(bundle, access->record_access_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Record access evidence has no access plan");
+        if (!verify_record_access_plan_rederives(ev, plan, access, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nrecord_access_plans != expected_record_access_plans)
+        return set_error(errbuf, errbuf_len, "AOT Record access plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->nmap_shapes; i++) {
         const XgMapShapeSummary *shape = &ev->map_shapes[i];
