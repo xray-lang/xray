@@ -21,24 +21,24 @@
 /* ========== Method Conversion ========== */
 
 TEST(http_method_from_string) {
-    ASSERT_EQ_INT(xr_http_method_from_string("GET", 3), XR_HTTP_METHOD_GET);
-    ASSERT_EQ_INT(xr_http_method_from_string("POST", 4), XR_HTTP_METHOD_POST);
-    ASSERT_EQ_INT(xr_http_method_from_string("PUT", 3), XR_HTTP_METHOD_PUT);
-    ASSERT_EQ_INT(xr_http_method_from_string("DELETE", 6), XR_HTTP_METHOD_DELETE);
-    ASSERT_EQ_INT(xr_http_method_from_string("HEAD", 4), XR_HTTP_METHOD_HEAD);
-    ASSERT_EQ_INT(xr_http_method_from_string("OPTIONS", 7), XR_HTTP_METHOD_OPTIONS);
-    ASSERT_EQ_INT(xr_http_method_from_string("PATCH", 5), XR_HTTP_METHOD_PATCH);
-    ASSERT_EQ_INT(xr_http_method_from_string("CONNECT", 7), XR_HTTP_METHOD_CONNECT);
-    ASSERT_EQ_INT(xr_http_method_from_string("TRACE", 5), XR_HTTP_METHOD_TRACE);
-    ASSERT_EQ_INT(xr_http_method_from_string("INVALID", 7), XR_HTTP_METHOD_UNKNOWN);
+    ASSERT_EQ_INT(http_method_from_string("GET", 3), XR_HTTP_METHOD_GET);
+    ASSERT_EQ_INT(http_method_from_string("POST", 4), XR_HTTP_METHOD_POST);
+    ASSERT_EQ_INT(http_method_from_string("PUT", 3), XR_HTTP_METHOD_PUT);
+    ASSERT_EQ_INT(http_method_from_string("DELETE", 6), XR_HTTP_METHOD_DELETE);
+    ASSERT_EQ_INT(http_method_from_string("HEAD", 4), XR_HTTP_METHOD_HEAD);
+    ASSERT_EQ_INT(http_method_from_string("OPTIONS", 7), XR_HTTP_METHOD_OPTIONS);
+    ASSERT_EQ_INT(http_method_from_string("PATCH", 5), XR_HTTP_METHOD_PATCH);
+    ASSERT_EQ_INT(http_method_from_string("CONNECT", 7), XR_HTTP_METHOD_CONNECT);
+    ASSERT_EQ_INT(http_method_from_string("TRACE", 5), XR_HTTP_METHOD_TRACE);
+    ASSERT_EQ_INT(http_method_from_string("INVALID", 7), XR_HTTP_METHOD_UNKNOWN);
 }
 
 TEST(http_method_to_string) {
-    ASSERT_STR_EQ(xr_http_method_to_string(XR_HTTP_METHOD_GET), "GET");
-    ASSERT_STR_EQ(xr_http_method_to_string(XR_HTTP_METHOD_POST), "POST");
-    ASSERT_STR_EQ(xr_http_method_to_string(XR_HTTP_METHOD_PUT), "PUT");
-    ASSERT_STR_EQ(xr_http_method_to_string(XR_HTTP_METHOD_DELETE), "DELETE");
-    ASSERT_NOT_NULL(xr_http_method_to_string(XR_HTTP_METHOD_UNKNOWN));
+    ASSERT_STR_EQ(http_method_to_string(XR_HTTP_METHOD_GET), "GET");
+    ASSERT_STR_EQ(http_method_to_string(XR_HTTP_METHOD_POST), "POST");
+    ASSERT_STR_EQ(http_method_to_string(XR_HTTP_METHOD_PUT), "PUT");
+    ASSERT_STR_EQ(http_method_to_string(XR_HTTP_METHOD_DELETE), "DELETE");
+    ASSERT_NOT_NULL(http_method_to_string(XR_HTTP_METHOD_UNKNOWN));
 }
 
 /* ========== Request Parsing ========== */
