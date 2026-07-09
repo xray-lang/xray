@@ -56,7 +56,7 @@ struct XrVMRuntime;
 
 /*
  * Growable byte buffer for encoding.
- * Caller should call xr_serial_buf_free() after use.
+ * Caller should call cluster_serial_buf_free() after use.
  */
 typedef struct {
     uint8_t *data;
@@ -65,8 +65,8 @@ typedef struct {
     bool error;  // set on allocation failure
 } XrSerialBuf;
 
-XR_FUNC void xr_serial_buf_init(XrSerialBuf *buf);
-XR_FUNC void xr_serial_buf_free(XrSerialBuf *buf);
+void cluster_serial_buf_init(XrSerialBuf *buf);
+void cluster_serial_buf_free(XrSerialBuf *buf);
 
 /* ========== Encode API ========== */
 
@@ -77,7 +77,7 @@ XR_FUNC void xr_serial_buf_free(XrSerialBuf *buf);
  *
  * The isolate is needed for Json → JSON string conversion.
  */
-XR_FUNC int xr_cluster_encode(struct XrVMRuntime *X, XrValue value, XrSerialBuf *buf);
+int cluster_encode(struct XrVMRuntime *X, XrValue value, XrSerialBuf *buf);
 
 /* ========== Decode API ========== */
 
@@ -92,8 +92,8 @@ typedef struct {
     struct XrVMRuntime *X;
 } XrSerialReader;
 
-XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrVMRuntime *X, const uint8_t *data,
-                                   size_t len);
+void cluster_serial_reader_init(XrSerialReader *r, struct XrVMRuntime *X, const uint8_t *data,
+                                size_t len);
 
 /*
  * Decode a single XrValue from binary data.
@@ -101,18 +101,18 @@ XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrVMRuntime *X, con
  * Returns: 0 on success, -1 on error (corrupt data, depth overflow)
  * Decoded value is written to *out.
  */
-XR_FUNC int xr_cluster_decode(XrSerialReader *r, XrValue *out);
+int cluster_decode(XrSerialReader *r, XrValue *out);
 
 /* ========== Convenience Wrappers ========== */
 
 /*
  * Decode value from a buffer.
  */
-static inline int xr_cluster_decode_value(struct XrVMRuntime *X, const uint8_t *data, size_t len,
-                                          XrValue *out) {
+static inline int cluster_decode_value(struct XrVMRuntime *X, const uint8_t *data, size_t len,
+                                       XrValue *out) {
     XrSerialReader r;
-    xr_serial_reader_init(&r, X, data, len);
-    return xr_cluster_decode(&r, out);
+    cluster_serial_reader_init(&r, X, data, len);
+    return cluster_decode(&r, out);
 }
 
 #endif
