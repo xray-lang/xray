@@ -1,0 +1,11 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_array_unshift_reject' allocates via method 'Array.unshift'
+contains=@no_alloc function 'xray_no_alloc_array_tostring_reject' allocates via method 'Array.toString'
+contains=@no_alloc function 'xray_no_alloc_array_entries_reject' allocates via method 'Array.entries'
+contains=@no_alloc function 'xray_no_alloc_array_entries_iterator_reject' allocates via method 'Array.entriesIterator'
+contains=@no_alloc function 'xray_no_alloc_map_keys_reject' allocates via method 'Map.keys'
+contains=@no_alloc function 'xray_no_alloc_map_values_reject' allocates via method 'Map.values'
+contains=@no_alloc function 'xray_no_alloc_map_iterator_reject' allocates via method 'Map.iterator'
+contains=@no_alloc function 'xray_no_alloc_map_entries_iterator_reject' allocates via method 'Map.entriesIterator'
+contains=@no_alloc function 'xray_no_alloc_set_iterator_reject' allocates via method 'Set.iterator'
+not_contains=CRASH
