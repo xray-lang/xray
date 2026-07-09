@@ -1120,8 +1120,8 @@ static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(0);
     }
 
-    int flen = xr_frame_encode_service_reply(frame, frame_size + 16, request_id, false, sbuf.data,
-                                             (uint32_t) sbuf.len);
+    int flen = cluster_frame_encode_service_reply(frame, frame_size + 16, request_id, false,
+                                                  sbuf.data, (uint32_t) sbuf.len);
     cluster_serial_buf_free(&sbuf);
 
     if (flen < 0) {
@@ -1219,8 +1219,8 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    int flen = xr_frame_encode_service_call(frame, frame_size + 16, req_id, service_name->data,
-                                            sbuf.data, (uint32_t) sbuf.len);
+    int flen = cluster_frame_encode_service_call(frame, frame_size + 16, req_id, service_name->data,
+                                                 sbuf.data, (uint32_t) sbuf.len);
     cluster_serial_buf_free(&sbuf);
 
     if (flen < 0) {
@@ -1288,10 +1288,10 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
             case XR_FRAME_HEARTBEAT_PING: {
                 // Reply with PONG via output queue
                 int64_t ts;
-                if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ts) == 0) {
+                if (cluster_frame_decode_heartbeat(recv_buf, payload_len, &ts) == 0) {
                     uint8_t pong[32];
-                    int plen =
-                        xr_frame_encode_heartbeat(pong, sizeof(pong), XR_FRAME_HEARTBEAT_PONG, ts);
+                    int plen = cluster_frame_encode_heartbeat(pong, sizeof(pong),
+                                                              XR_FRAME_HEARTBEAT_PONG, ts);
                     if (plen > 0) {
                         cluster_node_enqueue(node, pong, (uint32_t) plen);
                     }
@@ -1308,7 +1308,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 int64_t now_pong = cluster_now_ms();
                 // Compute RTT from ping timestamp
                 int64_t ping_ts;
-                if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ping_ts) == 0) {
+                if (cluster_frame_decode_heartbeat(recv_buf, payload_len, &ping_ts) == 0) {
                     node->metrics.last_rtt_ms = now_pong - ping_ts;
                 }
                 node->last_heartbeat_recv = now_pong;
@@ -1320,7 +1320,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_CHANNEL_SEND: {
                 XrFrameChannelSend cs;
-                if (xr_frame_decode_channel_send(recv_buf, payload_len, &cs) == 0) {
+                if (cluster_frame_decode_channel_send(recv_buf, payload_len, &cs) == 0) {
                     cluster_channel_handle_send(c, cs.channel_name, cs.value_data, cs.value_len);
                 }
                 break;
@@ -1328,8 +1328,8 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_CHANNEL_CLOSE: {
                 char ch_name[XR_CHANNEL_NAME_MAX + 1];
-                if (xr_frame_decode_channel_close(recv_buf, payload_len, ch_name,
-                                                  sizeof(ch_name)) == 0) {
+                if (cluster_frame_decode_channel_close(recv_buf, payload_len, ch_name,
+                                                       sizeof(ch_name)) == 0) {
                     cluster_channel_handle_close(c, ch_name);
                 }
                 break;
@@ -1412,7 +1412,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_SERVICE_CALL: {
                 XrFrameServiceCall sc;
-                if (xr_frame_decode_service_call(recv_buf, payload_len, &sc) != 0)
+                if (cluster_frame_decode_service_call(recv_buf, payload_len, &sc) != 0)
                     break;
 
                 XrServiceEntry *se = cluster_service_find(c, sc.service_name);
@@ -1442,7 +1442,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_SERVICE_REPLY: {
                 XrFrameServiceReply reply;
-                if (xr_frame_decode_service_reply(recv_buf, payload_len, &reply) != 0)
+                if (cluster_frame_decode_service_reply(recv_buf, payload_len, &reply) != 0)
                     break;
 
                 // Find pending request by request_id
@@ -1468,7 +1468,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_CHANNEL_SUBSCRIBE: {
                 XrFrameChannelSubscribe sub;
-                if (xr_frame_decode_channel_subscribe(recv_buf, payload_len, &sub) == 0) {
+                if (cluster_frame_decode_channel_subscribe(recv_buf, payload_len, &sub) == 0) {
                     cluster_subscriber_add(c, sub.channel_name, node);
                 }
                 break;
@@ -1476,8 +1476,8 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_CHANNEL_UNSUBSCRIBE: {
                 char unsub_name[XR_CHANNEL_NAME_MAX + 1];
-                if (xr_frame_decode_channel_unsubscribe(recv_buf, payload_len, unsub_name,
-                                                        sizeof(unsub_name)) == 0) {
+                if (cluster_frame_decode_channel_unsubscribe(recv_buf, payload_len, unsub_name,
+                                                             sizeof(unsub_name)) == 0) {
                     cluster_subscriber_remove(c, unsub_name, node);
                 }
                 break;
@@ -1485,7 +1485,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_CHANNEL_PUSH: {
                 XrFrameChannelPush push;
-                if (xr_frame_decode_channel_push(recv_buf, payload_len, &push) == 0) {
+                if (cluster_frame_decode_channel_push(recv_buf, payload_len, &push) == 0) {
                     cluster_channel_handle_push(c, push.channel_name, push.value_data,
                                                 push.value_len);
                 }
@@ -1517,8 +1517,8 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
             case XR_FRAME_CORO_MONITOR: {
                 char coro_name[XR_CORO_NAME_MAX + 1];
-                if (xr_frame_decode_coro_monitor(recv_buf, payload_len, coro_name,
-                                                 sizeof(coro_name)) == 0) {
+                if (cluster_frame_decode_coro_monitor(recv_buf, payload_len, coro_name,
+                                                      sizeof(coro_name)) == 0) {
                     cluster_monitor_handle_coro_request(c, node, coro_name);
                 }
                 break;
@@ -1527,8 +1527,9 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
             case XR_FRAME_CORO_EXIT: {
                 char coro_name[XR_CORO_NAME_MAX + 1];
                 char reason[128];
-                if (xr_frame_decode_coro_exit(recv_buf, payload_len, coro_name, sizeof(coro_name),
-                                              reason, sizeof(reason)) == 0) {
+                if (cluster_frame_decode_coro_exit(recv_buf, payload_len, coro_name,
+                                                   sizeof(coro_name), reason,
+                                                   sizeof(reason)) == 0) {
                     cluster_monitor_handle_coro_exit(c, coro_name, reason);
                 }
                 break;
