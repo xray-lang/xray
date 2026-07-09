@@ -17,6 +17,7 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     XgDeclSummary decl = {0};
     XgBodySummary body = {0};
     XgCallsiteSummary call = {0};
+    XgInterfaceObjectUseSummary iface_use = {0};
     XgLinkDependencySummary link = {0};
     XgGenericInstSummary inst = {0};
 
@@ -49,6 +50,16 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     call.static_target_func_id = body.func_id;
     call.method_name_id = xg_name_id("entry");
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(ev, &call));
+
+    iface_use.use_id = 4;
+    iface_use.interface_id = 41;
+    iface_use.owner_func_id = body.func_id;
+    iface_use.source_span_id = 4;
+    iface_use.body_ordinal = 2;
+    iface_use.type_key = 930;
+    iface_use.reason = XG_INTERFACE_OBJECT_USE_VALUE | XG_INTERFACE_OBJECT_USE_PARAM;
+    iface_use.flags = 0x8;
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_object_use(ev, &iface_use));
 
     link.link_id = 2;
     link.module_id = 7;
@@ -204,17 +215,23 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(info.key_hash, xg_evidence_cache_key_hash(&expected));
     ASSERT_EQ_UINT(info.body_len, info.payload_bytes);
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 callsites=1"));
+    ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
     ASSERT_NOT_NULL(strstr(info.body, "body id=11"));
+    ASSERT_NOT_NULL(strstr(info.body, "interface-object-use id=4 interface=41"));
     ASSERT(xg_evidence_cache_payload_matches(payload, &expected));
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
     ASSERT_EQ_UINT(materialized.nbodies, 1);
     ASSERT_EQ_UINT(materialized.ncallsites, 1);
+    ASSERT_EQ_UINT(materialized.ninterface_object_uses, 1);
     ASSERT_EQ_UINT(materialized.nlink_deps, 1);
     ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
     ASSERT_EQ_UINT(materialized.bodies[0].func_id, 11);
     ASSERT_EQ_UINT(materialized.callsites[0].callsite_id, 1);
+    ASSERT_EQ_UINT(materialized.interface_object_uses[0].interface_id, 41);
+    ASSERT_EQ_UINT(materialized.interface_object_uses[0].reason,
+                   XG_INTERFACE_OBJECT_USE_VALUE | XG_INTERFACE_OBJECT_USE_PARAM);
     ASSERT_STR_EQ(materialized.link_deps[0].name, "mem.copy");
     ASSERT_EQ_UINT(materialized.generic_insts[0].specialized_func_id, 31);
 

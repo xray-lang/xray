@@ -23,6 +23,7 @@ typedef uint32_t XgClassId;
 typedef uint32_t XgInterfaceId;
 typedef uint32_t XgMethodId;
 typedef uint32_t XgInterfaceMethodId;
+typedef uint32_t XgInterfaceObjectUseId;
 typedef uint32_t XgFieldId;
 typedef uint32_t XgCallsiteId;
 typedef uint32_t XgLinkId;
@@ -51,7 +52,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 10,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 11,
 };
 
 typedef enum XgBuildProfile {
@@ -358,6 +359,15 @@ enum {
 };
 
 enum {
+    XG_INTERFACE_OBJECT_USE_VALUE = 1u << 0,
+    XG_INTERFACE_OBJECT_USE_ARRAY = 1u << 1,
+    XG_INTERFACE_OBJECT_USE_FIELD = 1u << 2,
+    XG_INTERFACE_OBJECT_USE_RETURN = 1u << 3,
+    XG_INTERFACE_OBJECT_USE_CAPTURE = 1u << 4,
+    XG_INTERFACE_OBJECT_USE_PARAM = 1u << 5,
+};
+
+enum {
     XG_SEQ_ACCESS_MUTATING = 1u << 0,
     XG_SEQ_ACCESS_NEGATIVE_INDEX = 1u << 1,
     XG_SEQ_ACCESS_SLICE_NORMALIZED = 1u << 2,
@@ -593,6 +603,17 @@ typedef struct XgInterfaceMethodSummary {
     uint32_t source_span_id;
     uint32_t flags;
 } XgInterfaceMethodSummary;
+
+typedef struct XgInterfaceObjectUseSummary {
+    XgInterfaceObjectUseId use_id;
+    XgInterfaceId interface_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint32_t type_key;
+    uint32_t reason;
+    uint32_t flags;
+} XgInterfaceObjectUseSummary;
 
 typedef struct XgBodySummary {
     XgFuncId func_id;
@@ -920,6 +941,7 @@ typedef struct XgGlobalEvidence {
     XgInterfaceImplSummary *interface_impls;
     XgInterfaceExtendsSummary *interface_extends;
     XgInterfaceMethodSummary *interface_methods;
+    XgInterfaceObjectUseSummary *interface_object_uses;
     XgBodySummary *bodies;
     XgCallsiteSummary *callsites;
     XgLinkDependencySummary *link_deps;
@@ -950,6 +972,7 @@ typedef struct XgGlobalEvidence {
     uint32_t ninterface_impls;
     uint32_t ninterface_extends;
     uint32_t ninterface_methods;
+    uint32_t ninterface_object_uses;
     uint32_t nbodies;
     uint32_t ncallsites;
     uint32_t nlink_deps;
@@ -980,6 +1003,7 @@ typedef struct XgGlobalEvidence {
     uint32_t interface_impl_cap;
     uint32_t interface_extend_cap;
     uint32_t interface_method_cap;
+    uint32_t interface_object_use_cap;
     uint32_t body_cap;
     uint32_t callsite_cap;
     uint32_t link_dep_cap;
@@ -1032,6 +1056,8 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect);
 XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_body_escape_name(uint32_t escape);
 XR_FUNC const uint32_t *xg_body_escape_catalog(uint32_t *out_count);
+XR_FUNC const char *xg_interface_object_use_name(uint32_t reason);
+XR_FUNC const uint32_t *xg_interface_object_use_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_capability_name(uint32_t capability);
 XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_metadata_name(uint32_t metadata);
@@ -1052,6 +1078,8 @@ XR_FUNC bool xg_global_evidence_reserve_interface_extends(XgGlobalEvidence *evid
                                                           uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_methods(XgGlobalEvidence *evidence,
                                                           uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *evidence,
+                                                              uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -1101,6 +1129,9 @@ xg_global_evidence_add_interface_extends(XgGlobalEvidence *evidence,
 XR_FUNC XgInterfaceMethodSummary *
 xg_global_evidence_add_interface_method(XgGlobalEvidence *evidence,
                                         const XgInterfaceMethodSummary *summary);
+XR_FUNC XgInterfaceObjectUseSummary *
+xg_global_evidence_add_interface_object_use(XgGlobalEvidence *evidence,
+                                            const XgInterfaceObjectUseSummary *summary);
 XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
 XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evidence,
