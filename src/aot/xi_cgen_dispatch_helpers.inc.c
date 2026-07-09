@@ -939,6 +939,22 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
+    const XiConstLiteral *shared_static =
+        cg_freestanding_shared_initializer_literal(ctx, v ? v->aux_int : -1);
+    if (shared_static && shared_static->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        if ((f && f->module && f == f->module->init) ||
+            xicgen_value_is_elided_static_aggregate_access(ctx, f, v)) {
+            fprintf(out, "XR_NULL_VAL /* static shared aggregate */");
+            return;
+        }
+        fprintf(stderr,
+                "[xi_cgen] ERROR: freestanding shared aggregate slot %d must be consumed "
+                "through static field/index access in the current slice\n",
+                (int) v->aux_int);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (ctx && ctx->freestanding_profile &&
         cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
         fprintf(out, "XR_NULL_VAL");
@@ -996,7 +1012,8 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     const XiConstLiteral *shared_init =
         cg_freestanding_shared_initializer_literal(ctx, v ? v->aux_int : -1);
     if (shared_init && ctx && ctx->module && f == ctx->module->init &&
-        cg_const_value_matches_literal(value, shared_init)) {
+        (shared_init->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE ||
+         cg_const_value_matches_literal(value, shared_init))) {
         fprintf(out, "XR_NULL_VAL");
         return;
     }
@@ -5390,6 +5407,15 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
     if (strcmp(method, "encode") == 0 && nargs == 1 && v->nargs >= 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_json_encode(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "parse") == 0 && nargs == 1 && v->nargs >= 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_json_parse(");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);

@@ -1,0 +1,5 @@
+var data = Json.parse("{\"name\":\"Ada\",\"age\":37,\"ok\":true}")
+
+print(data.name)
+print(data.age)
+print(data.ok)

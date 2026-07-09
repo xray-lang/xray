@@ -30,6 +30,7 @@
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_typed_ops.h"
+#include <errno.h>
 #include <string.h>
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
@@ -3425,6 +3426,382 @@ static inline int64_t xrt_json_static_size(XrValue obj) {
 
 static inline int64_t xrt_json_static_is_empty(XrValue obj) {
     return xrt_json_static_size(obj) == 0 ? 1 : 0;
+}
+
+typedef struct {
+    const char *src;
+    const char *end;
+    const char *pos;
+    int depth;
+} xrt_json_parser_t;
+
+#define XRT_JSON_PARSE_MAX_DEPTH 256
+
+static inline int xrt_json_parse_is_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+static inline void xrt_json_parse_skip_ws(xrt_json_parser_t *p) {
+    while (p->pos < p->end) {
+        char c = *p->pos;
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+            p->pos++;
+        else
+            break;
+    }
+}
+
+static int xrt_json_parse_value(xrt_json_parser_t *p, XrValue *out);
+
+static inline int xrt_json_parse_null(xrt_json_parser_t *p, XrValue *out) {
+    if (p->pos + 4 <= p->end && strncmp(p->pos, "null", 4) == 0) {
+        p->pos += 4;
+        *out = XR_NULL_VAL;
+        return 1;
+    }
+    return 0;
+}
+
+static inline int xrt_json_parse_bool(xrt_json_parser_t *p, XrValue *out) {
+    if (p->pos + 4 <= p->end && strncmp(p->pos, "true", 4) == 0) {
+        p->pos += 4;
+        *out = XR_FROM_BOOL(1);
+        return 1;
+    }
+    if (p->pos + 5 <= p->end && strncmp(p->pos, "false", 5) == 0) {
+        p->pos += 5;
+        *out = XR_FROM_BOOL(0);
+        return 1;
+    }
+    return 0;
+}
+
+static inline int xrt_json_parse_number(xrt_json_parser_t *p, XrValue *out) {
+    const char *start = p->pos;
+    if (p->pos < p->end && *p->pos == '-')
+        p->pos++;
+    if (p->pos >= p->end || !xrt_json_parse_is_digit(*p->pos)) {
+        p->pos = start;
+        return 0;
+    }
+    const char *digit_start = p->pos;
+    while (p->pos < p->end && xrt_json_parse_is_digit(*p->pos))
+        p->pos++;
+    if (p->pos - digit_start > 1 && *digit_start == '0') {
+        p->pos = start;
+        return 0;
+    }
+
+    int is_float = 0;
+    if (p->pos < p->end && *p->pos == '.') {
+        is_float = 1;
+        p->pos++;
+        if (p->pos >= p->end || !xrt_json_parse_is_digit(*p->pos)) {
+            p->pos = start;
+            return 0;
+        }
+        while (p->pos < p->end && xrt_json_parse_is_digit(*p->pos))
+            p->pos++;
+    }
+    if (p->pos < p->end && (*p->pos == 'e' || *p->pos == 'E')) {
+        is_float = 1;
+        p->pos++;
+        if (p->pos < p->end && (*p->pos == '+' || *p->pos == '-'))
+            p->pos++;
+        if (p->pos >= p->end || !xrt_json_parse_is_digit(*p->pos)) {
+            p->pos = start;
+            return 0;
+        }
+        while (p->pos < p->end && xrt_json_parse_is_digit(*p->pos))
+            p->pos++;
+    }
+
+    size_t tok_len = (size_t) (p->pos - start);
+    char stack_buf[64];
+    char *buf = stack_buf;
+    if (tok_len + 1 > sizeof(stack_buf)) {
+        buf = (char *) XRT_MALLOC(tok_len + 1);
+        if (!buf) {
+            p->pos = start;
+            return 0;
+        }
+    }
+    memcpy(buf, start, tok_len);
+    buf[tok_len] = '\0';
+
+    if (is_float) {
+        *out = XR_FROM_FLOAT(strtod(buf, NULL));
+    } else {
+        errno = 0;
+        int64_t ival = strtoll(buf, NULL, 10);
+        *out = (errno == ERANGE) ? XR_FROM_FLOAT(strtod(buf, NULL)) : XR_FROM_INT(ival);
+    }
+    if (buf != stack_buf)
+        XRT_FREE(buf);
+    return 1;
+}
+
+static inline int xrt_json_parse_hex4(const char *s) {
+    unsigned int val = 0;
+    for (int i = 0; i < 4; i++) {
+        char c = s[i];
+        val <<= 4;
+        if (c >= '0' && c <= '9')
+            val |= (unsigned) (c - '0');
+        else if (c >= 'a' && c <= 'f')
+            val |= (unsigned) (c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F')
+            val |= (unsigned) (c - 'A' + 10);
+        else
+            return -1;
+    }
+    return (int) val;
+}
+
+static int xrt_json_parse_string_value(xrt_json_parser_t *p, XrValue *out) {
+    if (p->pos >= p->end || *p->pos != '"')
+        return 0;
+    p->pos++;
+
+    char stack_buf[256];
+    size_t cap = sizeof(stack_buf);
+    char *buf = stack_buf;
+    size_t len = 0;
+
+#define XRT_JSON_PARSE_STR_ENSURE(n)                                                               \
+    do {                                                                                           \
+        if (len + (n) >= cap) {                                                                    \
+            size_t new_cap = cap * 2;                                                              \
+            while (new_cap < len + (n) + 1)                                                        \
+                new_cap *= 2;                                                                      \
+            char *nb = (char *) XRT_MALLOC(new_cap);                                               \
+            if (!nb) {                                                                             \
+                if (buf != stack_buf)                                                              \
+                    XRT_FREE(buf);                                                                 \
+                return 0;                                                                          \
+            }                                                                                      \
+            memcpy(nb, buf, len);                                                                  \
+            if (buf != stack_buf)                                                                  \
+                XRT_FREE(buf);                                                                     \
+            buf = nb;                                                                              \
+            cap = new_cap;                                                                         \
+        }                                                                                          \
+    } while (0)
+
+    while (p->pos < p->end && *p->pos != '"') {
+        if (*p->pos == '\\') {
+            p->pos++;
+            if (p->pos >= p->end)
+                goto bad_string;
+            XRT_JSON_PARSE_STR_ENSURE(4);
+            switch (*p->pos) {
+                case '"':
+                    buf[len++] = '"';
+                    p->pos++;
+                    break;
+                case '\\':
+                    buf[len++] = '\\';
+                    p->pos++;
+                    break;
+                case '/':
+                    buf[len++] = '/';
+                    p->pos++;
+                    break;
+                case 'b':
+                    buf[len++] = '\b';
+                    p->pos++;
+                    break;
+                case 'f':
+                    buf[len++] = '\f';
+                    p->pos++;
+                    break;
+                case 'n':
+                    buf[len++] = '\n';
+                    p->pos++;
+                    break;
+                case 'r':
+                    buf[len++] = '\r';
+                    p->pos++;
+                    break;
+                case 't':
+                    buf[len++] = '\t';
+                    p->pos++;
+                    break;
+                case 'u': {
+                    p->pos++;
+                    if (p->pos + 4 > p->end)
+                        goto bad_string;
+                    int cp = xrt_json_parse_hex4(p->pos);
+                    if (cp < 0)
+                        goto bad_string;
+                    p->pos += 4;
+                    if (cp >= 0xD800 && cp <= 0xDBFF) {
+                        if (p->pos + 6 > p->end || p->pos[0] != '\\' || p->pos[1] != 'u')
+                            goto bad_string;
+                        int low = xrt_json_parse_hex4(p->pos + 2);
+                        if (low < 0xDC00 || low > 0xDFFF)
+                            goto bad_string;
+                        uint32_t full =
+                            0x10000u + ((uint32_t) (cp - 0xD800) << 10) + (uint32_t) (low - 0xDC00);
+                        int n = xrt_char_utf8_encode(full, buf + len);
+                        if (n <= 0)
+                            goto bad_string;
+                        len += (size_t) n;
+                        p->pos += 6;
+                    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                        goto bad_string;
+                    } else {
+                        int n = xrt_char_utf8_encode((uint32_t) cp, buf + len);
+                        if (n <= 0)
+                            goto bad_string;
+                        len += (size_t) n;
+                    }
+                    break;
+                }
+                default:
+                    goto bad_string;
+            }
+        } else {
+            XRT_JSON_PARSE_STR_ENSURE(1);
+            buf[len++] = *p->pos++;
+        }
+    }
+
+    if (p->pos >= p->end || *p->pos != '"')
+        goto bad_string;
+    p->pos++;
+
+    XrValue str = xrt_str_alloc(len);
+    memcpy(xr_str_buf(str), buf, len);
+    if (buf != stack_buf)
+        XRT_FREE(buf);
+    *out = str;
+    return 1;
+
+bad_string:
+    if (buf != stack_buf)
+        XRT_FREE(buf);
+    return 0;
+
+#undef XRT_JSON_PARSE_STR_ENSURE
+}
+
+static int xrt_json_parse_array(xrt_json_parser_t *p, XrValue *out) {
+    if (p->pos >= p->end || *p->pos != '[')
+        return 0;
+    p->pos++;
+    XrValue arr = xrt_array_with_capacity(0);
+    xrt_json_parse_skip_ws(p);
+    if (p->pos < p->end && *p->pos == ']') {
+        p->pos++;
+        *out = arr;
+        return 1;
+    }
+    while (1) {
+        XrValue elem = XR_NULL_VAL;
+        xrt_json_parse_skip_ws(p);
+        if (!xrt_json_parse_value(p, &elem))
+            return 0;
+        xrt_array_push(arr, elem);
+        xrt_json_parse_skip_ws(p);
+        if (p->pos < p->end && *p->pos == ']') {
+            p->pos++;
+            *out = arr;
+            return 1;
+        }
+        if (p->pos >= p->end || *p->pos != ',')
+            return 0;
+        p->pos++;
+    }
+}
+
+static int xrt_json_parse_object(xrt_json_parser_t *p, XrValue *out) {
+    if (p->pos >= p->end || *p->pos != '{')
+        return 0;
+    p->pos++;
+    XrValue obj = xrt_json_new(0);
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    xrt_json_parse_skip_ws(p);
+    if (p->pos < p->end && *p->pos == '}') {
+        p->pos++;
+        *out = obj;
+        return 1;
+    }
+    while (1) {
+        XrValue key = XR_NULL_VAL;
+        XrValue val = XR_NULL_VAL;
+        xrt_json_parse_skip_ws(p);
+        if (!xrt_json_parse_string_value(p, &key))
+            return 0;
+        xrt_json_parse_skip_ws(p);
+        if (p->pos >= p->end || *p->pos != ':')
+            return 0;
+        p->pos++;
+        xrt_json_parse_skip_ws(p);
+        if (!xrt_json_parse_value(p, &val))
+            return 0;
+        if (!j->dynamic_fields) {
+            XrValue dyn = xrt_map_new(8);
+            j->dynamic_fields = (xrt_map_t *) dyn.ptr;
+        }
+        xrt_map_set(j->dynamic_fields, key, val);
+        xrt_json_parse_skip_ws(p);
+        if (p->pos < p->end && *p->pos == '}') {
+            p->pos++;
+            *out = obj;
+            return 1;
+        }
+        if (p->pos >= p->end || *p->pos != ',')
+            return 0;
+        p->pos++;
+    }
+}
+
+static int xrt_json_parse_value(xrt_json_parser_t *p, XrValue *out) {
+    xrt_json_parse_skip_ws(p);
+    if (p->pos >= p->end || p->depth >= XRT_JSON_PARSE_MAX_DEPTH)
+        return 0;
+    p->depth++;
+    int ok = 0;
+    switch (*p->pos) {
+        case 'n':
+            ok = xrt_json_parse_null(p, out);
+            break;
+        case 't':
+        case 'f':
+            ok = xrt_json_parse_bool(p, out);
+            break;
+        case '"':
+            ok = xrt_json_parse_string_value(p, out);
+            break;
+        case '[':
+            ok = xrt_json_parse_array(p, out);
+            break;
+        case '{':
+            ok = xrt_json_parse_object(p, out);
+            break;
+        default:
+            if (*p->pos == '-' || xrt_json_parse_is_digit(*p->pos))
+                ok = xrt_json_parse_number(p, out);
+            break;
+    }
+    p->depth--;
+    return ok;
+}
+
+static inline XrValue xrt_json_parse(XrValue text) {
+    if (!XR_IS_STR(text))
+        return XR_NULL_VAL;
+    const char *data = xr_str_data(text);
+    int64_t len = xr_str_len(text);
+    if (!data || len <= 0)
+        return XR_NULL_VAL;
+    xrt_json_parser_t p = {.src = data, .end = data + len, .pos = data, .depth = 0};
+    XrValue out = XR_NULL_VAL;
+    if (!xrt_json_parse_value(&p, &out))
+        return XR_NULL_VAL;
+    xrt_json_parse_skip_ws(&p);
+    return p.pos == p.end ? out : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue val) {

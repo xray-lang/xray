@@ -23,11 +23,11 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <errno.h>
 
 #include "../../base/xmalloc.h"
 #include "../../base/xsimd.h"
 #include "../../base/xutf8.h"
-#include "../../base/xjson.h"
 
 #include "xmap.h"
 #include "xset.h"
@@ -68,61 +68,447 @@ static bool json_datetime_call_string(XrVMRuntime *X, XrInstance *inst, const ch
     return true;
 }
 
-/* ========== JSON Parser (delegates to src/base/xjson) ========== */
+/* ========== JSON Parser ========== */
 
 #define JSON_MAX_DEPTH 256
 
-/*
- * Convert a pure-C XrJsonValue DOM tree (from src/base/xjson) to runtime
- * XrValue objects (XrString, XrArray, XrJson). This is the bridge layer
- * that avoids duplicating parser code in the stdlib.
- *
- * Number heuristic: JSON has no integer type; we return xr_int when the
- * double has no fractional part and fits in int64, else xr_float.
- */
-static XrValue dom_to_xrvalue(XrVMRuntime *X, XrJsonValue *v) {
-    if (!v)
-        return xr_null();
+typedef struct {
+    XrVMRuntime *X;
+    const char *src;
+    const char *end;
+    const char *pos;
+    int depth;
+} JsonDirectParser;
 
-    switch (v->type) {
-        case XR_JSON_NULL:
-            return xr_null();
-
-        case XR_JSON_BOOL:
-            return xr_bool(v->as.boolean);
-
-        case XR_JSON_NUMBER:
-            if (v->is_integer) {
-                return xr_int(v->as.integer);
-            }
-            return xr_float(v->as.number);
-
-        case XR_JSON_STRING: {
-            size_t len = v->string_len;
-            XrString *str = xr_string_intern(X, v->as.string, len, 0);
-            return xr_string_value(str);
-        }
-
-        case XR_JSON_ARRAY: {
-            XrArray *arr = xr_array_new(xr_current_coro(X));
-            for (int idx = 0; idx < v->as.array.count; idx++) {
-                xr_array_push(arr, dom_to_xrvalue(X, v->as.array.items[idx]));
-            }
-            return xr_value_from_array(arr);
-        }
-
-        case XR_JSON_OBJECT: {
-            XrJson *json = xr_json_new(xr_current_coro(X));
-            if (!json)
-                return xr_null();
-            for (int idx = 0; idx < v->as.object.count; idx++) {
-                xr_json_set_by_key(X, json, v->as.object.members[idx].key,
-                                   dom_to_xrvalue(X, v->as.object.members[idx].value));
-            }
-            return xr_json_value(json);
+static void direct_skip_whitespace(JsonDirectParser *p) {
+    while (p->pos < p->end) {
+        char c = *p->pos;
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            p->pos++;
+        } else {
+            break;
         }
     }
-    return xr_null();
+}
+
+static bool direct_parse_value(JsonDirectParser *p, XrValue *out);
+
+static bool direct_parse_null(JsonDirectParser *p, XrValue *out) {
+    if (p->pos + 4 <= p->end && strncmp(p->pos, "null", 4) == 0) {
+        p->pos += 4;
+        *out = xr_null();
+        return true;
+    }
+    return false;
+}
+
+static bool direct_parse_bool(JsonDirectParser *p, XrValue *out) {
+    if (p->pos + 4 <= p->end && strncmp(p->pos, "true", 4) == 0) {
+        p->pos += 4;
+        *out = xr_bool(true);
+        return true;
+    }
+    if (p->pos + 5 <= p->end && strncmp(p->pos, "false", 5) == 0) {
+        p->pos += 5;
+        *out = xr_bool(false);
+        return true;
+    }
+    return false;
+}
+
+static bool direct_parse_number(JsonDirectParser *p, XrValue *out) {
+    const char *start = p->pos;
+
+    if (p->pos < p->end && *p->pos == '-')
+        p->pos++;
+
+    if (p->pos >= p->end || !isdigit((unsigned char) *p->pos)) {
+        p->pos = start;
+        return false;
+    }
+
+    const char *digit_start = p->pos;
+    while (p->pos < p->end && isdigit((unsigned char) *p->pos))
+        p->pos++;
+    int digit_count = (int) (p->pos - digit_start);
+    if (digit_count > 1 && *digit_start == '0') {
+        p->pos = start;
+        return false;
+    }
+
+    bool is_float = false;
+    if (p->pos < p->end && *p->pos == '.') {
+        is_float = true;
+        p->pos++;
+        if (p->pos >= p->end || !isdigit((unsigned char) *p->pos)) {
+            p->pos = start;
+            return false;
+        }
+        while (p->pos < p->end && isdigit((unsigned char) *p->pos))
+            p->pos++;
+    }
+
+    if (p->pos < p->end && (*p->pos == 'e' || *p->pos == 'E')) {
+        is_float = true;
+        p->pos++;
+        if (p->pos < p->end && (*p->pos == '+' || *p->pos == '-'))
+            p->pos++;
+        if (p->pos >= p->end || !isdigit((unsigned char) *p->pos)) {
+            p->pos = start;
+            return false;
+        }
+        while (p->pos < p->end && isdigit((unsigned char) *p->pos))
+            p->pos++;
+    }
+
+    size_t tok_len = (size_t) (p->pos - start);
+    char stack_numbuf[64];
+    char *numbuf = stack_numbuf;
+    if (tok_len + 1 > sizeof(stack_numbuf)) {
+        numbuf = (char *) xr_malloc(tok_len + 1);
+        if (!numbuf) {
+            p->pos = start;
+            return false;
+        }
+    }
+    memcpy(numbuf, start, tok_len);
+    numbuf[tok_len] = '\0';
+
+    if (is_float) {
+        *out = xr_float(strtod(numbuf, NULL));
+    } else {
+        errno = 0;
+        int64_t ival = strtoll(numbuf, NULL, 10);
+        if (errno == ERANGE)
+            *out = xr_float(strtod(numbuf, NULL));
+        else
+            *out = xr_int(ival);
+    }
+    if (numbuf != stack_numbuf)
+        xr_free(numbuf);
+    return true;
+}
+
+static int direct_parse_hex4(const char *s) {
+    unsigned int val = 0;
+    for (int i = 0; i < 4; i++) {
+        char c = s[i];
+        val <<= 4;
+        if (c >= '0' && c <= '9')
+            val |= (unsigned) (c - '0');
+        else if (c >= 'a' && c <= 'f')
+            val |= (unsigned) (c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F')
+            val |= (unsigned) (c - 'A' + 10);
+        else
+            return -1;
+    }
+    return (int) val;
+}
+
+static char *direct_parse_string_content(JsonDirectParser *p, size_t *out_len) {
+    if (p->pos >= p->end || *p->pos != '"')
+        return NULL;
+    p->pos++;
+
+    char stack_buf[256];
+    size_t cap = sizeof(stack_buf);
+    char *buf = stack_buf;
+    size_t len = 0;
+
+#define DIRECT_STR_ENSURE(n)                                                                       \
+    do {                                                                                           \
+        if (len + (n) >= cap) {                                                                    \
+            size_t new_cap = cap * 2;                                                              \
+            while (new_cap < len + (n) + 1)                                                        \
+                new_cap *= 2;                                                                      \
+            char *nb = (char *) xr_malloc(new_cap);                                                \
+            if (!nb) {                                                                             \
+                if (buf != stack_buf)                                                              \
+                    xr_free(buf);                                                                  \
+                return NULL;                                                                       \
+            }                                                                                      \
+            memcpy(nb, buf, len);                                                                  \
+            if (buf != stack_buf)                                                                  \
+                xr_free(buf);                                                                      \
+            buf = nb;                                                                              \
+            cap = new_cap;                                                                         \
+        }                                                                                          \
+    } while (0)
+
+    while (p->pos < p->end && *p->pos != '"') {
+        if (*p->pos == '\\') {
+            p->pos++;
+            if (p->pos >= p->end)
+                break;
+            DIRECT_STR_ENSURE(4);
+            switch (*p->pos) {
+                case '"':
+                    buf[len++] = '"';
+                    p->pos++;
+                    break;
+                case '\\':
+                    buf[len++] = '\\';
+                    p->pos++;
+                    break;
+                case '/':
+                    buf[len++] = '/';
+                    p->pos++;
+                    break;
+                case 'b':
+                    buf[len++] = '\b';
+                    p->pos++;
+                    break;
+                case 'f':
+                    buf[len++] = '\f';
+                    p->pos++;
+                    break;
+                case 'n':
+                    buf[len++] = '\n';
+                    p->pos++;
+                    break;
+                case 'r':
+                    buf[len++] = '\r';
+                    p->pos++;
+                    break;
+                case 't':
+                    buf[len++] = '\t';
+                    p->pos++;
+                    break;
+                case 'u': {
+                    p->pos++;
+                    if (p->pos + 4 > p->end)
+                        goto bad_escape;
+                    int cp = direct_parse_hex4(p->pos);
+                    if (cp < 0)
+                        goto bad_escape;
+                    p->pos += 4;
+
+                    if (cp >= 0xD800 && cp <= 0xDBFF) {
+                        if (p->pos + 6 <= p->end && p->pos[0] == '\\' && p->pos[1] == 'u') {
+                            int low = direct_parse_hex4(p->pos + 2);
+                            if (low >= 0xDC00 && low <= 0xDFFF) {
+                                unsigned int full = 0x10000 + ((unsigned) (cp - 0xD800) << 10) +
+                                                    (unsigned) (low - 0xDC00);
+                                len += xr_utf8_encode(full, buf + len);
+                                p->pos += 6;
+                            } else {
+                                goto bad_escape;
+                            }
+                        } else {
+                            goto bad_escape;
+                        }
+                    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                        goto bad_escape;
+                    } else {
+                        len += xr_utf8_encode((uint32_t) cp, buf + len);
+                    }
+                    break;
+                }
+                default:
+                    goto bad_escape;
+            }
+        } else {
+            DIRECT_STR_ENSURE(1);
+            buf[len++] = *p->pos++;
+        }
+    }
+
+#undef DIRECT_STR_ENSURE
+
+    if (p->pos >= p->end || *p->pos != '"')
+        goto bad_escape;
+    p->pos++;
+
+    char *result = (char *) xr_malloc(len + 1);
+    if (!result)
+        goto bad_escape;
+    memcpy(result, buf, len);
+    result[len] = '\0';
+    if (buf != stack_buf)
+        xr_free(buf);
+    if (out_len)
+        *out_len = len;
+    return result;
+
+bad_escape:
+    if (buf != stack_buf)
+        xr_free(buf);
+    return NULL;
+}
+
+static bool direct_parse_string(JsonDirectParser *p, XrValue *out) {
+    size_t len = 0;
+    char *str = direct_parse_string_content(p, &len);
+    if (!str)
+        return false;
+    XrString *xs = xr_string_intern(p->X, str, len, 0);
+    xr_free(str);
+    if (!xs)
+        return false;
+    *out = xr_string_value(xs);
+    return true;
+}
+
+static void direct_release_owned_value(XrValue value) {
+    if (XR_VALUE_NEEDS_GC(value))
+        xr_rc_release_value(xr_current_coro_heap(), value);
+}
+
+static bool direct_parse_array(JsonDirectParser *p, XrValue *out) {
+    if (p->pos >= p->end || *p->pos != '[')
+        return false;
+    p->pos++;
+
+    XrArray *arr = xr_array_new(xr_current_coro(p->X));
+    if (!arr)
+        return false;
+    XrValue arr_value = xr_value_from_array(arr);
+
+    direct_skip_whitespace(p);
+    if (p->pos < p->end && *p->pos == ']') {
+        p->pos++;
+        *out = arr_value;
+        return true;
+    }
+
+    while (true) {
+        XrValue elem = xr_null();
+        direct_skip_whitespace(p);
+        if (!direct_parse_value(p, &elem)) {
+            direct_release_owned_value(arr_value);
+            return false;
+        }
+        xr_array_push(arr, elem);
+
+        direct_skip_whitespace(p);
+        if (p->pos < p->end && *p->pos == ']') {
+            p->pos++;
+            *out = arr_value;
+            return true;
+        }
+        if (p->pos >= p->end || *p->pos != ',') {
+            direct_release_owned_value(arr_value);
+            return false;
+        }
+        p->pos++;
+    }
+}
+
+static bool direct_parse_object(JsonDirectParser *p, XrValue *out) {
+    if (p->pos >= p->end || *p->pos != '{')
+        return false;
+    p->pos++;
+
+    XrJson *json = xr_json_new(xr_current_coro(p->X));
+    if (!json)
+        return false;
+    XrValue obj_value = xr_json_value(json);
+
+    direct_skip_whitespace(p);
+    if (p->pos < p->end && *p->pos == '}') {
+        p->pos++;
+        *out = obj_value;
+        return true;
+    }
+
+    while (true) {
+        size_t key_len = 0;
+        char *key;
+        XrValue val = xr_null();
+        direct_skip_whitespace(p);
+        key = direct_parse_string_content(p, &key_len);
+        (void) key_len;
+        if (!key) {
+            direct_release_owned_value(obj_value);
+            return false;
+        }
+
+        direct_skip_whitespace(p);
+        if (p->pos >= p->end || *p->pos != ':') {
+            xr_free(key);
+            direct_release_owned_value(obj_value);
+            return false;
+        }
+        p->pos++;
+
+        direct_skip_whitespace(p);
+        if (!direct_parse_value(p, &val)) {
+            xr_free(key);
+            direct_release_owned_value(obj_value);
+            return false;
+        }
+        if (!xr_json_set_by_key(p->X, json, key, val)) {
+            xr_free(key);
+            direct_release_owned_value(val);
+            direct_release_owned_value(obj_value);
+            return false;
+        }
+        xr_free(key);
+
+        direct_skip_whitespace(p);
+        if (p->pos < p->end && *p->pos == '}') {
+            p->pos++;
+            *out = obj_value;
+            return true;
+        }
+        if (p->pos >= p->end || *p->pos != ',') {
+            direct_release_owned_value(obj_value);
+            return false;
+        }
+        p->pos++;
+    }
+}
+
+static bool direct_parse_value(JsonDirectParser *p, XrValue *out) {
+    direct_skip_whitespace(p);
+    if (p->pos >= p->end)
+        return false;
+    if (p->depth >= JSON_MAX_DEPTH)
+        return false;
+
+    p->depth++;
+    bool ok = false;
+    switch (*p->pos) {
+        case 'n':
+            ok = direct_parse_null(p, out);
+            break;
+        case 't':
+        case 'f':
+            ok = direct_parse_bool(p, out);
+            break;
+        case '"':
+            ok = direct_parse_string(p, out);
+            break;
+        case '[':
+            ok = direct_parse_array(p, out);
+            break;
+        case '{':
+            ok = direct_parse_object(p, out);
+            break;
+        default:
+            if (*p->pos == '-' || isdigit((unsigned char) *p->pos))
+                ok = direct_parse_number(p, out);
+            break;
+    }
+    p->depth--;
+    return ok;
+}
+
+static bool json_parse_runtime_direct(XrVMRuntime *X, const char *json, size_t len, XrValue *out) {
+    if (!X || !json || len == 0 || !out)
+        return false;
+    JsonDirectParser p = {.X = X, .src = json, .end = json + len, .pos = json, .depth = 0};
+    XrValue result = xr_null();
+    if (!direct_parse_value(&p, &result))
+        return false;
+    direct_skip_whitespace(&p);
+    if (p.pos != p.end) {
+        direct_release_owned_value(result);
+        return false;
+    }
+    *out = result;
+    return true;
 }
 
 /* ========== JSON Serialization ========== */
@@ -784,12 +1170,9 @@ XrValue xr_json_fn_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc) 
     }
 
     XrString *str = XR_TO_STRING(args[0]);
-    XrJsonValue *dom = xjson_parse(str->data, str->length);
-    if (!dom)
+    XrValue result = xr_null();
+    if (!json_parse_runtime_direct(X, str->data, str->length, &result))
         return xr_null();
-
-    XrValue result = dom_to_xrvalue(X, dom);
-    xjson_free(dom);
     return result;
 }
 
@@ -862,12 +1245,9 @@ XrValue xr_json_parse_from_cstr(XrVMRuntime *X, const char *json_str, size_t len
     if (!X || !json_str || len == 0)
         return xr_null();
 
-    XrJsonValue *dom = xjson_parse(json_str, len);
-    if (!dom)
+    XrValue result = xr_null();
+    if (!json_parse_runtime_direct(X, json_str, len, &result))
         return xr_null();
-
-    XrValue result = dom_to_xrvalue(X, dom);
-    xjson_free(dom);
     return result;
 }
 
@@ -1130,17 +1510,15 @@ XrValue xr_json_fn_try_parse(XrVMRuntime *X, XrValue self, XrValue *args, int ar
     }
 
     XrString *str = XR_TO_STRING(args[0]);
-    XrJsonValue *dom = xjson_parse(str->data, str->length);
-
-    if (!dom) {
+    XrValue parsed = xr_null();
+    if (!json_parse_runtime_direct(X, str->data, str->length, &parsed)) {
         const char *msg = "Invalid JSON";
         xr_json_set_by_key(X, result, "value", xr_null());
         xr_json_set_by_key(X, result, "error",
                            xr_string_value(xr_string_intern(X, msg, strlen(msg), 0)));
     } else {
-        xr_json_set_by_key(X, result, "value", dom_to_xrvalue(X, dom));
+        xr_json_set_by_key(X, result, "value", parsed);
         xr_json_set_by_key(X, result, "error", xr_null());
-        xjson_free(dom);
     }
 
     return xr_json_value(result);

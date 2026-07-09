@@ -7994,7 +7994,7 @@ TEST(global_evidence_records_json_codec_plans) {
     ASSERT_NOT_NULL(decode_plan);
     ASSERT_NOT_NULL(encode_plan);
     ASSERT_NOT_NULL(stringify_plan);
-    ASSERT_EQ_UINT(parse_plan->action, XAOT_JSON_CODEC_PARSE_DOM_BRIDGE);
+    ASSERT_EQ_UINT(parse_plan->action, XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
     ASSERT_EQ_UINT(decode_plan->action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
     ASSERT_EQ_UINT(encode_plan->action, XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
     ASSERT_EQ_UINT(stringify_plan->action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
@@ -8006,7 +8006,7 @@ TEST(global_evidence_records_json_codec_plans) {
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=parse_dom_bridge"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=parse_runtime_direct"));
     ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 1 id=2"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=decode_validate_copy"));
     ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 2 id=3"));
@@ -8657,7 +8657,7 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.njson_codec_plans, 4);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[0].action, XAOT_JSON_CODEC_PARSE_DOM_BRIDGE);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[0].action, XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
     ASSERT_EQ_UINT(bundle.json_codec_plans[1].action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
     ASSERT_EQ_UINT(bundle.json_codec_plans[2].action, XAOT_JSON_CODEC_ENCODE_FIELD_TABLE);
     ASSERT_EQ_UINT(bundle.json_codec_plans[3].action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
