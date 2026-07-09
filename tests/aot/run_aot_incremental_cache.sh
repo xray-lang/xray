@@ -311,10 +311,27 @@ XR_EOF
     expect_evidence_summary "$dir/log3" 2 2 "evidence-body-change"
     expect_output "$dir/ev3" "8" "evidence-body-change"
 
-    require_build "evidence-rebuild" "$dir/log4" \
-        build_log "$cache" "$app" "$dir/ev4" "$dir/log4" --rebuild || return 1
-    expect_evidence_summary "$dir/log4" 0 4 "evidence-rebuild" " rebuild"
-    expect_output "$dir/ev4" "8" "evidence-rebuild"
+    cat >"$app" <<'XR_EOF'
+fn id(x: int, y: int) -> int {
+    return x + y
+}
+
+print(id(7, 2))
+XR_EOF
+
+    require_build "evidence-decl-change" "$dir/log4" \
+        build_log "$cache" "$app" "$dir/ev4" "$dir/log4" || return 1
+    expect_evidence_phase "$dir/log4" declarations miss "evidence-decl-change"
+    expect_evidence_phase "$dir/log4" semantic_graph miss "evidence-decl-change"
+    expect_evidence_phase "$dir/log4" body_summary miss "evidence-decl-change"
+    expect_evidence_phase "$dir/log4" global_evidence miss "evidence-decl-change"
+    expect_evidence_summary "$dir/log4" 0 4 "evidence-decl-change"
+    expect_output "$dir/ev4" "9" "evidence-decl-change"
+
+    require_build "evidence-rebuild" "$dir/log5" \
+        build_log "$cache" "$app" "$dir/ev5" "$dir/log5" --rebuild || return 1
+    expect_evidence_summary "$dir/log5" 0 4 "evidence-rebuild" " rebuild"
+    expect_output "$dir/ev5" "9" "evidence-rebuild"
 }
 
 run_class_symbols() {
