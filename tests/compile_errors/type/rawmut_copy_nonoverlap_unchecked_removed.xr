@@ -1,0 +1,5 @@
+fn copy(dst: Bytes, src: Bytes) {
+    unsafe {
+        dst.mutPtr().copyFromNonOverlappingUnchecked(src.ptr(), 1)
+    }
+}

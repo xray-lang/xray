@@ -529,7 +529,7 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
         }
         return xr_type_new_function(X, NULL, 0, pointee, false);
     }
-    if (strcmp(name, "copyFromNonOverlappingUnchecked") == 0) {
+    if (strcmp(name, "copyFromNonOverlapping") == 0) {
         if (node) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             if (ctx->unsafe_depth == 0) {
@@ -546,12 +546,12 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
         XrType *params[2] = {xr_type_new_pointer(X, pointee, false), xr_type_new_int(X)};
         return xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
     }
-    if (strcmp(name, "loadLEUnchecked") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
+    if (strcmp(name, "loadLE") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
         if (ctx->unsafe_depth == 0 && node) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                "RawPtr.loadLEUnchecked() must be inside an unsafe block", &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_NOT_CALLABLE,
+                                       "RawPtr.loadLE() must be inside an unsafe block", &loc);
         }
         XrType *params[1] = {xr_type_new_int(X)};
         XrType *ret = xr_type_new_type_param(X, "T", 0);
@@ -562,13 +562,13 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
         }
         return fn;
     }
-    if (strcmp(name, "storeLEUnchecked") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
+    if (strcmp(name, "storeLE") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
         if (node) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             if (ctx->unsafe_depth == 0) {
-                xa_analyzer_add_diagnostic(
-                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                    "RawMut.storeLEUnchecked() must be inside an unsafe block", &loc);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_NOT_CALLABLE,
+                                           "RawMut.storeLE() must be inside an unsafe block", &loc);
             }
             if (!receiver->ptr_is_mut) {
                 xa_analyzer_add_diagnostic(
@@ -1733,6 +1733,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     XrType *ptr_method = xa_pointer_method_type(ctx, obj_type, ma->name, node);
     if (ptr_method)
         return ptr_method;
+
+    if (XR_TYPE_IS_POINTER(obj_type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg), "%s has no member '%s'",
+                 obj_type->ptr_is_mut ? "RawMut" : "RawPtr", ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
 
     if (XR_TYPE_IS_VIEW(obj_type)) {
         xa_report_view_member_error(ctx, node, obj_type, ma->name);

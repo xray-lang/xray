@@ -4,9 +4,9 @@ fn readRaw(src: ByteSpan) -> int {
     var value64: uint64 = 0
     unsafe {
         var p = src.ptr()
-        value16 = p.loadLEUnchecked<uint16>(1)
-        value32 = p.loadLEUnchecked<uint32>(0)
-        value64 = p.loadLEUnchecked<uint64>(0)
+        value16 = p.loadLE<uint16>(1)
+        value32 = p.loadLE<uint32>(0)
+        value64 = p.loadLE<uint64>(0)
     }
     return int(value16) + int(value32) + int(value64)
 }

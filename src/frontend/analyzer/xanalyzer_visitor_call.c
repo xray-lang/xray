@@ -1316,20 +1316,20 @@ static bool xa_call_is_bytespan_reinterpret(CallExprNode *call, XrType *receiver
     return ma->name && strcmp(ma->name, "reinterpret") == 0;
 }
 
-static bool xa_call_is_rawptr_load_le_unchecked(CallExprNode *call, XrType *receiver_type) {
+static bool xa_call_is_rawptr_load_le(CallExprNode *call, XrType *receiver_type) {
     if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "loadLEUnchecked") == 0;
+    return ma->name && strcmp(ma->name, "loadLE") == 0;
 }
 
-static bool xa_call_is_rawmut_store_le_unchecked(CallExprNode *call, XrType *receiver_type) {
+static bool xa_call_is_rawmut_store_le(CallExprNode *call, XrType *receiver_type) {
     if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "storeLEUnchecked") == 0;
+    return ma->name && strcmp(ma->name, "storeLE") == 0;
 }
 
 static bool xa_type_is_supported_raw_load_le_result(XrType *type) {
@@ -3395,11 +3395,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (xa_call_is_bytespan_reinterpret(call, callee_obj_type))
         return_type = xa_bytespan_reinterpret_return_type(ctx, node, call);
 
-    if (xa_call_is_rawptr_load_le_unchecked(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLEUnchecked<T>()", false);
+    if (xa_call_is_rawptr_load_le(call, callee_obj_type))
+        return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLE<T>()", false);
 
-    if (xa_call_is_rawmut_store_le_unchecked(call, callee_obj_type)) {
-        (void) xa_bytes_typed_type_arg(ctx, node, call, "RawMut.storeLEUnchecked<T>()", false);
+    if (xa_call_is_rawmut_store_le(call, callee_obj_type)) {
+        (void) xa_bytes_typed_type_arg(ctx, node, call, "RawMut.storeLE<T>()", false);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 
