@@ -1,0 +1,11 @@
+enum FsState {
+    Ready,
+    Done
+}
+
+@c_export("xray_enum_tostring_reject")
+fn xray_enum_tostring_reject() -> int {
+    var s = FsState.Ready
+    print(s.toString())
+    return 0
+}
