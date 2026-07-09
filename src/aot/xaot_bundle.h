@@ -300,6 +300,32 @@ typedef struct XaotAliasPlan {
     uint32_t evidence; /* XAOT_ALIAS_EV_* */
 } XaotAliasPlan;
 
+typedef enum XaotAllocationAction {
+    XAOT_ALLOC_ACTION_NONE = 0,
+    XAOT_ALLOC_ACTION_STACK = 1,
+    XAOT_ALLOC_ACTION_SROA = 2,
+} XaotAllocationAction;
+
+enum {
+    XAOT_ALLOC_EV_STACK_ALLOC_OP = 1u << 0,
+    XAOT_ALLOC_EV_NO_ESCAPE = 1u << 1,
+    XAOT_ALLOC_EV_ORIGINAL_ALLOC_OP = 1u << 2,
+    XAOT_ALLOC_EV_BODY_SUMMARY = 1u << 3,
+};
+
+typedef struct XaotAllocationPlan {
+    const XiFunc *func;
+    const XiValue *value;
+    XgFuncId body_func_id;
+    uint32_t body_effect_bits;
+    uint32_t body_escape_bits;
+    uint32_t body_evidence;
+    uint16_t original_op;
+    uint8_t escape;
+    uint8_t action;
+    uint32_t evidence;
+} XaotAllocationPlan;
+
 typedef enum XaotClosureRepresentation {
     XAOT_CLOSURE_RUNTIME = 1,
     XAOT_CLOSURE_STACK = 2,
@@ -1407,6 +1433,9 @@ typedef struct XaotBundle {
     XaotAliasPlan *alias_plans;
     uint32_t nalias_plans;
     uint32_t alias_plan_cap;
+    XaotAllocationPlan *allocation_plans;
+    uint32_t nallocation_plans;
+    uint32_t allocation_plan_cap;
     XaotClosurePlan *closure_plans;
     uint32_t nclosure_plans;
     uint32_t closure_plan_cap;
@@ -1516,6 +1545,7 @@ typedef struct XaotBundle {
     XaotPtrIndex bounds_index;            /* XiValue* (access) -> bounds_plans row */
     XaotPtrIndex span_access_index;       /* XiValue* (access op) -> span_access_plans row */
     XaotPtrIndex alias_index;             /* XiValue* (value) -> alias_plans row */
+    XaotPtrIndex allocation_index;        /* XiValue* (alloc) -> allocation_plans row */
     XaotPtrIndex closure_index;           /* XiValue* (closure alloc) -> closure_plans row */
     XaotPrepareStats stats;
     const char *error_msg;
@@ -1666,6 +1696,13 @@ XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFu
                                                   uint8_t kind, uint32_t evidence);
 XR_FUNC const XaotAliasPlan *xaot_bundle_find_alias_plan(const XaotBundle *bundle,
                                                          const XiValue *value);
+XR_FUNC XaotAllocationPlan *xaot_bundle_add_allocation_plan(XaotBundle *bundle, const XiFunc *func,
+                                                            const XiValue *value,
+                                                            const XgBodySummary *body,
+                                                            uint8_t action, uint16_t original_op,
+                                                            uint8_t escape, uint32_t evidence);
+XR_FUNC const XaotAllocationPlan *xaot_bundle_find_allocation_plan(const XaotBundle *bundle,
+                                                                   const XiValue *value);
 XR_FUNC XaotClosurePlan *
 xaot_bundle_add_closure_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
                              const XiFunc *target_func, uint16_t capture_count,
