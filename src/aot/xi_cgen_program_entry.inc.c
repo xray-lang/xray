@@ -572,7 +572,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     }
     xi_cgen_emit_str_literal_defs(ctx, out);
     if (main_func->nshared > 0 && bodybuf && strstr(bodybuf, "xrt_shared"))
-        fprintf(out, "static XrValue xrt_shared[%u];\n\n", main_func->nshared);
+        cg_emit_shared_array_definition(ctx, out, "static ", "xrt_shared", module,
+                                        main_func->nshared);
     fwrite(bodybuf, 1, bodysz, out);
     xr_free(bodybuf);
 }
@@ -679,7 +680,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
      * unrelated module gains or loses a shared slot (114 incremental caching);
      * the defining unit still carries the sized definition. */
     if (module->init->nshared > 0)
-        fprintf(out, "XrValue %s[%u];\n", shared_buf, module->init->nshared);
+        cg_emit_shared_array_definition(ctx, out, "", shared_buf, module, module->init->nshared);
     for (int i = 0; i < nmodules; i++) {
         XiModule *m = modules[i];
         if (i == mod_index || !m || !m->init || m->init->nshared == 0)

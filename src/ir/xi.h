@@ -1101,6 +1101,8 @@ typedef struct XiFunc {
      * initializer has folded to a scalar literal. */
     XiConstLiteral *shared_const_literals; /* array of nshared entries (arena-alloc'd) */
     uint16_t shared_const_literal_count;
+    XiConstLiteral *shared_init_literals; /* array of nshared static shared initializers */
+    uint16_t shared_init_literal_count;
 
     /* Program-level shared slot -> function mapping, populated during
      * lowering before XiModule is assembled so optimization passes can

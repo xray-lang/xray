@@ -842,6 +842,13 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "XR_NULL_VAL");
         return;
     }
+    const XiConstLiteral *shared_init =
+        cg_freestanding_shared_initializer_literal(ctx, v ? v->aux_int : -1);
+    if (shared_init && ctx && ctx->module && f == ctx->module->init &&
+        cg_const_value_matches_literal(value, shared_init)) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
     if (ctx && ctx->freestanding_profile &&
         cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
         fprintf(out, "XR_NULL_VAL");
