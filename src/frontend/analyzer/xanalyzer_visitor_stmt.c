@@ -1994,9 +1994,7 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
     AstNode *return_expr =
         xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
     XaThreadHandleLintState *returned_state =
-        return_expr ? xa_thread_lint_find_by_expr(states, return_expr) : NULL;
-    if (!returned_state)
-        returned_state = xa_thread_lint_find_returned_call_arg(states, return_expr);
+        xa_thread_lint_find_alias_source(states, return_expr);
     bool any_finalized = false;
     bool returns_param = false;
     for (int i = 0; i < fn->param_count; i++) {
@@ -3847,9 +3845,7 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
     AstNode *return_expr =
         xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
     XaOsResourceLintState *returned_state =
-        return_expr ? xa_os_resource_lint_find_by_expr(states, return_expr) : NULL;
-    if (!returned_state)
-        returned_state = xa_os_resource_lint_find_returned_call_arg(states, return_expr);
+        xa_os_resource_lint_find_alias_source(states, return_expr);
     bool any_finalized = false;
     bool returns_param = false;
     for (int i = 0; i < fn->param_count; i++) {
