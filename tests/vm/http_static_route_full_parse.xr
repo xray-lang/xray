@@ -6,6 +6,7 @@ const PORT = 9196
 
 fn serveStaticRoutes(port: int) {
     http.route("GET", "/plain", "hello static")
+    http.route("GET", "/empty", "")
     http.listen(port)
 }
 
@@ -36,6 +37,11 @@ fn test_http_static_routes_after_full_parse() {
     assert(plain.ok)
     assert_eq(plain.status, 200)
     assert_eq(plain.body, "hello static")
+
+    var empty = http.request({url: "http://127.0.0.1:" + string(PORT) + "/empty"})
+    assert(empty.ok)
+    assert_eq(empty.status, 200)
+    assert_eq(empty.body, "")
 
     http.stopServer()
 }

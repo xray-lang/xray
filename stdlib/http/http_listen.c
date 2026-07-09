@@ -641,18 +641,13 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
     XrRouteParams params;
     params.count = 0;
     void *user_data = NULL;
-    const char *static_resp = NULL, *prebuilt_resp = NULL;
-    size_t static_len = 0, prebuilt_len = 0;
+    const char *static_resp = NULL;
+    size_t static_len = 0;
 
-    XrRouteHandler found_handler =
-        xr_router_find(ctx->router, method, path_str, pure_path_len, &params, &user_data,
-                       &static_resp, &static_len, &prebuilt_resp, &prebuilt_len);
+    XrRouteHandler found_handler = xr_router_find(ctx->router, method, path_str, pure_path_len,
+                                                  &params, &user_data, &static_resp, &static_len);
 
-    if (prebuilt_resp && prebuilt_len > 0) {
-        return http_conn_start_write(X, ctx, prebuilt_resp, prebuilt_len, http_conn_loop, result);
-    }
-
-    if (static_resp && static_len > 0) {
+    if (static_resp) {
         HttpRawResponse r =
             format_response_arena(&ctx->req_arena, 200, NULL, static_resp, static_len);
         return http_conn_start_write(X, ctx, r.data, r.len, http_conn_loop, result);
@@ -1144,7 +1139,7 @@ static XrCFuncResult http_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrV
 
 /*
  * Main request loop continuation.
- * Reads headers, dispatches to prebuilt or dynamic route.
+ * Reads headers and dispatches to static, websocket, or dynamic route.
  * Called after: init, write complete (keep-alive), batch yield.
  */
 static XrCFuncResult http_conn_loop(XrVMRuntime *X, int status, XrValue resume_value,
