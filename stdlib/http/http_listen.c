@@ -20,7 +20,6 @@
  */
 
 #include "http_internal.h"
-#include "http_server.h"
 #include "http_parser.h"
 #include "http_router.h"
 #include "../../src/coro/xyieldable.h"
@@ -90,6 +89,7 @@ static const char RESP_503[] = "HTTP/1.1 503 Service Unavailable\r\n"
                                "Service Unavailable";
 
 #define MAX_BODY_SIZE 1048576
+#define HTTP_SERVER_BACKLOG 1024
 #define CONN_YIELD_BATCH 32
 #define CONN_READ_BUF_SIZE 8192
 #define HTTP_SERVER_MAX_CONNS 10000
@@ -1356,7 +1356,7 @@ XrCFuncResult http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue
     }
 
     // Create listen socket
-    int listen_fd = xr_socket_listen("0.0.0.0", port, XR_HTTP_BACKLOG);
+    int listen_fd = xr_socket_listen("0.0.0.0", port, HTTP_SERVER_BACKLOG);
     if (listen_fd < 0) {
         fprintf(stderr, "http.listen: cannot create listen socket on port %d\n", port);
         *result = xr_bool(false);

@@ -12,11 +12,24 @@
 #define XR_STDLIB_HTTP_INTERNAL_H
 
 #include "http.h"
-#include "http_server.h"
+#include "http_router.h"
 #include "http2_client.h"
 #include "../net/conn_pool.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/xisolate_internal.h"
+
+struct XrClosure;
+
+typedef struct XrHttpServer {
+    int listen_fd;
+    volatile bool running;
+
+    XrRouter *router;
+
+    struct XrClosure **route_closures;
+    int route_closure_count;
+    int route_closure_capacity;
+} XrHttpServer;
 
 // Per-Isolate HTTP module context, stored in module's native_handle.
 typedef struct XrHttpContext {
@@ -34,6 +47,12 @@ typedef struct XrHttpContext {
 } XrHttpContext;
 
 XrHttpContext *http_get_context(XrVMRuntime *X);
+
+XrHttpServer *http_server_new(void);
+void http_server_free(XrHttpServer *server);
+void http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
+                       struct XrClosure *handler);
+void http_server_stop(XrHttpServer *server);
 
 XrCFuncResult http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result);
 
