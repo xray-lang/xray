@@ -152,10 +152,6 @@ typedef struct {
     XrH2StreamHash stream_hash;
     uint32_t next_stream_id;
     int32_t connection_window;
-
-    char *recv_buf;
-    size_t recv_len;
-    size_t recv_cap;
 } XrH2Conn;
 
 void http2_hpack_init(XrHpackTable *table, size_t max_size);
