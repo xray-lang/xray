@@ -6,5 +6,6 @@ var STATE = CounterState{value: 1}
 
 @c_export("xray_top_var_aggregate_reject")
 fn xray_top_var_aggregate_reject() -> int {
+    STATE = CounterState{value: 2}
     return STATE.value
 }

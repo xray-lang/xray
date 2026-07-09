@@ -1,0 +1,24 @@
+struct CounterState {
+    value: int
+    limit: int
+}
+
+union FlagBits {
+    i: int32
+    u: uint32
+}
+
+struct DeviceState {
+    bits: FlagBits
+    count: int
+}
+
+var STATE = CounterState{value: 1, limit: 10}
+var DEVICE = DeviceState{bits: FlagBits{u: 7}, count: 3}
+
+@c_export("xray_top_var_aggregate_static")
+fn xray_top_var_aggregate_static() -> int {
+    STATE.value = STATE.value + 2
+    DEVICE.count = DEVICE.count + (unsafe { DEVICE.bits.u } as int)
+    return STATE.value + STATE.limit + DEVICE.count
+}

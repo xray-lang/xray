@@ -962,6 +962,7 @@ typedef struct XiConstLiteral {
     const char *data_section;
     bool data_used;
     bool data_weak;
+    bool data_mutable;
 } XiConstLiteral;
 
 typedef struct XiParallelForData {

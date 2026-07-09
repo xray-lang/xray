@@ -2006,6 +2006,10 @@ static bool cg_const_literal_is_static_scalar_kind(const XiConstLiteral *lit) {
 }
 
 static void cg_emit_static_const_storage(FILE *out, const XiConstLiteral *lit) {
+    if (lit && lit->data_mutable) {
+        fprintf(out, "static ");
+        return;
+    }
     fprintf(out, "%s", lit && lit->data_weak ? "const " : "static const ");
 }
 
