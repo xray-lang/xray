@@ -1,0 +1,22 @@
+struct Pair {
+    left: int
+    right: int
+}
+
+union I32Bits {
+    i: int32
+    u: uint32
+}
+
+struct Holder {
+    bits: I32Bits
+    base: int
+}
+
+shared PAIR = Pair{left: 1, right: 2}
+shared HOLDER = Holder{bits: I32Bits{u: 33}, base: 4}
+
+@c_export("xray_shared_aggregate_static")
+fn xray_shared_aggregate_static() -> int {
+    return PAIR.left + PAIR.right + (unsafe { HOLDER.bits.u } as int) + HOLDER.base
+}

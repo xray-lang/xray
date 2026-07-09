@@ -20,6 +20,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/lexer/xlex.h"
 #include "../analysis/xglobal_summary.h"
@@ -1476,8 +1477,15 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
                 : NULL;
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
         if (!links || !links->has_ct_value ||
-            !const_literal_from_ct_value(l, &links->ct_value, type, &lit))
-            return false;
+            !const_literal_from_ct_value(l, &links->ct_value, type, &lit)) {
+            XrCtValue value = {0};
+            const char *err = NULL;
+            (void) err;
+            if (!l->analyzer ||
+                !xa_consteval_expr(l->analyzer, s->as.var_decl.initializer, &value, &err) ||
+                !const_literal_from_ct_value(l, &value, type, &lit))
+                return false;
+        }
     }
     const_literal_normalize_for_static_slot_type(&lit, type);
     switch (lit.kind) {
@@ -1487,6 +1495,7 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
         case XI_CONST_LITERAL_CHAR:
         case XI_CONST_LITERAL_STRING:
         case XI_CONST_LITERAL_NULL:
+        case XI_CONST_LITERAL_COMPTIME_AGGREGATE:
             *out = lit;
             return true;
         default:

@@ -5593,8 +5593,8 @@ static bool xa_freestanding_top_const_allowed(XaInferContext *ctx, VarDeclNode *
     return xa_freestanding_top_const_ct_value_allowed(&value);
 }
 
-static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ctx,
-                                                              VarDeclNode *var) {
+static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ctx, VarDeclNode *var,
+                                                              bool allow_aggregate) {
     if (!ctx || !ctx->analyzer || !var || !var->initializer)
         return false;
     XrCtValue value = {0};
@@ -5610,6 +5610,9 @@ static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ct
         case XR_CT_STRING:
         case XR_CT_NULL:
             return true;
+        case XR_CT_STRUCT_VALUE:
+            return allow_aggregate &&
+                   xa_freestanding_top_const_aggregate_value_allowed(&value, false);
         default:
             return false;
     }
@@ -5621,7 +5624,7 @@ static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *c
     if (!var)
         return false;
     if (var->initializer)
-        return xa_freestanding_shared_static_initializer_allowed(ctx, var);
+        return xa_freestanding_shared_static_initializer_allowed(ctx, var, false);
     if (!declared_type || XR_TYPE_IS_UNKNOWN(declared_type) ||
         !xa_type_is_default_initializable(ctx, declared_type))
         return false;
@@ -6976,11 +6979,12 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         links->is_comptime_local = ctx->comptime_block_depth > 0;
     }
     if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL &&
-        !xa_freestanding_shared_static_initializer_allowed(ctx, var)) {
+        !xa_freestanding_shared_static_initializer_allowed(ctx, var, true)) {
         xa_freestanding_report_unavailable(
             ctx, node, "shared declaration",
-            "only int/float/bool/char/string/null consteval initializers are supported as static "
-            "shared storage in the current freestanding slice");
+            "only int/float/bool/char/string/null consteval initializers or recursively scalar "
+            "struct/union consteval initializers are supported as static shared storage in the "
+            "current freestanding slice");
     } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
                xa_is_module_level_scope(ctx->analyzer) && node->type != AST_SHARED_DECL &&
                !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var)) &&

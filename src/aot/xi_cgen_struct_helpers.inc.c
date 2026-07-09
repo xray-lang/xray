@@ -537,11 +537,10 @@ static bool cg_freestanding_static_struct_literal_in_module(XiCgenCtx *ctx, cons
                                                             int64_t slot,
                                                             const XrAggregateLayout **out_layout,
                                                             const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
-        slot >= module->nslots)
+    if (!ctx || !ctx->freestanding_profile || !module || slot < 0 || slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
+    if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_STRUCT_VALUE || !lit->type)
         return false;
     const XrAggregateLayout *sl = cg_type_struct_layout(lit->type);
@@ -952,7 +951,7 @@ static void cg_emit_static_struct_initializer(XiCgenCtx *ctx, FILE *out,
 
 static bool cg_emit_freestanding_static_struct_defs(XiCgenCtx *ctx, FILE *out,
                                                     const XiModule *module, const char *prefix) {
-    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+    if (!ctx || !out || !module || !ctx->freestanding_profile)
         return false;
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
@@ -961,7 +960,7 @@ static bool cg_emit_freestanding_static_struct_defs(XiCgenCtx *ctx, FILE *out,
         if (!cg_freestanding_static_struct_literal_in_module(ctx, module, slot, &sl, &value))
             continue;
         const XrCtStructValue *st = &value->as.struct_val;
-        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
         cg_emit_static_const_storage(out, lit);
         emit_static_aggregate_decl_head(out, sl);
         for (uint16_t i = 0; i < sl->field_count; i++) {

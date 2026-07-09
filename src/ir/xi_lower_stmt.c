@@ -2982,15 +2982,24 @@ static void stmt_record_shared_function_value(XiLower *l, int slot, XiValue *val
         l->func->shared_slot_funcs[slot] = target;
 }
 
-static bool stmt_freestanding_top_const_aggregate_is_erased(XiLower *l, AstNode *node, int var_id) {
+static bool stmt_freestanding_static_aggregate_is_erased(XiLower *l, AstNode *node, int var_id) {
     if (!l || !l->is_program || !l->analyzer || !xa_analyzer_is_freestanding(l->analyzer) ||
-        !node || node->type != AST_CONST_DECL || var_id < 0 || !l->shared_map)
+        !node || var_id < 0 || !l->shared_map)
         return false;
     int slot = l->shared_map[var_id];
-    if (slot < 0 || !l->func || !l->func->shared_const_literals ||
-        slot >= (int) l->func->shared_const_literal_count)
+    if (slot < 0 || !l->func)
         return false;
-    return l->func->shared_const_literals[slot].kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE;
+    if (node->type == AST_CONST_DECL) {
+        if (!l->func->shared_const_literals || slot >= (int) l->func->shared_const_literal_count)
+            return false;
+        return l->func->shared_const_literals[slot].kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE;
+    }
+    if (node->as.var_decl.storage_mode == XR_STORAGE_SHARED) {
+        if (!l->func->shared_init_literals || slot >= (int) l->func->shared_init_literal_count)
+            return false;
+        return l->func->shared_init_literals[slot].kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE;
+    }
+    return false;
 }
 
 static void lower_var_decl(XiLower *l, AstNode *node) {
@@ -2999,7 +3008,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     struct XrType *type = xi_lower_node_type(l, node);
 
     int var_id = xi_lower_var_create(l, sid, name, type);
-    if (stmt_freestanding_top_const_aggregate_is_erased(l, node, var_id)) {
+    if (stmt_freestanding_static_aggregate_is_erased(l, node, var_id)) {
         XiValue *placeholder = xi_const_null(l->func, l->cur_block, l->type_null);
         if (placeholder)
             xi_lower_braun_write(l, var_id, l->cur_block, placeholder);

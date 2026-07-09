@@ -2015,6 +2015,16 @@ static const XiConstLiteral *cg_module_const_literal(const XiModule *module, int
     return &module->slot_const_literals[slot];
 }
 
+static const XiConstLiteral *cg_module_static_data_literal(const XiModule *module, int64_t slot) {
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (lit && lit->kind != XI_CONST_LITERAL_NONE)
+        return lit;
+    if (!module || !module->slot_shared_initializers || slot < 0 || slot >= module->nslots)
+        return NULL;
+    lit = &module->slot_shared_initializers[slot];
+    return lit && lit->kind != XI_CONST_LITERAL_NONE ? lit : NULL;
+}
+
 static const char *cg_module_const_slot_name(const XiModule *module, int64_t slot) {
     if (!module || !module->init || !module->init->slot_owned_names || slot < 0 ||
         slot >= module->init->nshared)
@@ -2023,6 +2033,23 @@ static const char *cg_module_const_slot_name(const XiModule *module, int64_t slo
 }
 
 static bool cg_shared_initializer_literal_supported(const XiConstLiteral *lit) {
+    if (!lit)
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_STRING:
+        case XI_CONST_LITERAL_NULL:
+        case XI_CONST_LITERAL_COMPTIME_AGGREGATE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_shared_initializer_has_xrvalue_initializer(const XiConstLiteral *lit) {
     if (!lit)
         return false;
     switch (lit->kind) {
@@ -2383,7 +2410,8 @@ static bool cg_emit_shared_array_definition(XiCgenCtx *ctx, FILE *out, const cha
     bool has_static_init = false;
     if (ctx && ctx->freestanding_profile && module && module->slot_shared_initializers) {
         for (uint16_t slot = 0; slot < nshared && slot < module->nslots; slot++) {
-            if (cg_module_shared_initializer_literal(module, slot)) {
+            const XiConstLiteral *lit = cg_module_shared_initializer_literal(module, slot);
+            if (cg_shared_initializer_has_xrvalue_initializer(lit)) {
                 has_static_init = true;
                 break;
             }
@@ -2399,7 +2427,7 @@ static bool cg_emit_shared_array_definition(XiCgenCtx *ctx, FILE *out, const cha
     fprintf(out, " = {\n");
     for (uint16_t slot = 0; slot < nshared && slot < module->nslots; slot++) {
         const XiConstLiteral *lit = cg_module_shared_initializer_literal(module, slot);
-        if (!lit)
+        if (!cg_shared_initializer_has_xrvalue_initializer(lit))
             continue;
         fprintf(out, "    [%u] = ", slot);
         cg_emit_xrvalue_literal_initializer(out, lit, name, slot);
@@ -8406,6 +8434,13 @@ static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *t
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
+    /* Emit nested children first. A parent function can become unreachable
+     * after inlining while one of its nested closure bodies is still referenced
+     * from reachable code. */
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            xi_cgen_func(ctx, out, f->children[i], prefix);
+    }
     /* FFI: @extern functions have no Xray definition. Only the `extern Ret
      * sym(...)` forward declaration is emitted (see emit_one_forward_decl);
      * call sites emit a direct C call. Never emit a body. */
@@ -8423,12 +8458,6 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         xi_backend_lower(f);
     if (!cg_check_no_alloc_func(ctx, f))
         return;
-
-    /* Emit nested children first (forward declarations already emitted) */
-    for (uint16_t i = 0; i < f->nchildren; i++) {
-        if (f->children[i])
-            xi_cgen_func(ctx, out, f->children[i], prefix);
-    }
     xicgen_emit_par_for_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_collect_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_reduce_range_wrappers(ctx, out, f, prefix);
@@ -8714,7 +8743,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 /* Forward-declare a function and all its nested functions (children first). */
 static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     for (uint16_t i = 0; i < f->nchildren; i++) {
-        if (f->children[i] && cg_func_body_is_reachable_from_roots(ctx, f->children[i], 0))
+        if (f->children[i])
             emit_forward_decls(ctx, out, f->children[i], prefix);
     }
     if (cg_func_body_is_reachable_from_roots(ctx, f, 0))
