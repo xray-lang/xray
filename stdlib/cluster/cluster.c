@@ -1202,7 +1202,7 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
 
     // Register pending request BEFORE sending (avoid race)
-    XrChannel *rsp_ch = xr_cluster_node_add_pending(target, req_id, X, c->max_pending_requests);
+    XrChannel *rsp_ch = cluster_node_add_pending(target, req_id, X, c->max_pending_requests);
     if (!rsp_ch) {
         xr_serial_buf_free(&sbuf);
         return xr_null();
@@ -1226,7 +1226,7 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (flen < 0) {
         if (frame != stack_frame)
             xr_free(frame);
-        xr_cluster_node_take_pending(target, req_id);  // cleanup
+        cluster_node_take_pending(target, req_id);  // cleanup
         return xr_null();
     }
 
@@ -1234,7 +1234,7 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (frame != stack_frame)
         xr_free(frame);
     if (rc != 0) {
-        xr_cluster_node_take_pending(target, req_id);
+        cluster_node_take_pending(target, req_id);
         return xr_null();
     }
 
@@ -1343,7 +1343,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 for (int j = 0; j < 8; j++)
                     rsp_req_id = (rsp_req_id << 8) | recv_buf[j];
 
-                XrChannel *rsp_ch = xr_cluster_node_take_pending(node, rsp_req_id);
+                XrChannel *rsp_ch = cluster_node_take_pending(node, rsp_req_id);
                 if (!rsp_ch)
                     break;
 
@@ -1446,7 +1446,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     break;
 
                 // Find pending request by request_id
-                XrChannel *rsp_ch = xr_cluster_node_take_pending(node, reply.request_id);
+                XrChannel *rsp_ch = cluster_node_take_pending(node, reply.request_id);
                 if (!rsp_ch)
                     break;
 
@@ -1641,7 +1641,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 xr_json_set_by_key(X, nj, "rtt_ms", xr_int(node->metrics.last_rtt_ms));
                 xr_json_set_by_key(X, nj, "outq_bytes", xr_int(node->outq.total_bytes));
                 xr_json_set_by_key(X, nj, "outq_frames", xr_int(node->outq.frame_count));
-                xr_json_set_by_key(X, nj, "slow", xr_bool(xr_cluster_node_is_slow(node)));
+                xr_json_set_by_key(X, nj, "slow", xr_bool(cluster_node_is_slow(node)));
 
                 // Phi accrual failure-detector score. Higher = more
                 // likely dead. Threshold for "kill" is set by

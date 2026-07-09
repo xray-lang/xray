@@ -120,7 +120,7 @@ static int dist_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
     // Register pending request BEFORE sending
     XrChannel *rsp_ch =
-        xr_cluster_node_add_pending(dc->owner_node, req_id, c->isolate, c->max_pending_requests);
+        cluster_node_add_pending(dc->owner_node, req_id, c->isolate, c->max_pending_requests);
     if (!rsp_ch)
         return XR_CHAN_FULL;
 
@@ -137,7 +137,7 @@ static int dist_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
     if (xr_cluster_node_send_frame(dc->owner_node, XR_FRAME_CHANNEL_RECV_REQ, payload,
                                    9 + name_len) != 0) {
-        xr_cluster_node_take_pending(dc->owner_node, saved_req_id);
+        cluster_node_take_pending(dc->owner_node, saved_req_id);
         return XR_CHAN_CLOSED;
     }
 

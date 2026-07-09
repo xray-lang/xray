@@ -266,19 +266,19 @@ XR_FUNC double xr_phi_value(XrPhiDetector *det, int64_t now_ms);
 
 /* ========== Slow Consumer Detection ========== */
 
-XR_FUNC bool xr_cluster_node_is_slow(XrClusterNode *node);
+bool cluster_node_is_slow(XrClusterNode *node);
 
 /* ========== Pending Request API ========== */
 
 // Register a pending request. Returns the response Channel to block on,
 // or NULL if the node has reached `max_pending` in-flight requests.
 // Caller must recv from the returned Channel to get the response payload.
-XR_FUNC struct XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
-                                                      struct XrVMRuntime *X, int max_pending);
+struct XrChannel *cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
+                                           struct XrVMRuntime *X, int max_pending);
 
 // Find and remove a pending request by request_id.
 // Returns the response Channel, or NULL if not found.
-XR_FUNC struct XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id);
+struct XrChannel *cluster_node_take_pending(XrClusterNode *node, uint64_t request_id);
 
 // Get current monotonic time in milliseconds
 int64_t cluster_now_ms(void);
