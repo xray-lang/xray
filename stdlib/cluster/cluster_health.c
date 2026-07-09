@@ -11,7 +11,7 @@
  *   Implements heartbeat checking (Phi Accrual) and dead node tombstones.
  */
 
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "cluster_node.h"
 
 #include <string.h>

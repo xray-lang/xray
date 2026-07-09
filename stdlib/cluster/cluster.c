@@ -12,7 +12,7 @@
  *   function bindings (cluster.start, cluster.join, cluster.stop, etc.)
  */
 
-#include "cluster.h"
+#include "cluster_internal.h"
 #include "cluster_channel.h"
 #include "cluster_serial.h"
 #include "../common.h"
