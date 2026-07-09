@@ -1,0 +1,67 @@
+import sys
+
+enum ThreadAliasMergeErr {
+    Msg(s: string)
+}
+
+shared aliasMergeCh = Channel<int>(1)
+aliasMergeCh.trySend(1)
+
+fn mergeInTry() {
+    var target = sys.Thread.spawn(fn() -> int {
+        return 1
+    })
+    var oldTry = sys.Thread.spawn(fn() -> int {
+        return 2
+    })
+    var handle = oldTry
+    try {
+        handle = target
+    } catch (e) {
+        handle = target
+    }
+    print(handle.join())
+}
+
+fn mergeInMatch() {
+    var target = sys.Thread.spawn(fn() -> int {
+        return 3
+    })
+    var oldMatch = sys.Thread.spawn(fn() -> int {
+        return 4
+    })
+    var handle = oldMatch
+    match (1) {
+        0 -> {
+            handle = target
+        }
+        _ -> {
+            handle = target
+        }
+    }
+    print(handle.join())
+}
+
+fn mergeInSelect() {
+    var target = sys.Thread.spawn(fn() -> int {
+        return 5
+    })
+    var oldSelect = sys.Thread.spawn(fn() -> int {
+        return 6
+    })
+    var handle = oldSelect
+    select {
+        msg from aliasMergeCh -> {
+            handle = target
+        }
+        _ -> {
+            handle = target
+        }
+    }
+    print(handle.join())
+}
+
+mergeInTry()
+mergeInMatch()
+mergeInSelect()
+aliasMergeCh.close()

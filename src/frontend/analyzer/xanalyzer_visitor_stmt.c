@@ -784,6 +784,19 @@ static void xa_thread_lint_merge_alias_snapshots(XaThreadHandleLintState *states
     xa_thread_lint_free_aliases(keys);
 }
 
+static void xa_thread_lint_free_snapshot_paths(XaThreadHandleLintSnapshot **paths,
+                                               int path_count, int state_count,
+                                               XaThreadHandleLintSnapshot *borrowed_a,
+                                               XaThreadHandleLintSnapshot *borrowed_b) {
+    if (!paths)
+        return;
+    for (int i = 0; i < path_count; i++) {
+        if (paths[i] && paths[i] != borrowed_a && paths[i] != borrowed_b)
+            xa_thread_lint_free_snapshot_array(paths[i], state_count);
+    }
+    xr_free(paths);
+}
+
 static bool xa_thread_lint_snapshot_closed(XaThreadHandleLintSnapshot *snapshot) {
     return snapshot && (snapshot->finalized || snapshot->transferred);
 }
@@ -1725,6 +1738,13 @@ static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, 
     xa_thread_lint_scan_stmt(states, tc->try_body, true);
     xa_thread_lint_snapshot_states(states, try_after);
 
+    int alias_path_count = 1 + tc->catch_count;
+    XaThreadHandleLintSnapshot **alias_paths =
+        alias_path_count > 0 ? xr_calloc((size_t) alias_path_count, sizeof(*alias_paths)) : NULL;
+    bool alias_paths_complete = alias_paths != NULL;
+    if (alias_paths)
+        alias_paths[0] = try_after;
+
     for (int i = 0; i < state_count; i++)
         all_paths_closed[i] = xa_thread_lint_snapshot_closed(&try_after[i]);
 
@@ -1733,18 +1753,33 @@ static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, 
         if (!cc) {
             for (int i = 0; i < state_count; i++)
                 all_paths_closed[i] = false;
+            alias_paths_complete = false;
             continue;
         }
         xa_thread_lint_restore_states(states, before);
-        xa_thread_lint_clear_snapshot_array(catch_after, state_count);
+        XaThreadHandleLintSnapshot *path_after = catch_after;
+        if (alias_paths) {
+            path_after = xr_calloc(1, snapshot_size);
+            if (path_after)
+                alias_paths[ci + 1] = path_after;
+            else {
+                alias_paths_complete = false;
+                path_after = catch_after;
+            }
+        }
+        if (path_after == catch_after)
+            xa_thread_lint_clear_snapshot_array(catch_after, state_count);
         xa_thread_lint_scan_stmt(states, cc->body, true);
-        xa_thread_lint_snapshot_states(states, catch_after);
+        xa_thread_lint_snapshot_states(states, path_after);
         for (int i = 0; i < state_count; i++)
             all_paths_closed[i] =
-                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&catch_after[i]);
+                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&path_after[i]);
     }
 
     xa_thread_lint_restore_states(states, before);
+    if (alias_paths_complete)
+        xa_thread_lint_merge_alias_snapshots(states, before, alias_paths, alias_path_count,
+                                             state_count);
     int i = 0;
     for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
         bool before_closed = xa_thread_lint_snapshot_closed(&before[i]);
@@ -1752,6 +1787,8 @@ static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, 
             s->finalized = true;
     }
 
+    xa_thread_lint_free_snapshot_paths(alias_paths, alias_path_count, state_count, try_after,
+                                       catch_after);
     xa_thread_lint_free_snapshot_array(before, state_count);
     xa_thread_lint_free_snapshot_array(try_after, state_count);
     xa_thread_lint_free_snapshot_array(catch_after, state_count);
@@ -1792,22 +1829,41 @@ static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstN
     for (int i = 0; i < state_count; i++)
         all_paths_closed[i] = match->arm_count > 0;
 
+    XaThreadHandleLintSnapshot **alias_paths =
+        match->arm_count > 0 ? xr_calloc((size_t) match->arm_count, sizeof(*alias_paths)) : NULL;
+    bool alias_paths_complete = match->arm_count > 0 && alias_paths != NULL;
+
     for (int ai = 0; ai < match->arm_count; ai++) {
         if (!match->arms[ai]) {
             for (int i = 0; i < state_count; i++)
                 all_paths_closed[i] = false;
+            alias_paths_complete = false;
             continue;
         }
         xa_thread_lint_restore_states(states, before);
-        xa_thread_lint_clear_snapshot_array(arm_after, state_count);
+        XaThreadHandleLintSnapshot *path_after = arm_after;
+        if (alias_paths) {
+            path_after = xr_calloc(1, snapshot_size);
+            if (path_after)
+                alias_paths[ai] = path_after;
+            else {
+                alias_paths_complete = false;
+                path_after = arm_after;
+            }
+        }
+        if (path_after == arm_after)
+            xa_thread_lint_clear_snapshot_array(arm_after, state_count);
         xa_thread_lint_scan_stmt(states, match->arms[ai], true);
-        xa_thread_lint_snapshot_states(states, arm_after);
+        xa_thread_lint_snapshot_states(states, path_after);
         for (int i = 0; i < state_count; i++)
             all_paths_closed[i] =
-                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&arm_after[i]);
+                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&path_after[i]);
     }
 
     xa_thread_lint_restore_states(states, before);
+    if (alias_paths_complete)
+        xa_thread_lint_merge_alias_snapshots(states, before, alias_paths, match->arm_count,
+                                             state_count);
     int i = 0;
     for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
         bool before_closed = xa_thread_lint_snapshot_closed(&before[i]);
@@ -1815,6 +1871,8 @@ static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstN
             s->finalized = true;
     }
 
+    xa_thread_lint_free_snapshot_paths(alias_paths, match->arm_count, state_count, arm_after,
+                                       NULL);
     xa_thread_lint_free_snapshot_array(before, state_count);
     xa_thread_lint_free_snapshot_array(arm_after, state_count);
     xr_free(all_paths_closed);
@@ -1853,22 +1911,42 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
     for (int i = 0; i < state_count; i++)
         all_paths_closed[i] = select->case_count > 0;
 
+    XaThreadHandleLintSnapshot **alias_paths =
+        select->case_count > 0 ? xr_calloc((size_t) select->case_count, sizeof(*alias_paths))
+                               : NULL;
+    bool alias_paths_complete = select->case_count > 0 && alias_paths != NULL;
+
     for (int ci = 0; ci < select->case_count; ci++) {
         if (!select->cases[ci]) {
             for (int i = 0; i < state_count; i++)
                 all_paths_closed[i] = false;
+            alias_paths_complete = false;
             continue;
         }
         xa_thread_lint_restore_states(states, before);
-        xa_thread_lint_clear_snapshot_array(case_after, state_count);
+        XaThreadHandleLintSnapshot *path_after = case_after;
+        if (alias_paths) {
+            path_after = xr_calloc(1, snapshot_size);
+            if (path_after)
+                alias_paths[ci] = path_after;
+            else {
+                alias_paths_complete = false;
+                path_after = case_after;
+            }
+        }
+        if (path_after == case_after)
+            xa_thread_lint_clear_snapshot_array(case_after, state_count);
         xa_thread_lint_scan_stmt(states, select->cases[ci], true);
-        xa_thread_lint_snapshot_states(states, case_after);
+        xa_thread_lint_snapshot_states(states, path_after);
         for (int i = 0; i < state_count; i++)
             all_paths_closed[i] =
-                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&case_after[i]);
+                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&path_after[i]);
     }
 
     xa_thread_lint_restore_states(states, before);
+    if (alias_paths_complete)
+        xa_thread_lint_merge_alias_snapshots(states, before, alias_paths, select->case_count,
+                                             state_count);
     int i = 0;
     for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
         bool before_closed = xa_thread_lint_snapshot_closed(&before[i]);
@@ -1876,6 +1954,8 @@ static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, Ast
             s->finalized = true;
     }
 
+    xa_thread_lint_free_snapshot_paths(alias_paths, select->case_count, state_count, case_after,
+                                       NULL);
     xa_thread_lint_free_snapshot_array(before, state_count);
     xa_thread_lint_free_snapshot_array(case_after, state_count);
     xr_free(all_paths_closed);
@@ -3078,6 +3158,19 @@ static void xa_os_resource_lint_merge_alias_snapshots(XaOsResourceLintState *sta
     xa_os_resource_lint_free_aliases(keys);
 }
 
+static void xa_os_resource_lint_free_snapshot_paths(XaOsResourceLintSnapshot **paths,
+                                                    int path_count, int state_count,
+                                                    XaOsResourceLintSnapshot *borrowed_a,
+                                                    XaOsResourceLintSnapshot *borrowed_b) {
+    if (!paths)
+        return;
+    for (int i = 0; i < path_count; i++) {
+        if (paths[i] && paths[i] != borrowed_a && paths[i] != borrowed_b)
+            xa_os_resource_lint_free_snapshot_array(paths[i], state_count);
+    }
+    xr_free(paths);
+}
+
 static bool xa_os_resource_lint_snapshot_closed(XaOsResourceLintSnapshot *snapshot) {
     return snapshot && (snapshot->finalized || snapshot->transferred);
 }
@@ -3972,6 +4065,13 @@ static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *state
     xa_os_resource_lint_scan_stmt(states, tc->try_body, true);
     xa_os_resource_lint_snapshot_states(states, try_after);
 
+    int alias_path_count = 1 + tc->catch_count;
+    XaOsResourceLintSnapshot **alias_paths =
+        alias_path_count > 0 ? xr_calloc((size_t) alias_path_count, sizeof(*alias_paths)) : NULL;
+    bool alias_paths_complete = alias_paths != NULL;
+    if (alias_paths)
+        alias_paths[0] = try_after;
+
     for (int i = 0; i < state_count; i++)
         all_paths_closed[i] = xa_os_resource_lint_snapshot_closed(&try_after[i]);
 
@@ -3980,18 +4080,33 @@ static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *state
         if (!cc) {
             for (int i = 0; i < state_count; i++)
                 all_paths_closed[i] = false;
+            alias_paths_complete = false;
             continue;
         }
         xa_os_resource_lint_restore_states(states, before);
-        xa_os_resource_lint_clear_snapshot_array(catch_after, state_count);
+        XaOsResourceLintSnapshot *path_after = catch_after;
+        if (alias_paths) {
+            path_after = xr_calloc(1, snapshot_size);
+            if (path_after)
+                alias_paths[ci + 1] = path_after;
+            else {
+                alias_paths_complete = false;
+                path_after = catch_after;
+            }
+        }
+        if (path_after == catch_after)
+            xa_os_resource_lint_clear_snapshot_array(catch_after, state_count);
         xa_os_resource_lint_scan_stmt(states, cc->body, true);
-        xa_os_resource_lint_snapshot_states(states, catch_after);
+        xa_os_resource_lint_snapshot_states(states, path_after);
         for (int i = 0; i < state_count; i++)
             all_paths_closed[i] =
-                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&catch_after[i]);
+                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&path_after[i]);
     }
 
     xa_os_resource_lint_restore_states(states, before);
+    if (alias_paths_complete)
+        xa_os_resource_lint_merge_alias_snapshots(states, before, alias_paths, alias_path_count,
+                                                  state_count);
     int i = 0;
     for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
         bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
@@ -3999,6 +4114,8 @@ static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *state
             s->finalized = true;
     }
 
+    xa_os_resource_lint_free_snapshot_paths(alias_paths, alias_path_count, state_count, try_after,
+                                            catch_after);
     xa_os_resource_lint_free_snapshot_array(before, state_count);
     xa_os_resource_lint_free_snapshot_array(try_after, state_count);
     xa_os_resource_lint_free_snapshot_array(catch_after, state_count);
@@ -4039,22 +4156,41 @@ static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, A
     for (int i = 0; i < state_count; i++)
         all_paths_closed[i] = match->arm_count > 0;
 
+    XaOsResourceLintSnapshot **alias_paths =
+        match->arm_count > 0 ? xr_calloc((size_t) match->arm_count, sizeof(*alias_paths)) : NULL;
+    bool alias_paths_complete = match->arm_count > 0 && alias_paths != NULL;
+
     for (int ai = 0; ai < match->arm_count; ai++) {
         if (!match->arms[ai]) {
             for (int i = 0; i < state_count; i++)
                 all_paths_closed[i] = false;
+            alias_paths_complete = false;
             continue;
         }
         xa_os_resource_lint_restore_states(states, before);
-        xa_os_resource_lint_clear_snapshot_array(arm_after, state_count);
+        XaOsResourceLintSnapshot *path_after = arm_after;
+        if (alias_paths) {
+            path_after = xr_calloc(1, snapshot_size);
+            if (path_after)
+                alias_paths[ai] = path_after;
+            else {
+                alias_paths_complete = false;
+                path_after = arm_after;
+            }
+        }
+        if (path_after == arm_after)
+            xa_os_resource_lint_clear_snapshot_array(arm_after, state_count);
         xa_os_resource_lint_scan_stmt(states, match->arms[ai], true);
-        xa_os_resource_lint_snapshot_states(states, arm_after);
+        xa_os_resource_lint_snapshot_states(states, path_after);
         for (int i = 0; i < state_count; i++)
             all_paths_closed[i] =
-                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&arm_after[i]);
+                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&path_after[i]);
     }
 
     xa_os_resource_lint_restore_states(states, before);
+    if (alias_paths_complete)
+        xa_os_resource_lint_merge_alias_snapshots(states, before, alias_paths, match->arm_count,
+                                                  state_count);
     int i = 0;
     for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
         bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
@@ -4062,6 +4198,8 @@ static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, A
             s->finalized = true;
     }
 
+    xa_os_resource_lint_free_snapshot_paths(alias_paths, match->arm_count, state_count, arm_after,
+                                            NULL);
     xa_os_resource_lint_free_snapshot_array(before, state_count);
     xa_os_resource_lint_free_snapshot_array(arm_after, state_count);
     xr_free(all_paths_closed);
@@ -4100,22 +4238,42 @@ static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, 
     for (int i = 0; i < state_count; i++)
         all_paths_closed[i] = select->case_count > 0;
 
+    XaOsResourceLintSnapshot **alias_paths =
+        select->case_count > 0 ? xr_calloc((size_t) select->case_count, sizeof(*alias_paths))
+                               : NULL;
+    bool alias_paths_complete = select->case_count > 0 && alias_paths != NULL;
+
     for (int ci = 0; ci < select->case_count; ci++) {
         if (!select->cases[ci]) {
             for (int i = 0; i < state_count; i++)
                 all_paths_closed[i] = false;
+            alias_paths_complete = false;
             continue;
         }
         xa_os_resource_lint_restore_states(states, before);
-        xa_os_resource_lint_clear_snapshot_array(case_after, state_count);
+        XaOsResourceLintSnapshot *path_after = case_after;
+        if (alias_paths) {
+            path_after = xr_calloc(1, snapshot_size);
+            if (path_after)
+                alias_paths[ci] = path_after;
+            else {
+                alias_paths_complete = false;
+                path_after = case_after;
+            }
+        }
+        if (path_after == case_after)
+            xa_os_resource_lint_clear_snapshot_array(case_after, state_count);
         xa_os_resource_lint_scan_stmt(states, select->cases[ci], true);
-        xa_os_resource_lint_snapshot_states(states, case_after);
+        xa_os_resource_lint_snapshot_states(states, path_after);
         for (int i = 0; i < state_count; i++)
             all_paths_closed[i] =
-                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&case_after[i]);
+                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&path_after[i]);
     }
 
     xa_os_resource_lint_restore_states(states, before);
+    if (alias_paths_complete)
+        xa_os_resource_lint_merge_alias_snapshots(states, before, alias_paths, select->case_count,
+                                                  state_count);
     int i = 0;
     for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
         bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
@@ -4123,6 +4281,8 @@ static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, 
             s->finalized = true;
     }
 
+    xa_os_resource_lint_free_snapshot_paths(alias_paths, select->case_count, state_count,
+                                            case_after, NULL);
     xa_os_resource_lint_free_snapshot_array(before, state_count);
     xa_os_resource_lint_free_snapshot_array(case_after, state_count);
     xr_free(all_paths_closed);
