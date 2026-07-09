@@ -1,0 +1,6 @@
+import sys
+
+fn makeLocal(init: () -> int) {
+    var local = sys.ThreadLocal<int>(init)
+    print(local.get())
+}

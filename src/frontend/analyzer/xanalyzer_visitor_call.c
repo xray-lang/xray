@@ -1035,11 +1035,119 @@ static AstNode *xa_threadlocal_current_body(XaInferContext *ctx) {
     return ctx->current_block_node;
 }
 
-static bool xa_type_is_sys_threadlocal(XrType *type) {
-    if (!type || !XR_TYPE_IS_INSTANCE(type))
+static bool xa_path_is_sys_stdlib_module(const char *file) {
+    if (!file)
+        return false;
+    const char *suffixes[] = {"stdlib/sys/sys.xr", "<embedded stdlib>/sys/sys.xr"};
+    for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
+        size_t flen = strlen(file);
+        size_t slen = strlen(suffixes[i]);
+        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_class_info_is_sys_threadlocal(XaInferContext *ctx, XrClassInfo *info) {
+    if (!info || !info->name || strcmp(info->name, "ThreadLocal") != 0)
+        return false;
+    if (xa_path_is_sys_stdlib_module(info->location.file))
+        return true;
+    if (!ctx || !ctx->analyzer)
+        return false;
+    for (int i = 0; i < info->method_count; i++) {
+        XaSymbol *method = info->methods ? info->methods[i] : NULL;
+        XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
+        if (links && xa_path_is_sys_stdlib_module(links->file_path))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_class_info_has_source(XaInferContext *ctx, XrClassInfo *info) {
+    if (!info)
+        return false;
+    if (info->location.file)
+        return true;
+    if (!ctx || !ctx->analyzer)
+        return false;
+    for (int i = 0; i < info->method_count; i++) {
+        XaSymbol *method = info->methods ? info->methods[i] : NULL;
+        XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
+        if (links && links->file_path)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_symbol_is_sys_threadlocal_class(XaInferContext *ctx, XaSymbol *sym,
+                                               const char *name) {
+    if (!ctx || !ctx->analyzer || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    const char *member_name =
+        links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
+    if (!member_name || strcmp(member_name, "ThreadLocal") != 0)
+        return false;
+    if (links && links->module_name && strcmp(links->module_name, "sys") == 0)
+        return true;
+    if (links && xa_path_is_sys_stdlib_module(links->file_path))
+        return true;
+    return links && xa_class_info_is_sys_threadlocal(ctx, links->class_info);
+}
+
+static bool xa_module_alias_is(XaInferContext *ctx, const char *name, const char *module_name) {
+    if (!ctx || !ctx->analyzer || !name || !module_name)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    if (!sym || sym->kind != XA_SYM_MODULE)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    const char *actual = links && links->module_name ? links->module_name : name;
+    return actual && strcmp(actual, module_name) == 0;
+}
+
+static bool xa_type_is_sys_threadlocal(XaInferContext *ctx, XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && !XR_TYPE_IS_INSTANCE(type)))
         return false;
     const char *class_name = xr_type_get_class_name(type);
-    return class_name && strcmp(class_name, "ThreadLocal") == 0;
+    if (!class_name || strcmp(class_name, "ThreadLocal") != 0)
+        return false;
+    if (type->instance.class_ref) {
+        if (xa_class_info_is_sys_threadlocal(ctx, type->instance.class_ref))
+            return true;
+        if (xa_class_info_has_source(ctx, type->instance.class_ref))
+            return false;
+    }
+    XaSymbol *sym = xa_lookup_visible_class_symbol(ctx, class_name);
+    if (sym)
+        return xa_symbol_is_sys_threadlocal_class(ctx, sym, class_name);
+
+    /* Module-qualified stdlib construction can leave only the class_name on
+     * the value type. With no visible user class named ThreadLocal to collide
+     * with, treat that erased instance as sys.ThreadLocal. */
+    return true;
+}
+
+static bool xa_call_is_sys_threadlocal_constructor(XaInferContext *ctx, CallExprNode *call,
+                                                   XrType *callee_type) {
+    if (!ctx || !call)
+        return false;
+    AstNode *callee = call->callee;
+    if (callee && callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &callee->as.member_access;
+        if (ma->name && strcmp(ma->name, "ThreadLocal") == 0 && ma->object &&
+            ma->object->type == AST_VARIABLE &&
+            xa_module_alias_is(ctx, ma->object->as.variable.name, "sys")) {
+            return true;
+        }
+    } else if (callee && callee->type == AST_VARIABLE) {
+        const char *name = callee->as.variable.name;
+        XaSymbol *sym = name ? xa_lookup_visible_symbol(ctx, name) : NULL;
+        if (xa_symbol_is_sys_threadlocal_class(ctx, sym, name))
+            return true;
+    }
+    return xa_type_is_sys_threadlocal(ctx, callee_type);
 }
 
 static void xa_check_threadlocal_suspend_context(XaInferContext *ctx, AstNode *node,
@@ -1048,7 +1156,7 @@ static void xa_check_threadlocal_suspend_context(XaInferContext *ctx, AstNode *n
         return;
     if (strcmp(method_name, "get") != 0 && strcmp(method_name, "set") != 0)
         return;
-    if (!xa_type_is_sys_threadlocal(receiver_type))
+    if (!xa_type_is_sys_threadlocal(ctx, receiver_type))
         return;
 
     AstNode *body = xa_threadlocal_current_body(ctx);
@@ -1064,6 +1172,28 @@ static void xa_check_threadlocal_suspend_context(XaInferContext *ctx, AstNode *n
         "sys.ThreadLocal.get/set cannot be used in a coroutine or suspendable function; use it "
         "only in sys.Thread OS-thread code or in code with no suspend points",
         &loc);
+}
+
+static void xa_check_threadlocal_initializer(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                             XrType *callee_type) {
+    if (!ctx || !node || !call || !xa_call_is_sys_threadlocal_constructor(ctx, call, callee_type))
+        return;
+    if (call->arg_count <= 0 || !call->arguments || !call->arguments[0])
+        return;
+
+    XaSymbol *call_stack[32] = {0};
+    XaThreadSpawnFunctionValueStatus status =
+        xa_thread_spawn_function_value_expr_status(ctx, call->arguments[0], call_stack, 0);
+    if (status == XA_THREAD_SPAWN_FN_VALUE_SAFE)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    const char *message =
+        status == XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND
+            ? "sys.ThreadLocal initializer cannot be suspendable; it runs in OS-thread code"
+            : "sys.ThreadLocal initializer must be a known non-suspendable function value";
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE, message,
+                               &loc);
 }
 
 static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) {
@@ -2654,6 +2784,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         XrType *ns_instance = xa_module_member_class_instance_type(ctx, call);
         if (ns_instance) {
+            xa_check_threadlocal_initializer(ctx, node, call, ns_instance);
             xa_freestanding_report_unavailable(
                 ctx, node, "class construction",
                 "use structs or explicit raw-memory APIs in this profile");
@@ -2748,6 +2879,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Class constructor call: ClassName(args) returns instance type
     if (callee_type->kind == XR_KIND_CLASS) {
+        xa_check_threadlocal_initializer(ctx, node, call, callee_type);
+
         // Look up class symbol to get XrClassInfo. Try the current scope first
         // (covers function-local / nested class declarations) then global.
         if (call->callee && call->callee->type == AST_VARIABLE) {

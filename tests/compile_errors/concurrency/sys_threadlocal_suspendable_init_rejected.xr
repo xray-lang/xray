@@ -1,0 +1,10 @@
+import sys
+
+fn suspends() -> int {
+    Coro.yield()
+    return 1
+}
+
+shared local = sys.ThreadLocal<int>(fn() -> int {
+    return suspends()
+})
