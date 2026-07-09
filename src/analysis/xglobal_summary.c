@@ -511,6 +511,26 @@ static uint64_t hash_record_access_summary(uint64_t hash, const XgRecordAccessSu
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_options_bag_summary(uint64_t hash, const XgOptionsBagSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->options_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->callsite_id);
+    hash = hash_u32(hash, row->param_shape_id);
+    hash = hash_u32(hash, row->supplied_shape_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->supplied_field_mask_id);
+    hash = hash_u32(hash, row->default_field_mask_id);
+    hash = hash_u32(hash, row->required_field_mask_id);
+    hash = hash_u32(hash, row->supplied_count);
+    hash = hash_u32(hash, row->default_count);
+    hash = hash_u32(hash, row->required_count);
+    hash = hash_u8(hash, row->action);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_map_shape_summary(uint64_t hash, const XgMapShapeSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -899,6 +919,23 @@ XR_FUNC const char *xg_record_access_kind_name(uint8_t kind) {
     }
 }
 
+XR_FUNC const char *xg_options_action_name(uint8_t action) {
+    switch ((XgOptionsAction) action) {
+        case XG_OPTIONS_DEFAULT_ELIDED:
+            return "default_elided";
+        case XG_OPTIONS_DEFAULT_FILL_TABLE:
+            return "default_fill_table";
+        case XG_OPTIONS_REQUIRED_CHECK:
+            return "required_check";
+        case XG_OPTIONS_CALLSITE_SPECIALIZED:
+            return "callsite_specialized";
+        case XG_OPTIONS_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
 XR_FUNC const char *xg_map_container_kind_name(uint8_t kind) {
     switch ((XgMapContainerKind) kind) {
         case XG_MAP_CONTAINER_MAP:
@@ -1224,6 +1261,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->json_codecs);
     xr_free(evidence->record_shapes);
     xr_free(evidence->record_accesses);
+    xr_free(evidence->options_bags);
     xr_free(evidence->map_shapes);
     xr_free(evidence->map_entries);
     xr_free(evidence->key_accesses);
@@ -1388,6 +1426,12 @@ XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *eviden
     return evidence &&
            reserve_array((void **) &evidence->record_accesses, &evidence->record_access_cap,
                          capacity, sizeof(XgRecordAccessSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_options_bags(XgGlobalEvidence *evidence,
+                                                     uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->options_bags, &evidence->options_bag_cap,
+                                     capacity, sizeof(XgOptionsBagSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_map_shapes(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1716,6 +1760,17 @@ xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
     return row;
 }
 
+XR_FUNC XgOptionsBagSummary *
+xg_global_evidence_add_options_bag(XgGlobalEvidence *evidence, const XgOptionsBagSummary *summary) {
+    XgOptionsBagSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_options_bags(evidence, evidence->noptions_bags + 1))
+        return NULL;
+    row = &evidence->options_bags[evidence->noptions_bags++];
+    *row = *summary;
+    return row;
+}
+
 XR_FUNC XgMapShapeSummary *xg_global_evidence_add_map_shape(XgGlobalEvidence *evidence,
                                                             const XgMapShapeSummary *summary) {
     XgMapShapeSummary *row;
@@ -1894,6 +1949,17 @@ xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
     for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
         if (evidence->record_shapes[i].record_shape_id == record_shape_id)
             return &evidence->record_shapes[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgOptionsBagSummary *
+xg_global_evidence_find_options_bag(const XgGlobalEvidence *evidence, XgOptionsId options_id) {
+    if (!evidence || options_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
+        if (evidence->options_bags[i].options_id == options_id)
+            return &evidence->options_bags[i];
     }
     return NULL;
 }
@@ -2367,6 +2433,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->njson_codecs, sizeof(evidence->njson_codecs));
     hash = hash_mix(hash, &evidence->nrecord_shapes, sizeof(evidence->nrecord_shapes));
     hash = hash_mix(hash, &evidence->nrecord_accesses, sizeof(evidence->nrecord_accesses));
+    hash = hash_mix(hash, &evidence->noptions_bags, sizeof(evidence->noptions_bags));
     hash = hash_mix(hash, &evidence->nmap_shapes, sizeof(evidence->nmap_shapes));
     hash = hash_mix(hash, &evidence->nmap_entries, sizeof(evidence->nmap_entries));
     hash = hash_mix(hash, &evidence->nkey_accesses, sizeof(evidence->nkey_accesses));
@@ -2423,6 +2490,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_record_shape_summary(hash, &evidence->record_shapes[i]);
     for (uint32_t i = 0; i < evidence->nrecord_accesses; i++)
         hash = hash_record_access_summary(hash, &evidence->record_accesses[i]);
+    for (uint32_t i = 0; i < evidence->noptions_bags; i++)
+        hash = hash_options_bag_summary(hash, &evidence->options_bags[i]);
     for (uint32_t i = 0; i < evidence->nmap_shapes; i++)
         hash = hash_map_shape_summary(hash, &evidence->map_shapes[i]);
     for (uint32_t i = 0; i < evidence->nmap_entries; i++)
@@ -2913,8 +2982,8 @@ static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidenc
         "generic_insts=%u "
         "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u seq=%u capacity=%u "
         "bulk=%u encoding=%u derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
-        "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u map_shapes=%u "
-        "map_entries=%u key_accesses=%u hash_eqs=%u global_hash=%016" PRIx64 "\n",
+        "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u options=%u "
+        "map_shapes=%u map_entries=%u key_accesses=%u hash_eqs=%u global_hash=%016" PRIx64 "\n",
         evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
         evidence ? evidence->nmethods : 0, evidence ? evidence->ninterface_impls : 0,
         evidence ? evidence->ninterface_extends : 0, evidence ? evidence->ninterface_methods : 0,
@@ -2928,9 +2997,9 @@ static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidenc
         evidence ? evidence->nderived_methods : 0, evidence ? evidence->njson_shapes : 0,
         evidence ? evidence->njson_accesses : 0, evidence ? evidence->njson_codecs : 0,
         evidence ? evidence->nrecord_shapes : 0, evidence ? evidence->nrecord_accesses : 0,
-        evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
-        evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0,
-        evidence ? xg_global_evidence_hash(evidence) : 0);
+        evidence ? evidence->noptions_bags : 0, evidence ? evidence->nmap_shapes : 0,
+        evidence ? evidence->nmap_entries : 0, evidence ? evidence->nkey_accesses : 0,
+        evidence ? evidence->nhash_eqs : 0, evidence ? xg_global_evidence_hash(evidence) : 0);
 }
 
 static void dump_cache_payload_body_for_phase(FILE *out, const XgGlobalEvidence *evidence,
@@ -3621,8 +3690,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "sequence_accesses=%u capacity_ops=%u bulk_ops=%u encoding_ops=%u derives=%u "
             "derived_fields=%u derived_methods=%u json_shapes=%u "
-            "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u map_shapes=%u "
-            "map_entries=%u key_accesses=%u hash_eqs=%u\n",
+            "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u options=%u "
+            "map_shapes=%u map_entries=%u key_accesses=%u hash_eqs=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods,
             evidence->ninterface_object_uses, evidence->nbodies, evidence->ncallsites,
@@ -3632,8 +3701,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->nencoding_ops, evidence->nderives, evidence->nderived_fields,
             evidence->nderived_methods, evidence->njson_shapes, evidence->njson_accesses,
             evidence->njson_codecs, evidence->nrecord_shapes, evidence->nrecord_accesses,
-            evidence->nmap_shapes, evidence->nmap_entries, evidence->nkey_accesses,
-            evidence->nhash_eqs);
+            evidence->noptions_bags, evidence->nmap_shapes, evidence->nmap_entries,
+            evidence->nkey_accesses, evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -3890,6 +3959,18 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 i, a->record_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
                 xg_record_access_kind_name(a->access_kind), a->source_span_id, a->field_name_id,
                 a->result_type_key, (unsigned) a->field_ordinal, a->flags);
+    }
+    for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
+        const XgOptionsBagSummary *o = &evidence->options_bags[i];
+        fprintf(out,
+                "options-bag %u id=%u module=%u func=%u callsite=%u param_shape=%u "
+                "supplied_shape=%u action=%s span=%u supplied_mask=%u default_mask=%u "
+                "required_mask=%u supplied=%u defaults=%u required=%u flags=0x%x\n",
+                i, o->options_id, o->module_id, o->owner_func_id, o->callsite_id, o->param_shape_id,
+                o->supplied_shape_id, xg_options_action_name(o->action), o->source_span_id,
+                o->supplied_field_mask_id, o->default_field_mask_id, o->required_field_mask_id,
+                (unsigned) o->supplied_count, (unsigned) o->default_count,
+                (unsigned) o->required_count, o->flags);
     }
     for (uint32_t i = 0; i < evidence->nmap_shapes; i++) {
         const XgMapShapeSummary *s = &evidence->map_shapes[i];

@@ -43,6 +43,7 @@ typedef uint32_t XgJsonAccessId;
 typedef uint32_t XgJsonCodecId;
 typedef uint32_t XgRecordShapeId;
 typedef uint32_t XgRecordAccessId;
+typedef uint32_t XgOptionsId;
 typedef uint32_t XgMapShapeId;
 typedef uint32_t XgMapEntryId;
 typedef uint32_t XgKeyAccessId;
@@ -52,7 +53,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 12,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 13,
 };
 
 typedef enum XgBuildProfile {
@@ -232,6 +233,14 @@ typedef enum XgRecordAccessKind {
     XG_RECORD_ACCESS_FIELD_SET,
     XG_RECORD_ACCESS_DESTRUCTURE,
 } XgRecordAccessKind;
+
+typedef enum XgOptionsAction {
+    XG_OPTIONS_DEFAULT_ELIDED = 1,
+    XG_OPTIONS_DEFAULT_FILL_TABLE,
+    XG_OPTIONS_REQUIRED_CHECK,
+    XG_OPTIONS_CALLSITE_SPECIALIZED,
+    XG_OPTIONS_REJECT,
+} XgOptionsAction;
 
 typedef enum XgMapContainerKind {
     XG_MAP_CONTAINER_MAP = 1,
@@ -453,6 +462,13 @@ enum {
     XG_RECORD_ACCESS_STATIC_FIELD = 1u << 0,
     XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 1,
     XG_RECORD_ACCESS_MUTATING = 1u << 2,
+};
+
+enum {
+    XG_OPTIONS_ALL_SUPPLIED = 1u << 0,
+    XG_OPTIONS_NEEDS_DEFAULTS = 1u << 1,
+    XG_OPTIONS_MISSING_REQUIRED = 1u << 2,
+    XG_OPTIONS_CALLSITE_PROVEN = 1u << 3,
 };
 
 enum {
@@ -880,6 +896,24 @@ typedef struct XgRecordAccessSummary {
     uint32_t flags;
 } XgRecordAccessSummary;
 
+typedef struct XgOptionsBagSummary {
+    XgOptionsId options_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgCallsiteId callsite_id;
+    XgRecordShapeId param_shape_id;
+    XgRecordShapeId supplied_shape_id;
+    uint32_t source_span_id;
+    uint32_t supplied_field_mask_id;
+    uint32_t default_field_mask_id;
+    uint32_t required_field_mask_id;
+    uint16_t supplied_count;
+    uint16_t default_count;
+    uint16_t required_count;
+    uint8_t action;
+    uint32_t flags;
+} XgOptionsBagSummary;
+
 typedef struct XgMapShapeSummary {
     XgMapShapeId shape_id;
     XgModuleId module_id;
@@ -963,6 +997,7 @@ typedef struct XgGlobalEvidence {
     XgJsonCodecSummary *json_codecs;
     XgRecordShapeSummary *record_shapes;
     XgRecordAccessSummary *record_accesses;
+    XgOptionsBagSummary *options_bags;
     XgMapShapeSummary *map_shapes;
     XgMapEntrySummary *map_entries;
     XgKeyAccessSummary *key_accesses;
@@ -994,6 +1029,7 @@ typedef struct XgGlobalEvidence {
     uint32_t njson_codecs;
     uint32_t nrecord_shapes;
     uint32_t nrecord_accesses;
+    uint32_t noptions_bags;
     uint32_t nmap_shapes;
     uint32_t nmap_entries;
     uint32_t nkey_accesses;
@@ -1025,6 +1061,7 @@ typedef struct XgGlobalEvidence {
     uint32_t json_codec_cap;
     uint32_t record_shape_cap;
     uint32_t record_access_cap;
+    uint32_t options_bag_cap;
     uint32_t map_shape_cap;
     uint32_t map_entry_cap;
     uint32_t key_access_cap;
@@ -1052,6 +1089,7 @@ XR_FUNC const char *xg_json_access_kind_name(uint8_t kind);
 XR_FUNC const char *xg_json_codec_kind_name(uint8_t kind);
 XR_FUNC const char *xg_record_shape_kind_name(uint8_t kind);
 XR_FUNC const char *xg_record_access_kind_name(uint8_t kind);
+XR_FUNC const char *xg_options_action_name(uint8_t action);
 XR_FUNC const char *xg_map_container_kind_name(uint8_t kind);
 XR_FUNC const char *xg_map_shape_source_name(uint8_t source);
 XR_FUNC const char *xg_key_access_op_name(uint8_t op);
@@ -1113,6 +1151,7 @@ XR_FUNC bool xg_global_evidence_reserve_record_shapes(XgGlobalEvidence *evidence
                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_options_bags(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_map_shapes(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_map_entries(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_key_accesses(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -1184,6 +1223,8 @@ xg_global_evidence_add_record_shape(XgGlobalEvidence *evidence,
 XR_FUNC XgRecordAccessSummary *
 xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
                                      const XgRecordAccessSummary *summary);
+XR_FUNC XgOptionsBagSummary *xg_global_evidence_add_options_bag(XgGlobalEvidence *evidence,
+                                                                const XgOptionsBagSummary *summary);
 XR_FUNC XgMapShapeSummary *xg_global_evidence_add_map_shape(XgGlobalEvidence *evidence,
                                                             const XgMapShapeSummary *summary);
 XR_FUNC XgMapEntrySummary *xg_global_evidence_add_map_entry(XgGlobalEvidence *evidence,
@@ -1222,6 +1263,8 @@ xg_global_evidence_find_json_codec(const XgGlobalEvidence *evidence, XgJsonCodec
 XR_FUNC const XgRecordShapeSummary *
 xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
                                      XgRecordShapeId record_shape_id);
+XR_FUNC const XgOptionsBagSummary *
+xg_global_evidence_find_options_bag(const XgGlobalEvidence *evidence, XgOptionsId options_id);
 XR_FUNC const XgMapShapeSummary *xg_global_evidence_find_map_shape(const XgGlobalEvidence *evidence,
                                                                    XgMapShapeId shape_id);
 XR_FUNC const XgHashEqSummary *xg_global_evidence_find_hash_eq(const XgGlobalEvidence *evidence,

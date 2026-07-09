@@ -1018,6 +1018,48 @@ typedef struct XaotRecordAccessPlan {
     uint8_t unproven_reason;
 } XaotRecordAccessPlan;
 
+typedef enum XaotOptionsAction {
+    XAOT_OPTIONS_DEFAULT_ELIDED = 1,
+    XAOT_OPTIONS_DEFAULT_FILL_TABLE,
+    XAOT_OPTIONS_REQUIRED_CHECK,
+    XAOT_OPTIONS_CALLSITE_SPECIALIZED,
+    XAOT_OPTIONS_REJECT,
+} XaotOptionsAction;
+
+enum {
+    XAOT_OPTIONS_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_OPTIONS_EV_CALLSITE = 1u << 1,
+    XAOT_OPTIONS_EV_PARAM_SHAPE = 1u << 2,
+    XAOT_OPTIONS_EV_SUPPLIED_SHAPE = 1u << 3,
+    XAOT_OPTIONS_EV_DEFAULT_MASK = 1u << 4,
+    XAOT_OPTIONS_EV_REQUIRED_MASK = 1u << 5,
+};
+
+enum {
+    XAOT_OPTIONS_UNPROVEN_NONE = 0,
+    XAOT_OPTIONS_UNPROVEN_INVALID_ACTION = 1,
+    XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE = 2,
+    XAOT_OPTIONS_UNPROVEN_STALE_SHAPE = 3,
+};
+
+typedef struct XaotOptionsPlan {
+    XgOptionsId options_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    XgCallsiteId callsite_id;
+    XgRecordShapeId param_shape_id;
+    XgRecordShapeId supplied_shape_id;
+    uint32_t supplied_field_mask_id;
+    uint32_t default_field_mask_id;
+    uint32_t required_field_mask_id;
+    uint16_t supplied_count;
+    uint16_t default_count;
+    uint16_t required_count;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotOptionsPlan;
+
 typedef enum XaotMapShapeAction {
     XAOT_MAP_SHAPE_RUNTIME_HASH = 1,
     XAOT_MAP_SHAPE_PREALLOC_HASH,
@@ -1504,6 +1546,9 @@ typedef struct XaotBundle {
     XaotRecordAccessPlan *record_access_plans;
     uint32_t nrecord_access_plans;
     uint32_t record_access_plan_cap;
+    XaotOptionsPlan *options_plans;
+    uint32_t noptions_plans;
+    uint32_t options_plan_cap;
     XaotMapShapePlan *map_shape_plans;
     uint32_t nmap_shape_plans;
     uint32_t map_shape_plan_cap;
@@ -1607,6 +1652,8 @@ XR_FUNC const XaotRecordShapePlan *
 xaot_bundle_find_record_shape_plan(const XaotBundle *bundle, XgRecordShapeId record_shape_id);
 XR_FUNC const XaotRecordAccessPlan *
 xaot_bundle_find_record_access_plan(const XaotBundle *bundle, XgRecordAccessId record_access_id);
+XR_FUNC const XaotOptionsPlan *xaot_bundle_find_options_plan(const XaotBundle *bundle,
+                                                             XgOptionsId options_id);
 XR_FUNC const XaotMapShapePlan *xaot_bundle_find_map_shape_plan(const XaotBundle *bundle,
                                                                 XgMapShapeId shape_id);
 XR_FUNC const XaotKeyAccessPlan *xaot_bundle_find_key_access_plan(const XaotBundle *bundle,

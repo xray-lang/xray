@@ -284,6 +284,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nrecord_access_plans = 0;
     bundle->record_access_plan_cap = 0;
 
+    xr_free(bundle->options_plans);
+    bundle->options_plans = NULL;
+    bundle->noptions_plans = 0;
+    bundle->options_plan_cap = 0;
+
     xr_free(bundle->map_shape_plans);
     bundle->map_shape_plans = NULL;
     bundle->nmap_shape_plans = 0;
@@ -2298,6 +2303,113 @@ static bool xaot_bundle_add_record_access_plans(XaotBundle *bundle,
     return true;
 }
 
+static bool options_action_valid(uint8_t action) {
+    switch ((XgOptionsAction) action) {
+        case XG_OPTIONS_DEFAULT_ELIDED:
+        case XG_OPTIONS_DEFAULT_FILL_TABLE:
+        case XG_OPTIONS_REQUIRED_CHECK:
+        case XG_OPTIONS_CALLSITE_SPECIALIZED:
+        case XG_OPTIONS_REJECT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t options_action_for(const XgGlobalEvidence *evidence,
+                                  const XgOptionsBagSummary *options) {
+    if (!evidence || !options || !options_action_valid(options->action))
+        return XAOT_OPTIONS_REJECT;
+    if (!xg_global_evidence_find_callsite(evidence, options->callsite_id))
+        return XAOT_OPTIONS_REJECT;
+    if (!xg_global_evidence_find_record_shape(evidence, options->param_shape_id))
+        return XAOT_OPTIONS_REJECT;
+    if (options->supplied_shape_id != XG_NO_ID &&
+        !xg_global_evidence_find_record_shape(evidence, options->supplied_shape_id))
+        return XAOT_OPTIONS_REJECT;
+    if ((options->flags & XG_OPTIONS_MISSING_REQUIRED) != 0)
+        return XAOT_OPTIONS_REQUIRED_CHECK;
+    if ((options->flags & XG_OPTIONS_ALL_SUPPLIED) != 0 &&
+        (options->flags & XG_OPTIONS_NEEDS_DEFAULTS) == 0)
+        return XAOT_OPTIONS_DEFAULT_ELIDED;
+    if ((options->flags & XG_OPTIONS_NEEDS_DEFAULTS) != 0)
+        return XAOT_OPTIONS_DEFAULT_FILL_TABLE;
+    if ((options->flags & XG_OPTIONS_CALLSITE_PROVEN) != 0)
+        return XAOT_OPTIONS_CALLSITE_SPECIALIZED;
+    return XAOT_OPTIONS_REJECT;
+}
+
+static uint8_t options_reason_for(const XgGlobalEvidence *evidence,
+                                  const XgOptionsBagSummary *options) {
+    if (!evidence || !options || !options_action_valid(options->action))
+        return XAOT_OPTIONS_UNPROVEN_INVALID_ACTION;
+    if (!xg_global_evidence_find_callsite(evidence, options->callsite_id))
+        return XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE;
+    if (!xg_global_evidence_find_record_shape(evidence, options->param_shape_id))
+        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+    if (options->supplied_shape_id != XG_NO_ID &&
+        !xg_global_evidence_find_record_shape(evidence, options->supplied_shape_id))
+        return XAOT_OPTIONS_UNPROVEN_STALE_SHAPE;
+    return XAOT_OPTIONS_UNPROVEN_NONE;
+}
+
+static uint32_t options_evidence_for(const XgGlobalEvidence *evidence,
+                                     const XgOptionsBagSummary *options) {
+    uint32_t evidence_bits = XAOT_OPTIONS_EV_GLOBAL_ROW;
+    if (!evidence || !options)
+        return evidence_bits;
+    if (xg_global_evidence_find_callsite(evidence, options->callsite_id))
+        evidence_bits |= XAOT_OPTIONS_EV_CALLSITE;
+    if (xg_global_evidence_find_record_shape(evidence, options->param_shape_id))
+        evidence_bits |= XAOT_OPTIONS_EV_PARAM_SHAPE;
+    if (options->supplied_shape_id != XG_NO_ID &&
+        xg_global_evidence_find_record_shape(evidence, options->supplied_shape_id))
+        evidence_bits |= XAOT_OPTIONS_EV_SUPPLIED_SHAPE;
+    if (options->default_field_mask_id != 0)
+        evidence_bits |= XAOT_OPTIONS_EV_DEFAULT_MASK;
+    if (options->required_field_mask_id != 0)
+        evidence_bits |= XAOT_OPTIONS_EV_REQUIRED_MASK;
+    return evidence_bits;
+}
+
+static bool xaot_bundle_add_options_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                         const XgOptionsBagSummary *options) {
+    XaotOptionsPlan *plan;
+    if (!bundle || !evidence || !options)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->options_plans, &bundle->options_plan_cap,
+                            bundle->noptions_plans + 1, sizeof(XaotOptionsPlan), 8))
+        return false;
+    plan = &bundle->options_plans[bundle->noptions_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->options_id = options->options_id;
+    plan->module_id = options->module_id;
+    plan->owner_func_id = options->owner_func_id;
+    plan->callsite_id = options->callsite_id;
+    plan->param_shape_id = options->param_shape_id;
+    plan->supplied_shape_id = options->supplied_shape_id;
+    plan->supplied_field_mask_id = options->supplied_field_mask_id;
+    plan->default_field_mask_id = options->default_field_mask_id;
+    plan->required_field_mask_id = options->required_field_mask_id;
+    plan->supplied_count = options->supplied_count;
+    plan->default_count = options->default_count;
+    plan->required_count = options->required_count;
+    plan->action = options_action_for(evidence, options);
+    plan->evidence = options_evidence_for(evidence, options);
+    plan->unproven_reason = options_reason_for(evidence, options);
+    return true;
+}
+
+static bool xaot_bundle_add_options_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
+        if (!xaot_bundle_add_options_plan(bundle, evidence, &evidence->options_bags[i]))
+            return false;
+    }
+    return true;
+}
+
 static bool map_container_kind_valid(uint8_t kind) {
     return kind == XG_MAP_CONTAINER_MAP || kind == XG_MAP_CONTAINER_SET;
 }
@@ -3428,6 +3540,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT Record access plan";
         return false;
     }
+    if (!xaot_bundle_add_options_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT options plan";
+        return false;
+    }
     if (!xaot_bundle_add_map_shape_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT Map/Set shape plan";
         return false;
@@ -4097,6 +4213,17 @@ xaot_bundle_find_record_access_plan(const XaotBundle *bundle, XgRecordAccessId r
     for (uint32_t i = 0; i < bundle->nrecord_access_plans; i++) {
         if (bundle->record_access_plans[i].record_access_id == record_access_id)
             return &bundle->record_access_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotOptionsPlan *xaot_bundle_find_options_plan(const XaotBundle *bundle,
+                                                             XgOptionsId options_id) {
+    if (!bundle || options_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->noptions_plans; i++) {
+        if (bundle->options_plans[i].options_id == options_id)
+            return &bundle->options_plans[i];
     }
     return NULL;
 }
@@ -5522,6 +5649,38 @@ static const char *record_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *options_action_name(uint8_t action) {
+    switch ((XaotOptionsAction) action) {
+        case XAOT_OPTIONS_DEFAULT_ELIDED:
+            return "default_elided";
+        case XAOT_OPTIONS_DEFAULT_FILL_TABLE:
+            return "default_fill_table";
+        case XAOT_OPTIONS_REQUIRED_CHECK:
+            return "required_check";
+        case XAOT_OPTIONS_CALLSITE_SPECIALIZED:
+            return "callsite_specialized";
+        case XAOT_OPTIONS_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *options_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_OPTIONS_UNPROVEN_NONE:
+            return "none";
+        case XAOT_OPTIONS_UNPROVEN_INVALID_ACTION:
+            return "invalid_action";
+        case XAOT_OPTIONS_UNPROVEN_MISSING_CALLSITE:
+            return "missing_callsite";
+        case XAOT_OPTIONS_UNPROVEN_STALE_SHAPE:
+            return "stale_shape";
+        default:
+            return "unknown";
+    }
+}
+
 static const char *map_shape_action_name(uint8_t action) {
     switch ((XaotMapShapeAction) action) {
         case XAOT_MAP_SHAPE_RUNTIME_HASH:
@@ -6758,6 +6917,20 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 xg_record_access_kind_name(rp->access_kind), record_access_action_name(rp->action),
                 rp->field_name_id, rp->result_type_key, (unsigned) rp->field_ordinal, rp->evidence,
                 record_unproven_reason_name(rp->unproven_reason));
+    }
+
+    for (uint32_t oi = 0; oi < bundle->noptions_plans; oi++) {
+        const XaotOptionsPlan *op = &bundle->options_plans[oi];
+        fprintf(out,
+                "options-plan %u id=%u module=%u func=%u callsite=%u param_shape=%u "
+                "supplied_shape=%u action=%s supplied_mask=%u default_mask=%u required_mask=%u "
+                "supplied=%u defaults=%u required=%u evidence=0x%x reason=%s\n",
+                oi, op->options_id, op->module_id, op->owner_func_id, op->callsite_id,
+                op->param_shape_id, op->supplied_shape_id, options_action_name(op->action),
+                op->supplied_field_mask_id, op->default_field_mask_id, op->required_field_mask_id,
+                (unsigned) op->supplied_count, (unsigned) op->default_count,
+                (unsigned) op->required_count, op->evidence,
+                options_unproven_reason_name(op->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmap_shape_plans; mi++) {

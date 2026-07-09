@@ -522,7 +522,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=12 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=13 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -739,15 +739,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=12 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=12 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=12 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=12 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=13 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=13 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=13 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=13 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=12 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -8129,6 +8129,159 @@ TEST(global_evidence_records_record_shape_and_access_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_options_bag_plans) {
+    XgBuildKey key = {.source_hash = 41,
+                      .compiler_semver_hash = 42,
+                      .profile_hash = 43,
+                      .imported_summary_hash = 44,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgDeclSummary decl = {.decl_id = 7,
+                          .module_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = xg_name_id("caller"),
+                          .signature_key = 701,
+                          .source_span_id = 109};
+    XgRecordShapeSummary param_shape = {
+        .record_shape_id = 1,
+        .module_id = 1,
+        .owner_func_id = 7,
+        .source_span_id = 110,
+        .type_key = 210,
+        .field_name_start = 310,
+        .field_count = 3,
+        .shape_kind = XG_RECORD_SHAPE_OPTIONS,
+        .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_HAS_OPTIONS,
+        .shape_hash = UINT64_C(0x3456)};
+    XgRecordShapeSummary supplied_shape = {.record_shape_id = 2,
+                                           .module_id = 1,
+                                           .owner_func_id = 7,
+                                           .source_span_id = 111,
+                                           .type_key = 211,
+                                           .field_name_start = 320,
+                                           .field_count = 2,
+                                           .shape_kind = XG_RECORD_SHAPE_LITERAL,
+                                           .flags =
+                                               XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
+                                           .shape_hash = UINT64_C(0x4567)};
+    XgCallsiteSummary call = {.callsite_id = 12,
+                              .owner_func_id = 7,
+                              .source_span_id = 112,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_NATIVE,
+                              .method_id = 70,
+                              .method_name_id = xg_name_id("options"),
+                              .flags = XG_CALL_USES_DEFAULT_ARGS};
+    XgBodySummary body = {.func_id = 7,
+                          .module_id = 1,
+                          .owner_decl_id = 7,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = xg_name_id("caller"),
+                          .signature_key = 701,
+                          .source_span_id = 109,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = UINT64_C(0x789a),
+                          .effect_bits = XG_BODY_MAY_CALL | XG_BODY_MAY_CALL_NATIVE,
+                          .callsite_start = 12,
+                          .callsite_count = 1};
+    XgOptionsBagSummary all_supplied = {.options_id = 1,
+                                        .module_id = 1,
+                                        .owner_func_id = 7,
+                                        .callsite_id = 12,
+                                        .param_shape_id = 1,
+                                        .supplied_shape_id = 2,
+                                        .source_span_id = 113,
+                                        .supplied_field_mask_id = 501,
+                                        .required_field_mask_id = 502,
+                                        .supplied_count = 3,
+                                        .required_count = 1,
+                                        .action = XG_OPTIONS_DEFAULT_ELIDED,
+                                        .flags =
+                                            XG_OPTIONS_ALL_SUPPLIED | XG_OPTIONS_CALLSITE_PROVEN};
+    XgOptionsBagSummary needs_defaults = {.options_id = 2,
+                                          .module_id = 1,
+                                          .owner_func_id = 7,
+                                          .callsite_id = 12,
+                                          .param_shape_id = 1,
+                                          .supplied_shape_id = 2,
+                                          .source_span_id = 114,
+                                          .supplied_field_mask_id = 503,
+                                          .default_field_mask_id = 504,
+                                          .required_field_mask_id = 502,
+                                          .supplied_count = 2,
+                                          .default_count = 1,
+                                          .required_count = 1,
+                                          .action = XG_OPTIONS_DEFAULT_FILL_TABLE,
+                                          .flags = XG_OPTIONS_NEEDS_DEFAULTS |
+                                                   XG_OPTIONS_CALLSITE_PROVEN};
+
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &param_shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &supplied_shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+    ASSERT_NOT_NULL(xg_global_evidence_add_options_bag(&ev, &all_supplied));
+    ASSERT_NOT_NULL(xg_global_evidence_add_options_bag(&ev, &needs_defaults));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "options-bag 0 id=1 module=1 func=7 callsite=12"));
+    ASSERT_NOT_NULL(strstr(dump, "action=default_elided"));
+    ASSERT_NOT_NULL(strstr(dump, "options-bag 1 id=2 module=1 func=7 callsite=12"));
+    ASSERT_NOT_NULL(strstr(dump, "action=default_fill_table"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.noptions_plans, 2);
+    const XaotOptionsPlan *elided = xaot_bundle_find_options_plan(&bundle, 1);
+    const XaotOptionsPlan *filled = xaot_bundle_find_options_plan(&bundle, 2);
+    ASSERT_NOT_NULL(elided);
+    ASSERT_NOT_NULL(filled);
+    ASSERT_EQ_UINT(elided->action, XAOT_OPTIONS_DEFAULT_ELIDED);
+    ASSERT_EQ_UINT(filled->action, XAOT_OPTIONS_DEFAULT_FILL_TABLE);
+    ASSERT_TRUE((filled->evidence & XAOT_OPTIONS_EV_DEFAULT_MASK) != 0);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "options-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=default_elided"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "options-plan 1 id=2"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=default_fill_table"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    ev.options_bags[0].action = XG_OPTIONS_DEFAULT_FILL_TABLE;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT options evidence action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_records_map_set_key_plans) {
     XgBuildKey key = {.source_hash = 21,
                       .compiler_semver_hash = 22,
@@ -9942,6 +10095,7 @@ RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_json_codec_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
+RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);
 RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
