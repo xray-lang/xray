@@ -3627,7 +3627,116 @@ xa_os_resource_lint_find_returned_call_arg(XaOsResourceLintState *states, AstNod
     return state && state->kind == param->kind ? state : NULL;
 }
 
+typedef struct XaOsResourceTryWaitResultAlias {
+    uint32_t symbol_id;
+    XaOsResourceLintState *state;
+} XaOsResourceTryWaitResultAlias;
+
+static XaOsResourceLintState *xa_os_resource_lint_try_wait_call_state(XaOsResourceLintState *states,
+                                                                      AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return NULL;
+    CallExprNode *call = &expr->as.call_expr;
+    AstNode *callee = xa_thread_lint_unwrap_expr(call->callee);
+    if (!callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || strcmp(ma->name, "tryWait") != 0)
+        return NULL;
+    XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, ma->object);
+    if (!state || state->kind != XA_OS_RESOURCE_PROCESS)
+        return NULL;
+    return state;
+}
+
+static XaOsResourceLintState *
+xa_os_resource_lint_find_try_wait_result_alias(XaOsResourceTryWaitResultAlias *aliases,
+                                               int alias_count, uint32_t symbol_id) {
+    if (!aliases || symbol_id == 0)
+        return NULL;
+    for (int i = 0; i < alias_count; i++) {
+        if (aliases[i].symbol_id == symbol_id)
+            return aliases[i].state;
+    }
+    return NULL;
+}
+
+static void
+xa_os_resource_lint_remove_try_wait_result_alias(XaOsResourceTryWaitResultAlias *aliases,
+                                                 int *alias_count, uint32_t symbol_id) {
+    if (!aliases || !alias_count || symbol_id == 0)
+        return;
+    for (int i = 0; i < *alias_count; i++) {
+        if (aliases[i].symbol_id == symbol_id) {
+            aliases[i] = aliases[*alias_count - 1];
+            (*alias_count)--;
+            return;
+        }
+    }
+}
+
+static void xa_os_resource_lint_set_try_wait_result_alias(XaOsResourceTryWaitResultAlias *aliases,
+                                                          int alias_capacity, int *alias_count,
+                                                          uint32_t symbol_id,
+                                                          XaOsResourceLintState *state) {
+    if (!aliases || !alias_count || symbol_id == 0 || !state)
+        return;
+    xa_os_resource_lint_remove_try_wait_result_alias(aliases, alias_count, symbol_id);
+    if (*alias_count >= alias_capacity)
+        return;
+    aliases[*alias_count].symbol_id = symbol_id;
+    aliases[*alias_count].state = state;
+    (*alias_count)++;
+}
+
+static void xa_os_resource_lint_note_try_wait_result_alias(XaOsResourceLintState *states,
+                                                           AstNode *stmt,
+                                                           XaOsResourceTryWaitResultAlias *aliases,
+                                                           int alias_capacity, int *alias_count) {
+    if (!states || !stmt || !aliases || !alias_count)
+        return;
+    uint32_t symbol_id = 0;
+    AstNode *value = NULL;
+    if (stmt->type == AST_VAR_DECL) {
+        VarDeclNode *var = &stmt->as.var_decl;
+        if (var->storage_mode != XR_STORAGE_NORMAL)
+            return;
+        symbol_id = var->symbol_id;
+        value = var->initializer;
+    } else if (stmt->type == AST_ASSIGNMENT) {
+        AssignmentNode *assignment = &stmt->as.assignment;
+        symbol_id = assignment->symbol_id;
+        value = assignment->value;
+        xa_os_resource_lint_remove_try_wait_result_alias(aliases, alias_count, symbol_id);
+    } else {
+        return;
+    }
+    if (symbol_id == 0)
+        return;
+    XaOsResourceLintState *state = xa_os_resource_lint_try_wait_call_state(states, value);
+    if (state)
+        xa_os_resource_lint_set_try_wait_result_alias(aliases, alias_capacity, alias_count,
+                                                      symbol_id, state);
+}
+
+static XaOsResourceLintState *
+xa_os_resource_lint_try_wait_result_state(XaOsResourceLintState *states, AstNode *expr,
+                                          XaOsResourceTryWaitResultAlias *aliases,
+                                          int alias_count) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    XaOsResourceLintState *state = xa_os_resource_lint_try_wait_call_state(states, expr);
+    if (state)
+        return state;
+    if (expr && expr->type == AST_VARIABLE)
+        return xa_os_resource_lint_find_try_wait_result_alias(aliases, alias_count,
+                                                              expr->as.variable.symbol_id);
+    return NULL;
+}
+
 static bool xa_os_resource_lint_try_wait_null_check(XaOsResourceLintState *states, AstNode *expr,
+                                                    XaOsResourceTryWaitResultAlias *aliases,
+                                                    int alias_count,
                                                     XaOsResourceLintState **state_out,
                                                     bool *then_is_reaped) {
     expr = xa_thread_lint_unwrap_expr(expr);
@@ -3636,23 +3745,12 @@ static bool xa_os_resource_lint_try_wait_null_check(XaOsResourceLintState *state
     BinaryNode *bin = &expr->as.binary;
     AstNode *left = xa_thread_lint_unwrap_expr(bin->left);
     AstNode *right = xa_thread_lint_unwrap_expr(bin->right);
-    AstNode *call_expr = NULL;
-    if (left && left->type == AST_CALL_EXPR && right && right->type == AST_LITERAL_NULL)
-        call_expr = left;
-    else if (right && right->type == AST_CALL_EXPR && left && left->type == AST_LITERAL_NULL)
-        call_expr = right;
-    if (!call_expr)
-        return false;
-
-    CallExprNode *call = &call_expr->as.call_expr;
-    AstNode *callee = xa_thread_lint_unwrap_expr(call->callee);
-    if (!callee || callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "tryWait") != 0)
-        return false;
-    XaOsResourceLintState *state = xa_os_resource_lint_find_alias_source(states, ma->object);
-    if (!state || state->kind != XA_OS_RESOURCE_PROCESS)
+    XaOsResourceLintState *state = NULL;
+    if (right && right->type == AST_LITERAL_NULL)
+        state = xa_os_resource_lint_try_wait_result_state(states, left, aliases, alias_count);
+    else if (left && left->type == AST_LITERAL_NULL)
+        state = xa_os_resource_lint_try_wait_result_state(states, right, aliases, alias_count);
+    if (!state)
         return false;
     if (state_out)
         *state_out = state;
@@ -3663,13 +3761,15 @@ static bool xa_os_resource_lint_try_wait_null_check(XaOsResourceLintState *state
 
 static bool xa_os_resource_lint_try_wait_break_stmt(XaOsResourceLintState *states, AstNode *stmt,
                                                     const char *loop_label,
+                                                    XaOsResourceTryWaitResultAlias *aliases,
+                                                    int alias_count,
                                                     XaOsResourceLintState **state_out) {
     if (!stmt || stmt->type != AST_IF_STMT)
         return false;
     XaOsResourceLintState *state = NULL;
     bool then_is_reaped = false;
-    if (!xa_os_resource_lint_try_wait_null_check(states, stmt->as.if_stmt.condition, &state,
-                                                 &then_is_reaped))
+    if (!xa_os_resource_lint_try_wait_null_check(states, stmt->as.if_stmt.condition, aliases,
+                                                 alias_count, &state, &then_is_reaped))
         return false;
     AstNode *reaped_branch =
         then_is_reaped ? stmt->as.if_stmt.then_branch : stmt->as.if_stmt.else_branch;
@@ -3694,26 +3794,52 @@ static bool xa_os_resource_lint_mark_try_wait_poll_loop(XaOsResourceLintState *s
         count <= 0)
         return false;
 
+    XaOsResourceTryWaitResultAlias *aliases =
+        xr_calloc((size_t) count, sizeof(XaOsResourceTryWaitResultAlias));
+    if (!aliases)
+        return false;
+    int alias_count = 0;
+    XaOsResourceLintState **found_states =
+        xr_calloc((size_t) count, sizeof(XaOsResourceLintState *));
+    if (!found_states) {
+        xr_free(aliases);
+        return false;
+    }
+    int found_count = 0;
+
     const char *loop_label = xa_lifecycle_lint_loop_label(stmt);
     bool found = false;
     for (int i = 0; i < count; i++) {
+        xa_os_resource_lint_note_try_wait_result_alias(states, statements[i], aliases, count,
+                                                       &alias_count);
         XaOsResourceLintState *state = NULL;
-        if (xa_os_resource_lint_try_wait_break_stmt(states, statements[i], loop_label, &state)) {
+        if (xa_os_resource_lint_try_wait_break_stmt(states, statements[i], loop_label, aliases,
+                                                    alias_count, &state)) {
             found = true;
+            if (state && found_count < count)
+                found_states[found_count++] = state;
             continue;
         }
-        if (!found && xa_lifecycle_lint_node_skips_loop_tail(statements[i], loop_label))
+        if (!found && xa_lifecycle_lint_node_skips_loop_tail(statements[i], loop_label)) {
+            xr_free(found_states);
+            xr_free(aliases);
             return false;
-        if (xa_lifecycle_lint_node_exits_current_scope(statements[i], loop_label))
+        }
+        if (xa_lifecycle_lint_node_exits_current_scope(statements[i], loop_label)) {
+            xr_free(found_states);
+            xr_free(aliases);
             return false;
+        }
     }
-    if (!found)
+    if (!found) {
+        xr_free(found_states);
+        xr_free(aliases);
         return false;
-    for (int i = 0; i < count; i++) {
-        XaOsResourceLintState *state = NULL;
-        if (xa_os_resource_lint_try_wait_break_stmt(states, statements[i], loop_label, &state))
-            state->finalized = true;
     }
+    for (int i = 0; i < found_count; i++)
+        found_states[i]->finalized = true;
+    xr_free(found_states);
+    xr_free(aliases);
     return true;
 }
 
