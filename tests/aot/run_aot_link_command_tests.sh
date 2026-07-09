@@ -1754,6 +1754,53 @@ else
     sed 's/^/      /' "$FREESTANDING_SHARED_STRING_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_TOP_VAR_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_static.xr"
+FREESTANDING_TOP_VAR_STATIC_OBJ="$WORK/freestanding_top_var_static.o"
+FREESTANDING_TOP_VAR_STATIC_LOG="$WORK/freestanding_top_var_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_VAR_STATIC_OBJ" \
+        "$FREESTANDING_TOP_VAR_STATIC_SRC" >"$FREESTANDING_TOP_VAR_STATIC_LOG" 2>&1; then
+    FREESTANDING_TOP_VAR_STATIC_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_VAR_STATIC_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_VAR_STATIC_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "static XrValue xrt_shared[7] = {" \
+            "freestanding-profile/top-var-static: materializes mutable slots as static data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "[0] = XR_FROM_INT(INT64_C(1))," \
+            "freestanding-profile/top-var-static: initializes integer var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "[5] = {.tag = XR_TAG_STR, .ptr = (void *) &xrt_shared_init_str_5}" \
+            "freestanding-profile/top-var-static: initializes string var statically"
+        expect_log_contains "$FREESTANDING_TOP_VAR_STATIC_C" "xrt_shared[0] =" \
+            "freestanding-profile/top-var-static: keeps runtime writes to mutable storage"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" \
+            "xrt_shared[0] = XR_FROM_INT(INT64_C(1))" \
+            "freestanding-profile/top-var-static: elides module-init integer write"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_STATIC_C" "#include \"xrt.h\"" \
+            "freestanding-profile/top-var-static: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/top-var-static: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_STATIC_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_VAR_STATIC_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_VAR_STATIC_OBJ")"
+    FREESTANDING_TOP_VAR_STATIC_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_VAR_STATIC_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_TOP_VAR_STATIC_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-var-static: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/top-var-static: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_VAR_STATIC_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/top-var-static: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_VAR_STATIC_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_CONST_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_scalar.xr"
 FREESTANDING_TOP_CONST_SCALAR_OBJ="$WORK/freestanding_top_const_scalar.o"
 FREESTANDING_TOP_CONST_SCALAR_LOG="$WORK/freestanding_top_const_scalar.log"
@@ -2718,7 +2765,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_top_var_reject.log" \
     "freestanding-profile: rejects top-level var declarations" \
     "freestanding profile rejects top-level var declaration" \
-    "module storage still requires constructor initialization"
+    "only int/float/bool/char/string/null consteval initializers are supported as static mutable module storage"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \

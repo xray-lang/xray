@@ -1435,9 +1435,20 @@ static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *typ
 static bool const_literal_from_ct_value(XiLower *l, const XrCtValue *value, struct XrType *type,
                                         XiConstLiteral *out);
 
+static void const_literal_normalize_for_static_slot_type(XiConstLiteral *lit, struct XrType *type) {
+    if (!lit || !type)
+        return;
+    if (type->kind == XR_KIND_FLOAT && lit->kind == XI_CONST_LITERAL_INT) {
+        lit->kind = XI_CONST_LITERAL_FLOAT;
+        lit->float_value = (double) lit->int_value;
+    }
+    lit->type = type;
+}
+
 static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct XrType *type,
                                                 XiConstLiteral *out) {
-    if (!l || !s || s->type != AST_SHARED_DECL || !s->as.var_decl.initializer || !out)
+    if (!l || !s || (s->type != AST_SHARED_DECL && s->type != AST_VAR_DECL) ||
+        !s->as.var_decl.initializer || !out)
         return false;
     XiConstLiteral lit;
     if (!const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
@@ -1450,6 +1461,7 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
             !const_literal_from_ct_value(l, &links->ct_value, type, &lit))
             return false;
     }
+    const_literal_normalize_for_static_slot_type(&lit, type);
     switch (lit.kind) {
         case XI_CONST_LITERAL_INT:
         case XI_CONST_LITERAL_FLOAT:
@@ -1765,7 +1777,8 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 prescan_apply_const_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             }
-        } else if (s && s->type == AST_SHARED_DECL && s->as.var_decl.initializer) {
+        } else if (s && (s->type == AST_SHARED_DECL || s->type == AST_VAR_DECL) &&
+                   s->as.var_decl.initializer) {
             XiConstLiteral lit;
             if (shared_static_initializer_from_decl(l, s, type, &lit))
                 slot_meta.shared_initializers[next_shared] = lit;
