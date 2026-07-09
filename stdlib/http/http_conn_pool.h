@@ -44,8 +44,6 @@ typedef struct XrHttpPooledConn {
     XrTlsConn *tls_conn;  // TLS connection (NULL for plain TCP)
     XrHttpConnState state;
     uint64_t last_used_ms;  // Monotonic timestamp (milliseconds)
-    uint64_t created_ms;
-    bool is_https;
     struct XrHttpPooledConn *next;
 } XrHttpPooledConn;
 
