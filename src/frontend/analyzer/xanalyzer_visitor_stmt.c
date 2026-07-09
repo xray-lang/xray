@@ -1847,7 +1847,8 @@ static FunctionDeclNode *xa_lifecycle_lint_function_node(AstNode *node) {
 
 static XaThreadHandleLintFnSummary *
 xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
-                                       const char *summary_name, uint32_t summary_symbol_id) {
+                                       const char *summary_name, uint32_t summary_symbol_id,
+                                       XaThreadHandleLintFnSummary *visible_summaries) {
     FunctionDeclNode *fn = xa_lifecycle_lint_function_node(fn_node);
     if (!ctx || !fn_node || !fn || !summary_name || !fn->body || fn->param_count <= 0 ||
         xa_lifecycle_lint_body_has_non_tail_exit(fn->body))
@@ -1896,11 +1897,15 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
         return NULL;
     }
 
+    for (XaThreadHandleLintState *s = states; s; s = s->next)
+        s->fn_summaries = visible_summaries;
     xa_thread_lint_scan_stmt(states, fn->body, true);
     AstNode *return_expr =
         xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
     XaThreadHandleLintState *returned_state =
         return_expr ? xa_thread_lint_find_by_expr(states, return_expr) : NULL;
+    if (!returned_state)
+        returned_state = xa_thread_lint_find_returned_call_arg(states, return_expr);
     bool any_finalized = false;
     bool returns_param = false;
     for (int i = 0; i < fn->param_count; i++) {
@@ -1924,16 +1929,19 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
     return summary;
 }
 
-static XaThreadHandleLintFnSummary *xa_thread_lint_summarize_function(XaInferContext *ctx,
-                                                                      AstNode *stmt) {
+static XaThreadHandleLintFnSummary *
+xa_thread_lint_summarize_function(XaInferContext *ctx, AstNode *stmt,
+                                  XaThreadHandleLintFnSummary *visible_summaries) {
     if (!stmt || stmt->type != AST_FUNCTION_DECL)
         return NULL;
     FunctionDeclNode *fn = &stmt->as.function_decl;
-    return xa_thread_lint_summarize_function_node(ctx, stmt, fn->name, fn->symbol_id);
+    return xa_thread_lint_summarize_function_node(ctx, stmt, fn->name, fn->symbol_id,
+                                                  visible_summaries);
 }
 
 static XaThreadHandleLintFnSummary *
-xa_thread_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt) {
+xa_thread_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt,
+                                              XaThreadHandleLintFnSummary *visible_summaries) {
     if (!stmt || stmt->type != AST_CONST_DECL)
         return NULL;
     VarDeclNode *var = &stmt->as.var_decl;
@@ -1941,7 +1949,8 @@ xa_thread_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt
     if (!var->name || var->storage_mode != XR_STORAGE_NORMAL || !initializer ||
         initializer->type != AST_FUNCTION_EXPR)
         return NULL;
-    return xa_thread_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id);
+    return xa_thread_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id,
+                                                  visible_summaries);
 }
 
 static XaThreadHandleLintFnSummary *
@@ -1952,9 +1961,9 @@ xa_thread_lint_collect_fn_summaries(XaInferContext *ctx, AstNode **statements, i
     XaThreadHandleLintFnSummary **tail = &summaries;
     for (int i = 0; i < count; i++) {
         XaThreadHandleLintFnSummary *summary =
-            xa_thread_lint_summarize_function(ctx, statements[i]);
+            xa_thread_lint_summarize_function(ctx, statements[i], summaries);
         if (!summary)
-            summary = xa_thread_lint_summarize_const_function_value(ctx, statements[i]);
+            summary = xa_thread_lint_summarize_const_function_value(ctx, statements[i], summaries);
         if (!summary)
             continue;
         *tail = summary;
@@ -1983,7 +1992,8 @@ static void xa_thread_lint_collect_scope_fn_summaries(XaInferContext *ctx, XaSco
     if (node && node->type == AST_FUNCTION_DECL) {
         FunctionDeclNode *fn = &node->as.function_decl;
         if (!xa_thread_lint_fn_summary_exists(*head, fn->symbol_id, fn->name)) {
-            XaThreadHandleLintFnSummary *summary = xa_thread_lint_summarize_function(ctx, node);
+            XaThreadHandleLintFnSummary *summary =
+                xa_thread_lint_summarize_function(ctx, node, *head);
             if (summary) {
                 **tail = summary;
                 *tail = &summary->next;
@@ -2004,7 +2014,7 @@ static void xa_thread_lint_collect_scope_fn_summaries(XaInferContext *ctx, XaSco
         if (!initializer || initializer->type != AST_FUNCTION_EXPR)
             continue;
         XaThreadHandleLintFnSummary *summary =
-            xa_thread_lint_summarize_function_node(ctx, initializer, sym->name, sym->id);
+            xa_thread_lint_summarize_function_node(ctx, initializer, sym->name, sym->id, *head);
         if (summary) {
             **tail = summary;
             *tail = &summary->next;
@@ -3576,7 +3586,8 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
 
 static XaOsResourceLintFnSummary *
 xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
-                                            const char *summary_name, uint32_t summary_symbol_id) {
+                                            const char *summary_name, uint32_t summary_symbol_id,
+                                            XaOsResourceLintFnSummary *visible_summaries) {
     FunctionDeclNode *fn = xa_lifecycle_lint_function_node(fn_node);
     if (!ctx || !fn_node || !fn || !summary_name || !fn->body || fn->param_count <= 0 ||
         xa_lifecycle_lint_body_has_non_tail_exit(fn->body))
@@ -3627,11 +3638,15 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
         return NULL;
     }
 
+    for (XaOsResourceLintState *s = states; s; s = s->next)
+        s->fn_summaries = visible_summaries;
     xa_os_resource_lint_scan_stmt(states, fn->body, true);
     AstNode *return_expr =
         xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
     XaOsResourceLintState *returned_state =
         return_expr ? xa_os_resource_lint_find_by_expr(states, return_expr) : NULL;
+    if (!returned_state)
+        returned_state = xa_os_resource_lint_find_returned_call_arg(states, return_expr);
     bool any_finalized = false;
     bool returns_param = false;
     for (int i = 0; i < fn->param_count; i++) {
@@ -3662,16 +3677,19 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
     return summary;
 }
 
-static XaOsResourceLintFnSummary *xa_os_resource_lint_summarize_function(XaInferContext *ctx,
-                                                                         AstNode *stmt) {
+static XaOsResourceLintFnSummary *
+xa_os_resource_lint_summarize_function(XaInferContext *ctx, AstNode *stmt,
+                                       XaOsResourceLintFnSummary *visible_summaries) {
     if (!stmt || stmt->type != AST_FUNCTION_DECL)
         return NULL;
     FunctionDeclNode *fn = &stmt->as.function_decl;
-    return xa_os_resource_lint_summarize_function_node(ctx, stmt, fn->name, fn->symbol_id);
+    return xa_os_resource_lint_summarize_function_node(ctx, stmt, fn->name, fn->symbol_id,
+                                                       visible_summaries);
 }
 
 static XaOsResourceLintFnSummary *
-xa_os_resource_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt) {
+xa_os_resource_lint_summarize_const_function_value(XaInferContext *ctx, AstNode *stmt,
+                                                   XaOsResourceLintFnSummary *visible_summaries) {
     if (!stmt || stmt->type != AST_CONST_DECL)
         return NULL;
     VarDeclNode *var = &stmt->as.var_decl;
@@ -3679,7 +3697,8 @@ xa_os_resource_lint_summarize_const_function_value(XaInferContext *ctx, AstNode 
     if (!var->name || var->storage_mode != XR_STORAGE_NORMAL || !initializer ||
         initializer->type != AST_FUNCTION_EXPR)
         return NULL;
-    return xa_os_resource_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id);
+    return xa_os_resource_lint_summarize_function_node(ctx, initializer, var->name, var->symbol_id,
+                                                       visible_summaries);
 }
 
 static XaOsResourceLintFnSummary *
@@ -3690,9 +3709,10 @@ xa_os_resource_lint_collect_fn_summaries(XaInferContext *ctx, AstNode **statemen
     XaOsResourceLintFnSummary **tail = &summaries;
     for (int i = 0; i < count; i++) {
         XaOsResourceLintFnSummary *summary =
-            xa_os_resource_lint_summarize_function(ctx, statements[i]);
+            xa_os_resource_lint_summarize_function(ctx, statements[i], summaries);
         if (!summary)
-            summary = xa_os_resource_lint_summarize_const_function_value(ctx, statements[i]);
+            summary =
+                xa_os_resource_lint_summarize_const_function_value(ctx, statements[i], summaries);
         if (!summary)
             continue;
         *tail = summary;
@@ -3721,7 +3741,8 @@ static void xa_os_resource_lint_collect_scope_fn_summaries(XaInferContext *ctx, 
     if (node && node->type == AST_FUNCTION_DECL) {
         FunctionDeclNode *fn = &node->as.function_decl;
         if (!xa_os_resource_lint_fn_summary_exists(*head, fn->symbol_id, fn->name)) {
-            XaOsResourceLintFnSummary *summary = xa_os_resource_lint_summarize_function(ctx, node);
+            XaOsResourceLintFnSummary *summary =
+                xa_os_resource_lint_summarize_function(ctx, node, *head);
             if (summary) {
                 **tail = summary;
                 *tail = &summary->next;
@@ -3741,8 +3762,8 @@ static void xa_os_resource_lint_collect_scope_fn_summaries(XaInferContext *ctx, 
         AstNode *initializer = links ? xa_thread_lint_unwrap_expr(links->const_initializer) : NULL;
         if (!initializer || initializer->type != AST_FUNCTION_EXPR)
             continue;
-        XaOsResourceLintFnSummary *summary =
-            xa_os_resource_lint_summarize_function_node(ctx, initializer, sym->name, sym->id);
+        XaOsResourceLintFnSummary *summary = xa_os_resource_lint_summarize_function_node(
+            ctx, initializer, sym->name, sym->id, *head);
         if (summary) {
             **tail = summary;
             *tail = &summary->next;
