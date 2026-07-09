@@ -489,6 +489,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_init_from_module(ctx, module);
     ctx->shared_name = "xrt_shared";
     cg_collect_shared_native_instances(ctx);
+    if (!cg_check_no_alloc_func_tree(ctx, main_func))
+        return;
 
     xi_cgen_header(ctx, out);
 
@@ -629,6 +631,11 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     snprintf(shared_buf, sizeof(shared_buf), "xrt_shared_%s", prefix);
     ctx->shared_name = shared_buf;
     cg_collect_shared_native_instances(ctx);
+    if (!cg_check_no_alloc_func_tree(ctx, module->init)) {
+        ctx->shared_name = "xrt_shared";
+        ctx->extern_linkage = false;
+        return;
+    }
 
     char *bodybuf = NULL;
     size_t bodysz = 0;
