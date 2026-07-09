@@ -385,7 +385,7 @@ static void http_context_destroy(void *handle) {
 
     // Free HTTP server
     if (ctx->server) {
-        xr_http_server_free(ctx->server);
+        http_server_free(ctx->server);
         ctx->server = NULL;
     }
 
@@ -415,7 +415,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
 
     // Auto-create global server instance
     if (!ctx->server) {
-        ctx->server = xr_http_server_new();
+        ctx->server = http_server_new();
         if (!ctx->server) {
             fprintf(stderr, "http.route: failed to create server\n");
             return xr_null();
@@ -453,7 +453,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
     if (xr_value_is_closure(handler_arg)) {
         // Closure callback - register dynamic route
         XrClosure *closure = xr_value_to_closure(handler_arg);
-        xr_http_server_route(ctx->server, method, path_copy, closure);
+        http_server_route(ctx->server, method, path_copy, closure);
         xr_free(path_copy);
     } else if (XR_IS_STRING(handler_arg)) {
         // Static string response - router owns its own body copy.
@@ -496,7 +496,7 @@ static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     if (!ctx->server) {
-        ctx->server = xr_http_server_new();
+        ctx->server = http_server_new();
         if (!ctx->server)
             return xr_null();
     }
@@ -549,7 +549,7 @@ static XrValue http_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrHttpContext *ctx = xr_http_get_context(X);
     if (ctx && ctx->server) {
-        xr_http_server_stop(ctx->server);
+        http_server_stop(ctx->server);
     }
 
     return xr_null();

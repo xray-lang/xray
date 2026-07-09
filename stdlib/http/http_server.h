@@ -48,16 +48,16 @@ typedef struct XrHttpServer {
 /* ========== Server API ========== */
 
 // Create server
-XR_FUNC XrHttpServer *xr_http_server_new(void);
+XrHttpServer *http_server_new(void);
 
 // Free server
-XR_FUNC void xr_http_server_free(XrHttpServer *server);
+void http_server_free(XrHttpServer *server);
 
 // Add route (handler is xray closure)
-XR_FUNC void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
-                                  struct XrClosure *handler);
+void http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
+                       struct XrClosure *handler);
 
 // Stop server
-XR_FUNC void xr_http_server_stop(XrHttpServer *server);
+void http_server_stop(XrHttpServer *server);
 
 #endif  // XR_STDLIB_HTTP_SERVER_H
