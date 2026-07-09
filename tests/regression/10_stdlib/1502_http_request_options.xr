@@ -83,6 +83,13 @@ fn test_request_rejects_invalid_explicit_port() {
 }
 
 @test
+fn test_request_rejects_url_userinfo() {
+    var r = http.request({url: "http://user:pass@example.com/path"})
+    assert(!r.ok)
+    assert_eq(r.error, "URL parse error")
+}
+
+@test
 fn test_request_preserves_custom_method_token() {
     var maybeLst = net.listen(0, 1)
     if (maybeLst == null) { return }

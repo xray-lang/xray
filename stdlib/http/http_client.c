@@ -92,28 +92,18 @@ int http_url_parse(const char *url, XrHttpUrl *out) {
         p = scheme_end + 3;
     }
 
-    // Skip optional userinfo (`user:pass@`). We do not surface credentials
-    // to callers — they should use config->headers for Authorization. We
-    // only scan until the authority delimiter (/ ? #) to avoid matching an
-    // '@' inside the path/query. This is RFC 3986 compliant stripping, not
-    // validation; malformed userinfo is silently dropped.
+    // Reject URL userinfo (`user:pass@host`). The HTTP API does not derive
+    // Authorization from URLs, so accepting and stripping credentials would
+    // silently turn an authenticated-looking URL into an unauthenticated request.
     {
         const char *scan = p;
-        const char *at = NULL;
         while (*scan && *scan != '/' && *scan != '?' && *scan != '#') {
             if (*scan == '@') {
-                at = scan;
-                break;
-            }
-            if (*scan == '[') {
-                // IPv6 host begins; any earlier '@' would have been found
-                // above. Since we didn't, there is no userinfo — stop.
-                break;
+                http_url_free(out);
+                return -1;
             }
             scan++;
         }
-        if (at)
-            p = at + 1;
     }
 
     // Parse host + port. Two shapes per RFC 3986 §3.2.2:
