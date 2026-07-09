@@ -1,0 +1,16 @@
+import sys
+
+fn run() {
+    const waitThread = fn(t: Thread<int>) -> int {
+        var v = t.join()
+        print("fn-value joined " + string(v))
+        return v
+    }
+
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    print(waitThread(t))
+}
+
+run()
