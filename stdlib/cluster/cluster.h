@@ -190,7 +190,7 @@ typedef struct XrCluster {
      *                         xr_cluster_stop can spin-wait briefly and
      *                         avoid tearing down node state while the
      *                         accept path is still inside
-     *                         xr_cluster_node_accept.
+     *                         cluster_node_accept.
      */
     bool accept_coro_spawned;
     _Atomic(bool) accept_running;
@@ -206,7 +206,7 @@ typedef struct XrCluster {
      *
      *   tls_enabled     — flip to turn on TLS for every inbound and
      *                     outbound cluster connection.
-     *   tls_client_ctx  — used by xr_cluster_node_connect when TLS is on.
+     *   tls_client_ctx  — used by cluster_node_connect when TLS is on.
      *                     Built at start_ex time with caller-supplied CA
      *                     bundle, optional client cert/key (for mTLS), and
      *                     optional verify_peer toggle.

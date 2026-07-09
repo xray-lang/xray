@@ -182,7 +182,7 @@ static void cluster_accept_loop(void *arg) {
 
         /* Server-side handshake. On failure the conn is closed and no
          * XrClusterNode is created — we just drop the peer. */
-        XrClusterNode *node = xr_cluster_node_accept(c, conn);
+        XrClusterNode *node = cluster_node_accept(c, conn);
         if (!node) {
             xr_io_close(conn);
             continue;
@@ -191,13 +191,13 @@ static void cluster_accept_loop(void *arg) {
         /* Tombstone check: reject nodes that were recently dead. They
          * must wait out the tombstone window before rejoining. */
         if (cluster_health_is_dead(c, node->name)) {
-            xr_cluster_node_free(node);
+            cluster_node_free(node);
             continue;
         }
 
         xr_cluster_add_node(c, node);
-        xr_cluster_node_start_writer(node, c->isolate);
-        xr_cluster_node_start_reader(c, node);
+        cluster_node_start_writer(node, c->isolate);
+        cluster_node_start_reader(c, node);
     }
 
     atomic_store(&c->accept_running, false);
@@ -474,7 +474,7 @@ void xr_cluster_stop(XrCluster *c) {
     XrClusterNode *node = c->nodes;
     while (node) {
         XrClusterNode *next = node->next;
-        xr_cluster_node_free(node);
+        cluster_node_free(node);
         node = next;
     }
     c->nodes = NULL;
@@ -542,7 +542,7 @@ void xr_cluster_stop(XrCluster *c) {
     c->tombstones = NULL;
 
     // Release TLS contexts built in xr_cluster_start_ex. Freeing happens
-    // after xr_cluster_node_free loops so no node writer coroutine can
+    // after cluster_node_free loops so no node writer coroutine can
     // still be dereferencing conn->tls which points into these contexts.
     if (c->tls_client_ctx) {
         xr_tls_context_free(c->tls_client_ctx);
@@ -631,12 +631,12 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
     if (!c)
         return -1;
 
-    XrClusterNode *node = xr_cluster_node_new(NULL, host, port);
+    XrClusterNode *node = cluster_node_new(NULL, host, port);
     if (!node)
         return -1;
 
-    if (xr_cluster_node_connect(c, node) != 0) {
-        xr_cluster_node_free(node);
+    if (cluster_node_connect(c, node) != 0) {
+        cluster_node_free(node);
         return -1;
     }
 
@@ -647,8 +647,8 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
      * started, which meant inbound RPC responses and heartbeats went
      * unnoticed and the peer was torn down by the phi detector within
      * two heartbeat intervals. */
-    xr_cluster_node_start_writer(node, c->isolate);
-    xr_cluster_node_start_reader(c, node);
+    cluster_node_start_writer(node, c->isolate);
+    cluster_node_start_reader(c, node);
 
     return 0;
 }
@@ -1130,7 +1130,7 @@ static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(0);
     }
 
-    int rc = xr_cluster_node_enqueue(target, frame, (uint32_t) flen);
+    int rc = cluster_node_enqueue(target, frame, (uint32_t) flen);
     if (frame != stack_frame)
         xr_free(frame);
     return xr_bool(rc == 0);
@@ -1230,7 +1230,7 @@ static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    int rc = xr_cluster_node_enqueue(target, frame, (uint32_t) flen);
+    int rc = cluster_node_enqueue(target, frame, (uint32_t) flen);
     if (frame != stack_frame)
         xr_free(frame);
     if (rc != 0) {
@@ -1280,7 +1280,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     uint32_t payload_len;
 
     while (atomic_load(&c->running) && node->state == XR_NODE_CONNECTED) {
-        if (xr_cluster_node_recv_frame(node, &frame_type, recv_buf, 65536, &payload_len) != 0) {
+        if (cluster_node_recv_frame(node, &frame_type, recv_buf, 65536, &payload_len) != 0) {
             break;  // Disconnect
         }
 
@@ -1293,7 +1293,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     int plen =
                         xr_frame_encode_heartbeat(pong, sizeof(pong), XR_FRAME_HEARTBEAT_PONG, ts);
                     if (plen > 0) {
-                        xr_cluster_node_enqueue(node, pong, (uint32_t) plen);
+                        cluster_node_enqueue(node, pong, (uint32_t) plen);
                     }
                 }
                 int64_t now_hb = cluster_now_ms();
@@ -1395,17 +1395,17 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                         if (cluster_encode(c->isolate, out, &sbuf) == 0) {
                             rsp_payload[8] = 1;  // has_value = true
                             memcpy(rsp_payload + 9, sbuf.data, sbuf.len);
-                            xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload,
+                            cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload,
                                                        9 + (uint32_t) sbuf.len);
                         }
                         cluster_serial_buf_free(&sbuf);
                     } else {
                         rsp_payload[8] = 0;  // has_value = false
-                        xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
+                        cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
                     }
                 } else {
                     rsp_payload[8] = 0;
-                    xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
+                    cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
                 }
                 break;
             }
@@ -1548,7 +1548,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     cluster_subscriber_remove_all_for_node(c, node);
     cluster_monitor_fire(c, node->name);
     xr_cluster_remove_node(c, node);
-    xr_cluster_node_free(node);
+    cluster_node_free(node);
 }
 
 // xray binding: cluster.publish(topic, value)
