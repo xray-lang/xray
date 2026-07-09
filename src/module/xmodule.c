@@ -185,6 +185,7 @@ XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name) {
     module->loaded = false;
     module->loading = false;
     module->native_handle = NULL;
+    module->native_handle_destroy = NULL;
     module->init_fn = NULL;
     module->compiled_code = NULL;
 
@@ -210,6 +211,7 @@ XrModule *xr_module_create_script(XrVMRuntime *isolate, const char *name, const 
     module->loaded = false;
     module->loading = false;
     module->native_handle = NULL;
+    module->native_handle_destroy = NULL;
     module->init_fn = NULL;
     module->compiled_code = NULL;
 
@@ -337,6 +339,11 @@ void xr_module_free(XrModule *module) {
     if (!module)
         return;
 
+    if (module->native_handle && module->native_handle_destroy) {
+        module->native_handle_destroy(module->native_handle);
+        module->native_handle = NULL;
+    }
+
     if (module->name)
         xr_free(module->name);
     if (module->path)
@@ -351,6 +358,10 @@ void xr_module_free(XrModule *module) {
         xr_free(module->export_flags);
     if (module->symbol_to_index)
         xr_free(module->symbol_to_index);
+    if (module->compiled_code) {
+        xr_free(module->compiled_code);
+        module->compiled_code = NULL;
+    }
 }
 
 /* ========== Module System Initialization ========== */
@@ -420,15 +431,11 @@ static void destroy_registry(XrModuleRegistry *registry) {
         xr_hashmap_free(registry->native_loaders);
     }
     if (registry->loaded_modules) {
-        // Free compiled_code (XrProto*) for each loaded module before destroying hashmap
+        // Free module-owned payloads before destroying the non-owning hashmap.
         for (uint32_t i = 0; i < registry->loaded_modules->capacity; i++) {
             XrHashMapEntry *entry = &registry->loaded_modules->entries[i];
             if (entry->key != NULL && entry->value != NULL) {
-                XrModule *mod = (XrModule *) entry->value;
-                if (mod->compiled_code) {
-                    xr_free(mod->compiled_code);
-                    mod->compiled_code = NULL;
-                }
+                xr_module_free((XrModule *) entry->value);
             }
         }
         xr_hashmap_free(registry->loaded_modules);
@@ -1130,9 +1137,8 @@ static XrModule *try_load_native_package(XrVMRuntime *isolate, const char *modul
 
     // 8. Store the library handle. Symbols remain in use for the
     // lifetime of the runtime, so we deliberately never close it
-    // on the success path; native_handle stays a void* because the
-    // same field is reused by stdlib/http and stdlib/ws to store
-    // their own per-module context pointers.
+    // on the success path; no native_handle_destroy callback is set
+    // for package dylib handles.
     module->native_handle = (void *) handle;
 
     // 9. Cache and finalize. An uncached module breaks identity for later

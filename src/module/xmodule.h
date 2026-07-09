@@ -48,6 +48,8 @@ typedef enum {
 
 #define XR_EXPORT_CONST 0x01
 
+typedef void (*XrModuleNativeHandleDestroy)(void *handle);
+
 typedef struct XrModule {
     XrObjHeader hdr;
 
@@ -75,6 +77,7 @@ typedef struct XrModule {
     bool requires_script;
 
     void *native_handle;
+    XrModuleNativeHandleDestroy native_handle_destroy;
     struct XrClosure *init_fn;
     void *compiled_code;
 } XrModule;
