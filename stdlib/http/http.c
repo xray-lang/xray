@@ -471,15 +471,16 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
         // Static string response - router owns its own body copy.
         size_t response_len;
         const char *response = xrs_string_arg(handler_arg, &response_len);
-        if (response)
-            xr_http_server_static(ctx->server, method, path_copy, response, response_len);
+        if (response) {
+            xr_router_add_static(ctx->server->router, method, path_copy, response, response_len);
+        }
         xr_free(path_copy);
     } else if (xr_value_is_json(handler_arg)) {
         // Json object - serialize in C layer and register as static response body.
         size_t json_len = 0;
         char *json_str = xr_json_stringify_to_cstr(X, handler_arg, &json_len);
         if (json_str && json_len > 0) {
-            xr_http_server_static(ctx->server, method, path_copy, json_str, json_len);
+            xr_router_add_static(ctx->server->router, method, path_copy, json_str, json_len);
             xr_free(json_str);
             xr_free(path_copy);
         } else {

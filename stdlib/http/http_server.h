@@ -57,10 +57,6 @@ XR_FUNC void xr_http_server_free(XrHttpServer *server);
 XR_FUNC void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
                                   struct XrClosure *handler);
 
-// Add static response route
-XR_FUNC void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, const char *path,
-                                   const char *response, size_t response_len);
-
 // Stop server
 XR_FUNC void xr_http_server_stop(XrHttpServer *server);
 
