@@ -1,0 +1,12 @@
+struct CounterState {
+    value: int
+    limit: int
+}
+
+@weak
+var STATE = CounterState{value: 1, limit: 10}
+
+@c_export("xray_top_var_weak_reject")
+fn xray_top_var_weak_reject() -> int {
+    return STATE.value
+}

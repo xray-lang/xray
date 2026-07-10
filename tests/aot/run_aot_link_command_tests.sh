@@ -1944,6 +1944,74 @@ else
     sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_TOP_VAR_AGG_ATTRS_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_aggregate_attrs.xr"
+FREESTANDING_TOP_VAR_AGG_ATTRS_OBJ="$WORK/freestanding_top_var_aggregate_attrs.o"
+FREESTANDING_TOP_VAR_AGG_ATTRS_LOG="$WORK/freestanding_top_var_aggregate_attrs.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_VAR_AGG_ATTRS_OBJ" \
+        "$FREESTANDING_TOP_VAR_AGG_ATTRS_SRC" >"$FREESTANDING_TOP_VAR_AGG_ATTRS_LOG" 2>&1; then
+    FREESTANDING_TOP_VAR_AGG_ATTRS_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_VAR_AGG_ATTRS_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_attrs_" \
+            "freestanding-profile/top-var-aggregate-attrs: materializes mutable struct as static data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xr_state\") XRT_ATTR_USED" \
+            "freestanding-profile/top-var-aggregate-attrs: emits section/used attrs on mutable data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" ".value =" \
+            "freestanding-profile/top-var-aggregate-attrs: writes struct field directly"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" \
+            "const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_attrs_" \
+            "freestanding-profile/top-var-aggregate-attrs: keeps storage non-const"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" "xrt_shared[0] =" \
+            "freestanding-profile/top-var-aggregate-attrs: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" "xrt_arc_alloc" \
+            "freestanding-profile/top-var-aggregate-attrs: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" "xr_aggregate_ref" \
+            "freestanding-profile/top-var-aggregate-attrs: avoids runtime aggregate refs"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" "#include \"xrt.h\"" \
+            "freestanding-profile/top-var-aggregate-attrs: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/top-var-aggregate-attrs: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_ATTRS_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_VAR_AGG_ATTRS_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_VAR_AGG_ATTRS_OBJ")"
+    FREESTANDING_TOP_VAR_AGG_ATTRS_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_VAR_AGG_ATTRS_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_TOP_VAR_AGG_ATTRS_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-var-aggregate-attrs: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/top-var-aggregate-attrs: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_VAR_AGG_ATTRS_UNEXPECTED" | sed 's/^/      /'
+    fi
+    FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS="$WORK/freestanding_top_var_aggregate_attrs.sections"
+    if otool -l "$FREESTANDING_TOP_VAR_AGG_ATTRS_OBJ" >"$FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS" 2>/dev/null; then
+        if grep -Fq "sectname .xr_state" "$FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS"; then
+            record_pass "freestanding-profile/top-var-aggregate-attrs: object contains mutable data section"
+        else
+            record_fail "freestanding-profile/top-var-aggregate-attrs: object missing mutable data section"
+            sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS" | sed -n '1,120p'
+        fi
+    elif objdump -h "$FREESTANDING_TOP_VAR_AGG_ATTRS_OBJ" >"$FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS" 2>/dev/null; then
+        if grep -Fq ".xr_state" "$FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS"; then
+            record_pass "freestanding-profile/top-var-aggregate-attrs: object contains mutable data section"
+        else
+            record_fail "freestanding-profile/top-var-aggregate-attrs: object missing mutable data section"
+            sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_ATTRS_SECTIONS" | sed -n '1,120p'
+        fi
+    else
+        record_fail "freestanding-profile/top-var-aggregate-attrs: section dump failed"
+    fi
+else
+    record_fail "freestanding-profile/top-var-aggregate-attrs: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_ATTRS_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_RAWMUT_TOP_VAR_AGG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_top_var_aggregate_addr.xr"
 FREESTANDING_RAWMUT_TOP_VAR_AGG_OBJ="$WORK/freestanding_rawmut_of_top_var_aggregate_addr.o"
 FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG="$WORK/freestanding_rawmut_of_top_var_aggregate_addr.log"
@@ -3041,6 +3109,14 @@ expect_freestanding_reject \
     "freestanding-profile: rejects aggregate top-level var whole-value assignment" \
     "freestanding profile rejects whole-value assignment to static aggregate top-level var" \
     "mutate fields directly in the current slice"
+
+expect_freestanding_reject \
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_weak_reject.xr" \
+    "$WORK/freestanding_top_var_weak_reject" \
+    "$WORK/freestanding_top_var_weak_reject.log" \
+    "freestanding-profile: rejects weak mutable aggregate top-level var" \
+    "@weak mutable static data is not supported" \
+    "aggregate var static object"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \

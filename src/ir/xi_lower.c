@@ -1313,8 +1313,8 @@ static XrAttribute *prescan_var_attr(const VarDeclNode *var, AttributeKind kind)
     return NULL;
 }
 
-static void prescan_apply_const_data_attrs(XiLower *l, const VarDeclNode *var,
-                                           XiConstLiteral *lit) {
+static void prescan_apply_static_data_attrs(XiLower *l, const VarDeclNode *var,
+                                            XiConstLiteral *lit) {
     if (!l || !var || !lit)
         return;
     XrAttribute *section = prescan_var_attr(var, ATTR_SECTION);
@@ -1488,8 +1488,10 @@ static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
         }
     }
     const_literal_normalize_for_static_slot_type(&lit, type);
-    if (s->type == AST_VAR_DECL)
+    if (s->type == AST_VAR_DECL) {
         lit.data_mutable = true;
+        prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
+    }
     switch (lit.kind) {
         case XI_CONST_LITERAL_INT:
         case XI_CONST_LITERAL_FLOAT:
@@ -1829,11 +1831,11 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                                 : NULL;
             XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
             if (const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
-                prescan_apply_const_data_attrs(l, &s->as.var_decl, &lit);
+                prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             } else if (links && links->has_ct_value &&
                        const_literal_from_ct_value(l, &links->ct_value, type, &lit)) {
-                prescan_apply_const_data_attrs(l, &s->as.var_decl, &lit);
+                prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             }
         } else if (s && (s->type == AST_SHARED_DECL || s->type == AST_VAR_DECL) &&
