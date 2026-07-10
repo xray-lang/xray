@@ -165,11 +165,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
-        .name = "SERVICE_NAME_MAX",
-        .signature = ": int",
-        .summary = "",
-    },
-    {
         .name = "TOPIC_DEFAULT_HOP_LIMIT",
         .signature = ": int",
         .summary = "",
@@ -220,19 +215,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "Publish to topic",
     },
     {
-        .name = "reply",
-        .signature = "(req: Json, result: Json): bool",
-        .summary = "Reply to service request",
-    },
-    {
         .name = "self",
         .signature = "(): string",
         .summary = "Get own node name",
-    },
-    {
-        .name = "serve",
-        .signature = "(name: string): Channel",
-        .summary = "Register service and return request channel",
     },
     {
         .name = "start",
@@ -261,11 +246,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "validNodeName",
-        .signature = "(name: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "validServiceName",
         .signature = "(name: string): bool",
         .summary = "",
     },
@@ -5186,7 +5166,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
-            "| `cluster.SERVICE_NAME_MAX` | `: int` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
@@ -5197,16 +5176,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): Json` |  |\n"
             "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
-            "| `cluster.reply` | `(req: Json, result: Json): bool` | Reply to service request |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.serve` | `(name: string): Channel` | Register service and return request channel |\n"
             "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
             "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
             "| `cluster.validChannelName` | `(name: string): bool` |  |\n"
             "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
-            "| `cluster.validServiceName` | `(name: string): bool` |  |\n"
             "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
             "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n"
             "",

@@ -301,7 +301,6 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
 
     xr_amutex_init(&c->nodes_lock);
     xr_amutex_init(&c->channels_lock);
-    xr_amutex_init(&c->services_lock);
     xr_amutex_init(&c->dead_nodes_lock);
     xr_amutex_init(&c->topics_lock);
     atomic_store(&c->next_request_id, 1);
@@ -493,20 +492,6 @@ void cluster_runtime_stop(XrCluster *c) {
     }
     c->channel_count = 0;
     xr_amutex_unlock(&c->channels_lock);
-
-    // Free service registry
-    xr_amutex_lock(&c->services_lock);
-    for (int i = 0; i < XR_CLUSTER_SERVICE_BUCKETS; i++) {
-        XrServiceEntry *se = c->service_buckets[i];
-        while (se) {
-            XrServiceEntry *next = se->next;
-            xr_free(se);
-            se = next;
-        }
-        c->service_buckets[i] = NULL;
-    }
-    c->service_count = 0;
-    xr_amutex_unlock(&c->services_lock);
 
     // Free topic subscriptions (recursive trie teardown lives in cluster_topic.c)
     cluster_topics_destroy(c);
@@ -738,57 +723,6 @@ void cluster_channel_unregister(XrCluster *c, const char *name) {
         pp = &(*pp)->next;
     }
     xr_amutex_unlock(&c->channels_lock);
-}
-
-/* ========== Service Registry ========== */
-
-XrChannel *cluster_service_register(XrVMRuntime *X, const char *name) {
-    XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !name)
-        return NULL;
-
-    XrServiceEntry *se = (XrServiceEntry *) xr_calloc(1, sizeof(XrServiceEntry));
-    if (!se)
-        return NULL;
-
-    strncpy(se->name, name, XR_SERVICE_NAME_MAX);
-    se->name[XR_SERVICE_NAME_MAX] = '\0';
-
-    // Create a buffered channel for incoming requests
-    se->request_ch = xr_channel_new_vm(X, 64);
-    if (!se->request_ch) {
-        xr_free(se);
-        return NULL;
-    }
-
-    uint32_t bucket = str_hash(name) % XR_CLUSTER_SERVICE_BUCKETS;
-
-    xr_amutex_lock(&c->services_lock);
-    se->next = c->service_buckets[bucket];
-    c->service_buckets[bucket] = se;
-    c->service_count++;
-    xr_amutex_unlock(&c->services_lock);
-
-    return se->request_ch;
-}
-
-XrServiceEntry *cluster_service_find(XrCluster *c, const char *name) {
-    if (!c || !name)
-        return NULL;
-
-    uint32_t bucket = str_hash(name) % XR_CLUSTER_SERVICE_BUCKETS;
-
-    xr_amutex_lock(&c->services_lock);
-    XrServiceEntry *se = c->service_buckets[bucket];
-    while (se) {
-        if (strcmp(se->name, name) == 0) {
-            xr_amutex_unlock(&c->services_lock);
-            return se;
-        }
-        se = se->next;
-    }
-    xr_amutex_unlock(&c->services_lock);
-    return NULL;
 }
 
 /* ========== Subscriber Management (for select push model) ========== */
@@ -1038,103 +972,6 @@ static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_value_from_channel(ch);
 }
 
-// cluster.serve(name) - register service + return request Channel
-static XrValue cluster_serve_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
-
-    XrString *name_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = cluster_service_register(X, name_str->data);
-    if (!ch)
-        return xr_null();
-
-    return xr_value_from_channel(ch);
-}
-
-// cluster.reply(req, result) - auto-extract id/from from req Json
-static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    XrCluster *c = (XrCluster *) X->cluster;
-    if (!c)
-        return xr_bool(0);
-
-    uint64_t request_id;
-    const char *from_name;
-    XrValue result;
-
-    if (argc >= 2 && xr_value_is_json(args[0])) {
-        XrJson *req = (XrJson *) XR_TO_PTR(args[0]);
-        result = args[1];
-
-        // Check for local reply_ch first (local service call path)
-        XrValue reply_ch_val = xr_json_get_by_key(X, req, "reply_ch");
-        if (XR_IS_CHANNEL(reply_ch_val)) {
-            XrChannel *reply_ch = (XrChannel *) XR_TO_PTR(reply_ch_val);
-            xr_channel_try_send(reply_ch, result);
-            return xr_bool(1);
-        }
-
-        // Remote reply: extract id and from
-        XrValue v_id = xr_json_get_by_key(X, req, "id");
-        XrValue v_from = xr_json_get_by_key(X, req, "from");
-        if (!XR_IS_INT(v_id) || !XR_IS_STRING(v_from))
-            return xr_bool(0);
-        request_id = (uint64_t) XR_TO_INT(v_id);
-        from_name = XR_TO_STRING(v_from)->data;
-    } else {
-        return xr_bool(0);
-    }
-
-    // Find the requesting node
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode *target = NULL;
-    XrClusterNode *node = c->nodes;
-    while (node) {
-        if (strcmp(node->name, from_name) == 0 && node->state == XR_NODE_CONNECTED) {
-            target = node;
-            break;
-        }
-        node = node->next;
-    }
-    xr_amutex_unlock(&c->nodes_lock);
-
-    if (!target)
-        return xr_bool(0);
-
-    // Serialize result
-    XrSerialBuf sbuf;
-    cluster_serial_buf_init(&sbuf);
-    if (cluster_encode(X, result, &sbuf) != 0) {
-        cluster_serial_buf_free(&sbuf);
-        return xr_bool(0);
-    }
-
-    // Encode and enqueue SERVICE_REPLY frame via output queue
-    size_t frame_size = 4 + 1 + 8 + 1 + sbuf.len;
-    uint8_t stack_frame[4096];
-    uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-                         ? stack_frame
-                         : (uint8_t *) xr_malloc(frame_size + 16);
-    if (!frame) {
-        cluster_serial_buf_free(&sbuf);
-        return xr_bool(0);
-    }
-
-    int flen = cluster_frame_encode_service_reply(frame, frame_size + 16, request_id, false,
-                                                  sbuf.data, (uint32_t) sbuf.len);
-    cluster_serial_buf_free(&sbuf);
-
-    if (flen < 0) {
-        if (frame != stack_frame)
-            xr_free(frame);
-        return xr_bool(0);
-    }
-
-    int rc = cluster_node_enqueue(target, frame, (uint32_t) flen);
-    if (frame != stack_frame)
-        xr_free(frame);
-    return xr_bool(rc == 0);
-}
-
 // cluster.discover() - start LAN auto-discovery via UDP multicast
 static XrValue cluster_discover_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
@@ -1297,61 +1134,6 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
                 } else {
                     rsp_payload[8] = 0;
                     cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
-                }
-                break;
-            }
-
-            case XR_FRAME_SERVICE_CALL: {
-                XrFrameServiceCall sc;
-                if (cluster_frame_decode_service_call(recv_buf, payload_len, &sc) != 0)
-                    break;
-
-                XrServiceEntry *se = cluster_service_find(c, sc.service_name);
-                if (!se || !se->request_ch)
-                    break;
-
-                // Decode args
-                XrValue decoded_args;
-                if (cluster_decode_value(c->isolate, sc.args_data, sc.args_len, &decoded_args) != 0)
-                    break;
-
-                // Build request Json: {id: int, from: string, args: value}
-                XrJson *req_json = xr_json_new(NULL);
-                if (req_json) {
-                    xr_json_set_by_key(c->isolate, req_json, "id", xr_int((int64_t) sc.request_id));
-                    XrString *from_str =
-                        xr_string_intern(c->isolate, node->name, (uint32_t) strlen(node->name), 0);
-                    xr_json_set_by_key(c->isolate, req_json, "from", xr_string_value(from_str));
-                    xr_json_set_by_key(c->isolate, req_json, "args", decoded_args);
-
-                    // Send to service request channel (non-blocking)
-                    xr_channel_try_send(se->request_ch, xr_json_value(req_json));
-                }
-                break;
-            }
-
-            case XR_FRAME_SERVICE_REPLY: {
-                XrFrameServiceReply reply;
-                if (cluster_frame_decode_service_reply(recv_buf, payload_len, &reply) != 0)
-                    break;
-
-                // Find pending request by request_id
-                XrChannel *rsp_ch = cluster_node_take_pending(node, reply.request_id);
-                if (!rsp_ch)
-                    break;
-
-                if (reply.is_error || reply.result_len == 0) {
-                    // Signal error by closing the channel
-                    xr_channel_close(rsp_ch);
-                } else {
-                    // Decode result and deliver to waiting caller
-                    XrValue result;
-                    if (cluster_decode_value(c->isolate, reply.result_data, reply.result_len,
-                                             &result) == 0) {
-                        xr_channel_try_send(rsp_ch, result);
-                    } else {
-                        xr_channel_close(rsp_ch);
-                    }
                 }
                 break;
             }
@@ -1556,7 +1338,6 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     // intentionally lock-free here because info() is a diagnostic
     // endpoint and bounded staleness is preferable to global locking.
     xr_json_set_by_key(X, info, "channels", xr_int(c->channel_count));
-    xr_json_set_by_key(X, info, "services", xr_int(c->service_count));
     xr_json_set_by_key(X, info, "topic_subs", xr_int(c->topic_sub_count));
 
     /*

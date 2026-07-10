@@ -1,0 +1,3 @@
+import cluster
+
+cluster.serve("svc")

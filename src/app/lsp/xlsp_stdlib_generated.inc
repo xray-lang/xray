@@ -27,8 +27,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
     {"channel", XLSP_SYM_FUNCTION, "fn(name: string, size?: int): Channel", "Create or get named distributed channel", NULL, 0},
-    {"serve", XLSP_SYM_FUNCTION, "fn(name: string): Channel", "Register service and return request channel", NULL, 0},
-    {"reply", XLSP_SYM_FUNCTION, "fn(req: Json, result: Json): bool", "Reply to service request", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
     {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
@@ -37,7 +35,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
-    {"validServiceName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): Json", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
@@ -46,10 +43,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"TOPIC_DEFAULT_HOP_LIMIT", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"CHANNEL_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"SERVICE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 26
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 22
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
