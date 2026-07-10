@@ -93,9 +93,10 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
-| `abstract` `override` | 已移除——保留为关键字仅用于报错；接口与自动覆写替代这些标注 |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
+
+`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。class/member 修饰符位置若出现这些旧拼写，parser 会报告已移除语法；接口与自动覆写替代这些标注。
 
 #### 1.5.3 错误处理
 
@@ -480,9 +481,10 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
 | `final` | `final class` cannot be inherited |
-| `abstract` `override` | removed—kept as keywords only for diagnostics; interfaces and automatic overrides replace these annotations |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
+
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. In class/member modifier position, these legacy spellings are diagnosed as removed syntax; interfaces and automatic overrides replace the annotations.
 
 #### 1.5.3 Error Handling
 

@@ -199,9 +199,10 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
-| `abstract` `override` | 已移除——保留为关键字仅用于报错；接口与自动覆写替代这些标注 |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
+
+`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。class/member 修饰符位置若出现这些旧拼写，parser 会报告已移除语法；接口与自动覆写替代这些标注。
 
 #### 1.5.3 错误处理
 
@@ -5178,7 +5179,7 @@ Bytecode  →  AOT (machine code)
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
-| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` 未匹配父类链中的同名同签实例方法 |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | 自动覆写与父类链的方法签名、可见性或默认参数契约不一致 |
 | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | 类型用作 Map 键 / Set 元素时缺少 `operator==` / `hash` 契约 |
 | `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件表达式不是 `bool` 或 nullable 存在性（`T?`, `T != bool`） |
 
@@ -5613,7 +5614,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 | 关键字 | 节 |
 |--|--|
-| `abstract` | 已移除；§5.3 |
 | `as` | §3.8 |
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
@@ -5647,7 +5647,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `override` | 已移除；§5.3 |
+| `packed` | §5.4 |
 | `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -5665,6 +5665,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
+| `union` | §5.4 |
 | `unsafe` | §3.2 |
 | `var` | §5.1 |
 | `while` | §4.3 |

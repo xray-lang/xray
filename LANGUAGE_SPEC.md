@@ -198,9 +198,10 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
 | `final` | `final class` cannot be inherited |
-| `abstract` `override` | removed—kept as keywords only for diagnostics; interfaces and automatic overrides replace these annotations |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
+
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. In class/member modifier position, these legacy spellings are diagnosed as removed syntax; interfaces and automatic overrides replace the annotations.
 
 #### 1.5.3 Error Handling
 
@@ -5191,7 +5192,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
-| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` did not match a same-name, same-signature instance method in the parent chain |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | automatic override conflicts with the parent-chain method signature, visibility, or default-argument contract |
 | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | type used as Map key / Set element lacks `operator==` / `hash` contract |
 | `XR_ERR_ANALYZE_CONDITION_TYPE` | condition is not `bool` or nullable presence (`T?`, `T != bool`) |
 
@@ -5626,7 +5627,6 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 
 | Keyword | Section |
 |--|--|
-| `abstract` | removed; §5.3 |
 | `as` | §3.8 |
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
@@ -5660,7 +5660,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `override` | removed; §5.3 |
+| `packed` | §5.4 |
 | `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -5678,6 +5678,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
+| `union` | §5.4 |
 | `unsafe` | §3.2 |
 | `var` | §5.1 |
 | `while` | §4.3 |
