@@ -1191,8 +1191,9 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                     ref->member_name);
         } else if (cg_emit_aot_stdlib_generated_constant_import_ref(ctx, out, v, ref)) {
             /* Resolved to a generated stdlib constant (path.sep, encoding.LE, ...). */
-        } else if (cg_import_ref_value_is_dead_for_aot(ctx, f, v)) {
-            fprintf(out, "XR_NULL_VAL /* unreachable import: %s.%s */",
+        } else if (cg_import_ref_has_verified_link_dependency(ctx, ref) &&
+                   cg_import_ref_value_is_dead_for_aot(ctx, f, v)) {
+            fprintf(out, "XR_NULL_VAL /* unreachable verified import: %s.%s */",
                     ref && ref->module_path ? ref->module_path : "?",
                     ref && ref->member_name ? ref->member_name : "?");
         } else {

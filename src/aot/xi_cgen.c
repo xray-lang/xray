@@ -3572,6 +3572,31 @@ static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *own
     return memo->has_get;
 }
 
+static bool cg_import_ref_has_verified_link_dependency(const XiCgenCtx *ctx,
+                                                       const XiImportRef *ref) {
+    char name[XG_LINK_DEP_NAME_MAX];
+    uint8_t expected_kind;
+    int written;
+    if (!ctx || !ctx->aot_bundle || !ref || !ref->module_path || !ref->module_path[0])
+        return false;
+    if (ref->member_name && ref->member_name[0]) {
+        expected_kind = XG_LINK_DEP_STDLIB_SYMBOL;
+        written = snprintf(name, sizeof(name), "%s.%s", ref->module_path, ref->member_name);
+    } else {
+        expected_kind = XG_LINK_DEP_STDLIB_MODULE;
+        written = snprintf(name, sizeof(name), "%s", ref->module_path);
+    }
+    if (written <= 0 || (size_t) written >= sizeof(name))
+        return false;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nlink_dependency_plans; i++) {
+        const XaotLinkDependencyPlan *plan = &ctx->aot_bundle->link_dependency_plans[i];
+        if (plan->kind == expected_kind && plan->evidence == XAOT_LINK_DEP_EV_GLOBAL_SUMMARY &&
+            plan->unproven_reason == XAOT_LINK_DEP_UNPROVEN_NONE && strcmp(plan->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool cg_import_ref_value_use_requires_runtime_value(XiCgenCtx *ctx, const XiFunc *owner,
                                                            const XiValue *ref, int depth) {
     if (!ctx || !owner || !ref)
