@@ -43,6 +43,7 @@ typedef uint32_t XgJsonAccessId;
 typedef uint32_t XgJsonCodecId;
 typedef uint32_t XgRecordShapeId;
 typedef uint32_t XgRecordAccessId;
+typedef uint32_t XgRecordMergeId;
 typedef uint32_t XgOptionsId;
 typedef uint32_t XgMapShapeId;
 typedef uint32_t XgMapEntryId;
@@ -53,7 +54,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 13,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 14,
 };
 
 typedef enum XgBuildProfile {
@@ -226,6 +227,7 @@ typedef enum XgRecordShapeKind {
     XG_RECORD_SHAPE_OPTIONS,
     XG_RECORD_SHAPE_SPREAD,
     XG_RECORD_SHAPE_STATIC,
+    XG_RECORD_SHAPE_PATCH,
 } XgRecordShapeKind;
 
 typedef enum XgRecordAccessKind {
@@ -462,6 +464,14 @@ enum {
     XG_RECORD_ACCESS_STATIC_FIELD = 1u << 0,
     XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 1,
     XG_RECORD_ACCESS_MUTATING = 1u << 2,
+};
+
+enum {
+    XG_RECORD_MERGE_BASE_SHAPE_PROVEN = 1u << 0,
+    XG_RECORD_MERGE_PATCH_SHAPE_PROVEN = 1u << 1,
+    XG_RECORD_MERGE_RESULT_SHAPE_PROVEN = 1u << 2,
+    XG_RECORD_MERGE_OVERWRITES = 1u << 3,
+    XG_RECORD_MERGE_JSON_BRIDGE = 1u << 4,
 };
 
 enum {
@@ -896,6 +906,23 @@ typedef struct XgRecordAccessSummary {
     uint32_t flags;
 } XgRecordAccessSummary;
 
+typedef struct XgRecordMergeSummary {
+    XgRecordMergeId merge_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    XgRecordShapeId base_shape_id;
+    XgRecordShapeId patch_shape_id;
+    XgRecordShapeId result_shape_id;
+    uint16_t base_field_count;
+    uint16_t patch_field_count;
+    uint16_t result_field_count;
+    uint16_t overwrite_count;
+    uint32_t copy_table_id;
+    uint32_t flags;
+    uint64_t merge_hash;
+} XgRecordMergeSummary;
+
 typedef struct XgOptionsBagSummary {
     XgOptionsId options_id;
     XgModuleId module_id;
@@ -997,6 +1024,7 @@ typedef struct XgGlobalEvidence {
     XgJsonCodecSummary *json_codecs;
     XgRecordShapeSummary *record_shapes;
     XgRecordAccessSummary *record_accesses;
+    XgRecordMergeSummary *record_merges;
     XgOptionsBagSummary *options_bags;
     XgMapShapeSummary *map_shapes;
     XgMapEntrySummary *map_entries;
@@ -1029,6 +1057,7 @@ typedef struct XgGlobalEvidence {
     uint32_t njson_codecs;
     uint32_t nrecord_shapes;
     uint32_t nrecord_accesses;
+    uint32_t nrecord_merges;
     uint32_t noptions_bags;
     uint32_t nmap_shapes;
     uint32_t nmap_entries;
@@ -1061,6 +1090,7 @@ typedef struct XgGlobalEvidence {
     uint32_t json_codec_cap;
     uint32_t record_shape_cap;
     uint32_t record_access_cap;
+    uint32_t record_merge_cap;
     uint32_t options_bag_cap;
     uint32_t map_shape_cap;
     uint32_t map_entry_cap;
@@ -1151,6 +1181,8 @@ XR_FUNC bool xg_global_evidence_reserve_record_shapes(XgGlobalEvidence *evidence
                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_record_merges(XgGlobalEvidence *evidence,
+                                                      uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_options_bags(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_map_shapes(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_map_entries(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -1223,6 +1255,9 @@ xg_global_evidence_add_record_shape(XgGlobalEvidence *evidence,
 XR_FUNC XgRecordAccessSummary *
 xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
                                      const XgRecordAccessSummary *summary);
+XR_FUNC XgRecordMergeSummary *
+xg_global_evidence_add_record_merge(XgGlobalEvidence *evidence,
+                                    const XgRecordMergeSummary *summary);
 XR_FUNC XgOptionsBagSummary *xg_global_evidence_add_options_bag(XgGlobalEvidence *evidence,
                                                                 const XgOptionsBagSummary *summary);
 XR_FUNC XgMapShapeSummary *xg_global_evidence_add_map_shape(XgGlobalEvidence *evidence,
@@ -1263,6 +1298,9 @@ xg_global_evidence_find_json_codec(const XgGlobalEvidence *evidence, XgJsonCodec
 XR_FUNC const XgRecordShapeSummary *
 xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
                                      XgRecordShapeId record_shape_id);
+XR_FUNC const XgRecordMergeSummary *
+xg_global_evidence_find_record_merge(const XgGlobalEvidence *evidence,
+                                     XgRecordMergeId record_merge_id);
 XR_FUNC const XgOptionsBagSummary *
 xg_global_evidence_find_options_bag(const XgGlobalEvidence *evidence, XgOptionsId options_id);
 XR_FUNC const XgMapShapeSummary *xg_global_evidence_find_map_shape(const XgGlobalEvidence *evidence,

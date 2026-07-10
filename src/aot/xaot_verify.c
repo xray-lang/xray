@@ -1340,6 +1340,7 @@ static bool verify_record_shape_kind_valid(uint8_t kind) {
         case XG_RECORD_SHAPE_OPTIONS:
         case XG_RECORD_SHAPE_SPREAD:
         case XG_RECORD_SHAPE_STATIC:
+        case XG_RECORD_SHAPE_PATCH:
             return true;
         default:
             return false;
@@ -1390,6 +1391,29 @@ static bool verify_record_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         if ((access->flags & XG_RECORD_ACCESS_STATIC_FIELD) != 0 && access->field_name_id != 0 &&
             access->field_ordinal >= shape->field_count)
             return set_error(errbuf, errbuf_len, "AOT Record access field ordinal is stale");
+    }
+    for (uint32_t i = 0; i < ev->nrecord_merges; i++) {
+        const XgRecordMergeSummary *merge = &ev->record_merges[i];
+        const XgRecordShapeSummary *base;
+        const XgRecordShapeSummary *patch;
+        const XgRecordShapeSummary *result;
+        if (merge->merge_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Record merge evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nrecord_merges; j++) {
+            if (ev->record_merges[j].merge_id == merge->merge_id)
+                return set_error(errbuf, errbuf_len, "AOT Record merge evidence id is duplicated");
+        }
+        base = xg_global_evidence_find_record_shape(ev, merge->base_shape_id);
+        patch = xg_global_evidence_find_record_shape(ev, merge->patch_shape_id);
+        result = xg_global_evidence_find_record_shape(ev, merge->result_shape_id);
+        if (!base || !patch || !result)
+            return set_error(errbuf, errbuf_len, "AOT Record merge references missing shape");
+        if (base->field_count != merge->base_field_count ||
+            patch->field_count != merge->patch_field_count ||
+            result->field_count != merge->result_field_count)
+            return set_error(errbuf, errbuf_len, "AOT Record merge field count is stale");
+        if (merge->overwrite_count > merge->patch_field_count)
+            return set_error(errbuf, errbuf_len, "AOT Record merge overwrite count is stale");
     }
     return true;
 }
@@ -3833,6 +3857,8 @@ static uint8_t verify_record_shape_action_for(const XgRecordShapeSummary *shape)
             return XAOT_RECORD_SHAPE_SPREAD_RESULT;
         case XG_RECORD_SHAPE_STATIC:
             return XAOT_RECORD_SHAPE_STATIC_RECORD;
+        case XG_RECORD_SHAPE_PATCH:
+            return XAOT_RECORD_SHAPE_PATCH_RECORD;
         default:
             return XAOT_RECORD_SHAPE_REJECT;
     }
@@ -3944,6 +3970,79 @@ static bool verify_record_access_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT Record access plan action does not re-derive");
     if (plan->evidence != verify_record_access_evidence_for(ev, access))
         return set_error(errbuf, errbuf_len, "AOT Record access plan evidence does not re-derive");
+    return true;
+}
+
+static uint8_t verify_record_merge_reason_for(const XgGlobalEvidence *ev,
+                                              const XgRecordMergeSummary *merge) {
+    const XgRecordShapeSummary *base;
+    const XgRecordShapeSummary *patch;
+    const XgRecordShapeSummary *result;
+    if (!ev || !merge)
+        return XAOT_RECORD_UNPROVEN_MISSING_MERGE_SHAPE;
+    base = xg_global_evidence_find_record_shape(ev, merge->base_shape_id);
+    patch = xg_global_evidence_find_record_shape(ev, merge->patch_shape_id);
+    result = xg_global_evidence_find_record_shape(ev, merge->result_shape_id);
+    if (!base || !patch || !result)
+        return XAOT_RECORD_UNPROVEN_MISSING_MERGE_SHAPE;
+    if (base->field_count != merge->base_field_count ||
+        patch->field_count != merge->patch_field_count ||
+        result->field_count != merge->result_field_count)
+        return XAOT_RECORD_UNPROVEN_MERGE_FIELD_MISMATCH;
+    return XAOT_RECORD_UNPROVEN_NONE;
+}
+
+static uint8_t verify_record_merge_action_for(const XgGlobalEvidence *ev,
+                                              const XgRecordMergeSummary *merge) {
+    if (verify_record_merge_reason_for(ev, merge) != XAOT_RECORD_UNPROVEN_NONE)
+        return XAOT_RECORD_MERGE_REJECT;
+    if ((merge->flags & XG_RECORD_MERGE_JSON_BRIDGE) != 0)
+        return XAOT_RECORD_MERGE_JSON_BRIDGE;
+    return merge->overwrite_count != 0 ? XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE
+                                       : XAOT_RECORD_MERGE_COPY_APPEND;
+}
+
+static uint32_t verify_record_merge_evidence_for(const XgGlobalEvidence *ev,
+                                                 const XgRecordMergeSummary *merge) {
+    uint32_t evidence = XAOT_RECORD_EV_GLOBAL_ROW;
+    if (!ev || !merge)
+        return evidence;
+    if (xg_global_evidence_find_record_shape(ev, merge->base_shape_id))
+        evidence |= XAOT_RECORD_EV_BASE_SHAPE;
+    if (xg_global_evidence_find_record_shape(ev, merge->patch_shape_id))
+        evidence |= XAOT_RECORD_EV_PATCH_SHAPE;
+    if (xg_global_evidence_find_record_shape(ev, merge->result_shape_id))
+        evidence |= XAOT_RECORD_EV_RESULT_SHAPE;
+    if (merge->copy_table_id != 0)
+        evidence |= XAOT_RECORD_EV_COPY_TABLE;
+    if ((merge->flags & XG_RECORD_MERGE_JSON_BRIDGE) != 0)
+        evidence |= XAOT_RECORD_EV_JSON_BRIDGE;
+    return evidence;
+}
+
+static bool verify_record_merge_plan_rederives(const XgGlobalEvidence *ev,
+                                               const XaotRecordMergePlan *plan,
+                                               const XgRecordMergeSummary *merge, char *errbuf,
+                                               size_t errbuf_len) {
+    if (!ev || !plan || !merge)
+        return set_error(errbuf, errbuf_len, "AOT Record merge verifier has incomplete input");
+    if (plan->merge_id != merge->merge_id || plan->module_id != merge->module_id ||
+        plan->owner_func_id != merge->owner_func_id ||
+        plan->source_span_id != merge->source_span_id ||
+        plan->base_shape_id != merge->base_shape_id ||
+        plan->patch_shape_id != merge->patch_shape_id ||
+        plan->result_shape_id != merge->result_shape_id ||
+        plan->base_field_count != merge->base_field_count ||
+        plan->patch_field_count != merge->patch_field_count ||
+        plan->result_field_count != merge->result_field_count ||
+        plan->overwrite_count != merge->overwrite_count ||
+        plan->copy_table_id != merge->copy_table_id || plan->merge_hash != merge->merge_hash)
+        return set_error(errbuf, errbuf_len, "AOT Record merge plan identity does not re-derive");
+    if (plan->action != verify_record_merge_action_for(ev, merge) ||
+        plan->unproven_reason != verify_record_merge_reason_for(ev, merge))
+        return set_error(errbuf, errbuf_len, "AOT Record merge plan action does not re-derive");
+    if (plan->evidence != verify_record_merge_evidence_for(ev, merge))
+        return set_error(errbuf, errbuf_len, "AOT Record merge plan evidence does not re-derive");
     return true;
 }
 
@@ -4664,6 +4763,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_json_codec_plans = 0;
     uint32_t expected_record_shape_plans = 0;
     uint32_t expected_record_access_plans = 0;
+    uint32_t expected_record_merge_plans = 0;
     uint32_t expected_options_plans = 0;
     uint32_t expected_map_shape_plans = 0;
     uint32_t expected_key_access_plans = 0;
@@ -5118,6 +5218,19 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nrecord_access_plans != expected_record_access_plans)
         return set_error(errbuf, errbuf_len, "AOT Record access plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->nrecord_merges; i++) {
+        const XgRecordMergeSummary *merge = &ev->record_merges[i];
+        const XaotRecordMergePlan *plan;
+        expected_record_merge_plans++;
+        plan = xaot_bundle_find_record_merge_plan(bundle, merge->merge_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT Record merge evidence has no merge plan");
+        if (!verify_record_merge_plan_rederives(ev, plan, merge, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->nrecord_merge_plans != expected_record_merge_plans)
+        return set_error(errbuf, errbuf_len, "AOT Record merge plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->noptions_bags; i++) {
         const XgOptionsBagSummary *options = &ev->options_bags[i];

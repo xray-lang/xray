@@ -522,7 +522,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=13 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=14 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -739,15 +739,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=13 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=13 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=13 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=13 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=14 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=14 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=14 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=14 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=13 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=14 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=14 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=14 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=14 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
@@ -8129,6 +8129,124 @@ TEST(global_evidence_records_record_shape_and_access_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_records_record_merge_plans) {
+    XgBuildKey key = {.source_hash = 36,
+                      .compiler_semver_hash = 37,
+                      .profile_hash = 38,
+                      .imported_summary_hash = 39,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgRecordShapeSummary base = {.record_shape_id = 1,
+                                 .module_id = 1,
+                                 .owner_func_id = 7,
+                                 .source_span_id = 100,
+                                 .type_key = 200,
+                                 .field_name_start = 300,
+                                 .field_count = 2,
+                                 .shape_kind = XG_RECORD_SHAPE_LITERAL,
+                                 .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
+                                 .shape_hash = UINT64_C(0x1001)};
+    XgRecordShapeSummary patch = {.record_shape_id = 2,
+                                  .module_id = 1,
+                                  .owner_func_id = 7,
+                                  .source_span_id = 101,
+                                  .type_key = 201,
+                                  .field_name_start = 301,
+                                  .field_count = 1,
+                                  .shape_kind = XG_RECORD_SHAPE_PATCH,
+                                  .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
+                                  .shape_hash = UINT64_C(0x1002)};
+    XgRecordShapeSummary result = {.record_shape_id = 3,
+                                   .module_id = 1,
+                                   .owner_func_id = 7,
+                                   .source_span_id = 102,
+                                   .type_key = 202,
+                                   .field_name_start = 302,
+                                   .field_count = 2,
+                                   .shape_kind = XG_RECORD_SHAPE_SPREAD,
+                                   .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS |
+                                            XG_RECORD_SHAPE_HAS_SPREAD,
+                                   .shape_hash = UINT64_C(0x1003)};
+    XgRecordMergeSummary merge = {
+        .merge_id = 1,
+        .module_id = 1,
+        .owner_func_id = 7,
+        .source_span_id = 103,
+        .base_shape_id = 1,
+        .patch_shape_id = 2,
+        .result_shape_id = 3,
+        .base_field_count = 2,
+        .patch_field_count = 1,
+        .result_field_count = 2,
+        .overwrite_count = 1,
+        .copy_table_id = 77,
+        .flags = XG_RECORD_MERGE_BASE_SHAPE_PROVEN | XG_RECORD_MERGE_PATCH_SHAPE_PROVEN |
+                 XG_RECORD_MERGE_RESULT_SHAPE_PROVEN | XG_RECORD_MERGE_OVERWRITES,
+        .merge_hash = UINT64_C(0x2001)};
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &base));
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &patch));
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &result));
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_merge(&ev, &merge));
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "record-shape 1 id=2 module=1 func=7 type=201 kind=patch"));
+    ASSERT_NOT_NULL(strstr(dump, "record-merge 0 id=1 module=1 func=7"));
+    ASSERT_NOT_NULL(strstr(dump, "overwrites=1"));
+    xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nrecord_shape_plans, 3);
+    ASSERT_EQ_UINT(bundle.nrecord_merge_plans, 1);
+    const XaotRecordShapePlan *patch_plan = xaot_bundle_find_record_shape_plan(&bundle, 2);
+    const XaotRecordMergePlan *merge_plan = xaot_bundle_find_record_merge_plan(&bundle, 1);
+    ASSERT_NOT_NULL(patch_plan);
+    ASSERT_NOT_NULL(merge_plan);
+    ASSERT_EQ_UINT(patch_plan->action, XAOT_RECORD_SHAPE_PATCH_RECORD);
+    ASSERT_EQ_UINT(merge_plan->action, XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE);
+    ASSERT_EQ_UINT(merge_plan->evidence, XAOT_RECORD_EV_GLOBAL_ROW | XAOT_RECORD_EV_BASE_SHAPE |
+                                             XAOT_RECORD_EV_PATCH_SHAPE |
+                                             XAOT_RECORD_EV_RESULT_SHAPE |
+                                             XAOT_RECORD_EV_COPY_TABLE);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "record-shape-plan 1 id=2"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=patch_record"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "record-merge-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=copy_with_overwrite"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.record_merge_plans[0].action = XAOT_RECORD_MERGE_COPY_APPEND;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Record merge plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_records_options_bag_plans) {
     XgBuildKey key = {.source_hash = 41,
                       .compiler_semver_hash = 42,
@@ -10137,6 +10255,7 @@ RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_json_codec_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
+RUN_TEST(global_evidence_records_record_merge_plans);
 RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);

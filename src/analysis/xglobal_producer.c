@@ -2998,6 +2998,167 @@ static bool record_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLit
     return true;
 }
 
+static bool record_patch_collect_literal_keys(const ObjectLiteralNode *obj, const char ***out_keys,
+                                              uint32_t *out_count, uint64_t *out_hash) {
+    uint32_t capacity = 0;
+    uint32_t count = 0;
+    const char **keys = NULL;
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    static const char tag[] = "RecordPatchShape";
+    if (!out_keys || !out_count || !out_hash)
+        return false;
+    *out_keys = NULL;
+    *out_count = 0;
+    *out_hash = 0;
+    if (!obj)
+        return false;
+    for (int i = 0; i < obj->count; i++) {
+        if (body_object_literal_entry_is_spread(obj, i))
+            continue;
+        if (!body_object_literal_static_key(obj, i))
+            return false;
+        capacity++;
+    }
+    if (capacity > 0) {
+        keys = (const char **) xr_calloc((size_t) capacity, sizeof(*keys));
+        if (!keys)
+            return false;
+    }
+    for (int i = 0; i < obj->count; i++) {
+        const char *key;
+        if (body_object_literal_entry_is_spread(obj, i))
+            continue;
+        key = body_object_literal_static_key(obj, i);
+        if (!key || !record_shape_add_key(keys, capacity, &count, key)) {
+            xr_free(keys);
+            return false;
+        }
+    }
+    hash = fold_bytes(hash, tag, sizeof(tag) - 1);
+    for (uint32_t i = 0; i < count; i++) {
+        const char *key = keys[i] ? keys[i] : "";
+        hash = fold_bytes(hash, key, strlen(key));
+    }
+    *out_keys = keys;
+    *out_count = count;
+    *out_hash = hash;
+    return true;
+}
+
+static uint16_t record_patch_overwrite_count(const ObjectLiteralNode *source_literal,
+                                             const char **patch_keys, uint32_t patch_key_count) {
+    uint32_t count = 0;
+    if (!source_literal || !patch_keys)
+        return 0;
+    for (uint32_t i = 0; i < patch_key_count; i++) {
+        if (patch_keys[i] &&
+            body_object_literal_static_field_index(source_literal, patch_keys[i]) >= 0)
+            count++;
+    }
+    return (uint16_t) (count < UINT16_MAX ? count : UINT16_MAX);
+}
+
+static XgRecordShapeId body_add_record_patch_shape(XgBodyCollect *bc, uint32_t source_span_id,
+                                                   const char **patch_keys,
+                                                   uint32_t patch_key_count, uint64_t patch_hash) {
+    XgRecordShapeSummary row;
+    if (!bc || !bc->evidence)
+        return XG_NO_ID;
+    memset(&row, 0, sizeof(row));
+    row.record_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 1);
+    row.module_id = bc->module_id;
+    row.owner_func_id = bc->owner_func_id;
+    row.source_span_id = source_span_id;
+    row.type_key = hash_folded32(fold_u64(patch_hash, patch_key_count));
+    row.field_name_start = (uint32_t) (patch_hash & UINT32_MAX);
+    row.field_count = (uint16_t) (patch_key_count < UINT16_MAX ? patch_key_count : UINT16_MAX);
+    row.shape_kind = XG_RECORD_SHAPE_PATCH;
+    row.flags =
+        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
+    row.shape_hash = patch_hash;
+    (void) patch_keys;
+    return xg_global_evidence_add_record_shape(bc->evidence, &row) ? row.record_shape_id : XG_NO_ID;
+}
+
+static void body_add_record_merge_rows_for_literal(XgBodyCollect *bc, const ObjectLiteralNode *obj,
+                                                   XgRecordShapeId result_shape_id,
+                                                   uint32_t result_field_count,
+                                                   uint64_t result_shape_hash,
+                                                   uint32_t source_span_id) {
+    const char **patch_keys = NULL;
+    uint32_t patch_key_count = 0;
+    uint64_t patch_hash = 0;
+    XgRecordShapeId patch_shape_id = XG_NO_ID;
+    const XgRecordShapeSummary *patch_shape = NULL;
+    const XgRecordShapeSummary *result_shape = NULL;
+    if (!bc || !bc->evidence || !obj || result_shape_id == XG_NO_ID)
+        return;
+    if (!record_patch_collect_literal_keys(obj, &patch_keys, &patch_key_count, &patch_hash))
+        return;
+    result_shape = xg_global_evidence_find_record_shape(bc->evidence, result_shape_id);
+    if (!result_shape)
+        goto done;
+    for (int i = 0; i < obj->count; i++) {
+        AstNode *spread;
+        const ObjectLiteralNode *source_literal = NULL;
+        XgRecordShapeId base_shape_id;
+        const XgRecordShapeSummary *base_shape;
+        XgRecordMergeSummary row;
+        uint16_t overwrites;
+        uint64_t merge_hash;
+        static const char tag[] = "RecordMerge";
+        if (!body_object_literal_entry_is_spread(obj, i))
+            continue;
+        spread = obj->values[i];
+        if (!spread)
+            continue;
+        base_shape_id =
+            body_lookup_local_record_shape(bc, spread->as.spread_expr.expr, &source_literal);
+        if (base_shape_id == XG_NO_ID || !source_literal)
+            continue;
+        if (patch_shape_id == XG_NO_ID) {
+            patch_shape_id = body_add_record_patch_shape(bc, source_span_id, patch_keys,
+                                                         patch_key_count, patch_hash);
+            patch_shape = xg_global_evidence_find_record_shape(bc->evidence, patch_shape_id);
+            if (!patch_shape)
+                break;
+        }
+        base_shape = xg_global_evidence_find_record_shape(bc->evidence, base_shape_id);
+        if (!base_shape)
+            continue;
+        overwrites = record_patch_overwrite_count(source_literal, patch_keys, patch_key_count);
+        merge_hash = XR_FNV64_OFFSET_BASIS;
+        merge_hash = fold_bytes(merge_hash, tag, sizeof(tag) - 1);
+        merge_hash = fold_u64(merge_hash, base_shape->shape_hash);
+        merge_hash = fold_u64(merge_hash, patch_hash);
+        merge_hash = fold_u64(merge_hash, result_shape_hash);
+        merge_hash = fold_u64(merge_hash, overwrites);
+        memset(&row, 0, sizeof(row));
+        row.merge_id = (XgRecordMergeId) (bc->evidence->nrecord_merges + 1);
+        row.module_id = bc->module_id;
+        row.owner_func_id = bc->owner_func_id;
+        row.source_span_id = source_span_id;
+        row.base_shape_id = base_shape_id;
+        row.patch_shape_id = patch_shape_id;
+        row.result_shape_id = result_shape_id;
+        row.base_field_count = base_shape->field_count;
+        row.patch_field_count = patch_shape->field_count;
+        row.result_field_count =
+            (uint16_t) (result_field_count < UINT16_MAX ? result_field_count : UINT16_MAX);
+        row.overwrite_count = overwrites;
+        row.copy_table_id = (uint32_t) (merge_hash & UINT32_MAX);
+        row.flags = XG_RECORD_MERGE_BASE_SHAPE_PROVEN | XG_RECORD_MERGE_PATCH_SHAPE_PROVEN |
+                    XG_RECORD_MERGE_RESULT_SHAPE_PROVEN;
+        if (overwrites != 0)
+            row.flags |= XG_RECORD_MERGE_OVERWRITES;
+        row.merge_hash = merge_hash;
+        (void) xg_global_evidence_add_record_merge(bc->evidence, &row);
+    }
+
+done:
+    xr_free(patch_keys);
+}
+
 static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
                                                          const ObjectLiteralNode *obj,
                                                          uint32_t source_span_id,
@@ -3026,8 +3187,15 @@ static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
     if (has_spread)
         row.flags |= XG_RECORD_SHAPE_HAS_SPREAD;
     row.shape_hash = shape_hash;
+    if (!xg_global_evidence_add_record_shape(bc->evidence, &row)) {
+        xr_free(shape_keys);
+        return XG_NO_ID;
+    }
+    if (has_spread)
+        body_add_record_merge_rows_for_literal(bc, obj, row.record_shape_id, shape_key_count,
+                                               shape_hash, source_span_id);
     xr_free(shape_keys);
-    return xg_global_evidence_add_record_shape(bc->evidence, &row) ? row.record_shape_id : XG_NO_ID;
+    return row.record_shape_id;
 }
 
 static XgRecordShapeId body_add_record_shape_for_type_alias(XgGlobalEvidence *evidence,
