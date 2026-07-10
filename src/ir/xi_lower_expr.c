@@ -1528,6 +1528,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     v->aux = (void *) arena_strdup(l->func, ma->name);
     v->aux_int = xi_lower_method_symbol(l, ma->name);
     v->line = (uint32_t) node->line;
+    xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
                                      XG_JSON_ACCESS_FIELD_GET);
@@ -1604,6 +1605,7 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     v->aux_int = xi_lower_method_symbol(l, ms->member);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+    xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, UINT16_MAX,
                                      XG_JSON_ACCESS_FIELD_SET);

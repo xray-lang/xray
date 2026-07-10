@@ -231,6 +231,41 @@ static uint32_t global_evidence_body_declared_name_id(const XgGlobalEvidence *ev
     return 0;
 }
 
+static const XgClassSummary *global_evidence_find_class_by_name(const XgGlobalEvidence *ev,
+                                                                const char *name) {
+    const XgClassSummary *match = NULL;
+    uint32_t name_id = name ? xg_name_id(name) : 0;
+    if (!ev || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        if (cls->name_id != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = cls;
+    }
+    return match;
+}
+
+static const XgClassFieldSummary *
+global_evidence_find_class_field_by_name(const XgGlobalEvidence *ev, XgClassId owner_class_id,
+                                         const char *name) {
+    const XgClassFieldSummary *match = NULL;
+    uint32_t name_id = name ? xg_name_id(name) : 0;
+    if (!ev || owner_class_id == XG_NO_ID || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclass_fields; i++) {
+        const XgClassFieldSummary *field = &ev->class_fields[i];
+        if (field->owner_class_id != owner_class_id || field->name_id != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = field;
+    }
+    return match;
+}
+
 static void scramble_legacy_xi_identity_fields(XgGlobalEvidence *ev) {
     uint32_t stale_name_id = xg_name_id("<stale-xi-identity>");
     if (!ev)
@@ -811,6 +846,88 @@ TEST(object_literal) {
     }
     assert(found_alloc && "should have JSON_NEW for object literal");
     xi_func_free(f);
+}
+
+TEST(class_field_access_lowers_with_global_evidence_id) {
+#define REQUIRE_CLASS_FIELD_EVIDENCE(cond, msg)                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "class_field_access_lowers_with_global_evidence_id: %s\n", msg);       \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func =
+        lower_source_with_global_evidence("class Base {\n"
+                                          "    wide: int\n"
+                                          "    constructor(wide: int) {\n"
+                                          "        this.wide = wide\n"
+                                          "    }\n"
+                                          "}\n"
+                                          "\n"
+                                          "class Child extends Base {\n"
+                                          "    flag: bool\n"
+                                          "    constructor(wide: int, flag: bool) {\n"
+                                          "        super(wide)\n"
+                                          "        this.flag = flag\n"
+                                          "    }\n"
+                                          "}\n"
+                                          "\n"
+                                          "fn touch(c: Child) -> int {\n"
+                                          "    c.flag = false\n"
+                                          "    return c.wide\n"
+                                          "}\n"
+                                          "\n"
+                                          "var child = Child(7, true)\n"
+                                          "print(touch(child))\n",
+                                          &ev);
+    REQUIRE_CLASS_FIELD_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_CLASS_FIELD_EVIDENCE(ev.nclass_fields == 2, "producer should record class fields");
+
+    const XgClassSummary *base = global_evidence_find_class_by_name(&ev, "Base");
+    const XgClassSummary *child = global_evidence_find_class_by_name(&ev, "Child");
+    REQUIRE_CLASS_FIELD_EVIDENCE(base != NULL, "Base evidence should be present");
+    REQUIRE_CLASS_FIELD_EVIDENCE(child != NULL, "Child evidence should be present");
+    REQUIRE_CLASS_FIELD_EVIDENCE(child->parent_class_id == base->class_id,
+                                 "Child should retain parent class evidence");
+
+    const XgClassFieldSummary *wide =
+        global_evidence_find_class_field_by_name(&ev, base->class_id, "wide");
+    const XgClassFieldSummary *flag =
+        global_evidence_find_class_field_by_name(&ev, child->class_id, "flag");
+    REQUIRE_CLASS_FIELD_EVIDENCE(wide != NULL, "Base.wide field evidence should be present");
+    REQUIRE_CLASS_FIELD_EVIDENCE(flag != NULL, "Child.flag field evidence should be present");
+
+    XiFunc *touch = func_tree_find_func_name(main_func, "touch");
+    REQUIRE_CLASS_FIELD_EVIDENCE(touch != NULL, "target function should be present");
+    uint32_t wide_load_id = 0;
+    uint32_t flag_store_id = 0;
+    for (uint32_t b = 0; b < touch->nblocks; b++) {
+        XiBlock *blk = touch->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || !v->aux)
+                continue;
+            if (v->op == XI_LOAD_FIELD && strcmp((const char *) v->aux, "wide") == 0)
+                wide_load_id = v->xg_class_field_id;
+            if (v->op == XI_STORE_FIELD && strcmp((const char *) v->aux, "flag") == 0)
+                flag_store_id = v->xg_class_field_id;
+        }
+    }
+
+    REQUIRE_CLASS_FIELD_EVIDENCE(wide_load_id == wide->field_id,
+                                 "Child receiver should bind inherited Base.wide field id");
+    REQUIRE_CLASS_FIELD_EVIDENCE(flag_store_id == flag->field_id,
+                                 "Child.flag store should bind its own field id");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_CLASS_FIELD_EVIDENCE
 }
 
 TEST(json_access_lowers_with_global_evidence_id) {
@@ -2743,6 +2860,7 @@ int main(void) {
     run_try_catch();
     run_try_catch_defer();
     run_object_literal();
+    run_class_field_access_lowers_with_global_evidence_id();
     run_json_access_lowers_with_global_evidence_id();
     run_json_alias_shape_access_lowers_with_global_evidence_id();
     run_json_computed_key_access_lowers_with_global_evidence_id();

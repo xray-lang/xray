@@ -735,9 +735,10 @@ typedef struct XiValue {
     uint32_t xg_method_id;      /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
     uint32_t
-        xg_record_access_id;   /* stable XgRecordAccessId for evidence-backed Record slot access */
-    uint32_t xg_key_access_id; /* stable XgKeyAccessId for evidence-backed Map/Set key access */
-    struct XiBlock *block;     /* containing block */
+        xg_record_access_id;    /* stable XgRecordAccessId for evidence-backed Record slot access */
+    uint32_t xg_key_access_id;  /* stable XgKeyAccessId for evidence-backed Map/Set key access */
+    uint32_t xg_class_field_id; /* stable XgFieldId for evidence-backed class field access */
+    struct XiBlock *block;      /* containing block */
 } XiValue;
 
 static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
@@ -758,6 +759,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_json_access_id = src->xg_json_access_id;
     dst->xg_record_access_id = src->xg_record_access_id;
     dst->xg_key_access_id = src->xg_key_access_id;
+    dst->xg_class_field_id = src->xg_class_field_id;
 }
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {

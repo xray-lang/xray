@@ -137,6 +137,8 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [adt-field=%" PRId64 "]", v->aux_int);
     } else if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
         fprintf(out, " .%s", (const char *) v->aux);
+        if (v->xg_class_field_id != 0)
+            fprintf(out, " [class_field=%u]", v->xg_class_field_id);
     } else if (v->op == XI_AGG_GET || v->op == XI_AGG_SET) {
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
