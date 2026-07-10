@@ -73,7 +73,6 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", true, false, false, false},
     {"serve", "(name: string): Channel", "Register service and return request channel", true, false, false, false},
     {"reply", "(req: Json, result: Json): bool", "Reply to service request", true, false, false, false},
-    {"call", "(service: string, args: Json, timeout?: int): Json", "Call remote service", true, false, false, false},
     {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false},
     {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false},
     {"stop", "(): ()", "Stop cluster node", true, false, false, false},
@@ -81,7 +80,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"publish", "(topic: string, value: Json): bool", "Publish to topic", true, false, false, false},
     {"subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", true, false, false, false},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 14
+#define GEN_CLUSTER_FUNCTION_COUNT 13
 
 // compress module functions
 static const XaBuiltinMember g_gen_compress_functions[] = {

@@ -180,11 +180,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
-        .name = "call",
-        .signature = "(service: string, args: Json, timeout?: int): Json",
-        .summary = "Call remote service",
-    },
-    {
         .name = "channel",
         .signature = "(name: string, size?: int): Channel",
         .summary = "Create or get named distributed channel",
@@ -5194,7 +5189,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.SERVICE_NAME_MAX` | `: int` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
-            "| `cluster.call` | `(service: string, args: Json, timeout?: int): Json` | Call remote service |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
             "| `cluster.info` | `(): Json` | Get cluster status info |\n"
