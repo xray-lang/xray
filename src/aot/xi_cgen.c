@@ -4310,8 +4310,6 @@ static const XiFunc *cg_no_alloc_dispatch_call_target(XiCgenCtx *ctx, const XiVa
         return NULL;
 
     plan = xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, call);
-    if (!plan && call->xg_callsite_id != XG_NO_ID)
-        plan = xaot_bundle_find_method_dispatch_plan(bundle, call->xg_callsite_id);
     if (!plan || plan->target_count != 1 || plan->target_start == 0 ||
         plan->target_start - 1 >= bundle->ndispatch_target_cases)
         return NULL;

@@ -148,7 +148,7 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
  * default values can be lowered as IR before the user body. */
 XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
                                         ClassDeclNode *cd, struct XrType *receiver_type,
-                                        uint32_t source_span_id) {
+                                        uint32_t source_node_id) {
     XiLower ml;
     xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
@@ -169,7 +169,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         return NULL;
     }
     ml.func->analyzer = l->analyzer;
-    xi_lower_bind_method_body_id(&ml, cd ? cd->name : NULL, m->name, source_span_id);
+    xi_lower_bind_method_body_id(&ml, source_node_id);
 
     XiBlock *entry = xi_block_new(ml.func);
     entry->sealed = true;
@@ -337,7 +337,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(l, m, true, cd, NULL, (uint32_t) cd->methods[i]->line);
+        XiFunc *mf = xi_lower_method_as_func(l, m, true, cd, NULL, cd->methods[i]->node_id);
         if (!mf)
             continue;
         xi_lower_func_add_child(l->func, mf);
@@ -368,8 +368,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || !m->is_static)
             continue;
 
-        XiFunc *mf =
-            xi_lower_method_as_func(l, m, false, cd, NULL, (uint32_t) cd->methods[i]->line);
+        XiFunc *mf = xi_lower_method_as_func(l, m, false, cd, NULL, cd->methods[i]->node_id);
         if (!mf)
             continue;
         xi_lower_func_add_child(l->func, mf);
@@ -424,8 +423,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor)
             continue;
-        XiFunc *cf =
-            xi_lower_method_as_func(l, m, false, cd, NULL, (uint32_t) cd->methods[i]->line);
+        XiFunc *cf = xi_lower_method_as_func(l, m, false, cd, NULL, cd->methods[i]->node_id);
         if (cf) {
             xi_lower_func_add_child(l->func, cf);
             clinit_idx = (int) (l->func->nchildren - 1);

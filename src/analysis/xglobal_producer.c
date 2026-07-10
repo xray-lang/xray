@@ -83,6 +83,7 @@ typedef struct XgPendingBody {
     XgMethodId owner_method_id;
     uint32_t name_id;
     uint32_t signature_key;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     uint8_t kind;
     const AstNode *body;
@@ -696,9 +697,9 @@ static bool producer_reserve_bodies(XgProducer *p, uint32_t needed) {
 static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId module_id,
                                   XgDeclId owner_decl_id, XgClassId current_class_id,
                                   XgMethodId owner_method_id, uint32_t name_id,
-                                  uint32_t signature_key, uint32_t source_span_id, uint8_t kind,
-                                  const AstNode *body, const MethodDeclNode *method,
-                                  const FunctionDeclNode *function) {
+                                  uint32_t signature_key, uint32_t source_node_id,
+                                  uint32_t source_span_id, uint8_t kind, const AstNode *body,
+                                  const MethodDeclNode *method, const FunctionDeclNode *function) {
     XgPendingBody *row;
     if (!body)
         return true;
@@ -713,6 +714,7 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
     row->owner_method_id = owner_method_id;
     row->name_id = name_id;
     row->signature_key = signature_key;
+    row->source_node_id = source_node_id;
     row->source_span_id = source_span_id;
     row->kind = kind;
     row->body = body;
@@ -4369,6 +4371,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
+    row.source_node_id = call->node_id;
     row.source_span_id = (uint32_t) call->line;
     row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_CLOSURE;
@@ -4498,6 +4501,7 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
+    row.source_node_id = call->node_id;
     row.source_span_id = (uint32_t) call->line;
     row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_METHOD;
@@ -5404,6 +5408,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     memset(&row, 0, sizeof(row));
     row.func_id = pending->func_id;
     row.module_id = pending->module_id;
+    row.source_node_id = pending->source_node_id;
     row.owner_decl_id = pending->owner_decl_id;
     row.owner_class_id = pending->current_class_id;
     row.owner_method_id = pending->owner_method_id;
@@ -5447,6 +5452,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
+    decl.source_node_id = node->node_id;
     decl.decl_id = decl_id;
     decl.kind = XG_DECL_FUNC;
     decl.name_id = hash_name32(fn->name);
@@ -5472,8 +5478,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     if (!producer_register_func(p, fn->name, func_id, decl_id, decl.flags))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
-                                 hash_name32(fn->name), decl.signature_key, (uint32_t) node->line,
-                                 XG_BODY_FUNCTION, fn->body, NULL, fn);
+                                 hash_name32(fn->name), decl.signature_key, node->node_id,
+                                 (uint32_t) node->line, XG_BODY_FUNCTION, fn->body, NULL, fn);
 }
 
 static bool add_monomorphized_class_instantiation(XgProducer *p, XgModuleId module_id,
@@ -5523,6 +5529,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
+    decl.source_node_id = node->node_id;
     decl.decl_id = decl_id;
     decl.kind = (uint8_t) kind;
     decl.name_id = hash_name32(cls->name);
@@ -5548,6 +5555,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&method, 0, sizeof(method));
         method.method_id = (XgMethodId) (p->evidence->nmethods + 1);
         method.owner_class_id = class_id;
+        method.source_node_id = method_node->node_id;
         method.name_id = hash_name32(m->name);
         method.signature_key = hash_method_signature(m);
         if (m->is_static)
@@ -5561,7 +5569,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         method_count++;
         if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
                                    method.method_id, hash_name32(m->name), method.signature_key,
-                                   (uint32_t) method_node->line, XG_BODY_METHOD, m->body, m, NULL))
+                                   method_node->node_id, (uint32_t) method_node->line,
+                                   XG_BODY_METHOD, m->body, m, NULL))
             return false;
     }
     for (int i = 0; i < cls->field_count; i++) {
@@ -5639,6 +5648,7 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     XgInterfaceId interface_id = (XgInterfaceId) hash_name32(iface->name);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
+    decl.source_node_id = node->node_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_INTERFACE;
     decl.name_id = interface_id;
@@ -5685,6 +5695,7 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
+    decl.source_node_id = node->node_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_ENUM;
     decl.name_id = hash_name32(e->name);
@@ -5813,7 +5824,7 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
     if (has_module_body) {
         XgFuncId module_func_id = producer_next_func_id(p);
         if (!producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
-                                   hash_name32("<module-init>"), 0, 0, XG_BODY_MODULE_INIT, ast,
+                                   hash_name32("<module-init>"), 0, 0, 0, XG_BODY_MODULE_INIT, ast,
                                    NULL, NULL))
             return false;
     }
@@ -5921,15 +5932,18 @@ static const XgDeclSummary *evidence_find_decl_by_id(const XgGlobalEvidence *ev,
 
 static const XgDeclSummary *evidence_find_matching_decl(const XgGlobalEvidence *ev,
                                                         const XgDeclSummary *src) {
-    if (!ev || !src)
+    const XgDeclSummary *match = NULL;
+    if (!ev || !src || src->source_node_id == 0)
         return NULL;
     for (uint32_t i = 0; i < ev->ndecls; i++) {
         const XgDeclSummary *decl = &ev->decls[i];
-        if (decl->module_id == src->module_id && decl->kind == src->kind &&
-            decl->name_id == src->name_id && decl->source_span_id == src->source_span_id)
-            return decl;
+        if (decl->module_id != src->module_id || decl->source_node_id != src->source_node_id)
+            continue;
+        if (match)
+            return NULL;
+        match = decl;
     }
-    return NULL;
+    return match;
 }
 
 static const XgBodySummary *evidence_find_body_by_func_id(const XgGlobalEvidence *ev,
@@ -5944,21 +5958,19 @@ static const XgBodySummary *evidence_find_body_by_func_id(const XgGlobalEvidence
 }
 
 static const XgBodySummary *evidence_find_matching_body(const XgGlobalEvidence *ev,
-                                                        const XgBodySummary *src,
-                                                        XgDeclId remapped_decl_id) {
-    if (!ev || !src)
+                                                        const XgBodySummary *src) {
+    const XgBodySummary *match = NULL;
+    if (!ev || !src || (src->source_node_id == 0 && src->kind != XG_BODY_MODULE_INIT))
         return NULL;
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
-        if (body->module_id != src->module_id || body->kind != src->kind ||
-            body->name_id != src->name_id || body->signature_key != src->signature_key ||
-            body->source_span_id != src->source_span_id)
+        if (body->module_id != src->module_id || body->source_node_id != src->source_node_id)
             continue;
-        if (src->owner_decl_id != XG_NO_ID && body->owner_decl_id != remapped_decl_id)
-            continue;
-        return body;
+        if (match)
+            return NULL;
+        match = body;
     }
-    return NULL;
+    return match;
 }
 
 static const XgClassSummary *evidence_find_class_by_id(const XgGlobalEvidence *ev,
@@ -6001,15 +6013,19 @@ static const XgMethodSummary *evidence_find_method_by_id(const XgGlobalEvidence 
 static const XgMethodSummary *evidence_find_matching_method(const XgGlobalEvidence *ev,
                                                             const XgMethodSummary *src,
                                                             XgClassId remapped_owner_class_id) {
-    if (!ev || !src || remapped_owner_class_id == XG_NO_ID)
+    const XgMethodSummary *match = NULL;
+    if (!ev || !src || src->source_node_id == 0 || remapped_owner_class_id == XG_NO_ID)
         return NULL;
     for (uint32_t i = 0; i < ev->nmethods; i++) {
         const XgMethodSummary *method = &ev->methods[i];
-        if (method->owner_class_id == remapped_owner_class_id && method->name_id == src->name_id &&
-            method->signature_key == src->signature_key)
-            return method;
+        if (method->owner_class_id != remapped_owner_class_id ||
+            method->source_node_id != src->source_node_id)
+            continue;
+        if (match)
+            return NULL;
+        match = method;
     }
-    return NULL;
+    return match;
 }
 
 static const XgCallsiteSummary *evidence_find_callsite_by_id(const XgGlobalEvidence *ev,
@@ -6026,24 +6042,20 @@ static const XgCallsiteSummary *evidence_find_callsite_by_id(const XgGlobalEvide
 static const XgCallsiteSummary *
 evidence_find_matching_callsite(const XgGlobalEvidence *ev, const XgCallsiteSummary *src,
                                 const XgBodySummary *remapped_owner_body) {
-    if (!ev || !src)
+    const XgCallsiteSummary *match = NULL;
+    if (!ev || !src || src->source_node_id == 0 || !remapped_owner_body)
         return NULL;
     for (uint32_t i = 0; i < ev->ncallsites; i++) {
         const XgCallsiteSummary *call = &ev->callsites[i];
-        if (remapped_owner_body && call->owner_func_id != remapped_owner_body->func_id)
+        if (call->owner_func_id != remapped_owner_body->func_id)
             continue;
-        if (call->source_span_id == src->source_span_id &&
-            call->body_ordinal == src->body_ordinal && call->arg_count == src->arg_count)
-            return call;
+        if (call->source_node_id != src->source_node_id)
+            continue;
+        if (match)
+            return NULL;
+        match = call;
     }
-    if (remapped_owner_body)
-        return NULL;
-    for (uint32_t i = 0; i < ev->ncallsites; i++) {
-        const XgCallsiteSummary *call = &ev->callsites[i];
-        if (call->source_span_id == src->source_span_id && call->arg_count == src->arg_count)
-            return call;
-    }
-    return NULL;
+    return match;
 }
 
 static bool evidence_has_equivalent_generic_inst(const XgGlobalEvidence *ev,
@@ -6182,16 +6194,8 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
         mapped.generic_inst_id = (XgGenericInstId) (dst->ngeneric_insts + 1);
         mapped.origin_decl_id = dst_decl ? dst_decl->decl_id : XG_NO_ID;
 
-        if (src_origin_body) {
-            XgDeclId remapped_body_decl = mapped.origin_decl_id;
-            if (src_origin_body->owner_decl_id != src->origin_decl_id) {
-                const XgDeclSummary *body_decl =
-                    evidence_find_decl_by_id(roots, src_origin_body->owner_decl_id);
-                const XgDeclSummary *mapped_body_decl = evidence_find_matching_decl(dst, body_decl);
-                remapped_body_decl = mapped_body_decl ? mapped_body_decl->decl_id : XG_NO_ID;
-            }
-            dst_origin_body = evidence_find_matching_body(dst, src_origin_body, remapped_body_decl);
-        }
+        if (src_origin_body)
+            dst_origin_body = evidence_find_matching_body(dst, src_origin_body);
         mapped.origin_func_id = dst_origin_body ? dst_origin_body->func_id : XG_NO_ID;
 
         if (src_class) {
@@ -6225,13 +6229,8 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
         }
         mapped.origin_method_id = dst_method ? dst_method->method_id : XG_NO_ID;
 
-        if (src_owner_body) {
-            const XgDeclSummary *owner_decl =
-                evidence_find_decl_by_id(roots, src_owner_body->owner_decl_id);
-            const XgDeclSummary *mapped_owner_decl = evidence_find_matching_decl(dst, owner_decl);
-            dst_owner_body = evidence_find_matching_body(
-                dst, src_owner_body, mapped_owner_decl ? mapped_owner_decl->decl_id : XG_NO_ID);
-        }
+        if (src_owner_body)
+            dst_owner_body = evidence_find_matching_body(dst, src_owner_body);
         dst_call = evidence_find_matching_callsite(dst, src_call, dst_owner_body);
         mapped.root_callsite_id = dst_call ? dst_call->callsite_id : XG_NO_ID;
 

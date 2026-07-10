@@ -56,7 +56,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 15,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 16,
 };
 
 typedef enum XgBuildProfile {
@@ -577,6 +577,7 @@ typedef struct XgEvidenceCachePayloadInfo {
 
 typedef struct XgDeclSummary {
     XgModuleId module_id;
+    uint32_t source_node_id;
     XgDeclId decl_id;
     uint8_t kind;
     uint32_t flags;
@@ -611,6 +612,7 @@ typedef struct XgClassSummary {
 typedef struct XgMethodSummary {
     XgMethodId method_id;
     XgClassId owner_class_id;
+    uint32_t source_node_id;
     uint32_t name_id;
     uint32_t signature_key;
     XgMethodId override_of;
@@ -662,6 +664,7 @@ typedef struct XgInterfaceObjectUseSummary {
 typedef struct XgBodySummary {
     XgFuncId func_id;
     XgModuleId module_id;
+    uint32_t source_node_id;
     XgDeclId owner_decl_id;
     XgClassId owner_class_id;
     XgMethodId owner_method_id;
@@ -682,6 +685,7 @@ typedef struct XgBodySummary {
 typedef struct XgCallsiteSummary {
     XgCallsiteId callsite_id;
     XgFuncId owner_func_id;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     uint32_t body_ordinal;
     uint8_t kind;

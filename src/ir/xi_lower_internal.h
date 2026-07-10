@@ -97,14 +97,11 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMR
 XR_FUNC void xi_lower_cleanup(XiLower *l);
 XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent);
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l);
-XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, const char *name, uint32_t source_span_id);
-XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, const char *class_name,
-                                          const char *method_name, uint32_t source_span_id);
-XR_FUNC uint32_t xi_lower_next_callsite_ordinal(XiLower *l);
+XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id);
+XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, uint32_t source_node_id);
 XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_span_id,
                                                   uint8_t access_op);
-XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const char *method_name,
-                                              uint32_t source_span_id, uint32_t body_ordinal);
+XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, uint32_t source_node_id);
 XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
                                           uint32_t source_span_id, uint16_t field_ordinal,
                                           uint8_t access_kind);

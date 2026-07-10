@@ -477,6 +477,7 @@ typedef struct XaotMethodDispatchPlan {
     XgCallsiteId callsite_id;
     XgFuncId owner_func_id;
     uint32_t source_span_id;
+    uint32_t source_node_id;
     uint32_t body_ordinal;
     XgMethodId method_id;
     XgMethodId method_root_id;

@@ -98,7 +98,10 @@ static XiFunc *lower_source(const char *source) {
     return func;
 }
 
-static XiFunc *lower_source_with_global_evidence(const char *source, XgGlobalEvidence *out_ev) {
+typedef void (*GlobalEvidenceTestMutator)(XgGlobalEvidence *evidence);
+
+static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobalEvidence *out_ev,
+                                                    GlobalEvidenceTestMutator mutate_evidence) {
     assert(g_iso != NULL);
     assert(out_ev != NULL);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
@@ -126,6 +129,8 @@ static XiFunc *lower_source_with_global_evidence(const char *source, XgGlobalEvi
         xr_program_destroy(program);
         return NULL;
     }
+    if (mutate_evidence)
+        mutate_evidence(out_ev);
 
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer) {
@@ -158,6 +163,10 @@ static XiFunc *lower_source_with_global_evidence(const char *source, XgGlobalEvi
     return func;
 }
 
+static XiFunc *lower_source_with_global_evidence(const char *source, XgGlobalEvidence *out_ev) {
+    return lower_source_with_global_evidence_ex(source, out_ev, NULL);
+}
+
 static XiFunc *func_tree_find_func_name(XiFunc *f, const char *name) {
     if (!f || !name)
         return NULL;
@@ -169,6 +178,75 @@ static XiFunc *func_tree_find_func_name(XiFunc *f, const char *name) {
             return child;
     }
     return NULL;
+}
+
+static XiFunc *func_tree_find_xg_body(XiFunc *f, XgFuncId body_func_id) {
+    if (!f || body_func_id == XG_NO_ID)
+        return NULL;
+    if (f->xg_body_func_id == body_func_id)
+        return f;
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        XiFunc *child = func_tree_find_xg_body(f->children[i], body_func_id);
+        if (child)
+            return child;
+    }
+    return NULL;
+}
+
+static int func_collect_method_calls(XiFunc *f, XiValue **out, int capacity) {
+    int count = 0;
+    if (!f)
+        return 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *value = blk->values[i];
+            if (!value || (value->op != XI_CALL_METHOD && value->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            if (out && count < capacity)
+                out[count] = value;
+            count++;
+        }
+    }
+    return count;
+}
+
+static uint32_t global_evidence_body_declared_name_id(const XgGlobalEvidence *ev,
+                                                      const XgBodySummary *body) {
+    if (!ev || !body)
+        return 0;
+    if (body->kind == XG_BODY_METHOD) {
+        for (uint32_t i = 0; i < ev->nmethods; i++) {
+            if (ev->methods[i].method_id == body->owner_method_id)
+                return ev->methods[i].name_id;
+        }
+        return 0;
+    }
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        if (ev->decls[i].decl_id == body->owner_decl_id)
+            return ev->decls[i].name_id;
+    }
+    return 0;
+}
+
+static void scramble_legacy_xi_identity_fields(XgGlobalEvidence *ev) {
+    uint32_t stale_name_id = xg_name_id("<stale-xi-identity>");
+    if (!ev)
+        return;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].kind == XG_BODY_MODULE_INIT)
+            continue;
+        ev->bodies[i].name_id = stale_name_id;
+        ev->bodies[i].source_span_id = UINT32_MAX;
+    }
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        ev->callsites[i].source_span_id = UINT32_MAX;
+        ev->callsites[i].body_ordinal = UINT32_MAX;
+        ev->callsites[i].method_name_id = stale_name_id;
+        ev->callsites[i].arg_count = UINT16_MAX;
+    }
 }
 
 static int func_tree_has_op(XiFunc *f, uint16_t op) {
@@ -1433,6 +1511,109 @@ TEST(map_set_method_key_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_METHOD_KEY_EVIDENCE
 }
 
+TEST(strong_source_node_identity_binds_same_line_calls_and_same_name_bodies) {
+#define REQUIRE_STRONG_IDENTITY(cond, msg)                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "strong_source_node_identity: %s\n", msg);                             \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func = lower_source_with_global_evidence_ex(
+        "interface Valued { value() -> int }; "
+        "class Left implements Valued { value() -> int { return 1 } }; "
+        "class Right implements Valued { value() -> int { return 2 } }; "
+        "fn value() -> int { return 3 }; "
+        "fn exercise(left: Left, right: Right, named: Valued) -> int { "
+        "return left.value() + right.value() + named.value() }",
+        &ev, scramble_legacy_xi_identity_fields);
+    REQUIRE_STRONG_IDENTITY(main_func != NULL, "source should lower with global evidence");
+
+    uint32_t value_name_id = xg_name_id("value");
+    uint32_t exercise_name_id = xg_name_id("exercise");
+    const XgBodySummary *exercise_body = NULL;
+    const XgBodySummary *value_bodies[3] = {0};
+    uint32_t value_body_count = 0;
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        const XgBodySummary *body = &ev.bodies[i];
+        uint32_t declared_name_id = global_evidence_body_declared_name_id(&ev, body);
+        if (body->kind == XG_BODY_FUNCTION && declared_name_id == exercise_name_id)
+            exercise_body = body;
+        if (declared_name_id == value_name_id &&
+            (body->kind == XG_BODY_FUNCTION || body->kind == XG_BODY_METHOD)) {
+            if (value_body_count < 3)
+                value_bodies[value_body_count] = body;
+            value_body_count++;
+        }
+    }
+    REQUIRE_STRONG_IDENTITY(exercise_body != NULL, "exercise body evidence should exist");
+    REQUIRE_STRONG_IDENTITY(value_body_count == 3,
+                            "ordinary function and both same-name methods should have bodies");
+    REQUIRE_STRONG_IDENTITY(value_bodies[0]->source_span_id == UINT32_MAX &&
+                                value_bodies[1]->source_span_id == UINT32_MAX &&
+                                value_bodies[2]->source_span_id == UINT32_MAX,
+                            "scrambled diagnostic spans must not participate in body identity");
+    for (uint32_t i = 0; i < value_body_count; i++) {
+        REQUIRE_STRONG_IDENTITY(value_bodies[i]->name_id != value_name_id,
+                                "scrambled body names must not participate in identity");
+        REQUIRE_STRONG_IDENTITY(value_bodies[i]->source_node_id != 0,
+                                "source-backed body must carry a node identity");
+        REQUIRE_STRONG_IDENTITY(func_tree_find_xg_body(main_func, value_bodies[i]->func_id) != NULL,
+                                "each same-name body must bind to its Xi function");
+        for (uint32_t j = 0; j < i; j++)
+            REQUIRE_STRONG_IDENTITY(value_bodies[i]->source_node_id !=
+                                        value_bodies[j]->source_node_id,
+                                    "same-name body identities must remain distinct");
+    }
+
+    XiFunc *exercise = func_tree_find_xg_body(main_func, exercise_body->func_id);
+    REQUIRE_STRONG_IDENTITY(exercise != NULL, "exercise Xi body should bind by source node");
+    XiValue *calls[3] = {0};
+    REQUIRE_STRONG_IDENTITY(func_collect_method_calls(exercise, calls, 3) == 3,
+                            "exercise should lower all three method calls");
+
+    uint32_t method_calls = 0;
+    uint32_t interface_calls = 0;
+    for (uint32_t i = 0; i < 3; i++) {
+        const XgCallsiteSummary *callsite =
+            xg_global_evidence_find_callsite(&ev, calls[i]->xg_callsite_id);
+        REQUIRE_STRONG_IDENTITY(callsite != NULL, "each Xi call should carry its callsite id");
+        REQUIRE_STRONG_IDENTITY(callsite->owner_func_id == exercise_body->func_id,
+                                "callsite owner must be the bound exercise body");
+        REQUIRE_STRONG_IDENTITY(
+            callsite->source_span_id == UINT32_MAX && callsite->body_ordinal == UINT32_MAX &&
+                callsite->method_name_id != value_name_id && callsite->arg_count == UINT16_MAX,
+            "legacy callsite match fields must not participate in identity");
+        REQUIRE_STRONG_IDENTITY(callsite->source_node_id != 0,
+                                "source-backed callsite must carry a node identity");
+        REQUIRE_STRONG_IDENTITY(calls[i]->xg_method_id == callsite->method_id,
+                                "Xi method identity must come from the matched callsite");
+        for (uint32_t j = 0; j < i; j++) {
+            const XgCallsiteSummary *previous =
+                xg_global_evidence_find_callsite(&ev, calls[j]->xg_callsite_id);
+            REQUIRE_STRONG_IDENTITY(calls[i]->xg_callsite_id != calls[j]->xg_callsite_id,
+                                    "same-line Xi calls must bind distinct callsite ids");
+            REQUIRE_STRONG_IDENTITY(previous &&
+                                        previous->source_node_id != callsite->source_node_id,
+                                    "same-line calls must bind distinct source nodes");
+        }
+        if (callsite->kind == XG_CALL_METHOD)
+            method_calls++;
+        else if (callsite->kind == XG_CALL_INTERFACE)
+            interface_calls++;
+    }
+    REQUIRE_STRONG_IDENTITY(method_calls == 2 && interface_calls == 1,
+                            "callsite kind must distinguish class and interface dispatch");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_STRONG_IDENTITY
+}
+
 TEST(nested_function) {
     XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
                              "    return a + b\n"
@@ -2572,6 +2753,7 @@ int main(void) {
     run_map_key_access_lowers_with_global_evidence_id();
     run_map_key_access_alias_shape_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
+    run_strong_source_node_identity_binds_same_line_calls_and_same_name_bodies();
     run_nested_function();
     run_function_expr();
     run_multiple_functions();
