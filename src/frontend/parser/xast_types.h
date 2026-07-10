@@ -246,9 +246,9 @@ typedef enum {
     ATTR_EXTERN,        // @extern("C") — foreign function (FFI), calling convention in str_arg
     ATTR_DYLIB,         // @dylib("name") — resolve symbol from a named dynamic library
     ATTR_C_EXPORT,      // @c_export("name") — expose an AOT C ABI wrapper symbol
-    ATTR_SECTION,       // @section("name") — place AOT function/C export or const data in section
-    ATTR_WEAK,          // @weak — emit weak AOT C export or const data symbol
-    ATTR_USED,          // @used — force AOT function/C export or const data emission
+    ATTR_SECTION,       // @section("name") — place AOT function/C export or static data in section
+    ATTR_WEAK,          // @weak — emit weak AOT C export or const static data symbol
+    ATTR_USED,          // @used — force AOT function/C export or static data emission
     ATTR_NAKED,         // @naked — freestanding AOT naked extern symbol declaration
     ATTR_INTERRUPT,     // @interrupt("abi") — freestanding AOT interrupt extern declaration
     ATTR_NO_ALLOC,      // @no_alloc — AOT function must not perform heap/runtime allocation

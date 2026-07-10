@@ -1,0 +1,5 @@
+args=--profile freestanding
+status=fail
+contains=@weak mutable static data is not supported
+contains=aggregate var static object
+not_contains=CRASH

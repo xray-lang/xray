@@ -60,9 +60,24 @@ static bool xa_type_supports_const_static_data_object(const XrType *type) {
     }
 }
 
-static void xa_validate_const_static_data_attrs(XaInferContext *ctx, AstNode *node,
-                                                VarDeclNode *var, XaSymbolLinks *links,
-                                                XrType *var_type) {
+static bool xa_type_supports_mutable_static_data_object(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return xa_type_has_fixed_layout_data_object(type);
+        default:
+            return false;
+    }
+}
+
+static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *ctx,
+                                                               VarDeclNode *var,
+                                                               XrType *declared_type);
+
+static void xa_validate_static_data_attrs(XaInferContext *ctx, AstNode *node, VarDeclNode *var,
+                                          XaSymbolLinks *links, XrType *var_type) {
     if (!ctx || !node || !var || !xa_var_has_static_data_attr(var))
         return;
 
@@ -70,7 +85,7 @@ static void xa_validate_const_static_data_attrs(XaInferContext *ctx, AstNode *no
     if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@weak/@used const data is currently only supported in freestanding profile",
+            "@section/@weak/@used static data is currently only supported in freestanding profile",
             &loc);
         return;
     }
@@ -80,25 +95,54 @@ static void xa_validate_const_static_data_attrs(XaInferContext *ctx, AstNode *no
                                    "@section requires a non-empty section name", &loc);
         return;
     }
-    if (!xa_is_module_level_scope(ctx->analyzer) || node->type != AST_CONST_DECL) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@weak/@used can only annotate a module-level const data declaration", &loc);
-        return;
-    }
-    if (!links || !links->has_ct_value) {
+    if (!xa_is_module_level_scope(ctx->analyzer) ||
+        (node->type != AST_CONST_DECL && node->type != AST_VAR_DECL)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "@section/@weak/@used const data requires a compile-time "
-                                   "initializer",
+                                   "@section/@weak/@used can only annotate a module-level const "
+                                   "data declaration or aggregate var static object",
                                    &loc);
         return;
     }
-    if (!xa_type_supports_const_static_data_object(var_type)) {
+
+    if (node->type == AST_CONST_DECL) {
+        if (!links || !links->has_ct_value) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                       "@section/@weak/@used const data requires a compile-time "
+                                       "initializer",
+                                       &loc);
+            return;
+        }
+        if (!xa_type_supports_const_static_data_object(var_type)) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                "@section/@weak/@used const data currently requires a scalar, string, "
+                "fixed-array, tuple, struct, or union static object",
+                &loc);
+        }
+        return;
+    }
+
+    if (xa_var_attr(var, ATTR_WEAK)) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@weak/@used const data currently requires a scalar, string, fixed-array, "
-            "tuple, struct, or union static object",
+            "@weak mutable static data is not supported; use @section/@used on a module-level "
+            "aggregate var static object",
             &loc);
+        return;
+    }
+    if (!var->initializer ||
+        !xa_freestanding_top_var_static_initializer_allowed(ctx, var, var_type)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                   "@section/@used mutable static data requires a compile-time "
+                                   "aggregate initializer",
+                                   &loc);
+        return;
+    }
+    if (!xa_type_supports_mutable_static_data_object(var_type)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                   "@section/@used mutable static data currently requires a "
+                                   "struct or union aggregate static object",
+                                   &loc);
     }
 }
 
@@ -7151,7 +7195,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    "comptime block local binding requires an initializer", &loc);
     }
-    xa_validate_const_static_data_attrs(ctx, node, var, links, var_type);
+    xa_validate_static_data_attrs(ctx, node, var, links, var_type);
     links->assign_count = var->initializer ? 1 : 0;
 
     // Detect loop variable context

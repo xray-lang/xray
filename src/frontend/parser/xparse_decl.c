@@ -255,7 +255,7 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @c_export");
     } else if (name_token.length == 7 && memcmp(name_token.start, "section", 7) == 0) {
         // @section("name") — place a module-level AOT function/C export or
-        // freestanding const data object into a named linker section. The
+        // freestanding static data object into a named linker section. The
         // section name is open text, so it uses a string arg just like
         // @c_export.
         attr->kind = ATTR_SECTION;
@@ -368,7 +368,7 @@ static bool attrs_has_symbol_layout_attr(XrAttribute **attrs, int count) {
     return false;
 }
 
-static bool attrs_are_const_data_attrs(XrAttribute **attrs, int count) {
+static bool attrs_are_static_data_attrs(XrAttribute **attrs, int count) {
     if (count <= 0)
         return false;
     for (int i = 0; i < count; i++) {
@@ -543,7 +543,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     }
 
     if (xr_parser_match(parser, TK_CONST)) {
-        if (!attrs_are_const_data_attrs(attributes, attr_count)) {
+        if (!attrs_are_static_data_attrs(attributes, attr_count)) {
             xr_parser_error(
                 parser,
                 "attributes can only annotate declaration items; use 'fn name(...)' for function "
@@ -563,9 +563,31 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return decl;
     }
 
-    if (xr_parser_check(parser, TK_VAR) || xr_parser_check(parser, TK_SHARED)) {
-        xr_parser_error(parser, "attributes cannot annotate mutable module storage; use a const "
-                                "data declaration for static sections");
+    if (xr_parser_match(parser, TK_VAR)) {
+        if (!attrs_are_static_data_attrs(attributes, attr_count)) {
+            xr_parser_error(
+                parser,
+                "attributes can only annotate declaration items; use 'fn name(...)' for function "
+                "item attributes");
+            return NULL;
+        }
+        if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
+            xr_parser_check(parser, TK_LPAREN)) {
+            xr_parser_error(parser, "@section/@weak/@used require a single named var binding");
+            return NULL;
+        }
+        AstNode *decl = xr_parse_single_var_declaration(parser, 0);
+        if (!decl)
+            return NULL;
+        decl->as.var_decl.attributes = attributes;
+        decl->as.var_decl.attr_count = attr_count;
+        return decl;
+    }
+
+    if (xr_parser_check(parser, TK_SHARED)) {
+        xr_parser_error(parser,
+                        "attributes cannot annotate shared module storage; use const data or a "
+                        "freestanding aggregate var static object");
         return NULL;
     }
 
