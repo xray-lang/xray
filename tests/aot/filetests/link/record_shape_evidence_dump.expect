@@ -1,6 +1,7 @@
 args=--dump-global-evidence
 contains=record-shape
 contains=kind=literal
+contains=record-field
 contains=record-access
 contains=kind=field_get
 contains=record-shape-plan

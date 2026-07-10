@@ -3,6 +3,7 @@ contains=xglobal-evidence v1 profile=native_release
 contains=record-shape
 contains=kind=spread
 contains=kind=patch
+contains=record-field
 contains=record-merge
 contains=base_shape=
 contains=patch_shape=
