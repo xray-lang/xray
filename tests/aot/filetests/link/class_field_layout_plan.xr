@@ -1,0 +1,14 @@
+class Base {
+    wide: int
+    flag: bool
+}
+
+class Child extends Base {
+    childFlag: bool
+}
+
+class Holder {
+    values: Array<int> = []
+}
+
+print(0)

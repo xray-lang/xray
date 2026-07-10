@@ -12,6 +12,7 @@
 #define XAOT_LINK_H
 
 #include "../base/xdefs.h"
+#include "xaot_class_layout.h"
 
 typedef struct XaotTarget {
     char *name;
@@ -22,6 +23,7 @@ typedef struct XaotTarget {
     char *triple;
     uint16_t pointer_bits;
     char *endian;
+    XaotTargetDataLayout data_layout;
 } XaotTarget;
 
 typedef enum XaotLinkEntryKind {

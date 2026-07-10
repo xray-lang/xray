@@ -2339,24 +2339,26 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const XrCliToolchainPlan *toolchain_plan,
                             const XrTargetConfig *target_config, const char *objcopy_output) {
     XaotBuildResult aot_result;
+    XaotBuildOptions build_options;
+    XaotTarget build_target;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
                                        : XAOT_BUILD_PROFILE_HOSTED;
-    int rc = xaot_build_ex(input, dump_xaot_plan, !shared_library, aot_profile, type_name_profile,
-                           dump_global_evidence, &aot_result);
+    if (!xaot_target_init(&build_target, target && target->name ? target->name : "native-c90")) {
+        fprintf(stderr, "Error: failed to initialize AOT build target\n");
+        return 1;
+    }
+    memset(&build_options, 0, sizeof(build_options));
+    build_options.target = &build_target;
+    build_options.profile = aot_profile;
+    build_options.type_name_profile = type_name_profile;
+    build_options.emit_plan_dump = dump_xaot_plan;
+    build_options.emit_program_main = !shared_library;
+    build_options.emit_global_evidence_dump = dump_global_evidence;
+    int rc = xaot_build(input, &build_options, &aot_result);
+    xaot_target_free(&build_target);
     if (rc != 0)
         return rc;
-    if (target && target->name) {
-        XaotTarget link_target;
-        if (!xaot_target_init(&link_target, target->name) ||
-            !xaot_link_manifest_set_target(&aot_result.link_manifest, &link_target)) {
-            fprintf(stderr, "Error: failed to set AOT link target '%s'\n", target->name);
-            xaot_target_free(&link_target);
-            xaot_build_result_free(&aot_result);
-            return 1;
-        }
-        xaot_target_free(&link_target);
-    }
     {
         char normalize_err[512];
         if (!xaot_cli_normalize_manifest_for_target(&aot_result.link_manifest, target,
