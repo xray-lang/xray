@@ -19,8 +19,7 @@
  * RELATED MODULES:
  *   - xclass_builder.c / .h  : Builder lifecycle + add_* / has_*
  *   - xclass_builder_internal.h : XrClassBuilder layout
- *   - xclass_internal.h      : xr_class_free, build_itable,
- *                               compute_operator_flags
+ *   - xclass_internal.h      : xr_class_free, compute_operator_flags
  */
 
 #include "xclass.h"
@@ -37,79 +36,6 @@
 #include "../mem/xobj_header.h"
 #include "../mem/xsystem_heap.h"
 #include <string.h>
-
-/* ========== VTable Generation (file-local) ========== */
-
-// Locate the parent's vtable slot for `symbol` in O(1): the parent's
-// method_symbol_to_index maps a symbol to its slot in
-// parent->methods[], and each method already caches its vtable slot in
-// method->vtable_index.
-static int find_method_in_parent_vtable(XrClass *parent_class, int symbol) {
-    if (!parent_class || !parent_class->vtable || symbol < 0) {
-        return -1;
-    }
-    if (!parent_class->method_symbol_to_index || symbol >= parent_class->method_map_capacity) {
-        return -1;
-    }
-    int method_idx = parent_class->method_symbol_to_index[symbol];
-    if (method_idx < 0 || method_idx >= parent_class->method_count) {
-        return -1;
-    }
-    int vtable_idx = parent_class->methods[method_idx].vtable_index;
-    if (vtable_idx < 0 || vtable_idx >= parent_class->vtable_size) {
-        return -1;
-    }
-    return vtable_idx;
-}
-
-// Populate cls->vtable from cls->methods[]. Returns 0 on success,
-// -1 on allocation failure; on failure the partially-built vtable
-// may leak, but finalize catches the error and routes through
-// xr_class_free so nothing reaches cls's observable lifetime.
-static int generate_vtable(XrClass *cls) {
-    if (cls->super && cls->super->vtable) {
-        cls->vtable_size = cls->super->vtable_size;
-        cls->vtable = (XrMethod **) xr_malloc(cls->vtable_size * sizeof(XrMethod *));
-        if (!cls->vtable) {
-            xr_log_warning("class", "generate_vtable: failed to allocate vtable");
-            return -1;
-        }
-        memcpy(cls->vtable, cls->super->vtable, cls->vtable_size * sizeof(XrMethod *));
-        cls->own_method_start = cls->super->vtable_size;
-    } else {
-        cls->vtable = NULL;
-        cls->vtable_size = 0;
-        cls->own_method_start = 0;
-    }
-
-    for (int i = 0; i < cls->method_count; i++) {
-        XrMethod *method = &cls->methods[i];
-        if (method->flags & XMETHOD_FLAG_STATIC) {
-            method->vtable_index = -1;
-            continue;
-        }
-
-        int parent_vtable_idx = find_method_in_parent_vtable(cls->super, method->symbol);
-        if (parent_vtable_idx >= 0) {
-            cls->vtable[parent_vtable_idx] = method;
-            method->vtable_index = parent_vtable_idx;
-        } else {
-            // Route realloc through a temporary so a failed grow does
-            // not overwrite cls->vtable with NULL and leak the previous
-            // buffer.
-            XrMethod **new_vtable =
-                (XrMethod **) xr_realloc(cls->vtable, (cls->vtable_size + 1) * sizeof(XrMethod *));
-            if (!new_vtable) {
-                return -1;
-            }
-            cls->vtable = new_vtable;
-            cls->vtable[cls->vtable_size] = method;
-            method->vtable_index = cls->vtable_size;
-            cls->vtable_size++;
-        }
-    }
-    return 0;
-}
 
 /* ========== Finalize Helpers (forward decls) ========== */
 
@@ -171,7 +97,7 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
     int total_instance_field_count = parent_instance_field_count + own_instance_fields;
 
     // Every stage below is all-or-nothing: a class with a missing symbol
-    // map, default values, interface list or itable would keep working
+    // map, default values or interface list would keep working
     // but silently misbehave (invisible members, lost defaults, wrong
     // `is` checks). OOM anywhere rolls the whole class back.
     if (!finalize_fields(builder, cls, parent_instance_field_count, own_instance_fields,
@@ -218,10 +144,6 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         return NULL;
     }
 
-    if (xr_class_build_itable(cls) != 0) {
-        xr_class_free(cls);
-        return NULL;
-    }
     xr_class_compute_operator_flags(cls);
 
     finalize_type_identity(builder, cls);
@@ -455,13 +377,12 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
     method->symbol = item->symbol;
     method->name = item->name;
     method->param_count = item->param_count;
-    method->vtable_index = -1;
 }
 
 // Flatten parent instance methods into cls->methods[], apply the
 // class's own methods (override-in-place when the symbol matches an
-// inherited slot), then run vtable generation. Returns false on any
-// allocation failure.
+// inherited slot). The flattened symbol-indexed table is the VM's
+// dispatch representation; AOT vtable decisions live in Xaot plans.
 static bool finalize_methods(XrClassBuilder *b, XrClass *cls, int parent_instance_method_count,
                              int flat_instance_count, int total_method_count) {
     if (total_method_count == 0)
@@ -493,9 +414,7 @@ static bool finalize_methods(XrClassBuilder *b, XrClass *cls, int parent_instanc
     }
     cls->method_count = flat_instance_count;
 
-    // vtable generation is strict: OOM rolls the class back. Leaving a
-    // class without a vtable would silently break dispatch later.
-    return generate_vtable(cls) == 0;
+    return true;
 }
 
 // Static fields: separate storage from instance fields. Returns false
@@ -545,10 +464,7 @@ static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls) {
     return true;
 }
 
-// symbol -> method index map. Built BEFORE xr_class_build_itable so
-// the itable builder can do O(1) interface method -> implementation
-// lookups via cls->method_symbol_to_index instead of a linear scan
-// through cls->methods[]. Returns false on alloc failure: the map is
+// Symbol -> method index map for VM dispatch. Returns false on alloc failure: the map is
 // mandatory — xr_class_lookup_method has no linear fallback, so a class
 // without it would lose every method it declares.
 static bool finalize_method_symbol_map(XrClass *cls) {

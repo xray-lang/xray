@@ -13,6 +13,7 @@
 #include "../test_helper.h"
 #include "base/xmalloc.h"
 #include "runtime/class/xclass.h"
+#include "runtime/class/xclass_builder.h"
 #include "runtime/class/xinstance.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/xisolate_api.h"
@@ -73,6 +74,62 @@ static int sym(const char *name) {
         }
     }
     return id;
+}
+
+static XrValue base_run(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) isolate;
+    (void) self;
+    (void) args;
+    (void) argc;
+    return XR_FROM_INT(1);
+}
+
+static XrValue child_run(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) isolate;
+    (void) self;
+    (void) args;
+    (void) argc;
+    return XR_FROM_INT(2);
+}
+
+/* ========== Static Class Dispatch Tests ========== */
+
+TEST(flattened_method_table_keeps_most_derived_override) {
+    setup();
+
+    XrClassBuilder *base_builder = xr_class_builder_new(X, "DispatchBase", NULL);
+    ASSERT_NOT_NULL(base_builder);
+    ASSERT_EQ_INT(xr_class_builder_add_method(base_builder, "run", base_run, 0, 0), 0);
+    XrClass *base = xr_class_builder_finalize(base_builder);
+    ASSERT_NOT_NULL(base);
+
+    XrClassBuilder *child_builder = xr_class_builder_new(X, "DispatchChild", base);
+    ASSERT_NOT_NULL(child_builder);
+    ASSERT_EQ_INT(xr_class_builder_add_method(child_builder, "run", child_run, 0, 0), 0);
+    XrClass *child = xr_class_builder_finalize(child_builder);
+    ASSERT_NOT_NULL(child);
+
+    ASSERT_EQ_INT(base->method_count, 1);
+    ASSERT_EQ_INT(child->method_count, 1);
+    XrMethod *method = xr_class_lookup_method(child, base->methods[0].symbol);
+    ASSERT_NOT_NULL(method);
+    ASSERT_TRUE(method->as.primitive == child_run);
+    teardown();
+}
+
+TEST(interface_conformance_uses_declaration_list) {
+    setup();
+
+    XrClass *iface = xr_interface_new(X, "Renderable");
+    ASSERT_NOT_NULL(iface);
+    XrClassBuilder *builder = xr_class_builder_new(X, "Sprite", NULL);
+    ASSERT_NOT_NULL(builder);
+    ASSERT_EQ_INT(xr_class_builder_add_interface(builder, iface), 0);
+    XrClass *sprite = xr_class_builder_finalize(builder);
+    ASSERT_NOT_NULL(sprite);
+
+    ASSERT_TRUE(xr_class_implements_interface(sprite, iface));
+    teardown();
 }
 
 /* ========== Transition Tests ========== */
@@ -200,6 +257,10 @@ TEST(field_missing_overflow_reads_null) {
 /* ========== Run All ========== */
 
 static void run_all_tests(void) {
+    RUN_TEST_SUITE("Static Class Dispatch");
+    RUN_TEST(flattened_method_table_keeps_most_derived_override);
+    RUN_TEST(interface_conformance_uses_declaration_list);
+
     RUN_TEST_SUITE("Dynamic Class Transition");
     RUN_TEST(transition_create_first_field);
     RUN_TEST(transition_idempotent);

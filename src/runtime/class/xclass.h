@@ -102,12 +102,6 @@ typedef struct XrClassTransition {
     struct XrClassTransition *next;  // Next transition in the linked list
 } XrClassTransition;
 
-/* ========== ITable Entry (opaque) ========== */
-
-// Full layout lives in xclass_internal.h; external consumers only
-// need to know XrClass carries a `XrItableEntry *itable` pointer.
-typedef struct XrItableEntry XrItableEntry;
-
 /* ========== Builtin Kind ========== */
 
 /* Compact nominal-identity discriminator for builtin instance types.
@@ -200,11 +194,6 @@ struct XrClass {
     int *method_symbol_to_index;
     int method_map_capacity;
 
-    /* === VTable === */
-    XrMethod **vtable;
-    uint16_t vtable_size;
-    uint16_t own_method_start;  // Start index of own methods in vtable
-
     /* === Static Fields === */
     XrValue *static_field_values;
     uint16_t static_field_count;
@@ -212,10 +201,6 @@ struct XrClass {
     /* === Interfaces === */
     struct XrClass **interfaces;
     uint8_t interface_count;
-
-    /* === ITable === */
-    XrItableEntry *itable;
-    uint8_t itable_size;
 
     /* === Flags === */
     uint32_t flags;

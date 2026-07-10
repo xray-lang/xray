@@ -474,10 +474,6 @@ void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder, const cha
 // xclass_builder_finalize.c, and no external consumer ever asked for a
 // pre-finalize preview.
 //
-// generate_vtable + find_method_in_parent_vtable moved to
-// xclass_builder_finalize.c (file-local static there) because the
-// only caller is finalize_methods; there are no cross-TU users.
-
 /* ========== Builder Destroy ========== */
 
 void xr_class_builder_destroy(XrClassBuilder *builder) {
