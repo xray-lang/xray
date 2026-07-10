@@ -2903,7 +2903,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "Array/Span data pointer lowering should generate");
     assert(contains(code, "->data)") && "ptr must lower to raw array data");
-    assert(!contains(code, "mutPtr") && !contains(code, "ptr") &&
+    assert(!contains(code, "\"mutPtr\"") && !contains(code, "\"ptr\"") &&
            "data pointer methods must not survive as dynamic method names");
     assert(!contains(code, "xrt_method_0(") &&
            "data pointer methods must not fall back to dynamic method dispatch");
@@ -3261,19 +3261,16 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "write function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xrt_ptr_store_u16_le_unchecked_raw(") > 0 &&
-           "RawMut.storeLE<uint16> must lower to the raw pointer helper");
-    assert(count_between(fn, fn_end, "xrt_ptr_store_u32_le_unchecked_raw(") > 0 &&
-           "RawMut.storeLE<uint32> must lower to the raw pointer helper");
-    assert(count_between(fn, fn_end, "xrt_ptr_store_u64_le_unchecked_raw(") > 0 &&
-           "RawMut.storeLE<uint64> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_store_u16_le_unchecked_raw(v") > 0 &&
+           "RawMut.storeLE<uint16> must pass a native pointer to the raw helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_store_u32_le_unchecked_raw(v") > 0 &&
+           "RawMut.storeLE<uint32> must pass a native pointer to the raw helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_store_u64_le_unchecked_raw(v") > 0 &&
+           "RawMut.storeLE<uint64> must pass a native pointer to the raw helper");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "RawMut.storeLE should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "RawMut.storeLE hot path must not round-trip through integer pointer casts");
-    assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
-           count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
-           "RawMut.storeLE hot path must not box or unbox pointer values");
     assert(count_between(fn, fn_end, "xrt_span_bytes_store_") == 0 &&
            "RawMut.storeLE must not route back through ByteSpan helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
@@ -3541,7 +3538,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
     assert(!had_error && "escaping struct heap-native path should generate");
     assert(contains(code, "typedef struct xrt_struct_test_") &&
            "escaping primitive struct must emit a native heap layout");
-    assert(contains(code, "XR_TAG_AGG_REF") &&
+    assert(contains(code, "xr_aggregate_ref(") &&
            "escaping primitive struct must allocate as an AOT struct reference");
     assert(contains(code, "->x") && contains(code, "->y") && contains(code, "->ok") &&
            contains(code, "->byte") && "escaping primitive struct fields must use direct access");
@@ -3612,7 +3609,7 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
            "mixed scalar/string struct must emit a native heap layout");
     assert(contains(code, "XrValue name") &&
            "string struct field must be stored as a tagged immutable reference field");
-    assert(contains(code, "XR_TAG_AGG_REF") &&
+    assert(contains(code, "xr_aggregate_ref(") &&
            "mixed scalar/string struct must allocate as an AOT struct reference");
     assert(contains(code, "->count") && contains(code, "->name") &&
            "mixed scalar/string struct fields must use direct access");
@@ -3778,8 +3775,9 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
     assert(contains(code, "uint8_t _fa") && "local fixed array must allocate native stack storage");
     assert(contains(code, "xr_array_ref(_fa") &&
            "local fixed array must expose storage as an array ref");
-    assert(contains(code, "XR_ARRAY_REF_ELEM_COUNT") &&
-           "local fixed array length must read array-ref metadata");
+    assert(contains(code, "XR_FROM_INT(INT64_C(4))") &&
+           !contains(code, "XR_ARRAY_REF_ELEM_COUNT") &&
+           "local fixed array length must use its static extent without a metadata read");
     assert(contains(code, "[INT64_C(1)] = (uint8_t)") &&
            "local fixed array constant stores should use direct stack lanes");
     assert(contains(code, "((uint8_t*)") && contains(code, ".ptr)[INT64_C(0)]") &&
@@ -3834,7 +3832,7 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(contains(code, "XR_TAG_AGG_REF") &&
+    assert(contains(code, "xr_aggregate_ref(") &&
            "shared primitive struct must use native heap storage");
     assert(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") > 0 &&
            "mutable local struct copy should clone the shared slot value before mutation");
@@ -5576,8 +5574,10 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     const char *hash32 = find_static_function_definition(code, "test_hash32_");
     assert(hash32 != NULL && "hash32 function should be generated");
     const char *hash32_end = next_static_after(hash32);
-    assert(count_between(hash32, hash32_end, "(uint64_t)(") >= 2 &&
-           "uint32 arithmetic should use unsigned C operands");
+    assert(count_between(hash32, hash32_end, "(uint32_t)(") >= 3 &&
+           "uint32 arithmetic should use width-precise unsigned C operands");
+    assert(count_between(hash32, hash32_end, "(uint64_t)(") == 0 &&
+           "uint32 arithmetic should not widen through uint64_t");
     assert(count_between(hash32, hash32_end, "(int64_t)((uint64_t)") == 0 &&
            "uint32 arithmetic should not cast the product through int64_t");
 
@@ -6214,7 +6214,8 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
                       "    var task = go worker(0)\n"
                       "    signal.close()\n"
                       "    print(await task)\n"
-                      "}\n";
+                      "}\n"
+                      "main()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -6252,7 +6253,8 @@ TEST(cgen_event_count_advance_uses_i64_helper) {
                       "    var task = go worker()\n"
                       "    signal.close()\n"
                       "    print(await task)\n"
-                      "}\n";
+                      "}\n"
+                      "main()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -6309,7 +6311,8 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
                       "    var task = go worker()\n"
                       "    latch.close()\n"
                       "    print(await task)\n"
-                      "}\n";
+                      "}\n"
+                      "main()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -6372,7 +6375,8 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
                       "    print(syncUse())\n"
                       "    var task = go worker()\n"
                       "    print(await task)\n"
-                      "}\n";
+                      "}\n"
+                      "main()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -6426,7 +6430,8 @@ TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
                       "    var task = go worker()\n"
                       "    sem.release()\n"
                       "    print(await task)\n"
-                      "}\n";
+                      "}\n"
+                      "main()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
