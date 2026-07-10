@@ -82,7 +82,7 @@ XR_FUNC void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder,
 // automatically; calling this on a subclass builder is an error.
 XR_FUNC void xr_class_builder_set_native_body(XrClassBuilder *builder, XrNativeBodyDesc *desc);
 
-// Finalize: compute offsets, generate vtable, freeze class, destroy builder
+// Finalize: compute offsets and flattened method slots, freeze class, destroy builder
 XR_FUNC XrClass *xr_class_builder_finalize(XrClassBuilder *builder);
 
 // Manual cleanup if finalize fails
@@ -93,9 +93,7 @@ XR_FUNC void xr_class_builder_destroy(XrClassBuilder *builder);
 XR_FUNC bool xr_class_builder_has_field(const XrClassBuilder *builder, const char *name);
 XR_FUNC bool xr_class_builder_has_method(const XrClassBuilder *builder, const char *name);
 
-// calculate_instance_size and generate_vtable were removed when
-// finalize was split into xclass_builder_finalize.c. The latter
-// keeps vtable generation as a file-local static helper; no
-// consumer outside finalize ever needed it.
+// calculate_instance_size was removed when finalize was split into
+// xclass_builder_finalize.c; no consumer needed a pre-finalize preview.
 
 #endif  // XCLASS_BUILDER_H

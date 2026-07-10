@@ -232,15 +232,6 @@ XrMethod *xr_class_lookup_method(XrClass *cls, int symbol) {
             XrMethod *method = &cls->methods[method_idx];
 
             if (method->symbol == symbol && method->type != XMETHOD_NONE) {
-                // VTable optimization for closure methods only;
-                // primitive methods do not use vtable dispatch.
-                if (method->type != XMETHOD_PRIMITIVE && method->vtable_index >= 0 && cls->vtable &&
-                    method->vtable_index < cls->vtable_size) {
-                    XrMethod *vtable_method = cls->vtable[method->vtable_index];
-                    if (vtable_method && vtable_method->type != XMETHOD_NONE) {
-                        return vtable_method;
-                    }
-                }
                 return method;
             }
         }
@@ -382,133 +373,6 @@ bool xr_class_implements_interface(XrClass *cls, XrClass *iface) {
     return false;
 }
 
-/* ========== ITable Generation ========== */
-
-int xr_class_build_itable(XrClass *cls) {
-    if (!cls)
-        return -1;
-
-    // Free existing itable (including per-entry methods[] and per-entry
-    // method_symbol_to_index maps that a previous build may have left).
-    if (cls->itable) {
-        for (int i = 0; i < cls->itable_size; i++) {
-            if (cls->itable[i].methods) {
-                xr_free(cls->itable[i].methods);
-            }
-            if (cls->itable[i].method_symbol_to_index) {
-                xr_free(cls->itable[i].method_symbol_to_index);
-            }
-        }
-        xr_free(cls->itable);
-        cls->itable = NULL;
-        cls->itable_size = 0;
-    }
-
-    if (!cls->interfaces || cls->interface_count == 0) {
-        return 0;
-    }
-
-    cls->itable_size = cls->interface_count;
-    cls->itable = (XrItableEntry *) xr_malloc(cls->itable_size * sizeof(XrItableEntry));
-    if (!cls->itable) {
-        cls->itable_size = 0;
-        return -1;
-    }
-    memset(cls->itable, 0, cls->itable_size * sizeof(XrItableEntry));
-
-    int result = 0;
-
-    for (int i = 0; i < cls->interface_count; i++) {
-        XrClass *iface = cls->interfaces[i];
-        if (!iface)
-            continue;
-
-        cls->itable[i].interface = iface;
-        cls->itable[i].method_count = iface->method_count;
-
-        if (iface->method_count > 0) {
-            cls->itable[i].methods =
-                (XrMethod **) xr_malloc(iface->method_count * sizeof(XrMethod *));
-            if (!cls->itable[i].methods) {
-                // methods[] alloc failed -> unwind every itable entry built
-                // so far. Centralised in the `fail` label so we never mix
-                // a "half-built" itable into cls on the error path.
-                result = -1;
-                goto fail;
-            }
-
-            // Resolve each interface method via the class's
-            // symbol-to-index table. method_symbol_to_index is populated
-            // by the builder for every class with at least one method,
-            // so this is O(1) per slot; the previous inner loop was
-            // O(cls->method_count) per interface method.
-            int max_symbol = -1;
-            for (int j = 0; j < iface->method_count; j++) {
-                XrMethod *iface_method = &iface->methods[j];
-                XrMethod *impl = NULL;
-
-                int sym = iface_method->symbol;
-                if (cls->method_symbol_to_index && sym >= 0 && sym < cls->method_map_capacity) {
-                    int idx = cls->method_symbol_to_index[sym];
-                    if (idx >= 0 && idx < cls->method_count) {
-                        impl = &cls->methods[idx];
-                    }
-                }
-
-                cls->itable[i].methods[j] = impl;
-                if (sym > max_symbol)
-                    max_symbol = sym;
-            }
-
-            // Build the per-entry symbol -> slot map so the runtime
-            // dispatch path xr_class_lookup_interface_method_by_symbol
-            // can jump directly to a slot instead of walking the
-            // methods[] array. A map allocation failure is tolerated
-            // here -- lookup_by_symbol handles the NULL-map case with
-            // a direct "entry has no map => return NULL" fallback.
-            if (max_symbol >= 0) {
-                int cap = max_symbol + 1;
-                int *map = (int *) xr_malloc(cap * sizeof(int));
-                if (map) {
-                    for (int k = 0; k < cap; k++)
-                        map[k] = -1;
-                    for (int j = 0; j < iface->method_count; j++) {
-                        int sym = iface->methods[j].symbol;
-                        if (sym >= 0 && sym < cap)
-                            map[sym] = j;
-                    }
-                    cls->itable[i].method_symbol_to_index = map;
-                    cls->itable[i].method_map_capacity = cap;
-                }
-            }
-        } else {
-            cls->itable[i].methods = NULL;
-        }
-    }
-
-    return 0;
-
-fail:
-    // Release every partial entry and the itable array itself so the
-    // class is left with (itable == NULL, itable_size == 0) just like
-    // the pre-build state -- xr_class_free and a future retry of
-    // build_itable both see a clean slate.
-    for (int i = 0; i < cls->itable_size; i++) {
-        if (cls->itable[i].methods) {
-            xr_free(cls->itable[i].methods);
-            cls->itable[i].methods = NULL;
-        }
-        if (cls->itable[i].method_symbol_to_index) {
-            xr_free(cls->itable[i].method_symbol_to_index);
-            cls->itable[i].method_symbol_to_index = NULL;
-        }
-    }
-    xr_free(cls->itable);
-    cls->itable = NULL;
-    cls->itable_size = 0;
-    return result;
-}
-
 // instanceof operator implementation (O(1) with primary_supers)
 bool xr_instance_of(void *obj, const XrClass *target) {
     if (obj == NULL || target == NULL) {
@@ -577,12 +441,6 @@ void xr_class_free(XrClass *cls) {
         cls->field_default_values = NULL;
     }
 
-    // Free vtable
-    if (cls->vtable) {
-        xr_free(cls->vtable);
-        cls->vtable = NULL;
-    }
-
     // Free static field values
     if (cls->static_field_values) {
         xr_free(cls->static_field_values);
@@ -593,20 +451,6 @@ void xr_class_free(XrClass *cls) {
     if (cls->interfaces) {
         xr_free(cls->interfaces);
         cls->interfaces = NULL;
-    }
-
-    // Free itable entries (methods[] and per-entry symbol map).
-    if (cls->itable) {
-        for (int i = 0; i < cls->itable_size; i++) {
-            if (cls->itable[i].methods) {
-                xr_free(cls->itable[i].methods);
-            }
-            if (cls->itable[i].method_symbol_to_index) {
-                xr_free(cls->itable[i].method_symbol_to_index);
-            }
-        }
-        xr_free(cls->itable);
-        cls->itable = NULL;
     }
 
     // Free secondary supers hash (only allocated when depth >= 8).

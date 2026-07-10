@@ -96,7 +96,6 @@ typedef struct XrMethod {
     const char *name;
     uint8_t param_count;
 
-    int32_t vtable_index;  // -1 if not in vtable
 } XrMethod;
 
 /* ========== Property Accessors (inline) ========== */

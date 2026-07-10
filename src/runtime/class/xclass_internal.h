@@ -10,13 +10,11 @@
  * KEY CONCEPT:
  *   Everything in this header is private to src/runtime/class/.
  *   It sits one level below the public xclass.h and exposes:
- *     1. The full XrItableEntry layout (xclass.h only knows it as an
- *        opaque forward-declared struct).
- *     2. Build-time helpers -- xr_class_build_itable,
- *        xr_class_compute_operator_flags, xr_symbol_to_op_flag --
+ *     1. Build-time helpers -- xr_class_compute_operator_flags,
+ *        xr_symbol_to_op_flag --
  *        that the builder calls during finalize and that nothing
  *        outside the class module has any business invoking.
- *     3. The free hook used by builder rollback paths.
+ *     2. The free hook used by builder rollback paths.
  *
  * WHY THIS DESIGN:
  *   Public consumers (vm/, frontend/, api/) only need
@@ -33,24 +31,6 @@
 
 #include "xclass.h"
 
-/* ========== ITable Entry ========== */
-
-// Interface table entry for interface method dispatch.
-//
-// method_symbol_to_index[] is a per-entry reverse map from method
-// symbol -> index into methods[]. It is allocated by
-// xr_class_build_itable and sized by the highest symbol the entry
-// references (method_map_capacity). A NULL map means "no symbol
-// index available" (e.g. allocation pressure); callers fall back to
-// the methods[] array walk on that path.
-struct XrItableEntry {
-    struct XrClass *interface;
-    XrMethod **methods;
-    uint16_t method_count;
-    int *method_symbol_to_index;
-    int method_map_capacity;
-};
-
 /* ========== Build-Time Helpers ========== */
 
 // Compute operator overload flags for a class. Called once from
@@ -61,13 +41,6 @@ XR_FUNC void xr_class_compute_operator_flags(XrClass *cls);
 // symbol is not an operator. Internal-only; callers outside the class
 // module go through XCLASS_HAS_OP (public, flag-level).
 XR_FUNC uint32_t xr_symbol_to_op_flag(int symbol);
-
-// Rebuild the class's itable from its interfaces[] array. Idempotent:
-// frees any previously-allocated itable state before repopulating.
-// Returns 0 on success, -1 on allocation failure (cls->itable is
-// restored to NULL in that case so the class stays in a well-defined
-// "no itable" state rather than half-built).
-XR_FUNC int xr_class_build_itable(XrClass *cls);
 
 /* ========== Cleanup ========== */
 
