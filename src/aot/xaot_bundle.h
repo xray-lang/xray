@@ -963,6 +963,7 @@ typedef enum XaotRecordShapeAction {
     XAOT_RECORD_SHAPE_OPTIONS_BAG,
     XAOT_RECORD_SHAPE_SPREAD_RESULT,
     XAOT_RECORD_SHAPE_STATIC_RECORD,
+    XAOT_RECORD_SHAPE_PATCH_RECORD,
     XAOT_RECORD_SHAPE_REJECT,
 } XaotRecordShapeAction;
 
@@ -973,6 +974,13 @@ typedef enum XaotRecordAccessAction {
     XAOT_RECORD_ACCESS_REJECT,
 } XaotRecordAccessAction;
 
+typedef enum XaotRecordMergeAction {
+    XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE = 1,
+    XAOT_RECORD_MERGE_COPY_APPEND,
+    XAOT_RECORD_MERGE_JSON_BRIDGE,
+    XAOT_RECORD_MERGE_REJECT,
+} XaotRecordMergeAction;
+
 enum {
     XAOT_RECORD_EV_GLOBAL_ROW = 1u << 0,
     XAOT_RECORD_EV_SEALED = 1u << 1,
@@ -980,6 +988,10 @@ enum {
     XAOT_RECORD_EV_RECEIVER_SHAPE = 1u << 3,
     XAOT_RECORD_EV_FIELD_INDEX = 1u << 4,
     XAOT_RECORD_EV_JSON_BRIDGE = 1u << 5,
+    XAOT_RECORD_EV_BASE_SHAPE = 1u << 6,
+    XAOT_RECORD_EV_PATCH_SHAPE = 1u << 7,
+    XAOT_RECORD_EV_RESULT_SHAPE = 1u << 8,
+    XAOT_RECORD_EV_COPY_TABLE = 1u << 9,
 };
 
 enum {
@@ -988,6 +1000,8 @@ enum {
     XAOT_RECORD_UNPROVEN_RECEIVER_SHAPE_UNKNOWN = 2,
     XAOT_RECORD_UNPROVEN_STALE_SHAPE = 3,
     XAOT_RECORD_UNPROVEN_DYNAMIC_FIELD = 4,
+    XAOT_RECORD_UNPROVEN_MISSING_MERGE_SHAPE = 5,
+    XAOT_RECORD_UNPROVEN_MERGE_FIELD_MISMATCH = 6,
 };
 
 typedef struct XaotRecordShapePlan {
@@ -1017,6 +1031,25 @@ typedef struct XaotRecordAccessPlan {
     uint32_t evidence;
     uint8_t unproven_reason;
 } XaotRecordAccessPlan;
+
+typedef struct XaotRecordMergePlan {
+    XgRecordMergeId merge_id;
+    XgModuleId module_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    XgRecordShapeId base_shape_id;
+    XgRecordShapeId patch_shape_id;
+    XgRecordShapeId result_shape_id;
+    uint16_t base_field_count;
+    uint16_t patch_field_count;
+    uint16_t result_field_count;
+    uint16_t overwrite_count;
+    uint32_t copy_table_id;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+    uint64_t merge_hash;
+} XaotRecordMergePlan;
 
 typedef enum XaotOptionsAction {
     XAOT_OPTIONS_DEFAULT_ELIDED = 1,
@@ -1548,6 +1581,9 @@ typedef struct XaotBundle {
     XaotRecordAccessPlan *record_access_plans;
     uint32_t nrecord_access_plans;
     uint32_t record_access_plan_cap;
+    XaotRecordMergePlan *record_merge_plans;
+    uint32_t nrecord_merge_plans;
+    uint32_t record_merge_plan_cap;
     XaotOptionsPlan *options_plans;
     uint32_t noptions_plans;
     uint32_t options_plan_cap;
@@ -1654,6 +1690,8 @@ XR_FUNC const XaotRecordShapePlan *
 xaot_bundle_find_record_shape_plan(const XaotBundle *bundle, XgRecordShapeId record_shape_id);
 XR_FUNC const XaotRecordAccessPlan *
 xaot_bundle_find_record_access_plan(const XaotBundle *bundle, XgRecordAccessId record_access_id);
+XR_FUNC const XaotRecordMergePlan *
+xaot_bundle_find_record_merge_plan(const XaotBundle *bundle, XgRecordMergeId record_merge_id);
 XR_FUNC const XaotOptionsPlan *xaot_bundle_find_options_plan(const XaotBundle *bundle,
                                                              XgOptionsId options_id);
 XR_FUNC const XaotMapShapePlan *xaot_bundle_find_map_shape_plan(const XaotBundle *bundle,

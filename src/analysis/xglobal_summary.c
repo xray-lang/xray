@@ -511,6 +511,25 @@ static uint64_t hash_record_access_summary(uint64_t hash, const XgRecordAccessSu
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_record_merge_summary(uint64_t hash, const XgRecordMergeSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->merge_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->base_shape_id);
+    hash = hash_u32(hash, row->patch_shape_id);
+    hash = hash_u32(hash, row->result_shape_id);
+    hash = hash_u32(hash, row->base_field_count);
+    hash = hash_u32(hash, row->patch_field_count);
+    hash = hash_u32(hash, row->result_field_count);
+    hash = hash_u32(hash, row->overwrite_count);
+    hash = hash_u32(hash, row->copy_table_id);
+    hash = hash_u32(hash, row->flags);
+    return hash_u64(hash, row->merge_hash);
+}
+
 static uint64_t hash_options_bag_summary(uint64_t hash, const XgOptionsBagSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -901,6 +920,8 @@ XR_FUNC const char *xg_record_shape_kind_name(uint8_t kind) {
             return "spread";
         case XG_RECORD_SHAPE_STATIC:
             return "static";
+        case XG_RECORD_SHAPE_PATCH:
+            return "patch";
         default:
             return "unknown";
     }
@@ -1261,6 +1282,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->json_codecs);
     xr_free(evidence->record_shapes);
     xr_free(evidence->record_accesses);
+    xr_free(evidence->record_merges);
     xr_free(evidence->options_bags);
     xr_free(evidence->map_shapes);
     xr_free(evidence->map_entries);
@@ -1426,6 +1448,13 @@ XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *eviden
     return evidence &&
            reserve_array((void **) &evidence->record_accesses, &evidence->record_access_cap,
                          capacity, sizeof(XgRecordAccessSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_record_merges(XgGlobalEvidence *evidence,
+                                                      uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->record_merges, &evidence->record_merge_cap, capacity,
+                         sizeof(XgRecordMergeSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_options_bags(XgGlobalEvidence *evidence,
@@ -1760,6 +1789,18 @@ xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
     return row;
 }
 
+XR_FUNC XgRecordMergeSummary *
+xg_global_evidence_add_record_merge(XgGlobalEvidence *evidence,
+                                    const XgRecordMergeSummary *summary) {
+    XgRecordMergeSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_record_merges(evidence, evidence->nrecord_merges + 1))
+        return NULL;
+    row = &evidence->record_merges[evidence->nrecord_merges++];
+    *row = *summary;
+    return row;
+}
+
 XR_FUNC XgOptionsBagSummary *
 xg_global_evidence_add_options_bag(XgGlobalEvidence *evidence, const XgOptionsBagSummary *summary) {
     XgOptionsBagSummary *row;
@@ -1949,6 +1990,18 @@ xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
     for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
         if (evidence->record_shapes[i].record_shape_id == record_shape_id)
             return &evidence->record_shapes[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgRecordMergeSummary *
+xg_global_evidence_find_record_merge(const XgGlobalEvidence *evidence,
+                                     XgRecordMergeId record_merge_id) {
+    if (!evidence || record_merge_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nrecord_merges; i++) {
+        if (evidence->record_merges[i].merge_id == record_merge_id)
+            return &evidence->record_merges[i];
     }
     return NULL;
 }
@@ -2433,6 +2486,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->njson_codecs, sizeof(evidence->njson_codecs));
     hash = hash_mix(hash, &evidence->nrecord_shapes, sizeof(evidence->nrecord_shapes));
     hash = hash_mix(hash, &evidence->nrecord_accesses, sizeof(evidence->nrecord_accesses));
+    hash = hash_mix(hash, &evidence->nrecord_merges, sizeof(evidence->nrecord_merges));
     hash = hash_mix(hash, &evidence->noptions_bags, sizeof(evidence->noptions_bags));
     hash = hash_mix(hash, &evidence->nmap_shapes, sizeof(evidence->nmap_shapes));
     hash = hash_mix(hash, &evidence->nmap_entries, sizeof(evidence->nmap_entries));
@@ -2490,6 +2544,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_record_shape_summary(hash, &evidence->record_shapes[i]);
     for (uint32_t i = 0; i < evidence->nrecord_accesses; i++)
         hash = hash_record_access_summary(hash, &evidence->record_accesses[i]);
+    for (uint32_t i = 0; i < evidence->nrecord_merges; i++)
+        hash = hash_record_merge_summary(hash, &evidence->record_merges[i]);
     for (uint32_t i = 0; i < evidence->noptions_bags; i++)
         hash = hash_options_bag_summary(hash, &evidence->options_bags[i]);
     for (uint32_t i = 0; i < evidence->nmap_shapes; i++)
@@ -2982,8 +3038,9 @@ static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidenc
         "generic_insts=%u "
         "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u seq=%u capacity=%u "
         "bulk=%u encoding=%u derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
-        "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u options=%u "
-        "map_shapes=%u map_entries=%u key_accesses=%u hash_eqs=%u global_hash=%016" PRIx64 "\n",
+        "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u "
+        "record_merges=%u options=%u map_shapes=%u map_entries=%u key_accesses=%u "
+        "hash_eqs=%u global_hash=%016" PRIx64 "\n",
         evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
         evidence ? evidence->nmethods : 0, evidence ? evidence->ninterface_impls : 0,
         evidence ? evidence->ninterface_extends : 0, evidence ? evidence->ninterface_methods : 0,
@@ -2997,9 +3054,10 @@ static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidenc
         evidence ? evidence->nderived_methods : 0, evidence ? evidence->njson_shapes : 0,
         evidence ? evidence->njson_accesses : 0, evidence ? evidence->njson_codecs : 0,
         evidence ? evidence->nrecord_shapes : 0, evidence ? evidence->nrecord_accesses : 0,
-        evidence ? evidence->noptions_bags : 0, evidence ? evidence->nmap_shapes : 0,
-        evidence ? evidence->nmap_entries : 0, evidence ? evidence->nkey_accesses : 0,
-        evidence ? evidence->nhash_eqs : 0, evidence ? xg_global_evidence_hash(evidence) : 0);
+        evidence ? evidence->nrecord_merges : 0, evidence ? evidence->noptions_bags : 0,
+        evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
+        evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0,
+        evidence ? xg_global_evidence_hash(evidence) : 0);
 }
 
 static void dump_cache_payload_body_for_phase(FILE *out, const XgGlobalEvidence *evidence,
@@ -3690,8 +3748,9 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "sequence_accesses=%u capacity_ops=%u bulk_ops=%u encoding_ops=%u derives=%u "
             "derived_fields=%u derived_methods=%u json_shapes=%u "
-            "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u options=%u "
-            "map_shapes=%u map_entries=%u key_accesses=%u hash_eqs=%u\n",
+            "json_accesses=%u json_codecs=%u record_shapes=%u record_accesses=%u "
+            "record_merges=%u options=%u map_shapes=%u map_entries=%u key_accesses=%u "
+            "hash_eqs=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods,
             evidence->ninterface_object_uses, evidence->nbodies, evidence->ncallsites,
@@ -3701,8 +3760,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->nencoding_ops, evidence->nderives, evidence->nderived_fields,
             evidence->nderived_methods, evidence->njson_shapes, evidence->njson_accesses,
             evidence->njson_codecs, evidence->nrecord_shapes, evidence->nrecord_accesses,
-            evidence->noptions_bags, evidence->nmap_shapes, evidence->nmap_entries,
-            evidence->nkey_accesses, evidence->nhash_eqs);
+            evidence->nrecord_merges, evidence->noptions_bags, evidence->nmap_shapes,
+            evidence->nmap_entries, evidence->nkey_accesses, evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -3959,6 +4018,17 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 i, a->record_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
                 xg_record_access_kind_name(a->access_kind), a->source_span_id, a->field_name_id,
                 a->result_type_key, (unsigned) a->field_ordinal, a->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_merges; i++) {
+        const XgRecordMergeSummary *m = &evidence->record_merges[i];
+        fprintf(out,
+                "record-merge %u id=%u module=%u func=%u span=%u base_shape=%u patch_shape=%u "
+                "result_shape=%u base_fields=%u patch_fields=%u result_fields=%u overwrites=%u "
+                "copy_table=%u flags=0x%x hash=%016" PRIx64 "\n",
+                i, m->merge_id, m->module_id, m->owner_func_id, m->source_span_id, m->base_shape_id,
+                m->patch_shape_id, m->result_shape_id, (unsigned) m->base_field_count,
+                (unsigned) m->patch_field_count, (unsigned) m->result_field_count,
+                (unsigned) m->overwrite_count, m->copy_table_id, m->flags, m->merge_hash);
     }
     for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
         const XgOptionsBagSummary *o = &evidence->options_bags[i];
