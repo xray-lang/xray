@@ -111,6 +111,7 @@ static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->decl_id);
     hash = hash_u8(hash, row->kind);
     hash = hash_u32(hash, row->flags);
@@ -149,6 +150,7 @@ static uint64_t hash_method_summary(uint64_t hash, const XgMethodSummary *row) {
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->method_id);
     hash = hash_u32(hash, row->owner_class_id);
+    hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->name_id);
     hash = hash_u32(hash, row->signature_key);
     hash = hash_u32(hash, row->override_of);
@@ -212,6 +214,7 @@ static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->func_id);
     hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->owner_decl_id);
     hash = hash_u32(hash, row->owner_class_id);
     hash = hash_u32(hash, row->owner_method_id);
@@ -234,6 +237,7 @@ static uint64_t hash_callsite_summary(uint64_t hash, const XgCallsiteSummary *ro
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->callsite_id);
     hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u32(hash, row->body_ordinal);
     hash = hash_u8(hash, row->kind);
@@ -2977,10 +2981,10 @@ static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *e
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
-                "decl id=%u module=%u kind=%u flags=0x%x name=%u type=%u sig=%u span=%u "
+                "decl id=%u module=%u node=%u kind=%u flags=0x%x name=%u type=%u sig=%u span=%u "
                 "derive=0x%x\n",
-                d->decl_id, d->module_id, (unsigned) d->kind, d->flags, d->name_id, d->type_key,
-                d->signature_key, d->source_span_id, d->derive_flags);
+                d->decl_id, d->module_id, d->source_node_id, (unsigned) d->kind, d->flags,
+                d->name_id, d->type_key, d->signature_key, d->source_span_id, d->derive_flags);
     }
 }
 
@@ -3011,10 +3015,11 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];
         fprintf(out,
-                "method id=%u owner=%u name=%u sig=%u override=%u root=%u depth=%u "
+                "method id=%u owner=%u node=%u name=%u sig=%u override=%u root=%u depth=%u "
                 "default=%u flags=0x%x\n",
-                m->method_id, m->owner_class_id, m->name_id, m->signature_key, m->override_of,
-                m->root_method_id, m->override_depth, m->default_arg_contract_id, m->flags);
+                m->method_id, m->owner_class_id, m->source_node_id, m->name_id, m->signature_key,
+                m->override_of, m->root_method_id, m->override_depth, m->default_arg_contract_id,
+                m->flags);
     }
     for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
         const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
@@ -3071,23 +3076,25 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];
         fprintf(out,
-                "body id=%u module=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
+                "body id=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
                 "kind=%u hash=%016" PRIx64 " effect=0x%x escape=0x%x caps=0x%x "
                 "calls=%u+%u metadata=0x%x static=0x%x\n",
-                b->func_id, b->module_id, b->owner_decl_id, b->owner_class_id, b->owner_method_id,
-                b->name_id, b->signature_key, b->source_span_id, (unsigned) b->kind, b->body_hash,
-                b->effect_bits, b->escape_bits, b->capability_bits, b->callsite_start,
-                b->callsite_count, b->metadata_use_bits, b->static_data_use_bits);
+                b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
+                b->owner_method_id, b->name_id, b->signature_key, b->source_span_id,
+                (unsigned) b->kind, b->body_hash, b->effect_bits, b->escape_bits,
+                b->capability_bits, b->callsite_start, b->callsite_count, b->metadata_use_bits,
+                b->static_data_use_bits);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
-        fprintf(out,
-                "callsite id=%u owner=%u span=%u ordinal=%u kind=%u target=%u recv_class=%u "
-                "recv_interface=%u method=%u name=%u sig=%u args=%u+%u flags=0x%x\n",
-                c->callsite_id, c->owner_func_id, c->source_span_id, c->body_ordinal,
-                (unsigned) c->kind, c->static_target_func_id, c->receiver_static_class_id,
-                c->receiver_static_interface_id, c->method_id, c->method_name_id,
-                c->method_signature_key, c->arg_type_key_start, (unsigned) c->arg_count, c->flags);
+        fprintf(
+            out,
+            "callsite id=%u owner=%u node=%u span=%u ordinal=%u kind=%u target=%u recv_class=%u "
+            "recv_interface=%u method=%u name=%u sig=%u args=%u+%u flags=0x%x\n",
+            c->callsite_id, c->owner_func_id, c->source_node_id, c->source_span_id, c->body_ordinal,
+            (unsigned) c->kind, c->static_target_func_id, c->receiver_static_class_id,
+            c->receiver_static_interface_id, c->method_id, c->method_name_id,
+            c->method_signature_key, c->arg_type_key_start, (unsigned) c->arg_count, c->flags);
     }
     for (uint32_t i = 0; i < evidence->ninterface_object_uses; i++) {
         const XgInterfaceObjectUseSummary *u = &evidence->interface_object_uses[i];
@@ -3277,11 +3284,12 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "decl id=%" SCNu32 " module=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32
-                   " name=%" SCNu32 " type=%" SCNu32 " sig=%" SCNu32 " span=%" SCNu32
-                   " derive=0x%" SCNx32 " %c",
-                   &row.decl_id, &row.module_id, &kind, &row.flags, &row.name_id, &row.type_key,
-                   &row.signature_key, &row.source_span_id, &row.derive_flags, &trailing) != 9)
+                   "decl id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " kind=%" SCNu32
+                   " flags=0x%" SCNx32 " name=%" SCNu32 " type=%" SCNu32 " sig=%" SCNu32
+                   " span=%" SCNu32 " derive=0x%" SCNx32 " %c",
+                   &row.decl_id, &row.module_id, &row.source_node_id, &kind, &row.flags,
+                   &row.name_id, &row.type_key, &row.signature_key, &row.source_span_id,
+                   &row.derive_flags, &trailing) != 10)
             return false;
         row.kind = (uint8_t) kind;
         if (!xg_global_evidence_add_decl(evidence, &row))
@@ -3360,12 +3368,12 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "method id=%" SCNu32 " owner=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
-                   " override=%" SCNu32 " root=%" SCNu32 " depth=%" SCNu32 " default=%" SCNu32
-                   " flags=0x%" SCNx32 " %c",
-                   &row.method_id, &row.owner_class_id, &row.name_id, &row.signature_key,
-                   &row.override_of, &row.root_method_id, &row.override_depth,
-                   &row.default_arg_contract_id, &row.flags, &trailing) != 9)
+                   "method id=%" SCNu32 " owner=%" SCNu32 " node=%" SCNu32 " name=%" SCNu32
+                   " sig=%" SCNu32 " override=%" SCNu32 " root=%" SCNu32 " depth=%" SCNu32
+                   " default=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.method_id, &row.owner_class_id, &row.source_node_id, &row.name_id,
+                   &row.signature_key, &row.override_of, &row.root_method_id, &row.override_depth,
+                   &row.default_arg_contract_id, &row.flags, &trailing) != 10)
             return false;
         if (!xg_global_evidence_add_method(evidence, &row))
             return false;
@@ -3508,16 +3516,16 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "body id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " class=%" SCNu32
-                   " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32 " span=%" SCNu32
-                   " kind=%" SCNu32 " hash=%" SCNx64 " effect=0x%" SCNx32 " escape=0x%" SCNx32
-                   " caps=0x%" SCNx32 " calls=%" SCNu32 "+%" SCNu32 " metadata=0x%" SCNx32
-                   " static=0x%" SCNx32 " %c",
-                   &row.func_id, &row.module_id, &row.owner_decl_id, &row.owner_class_id,
-                   &row.owner_method_id, &row.name_id, &row.signature_key, &row.source_span_id,
-                   &kind, &row.body_hash, &row.effect_bits, &row.escape_bits, &row.capability_bits,
-                   &row.callsite_start, &row.callsite_count, &row.metadata_use_bits,
-                   &row.static_data_use_bits, &trailing) != 17)
+                   "body id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " decl=%" SCNu32
+                   " class=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
+                   " span=%" SCNu32 " kind=%" SCNu32 " hash=%" SCNx64 " effect=0x%" SCNx32
+                   " escape=0x%" SCNx32 " caps=0x%" SCNx32 " calls=%" SCNu32 "+%" SCNu32
+                   " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
+                   &row.func_id, &row.module_id, &row.source_node_id, &row.owner_decl_id,
+                   &row.owner_class_id, &row.owner_method_id, &row.name_id, &row.signature_key,
+                   &row.source_span_id, &kind, &row.body_hash, &row.effect_bits, &row.escape_bits,
+                   &row.capability_bits, &row.callsite_start, &row.callsite_count,
+                   &row.metadata_use_bits, &row.static_data_use_bits, &trailing) != 18)
             return false;
         row.kind = (uint8_t) kind;
         if (!xg_global_evidence_add_body(evidence, &row))
@@ -3532,15 +3540,15 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "callsite id=%" SCNu32 " owner=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32
-                   " kind=%" SCNu32 " target=%" SCNu32 " recv_class=%" SCNu32
+                   "callsite id=%" SCNu32 " owner=%" SCNu32 " node=%" SCNu32 " span=%" SCNu32
+                   " ordinal=%" SCNu32 " kind=%" SCNu32 " target=%" SCNu32 " recv_class=%" SCNu32
                    " recv_interface=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
                    " args=%" SCNu32 "+%" SCNu32 " flags=0x%" SCNx32 " %c",
-                   &row.callsite_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal,
-                   &kind, &row.static_target_func_id, &row.receiver_static_class_id,
-                   &row.receiver_static_interface_id, &row.method_id, &row.method_name_id,
-                   &row.method_signature_key, &row.arg_type_key_start, &arg_count, &row.flags,
-                   &trailing) != 14)
+                   &row.callsite_id, &row.owner_func_id, &row.source_node_id, &row.source_span_id,
+                   &row.body_ordinal, &kind, &row.static_target_func_id,
+                   &row.receiver_static_class_id, &row.receiver_static_interface_id, &row.method_id,
+                   &row.method_name_id, &row.method_signature_key, &row.arg_type_key_start,
+                   &arg_count, &row.flags, &trailing) != 15)
             return false;
         row.kind = (uint8_t) kind;
         row.arg_count = (uint16_t) arg_count;
@@ -3858,10 +3866,11 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
-                "decl %u id=%u module=%u kind=%s flags=0x%x name=%u type=%u sig=%u span=%u "
-                "derive=0x%x\n",
-                i, d->decl_id, d->module_id, xg_decl_kind_name(d->kind), d->flags, d->name_id,
-                d->type_key, d->signature_key, d->source_span_id, d->derive_flags);
+                "decl %u id=%u module=%u node=%u kind=%s flags=0x%x name=%u type=%u sig=%u "
+                "span=%u derive=0x%x\n",
+                i, d->decl_id, d->module_id, d->source_node_id, xg_decl_kind_name(d->kind),
+                d->flags, d->name_id, d->type_key, d->signature_key, d->source_span_id,
+                d->derive_flags);
     }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *c = &evidence->classes[i];
@@ -3879,10 +3888,11 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];
         fprintf(out,
-                "method %u id=%u owner=%u name=%u sig=%u override_of=%u root=%u depth=%u "
+                "method %u id=%u owner=%u node=%u name=%u sig=%u override_of=%u root=%u depth=%u "
                 "defaults=%u flags=0x%x\n",
-                i, m->method_id, m->owner_class_id, m->name_id, m->signature_key, m->override_of,
-                m->root_method_id, m->override_depth, m->default_arg_contract_id, m->flags);
+                i, m->method_id, m->owner_class_id, m->source_node_id, m->name_id, m->signature_key,
+                m->override_of, m->root_method_id, m->override_depth, m->default_arg_contract_id,
+                m->flags);
     }
     for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
         const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
@@ -3917,13 +3927,12 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     }
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];
-        fprintf(
-            out,
-            "body %u func=%u module=%u decl=%u class=%u method=%u name=%u sig=%u span=%u kind=%s "
-            "hash=%016" PRIx64 " effect=0x%x",
-            i, b->func_id, b->module_id, b->owner_decl_id, b->owner_class_id, b->owner_method_id,
-            b->name_id, b->signature_key, b->source_span_id, xg_body_kind_name(b->kind),
-            b->body_hash, b->effect_bits);
+        fprintf(out,
+                "body %u func=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u "
+                "span=%u kind=%s hash=%016" PRIx64 " effect=0x%x",
+                i, b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
+                b->owner_method_id, b->name_id, b->signature_key, b->source_span_id,
+                xg_body_kind_name(b->kind), b->body_hash, b->effect_bits);
         dump_named_bitset(out, b->effect_bits, effects, effect_count, xg_body_effect_name);
         fprintf(out, " escape=0x%x", b->escape_bits);
         dump_named_bitset(out, b->escape_bits, escapes, escape_count, xg_body_escape_name);
@@ -3941,9 +3950,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
         fprintf(out,
-                "callsite %u id=%u owner=%u span=%u kind=%s ordinal=%u target=%u recv_class=%u "
+                "callsite %u id=%u owner=%u node=%u span=%u kind=%s ordinal=%u target=%u "
+                "recv_class=%u "
                 "recv_iface=%u method=%u method_name=%u method_sig=%u args=%u+%u flags=0x%x\n",
-                i, c->callsite_id, c->owner_func_id, c->source_span_id,
+                i, c->callsite_id, c->owner_func_id, c->source_node_id, c->source_span_id,
                 xg_callsite_kind_name(c->kind), c->body_ordinal, c->static_target_func_id,
                 c->receiver_static_class_id, c->receiver_static_interface_id, c->method_id,
                 c->method_name_id, c->method_signature_key, c->arg_type_key_start,

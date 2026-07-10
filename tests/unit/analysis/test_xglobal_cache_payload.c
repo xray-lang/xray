@@ -128,6 +128,7 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
 
     method.method_id = 30;
     method.owner_class_id = cls.class_id;
+    method.source_node_id = 10030;
     method.name_id = xg_name_id("value");
     method.signature_key = 920;
     method.root_method_id = method.method_id;
@@ -301,6 +302,7 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT_EQ_UINT(materialized.nderived_methods, 1);
     ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_count, 1);
     ASSERT_EQ_UINT(materialized.methods[0].root_method_id, 30);
+    ASSERT_EQ_UINT(materialized.methods[0].source_node_id, 10030);
     ASSERT_EQ_UINT(materialized.derives[0].derive_hash, UINT64_C(0x8888));
 
     xg_global_evidence_free(&materialized);

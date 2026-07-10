@@ -606,22 +606,10 @@ static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module
     return l && l->xg_module_id != 0 && module_id == l->xg_module_id;
 }
 
-static const XgClassSummary *xi_lower_find_evidence_class(const XgGlobalEvidence *ev,
-                                                          XgClassId class_id) {
-    if (!ev || class_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->nclasses; i++) {
-        if (ev->classes[i].class_id == class_id)
-            return &ev->classes[i];
-    }
-    return NULL;
-}
-
-static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t name_id,
-                                             uint32_t source_span_id, uint32_t class_name_id) {
+static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t source_node_id) {
     const XgGlobalEvidence *ev;
     XgFuncId match = XG_NO_ID;
-    if (!l || !l->global_evidence)
+    if (!l || !l->global_evidence || (kind != XG_BODY_MODULE_INIT && source_node_id == 0))
         return XG_NO_ID;
     ev = l->global_evidence;
     for (uint32_t i = 0; i < ev->nbodies; i++) {
@@ -630,16 +618,8 @@ static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t 
             continue;
         if (!xi_lower_evidence_module_matches(l, body->module_id))
             continue;
-        if (name_id != 0 && body->name_id != name_id)
+        if (kind != XG_BODY_MODULE_INIT && body->source_node_id != source_node_id)
             continue;
-        if (source_span_id != 0 && body->source_span_id != source_span_id)
-            continue;
-        if (class_name_id != 0) {
-            const XgClassSummary *cls = xi_lower_find_evidence_class(ev, body->owner_class_id);
-            if (!cls || cls->name_id != class_name_id ||
-                !xi_lower_evidence_module_matches(l, cls->module_id))
-                continue;
-        }
         if (match != XG_NO_ID)
             return XG_NO_ID;
         match = body->func_id;
@@ -655,27 +635,17 @@ static void xi_lower_bind_current_func_body_id(XiLower *l, XgFuncId body_func_id
 }
 
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l) {
-    xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, xg_name_id("<module-init>"), 0, 0));
+    xi_lower_bind_current_func_body_id(l, xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, 0));
 }
 
-XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, const char *name, uint32_t source_span_id) {
+XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id) {
     xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_FUNCTION, xg_name_id(name), source_span_id, 0));
+        l, xi_lower_find_unique_body_id(l, XG_BODY_FUNCTION, source_node_id));
 }
 
-XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, const char *class_name,
-                                          const char *method_name, uint32_t source_span_id) {
-    uint32_t class_name_id = class_name ? xg_name_id(class_name) : 0;
+XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, uint32_t source_node_id) {
     xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_METHOD, xg_name_id(method_name), source_span_id,
-                                        class_name_id));
-}
-
-XR_FUNC uint32_t xi_lower_next_callsite_ordinal(XiLower *l) {
-    if (!l)
-        return 0;
-    return l->xg_next_callsite_ordinal++;
+        l, xi_lower_find_unique_body_id(l, XG_BODY_METHOD, source_node_id));
 }
 
 XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_span_id,
@@ -701,29 +671,20 @@ XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_sp
     return UINT32_MAX;
 }
 
-XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, const char *method_name,
-                                              uint32_t source_span_id, uint32_t body_ordinal) {
+XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, uint32_t source_node_id) {
     const XgGlobalEvidence *ev;
     const XgCallsiteSummary *match = NULL;
-    uint32_t method_name_id;
-    uint16_t arg_count;
     if (!l || !call || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT))
+        source_node_id == 0 || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs == 0)
         return;
-    method_name_id = xg_name_id(method_name);
-    if (method_name_id == 0 || call->nargs == 0)
-        return;
-    arg_count = (uint16_t) (call->nargs - 1);
     ev = l->global_evidence;
     for (uint32_t i = 0; i < ev->ncallsites; i++) {
         const XgCallsiteSummary *row = &ev->callsites[i];
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
-            row->body_ordinal != body_ordinal)
+            row->source_node_id != source_node_id)
             continue;
         if (row->kind != XG_CALL_METHOD && row->kind != XG_CALL_INTERFACE)
-            continue;
-        if (row->source_span_id != source_span_id || row->method_name_id != method_name_id ||
-            row->arg_count != arg_count)
             continue;
         if (match)
             return;
@@ -1065,7 +1026,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
-    xi_lower_bind_function_body_id(&l, fdecl->name, (uint32_t) func_node->line);
+    xi_lower_bind_function_body_id(&l, func_node->node_id);
 
     /* FFI: @extern("C") functions are bodyless foreign declarations. Record
      * the C symbol + optional dylib; the body below stays empty and a trivial

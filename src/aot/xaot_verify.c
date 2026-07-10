@@ -383,6 +383,9 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     body = verify_find_evidence_body_by_func(ev, plan->body_func_id);
     if (!body)
         return set_error(errbuf, errbuf_len, "AOT function attribute plan has no body summary");
+    if (plan->func->xg_body_func_id != plan->body_func_id)
+        return set_error(errbuf, errbuf_len,
+                         "AOT function attribute plan Xi body identity is stale");
     if (plan->func->name && body->name_id != xg_name_id(plan->func->name))
         return set_error(errbuf, errbuf_len, "AOT function attribute plan body identity is stale");
     if (plan->body_effect_bits != body->effect_bits)
@@ -774,6 +777,11 @@ static bool verify_body_summary_anchor(const XaotBundle *bundle, const XiFunc *f
     if (!body) {
         if (errbuf && errbuf_len > 0)
             snprintf(errbuf, errbuf_len, "AOT %s plan has no body summary", plan_name);
+        return false;
+    }
+    if (!func || func->xg_body_func_id != body_func_id) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s plan Xi body identity is stale", plan_name);
         return false;
     }
     if (func && func->name && body->kind != XG_BODY_MODULE_INIT &&
@@ -1829,6 +1837,9 @@ static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbu
 
         if (method->method_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence method has no id");
+        if (method->source_node_id == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence method source identity is missing");
         for (uint32_t j = i + 1; j < ev->nmethods; j++) {
             if (ev->methods[j].method_id == method->method_id)
                 return set_error(errbuf, errbuf_len, "AOT global evidence method id is duplicated");
@@ -1838,6 +1849,15 @@ static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbu
             return set_error(errbuf, errbuf_len, "AOT global evidence method owner is missing");
         if (!verify_class_method_range_contains(ev, owner, method))
             return set_error(errbuf, errbuf_len, "AOT global evidence method owner range is stale");
+        for (uint32_t j = i + 1; j < ev->nmethods; j++) {
+            const XgMethodSummary *other = &ev->methods[j];
+            const XgClassSummary *other_owner =
+                verify_find_evidence_class(ev, other->owner_class_id);
+            if (other_owner && other_owner->module_id == owner->module_id &&
+                other->source_node_id == method->source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence method source identity is duplicated");
+        }
 
         if (xg_verify_method_participates_in_override(method)) {
             expected_parent = verify_find_parent_method_by_signature(ev, owner, method->name_id,
@@ -2195,10 +2215,29 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                        size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no evidence");
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->module_id == XG_NO_ID || decl->source_node_id == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence declaration source identity is missing");
+        for (uint32_t j = i + 1; j < ev->ndecls; j++) {
+            const XgDeclSummary *other = &ev->decls[j];
+            if (other->module_id == decl->module_id &&
+                other->source_node_id == decl->source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence declaration source identity is duplicated");
+        }
+    }
     for (uint32_t i = 0; i < ev->ncallsites; i++) {
         const XgCallsiteSummary *call = &ev->callsites[i];
         if (call->callsite_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence callsite has no id");
+        if (call->source_node_id == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence callsite source identity is missing");
+        if (!verify_find_evidence_body_by_func(ev, call->owner_func_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence callsite owner body is missing");
         switch ((XgCallsiteKind) call->kind) {
             case XG_CALL_DIRECT_FUNC:
                 if (call->static_target_func_id == XG_NO_ID)
@@ -2300,6 +2339,10 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
             if (ev->callsites[j].callsite_id == call->callsite_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence callsite id is duplicated");
+            if (ev->callsites[j].owner_func_id == call->owner_func_id &&
+                ev->callsites[j].source_node_id == call->source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence callsite source identity is duplicated");
         }
     }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
@@ -2318,14 +2361,16 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
             return set_error(errbuf, errbuf_len, "AOT global evidence body has no name id");
         switch ((XgBodyKind) body->kind) {
             case XG_BODY_MODULE_INIT:
-                if (body->owner_decl_id != XG_NO_ID || body->owner_class_id != XG_NO_ID ||
-                    body->owner_method_id != XG_NO_ID || body->signature_key != 0)
+                if (body->source_node_id != 0 || body->owner_decl_id != XG_NO_ID ||
+                    body->owner_class_id != XG_NO_ID || body->owner_method_id != XG_NO_ID ||
+                    body->signature_key != 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence module body has stale owner identity");
                 break;
             case XG_BODY_FUNCTION:
-                if (body->owner_decl_id == XG_NO_ID || body->owner_class_id != XG_NO_ID ||
-                    body->owner_method_id != XG_NO_ID || body->source_span_id == 0)
+                if (body->source_node_id == 0 || body->owner_decl_id == XG_NO_ID ||
+                    body->owner_class_id != XG_NO_ID || body->owner_method_id != XG_NO_ID ||
+                    body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence function body identity is stale");
                 owner_decl = verify_find_evidence_decl(ev, body->owner_decl_id);
@@ -2335,14 +2380,16 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 if (owner_decl->kind != XG_DECL_FUNC || owner_decl->module_id != body->module_id ||
                     owner_decl->name_id != body->name_id ||
                     owner_decl->signature_key != body->signature_key ||
-                    owner_decl->source_span_id != body->source_span_id)
+                    owner_decl->source_span_id != body->source_span_id ||
+                    owner_decl->source_node_id != body->source_node_id)
                     return set_error(
                         errbuf, errbuf_len,
                         "AOT global evidence function body owner decl does not re-derive");
                 break;
             case XG_BODY_METHOD:
-                if (body->owner_decl_id == XG_NO_ID || body->owner_class_id == XG_NO_ID ||
-                    body->owner_method_id == XG_NO_ID || body->source_span_id == 0)
+                if (body->source_node_id == 0 || body->owner_decl_id == XG_NO_ID ||
+                    body->owner_class_id == XG_NO_ID || body->owner_method_id == XG_NO_ID ||
+                    body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method body identity is stale");
                 owner_decl = verify_find_evidence_decl(ev, body->owner_decl_id);
@@ -2370,6 +2417,7 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                         return set_error(errbuf, errbuf_len,
                                          "AOT global evidence method body owner method is missing");
                     if (owner_method->owner_class_id != body->owner_class_id ||
+                        owner_method->source_node_id != body->source_node_id ||
                         owner_method->name_id != body->name_id ||
                         owner_method->signature_key != body->signature_key)
                         return set_error(
@@ -2379,6 +2427,13 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 break;
             default:
                 return set_error(errbuf, errbuf_len, "AOT global evidence body kind is invalid");
+        }
+        for (uint32_t j = i + 1; j < ev->nbodies; j++) {
+            const XgBodySummary *other = &ev->bodies[j];
+            if (other->module_id == body->module_id &&
+                other->source_node_id == body->source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence body source identity is duplicated");
         }
         if (body->callsite_count == 0) {
             if (body->callsite_start != 0)
@@ -2740,6 +2795,8 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT dispatch plan owner function does not re-derive");
     if (plan->source_span_id != call->source_span_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan source span does not re-derive");
+    if (plan->source_node_id != call->source_node_id)
+        return set_error(errbuf, errbuf_len, "AOT dispatch plan source node does not re-derive");
     if (plan->body_ordinal != call->body_ordinal)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan body ordinal does not re-derive");
     if (plan->method_id != expected_method_id)

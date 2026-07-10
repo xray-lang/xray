@@ -214,7 +214,6 @@ typedef struct XiLower {
      * writes stable body/callsite ids directly into XiFunc/XiValue metadata. */
     const struct XgGlobalEvidence *global_evidence;
     uint32_t xg_module_id; /* 1-based module id; 0 means unavailable */
-    uint32_t xg_next_callsite_ordinal;
     uint32_t xg_next_key_access_ordinal;
 } XiLower;
 

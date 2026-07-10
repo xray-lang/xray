@@ -3565,31 +3565,21 @@ static const XgBodySummary *prepare_find_body_summary_for_func(const XaotBundle 
                                                                uint32_t module_index,
                                                                bool is_module_init) {
     const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
-    const XgBodySummary *found = NULL;
-    uint32_t name_id = 0;
     XgModuleId module_id = (XgModuleId) (module_index + 1u);
 
-    if (!ev || !func)
+    if (!ev || !func || func->xg_body_func_id == XG_NO_ID)
         return NULL;
-    if (!is_module_init) {
-        if (!func->name)
-            return NULL;
-        name_id = xg_name_id(func->name);
-    }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
-        if (is_module_init) {
-            if (body->kind != XG_BODY_MODULE_INIT || body->module_id != module_id)
-                continue;
-        } else {
-            if (body->kind == XG_BODY_MODULE_INIT || body->name_id != name_id)
-                continue;
-        }
-        if (found)
+        if (body->func_id != (XgFuncId) func->xg_body_func_id)
+            continue;
+        if (body->module_id != module_id)
             return NULL;
-        found = body;
+        if ((body->kind == XG_BODY_MODULE_INIT) != is_module_init)
+            return NULL;
+        return body;
     }
-    return found;
+    return NULL;
 }
 
 static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const XgBodySummary *body,

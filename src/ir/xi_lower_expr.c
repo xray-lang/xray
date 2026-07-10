@@ -3743,8 +3743,7 @@ static XiValue *lower_raw_pointer_static_call(XiLower *l, AstNode *node, CallExp
 }
 
 static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                 const char *method, XiValue *recv,
-                                                 uint32_t body_ordinal) {
+                                                 const char *method, XiValue *recv) {
     if (!recv || !recv->type || recv->type->kind != XR_KIND_CHANNEL ||
         !lower_is_channel_send_boundary_method(method))
         return NULL;
@@ -3794,7 +3793,7 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
     if (xi_lower_method_may_suspend(recv->type, method, want_args))
         v->flags |= XI_FLAG_MAY_SUSPEND;
     v->line = (uint32_t) node->line;
-    xi_lower_bind_method_callsite_id(l, v, method, (uint32_t) node->line, body_ordinal);
+    xi_lower_bind_method_callsite_id(l, v, node->node_id);
     xi_lower_insert_err_check(l, node);
     return v;
 }
@@ -3831,7 +3830,6 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
 
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
-    uint32_t body_ordinal = xi_lower_next_callsite_ordinal(l);
 
     if (lower_call_is_sys_thread_spawn(call))
         return lower_thread_spawn_call(l, node, call);
@@ -3955,8 +3953,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return addr_of;
         }
 
-        XiValue *chan_send =
-            lower_channel_send_boundary_call(l, node, call, ma->name, recv, body_ordinal);
+        XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);
         if (chan_send)
             return chan_send;
 
@@ -4455,7 +4452,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;
-        xi_lower_bind_method_callsite_id(l, v, ma->name, (uint32_t) node->line, body_ordinal);
+        xi_lower_bind_method_callsite_id(l, v, node->node_id);
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
 
@@ -4519,7 +4516,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
         mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         mcall->line = (uint32_t) node->line;
-        xi_lower_bind_method_callsite_id(l, mcall, oc->name, (uint32_t) node->line, body_ordinal);
+        xi_lower_bind_method_callsite_id(l, mcall, node->node_id);
         XiBlock *call_exit = l->cur_block;
         xi_block_set_jump(call_exit, merge);
 
@@ -7366,7 +7363,6 @@ static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     SuperCallNode *sc = &node->as.super_call;
-    uint32_t body_ordinal = xi_lower_next_callsite_ordinal(l);
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
@@ -7400,8 +7396,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
         1;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
-    xi_lower_bind_method_callsite_id(l, call, sc->method_name ? sc->method_name : "constructor",
-                                     (uint32_t) node->line, body_ordinal);
+    xi_lower_bind_method_callsite_id(l, call, node->node_id);
     return call;
 }
 
