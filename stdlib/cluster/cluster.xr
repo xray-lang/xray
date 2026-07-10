@@ -5,7 +5,7 @@
 // and topic-pattern matching live here so the cluster control-plane rules have a
 // visible Xray semantic source.
 
-const HANDSHAKE_VERSION = 4
+const HANDSHAKE_VERSION = 5
 const TOPIC_DEFAULT_HOP_LIMIT = 3
 const NODE_NAME_MAX = 63
 const CHANNEL_NAME_MAX = 127
