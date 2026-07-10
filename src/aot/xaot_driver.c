@@ -590,21 +590,15 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
            features->n_stdlib_symbols == 0 && features->n_extern_dylibs == 0;
 }
 
-static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest,
-                                bool freestanding_profile) {
-    XaotTarget target;
+static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget *target,
+                                XaotLinkManifest *manifest, bool freestanding_profile) {
     bool ok = false;
     bool fast_test;
 
-    if (!features || !manifest)
+    if (!features || !target || !manifest)
         return false;
-    if (!xaot_target_init(&target, "native-c90"))
+    if (!xaot_link_manifest_init(manifest, target))
         return false;
-    if (!xaot_link_manifest_init(manifest, &target)) {
-        xaot_target_free(&target);
-        return false;
-    }
-    xaot_target_free(&target);
 
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_GENERATED_C_FILE, "<aot-generated-c>"))
         goto done;
@@ -677,16 +671,24 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
     return error_count;
 }
 
-XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result) {
-    return xaot_build_ex(input_path, emit_plan_dump, true, XAOT_BUILD_PROFILE_HOSTED,
-                         XI_CGEN_TYPE_NAMES_ALL, false, result);
-}
-
-XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
-                          XaotBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                          bool emit_global_evidence_dump, XaotBuildResult *result) {
+XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
+                       XaotBuildResult *result) {
+    bool emit_plan_dump;
+    bool emit_program_main;
+    bool emit_global_evidence_dump;
+    XaotBuildProfile profile;
+    XiCgenTypeNameProfile type_name_profile;
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
+    XR_DCHECK(options != NULL, "xaot_build: NULL options");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
+    if (!input_path || !options || !options->target ||
+        !xaot_target_data_layout_validate(&options->target->data_layout) || !result)
+        return 1;
+    emit_plan_dump = options->emit_plan_dump;
+    emit_program_main = options->emit_program_main;
+    emit_global_evidence_dump = options->emit_global_evidence_dump;
+    profile = options->profile;
+    type_name_profile = options->type_name_profile;
     memset(result, 0, sizeof(*result));
     XgGlobalEvidence pre_mono_generic_evidence;
     bool pre_mono_generic_evidence_initialized = false;
@@ -983,6 +985,10 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
+    if (!xaot_bundle_set_target_data_layout(&aot_bundle, &options->target->data_layout)) {
+        fprintf(stderr, "Error: failed to set AOT target data layout\n");
+        goto fail_free_ir;
+    }
     if (!xaot_bundle_set_global_evidence(&aot_bundle, &global_evidence,
                                          global_evidence.key.profile)) {
         fprintf(stderr, "Error: failed to attach global evidence plan\n");
@@ -1128,7 +1134,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
     features_apply_link_dependency_plans(&features, &aot_bundle);
-    if (!build_link_manifest(&features, &link_manifest,
+    if (!build_link_manifest(&features, options->target, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");
         goto fail_free_ir;

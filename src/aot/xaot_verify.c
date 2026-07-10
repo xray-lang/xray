@@ -1201,6 +1201,9 @@ static bool verify_derive_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         }
         if (!verify_find_derive_by_id(ev, field->derive_id))
             return set_error(errbuf, errbuf_len, "AOT derived field owner derive is missing");
+        if (field->source_field_id == XG_NO_ID ||
+            !xg_global_evidence_find_class_field(ev, field->source_field_id))
+            return set_error(errbuf, errbuf_len, "AOT derived source field is missing");
     }
     for (uint32_t i = 0; i < ev->nderived_methods; i++) {
         const XgDerivedMethodSummary *method = &ev->derived_methods[i];
@@ -4829,6 +4832,383 @@ static bool verify_encoding_plan_rederives(const XaotEncodingPlan *plan,
     return true;
 }
 
+static bool verify_class_field_range(const XgGlobalEvidence *ev, const XgClassSummary *cls,
+                                     uint32_t *out_start) {
+    uint32_t start;
+    if (!ev || !cls)
+        return false;
+    if (cls->field_count == 0) {
+        if (out_start)
+            *out_start = 0;
+        return cls->field_start == 0;
+    }
+    if (cls->field_start == 0)
+        return false;
+    start = cls->field_start - 1;
+    if (start >= ev->nclass_fields || cls->field_count > ev->nclass_fields - start)
+        return false;
+    if (out_start)
+        *out_start = start;
+    return true;
+}
+
+static bool verify_class_instance_field_count(const XgGlobalEvidence *ev, const XgClassSummary *cls,
+                                              uint32_t depth, uint32_t *out_count) {
+    uint32_t count = 0;
+    uint32_t start = 0;
+    if (!ev || !cls || !out_count || depth > 64 || !verify_class_field_range(ev, cls, &start))
+        return false;
+    if (cls->parent_class_id != XG_NO_ID) {
+        const XgClassSummary *parent = verify_find_evidence_class(ev, cls->parent_class_id);
+        if (!parent || !verify_class_instance_field_count(ev, parent, depth + 1, &count))
+            return false;
+    }
+    for (uint32_t i = 0; i < cls->field_count; i++) {
+        if ((ev->class_fields[start + i].flags & XG_CLASS_FIELD_STATIC) == 0) {
+            if (count == UINT32_MAX)
+                return false;
+            count++;
+        }
+    }
+    *out_count = count;
+    return true;
+}
+
+static bool verify_class_ancestor_has_field_name(const XgGlobalEvidence *ev,
+                                                 const XgClassSummary *cls, uint32_t name_id,
+                                                 uint32_t depth) {
+    const XgClassSummary *parent;
+    uint32_t start = 0;
+    if (!ev || !cls || cls->parent_class_id == XG_NO_ID || name_id == 0 || depth > 64)
+        return false;
+    parent = verify_find_evidence_class(ev, cls->parent_class_id);
+    if (!parent || !verify_class_field_range(ev, parent, &start))
+        return false;
+    for (uint32_t i = 0; i < parent->field_count; i++) {
+        if (ev->class_fields[start + i].name_id == name_id)
+            return true;
+    }
+    return verify_class_ancestor_has_field_name(ev, parent, name_id, depth + 1);
+}
+
+static bool verify_interface_identity_exists(const XgGlobalEvidence *ev,
+                                             XgInterfaceId interface_id) {
+    if (!ev || interface_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        if (ev->decls[i].kind == XG_DECL_INTERFACE && ev->decls[i].name_id == interface_id)
+            return true;
+    }
+    return false;
+}
+
+static bool verify_enum_identity_exists(const XgGlobalEvidence *ev, XgModuleId module_id,
+                                        uint32_t name_id) {
+    uint32_t scoped_count = 0;
+    uint32_t global_count = 0;
+    if (!ev || module_id == XG_NO_ID || name_id == 0)
+        return false;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->kind != XG_DECL_ENUM || decl->name_id != name_id)
+            continue;
+        global_count++;
+        if (decl->module_id == module_id)
+            scoped_count++;
+    }
+    return scoped_count == 1 || (scoped_count == 0 && global_count == 1);
+}
+
+static bool verify_class_field_native_width(uint8_t semantic_kind, uint8_t native_width) {
+    switch ((XgClassFieldTypeKind) semantic_kind) {
+        case XG_CLASS_FIELD_TYPE_I8:
+            return native_width == XR_NATIVE_I8;
+        case XG_CLASS_FIELD_TYPE_U8:
+            return native_width == XR_NATIVE_U8;
+        case XG_CLASS_FIELD_TYPE_I16:
+            return native_width == XR_NATIVE_I16;
+        case XG_CLASS_FIELD_TYPE_U16:
+            return native_width == XR_NATIVE_U16;
+        case XG_CLASS_FIELD_TYPE_I32:
+            return native_width == XR_NATIVE_I32;
+        case XG_CLASS_FIELD_TYPE_U32:
+            return native_width == XR_NATIVE_U32;
+        case XG_CLASS_FIELD_TYPE_I64:
+            return native_width == XR_NATIVE_I64;
+        case XG_CLASS_FIELD_TYPE_U64:
+            return native_width == XR_NATIVE_U64;
+        case XG_CLASS_FIELD_TYPE_ISIZE:
+            return native_width == XR_NATIVE_ISIZE;
+        case XG_CLASS_FIELD_TYPE_USIZE:
+            return native_width == XR_NATIVE_USIZE;
+        case XG_CLASS_FIELD_TYPE_F32:
+            return native_width == XR_NATIVE_F32;
+        case XG_CLASS_FIELD_TYPE_F64:
+            return native_width == 0 || native_width == XR_NATIVE_F64;
+        default:
+            return native_width == 0;
+    }
+}
+
+static bool verify_class_field_rows(const XgGlobalEvidence *ev,
+                                    const XaotTargetDataLayout *target_layout, char *errbuf,
+                                    size_t errbuf_len) {
+    const uint32_t allowed_flags = XG_CLASS_FIELD_STATIC | XG_CLASS_FIELD_CONST |
+                                   XG_CLASS_FIELD_PRIVATE | XG_CLASS_FIELD_PROTECTED |
+                                   XG_CLASS_FIELD_OWNED_REF | XG_CLASS_FIELD_NULLABLE;
+    if (!ev)
+        return false;
+    for (uint32_t ci = 0; ci < ev->nclasses; ci++) {
+        const XgClassSummary *cls = &ev->classes[ci];
+        uint32_t start = 0;
+        uint32_t prefix_count = 0;
+        uint32_t own_instance_count = 0;
+        if (!verify_class_field_range(ev, cls, &start))
+            return set_error(errbuf, errbuf_len, "AOT class field range is stale");
+        if (cls->parent_class_id != XG_NO_ID) {
+            const XgClassSummary *parent = verify_find_evidence_class(ev, cls->parent_class_id);
+            if (!parent || !verify_class_instance_field_count(ev, parent, 0, &prefix_count))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field parent prefix does not re-derive");
+        }
+        for (uint32_t i = 0; i < cls->field_count; i++) {
+            const XgClassFieldSummary *field = &ev->class_fields[start + i];
+            XaotClassFieldPhysicalLayout physical;
+            bool expected_owned;
+            if (field->field_id != start + i + 1)
+                return set_error(errbuf, errbuf_len, "AOT class field id does not re-derive");
+            if (field->module_id == XG_NO_ID || field->module_id != cls->module_id ||
+                field->owner_class_id != cls->class_id)
+                return set_error(errbuf, errbuf_len, "AOT class field owner does not re-derive");
+            if (field->source_node_id == 0 || field->name_id == 0 || field->type_key == 0)
+                return set_error(errbuf, errbuf_len, "AOT class field identity is incomplete");
+            if (field->decl_ordinal != i)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field declaration ordinal does not re-derive");
+            if ((field->flags & ~allowed_flags) != 0 ||
+                (field->flags & (XG_CLASS_FIELD_PRIVATE | XG_CLASS_FIELD_PROTECTED)) ==
+                    (XG_CLASS_FIELD_PRIVATE | XG_CLASS_FIELD_PROTECTED))
+                return set_error(errbuf, errbuf_len, "AOT class field flags are invalid");
+            if (field->semantic_kind == 0 || field->semantic_kind > XG_CLASS_FIELD_TYPE_DYNAMIC ||
+                !xaot_class_field_physical_layout(target_layout, field->semantic_kind, &physical))
+                return set_error(errbuf, errbuf_len, "AOT class field storage is invalid");
+            if (!verify_class_field_native_width(field->semantic_kind, field->native_width))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field native width does not re-derive");
+            if (field->target_class_id != XG_NO_ID && field->target_interface_id != XG_NO_ID)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field semantic target is ambiguous");
+            if ((field->target_class_id != XG_NO_ID || field->target_interface_id != XG_NO_ID) &&
+                field->target_name_id == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field semantic target name is missing");
+            if (field->target_class_id != XG_NO_ID) {
+                const XgClassSummary *target =
+                    verify_find_evidence_class(ev, field->target_class_id);
+                if (!target || target->name_id != field->target_name_id)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT class field class target does not re-derive");
+                if ((field->semantic_kind == XG_CLASS_FIELD_TYPE_CLASS &&
+                     target->decl_kind != XG_DECL_CLASS) ||
+                    (field->semantic_kind == XG_CLASS_FIELD_TYPE_STRUCT &&
+                     target->decl_kind != XG_DECL_STRUCT) ||
+                    (field->semantic_kind == XG_CLASS_FIELD_TYPE_FIXED_UNION &&
+                     target->decl_kind != XG_DECL_UNION))
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT class field target kind does not re-derive");
+            }
+            if (field->target_interface_id != XG_NO_ID &&
+                (!verify_interface_identity_exists(ev, field->target_interface_id) ||
+                 field->target_interface_id != field->target_name_id))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field interface target does not re-derive");
+            if ((field->semantic_kind == XG_CLASS_FIELD_TYPE_CLASS ||
+                 field->semantic_kind == XG_CLASS_FIELD_TYPE_STRUCT ||
+                 field->semantic_kind == XG_CLASS_FIELD_TYPE_FIXED_UNION) &&
+                field->target_class_id == XG_NO_ID)
+                return set_error(errbuf, errbuf_len, "AOT class field class target is missing");
+            if (field->semantic_kind == XG_CLASS_FIELD_TYPE_INTERFACE &&
+                field->target_interface_id == XG_NO_ID)
+                return set_error(errbuf, errbuf_len, "AOT class field interface target is missing");
+            if (field->semantic_kind == XG_CLASS_FIELD_TYPE_ENUM &&
+                !verify_enum_identity_exists(ev, field->module_id, field->target_name_id))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field enum target does not re-derive");
+            if (verify_class_ancestor_has_field_name(ev, cls, field->name_id, 0))
+                return set_error(errbuf, errbuf_len, "AOT class field shadows an inherited field");
+            expected_owned = physical.ownership == XAOT_CLASS_FIELD_OWNERSHIP_OWNED;
+            if (((field->flags & XG_CLASS_FIELD_OWNED_REF) != 0) != expected_owned)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field ownership does not re-derive");
+            if ((field->flags & XG_CLASS_FIELD_STATIC) != 0) {
+                if (field->instance_slot != UINT32_MAX)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT static class field has an instance slot");
+            } else {
+                if (prefix_count > UINT32_MAX - own_instance_count ||
+                    field->instance_slot != prefix_count + own_instance_count)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT class field instance slot does not re-derive");
+                own_instance_count++;
+            }
+            for (uint32_t j = i + 1; j < cls->field_count; j++) {
+                const XgClassFieldSummary *other = &ev->class_fields[start + j];
+                if (other->source_node_id == field->source_node_id)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT class field source identity is duplicated");
+                if (other->name_id == field->name_id)
+                    return set_error(errbuf, errbuf_len, "AOT class field name is duplicated");
+            }
+        }
+    }
+    for (uint32_t fi = 0; fi < ev->nclass_fields; fi++) {
+        uint32_t owners = 0;
+        for (uint32_t ci = 0; ci < ev->nclasses; ci++) {
+            const XgClassSummary *cls = &ev->classes[ci];
+            uint32_t start = 0;
+            if (!verify_class_field_range(ev, cls, &start))
+                continue;
+            if (fi >= start && fi - start < cls->field_count)
+                owners++;
+        }
+        if (owners != 1)
+            return set_error(errbuf, errbuf_len, "AOT class field row is orphaned or overlapping");
+        for (uint32_t other = fi + 1; other < ev->nclass_fields; other++) {
+            if (ev->class_fields[other].module_id == ev->class_fields[fi].module_id &&
+                ev->class_fields[other].source_node_id == ev->class_fields[fi].source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT class field source identity is duplicated in module");
+        }
+    }
+    return true;
+}
+
+typedef struct VerifyClassLayout {
+    uint32_t parent_size;
+    uint32_t size;
+    uint32_t align;
+    uint32_t instance_field_count;
+    uint32_t own_instance_field_count;
+} VerifyClassLayout;
+
+static bool verify_class_layout_rederives(const XgGlobalEvidence *ev, const XaotBundle *bundle,
+                                          const XgClassSummary *cls, uint32_t depth,
+                                          VerifyClassLayout *out, char *errbuf, size_t errbuf_len) {
+    const XaotClassLayoutPlan *plan;
+    VerifyClassLayout expected = {0};
+    uint32_t offset = 0;
+    uint32_t max_align = 1;
+    uint32_t start = 0;
+    uint32_t expected_flags = XAOT_CLASS_LAYOUT_TYPED_PAYLOAD | XAOT_CLASS_LAYOUT_PAYLOAD_ONLY;
+    uint32_t expected_evidence = XAOT_CLASS_LAYOUT_EV_GLOBAL_SUMMARY |
+                                 XAOT_CLASS_LAYOUT_EV_FIELD_PLANS |
+                                 XAOT_CLASS_LAYOUT_EV_PHYSICAL_ABI;
+    char expected_ctype[64];
+    if (!ev || !bundle || !cls || !out || depth > 64 || !verify_class_field_range(ev, cls, &start))
+        return set_error(errbuf, errbuf_len, "AOT class physical layout cannot re-derive");
+    if (cls->parent_class_id != XG_NO_ID) {
+        const XgClassSummary *parent = verify_find_evidence_class(ev, cls->parent_class_id);
+        VerifyClassLayout parent_layout;
+        if (!parent || !verify_class_layout_rederives(ev, bundle, parent, depth + 1, &parent_layout,
+                                                      errbuf, errbuf_len))
+            return false;
+        expected.parent_size = parent_layout.size;
+        expected.instance_field_count = parent_layout.instance_field_count;
+        offset = parent_layout.size;
+        max_align = parent_layout.align;
+        expected_flags |= XAOT_CLASS_LAYOUT_PREFIX_PARENT | XAOT_CLASS_LAYOUT_TYPE_ID;
+        expected_evidence |= XAOT_CLASS_LAYOUT_EV_PARENT_PREFIX;
+    }
+    if ((cls->flags & XG_CLASS_HAS_SUBCLASS) != 0)
+        expected_flags |= XAOT_CLASS_LAYOUT_TYPE_ID;
+    for (uint32_t i = 0; i < cls->field_count; i++) {
+        const XgClassFieldSummary *field = &ev->class_fields[start + i];
+        const XaotClassFieldPlan *field_plan =
+            xaot_bundle_find_class_field_plan(bundle, field->field_id);
+        XaotClassFieldPhysicalLayout physical;
+        uint32_t aligned;
+        const uint32_t expected_field_evidence =
+            XAOT_CLASS_FIELD_EV_GLOBAL_SUMMARY | XAOT_CLASS_FIELD_EV_OWNER_RANGE |
+            XAOT_CLASS_FIELD_EV_SLOT_DERIVED | XAOT_CLASS_FIELD_EV_PHYSICAL_ABI |
+            XAOT_CLASS_FIELD_EV_SEMANTIC_TYPE | XAOT_CLASS_FIELD_EV_OWNERSHIP |
+            XAOT_CLASS_FIELD_EV_DROP;
+        if (!field_plan || !xaot_class_field_physical_layout(&bundle->target_data_layout,
+                                                             field->semantic_kind, &physical))
+            return set_error(errbuf, errbuf_len, "AOT class field plan is missing");
+        if (field_plan->field_id != field->field_id ||
+            field_plan->owner_class_id != field->owner_class_id ||
+            field_plan->source_node_id != field->source_node_id ||
+            field_plan->target_name_id != field->target_name_id ||
+            field_plan->target_class_id != field->target_class_id ||
+            field_plan->target_interface_id != field->target_interface_id ||
+            field_plan->element_type_key != field->element_type_key ||
+            field_plan->key_type_key != field->key_type_key ||
+            field_plan->value_type_key != field->value_type_key ||
+            field_plan->fixed_length != field->fixed_length ||
+            field_plan->instance_slot != field->instance_slot ||
+            field_plan->field_flags != field->flags ||
+            field_plan->semantic_kind != field->semantic_kind ||
+            field_plan->native_width != field->native_width)
+            return set_error(errbuf, errbuf_len, "AOT class field plan identity is stale");
+        if (field_plan->size != physical.size || field_plan->align != physical.align ||
+            field_plan->ref_kind != physical.ref_kind ||
+            field_plan->native_type != physical.native_type ||
+            field_plan->storage_kind != physical.storage_kind ||
+            field_plan->action != physical.action ||
+            field_plan->representation != physical.representation ||
+            field_plan->ownership != physical.ownership ||
+            field_plan->drop_kind != physical.drop_kind ||
+            field_plan->unproven_reason != physical.unproven_reason ||
+            field_plan->evidence != expected_field_evidence)
+            return set_error(errbuf, errbuf_len,
+                             "AOT class field physical storage does not re-derive");
+        if ((field->flags & XG_CLASS_FIELD_STATIC) != 0) {
+            if (field_plan->offset != UINT32_MAX)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT static class field plan has an instance offset");
+            continue;
+        }
+        if (physical.align == 0 || offset > UINT32_MAX - (physical.align - 1))
+            return set_error(errbuf, errbuf_len, "AOT class field offset overflows");
+        aligned = (offset + physical.align - 1) & ~(physical.align - 1);
+        if (aligned > UINT32_MAX - physical.size || field_plan->offset != aligned)
+            return set_error(errbuf, errbuf_len, "AOT class field offset does not re-derive");
+        offset = aligned + physical.size;
+        if (physical.align > max_align)
+            max_align = physical.align;
+        expected.own_instance_field_count++;
+    }
+    if (expected.instance_field_count > UINT32_MAX - expected.own_instance_field_count)
+        return set_error(errbuf, errbuf_len, "AOT class field count overflows");
+    expected.instance_field_count += expected.own_instance_field_count;
+    if (expected.instance_field_count == 0) {
+        expected.size = 1;
+        expected.align = 1;
+    } else if (expected.own_instance_field_count == 0 && cls->parent_class_id != XG_NO_ID) {
+        expected.size = offset;
+        expected.align = max_align;
+    } else {
+        if (offset > UINT32_MAX - (max_align - 1))
+            return set_error(errbuf, errbuf_len, "AOT class layout size overflows");
+        expected.size = (offset + max_align - 1) & ~(max_align - 1);
+        expected.align = max_align;
+    }
+    plan = xaot_bundle_find_class_layout_plan(bundle, cls->class_id);
+    snprintf(expected_ctype, sizeof(expected_ctype), "XrC_%u", cls->class_id);
+    if (!plan || !plan->c_type_name || strcmp(plan->c_type_name, expected_ctype) != 0)
+        return set_error(errbuf, errbuf_len, "AOT class layout C type identity is stale");
+    if (plan->class_id != cls->class_id || plan->parent_class_id != cls->parent_class_id ||
+        plan->parent_instance_size != expected.parent_size ||
+        plan->instance_size != expected.size || plan->instance_align != expected.align ||
+        plan->field_start != cls->field_start || plan->field_count != cls->field_count ||
+        plan->instance_field_count != expected.instance_field_count ||
+        plan->own_instance_field_count != expected.own_instance_field_count ||
+        plan->flags != expected_flags || plan->evidence != expected_evidence)
+        return set_error(errbuf, errbuf_len, "AOT class physical layout does not re-derive");
+    *out = expected;
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -4838,6 +5218,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t static_data_count = 0;
     const uint32_t *static_data = xg_static_data_catalog(&static_data_count);
     uint32_t runtime_class_count = 0;
+    uint32_t runtime_class_field_count = 0;
     uint32_t expected_dispatch_plans = 0;
     uint32_t expected_dispatch_target_cases = 0;
     uint32_t expected_interface_abi_plans = 0;
@@ -4882,6 +5263,10 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         return false;
     if (!verify_interface_object_use_rows(ev, errbuf, errbuf_len))
         return false;
+    if (!xaot_target_data_layout_validate(&bundle->target_data_layout))
+        return set_error(errbuf, errbuf_len, "AOT target data layout is invalid");
+    if (!verify_class_field_rows(ev, &bundle->target_data_layout, errbuf, errbuf_len))
+        return false;
     if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
         return false;
     if (!verify_generic_inst_rows(ev, errbuf, errbuf_len))
@@ -4909,13 +5294,14 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     for (uint32_t i = 0; i < ev->nclasses; i++) {
         const XgClassSummary *cls = &ev->classes[i];
         const XaotClassHierarchyPlan *hier;
-        const XaotClassLayoutPlan *layout;
+        VerifyClassLayout expected_layout;
         bool actual_has_subclass;
         bool flag_has_subclass;
         bool expected_inferred_final;
         if (!xg_verify_class_is_runtime_class(cls))
             continue;
         runtime_class_count++;
+        runtime_class_field_count += cls->field_count;
         if (cls->parent_class_id != XG_NO_ID &&
             !verify_find_evidence_class(ev, cls->parent_class_id))
             return set_error(errbuf, errbuf_len, "AOT global evidence class parent is missing");
@@ -4953,20 +5339,15 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             return set_error(errbuf, errbuf_len, "AOT class hierarchy plan mismatches evidence");
         if (hier->evidence == 0 || hier->unproven_reason != XAOT_CLASS_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT class hierarchy plan lacks evidence");
-        layout = xaot_bundle_find_class_layout_plan(bundle, cls->class_id);
-        if (!layout)
-            return set_error(errbuf, errbuf_len, "AOT class has no layout plan");
-        if (!layout->c_type_name)
-            return set_error(errbuf, errbuf_len, "AOT class layout plan has no C type name");
-        if (layout->field_start != cls->field_start || layout->field_count != cls->field_count)
-            return set_error(errbuf, errbuf_len, "AOT class layout plan mismatches fields");
-        if (((layout->flags & XAOT_CLASS_LAYOUT_PREFIX_PARENT) != 0) !=
-            (cls->parent_class_id != XG_NO_ID))
-            return set_error(errbuf, errbuf_len, "AOT class layout prefix flag mismatches graph");
+        if (!verify_class_layout_rederives(ev, bundle, cls, 0, &expected_layout, errbuf,
+                                           errbuf_len))
+            return false;
     }
     if (bundle->nclass_hierarchy_plans != runtime_class_count ||
         bundle->nclass_layout_plans != runtime_class_count)
         return set_error(errbuf, errbuf_len, "AOT class plan count mismatches evidence");
+    if (bundle->nclass_field_plans != runtime_class_field_count)
+        return set_error(errbuf, errbuf_len, "AOT class field plan count mismatches evidence");
 
     if (!verify_method_override_graph(ev, errbuf, errbuf_len))
         return false;

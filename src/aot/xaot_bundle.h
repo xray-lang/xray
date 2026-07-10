@@ -12,6 +12,7 @@
 #define XAOT_BUNDLE_H
 
 #include "xaot_abi.h"
+#include "xaot_class_layout.h"
 #include "xaot_container.h"
 #include "../analysis/xglobal_summary.h"
 #include "../ir/xi_module.h"
@@ -431,17 +432,68 @@ enum {
     XAOT_CLASS_LAYOUT_PREFIX_PARENT = 1u << 1,
     XAOT_CLASS_LAYOUT_TYPE_ID = 1u << 2,
     XAOT_CLASS_LAYOUT_VTABLE = 1u << 3,
-    XAOT_CLASS_LAYOUT_HEADER = 1u << 4,
+    XAOT_CLASS_LAYOUT_PAYLOAD_ONLY = 1u << 4,
+};
+
+enum {
+    XAOT_CLASS_FIELD_EV_GLOBAL_SUMMARY = 1u << 0,
+    XAOT_CLASS_FIELD_EV_OWNER_RANGE = 1u << 1,
+    XAOT_CLASS_FIELD_EV_SLOT_DERIVED = 1u << 2,
+    XAOT_CLASS_FIELD_EV_PHYSICAL_ABI = 1u << 3,
+    XAOT_CLASS_FIELD_EV_SEMANTIC_TYPE = 1u << 4,
+    XAOT_CLASS_FIELD_EV_OWNERSHIP = 1u << 5,
+    XAOT_CLASS_FIELD_EV_DROP = 1u << 6,
+};
+
+typedef struct XaotClassFieldPlan {
+    XgFieldId field_id;
+    XgClassId owner_class_id;
+    uint32_t source_node_id;
+    uint32_t target_name_id;
+    XgClassId target_class_id;
+    XgInterfaceId target_interface_id;
+    uint32_t element_type_key;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t fixed_length;
+    uint32_t instance_slot;
+    uint32_t offset;
+    uint32_t size;
+    uint32_t align;
+    uint32_t field_flags;
+    uint32_t evidence;
+    uint8_t semantic_kind;
+    uint8_t native_type;
+    uint8_t native_width;
+    uint8_t storage_kind;
+    uint8_t action;
+    uint8_t representation;
+    uint8_t ownership;
+    uint8_t drop_kind;
+    uint8_t ref_kind;
+    uint8_t unproven_reason;
+} XaotClassFieldPlan;
+
+enum {
+    XAOT_CLASS_LAYOUT_EV_GLOBAL_SUMMARY = 1u << 0,
+    XAOT_CLASS_LAYOUT_EV_FIELD_PLANS = 1u << 1,
+    XAOT_CLASS_LAYOUT_EV_PARENT_PREFIX = 1u << 2,
+    XAOT_CLASS_LAYOUT_EV_PHYSICAL_ABI = 1u << 3,
 };
 
 typedef struct XaotClassLayoutPlan {
     XgClassId class_id;
+    XgClassId parent_class_id;
     char *c_type_name;
+    uint32_t parent_instance_size;
     uint32_t instance_size;
     uint32_t instance_align;
     uint32_t field_start;
     uint32_t field_count;
+    uint32_t instance_field_count;
+    uint32_t own_instance_field_count;
     uint32_t flags;
+    uint32_t evidence;
 } XaotClassLayoutPlan;
 
 typedef enum XaotMethodDispatchKind {
@@ -1482,6 +1534,7 @@ typedef struct XaotBundle {
     XiModule **modules;
     uint32_t nmodules;
     uint32_t entry_module;
+    XaotTargetDataLayout target_data_layout;
     XaotFuncPlan *func_plans;
     uint32_t nfunc_plans;
     uint32_t func_plan_cap;
@@ -1531,6 +1584,9 @@ typedef struct XaotBundle {
     XaotClassLayoutPlan *class_layout_plans;
     uint32_t nclass_layout_plans;
     uint32_t class_layout_plan_cap;
+    XaotClassFieldPlan *class_field_plans;
+    uint32_t nclass_field_plans;
+    uint32_t class_field_plan_cap;
     XaotMethodDispatchPlan *method_dispatch_plans;
     uint32_t nmethod_dispatch_plans;
     uint32_t method_dispatch_plan_cap;
@@ -1642,12 +1698,16 @@ typedef struct XaotBundle {
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module);
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
+XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
+                                                const XaotTargetDataLayout *target_layout);
 XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,
                                              uint32_t profile);
 XR_FUNC const XaotClassHierarchyPlan *
 xaot_bundle_find_class_hierarchy_plan(const XaotBundle *bundle, XgClassId class_id);
 XR_FUNC const XaotClassLayoutPlan *xaot_bundle_find_class_layout_plan(const XaotBundle *bundle,
                                                                       XgClassId class_id);
+XR_FUNC const XaotClassFieldPlan *xaot_bundle_find_class_field_plan(const XaotBundle *bundle,
+                                                                    XgFieldId field_id);
 XR_FUNC const XaotMethodDispatchPlan *
 xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId callsite_id);
 XR_FUNC const XaotMethodDispatchPlan *

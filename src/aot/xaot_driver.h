@@ -132,6 +132,15 @@ typedef enum XaotBuildProfile {
     XAOT_BUILD_PROFILE_FREESTANDING,
 } XaotBuildProfile;
 
+typedef struct XaotBuildOptions {
+    const XaotTarget *target;
+    XaotBuildProfile profile;
+    XiCgenTypeNameProfile type_name_profile;
+    bool emit_plan_dump;
+    bool emit_program_main;
+    bool emit_global_evidence_dump;
+} XaotBuildOptions;
+
 /* Full AOT pipeline: Source → AST → Xi IR → C.
  * Supports single and multi-module bundles.
  * Returns 0 on success, non-zero on failure.
@@ -142,10 +151,8 @@ typedef enum XaotBuildProfile {
  * text (for --dump-xaot-plan); otherwise it stays NULL and the O(N) dump is
  * skipped (it is pure diagnostics and most builds discard it).
  * Caller frees the result via xaot_build_result_free(). */
-XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result);
-XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
-                          XaotBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                          bool emit_global_evidence_dump, XaotBuildResult *result);
+XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
+                       XaotBuildResult *result);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

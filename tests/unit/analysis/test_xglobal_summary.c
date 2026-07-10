@@ -393,9 +393,21 @@ static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
                           .name_id = 10,
                           .parent_class_id = XG_NO_ID,
                           .flags = XG_CLASS_INFERRED_FINAL,
+                          .field_start = 1,
+                          .field_count = 1,
                           .method_start = 1,
                           .method_count = 1,
                           .decl_kind = XG_DECL_CLASS};
+    XgClassFieldSummary field = {.field_id = 1,
+                                 .module_id = key.module_id,
+                                 .source_node_id = 1004,
+                                 .owner_class_id = 1,
+                                 .name_id = 15,
+                                 .type_key = 21,
+                                 .decl_ordinal = 0,
+                                 .instance_slot = 0,
+                                 .flags = XG_CLASS_FIELD_OWNED_REF,
+                                 .semantic_kind = XG_CLASS_FIELD_TYPE_STRING};
     XgMethodSummary method = {.method_id = 1,
                               .owner_class_id = 1,
                               .source_node_id = 1002,
@@ -445,6 +457,7 @@ static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
     xg_global_evidence_init(ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(ev, &field));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(ev, &method));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(ev, &call));
@@ -457,6 +470,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     XgGlobalEvidence body_changed;
     XgGlobalEvidence decl_changed;
     XgGlobalEvidence decl_identity_changed;
+    XgGlobalEvidence field_identity_changed;
     XgGlobalEvidence method_identity_changed;
     XgGlobalEvidence body_identity_changed;
     XgGlobalEvidence call_identity_changed;
@@ -483,6 +497,9 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
 
     init_cache_key_fixture(&decl_identity_changed, key);
     decl_identity_changed.decls[0].source_node_id++;
+
+    init_cache_key_fixture(&field_identity_changed, key);
+    field_identity_changed.class_fields[0].source_node_id++;
 
     init_cache_key_fixture(&method_identity_changed, key);
     method_identity_changed.methods[0].source_node_id++;
@@ -525,6 +542,8 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
         xg_global_evidence_cache_key(&decl_identity_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
     XgEvidenceCacheKey changed_method_identity =
         xg_global_evidence_cache_key(&method_identity_changed, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    XgEvidenceCacheKey changed_field_identity =
+        xg_global_evidence_cache_key(&field_identity_changed, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
     XgEvidenceCacheKey changed_body_identity =
         xg_global_evidence_cache_key(&body_identity_changed, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     XgEvidenceCacheKey changed_call_identity =
@@ -563,7 +582,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=16 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=17 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -619,6 +638,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
 
     ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_decl, &changed_decl));
     ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_decl, &changed_decl_identity));
+    ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_semantic, &changed_field_identity));
     ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_semantic, &changed_method_identity));
     ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_body, &changed_body_identity));
     ASSERT_TRUE(!xg_evidence_cache_key_matches(&base_body, &changed_call_identity));
@@ -636,6 +656,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     xg_global_evidence_free(&body_changed);
     xg_global_evidence_free(&decl_changed);
     xg_global_evidence_free(&decl_identity_changed);
+    xg_global_evidence_free(&field_identity_changed);
     xg_global_evidence_free(&method_identity_changed);
     xg_global_evidence_free(&body_identity_changed);
     xg_global_evidence_free(&call_identity_changed);
@@ -667,8 +688,10 @@ TEST(global_evidence_cache_payload_preserves_source_node_identity) {
 
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
     ASSERT_NOT_NULL(payload);
+    ASSERT_NOT_NULL(strstr(payload, "class-field id=1 module=1 node=1004"));
     ASSERT_NOT_NULL(strstr(payload, "method id=1 owner=1 node=1002"));
     ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_EQ_UINT(materialized.class_fields[0].source_node_id, 1004);
     ASSERT_EQ_UINT(materialized.methods[0].source_node_id, 1002);
     xg_global_evidence_free(&materialized);
     memset(&materialized, 0, sizeof(materialized));
@@ -711,12 +734,22 @@ TEST(global_evidence_dump_lists_core_rows) {
                           .name_id = 44,
                           .parent_class_id = XG_NO_ID,
                           .flags = XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL,
-                          .field_start = 0,
+                          .field_start = 1,
                           .field_count = 1,
-                          .method_start = 0,
+                          .method_start = 1,
                           .method_count = 1,
                           .interface_start = 0,
-                          .interface_count = 0};
+                          .interface_count = 0,
+                          .decl_kind = XG_DECL_CLASS};
+    XgClassFieldSummary field = {.field_id = 1,
+                                 .module_id = 1,
+                                 .source_node_id = 705,
+                                 .owner_class_id = 2,
+                                 .name_id = 45,
+                                 .type_key = 56,
+                                 .decl_ordinal = 0,
+                                 .instance_slot = 0,
+                                 .semantic_kind = XG_CLASS_FIELD_TYPE_I64};
     XgMethodSummary method = {.method_id = 3,
                               .owner_class_id = 2,
                               .source_node_id = 704,
@@ -821,6 +854,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &field));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impl));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(&ev, &interface_extends));
@@ -835,15 +869,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=16 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=16 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=16 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=16 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=17 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=17 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=17 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=17 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=16 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=16 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=16 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=16 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 node=701 kind=class"));
@@ -1243,6 +1277,9 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
     XgClassSummary base = {.class_id = 1,
+                           .module_id = 1,
+                           .decl_id = 1,
+                           .name_id = 1001,
                            .parent_class_id = XG_NO_ID,
                            .flags = XG_CLASS_HAS_SUBCLASS,
                            .field_start = 1,
@@ -1253,6 +1290,9 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                            .interface_count = 0,
                            .decl_kind = XG_DECL_CLASS};
     XgClassSummary child = {.class_id = 2,
+                            .module_id = 1,
+                            .decl_id = 2,
+                            .name_id = 1002,
                             .parent_class_id = 1,
                             .flags = XG_CLASS_INFERRED_FINAL,
                             .field_start = 2,
@@ -1262,6 +1302,24 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                             .interface_start = 1,
                             .interface_count = 1,
                             .decl_kind = XG_DECL_CLASS};
+    XgClassFieldSummary base_field = {.field_id = 1,
+                                      .module_id = 1,
+                                      .source_node_id = 11001,
+                                      .owner_class_id = 1,
+                                      .name_id = 2001,
+                                      .type_key = 3001,
+                                      .decl_ordinal = 0,
+                                      .instance_slot = 0,
+                                      .semantic_kind = XG_CLASS_FIELD_TYPE_I64};
+    XgClassFieldSummary child_field = {.field_id = 2,
+                                       .module_id = 1,
+                                       .source_node_id = 11002,
+                                       .owner_class_id = 2,
+                                       .name_id = 2002,
+                                       .type_key = 3002,
+                                       .decl_ordinal = 0,
+                                       .instance_slot = 1,
+                                       .semantic_kind = XG_CLASS_FIELD_TYPE_BOOL};
     XgMethodSummary base_method = {.method_id = 1,
                                    .owner_class_id = 1,
                                    .source_node_id = 12001,
@@ -1327,6 +1385,8 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &base));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &child));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &base_field));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &child_field));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &base_method));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &child_method));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
@@ -7771,6 +7831,434 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_derives_verified_class_field_layouts) {
+    setup_parser_session();
+    const char *source = "enum Tone {\n"
+                         "    Light,\n"
+                         "    Dark\n"
+                         "}\n"
+                         "interface Face {\n"
+                         "    ping() -> int\n"
+                         "}\n"
+                         "class TailParent {\n"
+                         "    wide: int\n"
+                         "    flag: bool\n"
+                         "}\n"
+                         "class TailChild extends TailParent {\n"
+                         "    childFlag: bool\n"
+                         "}\n"
+                         "class Holder {\n"
+                         "    later: Later\n"
+                         "    face: Face\n"
+                         "    label: string\n"
+                         "    values: Array<int>\n"
+                         "    lookup: Map<string, int>\n"
+                         "    keys: Set<string>\n"
+                         "    tone: Tone\n"
+                         "    static total: int = 0\n"
+                         "}\n"
+                         "class Later {\n"
+                         "    self: Later?\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nclasses, 4);
+    ASSERT_EQ_UINT(ev.nclass_fields, 12);
+
+    const XgClassSummary *tail_parent = NULL;
+    const XgClassSummary *tail_child = NULL;
+    const XgClassSummary *holder = NULL;
+    const XgClassSummary *later = NULL;
+    for (uint32_t i = 0; i < ev.nclasses; i++) {
+        const XgClassSummary *cls = &ev.classes[i];
+        if (cls->name_id == xg_name_id("TailParent"))
+            tail_parent = cls;
+        else if (cls->name_id == xg_name_id("TailChild"))
+            tail_child = cls;
+        else if (cls->name_id == xg_name_id("Holder"))
+            holder = cls;
+        else if (cls->name_id == xg_name_id("Later"))
+            later = cls;
+    }
+    ASSERT_NOT_NULL(tail_parent);
+    ASSERT_NOT_NULL(tail_child);
+    ASSERT_NOT_NULL(holder);
+    ASSERT_NOT_NULL(later);
+    ASSERT_EQ_UINT(tail_child->parent_class_id, tail_parent->class_id);
+
+    const XgClassFieldSummary *wide = NULL;
+    const XgClassFieldSummary *flag = NULL;
+    const XgClassFieldSummary *child_flag = NULL;
+    const XgClassFieldSummary *later_field = NULL;
+    const XgClassFieldSummary *face_field = NULL;
+    const XgClassFieldSummary *label_field = NULL;
+    const XgClassFieldSummary *values_field = NULL;
+    const XgClassFieldSummary *lookup_field = NULL;
+    const XgClassFieldSummary *keys_field = NULL;
+    const XgClassFieldSummary *tone_field = NULL;
+    const XgClassFieldSummary *static_total = NULL;
+    const XgClassFieldSummary *self_field = NULL;
+    for (uint32_t i = 0; i < ev.nclass_fields; i++) {
+        const XgClassFieldSummary *field = &ev.class_fields[i];
+        if (field->owner_class_id == tail_parent->class_id && field->name_id == xg_name_id("wide"))
+            wide = field;
+        else if (field->owner_class_id == tail_parent->class_id &&
+                 field->name_id == xg_name_id("flag"))
+            flag = field;
+        else if (field->owner_class_id == tail_child->class_id)
+            child_flag = field;
+        else if (field->owner_class_id == holder->class_id && field->name_id == xg_name_id("later"))
+            later_field = field;
+        else if (field->owner_class_id == holder->class_id && field->name_id == xg_name_id("face"))
+            face_field = field;
+        else if (field->owner_class_id == holder->class_id && field->name_id == xg_name_id("label"))
+            label_field = field;
+        else if (field->owner_class_id == holder->class_id &&
+                 field->name_id == xg_name_id("values"))
+            values_field = field;
+        else if (field->owner_class_id == holder->class_id &&
+                 field->name_id == xg_name_id("lookup"))
+            lookup_field = field;
+        else if (field->owner_class_id == holder->class_id && field->name_id == xg_name_id("keys"))
+            keys_field = field;
+        else if (field->owner_class_id == holder->class_id && field->name_id == xg_name_id("tone"))
+            tone_field = field;
+        else if (field->owner_class_id == holder->class_id && field->name_id == xg_name_id("total"))
+            static_total = field;
+        else if (field->owner_class_id == later->class_id)
+            self_field = field;
+    }
+    ASSERT_NOT_NULL(wide);
+    ASSERT_NOT_NULL(flag);
+    ASSERT_NOT_NULL(child_flag);
+    ASSERT_NOT_NULL(later_field);
+    ASSERT_NOT_NULL(face_field);
+    ASSERT_NOT_NULL(label_field);
+    ASSERT_NOT_NULL(values_field);
+    ASSERT_NOT_NULL(lookup_field);
+    ASSERT_NOT_NULL(keys_field);
+    ASSERT_NOT_NULL(tone_field);
+    ASSERT_NOT_NULL(static_total);
+    ASSERT_NOT_NULL(self_field);
+
+    ASSERT_EQ_UINT(wide->instance_slot, 0);
+    ASSERT_EQ_UINT(flag->instance_slot, 1);
+    ASSERT_EQ_UINT(child_flag->instance_slot, 2);
+    ASSERT_EQ_UINT(static_total->instance_slot, UINT32_MAX);
+    ASSERT_TRUE((static_total->flags & XG_CLASS_FIELD_STATIC) != 0);
+    ASSERT_TRUE(wide->source_node_id != 0 && flag->source_node_id != 0 &&
+                wide->source_node_id != flag->source_node_id);
+    ASSERT_EQ_UINT(later_field->semantic_kind, XG_CLASS_FIELD_TYPE_CLASS);
+    ASSERT_EQ_UINT(later_field->target_class_id, later->class_id);
+    ASSERT_EQ_UINT(face_field->semantic_kind, XG_CLASS_FIELD_TYPE_INTERFACE);
+    ASSERT_TRUE(face_field->target_interface_id != XG_NO_ID);
+    ASSERT_EQ_UINT(self_field->semantic_kind, XG_CLASS_FIELD_TYPE_OPTIONAL);
+    ASSERT_EQ_UINT(self_field->target_class_id, later->class_id);
+    ASSERT_TRUE((self_field->flags & XG_CLASS_FIELD_NULLABLE) != 0);
+    ASSERT_EQ_UINT(label_field->semantic_kind, XG_CLASS_FIELD_TYPE_STRING);
+    ASSERT_EQ_UINT(values_field->semantic_kind, XG_CLASS_FIELD_TYPE_ARRAY);
+    ASSERT_EQ_UINT(lookup_field->semantic_kind, XG_CLASS_FIELD_TYPE_MAP);
+    ASSERT_EQ_UINT(keys_field->semantic_kind, XG_CLASS_FIELD_TYPE_SET);
+    ASSERT_EQ_UINT(tone_field->semantic_kind, XG_CLASS_FIELD_TYPE_ENUM);
+    ASSERT_EQ_UINT(tone_field->target_name_id, xg_name_id("Tone"));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotClassLayoutPlan *parent_layout =
+        xaot_bundle_find_class_layout_plan(&bundle, tail_parent->class_id);
+    const XaotClassLayoutPlan *child_layout =
+        xaot_bundle_find_class_layout_plan(&bundle, tail_child->class_id);
+    const XaotClassLayoutPlan *holder_layout =
+        xaot_bundle_find_class_layout_plan(&bundle, holder->class_id);
+    ASSERT_NOT_NULL(parent_layout);
+    ASSERT_NOT_NULL(child_layout);
+    ASSERT_NOT_NULL(holder_layout);
+    ASSERT_EQ_UINT(parent_layout->instance_size, 16);
+    ASSERT_EQ_UINT(parent_layout->instance_align, 8);
+    ASSERT_EQ_UINT(child_layout->parent_instance_size, 16);
+    ASSERT_EQ_UINT(child_layout->instance_size, 24);
+    ASSERT_EQ_UINT(child_layout->instance_align, 8);
+    ASSERT_EQ_UINT(holder_layout->instance_field_count, 7);
+    ASSERT_EQ_UINT(holder_layout->own_instance_field_count, 7);
+
+    const XaotClassFieldPlan *wide_plan =
+        xaot_bundle_find_class_field_plan(&bundle, wide->field_id);
+    const XaotClassFieldPlan *flag_plan =
+        xaot_bundle_find_class_field_plan(&bundle, flag->field_id);
+    const XaotClassFieldPlan *child_flag_plan =
+        xaot_bundle_find_class_field_plan(&bundle, child_flag->field_id);
+    const XaotClassFieldPlan *later_plan =
+        xaot_bundle_find_class_field_plan(&bundle, later_field->field_id);
+    const XaotClassFieldPlan *face_plan =
+        xaot_bundle_find_class_field_plan(&bundle, face_field->field_id);
+    const XaotClassFieldPlan *label_plan =
+        xaot_bundle_find_class_field_plan(&bundle, label_field->field_id);
+    const XaotClassFieldPlan *values_plan =
+        xaot_bundle_find_class_field_plan(&bundle, values_field->field_id);
+    const XaotClassFieldPlan *lookup_plan =
+        xaot_bundle_find_class_field_plan(&bundle, lookup_field->field_id);
+    const XaotClassFieldPlan *keys_plan =
+        xaot_bundle_find_class_field_plan(&bundle, keys_field->field_id);
+    const XaotClassFieldPlan *tone_plan =
+        xaot_bundle_find_class_field_plan(&bundle, tone_field->field_id);
+    const XaotClassFieldPlan *static_plan =
+        xaot_bundle_find_class_field_plan(&bundle, static_total->field_id);
+    ASSERT_NOT_NULL(wide_plan);
+    ASSERT_NOT_NULL(flag_plan);
+    ASSERT_NOT_NULL(child_flag_plan);
+    ASSERT_NOT_NULL(later_plan);
+    ASSERT_NOT_NULL(face_plan);
+    ASSERT_NOT_NULL(label_plan);
+    ASSERT_NOT_NULL(values_plan);
+    ASSERT_NOT_NULL(lookup_plan);
+    ASSERT_NOT_NULL(keys_plan);
+    ASSERT_NOT_NULL(tone_plan);
+    ASSERT_NOT_NULL(static_plan);
+    ASSERT_EQ_UINT(wide_plan->offset, 0);
+    ASSERT_EQ_UINT(flag_plan->offset, 8);
+    ASSERT_EQ_UINT(child_flag_plan->offset, 16);
+    ASSERT_EQ_UINT(static_plan->offset, UINT32_MAX);
+    ASSERT_EQ_UINT(later_plan->storage_kind, XAOT_CLASS_FIELD_STORAGE_TAGGED_VALUE);
+    ASSERT_EQ_UINT(later_plan->action, XAOT_CLASS_FIELD_ACTION_TAGGED_FALLBACK);
+    ASSERT_EQ_UINT(later_plan->unproven_reason, XAOT_CLASS_FIELD_UNPROVEN_CLASS_LAYOUT);
+    ASSERT_EQ_UINT(face_plan->storage_kind, XAOT_CLASS_FIELD_STORAGE_TAGGED_VALUE);
+    ASSERT_EQ_UINT(face_plan->unproven_reason, XAOT_CLASS_FIELD_UNPROVEN_INTERFACE_LAYOUT);
+    ASSERT_EQ_UINT(label_plan->size, sizeof(XrValue));
+    ASSERT_EQ_UINT(label_plan->align, _Alignof(XrValue));
+    ASSERT_EQ_UINT(label_plan->native_type, XR_NATIVE_STRING);
+    ASSERT_EQ_UINT(values_plan->size, sizeof(void *));
+    ASSERT_EQ_UINT(values_plan->align, _Alignof(void *));
+    ASSERT_EQ_UINT(values_plan->native_type, XR_NATIVE_ARRAY_REF);
+    ASSERT_EQ_UINT(values_plan->ref_kind, XAOT_CLASS_FIELD_REF_ARRAY);
+    ASSERT_EQ_UINT(lookup_plan->native_type, XR_NATIVE_MAP_REF);
+    ASSERT_EQ_UINT(lookup_plan->ref_kind, XAOT_CLASS_FIELD_REF_MAP);
+    ASSERT_EQ_UINT(keys_plan->native_type, XR_NATIVE_SET_REF);
+    ASSERT_EQ_UINT(keys_plan->ref_kind, XAOT_CLASS_FIELD_REF_SET);
+    ASSERT_EQ_UINT(tone_plan->unproven_reason, XAOT_CLASS_FIELD_UNPROVEN_ENUM_LAYOUT);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    XgFieldId saved_wide_id = ev.class_fields[0].field_id;
+    XgFieldId saved_field_id = ev.class_fields[1].field_id;
+    ev.class_fields[1].field_id = ev.class_fields[0].field_id;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ev.class_fields[1].field_id = saved_field_id;
+    ev.class_fields[0].field_id = XG_NO_ID;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ev.class_fields[0].field_id = saved_wide_id;
+
+    XgClassId saved_owner = ev.class_fields[0].owner_class_id;
+    ev.class_fields[0].owner_class_id = tail_child->class_id;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ev.class_fields[0].owner_class_id = saved_owner;
+    uint32_t saved_start = ev.classes[0].field_start;
+    ev.classes[0].field_start = ev.nclass_fields + 1;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ev.classes[0].field_start = saved_start;
+    uint32_t saved_slot = ev.class_fields[0].instance_slot;
+    ev.class_fields[0].instance_slot = 99;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ev.class_fields[0].instance_slot = saved_slot;
+    uint8_t saved_kind = ev.class_fields[0].semantic_kind;
+    ev.class_fields[0].semantic_kind = XG_CLASS_FIELD_TYPE_DYNAMIC;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ev.class_fields[0].semantic_kind = saved_kind;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    XaotClassFieldPlan *mutable_wide = NULL;
+    XaotClassFieldPlan *mutable_tone = NULL;
+    for (uint32_t i = 0; i < bundle.nclass_field_plans; i++) {
+        if (bundle.class_field_plans[i].field_id == wide->field_id) {
+            mutable_wide = &bundle.class_field_plans[i];
+        } else if (bundle.class_field_plans[i].field_id == tone_field->field_id)
+            mutable_tone = &bundle.class_field_plans[i];
+    }
+    ASSERT_NOT_NULL(mutable_wide);
+    ASSERT_NOT_NULL(mutable_tone);
+
+    XgClassFieldSummary *mutable_wide_evidence = &ev.class_fields[wide->field_id - 1];
+    uint8_t saved_native_width = mutable_wide_evidence->native_width;
+    uint8_t stale_native_width =
+        saved_native_width == XR_NATIVE_I32 ? XR_NATIVE_I64 : XR_NATIVE_I32;
+    mutable_wide_evidence->native_width = stale_native_width;
+    mutable_wide->native_width = stale_native_width;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    mutable_wide_evidence->native_width = saved_native_width;
+    mutable_wide->native_width = saved_native_width;
+
+    XgClassFieldSummary *mutable_tone_evidence = &ev.class_fields[tone_field->field_id - 1];
+    uint32_t saved_tone_name = mutable_tone_evidence->target_name_id;
+    uint32_t stale_tone_name = xg_name_id("MissingTone");
+    mutable_tone_evidence->target_name_id = stale_tone_name;
+    mutable_tone->target_name_id = stale_tone_name;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    mutable_tone_evidence->target_name_id = saved_tone_name;
+    mutable_tone->target_name_id = saved_tone_name;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    uint32_t saved_size = mutable_wide->size;
+    mutable_wide->size++;
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    mutable_wide->size = saved_size;
+    uint32_t saved_align = mutable_wide->align;
+    mutable_wide->align = 1;
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    mutable_wide->align = saved_align;
+    uint32_t saved_offset = mutable_wide->offset;
+    mutable_wide->offset++;
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    mutable_wide->offset = saved_offset;
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=tagged_fallback"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=class_layout"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "ownership=owned"));
+    xr_free(plan_dump);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_class_layout_failure_is_atomic) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.module_id = 1, .profile = XG_BUILD_NATIVE_RELEASE};
+    XgClassSummary cls = {.class_id = 1,
+                          .module_id = 1,
+                          .name_id = 100,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .field_start = 1,
+                          .field_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgClassFieldSummary field = {.field_id = 1,
+                                 .module_id = 1,
+                                 .source_node_id = 101,
+                                 .owner_class_id = 1,
+                                 .name_id = 102,
+                                 .type_key = 103,
+                                 .semantic_kind = 0};
+    XaotBundle bundle;
+
+    memset(&bundle, 0, sizeof(bundle));
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &field));
+
+    ASSERT_TRUE(!xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_NULL(bundle.global_evidence_plan.evidence);
+    ASSERT_NULL(bundle.class_hierarchy_plans);
+    ASSERT_NULL(bundle.class_layout_plans);
+    ASSERT_NULL(bundle.class_field_plans);
+    ASSERT_EQ_UINT(bundle.nclass_hierarchy_plans, 0);
+    ASSERT_EQ_UINT(bundle.nclass_layout_plans, 0);
+    ASSERT_EQ_UINT(bundle.nclass_field_plans, 0);
+    ASSERT_NOT_NULL(bundle.error_msg);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_class_layout_uses_selected_target_abi) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.module_id = 1, .profile = XG_BUILD_NATIVE_RELEASE};
+    XgClassSummary cls = {.class_id = 1,
+                          .module_id = 1,
+                          .name_id = 100,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .field_start = 1,
+                          .field_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgClassFieldSummary field = {.field_id = 1,
+                                 .module_id = 1,
+                                 .source_node_id = 101,
+                                 .owner_class_id = 1,
+                                 .name_id = 102,
+                                 .type_key = 103,
+                                 .instance_slot = 0,
+                                 .semantic_kind = XG_CLASS_FIELD_TYPE_ISIZE,
+                                 .native_width = XR_NATIVE_ISIZE};
+    XaotTargetDataLayout ilp32;
+    XaotTargetDataLayout lp64;
+    XaotBundle bundle;
+    const XaotClassFieldPlan *field_plan;
+    const XaotClassLayoutPlan *class_plan;
+
+    ASSERT_TRUE(xaot_target_data_layout_init_ilp32(&ilp32));
+    ASSERT_TRUE(xaot_target_data_layout_init_lp64(&lp64));
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &field));
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_target_data_layout(&bundle, &ilp32));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(!xaot_bundle_set_target_data_layout(&bundle, &lp64));
+    field_plan = xaot_bundle_find_class_field_plan(&bundle, field.field_id);
+    class_plan = xaot_bundle_find_class_layout_plan(&bundle, cls.class_id);
+    ASSERT_NOT_NULL(field_plan);
+    ASSERT_NOT_NULL(class_plan);
+    ASSERT_EQ_UINT(field_plan->size, 4);
+    ASSERT_EQ_UINT(field_plan->align, 4);
+    ASSERT_EQ_UINT(class_plan->instance_size, 4);
+    ASSERT_EQ_UINT(class_plan->instance_align, 4);
+    xaot_bundle_free(&bundle);
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_target_data_layout(&bundle, &lp64));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    field_plan = xaot_bundle_find_class_field_plan(&bundle, field.field_id);
+    class_plan = xaot_bundle_find_class_layout_plan(&bundle, cls.class_id);
+    ASSERT_NOT_NULL(field_plan);
+    ASSERT_NOT_NULL(class_plan);
+    ASSERT_EQ_UINT(field_plan->size, 8);
+    ASSERT_EQ_UINT(field_plan->align, 8);
+    ASSERT_EQ_UINT(class_plan->instance_size, 8);
+    ASSERT_EQ_UINT(class_plan->instance_align, 8);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     setup_parser_session();
     const char *source = "interface Shape {\n"
@@ -10981,6 +11469,9 @@ RUN_TEST(global_evidence_producer_marks_body_escape_bits);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_records_interface_object_storage_uses);
+RUN_TEST(global_evidence_producer_derives_verified_class_field_layouts);
+RUN_TEST(global_evidence_class_layout_failure_is_atomic);
+RUN_TEST(global_evidence_class_layout_uses_selected_target_abi);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
 RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
 RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);

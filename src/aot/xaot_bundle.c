@@ -200,6 +200,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nclass_layout_plans = 0;
     bundle->class_layout_plan_cap = 0;
 
+    xr_free(bundle->class_field_plans);
+    bundle->class_field_plans = NULL;
+    bundle->nclass_field_plans = 0;
+    bundle->class_field_plan_cap = 0;
+
     xr_free(bundle->method_dispatch_plans);
     bundle->method_dispatch_plans = NULL;
     bundle->nmethod_dispatch_plans = 0;
@@ -409,6 +414,8 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     if (!bundle || !modules || nmodules == 0 || entry_module >= nmodules)
         return false;
     memset(bundle, 0, sizeof(*bundle));
+    if (!xaot_target_data_layout_init_native(&bundle->target_data_layout))
+        return false;
     bundle->modules = modules;
     bundle->nmodules = nmodules;
     bundle->entry_module = entry_module;
@@ -697,11 +704,97 @@ static bool xaot_bundle_add_class_hierarchy_plan(XaotBundle *bundle,
     return true;
 }
 
-static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgClassSummary *summary) {
+static XaotClassFieldPlan *xaot_bundle_find_class_field_plan_mut(XaotBundle *bundle,
+                                                                 XgFieldId field_id) {
+    if (!bundle || field_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nclass_field_plans; i++) {
+        if (bundle->class_field_plans[i].field_id == field_id)
+            return &bundle->class_field_plans[i];
+    }
+    return NULL;
+}
+
+static XaotClassLayoutPlan *xaot_bundle_find_class_layout_plan_mut(XaotBundle *bundle,
+                                                                   XgClassId class_id,
+                                                                   uint32_t *out_index) {
+    if (!bundle || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nclass_layout_plans; i++) {
+        if (bundle->class_layout_plans[i].class_id == class_id) {
+            if (out_index)
+                *out_index = i;
+            return &bundle->class_layout_plans[i];
+        }
+    }
+    return NULL;
+}
+
+static bool xaot_bundle_add_class_field_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                              const XgClassSummary *summary) {
+    uint32_t start;
+    if (!bundle || !evidence || !summary)
+        return false;
+    if (summary->field_count == 0)
+        return summary->field_start == 0;
+    if (summary->field_start == 0)
+        return false;
+    start = summary->field_start - 1;
+    if (start >= evidence->nclass_fields || summary->field_count > evidence->nclass_fields - start)
+        return false;
+    for (uint32_t i = 0; i < summary->field_count; i++) {
+        const XgClassFieldSummary *field = &evidence->class_fields[start + i];
+        XaotClassFieldPhysicalLayout physical;
+        XaotClassFieldPlan *plan;
+        if (field->owner_class_id != summary->class_id ||
+            !xaot_class_field_physical_layout(&bundle->target_data_layout, field->semantic_kind,
+                                              &physical))
+            return false;
+        if (!reserve_plan_array((void **) &bundle->class_field_plans, &bundle->class_field_plan_cap,
+                                bundle->nclass_field_plans + 1, sizeof(XaotClassFieldPlan), 8))
+            return false;
+        plan = &bundle->class_field_plans[bundle->nclass_field_plans++];
+        memset(plan, 0, sizeof(*plan));
+        plan->field_id = field->field_id;
+        plan->owner_class_id = field->owner_class_id;
+        plan->source_node_id = field->source_node_id;
+        plan->target_name_id = field->target_name_id;
+        plan->target_class_id = field->target_class_id;
+        plan->target_interface_id = field->target_interface_id;
+        plan->element_type_key = field->element_type_key;
+        plan->key_type_key = field->key_type_key;
+        plan->value_type_key = field->value_type_key;
+        plan->fixed_length = field->fixed_length;
+        plan->instance_slot = field->instance_slot;
+        plan->offset = (field->flags & XG_CLASS_FIELD_STATIC) != 0 ? UINT32_MAX : 0;
+        plan->size = physical.size;
+        plan->align = physical.align;
+        plan->ref_kind = physical.ref_kind;
+        plan->field_flags = field->flags;
+        plan->semantic_kind = field->semantic_kind;
+        plan->native_type = physical.native_type;
+        plan->native_width = field->native_width;
+        plan->storage_kind = physical.storage_kind;
+        plan->action = physical.action;
+        plan->representation = physical.representation;
+        plan->ownership = physical.ownership;
+        plan->drop_kind = physical.drop_kind;
+        plan->unproven_reason = physical.unproven_reason;
+        plan->evidence = XAOT_CLASS_FIELD_EV_GLOBAL_SUMMARY | XAOT_CLASS_FIELD_EV_OWNER_RANGE |
+                         XAOT_CLASS_FIELD_EV_SLOT_DERIVED | XAOT_CLASS_FIELD_EV_PHYSICAL_ABI |
+                         XAOT_CLASS_FIELD_EV_SEMANTIC_TYPE | XAOT_CLASS_FIELD_EV_OWNERSHIP |
+                         XAOT_CLASS_FIELD_EV_DROP;
+    }
+    return true;
+}
+
+static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                              const XgClassSummary *summary) {
     XaotClassLayoutPlan *plan;
     char ctype[64];
-    uint32_t flags = XAOT_CLASS_LAYOUT_HEADER | XAOT_CLASS_LAYOUT_TYPED_PAYLOAD;
-    if (!bundle || !summary)
+    uint32_t field_plan_start;
+    uint32_t flags = XAOT_CLASS_LAYOUT_PAYLOAD_ONLY | XAOT_CLASS_LAYOUT_TYPED_PAYLOAD;
+    if (!bundle || !evidence || !summary)
         return false;
     if (!reserve_plan_array((void **) &bundle->class_layout_plans, &bundle->class_layout_plan_cap,
                             bundle->nclass_layout_plans + 1, sizeof(XaotClassLayoutPlan), 8))
@@ -713,6 +806,7 @@ static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgClassS
     plan = &bundle->class_layout_plans[bundle->nclass_layout_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->class_id = summary->class_id;
+    plan->parent_class_id = summary->parent_class_id;
     snprintf(ctype, sizeof(ctype), "XrC_%u", summary->class_id);
     plan->c_type_name = xr_strdup(ctype);
     if (!plan->c_type_name) {
@@ -722,7 +816,126 @@ static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgClassS
     plan->field_start = summary->field_start;
     plan->field_count = summary->field_count;
     plan->flags = flags;
+    plan->evidence = XAOT_CLASS_LAYOUT_EV_GLOBAL_SUMMARY;
+    field_plan_start = bundle->nclass_field_plans;
+    if (!xaot_bundle_add_class_field_plans(bundle, evidence, summary)) {
+        bundle->nclass_field_plans = field_plan_start;
+        xaot_class_layout_plan_free(plan);
+        bundle->nclass_layout_plans--;
+        return false;
+    }
     return true;
+}
+
+static bool xaot_bundle_finalize_class_layout_rec(XaotBundle *bundle,
+                                                  const XgGlobalEvidence *evidence,
+                                                  uint32_t layout_index, uint8_t *state) {
+    XaotClassLayoutPlan *plan;
+    const XgClassSummary *summary;
+    uint32_t offset = 0;
+    uint32_t max_align = 1;
+    uint32_t prefix_field_count = 0;
+    uint32_t own_instance_count = 0;
+    if (!bundle || !evidence || !state || layout_index >= bundle->nclass_layout_plans)
+        return false;
+    if (state[layout_index] == 2)
+        return true;
+    if (state[layout_index] == 1)
+        return false;
+    state[layout_index] = 1;
+    plan = &bundle->class_layout_plans[layout_index];
+    summary = xg_evidence_find_class(evidence, plan->class_id);
+    if (!summary)
+        return false;
+    if (summary->parent_class_id != XG_NO_ID) {
+        XaotClassLayoutPlan *parent;
+        uint32_t parent_index = 0;
+        parent =
+            xaot_bundle_find_class_layout_plan_mut(bundle, summary->parent_class_id, &parent_index);
+        if (!parent ||
+            !xaot_bundle_finalize_class_layout_rec(bundle, evidence, parent_index, state))
+            return false;
+        plan = &bundle->class_layout_plans[layout_index];
+        plan->parent_instance_size = parent->instance_size;
+        offset = parent->instance_size;
+        max_align = parent->instance_align;
+        prefix_field_count = parent->instance_field_count;
+        plan->evidence |= XAOT_CLASS_LAYOUT_EV_PARENT_PREFIX;
+    }
+    if (summary->field_count != 0) {
+        uint32_t start = summary->field_start - 1;
+        if (summary->field_start == 0 || start >= evidence->nclass_fields ||
+            summary->field_count > evidence->nclass_fields - start)
+            return false;
+        for (uint32_t i = 0; i < summary->field_count; i++) {
+            const XgClassFieldSummary *field = &evidence->class_fields[start + i];
+            XaotClassFieldPlan *field_plan =
+                xaot_bundle_find_class_field_plan_mut(bundle, field->field_id);
+            uint32_t aligned;
+            if (!field_plan || field_plan->owner_class_id != summary->class_id)
+                return false;
+            if ((field->flags & XG_CLASS_FIELD_STATIC) != 0) {
+                if (field->instance_slot != UINT32_MAX || field_plan->offset != UINT32_MAX)
+                    return false;
+                continue;
+            }
+            if (field_plan->align == 0 || (field_plan->align & (field_plan->align - 1)) != 0 ||
+                offset > UINT32_MAX - (field_plan->align - 1))
+                return false;
+            aligned = (offset + field_plan->align - 1) & ~(field_plan->align - 1);
+            if (aligned > UINT32_MAX - field_plan->size ||
+                field->instance_slot != prefix_field_count + own_instance_count)
+                return false;
+            field_plan->offset = aligned;
+            offset = aligned + field_plan->size;
+            if (field_plan->align > max_align)
+                max_align = field_plan->align;
+            own_instance_count++;
+        }
+    } else if (summary->field_start != 0) {
+        return false;
+    }
+    if (prefix_field_count > UINT32_MAX - own_instance_count)
+        return false;
+    plan = &bundle->class_layout_plans[layout_index];
+    plan->instance_field_count = prefix_field_count + own_instance_count;
+    plan->own_instance_field_count = own_instance_count;
+    if (plan->instance_field_count == 0) {
+        plan->instance_size = 1;
+        plan->instance_align = 1;
+    } else if (own_instance_count == 0 && summary->parent_class_id != XG_NO_ID) {
+        plan->instance_size = offset;
+        plan->instance_align = max_align;
+    } else {
+        if (offset > UINT32_MAX - (max_align - 1))
+            return false;
+        plan->instance_size = (offset + max_align - 1) & ~(max_align - 1);
+        plan->instance_align = max_align;
+    }
+    plan->evidence |= XAOT_CLASS_LAYOUT_EV_FIELD_PLANS | XAOT_CLASS_LAYOUT_EV_PHYSICAL_ABI;
+    state[layout_index] = 2;
+    return true;
+}
+
+static bool xaot_bundle_finalize_class_layouts(XaotBundle *bundle,
+                                               const XgGlobalEvidence *evidence) {
+    uint8_t *state;
+    bool ok = true;
+    if (!bundle || !evidence)
+        return false;
+    if (bundle->nclass_layout_plans == 0)
+        return true;
+    state = (uint8_t *) xr_calloc(bundle->nclass_layout_plans, sizeof(*state));
+    if (!state)
+        return false;
+    for (uint32_t i = 0; i < bundle->nclass_layout_plans; i++) {
+        if (!xaot_bundle_finalize_class_layout_rec(bundle, evidence, i, state)) {
+            ok = false;
+            break;
+        }
+    }
+    xr_free(state);
+    return ok;
 }
 
 static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
@@ -3567,10 +3780,14 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         if (!xg_class_summary_is_runtime_class(summary))
             continue;
         if (!xaot_bundle_add_class_hierarchy_plan(bundle, summary) ||
-            !xaot_bundle_add_class_layout_plan(bundle, summary)) {
+            !xaot_bundle_add_class_layout_plan(bundle, evidence, summary)) {
             bundle->error_msg = "failed to allocate AOT class plan";
             return false;
         }
+    }
+    if (!xaot_bundle_finalize_class_layouts(bundle, evidence)) {
+        bundle->error_msg = "failed to derive AOT class physical layout";
+        return false;
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *call = &evidence->callsites[i];
@@ -3745,14 +3962,33 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
 
 XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,
                                              uint32_t profile) {
+    const char *error_msg;
     if (!bundle || !evidence)
         return false;
+    if (!xaot_target_data_layout_validate(&bundle->target_data_layout) &&
+        !xaot_target_data_layout_init_native(&bundle->target_data_layout))
+        return false;
     xaot_bundle_clear_global_lowered_plans(bundle);
+    bundle->error_msg = NULL;
     bundle->global_evidence_plan.evidence = evidence;
     bundle->global_evidence_plan.evidence_hash = xg_global_evidence_hash(evidence);
     bundle->global_evidence_plan.profile = profile;
-    if (!xaot_bundle_populate_global_lowered_plans(bundle, evidence))
+    if (!xaot_bundle_populate_global_lowered_plans(bundle, evidence)) {
+        error_msg = bundle->error_msg;
+        xaot_bundle_clear_global_lowered_plans(bundle);
+        memset(&bundle->global_evidence_plan, 0, sizeof(bundle->global_evidence_plan));
+        bundle->error_msg = error_msg;
         return false;
+    }
+    return true;
+}
+
+XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
+                                                const XaotTargetDataLayout *target_layout) {
+    if (!bundle || !xaot_target_data_layout_validate(target_layout) ||
+        bundle->global_evidence_plan.evidence)
+        return false;
+    bundle->target_data_layout = *target_layout;
     return true;
 }
 
@@ -3774,6 +4010,17 @@ XR_FUNC const XaotClassLayoutPlan *xaot_bundle_find_class_layout_plan(const Xaot
     for (uint32_t i = 0; i < bundle->nclass_layout_plans; i++) {
         if (bundle->class_layout_plans[i].class_id == class_id)
             return &bundle->class_layout_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotClassFieldPlan *xaot_bundle_find_class_field_plan(const XaotBundle *bundle,
+                                                                    XgFieldId field_id) {
+    if (!bundle || field_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nclass_field_plans; i++) {
+        if (bundle->class_field_plans[i].field_id == field_id)
+            return &bundle->class_field_plans[i];
     }
     return NULL;
 }
@@ -5985,10 +6232,84 @@ static void print_class_layout_flags(FILE *out, uint32_t flags) {
     PRINT_BIT(XAOT_CLASS_LAYOUT_PREFIX_PARENT, "prefix");
     PRINT_BIT(XAOT_CLASS_LAYOUT_TYPE_ID, "type_id");
     PRINT_BIT(XAOT_CLASS_LAYOUT_VTABLE, "vtable");
-    PRINT_BIT(XAOT_CLASS_LAYOUT_HEADER, "header");
+    PRINT_BIT(XAOT_CLASS_LAYOUT_PAYLOAD_ONLY, "payload_only");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT
+}
+
+static const char *class_field_storage_kind_name(uint8_t kind) {
+    switch ((XaotClassFieldStorageKind) kind) {
+        case XAOT_CLASS_FIELD_STORAGE_SCALAR:
+            return "scalar";
+        case XAOT_CLASS_FIELD_STORAGE_TAGGED_VALUE:
+            return "tagged_value";
+        case XAOT_CLASS_FIELD_STORAGE_POINTER_REF:
+            return "pointer_ref";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *class_field_action_name(uint8_t action) {
+    switch ((XaotClassFieldAction) action) {
+        case XAOT_CLASS_FIELD_ACTION_NATIVE_SCALAR:
+            return "native_scalar";
+        case XAOT_CLASS_FIELD_ACTION_TAGGED_VALUE:
+            return "tagged_value";
+        case XAOT_CLASS_FIELD_ACTION_POINTER_REF:
+            return "pointer_ref";
+        case XAOT_CLASS_FIELD_ACTION_TAGGED_FALLBACK:
+            return "tagged_fallback";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *class_field_representation_name(uint8_t representation) {
+    switch ((XaotClassFieldValueRep) representation) {
+        case XAOT_CLASS_FIELD_REP_NATIVE_SCALAR:
+            return "native_scalar";
+        case XAOT_CLASS_FIELD_REP_TAGGED_VALUE:
+            return "tagged_value";
+        case XAOT_CLASS_FIELD_REP_POINTER_REF:
+            return "pointer_ref";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *class_field_ownership_name(uint8_t ownership) {
+    switch ((XaotClassFieldOwnership) ownership) {
+        case XAOT_CLASS_FIELD_OWNERSHIP_TRIVIAL:
+            return "trivial";
+        case XAOT_CLASS_FIELD_OWNERSHIP_OWNED:
+            return "owned";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *class_field_drop_name(uint8_t drop_kind) {
+    switch ((XaotClassFieldDropKind) drop_kind) {
+        case XAOT_CLASS_FIELD_DROP_NONE:
+            return "none";
+        case XAOT_CLASS_FIELD_DROP_VALUE_RELEASE:
+            return "value_release";
+        case XAOT_CLASS_FIELD_DROP_REF_RELEASE:
+            return "ref_release";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *class_field_unproven_reason_name(uint8_t reason) {
+    static const char *const names[] = {
+        "none",         "class_layout",    "interface_layout", "enum_layout",
+        "fixed_layout", "optional_layout", "union_layout",     "nested_layout",
+        "type_param",   "dynamic_type",    "unit_value",       "null_value",
+    };
+    return reason < sizeof(names) / sizeof(names[0]) ? names[reason] : "unknown";
 }
 
 static void print_interface_reason_bits(FILE *out, uint32_t bits) {
@@ -6601,6 +6922,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     fprintf(out, "xaot-plan v0\n");
     fprintf(out, "modules %u entry %u\n", bundle->nmodules, bundle->entry_module);
+    fprintf(out, "target-data-layout pointer=%u/%u isize=%u/%u usize=%u/%u xr_value=%u/%u\n",
+            bundle->target_data_layout.pointer.size, bundle->target_data_layout.pointer.align,
+            bundle->target_data_layout.isize.size, bundle->target_data_layout.isize.align,
+            bundle->target_data_layout.usize.size, bundle->target_data_layout.usize.align,
+            bundle->target_data_layout.xr_value.size, bundle->target_data_layout.xr_value.align);
     if (bundle->global_evidence_plan.evidence) {
         const XgGlobalEvidence *ev = bundle->global_evidence_plan.evidence;
         fprintf(out,
@@ -6638,11 +6964,38 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     for (uint32_t ci = 0; ci < bundle->nclass_layout_plans; ci++) {
         const XaotClassLayoutPlan *cp = &bundle->class_layout_plans[ci];
-        fprintf(out, "class-layout %u id=%u ctype=%s size=%u align=%u fields=%u+%u flags=", ci,
-                cp->class_id, safe_str(cp->c_type_name), cp->instance_size, cp->instance_align,
-                cp->field_start, cp->field_count);
+        fprintf(out,
+                "class-layout %u id=%u parent=%u ctype=%s parent_size=%u size=%u align=%u "
+                "fields=%u+%u instance_fields=%u own_instance_fields=%u flags=",
+                ci, cp->class_id, cp->parent_class_id, safe_str(cp->c_type_name),
+                cp->parent_instance_size, cp->instance_size, cp->instance_align, cp->field_start,
+                cp->field_count, cp->instance_field_count, cp->own_instance_field_count);
         print_class_layout_flags(out, cp->flags);
-        fprintf(out, "\n");
+        fprintf(out, " evidence=0x%x\n", cp->evidence);
+    }
+
+    for (uint32_t fi = 0; fi < bundle->nclass_field_plans; fi++) {
+        const XaotClassFieldPlan *fp = &bundle->class_field_plans[fi];
+        fprintf(out, "class-field-plan %u field=%u owner=%u node=%u ", fi, fp->field_id,
+                fp->owner_class_id, fp->source_node_id);
+        if ((fp->field_flags & XG_CLASS_FIELD_STATIC) != 0)
+            fprintf(out, "slot=- offset=- ");
+        else
+            fprintf(out, "slot=%u offset=%u ", fp->instance_slot, fp->offset);
+        fprintf(
+            out,
+            "semantic=%u width=%u target_name=%u target_class=%u target_interface=%u "
+            "element=%u key=%u value=%u fixed=%u size=%u align=%u native=%u ref_kind=%u "
+            "storage=%s "
+            "action=%s rep=%s ownership=%s drop=%s reason=%s flags=0x%x evidence=0x%x\n",
+            (unsigned) fp->semantic_kind, (unsigned) fp->native_width, fp->target_name_id,
+            fp->target_class_id, fp->target_interface_id, fp->element_type_key, fp->key_type_key,
+            fp->value_type_key, fp->fixed_length, fp->size, fp->align, (unsigned) fp->native_type,
+            (unsigned) fp->ref_kind, class_field_storage_kind_name(fp->storage_kind),
+            class_field_action_name(fp->action),
+            class_field_representation_name(fp->representation),
+            class_field_ownership_name(fp->ownership), class_field_drop_name(fp->drop_kind),
+            class_field_unproven_reason_name(fp->unproven_reason), fp->field_flags, fp->evidence);
     }
 
     for (uint32_t di = 0; di < bundle->nmethod_dispatch_plans; di++) {

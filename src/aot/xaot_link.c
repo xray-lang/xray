@@ -371,6 +371,12 @@ XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const cha
     target->triple = xr_strdup(triple ? triple : (name ? name : "native"));
     target->pointer_bits = pointer_bits;
     target->endian = xr_strdup(endian ? endian : "unknown");
+    if (!((pointer_bits == 32 && xaot_target_data_layout_init_ilp32(&target->data_layout)) ||
+          (pointer_bits == 64 && xaot_target_data_layout_init_lp64(&target->data_layout)) ||
+          (pointer_bits == 0 && xaot_target_data_layout_init_native(&target->data_layout)))) {
+        xaot_target_free(target);
+        return false;
+    }
     if (!target->name || !target->arch || !target->os || !target->abi || !target->object_format ||
         !target->triple || !target->endian) {
         xaot_target_free(target);
@@ -394,11 +400,17 @@ XR_FUNC void xaot_target_free(XaotTarget *target) {
 }
 
 static bool xaot_target_copy_init(XaotTarget *out, const XaotTarget *target) {
+    bool ok;
     if (!target)
         return xaot_target_init(out, NULL);
-    return xaot_target_init_ex(out, target->name, target->arch, target->os, target->abi,
-                               target->object_format, target->triple, target->pointer_bits,
-                               target->endian);
+    if (!xaot_target_data_layout_validate(&target->data_layout))
+        return false;
+    ok = xaot_target_init_ex(out, target->name, target->arch, target->os, target->abi,
+                             target->object_format, target->triple, target->pointer_bits,
+                             target->endian);
+    if (ok)
+        out->data_layout = target->data_layout;
+    return ok;
 }
 
 XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarget *target) {

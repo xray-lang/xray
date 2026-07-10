@@ -28,6 +28,7 @@ enum {
 };
 
 typedef struct XgClassNameRow {
+    XgModuleId module_id;
     const char *name;
     const char *super_name;
     XgClassId class_id;
@@ -42,6 +43,7 @@ typedef struct XgFuncNameRow {
 } XgFuncNameRow;
 
 typedef struct XgInterfaceNameRow {
+    XgModuleId module_id;
     const char *name;
     XgInterfaceId interface_id;
     const InterfaceDeclNode *decl;
@@ -72,7 +74,6 @@ typedef struct XgProducer {
     uint32_t nbodies;
     uint32_t body_cap;
     XgFuncId next_func_id;
-    uint32_t field_cursor;
 } XgProducer;
 
 typedef struct XgPendingBody {
@@ -298,6 +299,210 @@ static uint32_t hash_named_type_key32(const char *name, XrTypeRef **type_args, i
     if (type_args && type_arg_count > 0)
         return hash_synthetic_tref32(XR_TREF_GENERIC, name, type_args, type_arg_count);
     return hash_synthetic_tref32(XR_TREF_NAMED, name, NULL, 0);
+}
+
+static uint8_t class_field_int_semantic_kind(uint8_t native_width) {
+    switch (native_width) {
+        case XR_TREF_NW_I8:
+            return XG_CLASS_FIELD_TYPE_I8;
+        case XR_TREF_NW_U8:
+            return XG_CLASS_FIELD_TYPE_U8;
+        case XR_TREF_NW_I16:
+            return XG_CLASS_FIELD_TYPE_I16;
+        case XR_TREF_NW_U16:
+            return XG_CLASS_FIELD_TYPE_U16;
+        case XR_TREF_NW_I32:
+            return XG_CLASS_FIELD_TYPE_I32;
+        case XR_TREF_NW_U32:
+            return XG_CLASS_FIELD_TYPE_U32;
+        case XR_TREF_NW_U64:
+            return XG_CLASS_FIELD_TYPE_U64;
+        case XR_TREF_NW_ISIZE:
+            return XG_CLASS_FIELD_TYPE_ISIZE;
+        case XR_TREF_NW_USIZE:
+            return XG_CLASS_FIELD_TYPE_USIZE;
+        case XR_TREF_NW_I64:
+        default:
+            return XG_CLASS_FIELD_TYPE_I64;
+    }
+}
+
+static uint8_t class_field_named_semantic_kind(const char *name) {
+    if (!name)
+        return XG_CLASS_FIELD_TYPE_DYNAMIC;
+    if (strcmp(name, "Array") == 0 || strcmp(name, "Bytes") == 0 || strcmp(name, "ByteSpan") == 0 ||
+        strcmp(name, "Span") == 0 || strcmp(name, "View") == 0)
+        return XG_CLASS_FIELD_TYPE_ARRAY;
+    if (strcmp(name, "Map") == 0)
+        return XG_CLASS_FIELD_TYPE_MAP;
+    if (strcmp(name, "Set") == 0)
+        return XG_CLASS_FIELD_TYPE_SET;
+    if (strcmp(name, "string") == 0 || strcmp(name, "String") == 0)
+        return XG_CLASS_FIELD_TYPE_STRING;
+    return XG_CLASS_FIELD_TYPE_DYNAMIC;
+}
+
+static bool class_field_target_is_builtin_name_id(uint32_t name_id) {
+    static const char *const names[] = {
+        "Array", "Bytes", "ByteSpan", "Span", "View", "Map", "Set", "string", "String",
+    };
+    if (name_id == 0)
+        return false;
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if (name_id == hash_name32(names[i]))
+            return true;
+    }
+    return false;
+}
+
+static const XrTypeRef *class_field_target_type(const XrTypeRef *type) {
+    const XrTypeRef *target = type;
+    while (target && (target->kind == XR_TREF_OPTIONAL || target->kind == XR_TREF_FIXED_ARRAY) &&
+           target->children && target->nchildren > 0)
+        target = target->children[0];
+    return target;
+}
+
+static void class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRef *type) {
+    const XrTypeRef *target;
+    if (!row)
+        return;
+    row->semantic_kind = XG_CLASS_FIELD_TYPE_DYNAMIC;
+    if (!type)
+        return;
+    row->native_width = type->native_width;
+    target = class_field_target_type(type);
+    if (target && (target->kind == XR_TREF_NAMED || target->kind == XR_TREF_GENERIC) &&
+        target->name)
+        row->target_name_id = hash_name32(target->name);
+    if (type->children && type->nchildren > 0)
+        row->element_type_key = hash_tref32(type->children[0]);
+    if (type->kind == XR_TREF_GENERIC && type->name && strcmp(type->name, "Map") == 0) {
+        row->key_type_key = row->element_type_key;
+        if (type->nchildren > 1)
+            row->value_type_key = hash_tref32(type->children[1]);
+    }
+    if (type->kind == XR_TREF_FIXED_ARRAY && type->fixed_length > 0)
+        row->fixed_length = (uint32_t) type->fixed_length;
+    switch ((XrTypeRefKind) type->kind) {
+        case XR_TREF_INT:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_I64;
+            break;
+        case XR_TREF_INT_WIDTH:
+            row->semantic_kind = class_field_int_semantic_kind(type->native_width);
+            break;
+        case XR_TREF_FLOAT:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_F64;
+            break;
+        case XR_TREF_FLOAT_WIDTH:
+            row->semantic_kind = type->native_width == XR_TREF_NW_F32 ? XG_CLASS_FIELD_TYPE_F32
+                                                                      : XG_CLASS_FIELD_TYPE_F64;
+            break;
+        case XR_TREF_BOOL:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_BOOL;
+            break;
+        case XR_TREF_CHAR:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_CHAR;
+            break;
+        case XR_TREF_STRING:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_STRING;
+            break;
+        case XR_TREF_NAMED:
+        case XR_TREF_GENERIC:
+            row->semantic_kind = class_field_named_semantic_kind(type->name);
+            break;
+        case XR_TREF_FIXED_ARRAY:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_FIXED_ARRAY;
+            break;
+        case XR_TREF_OPTIONAL:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_OPTIONAL;
+            row->flags |= XG_CLASS_FIELD_NULLABLE;
+            break;
+        case XR_TREF_UNION:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_UNION;
+            break;
+        case XR_TREF_FUNCTION:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_FUNCTION;
+            break;
+        case XR_TREF_TUPLE:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_TUPLE;
+            break;
+        case XR_TREF_OBJECT:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_OBJECT;
+            break;
+        case XR_TREF_TYPE_PARAM:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_TYPE_PARAM;
+            break;
+        case XR_TREF_UNIT:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_UNIT;
+            break;
+        case XR_TREF_NULL:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_NULL;
+            row->flags |= XG_CLASS_FIELD_NULLABLE;
+            break;
+        case XR_TREF_UNKNOWN:
+        default:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_DYNAMIC;
+            break;
+    }
+}
+
+static bool class_field_semantic_is_owned(uint8_t semantic_kind) {
+    switch ((XgClassFieldTypeKind) semantic_kind) {
+        case XG_CLASS_FIELD_TYPE_I8:
+        case XG_CLASS_FIELD_TYPE_U8:
+        case XG_CLASS_FIELD_TYPE_I16:
+        case XG_CLASS_FIELD_TYPE_U16:
+        case XG_CLASS_FIELD_TYPE_I32:
+        case XG_CLASS_FIELD_TYPE_U32:
+        case XG_CLASS_FIELD_TYPE_I64:
+        case XG_CLASS_FIELD_TYPE_U64:
+        case XG_CLASS_FIELD_TYPE_ISIZE:
+        case XG_CLASS_FIELD_TYPE_USIZE:
+        case XG_CLASS_FIELD_TYPE_F32:
+        case XG_CLASS_FIELD_TYPE_F64:
+        case XG_CLASS_FIELD_TYPE_BOOL:
+        case XG_CLASS_FIELD_TYPE_CHAR:
+        case XG_CLASS_FIELD_TYPE_UNIT:
+        case XG_CLASS_FIELD_TYPE_NULL:
+            return false;
+        default:
+            return true;
+    }
+}
+
+static uint8_t class_field_semantic_kind_for_decl(uint8_t decl_kind) {
+    switch ((XgDeclKind) decl_kind) {
+        case XG_DECL_CLASS:
+            return XG_CLASS_FIELD_TYPE_CLASS;
+        case XG_DECL_STRUCT:
+            return XG_CLASS_FIELD_TYPE_STRUCT;
+        case XG_DECL_UNION:
+            return XG_CLASS_FIELD_TYPE_FIXED_UNION;
+        case XG_DECL_ENUM:
+            return XG_CLASS_FIELD_TYPE_ENUM;
+        default:
+            return XG_CLASS_FIELD_TYPE_DYNAMIC;
+    }
+}
+
+static uint32_t class_field_flags(const FieldDeclNode *field, uint8_t semantic_kind,
+                                  uint32_t type_flags) {
+    uint32_t flags = 0;
+    if (!field)
+        return flags;
+    flags |= type_flags;
+    if (field->is_static)
+        flags |= XG_CLASS_FIELD_STATIC;
+    if (field->is_const || field->is_final)
+        flags |= XG_CLASS_FIELD_CONST;
+    if (field->is_private)
+        flags |= XG_CLASS_FIELD_PRIVATE;
+    if (field->is_protected)
+        flags |= XG_CLASS_FIELD_PROTECTED;
+    if (class_field_semantic_is_owned(semantic_kind))
+        flags |= XG_CLASS_FIELD_OWNED_REF;
+    return flags;
 }
 
 static uint32_t hash_generic_inst_type_key(const char *name, XrTypeRef **type_args,
@@ -583,18 +788,21 @@ static XgInterfaceNameRow *producer_lookup_interface_row_by_id(const XgProducer 
     return NULL;
 }
 
-static bool producer_register_interface(XgProducer *p, const char *name,
+static bool producer_register_interface(XgProducer *p, XgModuleId module_id, const char *name,
                                         const InterfaceDeclNode *decl) {
-    XgInterfaceNameRow *existing;
     if (!name)
         return true;
-    existing = producer_lookup_interface_row(p, name);
-    if (existing) {
-        existing->decl = decl;
-        return true;
+    for (uint32_t i = 0; i < p->ninterfaces; i++) {
+        XgInterfaceNameRow *existing = &p->interfaces[i];
+        if (existing->module_id == module_id && existing->name &&
+            strcmp(existing->name, name) == 0) {
+            existing->decl = decl;
+            return true;
+        }
     }
     if (!producer_reserve_interfaces(p, p->ninterfaces + 1))
         return false;
+    p->interfaces[p->ninterfaces].module_id = module_id;
     p->interfaces[p->ninterfaces].name = name;
     p->interfaces[p->ninterfaces].interface_id = (XgInterfaceId) hash_name32(name);
     p->interfaces[p->ninterfaces].decl = decl;
@@ -723,10 +931,12 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
     return true;
 }
 
-static bool producer_register_class(XgProducer *p, const char *name, const char *super_name,
-                                    XgClassId class_id, uint32_t summary_index) {
+static bool producer_register_class(XgProducer *p, XgModuleId module_id, const char *name,
+                                    const char *super_name, XgClassId class_id,
+                                    uint32_t summary_index) {
     if (!producer_reserve_classes(p, p->nclasses + 1))
         return false;
+    p->classes[p->nclasses].module_id = module_id;
     p->classes[p->nclasses].name = name;
     p->classes[p->nclasses].super_name = super_name;
     p->classes[p->nclasses].class_id = class_id;
@@ -758,6 +968,61 @@ static XgClassNameRow *producer_lookup_class_row_by_id(const XgProducer *p, XgCl
 static XgClassId producer_lookup_class(const XgProducer *p, const char *name) {
     XgClassNameRow *row = producer_lookup_class_row(p, name);
     return row ? row->class_id : XG_NO_ID;
+}
+
+static XgClassNameRow *producer_lookup_class_row_scoped(const XgProducer *p, XgModuleId module_id,
+                                                        uint32_t name_id,
+                                                        bool allow_global_unique) {
+    XgClassNameRow *match = NULL;
+    if (!p || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < p->nclasses; i++) {
+        XgClassNameRow *row = &p->classes[i];
+        if (row->module_id != module_id || hash_name32(row->name) != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    if (match || !allow_global_unique)
+        return match;
+    for (uint32_t i = 0; i < p->nclasses; i++) {
+        XgClassNameRow *row = &p->classes[i];
+        if (hash_name32(row->name) != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
+}
+
+static XgInterfaceNameRow *producer_lookup_interface_row_scoped(const XgProducer *p,
+                                                                XgModuleId module_id,
+                                                                uint32_t name_id,
+                                                                bool allow_global_unique) {
+    XgInterfaceNameRow *match = NULL;
+    if (!p || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < p->ninterfaces; i++) {
+        XgInterfaceNameRow *row = &p->interfaces[i];
+        if (row->module_id != module_id || hash_name32(row->name) != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    if (match || !allow_global_unique)
+        return match;
+    for (uint32_t i = 0; i < p->ninterfaces; i++) {
+        XgInterfaceNameRow *row = &p->interfaces[i];
+        if (hash_name32(row->name) != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
 }
 
 static XgDeclId producer_lookup_class_decl_id(const XgProducer *p, XgClassId class_id) {
@@ -893,9 +1158,167 @@ static XgMethodSummary *producer_find_method_by_name_in_hierarchy(XgProducer *p,
     return NULL;
 }
 
-static void producer_finalize_class_graph(XgProducer *p) {
+static bool producer_finalize_class_field_slots_rec(XgProducer *p, uint32_t class_index,
+                                                    uint8_t *state, uint32_t *instance_counts) {
+    XgClassSummary *summary;
+    uint32_t prefix_count = 0;
+    uint32_t own_instance_count = 0;
+    uint32_t start;
+    if (!p || !p->evidence || class_index >= p->evidence->nclasses || !state || !instance_counts)
+        return false;
+    if (state[class_index] == 2)
+        return true;
+    if (state[class_index] == 1)
+        return false;
+    state[class_index] = 1;
+    summary = &p->evidence->classes[class_index];
+    if (summary->parent_class_id != XG_NO_ID) {
+        XgClassNameRow *parent_row = producer_lookup_class_row_by_id(p, summary->parent_class_id);
+        if (!parent_row || parent_row->summary_index >= p->evidence->nclasses ||
+            !producer_finalize_class_field_slots_rec(p, parent_row->summary_index, state,
+                                                     instance_counts))
+            return false;
+        prefix_count = instance_counts[parent_row->summary_index];
+    }
+    if (summary->field_count == 0) {
+        if (summary->field_start != 0)
+            return false;
+    } else {
+        if (summary->field_start == 0)
+            return false;
+        start = summary->field_start - 1;
+        if (start >= p->evidence->nclass_fields ||
+            summary->field_count > p->evidence->nclass_fields - start)
+            return false;
+        for (uint32_t i = 0; i < summary->field_count; i++) {
+            XgClassFieldSummary *field = &p->evidence->class_fields[start + i];
+            if (field->owner_class_id != summary->class_id)
+                return false;
+            if ((field->flags & XG_CLASS_FIELD_STATIC) != 0) {
+                field->instance_slot = UINT32_MAX;
+                continue;
+            }
+            field->instance_slot = prefix_count + own_instance_count++;
+        }
+    }
+    if (prefix_count > UINT32_MAX - own_instance_count)
+        return false;
+    instance_counts[class_index] = prefix_count + own_instance_count;
+    state[class_index] = 2;
+    return true;
+}
+
+static bool producer_finalize_class_field_slots(XgProducer *p) {
+    uint8_t *state;
+    uint32_t *instance_counts;
+    bool ok = true;
     if (!p || !p->evidence)
-        return;
+        return false;
+    if (p->evidence->nclasses == 0)
+        return true;
+    state = (uint8_t *) xr_calloc(p->evidence->nclasses, sizeof(*state));
+    instance_counts = (uint32_t *) xr_calloc(p->evidence->nclasses, sizeof(*instance_counts));
+    if (!state || !instance_counts) {
+        xr_free(state);
+        xr_free(instance_counts);
+        return false;
+    }
+    for (uint32_t i = 0; i < p->evidence->nclasses; i++) {
+        if (!producer_finalize_class_field_slots_rec(p, i, state, instance_counts)) {
+            ok = false;
+            break;
+        }
+    }
+    xr_free(state);
+    xr_free(instance_counts);
+    return ok;
+}
+
+static bool producer_finalize_class_field_types(XgProducer *p) {
+    if (!p || !p->evidence)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->nclass_fields; i++) {
+        XgClassFieldSummary *field = &p->evidence->class_fields[i];
+        XgClassNameRow *class_row = NULL;
+        XgInterfaceNameRow *interface_row = NULL;
+        const XgDeclSummary *enum_decl = NULL;
+        bool enum_ambiguous = false;
+        if (field->target_name_id != 0) {
+            bool allow_global_unique =
+                !class_field_target_is_builtin_name_id(field->target_name_id);
+            class_row = producer_lookup_class_row_scoped(p, field->module_id, field->target_name_id,
+                                                         allow_global_unique);
+            interface_row = producer_lookup_interface_row_scoped(
+                p, field->module_id, field->target_name_id, allow_global_unique);
+            for (uint32_t j = 0; j < p->evidence->ndecls; j++) {
+                const XgDeclSummary *decl = &p->evidence->decls[j];
+                if (decl->module_id != field->module_id || decl->kind != XG_DECL_ENUM ||
+                    decl->name_id != field->target_name_id)
+                    continue;
+                if (enum_decl) {
+                    enum_ambiguous = true;
+                    break;
+                }
+                enum_decl = decl;
+            }
+            if (enum_ambiguous)
+                enum_decl = NULL;
+            if (!enum_decl && !enum_ambiguous && allow_global_unique) {
+                for (uint32_t j = 0; j < p->evidence->ndecls; j++) {
+                    const XgDeclSummary *decl = &p->evidence->decls[j];
+                    if (decl->kind != XG_DECL_ENUM || decl->name_id != field->target_name_id)
+                        continue;
+                    if (enum_decl) {
+                        enum_decl = NULL;
+                        break;
+                    }
+                    enum_decl = decl;
+                }
+            }
+            if ((class_row != NULL) + (interface_row != NULL) + (enum_decl != NULL) > 1) {
+                class_row = NULL;
+                interface_row = NULL;
+                enum_decl = NULL;
+            }
+        }
+        if (class_row) {
+            const XgClassSummary *target;
+            if (class_row->summary_index >= p->evidence->nclasses)
+                return false;
+            target = &p->evidence->classes[class_row->summary_index];
+            field->target_class_id = class_row->class_id;
+            if (field->semantic_kind == XG_CLASS_FIELD_TYPE_DYNAMIC ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_ARRAY ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_MAP ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_SET ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_STRING)
+                field->semantic_kind = class_field_semantic_kind_for_decl(target->decl_kind);
+        } else if (interface_row) {
+            field->target_interface_id = interface_row->interface_id;
+            if (field->semantic_kind == XG_CLASS_FIELD_TYPE_DYNAMIC ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_ARRAY ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_MAP ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_SET ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_STRING)
+                field->semantic_kind = XG_CLASS_FIELD_TYPE_INTERFACE;
+        } else if (enum_decl) {
+            if (field->semantic_kind == XG_CLASS_FIELD_TYPE_DYNAMIC ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_ARRAY ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_MAP ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_SET ||
+                field->semantic_kind == XG_CLASS_FIELD_TYPE_STRING)
+                field->semantic_kind = XG_CLASS_FIELD_TYPE_ENUM;
+        }
+        field->flags &= ~XG_CLASS_FIELD_OWNED_REF;
+        if (class_field_semantic_is_owned(field->semantic_kind))
+            field->flags |= XG_CLASS_FIELD_OWNED_REF;
+    }
+    return true;
+}
+
+static bool producer_finalize_class_graph(XgProducer *p) {
+    if (!p || !p->evidence)
+        return false;
 
     for (uint32_t i = 0; i < p->nclasses; i++) {
         XgClassNameRow *row = &p->classes[i];
@@ -903,12 +1326,14 @@ static void producer_finalize_class_graph(XgProducer *p) {
         if (row->summary_index >= p->evidence->nclasses)
             continue;
         summary = &p->evidence->classes[row->summary_index];
-        summary->parent_class_id = producer_lookup_class(p, row->super_name);
+        XgClassNameRow *parent_row =
+            producer_lookup_class_row_scoped(p, row->module_id, hash_name32(row->super_name), true);
+        summary->parent_class_id = parent_row ? parent_row->class_id : XG_NO_ID;
         if (summary->parent_class_id != XG_NO_ID) {
-            XgClassNameRow *parent_row =
+            XgClassNameRow *resolved_parent =
                 producer_lookup_class_row_by_id(p, summary->parent_class_id);
-            if (parent_row && parent_row->summary_index < p->evidence->nclasses) {
-                p->evidence->classes[parent_row->summary_index].flags |= XG_CLASS_HAS_SUBCLASS;
+            if (resolved_parent && resolved_parent->summary_index < p->evidence->nclasses) {
+                p->evidence->classes[resolved_parent->summary_index].flags |= XG_CLASS_HAS_SUBCLASS;
             }
         }
     }
@@ -920,6 +1345,9 @@ static void producer_finalize_class_graph(XgProducer *p) {
         else
             summary->flags &= ~XG_CLASS_INFERRED_FINAL;
     }
+
+    if (!producer_finalize_class_field_types(p) || !producer_finalize_class_field_slots(p))
+        return false;
 
     for (uint32_t i = 0; i < p->evidence->nclasses; i++) {
         XgClassSummary *summary = &p->evidence->classes[i];
@@ -943,6 +1371,7 @@ static void producer_finalize_class_graph(XgProducer *p) {
             parent_method->flags |= XG_METHOD_OVERRIDDEN;
         }
     }
+    return true;
 }
 
 static bool body_reserve_locals(XgBodyCollect *bc, uint32_t needed) {
@@ -1660,8 +2089,20 @@ static uint64_t hash_derive_decl(uint32_t type_key, uint8_t derive_kind, const C
     return h ? h : 1;
 }
 
+static XgFieldId producer_find_class_field_id(const XgProducer *p, XgClassId owner_class_id,
+                                              uint32_t decl_ordinal) {
+    if (!p || !p->evidence || owner_class_id == XG_NO_ID)
+        return XG_NO_ID;
+    for (uint32_t i = 0; i < p->evidence->nclass_fields; i++) {
+        const XgClassFieldSummary *field = &p->evidence->class_fields[i];
+        if (field->owner_class_id == owner_class_id && field->decl_ordinal == decl_ordinal)
+            return field->field_id;
+    }
+    return XG_NO_ID;
+}
+
 static bool producer_add_derive_fields(XgProducer *p, XgDeriveId derive_id,
-                                       const ClassDeclNode *cls, uint32_t source_field_start) {
+                                       const ClassDeclNode *cls, XgClassId owner_class_id) {
     if (!p || !p->evidence || !cls || cls->field_count <= 0)
         return true;
     for (int i = 0; i < cls->field_count; i++) {
@@ -1675,7 +2116,7 @@ static bool producer_add_derive_fields(XgProducer *p, XgDeriveId derive_id,
         row.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
         row.name_id = field ? hash_name32(field->name) : 0;
         row.type_key = field ? hash_tref32(field->field_type) : 0;
-        row.source_field_id = source_field_start != 0 ? source_field_start + (uint32_t) i : 0;
+        row.source_field_id = producer_find_class_field_id(p, owner_class_id, (uint32_t) i);
         row.flags = derived_field_flags(field);
         if (!xg_global_evidence_add_derived_field(p->evidence, &row))
             return false;
@@ -1686,7 +2127,7 @@ static bool producer_add_derive_fields(XgProducer *p, XgDeriveId derive_id,
 static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDeclId owner_decl_id,
                                       uint32_t source_span_id, const char *type_name,
                                       uint32_t derive_flags, const ClassDeclNode *cls,
-                                      uint32_t source_field_start) {
+                                      XgClassId owner_class_id) {
     static const uint32_t ordered_flags[] = {
         XR_DERIVE_JSON, XR_DERIVE_INSPECT, XR_DERIVE_EQ, XR_DERIVE_HASH, XR_DERIVE_CLONE,
     };
@@ -1717,7 +2158,7 @@ static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDec
         row.derive_hash = hash_derive_decl(type_key, kind, cls);
         if (!xg_global_evidence_add_derive(p->evidence, &row))
             return false;
-        if (!producer_add_derive_fields(p, derive_id, cls, source_field_start))
+        if (!producer_add_derive_fields(p, derive_id, cls, owner_class_id))
             return false;
     }
     return true;
@@ -5524,6 +5965,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     XgClassSummary csum;
     XgDeclId decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     XgClassId class_id = (XgClassId) (p->evidence->nclasses + 1);
+    uint32_t field_start = p->evidence->nclass_fields + 1;
+    uint32_t field_count = 0;
+    uint32_t instance_field_count = 0;
     uint32_t method_start = p->evidence->nmethods + 1;
     uint32_t method_count = 0;
     uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
@@ -5576,9 +6020,24 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     for (int i = 0; i < cls->field_count; i++) {
         const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
         const FieldDeclNode *field;
+        XgClassFieldSummary summary;
         if (!field_node || field_node->type != AST_FIELD_DECL)
             continue;
         field = &field_node->as.field_decl;
+        memset(&summary, 0, sizeof(summary));
+        summary.field_id = (XgFieldId) (p->evidence->nclass_fields + 1);
+        summary.module_id = module_id;
+        summary.source_node_id = field_node->node_id;
+        summary.owner_class_id = class_id;
+        summary.name_id = hash_name32(field->name);
+        summary.type_key = hash_tref32(field->field_type);
+        summary.decl_ordinal = (uint32_t) i;
+        summary.instance_slot = field->is_static ? UINT32_MAX : instance_field_count++;
+        class_field_fill_type_facts(&summary, field->field_type);
+        summary.flags = class_field_flags(field, summary.semantic_kind, summary.flags);
+        if (!xg_global_evidence_add_class_field(p->evidence, &summary))
+            return false;
+        field_count++;
         if (!producer_add_interface_object_uses_for_type_ref(
                 p, XG_NO_ID, (uint32_t) field_node->line, NULL, field->field_type,
                 XG_INTERFACE_OBJECT_USE_FIELD, 0))
@@ -5590,7 +6049,11 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     csum.decl_id = decl_id;
     csum.class_id = class_id;
     csum.name_id = hash_name32(cls->name);
-    csum.parent_class_id = producer_lookup_class(p, cls->super_name);
+    {
+        XgClassNameRow *parent =
+            producer_lookup_class_row_scoped(p, module_id, hash_name32(cls->super_name), true);
+        csum.parent_class_id = parent ? parent->class_id : XG_NO_ID;
+    }
     if (cls->explicit_final)
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;
     if (cls->is_native)
@@ -5610,14 +6073,13 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             (uint16_t) (cls->mono_type_arg_count < UINT16_MAX ? cls->mono_type_arg_count
                                                               : UINT16_MAX);
     }
-    csum.field_start = cls->field_count > 0 ? p->field_cursor + 1 : 0;
-    csum.field_count = (uint32_t) cls->field_count;
+    csum.field_start = field_count > 0 ? field_start : 0;
+    csum.field_count = field_count;
     csum.method_start = method_count > 0 ? method_start : 0;
     csum.method_count = method_count;
     csum.interface_start = cls->interface_count > 0 ? p->evidence->ninterface_impls + 1 : 0;
     csum.interface_count = (uint32_t) cls->interface_count;
     csum.decl_kind = (uint8_t) kind;
-    p->field_cursor += (uint32_t) cls->field_count;
     for (int i = 0; i < cls->interface_count; i++) {
         XgInterfaceImplSummary impl;
         const XrTypeRef *iface = cls->interfaces ? cls->interfaces[i] : NULL;
@@ -5634,11 +6096,11 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     if (!xg_global_evidence_add_class(p->evidence, &csum))
         return false;
     if (!producer_add_decl_derives(p, module_id, decl_id, (uint32_t) node->line, cls->name,
-                                   derive_flags, cls, csum.field_start))
+                                   derive_flags, cls, class_id))
         return false;
     if (!add_monomorphized_class_instantiation(p, module_id, node, cls, class_id))
         return false;
-    return producer_register_class(p, cls->name, cls->super_name, class_id,
+    return producer_register_class(p, module_id, cls->name, cls->super_name, class_id,
                                    p->evidence->nclasses - 1);
 }
 
@@ -5686,7 +6148,7 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
         if (!xg_global_evidence_add_interface_method(p->evidence, &summary))
             return false;
     }
-    return producer_register_interface(p, iface->name, iface);
+    return producer_register_interface(p, module_id, iface->name, iface);
 }
 
 static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
@@ -5902,8 +6364,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
         }
     }
 
-    producer_finalize_class_graph(&producer);
-    if (!producer_emit_body_summaries(&producer)) {
+    if (!producer_finalize_class_graph(&producer) || !producer_emit_body_summaries(&producer)) {
         xr_free(producer.classes);
         xr_free(producer.interfaces);
         xr_free(producer.funcs);
