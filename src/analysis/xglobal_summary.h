@@ -39,9 +39,11 @@ typedef uint32_t XgDeriveId;
 typedef uint32_t XgDerivedFieldId;
 typedef uint32_t XgDerivedMethodId;
 typedef uint32_t XgJsonShapeId;
+typedef uint32_t XgJsonFieldId;
 typedef uint32_t XgJsonAccessId;
 typedef uint32_t XgJsonCodecId;
 typedef uint32_t XgRecordShapeId;
+typedef uint32_t XgRecordFieldId;
 typedef uint32_t XgRecordAccessId;
 typedef uint32_t XgRecordMergeId;
 typedef uint32_t XgOptionsId;
@@ -54,7 +56,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 14,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 15,
 };
 
 typedef enum XgBuildProfile {
@@ -453,6 +455,12 @@ enum {
 };
 
 enum {
+    XG_JSON_FIELD_STATIC_KEY = 1u << 0,
+    XG_JSON_FIELD_TYPED = 1u << 1,
+    XG_JSON_FIELD_RECORD_BRIDGE = 1u << 2,
+};
+
+enum {
     XG_RECORD_SHAPE_SEALED = 1u << 0,
     XG_RECORD_SHAPE_STATIC_KEYS = 1u << 1,
     XG_RECORD_SHAPE_HAS_SPREAD = 1u << 2,
@@ -464,6 +472,14 @@ enum {
     XG_RECORD_ACCESS_STATIC_FIELD = 1u << 0,
     XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 1,
     XG_RECORD_ACCESS_MUTATING = 1u << 2,
+};
+
+enum {
+    XG_RECORD_FIELD_REQUIRED = 1u << 0,
+    XG_RECORD_FIELD_OPTIONAL = 1u << 1,
+    XG_RECORD_FIELD_DEFAULTED = 1u << 2,
+    XG_RECORD_FIELD_READONLY = 1u << 3,
+    XG_RECORD_FIELD_STATIC_KEY = 1u << 4,
 };
 
 enum {
@@ -853,6 +869,15 @@ typedef struct XgJsonShapeSummary {
     uint64_t shape_hash;
 } XgJsonShapeSummary;
 
+typedef struct XgJsonFieldSummary {
+    XgJsonFieldId field_id;
+    XgJsonShapeId shape_id;
+    uint16_t field_ordinal;
+    uint32_t name_id;
+    uint32_t type_key;
+    uint32_t flags;
+} XgJsonFieldSummary;
+
 typedef struct XgJsonAccessSummary {
     XgJsonAccessId json_access_id;
     XgModuleId module_id;
@@ -892,6 +917,16 @@ typedef struct XgRecordShapeSummary {
     uint32_t flags;
     uint64_t shape_hash;
 } XgRecordShapeSummary;
+
+typedef struct XgRecordFieldSummary {
+    XgRecordFieldId field_id;
+    XgRecordShapeId shape_id;
+    uint16_t field_ordinal;
+    uint32_t name_id;
+    uint32_t type_key;
+    uint32_t default_value_id;
+    uint32_t flags;
+} XgRecordFieldSummary;
 
 typedef struct XgRecordAccessSummary {
     XgRecordAccessId record_access_id;
@@ -1020,9 +1055,11 @@ typedef struct XgGlobalEvidence {
     XgDerivedFieldSummary *derived_fields;
     XgDerivedMethodSummary *derived_methods;
     XgJsonShapeSummary *json_shapes;
+    XgJsonFieldSummary *json_fields;
     XgJsonAccessSummary *json_accesses;
     XgJsonCodecSummary *json_codecs;
     XgRecordShapeSummary *record_shapes;
+    XgRecordFieldSummary *record_fields;
     XgRecordAccessSummary *record_accesses;
     XgRecordMergeSummary *record_merges;
     XgOptionsBagSummary *options_bags;
@@ -1053,9 +1090,11 @@ typedef struct XgGlobalEvidence {
     uint32_t nderived_fields;
     uint32_t nderived_methods;
     uint32_t njson_shapes;
+    uint32_t njson_fields;
     uint32_t njson_accesses;
     uint32_t njson_codecs;
     uint32_t nrecord_shapes;
+    uint32_t nrecord_fields;
     uint32_t nrecord_accesses;
     uint32_t nrecord_merges;
     uint32_t noptions_bags;
@@ -1086,9 +1125,11 @@ typedef struct XgGlobalEvidence {
     uint32_t derived_field_cap;
     uint32_t derived_method_cap;
     uint32_t json_shape_cap;
+    uint32_t json_field_cap;
     uint32_t json_access_cap;
     uint32_t json_codec_cap;
     uint32_t record_shape_cap;
+    uint32_t record_field_cap;
     uint32_t record_access_cap;
     uint32_t record_merge_cap;
     uint32_t options_bag_cap;
@@ -1174,10 +1215,13 @@ XR_FUNC bool xg_global_evidence_reserve_derived_fields(XgGlobalEvidence *evidenc
 XR_FUNC bool xg_global_evidence_reserve_derived_methods(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_json_shapes(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_json_fields(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_json_accesses(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_json_codecs(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_record_shapes(XgGlobalEvidence *evidence,
+                                                      uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_record_fields(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_record_accesses(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
@@ -1245,6 +1289,8 @@ xg_global_evidence_add_derived_method(XgGlobalEvidence *evidence,
                                       const XgDerivedMethodSummary *summary);
 XR_FUNC XgJsonShapeSummary *xg_global_evidence_add_json_shape(XgGlobalEvidence *evidence,
                                                               const XgJsonShapeSummary *summary);
+XR_FUNC XgJsonFieldSummary *xg_global_evidence_add_json_field(XgGlobalEvidence *evidence,
+                                                              const XgJsonFieldSummary *summary);
 XR_FUNC XgJsonAccessSummary *xg_global_evidence_add_json_access(XgGlobalEvidence *evidence,
                                                                 const XgJsonAccessSummary *summary);
 XR_FUNC XgJsonCodecSummary *xg_global_evidence_add_json_codec(XgGlobalEvidence *evidence,
@@ -1252,6 +1298,9 @@ XR_FUNC XgJsonCodecSummary *xg_global_evidence_add_json_codec(XgGlobalEvidence *
 XR_FUNC XgRecordShapeSummary *
 xg_global_evidence_add_record_shape(XgGlobalEvidence *evidence,
                                     const XgRecordShapeSummary *summary);
+XR_FUNC XgRecordFieldSummary *
+xg_global_evidence_add_record_field(XgGlobalEvidence *evidence,
+                                    const XgRecordFieldSummary *summary);
 XR_FUNC XgRecordAccessSummary *
 xg_global_evidence_add_record_access(XgGlobalEvidence *evidence,
                                      const XgRecordAccessSummary *summary);
@@ -1293,11 +1342,15 @@ XR_FUNC const XgEncodingOpSummary *
 xg_global_evidence_find_encoding_op(const XgGlobalEvidence *evidence, XgEncodingOpId op_id);
 XR_FUNC const XgJsonShapeSummary *
 xg_global_evidence_find_json_shape(const XgGlobalEvidence *evidence, XgJsonShapeId json_shape_id);
+XR_FUNC const XgJsonFieldSummary *
+xg_global_evidence_find_json_field(const XgGlobalEvidence *evidence, XgJsonFieldId field_id);
 XR_FUNC const XgJsonCodecSummary *
 xg_global_evidence_find_json_codec(const XgGlobalEvidence *evidence, XgJsonCodecId codec_id);
 XR_FUNC const XgRecordShapeSummary *
 xg_global_evidence_find_record_shape(const XgGlobalEvidence *evidence,
                                      XgRecordShapeId record_shape_id);
+XR_FUNC const XgRecordFieldSummary *
+xg_global_evidence_find_record_field(const XgGlobalEvidence *evidence, XgRecordFieldId field_id);
 XR_FUNC const XgRecordMergeSummary *
 xg_global_evidence_find_record_merge(const XgGlobalEvidence *evidence,
                                      XgRecordMergeId record_merge_id);

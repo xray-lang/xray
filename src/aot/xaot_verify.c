@@ -1288,6 +1288,23 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
                 return set_error(errbuf, errbuf_len, "AOT Json shape evidence id is duplicated");
         }
     }
+    for (uint32_t i = 0; i < ev->njson_fields; i++) {
+        const XgJsonFieldSummary *field = &ev->json_fields[i];
+        const XgJsonShapeSummary *shape;
+        if (field->field_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Json field evidence has no id");
+        for (uint32_t j = i + 1; j < ev->njson_fields; j++) {
+            if (ev->json_fields[j].field_id == field->field_id)
+                return set_error(errbuf, errbuf_len, "AOT Json field evidence id is duplicated");
+        }
+        shape = xg_global_evidence_find_json_shape(ev, field->shape_id);
+        if (!shape)
+            return set_error(errbuf, errbuf_len, "AOT Json field references missing shape");
+        if (field->field_ordinal >= shape->field_count)
+            return set_error(errbuf, errbuf_len, "AOT Json field ordinal is stale");
+        if (field->name_id == 0)
+            return set_error(errbuf, errbuf_len, "AOT Json field has no static key");
+    }
     for (uint32_t i = 0; i < ev->njson_accesses; i++) {
         const XgJsonAccessSummary *access = &ev->json_accesses[i];
         const XgJsonShapeSummary *shape;
@@ -1371,6 +1388,23 @@ static bool verify_record_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
             if (ev->record_shapes[j].record_shape_id == shape->record_shape_id)
                 return set_error(errbuf, errbuf_len, "AOT Record shape evidence id is duplicated");
         }
+    }
+    for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
+        const XgRecordFieldSummary *field = &ev->record_fields[i];
+        const XgRecordShapeSummary *shape;
+        if (field->field_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT Record field evidence has no id");
+        for (uint32_t j = i + 1; j < ev->nrecord_fields; j++) {
+            if (ev->record_fields[j].field_id == field->field_id)
+                return set_error(errbuf, errbuf_len, "AOT Record field evidence id is duplicated");
+        }
+        shape = xg_global_evidence_find_record_shape(ev, field->shape_id);
+        if (!shape)
+            return set_error(errbuf, errbuf_len, "AOT Record field references missing shape");
+        if (field->field_ordinal >= shape->field_count)
+            return set_error(errbuf, errbuf_len, "AOT Record field ordinal is stale");
+        if (field->name_id == 0)
+            return set_error(errbuf, errbuf_len, "AOT Record field has no static key");
     }
     for (uint32_t i = 0; i < ev->nrecord_accesses; i++) {
         const XgRecordAccessSummary *access = &ev->record_accesses[i];
