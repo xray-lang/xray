@@ -1,0 +1,28 @@
+interface Drawable {
+    draw() -> int
+}
+
+class Sprite implements Drawable {
+    draw() -> int { return 1 }
+}
+
+class Icon implements Drawable {
+    draw() -> int { return 2 }
+}
+
+class Scene {
+    root: Drawable
+    sprites: Array<Drawable>
+
+    constructor(root: Drawable, sprites: Array<Drawable>) {
+        this.root = root
+        this.sprites = sprites
+    }
+}
+
+fn keep(item: Drawable, items: Array<Drawable>) -> Drawable {
+    var local: Drawable = item
+    var localItems: Array<Drawable> = items
+    var f = fn() -> Drawable { return local }
+    return local
+}
