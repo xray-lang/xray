@@ -8,6 +8,8 @@
  * xi_cgen_class_native_helpers.inc.c - AOT native class receiver emission
  */
 
+static bool cg_class_native_field_is_ref(const XrAggregateFieldLayout *field);
+
 static int cg_class_native_field_index(const XrAggregateLayout *layout, const char *field) {
     return cg_class_layout_field_index(layout, field);
 }
@@ -86,6 +88,23 @@ static void cg_class_native_report_field_plan_error(XiCgenCtx *ctx, const XiValu
     fprintf(stderr, ")\n");
 }
 
+static void cg_class_native_report_field_slot_plan_error(XiCgenCtx *ctx, const XiClassData *cd,
+                                                         uint32_t slot, const char *reason,
+                                                         const XaotClassFieldPlan *plan) {
+    if (ctx)
+        ctx->error = true;
+    fprintf(stderr,
+            "[xi_cgen] ERROR: stale class field plan for native class %s slot %u "
+            "(%s",
+            cd && cd->class_name ? cd->class_name : "?", (unsigned) slot,
+            reason ? reason : "invalid");
+    if (plan) {
+        fprintf(stderr, " field=%u owner=%u drop=%u", (unsigned) plan->field_id,
+                (unsigned) plan->owner_class_id, (unsigned) plan->drop_kind);
+    }
+    fprintf(stderr, ")\n");
+}
+
 static int cg_class_native_field_index_for_value(XiCgenCtx *ctx, const XiClassData *cd,
                                                  const XrAggregateLayout *layout,
                                                  const XiValue *v) {
@@ -121,6 +140,49 @@ static int cg_class_native_field_index_for_value(XiCgenCtx *ctx, const XiClassDa
         }
     }
     return (int) plan->instance_slot;
+}
+
+static const XaotClassFieldPlan *
+cg_class_native_field_plan_for_slot(XiCgenCtx *ctx, const XiClassData *cd, uint32_t slot) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    XgClassId receiver_class_id = cg_class_native_class_id_for_data(ctx, cd);
+    const XaotClassFieldPlan *match = NULL;
+    if (!bundle || !ev || receiver_class_id == XG_NO_ID) {
+        cg_class_native_report_field_slot_plan_error(ctx, cd, slot, "missing_receiver_class", NULL);
+        return NULL;
+    }
+    for (uint32_t i = 0; i < bundle->nclass_field_plans; i++) {
+        const XaotClassFieldPlan *plan = &bundle->class_field_plans[i];
+        if (plan->instance_slot != slot)
+            continue;
+        if (!cg_class_native_class_is_descendant_or_self(ev, receiver_class_id,
+                                                         plan->owner_class_id))
+            continue;
+        if (match) {
+            cg_class_native_report_field_slot_plan_error(ctx, cd, slot, "ambiguous_slot", plan);
+            return NULL;
+        }
+        match = plan;
+    }
+    if (!match)
+        cg_class_native_report_field_slot_plan_error(ctx, cd, slot, "missing_slot_plan", NULL);
+    return match;
+}
+
+static bool cg_class_native_field_plan_has_release_drop(XiCgenCtx *ctx, const XiClassData *cd,
+                                                        uint32_t slot,
+                                                        const XrAggregateFieldLayout *field) {
+    const XaotClassFieldPlan *plan = cg_class_native_field_plan_for_slot(ctx, cd, slot);
+    if (!plan)
+        return false;
+    if (plan->drop_kind == XAOT_CLASS_FIELD_DROP_VALUE_RELEASE ||
+        plan->drop_kind == XAOT_CLASS_FIELD_DROP_REF_RELEASE)
+        return true;
+    if (cg_class_native_field_is_ref(field)) {
+        cg_class_native_report_field_slot_plan_error(ctx, cd, slot, "drop_kind_mismatch", plan);
+    }
+    return false;
 }
 
 static void emit_class_native_field_path(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
@@ -273,7 +335,7 @@ static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, co
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
     fprintf(out, "({ XrValue _new = ");
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-    if (cg_class_native_field_is_arc_managed_ref(field)) {
+    if (cg_class_native_field_plan_has_release_drop(ctx, cd, idx, field)) {
         fprintf(out, "; xrt_retain(_new); xrt_release(");
         emit_class_native_ref_field_value(ctx, out, cd, layout, idx, object_expr);
         fprintf(out, "); ");
@@ -301,7 +363,7 @@ static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
     fprintf(out, "({ XrValue _new = ");
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-    if (cg_class_native_field_is_arc_managed_ref(field)) {
+    if (cg_class_native_field_plan_has_release_drop(ctx, cd, idx, field)) {
         fprintf(out, "; xrt_retain(_new); xrt_release(");
         emit_class_native_receiver_ref_field_value(ctx, out, f, cd, layout, idx, recv);
         fprintf(out, "); ");
@@ -4278,7 +4340,10 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     fprintf(out, "*)obj;\n");
     fprintf(out, "    if (!self) return;\n");
     for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
-        if (!cg_class_native_field_is_arc_managed_ref(cg_struct_field(cd->instance_layout, fi)))
+        const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, fi);
+        if (!cg_class_native_field_is_ref(field))
+            continue;
+        if (!cg_class_native_field_plan_has_release_drop(ctx, cd, fi, field))
             continue;
         fprintf(out, "    xrt_release(");
         emit_class_native_ref_field_value(ctx, out, cd, cd->instance_layout, fi, "self");
