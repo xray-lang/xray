@@ -696,6 +696,103 @@ XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, uint32_
     }
 }
 
+static const XgClassSummary *xi_lower_find_class_by_id(const XgGlobalEvidence *ev,
+                                                       XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        if (cls->class_id == class_id)
+            return cls;
+    }
+    return NULL;
+}
+
+static const XgClassSummary *xi_lower_find_unique_class_by_name_id(const XgGlobalEvidence *ev,
+                                                                   uint32_t name_id,
+                                                                   bool generic_origin) {
+    const XgClassSummary *match = NULL;
+    if (!ev || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        uint32_t candidate = generic_origin ? cls->generic_origin_name_id : cls->name_id;
+        if (candidate != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = cls;
+    }
+    return match;
+}
+
+static const XgClassSummary *xi_lower_find_unique_class_by_name(const XgGlobalEvidence *ev,
+                                                                const char *class_name) {
+    uint32_t name_id = class_name ? xg_name_id(class_name) : 0;
+    const XgClassSummary *match;
+    if (name_id == 0)
+        return NULL;
+    match = xi_lower_find_unique_class_by_name_id(ev, name_id, false);
+    if (match)
+        return match;
+    return xi_lower_find_unique_class_by_name_id(ev, name_id, true);
+}
+
+static const XgClassFieldSummary *xi_lower_find_unique_own_class_field(const XgGlobalEvidence *ev,
+                                                                       const XgClassSummary *cls,
+                                                                       uint32_t field_name_id) {
+    const XgClassFieldSummary *match = NULL;
+    uint32_t start;
+    if (!ev || !cls || field_name_id == 0 || cls->field_count == 0)
+        return NULL;
+    if (cls->field_start == 0)
+        return NULL;
+    start = cls->field_start - 1;
+    if (start >= ev->nclass_fields || cls->field_count > ev->nclass_fields - start)
+        return NULL;
+    for (uint32_t i = 0; i < cls->field_count; i++) {
+        const XgClassFieldSummary *field = &ev->class_fields[start + i];
+        if (field->owner_class_id != cls->class_id || field->name_id != field_name_id ||
+            (field->flags & XG_CLASS_FIELD_STATIC) != 0)
+            continue;
+        if (match)
+            return NULL;
+        match = field;
+    }
+    return match;
+}
+
+XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
+                                          const struct XrType *receiver_type,
+                                          const char *field_name) {
+    const XgGlobalEvidence *ev;
+    const XgClassSummary *cls;
+    uint32_t field_name_id;
+    if (!l || !access || !l->global_evidence || !receiver_type || !field_name ||
+        (access->op != XI_LOAD_FIELD && access->op != XI_STORE_FIELD))
+        return;
+    if (receiver_type->kind != XR_KIND_CLASS && receiver_type->kind != XR_KIND_INSTANCE)
+        return;
+    if (!receiver_type->instance.class_name)
+        return;
+    field_name_id = xg_name_id(field_name);
+    if (field_name_id == 0)
+        return;
+    ev = l->global_evidence;
+    cls = xi_lower_find_unique_class_by_name(ev, receiver_type->instance.class_name);
+    for (uint32_t depth = 0; cls && depth < 64; depth++) {
+        const XgClassFieldSummary *field =
+            xi_lower_find_unique_own_class_field(ev, cls, field_name_id);
+        if (field) {
+            access->xg_class_field_id = field->field_id;
+            return;
+        }
+        if (cls->parent_class_id == XG_NO_ID)
+            return;
+        cls = xi_lower_find_class_by_id(ev, cls->parent_class_id);
+    }
+}
+
 static bool xi_lower_json_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
                                                              const XgJsonAccessSummary *row);
 
