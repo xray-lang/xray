@@ -1,4 +1,5 @@
 contains=xaot-plan v0
+regex=class-field-plan [0-9]+ field=1 owner=1 .*storage=pointer_ref action=pointer_ref rep=pointer_ref ownership=owned drop=ref_release .*evidence=0x7f
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_caps": []
 contains="runtime_objects": []
