@@ -77,6 +77,54 @@ static void teardown(void) {
     }
 }
 
+/* CGen fixtures bypass the global producer, so synthesize strong body anchors for strict plans. */
+typedef struct TestAotEvidenceIds {
+    XgFuncId next_func_id;
+    XgDeclId next_decl_id;
+    uint32_t next_source_node_id;
+} TestAotEvidenceIds;
+
+static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgModuleId module_id,
+                                           TestAotEvidenceIds *ids) {
+    if (!func)
+        return;
+
+    XgFuncId func_id = ids->next_func_id++;
+    XgDeclId decl_id = ids->next_decl_id++;
+    uint32_t source_node_id = ids->next_source_node_id++;
+    uint32_t name_id = xg_name_id(func->name ? func->name : "<anonymous>");
+    uint32_t signature_key = source_node_id;
+    XgDeclSummary decl = {
+        .module_id = module_id,
+        .source_node_id = source_node_id,
+        .decl_id = decl_id,
+        .kind = XG_DECL_FUNC,
+        .name_id = name_id,
+        .signature_key = signature_key,
+        .source_span_id = source_node_id,
+    };
+    XgBodySummary body = {
+        .func_id = func_id,
+        .module_id = module_id,
+        .source_node_id = source_node_id,
+        .owner_decl_id = decl_id,
+        .name_id = name_id,
+        .signature_key = signature_key,
+        .source_span_id = source_node_id,
+        .kind = XG_BODY_FUNCTION,
+        .body_hash = ((uint64_t) module_id << 32) | func_id,
+    };
+
+    func->xg_body_func_id = func_id;
+    TEST_REQUIRE(xg_global_evidence_add_decl(&plan->evidence, &decl) != NULL,
+                 "AOT function declaration evidence allocation failed");
+    TEST_REQUIRE(xg_global_evidence_add_body(&plan->evidence, &body) != NULL,
+                 "AOT function body evidence allocation failed");
+
+    for (uint16_t i = 0; i < func->nchildren; i++)
+        test_aot_add_function_evidence(plan, func->children[i], module_id, ids);
+}
+
 static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
                                   uint32_t entry_module) {
     char verify_err[256];
@@ -94,6 +142,29 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
                       .profile = XG_BUILD_NATIVE_RELEASE};
     xg_global_evidence_init(&plan->evidence, key);
     plan->evidence_initialized = true;
+    TestAotEvidenceIds ids = {.next_func_id = 1, .next_decl_id = 1, .next_source_node_id = 1};
+    for (uint32_t i = 0; i < nmodules; i++) {
+        XiModule *module = modules[i];
+        XgModuleId module_id = (XgModuleId) (i + 1);
+        XgFuncId func_id;
+        XgBodySummary body;
+
+        if (!module || !module->init)
+            continue;
+        func_id = ids.next_func_id++;
+        body = (XgBodySummary) {
+            .func_id = func_id,
+            .module_id = module_id,
+            .name_id = xg_name_id("<module-init>"),
+            .kind = XG_BODY_MODULE_INIT,
+            .body_hash = ((uint64_t) module_id << 32) | func_id,
+        };
+        module->init->xg_body_func_id = func_id;
+        TEST_REQUIRE(xg_global_evidence_add_body(&plan->evidence, &body) != NULL,
+                     "AOT module-init body evidence allocation failed");
+        for (uint16_t ci = 0; ci < module->init->nchildren; ci++)
+            test_aot_add_function_evidence(plan, module->init->children[ci], module_id, &ids);
+    }
     TEST_REQUIRE(
         xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE),
         "AOT global evidence attach failed");
