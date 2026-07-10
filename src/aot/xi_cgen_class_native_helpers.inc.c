@@ -12,6 +12,117 @@ static int cg_class_native_field_index(const XrAggregateLayout *layout, const ch
     return cg_class_layout_field_index(layout, field);
 }
 
+static const XgGlobalEvidence *cg_class_native_global_evidence(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    return bundle ? bundle->global_evidence_plan.evidence : NULL;
+}
+
+static XgClassId cg_class_native_class_id_for_name(const XgGlobalEvidence *ev, const char *name) {
+    uint32_t name_id = name ? xg_name_id(name) : 0;
+    if (!ev || name_id == 0)
+        return XG_NO_ID;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].name_id == name_id)
+            return ev->classes[i].class_id;
+    }
+    return XG_NO_ID;
+}
+
+static const XgClassSummary *cg_class_native_evidence_class_by_id(const XgGlobalEvidence *ev,
+                                                                  XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].class_id == class_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
+static XgClassId cg_class_native_class_id_for_data(XiCgenCtx *ctx, const XiClassData *cd) {
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    XgClassId class_id;
+    if (!ev || !cd)
+        return XG_NO_ID;
+    class_id = cg_class_native_class_id_for_name(ev, cd->class_name);
+    if (class_id != XG_NO_ID)
+        return class_id;
+    class_id = cg_class_native_class_id_for_name(ev, cd->display_name);
+    if (class_id != XG_NO_ID)
+        return class_id;
+    return cg_class_native_class_id_for_name(ev, cd->generic_origin_name);
+}
+
+static bool cg_class_native_class_is_descendant_or_self(const XgGlobalEvidence *ev,
+                                                        XgClassId class_id, XgClassId ancestor_id) {
+    uint32_t depth = 0;
+    if (!ev || class_id == XG_NO_ID || ancestor_id == XG_NO_ID)
+        return false;
+    while (class_id != XG_NO_ID && depth++ < 64) {
+        const XgClassSummary *cls;
+        if (class_id == ancestor_id)
+            return true;
+        cls = cg_class_native_evidence_class_by_id(ev, class_id);
+        if (!cls || cls->parent_class_id == class_id)
+            return false;
+        class_id = cls->parent_class_id;
+    }
+    return false;
+}
+
+static void cg_class_native_report_field_plan_error(XiCgenCtx *ctx, const XiValue *v,
+                                                    const char *reason,
+                                                    const XaotClassFieldPlan *plan) {
+    if (ctx)
+        ctx->error = true;
+    fprintf(stderr,
+            "[xi_cgen] ERROR: stale class field plan for Xi value v%u "
+            "(class_field=%u%s%s",
+            v ? v->id : 0, v ? v->xg_class_field_id : 0, reason ? " " : "", reason ? reason : "");
+    if (plan) {
+        fprintf(stderr, " owner=%u slot=%u", (unsigned) plan->owner_class_id,
+                (unsigned) plan->instance_slot);
+    }
+    fprintf(stderr, ")\n");
+}
+
+static int cg_class_native_field_index_for_value(XiCgenCtx *ctx, const XiClassData *cd,
+                                                 const XrAggregateLayout *layout,
+                                                 const XiValue *v) {
+    if (!layout || !v)
+        return -1;
+    if (v->xg_class_field_id == 0)
+        return cg_class_native_field_index(layout, (const char *) v->aux);
+
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotClassFieldPlan *plan =
+        xaot_bundle_find_class_field_plan(bundle, (XgFieldId) v->xg_class_field_id);
+    if (!plan) {
+        cg_class_native_report_field_plan_error(ctx, v, "missing", NULL);
+        return -1;
+    }
+    if (plan->instance_slot == UINT32_MAX || plan->instance_slot >= layout->field_count) {
+        cg_class_native_report_field_plan_error(ctx, v, "slot_out_of_range", plan);
+        return -1;
+    }
+
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    XgClassId receiver_class_id = cg_class_native_class_id_for_data(ctx, cd);
+    if (!cg_class_native_class_is_descendant_or_self(ev, receiver_class_id, plan->owner_class_id)) {
+        cg_class_native_report_field_plan_error(ctx, v, "owner_not_in_receiver_hierarchy", plan);
+        return -1;
+    }
+
+    if (v->aux) {
+        int name_idx = cg_class_native_field_index(layout, (const char *) v->aux);
+        if (name_idx < 0 || (uint32_t) name_idx != plan->instance_slot) {
+            cg_class_native_report_field_plan_error(ctx, v, "name_slot_mismatch", plan);
+            return -1;
+        }
+    }
+    return (int) plan->instance_slot;
+}
+
 static void emit_class_native_field_path(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                          uint16_t idx) {
     if (!cd || idx >= cd->inherited_field_count) {
@@ -285,7 +396,7 @@ static bool cg_class_native_receiver_ref_field(XiCgenCtx *ctx, const XiFunc *f, 
     if (!info.layout || !v || v->op != XI_LOAD_FIELD || v->nargs < 1 ||
         !cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
-    int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
+    int idx = cg_class_native_field_index_for_value(ctx, info.class_data, info.layout, v);
     const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
     if (!field || field->native_type != expected_native)
         return false;
@@ -2262,7 +2373,7 @@ static bool emit_class_native_receiver_field_load_expr(XiCgenCtx *ctx, FILE *out
     if (!info.layout || !v || v->op != XI_LOAD_FIELD || v->nargs < 1 ||
         !cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
-    int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
+    int idx = cg_class_native_field_index_for_value(ctx, info.class_data, info.layout, v);
     if (idx < 0)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
@@ -2293,7 +2404,7 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
     if (!info.layout || !v || v->op != XI_STORE_FIELD || v->nargs < 2 ||
         !cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
-    int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
+    int idx = cg_class_native_field_index_for_value(ctx, info.class_data, info.layout, v);
     if (idx < 0)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
@@ -2322,7 +2433,7 @@ static bool emit_class_native_instance_field_load_expr(XiCgenCtx *ctx, FILE *out
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd)
         return false;
-    int idx = cg_class_native_field_index(cd->instance_layout, (const char *) v->aux);
+    int idx = cg_class_native_field_index_for_value(ctx, cd, cd->instance_layout, v);
     if (idx < 0)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, (uint16_t) idx);
@@ -2364,7 +2475,7 @@ static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *ou
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd)
         return false;
-    int idx = cg_class_native_field_index(cd->instance_layout, (const char *) v->aux);
+    int idx = cg_class_native_field_index_for_value(ctx, cd, cd->instance_layout, v);
     if (idx < 0)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, (uint16_t) idx);
