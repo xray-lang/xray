@@ -344,8 +344,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"cluster", "channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", "cluster_channel_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"cluster", "serve", "(name: string): Channel", "Register service and return request channel", "cluster_serve_fn", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"cluster", "reply", "(req: Json, result: Json): bool", "Reply to service request", "cluster_reply_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},

@@ -55,8 +55,6 @@ typedef enum {
     XR_FRAME_CHANNEL_RECV_REQ = 0x08,
     XR_FRAME_CHANNEL_RECV_RSP = 0x09,
     XR_FRAME_CHANNEL_CLOSE = 0x0A,
-    XR_FRAME_SERVICE_CALL = 0x0B,
-    XR_FRAME_SERVICE_REPLY = 0x0C,
     XR_FRAME_CHANNEL_SUBSCRIBE = 0x0F,
     XR_FRAME_CHANNEL_UNSUBSCRIBE = 0x10,
     XR_FRAME_CHANNEL_PUSH = 0x11,
@@ -71,12 +69,11 @@ typedef enum {
 #define XR_FRAME_MAX_PAYLOAD (16 * 1024 * 1024)
 #define XR_NONCE_SIZE 16
 #define XR_PROOF_SIZE 32
-#define XR_CLUSTER_HANDSHAKE_VERSION 3
+#define XR_CLUSTER_HANDSHAKE_VERSION 4
 #define XR_CLUSTER_HANDSHAKE_TIMEOUT_MS 5000
 #define XR_TOPIC_DEFAULT_HOP_LIMIT 3
 #define XR_NODE_NAME_MAX 63
 #define XR_CHANNEL_NAME_MAX 127
-#define XR_SERVICE_NAME_MAX 127
 #define XR_CORO_NAME_MAX 127
 
 typedef struct {
@@ -121,21 +118,6 @@ typedef struct {
 } XrFrameChannelRecvRsp;
 
 typedef struct {
-    uint64_t request_id;
-    char service_name[XR_SERVICE_NAME_MAX + 1];
-    uint8_t service_name_len;
-    uint8_t *args_data;
-    uint32_t args_len;
-} XrFrameServiceCall;
-
-typedef struct {
-    uint64_t request_id;
-    bool is_error;
-    uint8_t *result_data;
-    uint32_t result_len;
-} XrFrameServiceReply;
-
-typedef struct {
     char channel_name[XR_CHANNEL_NAME_MAX + 1];
     uint8_t channel_name_len;
 } XrFrameChannelSubscribe;
@@ -159,12 +141,6 @@ int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, 
 int cluster_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *channel_name,
                                       const uint8_t *value_data, uint32_t value_len);
 int cluster_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *channel_name);
-int cluster_frame_encode_service_call(uint8_t *buf, size_t buf_size, uint64_t request_id,
-                                      const char *service_name, const uint8_t *args_data,
-                                      uint32_t args_len);
-int cluster_frame_encode_service_reply(uint8_t *buf, size_t buf_size, uint64_t request_id,
-                                       bool is_error, const uint8_t *result_data,
-                                       uint32_t result_len);
 int cluster_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size, const char *channel_name);
 int cluster_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
                                              const char *channel_name);
@@ -183,10 +159,6 @@ int cluster_frame_decode_channel_send(const uint8_t *payload, uint32_t len,
                                       XrFrameChannelSend *out);
 int cluster_frame_decode_channel_close(const uint8_t *payload, uint32_t len, char *channel_name,
                                        size_t name_size);
-int cluster_frame_decode_service_call(const uint8_t *payload, uint32_t len,
-                                      XrFrameServiceCall *out);
-int cluster_frame_decode_service_reply(const uint8_t *payload, uint32_t len,
-                                       XrFrameServiceReply *out);
 int cluster_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
                                            XrFrameChannelSubscribe *out);
 int cluster_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len,
@@ -357,14 +329,6 @@ typedef struct XrDistChannel {
     int rr_index;                      // round-robin index for push
 } XrDistChannel;
 
-/* ========== Service Entry ========== */
-
-typedef struct XrServiceEntry {
-    char name[XR_SERVICE_NAME_MAX + 1];
-    struct XrChannel *request_ch;  // Channel to deliver incoming requests
-    struct XrServiceEntry *next;
-} XrServiceEntry;
-
 /* ========== Value Wire Serialization ========== */
 
 typedef struct XrSerialBuf {
@@ -425,11 +389,6 @@ typedef struct XrCluster {
     int channel_count;
     XrAdaptiveMutex channels_lock;
 
-    // Service registry (hash table)
-    XrServiceEntry *service_buckets[XR_CLUSTER_SERVICE_BUCKETS];
-    int service_count;
-    XrAdaptiveMutex services_lock;
-
     /*
      * Topic Pub/Sub registry.
      *
@@ -449,7 +408,7 @@ typedef struct XrCluster {
     int topic_sub_count;
     XrAdaptiveMutex topics_lock;
 
-    // Request ID counter for service calls
+    // Request ID counter for channel recv proxies.
     _Atomic(uint64_t) next_request_id;
 
     // Heartbeat configuration
@@ -458,7 +417,7 @@ typedef struct XrCluster {
     int max_missed_heartbeats;  // default 3
 
     // Per-node pending request cap (default XR_MAX_PENDING_REQUESTS).
-    // Controls backpressure on concurrent RPC / channel recv proxies.
+    // Controls backpressure on concurrent channel recv proxies.
     int max_pending_requests;
 
     // Dead node tombstones prevent immediate rejoin of recently departed nodes.
@@ -668,14 +627,6 @@ int cluster_channel_handle_push(XrCluster *c, const char *channel_name, const ui
                                 uint32_t value_len);
 void cluster_channel_subscribe(struct XrChannel *ch);
 void cluster_channel_unsubscribe(struct XrChannel *ch);
-
-/* ========== Service Registry ========== */
-
-// Register a service (returns request channel)
-struct XrChannel *cluster_service_register(struct XrVMRuntime *X, const char *name);
-
-// Find a service by name
-XrServiceEntry *cluster_service_find(XrCluster *c, const char *name);
 
 /* ========== Frame Processing ========== */
 

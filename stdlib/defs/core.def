@@ -3447,28 +3447,6 @@ module cluster {
     layer: "runtime"
   }
 
-  fn serve {
-    signature: "(name: string): Channel"
-    doc: "Register service and return request channel"
-    vm: "cluster_serve_fn"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn reply {
-    signature: "(req: Json, result: Json): bool"
-    doc: "Reply to service request"
-    vm: "cluster_reply_fn"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn monitor {
     signature: "(name: string, coro_name?: string): Channel"
     doc: "Monitor node or remote coroutine"

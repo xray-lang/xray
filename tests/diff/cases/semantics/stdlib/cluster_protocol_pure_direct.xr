@@ -5,7 +5,6 @@ import {
     TOPIC_DEFAULT_HOP_LIMIT,
     validNodeName,
     validChannelName,
-    validServiceName,
     parseAddress,
     validTopicName,
     validTopicPattern,
@@ -19,7 +18,6 @@ print(validNodeName("node-a"))
 print(validNodeName(""))
 print(validNodeName("bad\nname"))
 print(validChannelName("events.main"))
-print(validServiceName("svc.search"))
 
 var addr = parseAddress("127.0.0.1:9000")
 print(addr["host"])
