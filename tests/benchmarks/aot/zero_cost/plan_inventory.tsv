@@ -3,6 +3,7 @@
 class_interface_dispatch|covered|interface-abi|tests/aot/filetests/cgen|Class/interface dispatch has verified ABI and direct/type-switch filetests.
 class_vtable_dispatch|covered|class_vtable_dispatch|tests/aot/filetests/cgen|Class vtable target cases are covered by generated-C filetests.
 class_field_layout|covered|class-field-plan|tests/aot/filetests/link|Class field declarations produce target-aware layout and field plans with verifier-backed physical ABI facts.
+class_field_backend_consumption|covered|p0->base\.f0|tests/aot/filetests/cgen|Native class field load/store paths consume class-field plans and emit direct struct field access.
 generic_instantiation|covered|generic-instantiation|tests/aot/filetests/cgen|Generic roots and class clone anchors have plan dump coverage.
 closure_deobjectization|covered|repr=direct_symbol|tests/aot/filetests/cgen|Non-capturing closure direct-symbol representation is covered.
 closure_noescape_stack|covered|repr=stack|tests/aot/filetests/cgen|Capturing noescape closure stack representation is covered.
