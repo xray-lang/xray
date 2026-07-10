@@ -29,7 +29,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"channel", XLSP_SYM_FUNCTION, "fn(name: string, size?: int): Channel", "Create or get named distributed channel", NULL, 0},
     {"serve", XLSP_SYM_FUNCTION, "fn(name: string): Channel", "Register service and return request channel", NULL, 0},
     {"reply", XLSP_SYM_FUNCTION, "fn(req: Json, result: Json): bool", "Reply to service request", NULL, 0},
-    {"call", XLSP_SYM_FUNCTION, "fn(service: string, args: Json, timeout?: int): Json", "Call remote service", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
     {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
@@ -50,7 +49,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"SERVICE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 27
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 26
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {

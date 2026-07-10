@@ -3469,17 +3469,6 @@ module cluster {
     layer: "runtime"
   }
 
-  fn call {
-    signature: "(service: string, args: Json, timeout?: int): Json"
-    doc: "Call remote service"
-    vm: "cluster_call_fn"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn monitor {
     signature: "(name: string, coro_name?: string): Channel"
     doc: "Monitor node or remote coroutine"
