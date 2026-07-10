@@ -379,22 +379,6 @@ struct XrChannel *cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
         return NULL;
     }
 
-    // Broadcast subscription to all connected nodes
-    uint8_t name_len = (uint8_t) strlen(pattern);
-    uint8_t payload[256];
-    payload[0] = name_len;
-    memcpy(payload + 1, pattern, name_len);
-
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode *node = c->nodes;
-    while (node) {
-        if (node->state == XR_NODE_CONNECTED) {
-            cluster_node_send_frame(node, XR_FRAME_TOPIC_SUBSCRIBE, payload, 1 + name_len);
-        }
-        node = node->next;
-    }
-    xr_amutex_unlock(&c->nodes_lock);
-
     return ch;
 }
 

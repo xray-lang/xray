@@ -58,7 +58,6 @@ typedef enum {
     XR_FRAME_CHANNEL_SUBSCRIBE = 0x0F,
     XR_FRAME_CHANNEL_UNSUBSCRIBE = 0x10,
     XR_FRAME_CHANNEL_PUSH = 0x11,
-    XR_FRAME_TOPIC_SUBSCRIBE = 0x12,
     XR_FRAME_TOPIC_PUBLISH = 0x14,
     XR_FRAME_CORO_MONITOR = 0x15,
     XR_FRAME_CORO_DEMONITOR = 0x16,
@@ -69,7 +68,7 @@ typedef enum {
 #define XR_FRAME_MAX_PAYLOAD (16 * 1024 * 1024)
 #define XR_NONCE_SIZE 16
 #define XR_PROOF_SIZE 32
-#define XR_CLUSTER_HANDSHAKE_VERSION 4
+#define XR_CLUSTER_HANDSHAKE_VERSION 5
 #define XR_CLUSTER_HANDSHAKE_TIMEOUT_MS 5000
 #define XR_TOPIC_DEFAULT_HOP_LIMIT 3
 #define XR_NODE_NAME_MAX 63
@@ -395,7 +394,7 @@ typedef struct XrCluster {
      * Route lookups go through a NATS-style segment trie (see
      * cluster_topic.c) instead of the old flat hash of subscriptions.
      * The trie makes publish() cost O(topic_depth) instead of
-     * O(total_subscriptions) — critical for services that maintain
+     * O(total_subscriptions) — critical for applications that maintain
      * thousands of subscriptions of which only a handful match any
      * given message. The root node is embedded to keep the hot path
      * a single dereference.
