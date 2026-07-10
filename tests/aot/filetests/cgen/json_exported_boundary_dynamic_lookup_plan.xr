@@ -1,0 +1,3 @@
+import { readExported } from "./_json_boundary_lib"
+
+print(readExported({ name: "ada", age: 1 }))
