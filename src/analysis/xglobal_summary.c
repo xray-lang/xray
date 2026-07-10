@@ -145,6 +145,29 @@ static uint64_t hash_class_summary(uint64_t hash, const XgClassSummary *row) {
     return hash_u8(hash, row->decl_kind);
 }
 
+static uint64_t hash_class_field_summary(uint64_t hash, const XgClassFieldSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->field_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->source_node_id);
+    hash = hash_u32(hash, row->owner_class_id);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u32(hash, row->target_name_id);
+    hash = hash_u32(hash, row->target_class_id);
+    hash = hash_u32(hash, row->target_interface_id);
+    hash = hash_u32(hash, row->element_type_key);
+    hash = hash_u32(hash, row->key_type_key);
+    hash = hash_u32(hash, row->value_type_key);
+    hash = hash_u32(hash, row->fixed_length);
+    hash = hash_u32(hash, row->decl_ordinal);
+    hash = hash_u32(hash, row->instance_slot);
+    hash = hash_u32(hash, row->flags);
+    hash = hash_u8(hash, row->semantic_kind);
+    return hash_u8(hash, row->native_width);
+}
+
 static uint64_t hash_method_summary(uint64_t hash, const XgMethodSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -1285,6 +1308,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
         return;
     xr_free(evidence->decls);
     xr_free(evidence->classes);
+    xr_free(evidence->class_fields);
     xr_free(evidence->methods);
     xr_free(evidence->interface_impls);
     xr_free(evidence->interface_extends);
@@ -1328,6 +1352,12 @@ XR_FUNC bool xg_global_evidence_reserve_decls(XgGlobalEvidence *evidence, uint32
 XR_FUNC bool xg_global_evidence_reserve_classes(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->classes, &evidence->class_cap, capacity,
                                      sizeof(XgClassSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_class_fields(XgGlobalEvidence *evidence,
+                                                     uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->class_fields, &evidence->class_field_cap,
+                                     capacity, sizeof(XgClassFieldSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_methods(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1542,6 +1572,17 @@ XR_FUNC XgClassSummary *xg_global_evidence_add_class(XgGlobalEvidence *evidence,
         !xg_global_evidence_reserve_classes(evidence, evidence->nclasses + 1))
         return NULL;
     row = &evidence->classes[evidence->nclasses++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgClassFieldSummary *
+xg_global_evidence_add_class_field(XgGlobalEvidence *evidence, const XgClassFieldSummary *summary) {
+    XgClassFieldSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_class_fields(evidence, evidence->nclass_fields + 1))
+        return NULL;
+    row = &evidence->class_fields[evidence->nclass_fields++];
     *row = *summary;
     return row;
 }
@@ -1918,6 +1959,17 @@ XR_FUNC XgHashEqSummary *xg_global_evidence_add_hash_eq(XgGlobalEvidence *eviden
     row = &evidence->hash_eqs[evidence->nhash_eqs++];
     *row = *summary;
     return row;
+}
+
+XR_FUNC const XgClassFieldSummary *
+xg_global_evidence_find_class_field(const XgGlobalEvidence *evidence, XgFieldId field_id) {
+    if (!evidence || field_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nclass_fields; i++) {
+        if (evidence->class_fields[i].field_id == field_id)
+            return &evidence->class_fields[i];
+    }
+    return NULL;
 }
 
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
@@ -2547,6 +2599,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_build_key(hash, &evidence->key);
     hash = hash_mix(hash, &evidence->ndecls, sizeof(evidence->ndecls));
     hash = hash_mix(hash, &evidence->nclasses, sizeof(evidence->nclasses));
+    hash = hash_mix(hash, &evidence->nclass_fields, sizeof(evidence->nclass_fields));
     hash = hash_mix(hash, &evidence->nmethods, sizeof(evidence->nmethods));
     hash = hash_mix(hash, &evidence->ninterface_impls, sizeof(evidence->ninterface_impls));
     hash = hash_mix(hash, &evidence->ninterface_extends, sizeof(evidence->ninterface_extends));
@@ -2584,6 +2637,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_decl_summary(hash, &evidence->decls[i]);
     for (uint32_t i = 0; i < evidence->nclasses; i++)
         hash = hash_class_summary(hash, &evidence->classes[i]);
+    for (uint32_t i = 0; i < evidence->nclass_fields; i++)
+        hash = hash_class_field_summary(hash, &evidence->class_fields[i]);
     for (uint32_t i = 0; i < evidence->nmethods; i++)
         hash = hash_method_summary(hash, &evidence->methods[i]);
     for (uint32_t i = 0; i < evidence->ninterface_impls; i++)
@@ -2679,6 +2734,7 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
         case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
             hash = hash_u32(hash, evidence->ndecls);
             hash = hash_u32(hash, evidence->nclasses);
+            hash = hash_u32(hash, evidence->nclass_fields);
             hash = hash_u32(hash, evidence->nmethods);
             hash = hash_u32(hash, evidence->ninterface_impls);
             hash = hash_u32(hash, evidence->ninterface_extends);
@@ -2690,6 +2746,8 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
                 hash = hash_decl_summary(hash, &evidence->decls[i]);
             for (uint32_t i = 0; i < evidence->nclasses; i++)
                 hash = hash_class_summary(hash, &evidence->classes[i]);
+            for (uint32_t i = 0; i < evidence->nclass_fields; i++)
+                hash = hash_class_field_summary(hash, &evidence->class_fields[i]);
             for (uint32_t i = 0; i < evidence->nmethods; i++)
                 hash = hash_method_summary(hash, &evidence->methods[i]);
             for (uint32_t i = 0; i < evidence->ninterface_impls; i++)
@@ -2990,11 +3048,11 @@ static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *e
 
 static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-count decls=%u classes=%u methods=%u impls=%u extends=%u "
+            "payload-count decls=%u classes=%u class_fields=%u methods=%u impls=%u extends=%u "
             "interface_methods=%u derives=%u derived_fields=%u derived_methods=%u\n",
             evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
-            evidence ? evidence->nmethods : 0, evidence ? evidence->ninterface_impls : 0,
-            evidence ? evidence->ninterface_extends : 0,
+            evidence ? evidence->nclass_fields : 0, evidence ? evidence->nmethods : 0,
+            evidence ? evidence->ninterface_impls : 0, evidence ? evidence->ninterface_extends : 0,
             evidence ? evidence->ninterface_methods : 0, evidence ? evidence->nderives : 0,
             evidence ? evidence->nderived_fields : 0, evidence ? evidence->nderived_methods : 0);
     if (!evidence)
@@ -3011,6 +3069,18 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
                 c->interface_start, c->interface_count, c->generic_origin_class_id,
                 c->generic_origin_name_id, c->generic_type_key, c->generic_type_arg_key_start,
                 (unsigned) c->generic_type_arg_count, (unsigned) c->decl_kind);
+    }
+    for (uint32_t i = 0; i < evidence->nclass_fields; i++) {
+        const XgClassFieldSummary *f = &evidence->class_fields[i];
+        fprintf(out,
+                "class-field id=%u module=%u node=%u owner=%u name=%u type=%u target_name=%u "
+                "target_class=%u target_interface=%u element=%u key=%u value=%u fixed=%u "
+                "ordinal=%u slot=%u semantic=%u width=%u flags=0x%x\n",
+                f->field_id, f->module_id, f->source_node_id, f->owner_class_id, f->name_id,
+                f->type_key, f->target_name_id, f->target_class_id, f->target_interface_id,
+                f->element_type_key, f->key_type_key, f->value_type_key, f->fixed_length,
+                f->decl_ordinal, f->instance_slot, (unsigned) f->semantic_kind,
+                (unsigned) f->native_width, f->flags);
     }
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];
@@ -3126,35 +3196,36 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
 }
 
 static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidence) {
-    fprintf(
-        out,
-        "payload-count decls=%u classes=%u methods=%u impls=%u extends=%u "
-        "interface_methods=%u interface_object_uses=%u bodies=%u callsites=%u link_deps=%u "
-        "generic_insts=%u "
-        "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u seq=%u capacity=%u "
-        "bulk=%u encoding=%u derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
-        "json_fields=%u json_accesses=%u json_codecs=%u record_shapes=%u record_fields=%u "
-        "record_accesses=%u record_merges=%u options=%u map_shapes=%u map_entries=%u "
-        "key_accesses=%u "
-        "hash_eqs=%u global_hash=%016" PRIx64 "\n",
-        evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
-        evidence ? evidence->nmethods : 0, evidence ? evidence->ninterface_impls : 0,
-        evidence ? evidence->ninterface_extends : 0, evidence ? evidence->ninterface_methods : 0,
-        evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->nbodies : 0,
-        evidence ? evidence->ncallsites : 0, evidence ? evidence->nlink_deps : 0,
-        evidence ? evidence->ngeneric_insts : 0, evidence ? evidence->ngeneric_body_uses : 0,
-        evidence ? evidence->ngeneric_storages : 0, evidence ? evidence->ngeneric_code_sizes : 0,
-        evidence ? evidence->nsequence_accesses : 0, evidence ? evidence->ncapacity_ops : 0,
-        evidence ? evidence->nbulk_ops : 0, evidence ? evidence->nencoding_ops : 0,
-        evidence ? evidence->nderives : 0, evidence ? evidence->nderived_fields : 0,
-        evidence ? evidence->nderived_methods : 0, evidence ? evidence->njson_shapes : 0,
-        evidence ? evidence->njson_fields : 0, evidence ? evidence->njson_accesses : 0,
-        evidence ? evidence->njson_codecs : 0, evidence ? evidence->nrecord_shapes : 0,
-        evidence ? evidence->nrecord_fields : 0, evidence ? evidence->nrecord_accesses : 0,
-        evidence ? evidence->nrecord_merges : 0, evidence ? evidence->noptions_bags : 0,
-        evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
-        evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0,
-        evidence ? xg_global_evidence_hash(evidence) : 0);
+    fprintf(out,
+            "payload-count decls=%u classes=%u class_fields=%u methods=%u impls=%u extends=%u "
+            "interface_methods=%u interface_object_uses=%u bodies=%u callsites=%u link_deps=%u "
+            "generic_insts=%u "
+            "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u seq=%u capacity=%u "
+            "bulk=%u encoding=%u derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
+            "json_fields=%u json_accesses=%u json_codecs=%u record_shapes=%u record_fields=%u "
+            "record_accesses=%u record_merges=%u options=%u map_shapes=%u map_entries=%u "
+            "key_accesses=%u "
+            "hash_eqs=%u global_hash=%016" PRIx64 "\n",
+            evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
+            evidence ? evidence->nclass_fields : 0, evidence ? evidence->nmethods : 0,
+            evidence ? evidence->ninterface_impls : 0, evidence ? evidence->ninterface_extends : 0,
+            evidence ? evidence->ninterface_methods : 0,
+            evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->nbodies : 0,
+            evidence ? evidence->ncallsites : 0, evidence ? evidence->nlink_deps : 0,
+            evidence ? evidence->ngeneric_insts : 0, evidence ? evidence->ngeneric_body_uses : 0,
+            evidence ? evidence->ngeneric_storages : 0,
+            evidence ? evidence->ngeneric_code_sizes : 0,
+            evidence ? evidence->nsequence_accesses : 0, evidence ? evidence->ncapacity_ops : 0,
+            evidence ? evidence->nbulk_ops : 0, evidence ? evidence->nencoding_ops : 0,
+            evidence ? evidence->nderives : 0, evidence ? evidence->nderived_fields : 0,
+            evidence ? evidence->nderived_methods : 0, evidence ? evidence->njson_shapes : 0,
+            evidence ? evidence->njson_fields : 0, evidence ? evidence->njson_accesses : 0,
+            evidence ? evidence->njson_codecs : 0, evidence ? evidence->nrecord_shapes : 0,
+            evidence ? evidence->nrecord_fields : 0, evidence ? evidence->nrecord_accesses : 0,
+            evidence ? evidence->nrecord_merges : 0, evidence ? evidence->noptions_bags : 0,
+            evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
+            evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0,
+            evidence ? xg_global_evidence_hash(evidence) : 0);
 }
 
 static void dump_cache_payload_body_for_phase(FILE *out, const XgGlobalEvidence *evidence,
@@ -3305,6 +3376,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     char line[1024];
     uint32_t decl_count = 0;
     uint32_t class_count = 0;
+    uint32_t class_field_count = 0;
     uint32_t method_count = 0;
     uint32_t impl_count = 0;
     uint32_t extends_count = 0;
@@ -3317,17 +3389,19 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     if (!body || !evidence || !evidence_cache_next_line(&cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-count decls=%" SCNu32 " classes=%" SCNu32 " methods=%" SCNu32
-               " impls=%" SCNu32 " extends=%" SCNu32 " interface_methods=%" SCNu32
-               " derives=%" SCNu32 " derived_fields=%" SCNu32 " derived_methods=%" SCNu32 " %c",
-               &decl_count, &class_count, &method_count, &impl_count, &extends_count,
-               &interface_method_count, &derive_count, &derived_field_count, &derived_method_count,
-               &trailing) != 9)
+               "payload-count decls=%" SCNu32 " classes=%" SCNu32 " class_fields=%" SCNu32
+               " methods=%" SCNu32 " impls=%" SCNu32 " extends=%" SCNu32
+               " interface_methods=%" SCNu32 " derives=%" SCNu32 " derived_fields=%" SCNu32
+               " derived_methods=%" SCNu32 " %c",
+               &decl_count, &class_count, &class_field_count, &method_count, &impl_count,
+               &extends_count, &interface_method_count, &derive_count, &derived_field_count,
+               &derived_method_count, &trailing) != 10)
         return false;
     if (!materialize_payload_declarations(&cursor, evidence, &parsed_decl_count) ||
         parsed_decl_count != decl_count)
         return false;
     if (!xg_global_evidence_reserve_classes(evidence, class_count) ||
+        !xg_global_evidence_reserve_class_fields(evidence, class_field_count) ||
         !xg_global_evidence_reserve_methods(evidence, method_count) ||
         !xg_global_evidence_reserve_interface_impls(evidence, impl_count) ||
         !xg_global_evidence_reserve_interface_extends(evidence, extends_count) ||
@@ -3359,6 +3433,35 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         row.generic_type_arg_count = (uint16_t) type_arg_count;
         row.decl_kind = (uint8_t) decl_kind;
         if (!xg_global_evidence_add_class(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < class_field_count; i++) {
+        XgClassFieldSummary row;
+        uint32_t semantic_kind = 0;
+        uint32_t native_width = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "class-field id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " owner=%" SCNu32
+                   " name=%" SCNu32 " type=%" SCNu32 " target_name=%" SCNu32
+                   " target_class=%" SCNu32 " target_interface=%" SCNu32 " element=%" SCNu32
+                   " key=%" SCNu32 " value=%" SCNu32 " fixed=%" SCNu32 " ordinal=%" SCNu32
+                   " slot=%" SCNu32 " semantic=%" SCNu32 " width=%" SCNu32 " flags=0x%" SCNx32
+                   " %c",
+                   &row.field_id, &row.module_id, &row.source_node_id, &row.owner_class_id,
+                   &row.name_id, &row.type_key, &row.target_name_id, &row.target_class_id,
+                   &row.target_interface_id, &row.element_type_key, &row.key_type_key,
+                   &row.value_type_key, &row.fixed_length, &row.decl_ordinal, &row.instance_slot,
+                   &semantic_kind, &native_width, &row.flags, &trailing) != 18)
+            return false;
+        if (semantic_kind == 0 || semantic_kind > XG_CLASS_FIELD_TYPE_DYNAMIC ||
+            native_width > UINT8_MAX)
+            return false;
+        row.semantic_kind = (uint8_t) semantic_kind;
+        row.native_width = (uint8_t) native_width;
+        if (!xg_global_evidence_add_class_field(evidence, &row))
             return false;
     }
     for (uint32_t i = 0; i < method_count; i++) {
@@ -3665,101 +3768,6 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
     return true;
 }
 
-static uint64_t evidence_import_hash_extend(uint64_t current, const XgEvidenceCacheKey *key) {
-    uint64_t hash = current ? current : XR_FNV64_OFFSET_BASIS;
-    hash = hash_u32(hash, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION);
-    hash = hash_u64(hash, key ? xg_evidence_cache_key_hash(key) : 0);
-    return hash == 0 ? 1 : hash;
-}
-
-static bool append_imported_summary_rows(XgGlobalEvidence *dst, const XgGlobalEvidence *src) {
-    if (!dst || !src)
-        return false;
-    if (!xg_global_evidence_reserve_decls(dst, dst->ndecls + src->ndecls) ||
-        !xg_global_evidence_reserve_classes(dst, dst->nclasses + src->nclasses) ||
-        !xg_global_evidence_reserve_methods(dst, dst->nmethods + src->nmethods) ||
-        !xg_global_evidence_reserve_interface_impls(dst, dst->ninterface_impls +
-                                                             src->ninterface_impls) ||
-        !xg_global_evidence_reserve_interface_extends(dst, dst->ninterface_extends +
-                                                               src->ninterface_extends) ||
-        !xg_global_evidence_reserve_interface_methods(dst, dst->ninterface_methods +
-                                                               src->ninterface_methods) ||
-        !xg_global_evidence_reserve_interface_object_uses(dst, dst->ninterface_object_uses +
-                                                                   src->ninterface_object_uses) ||
-        !xg_global_evidence_reserve_derives(dst, dst->nderives + src->nderives) ||
-        !xg_global_evidence_reserve_derived_fields(dst,
-                                                   dst->nderived_fields + src->nderived_fields) ||
-        !xg_global_evidence_reserve_derived_methods(dst, dst->nderived_methods +
-                                                             src->nderived_methods) ||
-        !xg_global_evidence_reserve_bodies(dst, dst->nbodies + src->nbodies) ||
-        !xg_global_evidence_reserve_callsites(dst, dst->ncallsites + src->ncallsites) ||
-        !xg_global_evidence_reserve_link_deps(dst, dst->nlink_deps + src->nlink_deps) ||
-        !xg_global_evidence_reserve_generic_insts(dst, dst->ngeneric_insts + src->ngeneric_insts))
-        return false;
-    for (uint32_t i = 0; i < src->ndecls; i++)
-        if (!xg_global_evidence_add_decl(dst, &src->decls[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nclasses; i++)
-        if (!xg_global_evidence_add_class(dst, &src->classes[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nmethods; i++)
-        if (!xg_global_evidence_add_method(dst, &src->methods[i]))
-            return false;
-    for (uint32_t i = 0; i < src->ninterface_impls; i++)
-        if (!xg_global_evidence_add_interface_impl(dst, &src->interface_impls[i]))
-            return false;
-    for (uint32_t i = 0; i < src->ninterface_extends; i++)
-        if (!xg_global_evidence_add_interface_extends(dst, &src->interface_extends[i]))
-            return false;
-    for (uint32_t i = 0; i < src->ninterface_methods; i++)
-        if (!xg_global_evidence_add_interface_method(dst, &src->interface_methods[i]))
-            return false;
-    for (uint32_t i = 0; i < src->ninterface_object_uses; i++)
-        if (!xg_global_evidence_add_interface_object_use(dst, &src->interface_object_uses[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nderives; i++)
-        if (!xg_global_evidence_add_derive(dst, &src->derives[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nderived_fields; i++)
-        if (!xg_global_evidence_add_derived_field(dst, &src->derived_fields[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nderived_methods; i++)
-        if (!xg_global_evidence_add_derived_method(dst, &src->derived_methods[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nbodies; i++)
-        if (!xg_global_evidence_add_body(dst, &src->bodies[i]))
-            return false;
-    for (uint32_t i = 0; i < src->ncallsites; i++)
-        if (!xg_global_evidence_add_callsite(dst, &src->callsites[i]))
-            return false;
-    for (uint32_t i = 0; i < src->nlink_deps; i++)
-        if (!xg_global_evidence_add_link_dependency(dst, &src->link_deps[i]))
-            return false;
-    for (uint32_t i = 0; i < src->ngeneric_insts; i++)
-        if (!xg_global_evidence_add_generic_inst(dst, &src->generic_insts[i]))
-            return false;
-    return true;
-}
-
-XR_FUNC bool xg_global_evidence_reuse_import_summary(XgGlobalEvidence *evidence,
-                                                     const char *payload_text) {
-    XgEvidenceCachePayloadInfo info;
-    XgGlobalEvidence imported;
-    bool ok;
-    memset(&imported, 0, sizeof(imported));
-    if (!evidence || !xg_evidence_cache_payload_parse(payload_text, &info))
-        return false;
-    if (!xg_evidence_cache_payload_materialize(payload_text, &imported))
-        return false;
-    ok = append_imported_summary_rows(evidence, &imported);
-    xg_global_evidence_free(&imported);
-    if (!ok)
-        return false;
-    evidence->key.imported_summary_hash =
-        evidence_import_hash_extend(evidence->key.imported_summary_hash, &info.key);
-    return true;
-}
-
 typedef const char *(*XgBitNameFn)(uint32_t bit);
 
 static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,
@@ -3840,7 +3848,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     dump_cache_manifest(out, evidence);
     fprintf(out,
-            "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
+            "counts decls=%u classes=%u class_fields=%u methods=%u interface_impls=%u "
+            "interface_extends=%u "
             "interface_methods=%u interface_object_uses=%u bodies=%u callsites=%u link_deps=%u "
             "generic_insts=%u "
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
@@ -3850,8 +3859,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "record_fields=%u record_accesses=%u record_merges=%u options=%u map_shapes=%u "
             "map_entries=%u key_accesses=%u "
             "hash_eqs=%u\n",
-            evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
-            evidence->ninterface_extends, evidence->ninterface_methods,
+            evidence->ndecls, evidence->nclasses, evidence->nclass_fields, evidence->nmethods,
+            evidence->ninterface_impls, evidence->ninterface_extends, evidence->ninterface_methods,
             evidence->ninterface_object_uses, evidence->nbodies, evidence->ncallsites,
             evidence->nlink_deps, evidence->ngeneric_insts, evidence->ngeneric_body_uses,
             evidence->ngeneric_storages, evidence->ngeneric_code_sizes,
@@ -3884,6 +3893,18 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 c->interface_start, c->interface_count, c->generic_origin_class_id,
                 c->generic_origin_name_id, c->generic_type_key, c->generic_type_arg_key_start,
                 (unsigned) c->generic_type_arg_count);
+    }
+    for (uint32_t i = 0; i < evidence->nclass_fields; i++) {
+        const XgClassFieldSummary *f = &evidence->class_fields[i];
+        fprintf(out,
+                "class-field %u id=%u module=%u node=%u owner=%u name=%u type=%u "
+                "target_name=%u target_class=%u target_interface=%u element=%u key=%u value=%u "
+                "fixed=%u ordinal=%u slot=%u semantic=%u width=%u flags=0x%x\n",
+                i, f->field_id, f->module_id, f->source_node_id, f->owner_class_id, f->name_id,
+                f->type_key, f->target_name_id, f->target_class_id, f->target_interface_id,
+                f->element_type_key, f->key_type_key, f->value_type_key, f->fixed_length,
+                f->decl_ordinal, f->instance_slot, (unsigned) f->semantic_kind,
+                (unsigned) f->native_width, f->flags);
     }
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];

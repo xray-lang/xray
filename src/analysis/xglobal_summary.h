@@ -56,7 +56,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 16,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 17,
 };
 
 typedef enum XgBuildProfile {
@@ -98,6 +98,51 @@ enum {
     XG_CLASS_GENERIC_SKELETON = 1u << 5,
     XG_CLASS_MONOMORPHIZED = 1u << 6,
 };
+
+enum {
+    XG_CLASS_FIELD_STATIC = 1u << 0,
+    XG_CLASS_FIELD_CONST = 1u << 1,
+    XG_CLASS_FIELD_PRIVATE = 1u << 2,
+    XG_CLASS_FIELD_PROTECTED = 1u << 3,
+    XG_CLASS_FIELD_OWNED_REF = 1u << 4,
+    XG_CLASS_FIELD_NULLABLE = 1u << 5,
+};
+
+typedef enum XgClassFieldTypeKind {
+    XG_CLASS_FIELD_TYPE_I8 = 1,
+    XG_CLASS_FIELD_TYPE_U8,
+    XG_CLASS_FIELD_TYPE_I16,
+    XG_CLASS_FIELD_TYPE_U16,
+    XG_CLASS_FIELD_TYPE_I32,
+    XG_CLASS_FIELD_TYPE_U32,
+    XG_CLASS_FIELD_TYPE_I64,
+    XG_CLASS_FIELD_TYPE_U64,
+    XG_CLASS_FIELD_TYPE_ISIZE,
+    XG_CLASS_FIELD_TYPE_USIZE,
+    XG_CLASS_FIELD_TYPE_F32,
+    XG_CLASS_FIELD_TYPE_F64,
+    XG_CLASS_FIELD_TYPE_BOOL,
+    XG_CLASS_FIELD_TYPE_CHAR,
+    XG_CLASS_FIELD_TYPE_STRING,
+    XG_CLASS_FIELD_TYPE_ARRAY,
+    XG_CLASS_FIELD_TYPE_MAP,
+    XG_CLASS_FIELD_TYPE_SET,
+    XG_CLASS_FIELD_TYPE_CLASS,
+    XG_CLASS_FIELD_TYPE_INTERFACE,
+    XG_CLASS_FIELD_TYPE_ENUM,
+    XG_CLASS_FIELD_TYPE_STRUCT,
+    XG_CLASS_FIELD_TYPE_FIXED_UNION,
+    XG_CLASS_FIELD_TYPE_FIXED_ARRAY,
+    XG_CLASS_FIELD_TYPE_OPTIONAL,
+    XG_CLASS_FIELD_TYPE_UNION,
+    XG_CLASS_FIELD_TYPE_FUNCTION,
+    XG_CLASS_FIELD_TYPE_TUPLE,
+    XG_CLASS_FIELD_TYPE_OBJECT,
+    XG_CLASS_FIELD_TYPE_TYPE_PARAM,
+    XG_CLASS_FIELD_TYPE_UNIT,
+    XG_CLASS_FIELD_TYPE_NULL,
+    XG_CLASS_FIELD_TYPE_DYNAMIC,
+} XgClassFieldTypeKind;
 
 enum {
     XG_METHOD_STATIC = 1u << 0,
@@ -609,6 +654,27 @@ typedef struct XgClassSummary {
     uint8_t decl_kind;
 } XgClassSummary;
 
+typedef struct XgClassFieldSummary {
+    XgFieldId field_id;
+    XgModuleId module_id;
+    uint32_t source_node_id;
+    XgClassId owner_class_id;
+    uint32_t name_id;
+    uint32_t type_key;
+    uint32_t target_name_id;
+    XgClassId target_class_id;
+    XgInterfaceId target_interface_id;
+    uint32_t element_type_key;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t fixed_length;
+    uint32_t decl_ordinal;
+    uint32_t instance_slot;
+    uint32_t flags;
+    uint8_t semantic_kind;
+    uint8_t native_width;
+} XgClassFieldSummary;
+
 typedef struct XgMethodSummary {
     XgMethodId method_id;
     XgClassId owner_class_id;
@@ -1039,6 +1105,7 @@ typedef struct XgGlobalEvidence {
 
     XgDeclSummary *decls;
     XgClassSummary *classes;
+    XgClassFieldSummary *class_fields;
     XgMethodSummary *methods;
     XgInterfaceImplSummary *interface_impls;
     XgInterfaceExtendsSummary *interface_extends;
@@ -1074,6 +1141,7 @@ typedef struct XgGlobalEvidence {
 
     uint32_t ndecls;
     uint32_t nclasses;
+    uint32_t nclass_fields;
     uint32_t nmethods;
     uint32_t ninterface_impls;
     uint32_t ninterface_extends;
@@ -1109,6 +1177,7 @@ typedef struct XgGlobalEvidence {
 
     uint32_t decl_cap;
     uint32_t class_cap;
+    uint32_t class_field_cap;
     uint32_t method_cap;
     uint32_t interface_impl_cap;
     uint32_t interface_extend_cap;
@@ -1188,6 +1257,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);
 
 XR_FUNC bool xg_global_evidence_reserve_decls(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_classes(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_class_fields(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_methods(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_impls(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
@@ -1241,6 +1311,8 @@ XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
                                                    const XgDeclSummary *summary);
 XR_FUNC XgClassSummary *xg_global_evidence_add_class(XgGlobalEvidence *evidence,
                                                      const XgClassSummary *summary);
+XR_FUNC XgClassFieldSummary *xg_global_evidence_add_class_field(XgGlobalEvidence *evidence,
+                                                                const XgClassFieldSummary *summary);
 XR_FUNC XgMethodSummary *xg_global_evidence_add_method(XgGlobalEvidence *evidence,
                                                        const XgMethodSummary *summary);
 XR_FUNC XgInterfaceImplSummary *
@@ -1321,6 +1393,8 @@ XR_FUNC XgKeyAccessSummary *xg_global_evidence_add_key_access(XgGlobalEvidence *
                                                               const XgKeyAccessSummary *summary);
 XR_FUNC XgHashEqSummary *xg_global_evidence_add_hash_eq(XgGlobalEvidence *evidence,
                                                         const XgHashEqSummary *summary);
+XR_FUNC const XgClassFieldSummary *
+xg_global_evidence_find_class_field(const XgGlobalEvidence *evidence, XgFieldId field_id);
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id);
 XR_FUNC const XgGenericInstSummary *
@@ -1393,8 +1467,6 @@ XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
                                                const XgEvidenceCacheKey *expected);
 XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
                                                    XgGlobalEvidence *out_evidence);
-XR_FUNC bool xg_global_evidence_reuse_import_summary(XgGlobalEvidence *evidence,
-                                                     const char *payload_text);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H

@@ -54,4 +54,4 @@ sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evi
 sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/Bytes encoding evidence lowers into verified encoding plans.
 sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tests/aot/filetests/link|Bytes-to-string encoding evidence fixes the validate-once action in plan output.
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, and body summary payloads materialize back into validated summary rows.
-cross_package_summary_reuse|covered|cache_payload_reuses_cross_package_export_summaries|tests/unit/analysis|Materialized import payloads append cross-package summary rows and update imported-summary cache keys.
+cross_package_summary_reuse|gap|payload_v2|src/analysis|Producer-precomputable request keys and complete immutable package evidence reuse are not implemented yet.

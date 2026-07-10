@@ -90,6 +90,7 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
 static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     XgDeclSummary decl = {0};
     XgClassSummary cls = {0};
+    XgClassFieldSummary class_field = {0};
     XgMethodSummary method = {0};
     XgInterfaceImplSummary impl = {0};
     XgInterfaceExtendsSummary edge = {0};
@@ -114,6 +115,8 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     cls.decl_id = decl.decl_id;
     cls.name_id = decl.name_id;
     cls.flags = XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL;
+    cls.field_start = 1;
+    cls.field_count = 1;
     cls.method_start = 30;
     cls.method_count = 1;
     cls.interface_start = 40;
@@ -125,6 +128,20 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     cls.generic_type_arg_count = 1;
     cls.decl_kind = XG_DECL_CLASS;
     ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &cls));
+
+    class_field.field_id = 1;
+    class_field.module_id = 7;
+    class_field.source_node_id = 10020;
+    class_field.owner_class_id = cls.class_id;
+    class_field.name_id = xg_name_id("item");
+    class_field.type_key = 940;
+    class_field.target_name_id = cls.name_id;
+    class_field.target_class_id = cls.class_id;
+    class_field.decl_ordinal = 0;
+    class_field.instance_slot = 0;
+    class_field.flags = XG_CLASS_FIELD_OWNED_REF;
+    class_field.semantic_kind = XG_CLASS_FIELD_TYPE_CLASS;
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(ev, &class_field));
 
     method.method_id = 30;
     method.owner_class_id = cls.class_id;
@@ -177,9 +194,9 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     field.field_id = 70;
     field.derive_id = derive.derive_id;
     field.field_ordinal = 0;
-    field.name_id = xg_name_id("item");
-    field.type_key = 940;
-    field.source_field_id = 71;
+    field.name_id = class_field.name_id;
+    field.type_key = class_field.type_key;
+    field.source_field_id = class_field.field_id;
     field.flags = XG_DERIVED_FIELD_PUBLIC;
     ASSERT_NOT_NULL(xg_global_evidence_add_derived_field(ev, &field));
 
@@ -293,6 +310,7 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
     ASSERT_EQ_UINT(materialized.ndecls, 1);
     ASSERT_EQ_UINT(materialized.nclasses, 1);
+    ASSERT_EQ_UINT(materialized.nclass_fields, 1);
     ASSERT_EQ_UINT(materialized.nmethods, 1);
     ASSERT_EQ_UINT(materialized.ninterface_impls, 1);
     ASSERT_EQ_UINT(materialized.ninterface_extends, 1);
@@ -301,93 +319,20 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT_EQ_UINT(materialized.nderived_fields, 1);
     ASSERT_EQ_UINT(materialized.nderived_methods, 1);
     ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_count, 1);
+    ASSERT_EQ_UINT(materialized.classes[0].field_start, 1);
+    ASSERT_EQ_UINT(materialized.classes[0].field_count, 1);
+    ASSERT_EQ_UINT(materialized.class_fields[0].field_id, 1);
+    ASSERT_EQ_UINT(materialized.class_fields[0].source_node_id, 10020);
+    ASSERT_EQ_UINT(materialized.class_fields[0].owner_class_id, 20);
+    ASSERT_EQ_UINT(materialized.class_fields[0].target_class_id, 20);
     ASSERT_EQ_UINT(materialized.methods[0].root_method_id, 30);
     ASSERT_EQ_UINT(materialized.methods[0].source_node_id, 10030);
     ASSERT_EQ_UINT(materialized.derives[0].derive_hash, UINT64_C(0x8888));
+    ASSERT_EQ_UINT(materialized.derived_fields[0].source_field_id, 1);
 
     xg_global_evidence_free(&materialized);
     xr_free(payload);
     xg_global_evidence_free(&ev);
-}
-
-TEST(cache_payload_reuses_cross_package_export_summaries) {
-    XgGlobalEvidence import_ev = {0};
-    XgGlobalEvidence changed_import = {0};
-    XgGlobalEvidence consumer_a = {0};
-    XgGlobalEvidence consumer_b = {0};
-    XgGlobalEvidence consumer_changed = {0};
-    XgBuildKey consumer_key = {0};
-    XgEvidenceCacheKey consumer_a_key;
-    XgEvidenceCacheKey consumer_changed_key;
-    char *semantic_payload = NULL;
-    char *body_payload = NULL;
-    char *changed_semantic_payload = NULL;
-    uint64_t hash_after_semantic = 0;
-
-    import_ev.key.module_id = 7;
-    import_ev.key.profile = XG_BUILD_NATIVE_RELEASE;
-    import_ev.key.compiler_semver_hash = UINT64_C(0x1111);
-    import_ev.key.profile_hash = UINT64_C(0x2222);
-    import_ev.key.imported_summary_hash = UINT64_C(0x3333);
-    add_sample_body_summary(&import_ev);
-    add_sample_semantic_summary(&import_ev);
-
-    changed_import.key = import_ev.key;
-    add_sample_body_summary(&changed_import);
-    add_sample_semantic_summary(&changed_import);
-    changed_import.decls[0].signature_key++;
-
-    semantic_payload =
-        xg_global_evidence_cache_payload_dump(&import_ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
-    body_payload =
-        xg_global_evidence_cache_payload_dump(&import_ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
-    changed_semantic_payload =
-        xg_global_evidence_cache_payload_dump(&changed_import, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
-    ASSERT_NOT_NULL(semantic_payload);
-    ASSERT_NOT_NULL(body_payload);
-    ASSERT_NOT_NULL(changed_semantic_payload);
-
-    consumer_key.module_id = 99;
-    consumer_key.profile = XG_BUILD_NATIVE_RELEASE;
-    consumer_key.compiler_semver_hash = UINT64_C(0xaaaa);
-    consumer_key.profile_hash = UINT64_C(0xbbbb);
-    xg_global_evidence_init(&consumer_a, consumer_key);
-    xg_global_evidence_init(&consumer_b, consumer_key);
-    xg_global_evidence_init(&consumer_changed, consumer_key);
-
-    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_a, semantic_payload));
-    hash_after_semantic = consumer_a.key.imported_summary_hash;
-    ASSERT(hash_after_semantic != 0);
-    ASSERT_EQ_UINT(consumer_a.ndecls, 2);
-    ASSERT_EQ_UINT(consumer_a.nclasses, 1);
-    ASSERT_EQ_UINT(consumer_a.nderives, 1);
-    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_a, body_payload));
-    ASSERT(consumer_a.key.imported_summary_hash != hash_after_semantic);
-    ASSERT_EQ_UINT(consumer_a.nbodies, 1);
-    ASSERT_EQ_UINT(consumer_a.ncallsites, 1);
-    ASSERT_EQ_UINT(consumer_a.nlink_deps, 1);
-    ASSERT_EQ_UINT(consumer_a.ngeneric_insts, 1);
-
-    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_b, semantic_payload));
-    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_b, body_payload));
-    ASSERT_EQ_UINT(consumer_b.key.imported_summary_hash, consumer_a.key.imported_summary_hash);
-
-    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_changed, changed_semantic_payload));
-    ASSERT(xg_global_evidence_reuse_import_summary(&consumer_changed, body_payload));
-    ASSERT(consumer_changed.key.imported_summary_hash != consumer_a.key.imported_summary_hash);
-    consumer_a_key = xg_global_evidence_cache_key(&consumer_a, XG_EVIDENCE_CACHE_DECLARATIONS);
-    consumer_changed_key =
-        xg_global_evidence_cache_key(&consumer_changed, XG_EVIDENCE_CACHE_DECLARATIONS);
-    ASSERT(!xg_evidence_cache_key_matches(&consumer_a_key, &consumer_changed_key));
-
-    xr_free(semantic_payload);
-    xr_free(body_payload);
-    xr_free(changed_semantic_payload);
-    xg_global_evidence_free(&consumer_a);
-    xg_global_evidence_free(&consumer_b);
-    xg_global_evidence_free(&consumer_changed);
-    xg_global_evidence_free(&import_ev);
-    xg_global_evidence_free(&changed_import);
 }
 
 TEST(cache_payload_parse_rejects_body_drift) {
@@ -444,7 +389,6 @@ RUN_TEST_SUITE("Global Evidence Cache Payload");
 RUN_TEST(cache_payload_parse_exposes_validated_body);
 RUN_TEST(cache_payload_materializes_declaration_summary);
 RUN_TEST(cache_payload_materializes_semantic_graph_summary);
-RUN_TEST(cache_payload_reuses_cross_package_export_summaries);
 RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_materialize_rejects_global_count_only_payload);
