@@ -10942,6 +10942,76 @@ TEST(global_evidence_producer_propagates_json_shape_through_closure_capture) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_json_bridge_shape_through_field_and_container_receivers) {
+    setup_parser_session();
+    const char *source = "type User = { name: string, age: int }\n"
+                         "class Holder {\n"
+                         "    user: User\n"
+                         "    constructor(user: User) {\n"
+                         "        this.user = user\n"
+                         "    }\n"
+                         "    readFieldJson() -> int {\n"
+                         "        return this.user.age\n"
+                         "    }\n"
+                         "}\n"
+                         "fn readContainerJson(users: Array<User>) -> int {\n"
+                         "    return users[0].age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *field_reader = evidence_find_body_by_name(&ev, "readFieldJson");
+    const XgBodySummary *container_reader = evidence_find_body_by_name(&ev, "readContainerJson");
+    ASSERT_NOT_NULL(field_reader);
+    ASSERT_NOT_NULL(container_reader);
+    ASSERT_EQ_UINT(ev.njson_shapes, 1);
+    ASSERT_EQ_UINT(ev.njson_fields, 2);
+    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+    bool saw_field = false;
+    bool saw_container = false;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+        ASSERT_EQ_UINT(access->receiver_shape_id, ev.json_shapes[0].json_shape_id);
+        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(access->field_ordinal, 1);
+        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == field_reader->func_id)
+            saw_field = true;
+        if (access->owner_func_id == container_reader->func_id)
+            saw_container = true;
+    }
+    ASSERT_TRUE(saw_field);
+    ASSERT_TRUE(saw_container);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.njson_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.json_access_plans[i].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(bundle.json_access_plans[i].field_ordinal, 1);
+    }
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_propagates_record_shape_through_closure_capture) {
     setup_parser_session();
     const char *source = "fn readCapturedRecord() -> int {\n"
@@ -12289,6 +12359,8 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_direct_return_receiver);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_return_initialized_local);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_closure_capture);
+RUN_TEST(
+    global_evidence_producer_propagates_json_bridge_shape_through_field_and_container_receivers);
 RUN_TEST(global_evidence_producer_propagates_record_shape_through_closure_capture);
 RUN_TEST(global_evidence_producer_propagates_record_shape_through_return_receivers);
 RUN_TEST(global_evidence_producer_propagates_record_shape_through_typed_param);
