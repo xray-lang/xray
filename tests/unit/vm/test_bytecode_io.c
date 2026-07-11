@@ -15,6 +15,7 @@
 #include "runtime/xisolate_api.h"
 #include "runtime/class/xclass.h"
 #include "runtime/class/xclass_descriptor.h"
+#include "runtime/class/xenum.h"
 #include "runtime/class/xinstance.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
@@ -268,6 +269,65 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     xray_vm_delete(writer);
 }
 
+TEST(bytecode_roundtrips_enum_type_constants) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+
+    char *members[] = {"Ok", "Err"};
+    XrEnumType *enum_type = xr_enum_type_new(writer, "BytecodeResult", members, 2);
+    ASSERT_NOT_NULL(enum_type);
+    int payload_counts[] = {0, 1};
+    ASSERT_TRUE(xr_enum_type_set_adt_payloads(enum_type, payload_counts, 2));
+    enum_type->derive_flags = XR_DERIVE_INSPECT | XR_DERIVE_EQ;
+
+    int kidx = xr_valuearray_add(&proto->constants, XR_FROM_PTR(enum_type));
+    ASSERT_EQ_INT(kidx, 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    proto->maxstacksize = 1;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_LOADK, 0, kidx), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
+
+    XrValue roundtrip_val = PROTO_CONSTANT(roundtrip, 0);
+    ASSERT_TRUE(XR_IS_ENUM_TYPE(roundtrip_val));
+    XrEnumType *roundtrip_enum = XR_TO_ENUM_TYPE(roundtrip_val);
+    ASSERT_NOT_NULL(roundtrip_enum);
+    ASSERT_STR_EQ(roundtrip_enum->name, "BytecodeResult");
+    ASSERT_EQ_UINT(roundtrip_enum->member_count, 2);
+    ASSERT_STR_EQ(xr_enum_type_member_name(roundtrip_enum, 0), "Ok");
+    ASSERT_STR_EQ(xr_enum_type_member_name(roundtrip_enum, 1), "Err");
+    ASSERT_EQ_INT(xr_enum_type_payload_count(roundtrip_enum, 0), 0);
+    ASSERT_EQ_INT(xr_enum_type_payload_count(roundtrip_enum, 1), 1);
+    ASSERT_EQ_UINT(roundtrip_enum->derive_flags, XR_DERIVE_INSPECT | XR_DERIVE_EQ);
+
+    XrSymbolTable *reader_symbols = (XrSymbolTable *) xr_isolate_get_symbol_table(reader);
+    ASSERT_NOT_NULL(reader_symbols);
+    SymbolId err_sym = xr_symbol_lookup_in_table(reader_symbols, "Err");
+    ASSERT_TRUE(err_sym > 0);
+    ASSERT_EQ_INT(xr_enum_type_find_member_index_by_symbol(roundtrip_enum, err_sym), 1);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
 TEST(bytecode_roundtrips_u16_upvalue_index) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
@@ -495,6 +555,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
+    RUN_TEST(bytecode_roundtrips_enum_type_constants);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_declared_shared_count);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);
