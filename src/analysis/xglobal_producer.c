@@ -3497,23 +3497,31 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
     return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
 }
 
-static const ObjectLiteralNode *producer_find_class_field_json_initializer(const XgProducer *p,
-                                                                           XgClassId class_id,
-                                                                           uint32_t field_name_id) {
+static const ClassDeclNode *producer_lookup_class_decl_node(const XgProducer *p,
+                                                            XgClassId class_id) {
     const XgClassNameRow *row;
-    const ClassDeclNode *cls;
-    if (!p || class_id == XG_NO_ID || field_name_id == 0)
+    if (!p || class_id == XG_NO_ID)
         return NULL;
     row = producer_lookup_class_row_by_id(p, class_id);
     if (!row || !row->class_node)
         return NULL;
     if (row->class_node->type == AST_CLASS_DECL)
-        cls = &row->class_node->as.class_decl;
-    else if (row->class_node->type == AST_STRUCT_DECL)
-        cls = &row->class_node->as.struct_decl;
-    else if (row->class_node->type == AST_UNION_DECL)
-        cls = &row->class_node->as.union_decl;
-    else
+        return &row->class_node->as.class_decl;
+    if (row->class_node->type == AST_STRUCT_DECL)
+        return &row->class_node->as.struct_decl;
+    if (row->class_node->type == AST_UNION_DECL)
+        return &row->class_node->as.union_decl;
+    return NULL;
+}
+
+static const ObjectLiteralNode *producer_find_class_field_json_initializer(const XgProducer *p,
+                                                                           XgClassId class_id,
+                                                                           uint32_t field_name_id) {
+    const ClassDeclNode *cls;
+    if (!p || class_id == XG_NO_ID || field_name_id == 0)
+        return NULL;
+    cls = producer_lookup_class_decl_node(p, class_id);
+    if (!cls)
         return NULL;
     for (int i = 0; i < cls->field_count; i++) {
         const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
@@ -3527,6 +3535,220 @@ static const ObjectLiteralNode *producer_find_class_field_json_initializer(const
         return body_static_object_literal(field->initializer);
     }
     return NULL;
+}
+
+typedef struct XgJsonCtorFieldAssignScan {
+    uint32_t field_name_id;
+    const ObjectLiteralNode *literal;
+    uint64_t shape_hash;
+    int field_count;
+    bool saw_assignment;
+    bool failed;
+} XgJsonCtorFieldAssignScan;
+
+static bool body_expr_is_this(const AstNode *expr) {
+    const AstNode *receiver = body_json_receiver_unwrap(expr);
+    return receiver && receiver->type == AST_THIS_EXPR;
+}
+
+static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
+                                                     const AstNode *node);
+
+static bool ctor_scan_node_list_for_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
+                                                          AstNode *const *nodes, int count) {
+    if (!scan || scan->failed)
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (!ctor_scan_node_for_json_field_assignment(scan, nodes ? nodes[i] : NULL))
+            return false;
+    }
+    return true;
+}
+
+static bool ctor_scan_record_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
+                                                   const ObjectLiteralNode *literal) {
+    uint64_t shape_hash;
+    if (!scan || !literal)
+        return false;
+    shape_hash = body_json_shape_hash(literal);
+    if (!scan->saw_assignment) {
+        scan->literal = literal;
+        scan->shape_hash = shape_hash;
+        scan->field_count = literal->count;
+        scan->saw_assignment = true;
+        return true;
+    }
+    if (scan->field_count != literal->count || scan->shape_hash != shape_hash) {
+        scan->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool ctor_scan_member_set_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
+                                                       const AstNode *node) {
+    const ObjectLiteralNode *literal;
+    if (!scan || !node || node->type != AST_MEMBER_SET)
+        return true;
+    if (!node->as.member_set.member ||
+        hash_name32(node->as.member_set.member) != scan->field_name_id ||
+        !body_expr_is_this(node->as.member_set.object)) {
+        return ctor_scan_node_for_json_field_assignment(scan, node->as.member_set.object) &&
+               ctor_scan_node_for_json_field_assignment(scan, node->as.member_set.value);
+    }
+    literal = body_static_object_literal(node->as.member_set.value);
+    if (!literal) {
+        scan->failed = true;
+        return false;
+    }
+    return ctor_scan_record_json_field_assignment(scan, literal);
+}
+
+static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
+                                                     const AstNode *node) {
+    if (!scan || scan->failed)
+        return false;
+    if (!node)
+        return true;
+    switch (node->type) {
+        case AST_PROGRAM:
+            return ctor_scan_node_list_for_json_field_assignment(scan, node->as.program.statements,
+                                                                 node->as.program.count);
+        case AST_BLOCK:
+            return ctor_scan_node_list_for_json_field_assignment(scan, node->as.block.statements,
+                                                                 node->as.block.count);
+        case AST_EXPR_STMT:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.expr_stmt);
+        case AST_MEMBER_SET:
+            return ctor_scan_member_set_json_field_assignment(scan, node);
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.var_decl.initializer);
+        case AST_ASSIGNMENT:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.assignment.value);
+        case AST_COMPOUND_ASSIGNMENT:
+            return ctor_scan_node_for_json_field_assignment(scan,
+                                                            node->as.compound_assignment.object) &&
+                   ctor_scan_node_for_json_field_assignment(scan,
+                                                            node->as.compound_assignment.value);
+        case AST_RETURN_STMT:
+            return ctor_scan_node_list_for_json_field_assignment(scan, node->as.return_stmt.values,
+                                                                 node->as.return_stmt.value_count);
+        case AST_CALL_EXPR:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.call_expr.callee) &&
+                   ctor_scan_node_list_for_json_field_assignment(scan, node->as.call_expr.arguments,
+                                                                 node->as.call_expr.arg_count);
+        case AST_MEMBER_ACCESS:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.member_access.object);
+        case AST_INDEX_GET:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.index_get.array) &&
+                   ctor_scan_node_for_json_field_assignment(scan, node->as.index_get.index);
+        case AST_INDEX_SET:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.index_set.array) &&
+                   ctor_scan_node_for_json_field_assignment(scan, node->as.index_set.index) &&
+                   ctor_scan_node_for_json_field_assignment(scan, node->as.index_set.value);
+        case AST_ARRAY_LITERAL:
+            return ctor_scan_node_list_for_json_field_assignment(
+                       scan, node->as.array_literal.elements, node->as.array_literal.count) &&
+                   ctor_scan_node_for_json_field_assignment(scan,
+                                                            node->as.array_literal.repeat_value) &&
+                   ctor_scan_node_for_json_field_assignment(scan,
+                                                            node->as.array_literal.repeat_count);
+        case AST_TUPLE_LITERAL:
+            return ctor_scan_node_list_for_json_field_assignment(
+                scan, node->as.tuple_literal.elements, node->as.tuple_literal.count);
+        case AST_SPREAD_EXPR:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.spread_expr.expr);
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++) {
+                if (node->as.object_literal.computed && node->as.object_literal.computed[i] &&
+                    !ctor_scan_node_for_json_field_assignment(
+                        scan,
+                        node->as.object_literal.keys ? node->as.object_literal.keys[i] : NULL))
+                    return false;
+                if (!ctor_scan_node_for_json_field_assignment(
+                        scan,
+                        node->as.object_literal.values ? node->as.object_literal.values[i] : NULL))
+                    return false;
+            }
+            return true;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                if (!ctor_scan_node_for_json_field_assignment(
+                        scan, node->as.map_literal.keys ? node->as.map_literal.keys[i] : NULL) ||
+                    !ctor_scan_node_for_json_field_assignment(
+                        scan, node->as.map_literal.values ? node->as.map_literal.values[i] : NULL))
+                    return false;
+            }
+            return true;
+        case AST_SET_LITERAL:
+            return ctor_scan_node_list_for_json_field_assignment(
+                scan, node->as.set_literal.elements, node->as.set_literal.count);
+        case AST_STRUCT_LITERAL:
+            return ctor_scan_node_list_for_json_field_assignment(
+                scan, node->as.struct_literal.field_values, node->as.struct_literal.field_count);
+        case AST_GROUPING:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.grouping);
+        case AST_MOVE_EXPR:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.unary.operand);
+        case AST_IF_STMT:
+        case AST_WHILE_STMT:
+        case AST_FOR_STMT:
+        case AST_FOR_IN_STMT:
+        case AST_TRY_CATCH:
+        case AST_MATCH_EXPR:
+        case AST_SELECT_STMT:
+        case AST_SCOPE_BLOCK:
+            scan->failed = true;
+            return false;
+        default:
+            return true;
+    }
+}
+
+static const ObjectLiteralNode *
+producer_find_class_field_json_constructor_assignment(const XgProducer *p, XgClassId class_id,
+                                                      uint32_t field_name_id) {
+    const ClassDeclNode *cls;
+    const ObjectLiteralNode *literal = NULL;
+    uint64_t shape_hash = 0;
+    int field_count = 0;
+    bool saw_constructor = false;
+    if (!p || class_id == XG_NO_ID || field_name_id == 0)
+        return NULL;
+    cls = producer_lookup_class_decl_node(p, class_id);
+    if (!cls)
+        return NULL;
+    for (int i = 0; i < cls->method_count; i++) {
+        const AstNode *method_node = cls->methods ? cls->methods[i] : NULL;
+        const MethodDeclNode *method;
+        XgJsonCtorFieldAssignScan scan;
+        if (!method_node || method_node->type != AST_METHOD_DECL)
+            continue;
+        method = &method_node->as.method_decl;
+        if (!method->is_constructor || method->is_static || method->is_static_constructor)
+            continue;
+        saw_constructor = true;
+        memset(&scan, 0, sizeof(scan));
+        scan.field_name_id = field_name_id;
+        if (!method->body || !ctor_scan_node_for_json_field_assignment(&scan, method->body) ||
+            !scan.saw_assignment || scan.failed)
+            return NULL;
+        if (!literal) {
+            literal = scan.literal;
+            shape_hash = scan.shape_hash;
+            field_count = scan.field_count;
+            continue;
+        }
+        if (field_count != scan.field_count || shape_hash != scan.shape_hash)
+            return NULL;
+    }
+    return saw_constructor ? literal : NULL;
 }
 
 static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
@@ -3547,6 +3769,9 @@ static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const
         return shape_id;
     initializer = producer_find_class_field_json_initializer(bc->producer, field->owner_class_id,
                                                              field->name_id);
+    if (!initializer)
+        initializer = producer_find_class_field_json_constructor_assignment(
+            bc->producer, field->owner_class_id, field->name_id);
     if (!initializer)
         return XG_NO_ID;
     return body_add_json_shape_for_literal(bc, initializer, (uint32_t) receiver->line,
