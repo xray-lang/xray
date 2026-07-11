@@ -1225,6 +1225,27 @@ fn _requestHeaders(options: Json) -> Json {
     return raw
 }
 
+fn _headersHave(headers: Json, name: string) -> bool {
+    if (headers == null) { return false }
+    for (key in headers) {
+        if (_headerKeyEquals(string(key), name)) { return true }
+    }
+    return false
+}
+
+fn _requestWireHeaders(headers: Json) -> Json {
+    if (_headersHave(headers, "Accept-Encoding")) { return headers }
+    var out: Json = {}
+    if (headers != null) {
+        for (key in headers) {
+            var name = string(key)
+            out[name] = Json.get(headers, name, null)
+        }
+    }
+    out["Accept-Encoding"] = "identity"
+    return out
+}
+
 fn _headersLocation(headers: Json) -> string? {
     if (headers == null) { return null }
     for (key in headers) {
@@ -1272,7 +1293,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Json, body: str
     var deadline = time.monotonic() + timeoutMs
     net.setDeadline(conn!, deadline)
 
-    var request = requestText(method, url.path, headers, body, _httpRequestHostHeader(url),
+    var request = requestText(method, url.path, _requestWireHeaders(headers), body, _httpRequestHostHeader(url),
                               stripSensitive)
     if (request == null) {
         net.close(conn!)
