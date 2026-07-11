@@ -5124,6 +5124,63 @@ static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
            package->nhash_eqs;
 }
 
+static bool module_id_existed_before_import(const XgGlobalEvidence *target, XgModuleId module_id,
+                                            uint32_t original_module_count) {
+    if (!target)
+        return false;
+    for (uint32_t i = 0; i < target->nmodules && i < original_module_count; i++) {
+        if (target->modules[i].module_id == module_id)
+            return true;
+    }
+    return false;
+}
+
+static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModuleId module_id) {
+    if (!target || module_id == XG_NO_ID)
+        return false;
+#define HAS_MODULE_ROWS(ROWS, COUNT)                                                               \
+    do {                                                                                           \
+        for (uint32_t i = 0; i < (target)->COUNT; i++) {                                           \
+            if ((target)->ROWS[i].module_id == module_id)                                          \
+                return true;                                                                       \
+        }                                                                                          \
+    } while (0)
+    HAS_MODULE_ROWS(decls, ndecls);
+    HAS_MODULE_ROWS(classes, nclasses);
+    HAS_MODULE_ROWS(class_fields, nclass_fields);
+    HAS_MODULE_ROWS(bodies, nbodies);
+    HAS_MODULE_ROWS(link_deps, nlink_deps);
+    HAS_MODULE_ROWS(generic_insts, ngeneric_insts);
+    HAS_MODULE_ROWS(generic_body_uses, ngeneric_body_uses);
+    HAS_MODULE_ROWS(generic_storages, ngeneric_storages);
+    HAS_MODULE_ROWS(generic_code_sizes, ngeneric_code_sizes);
+    HAS_MODULE_ROWS(derives, nderives);
+    HAS_MODULE_ROWS(json_shapes, njson_shapes);
+    HAS_MODULE_ROWS(json_accesses, njson_accesses);
+    HAS_MODULE_ROWS(json_codecs, njson_codecs);
+    HAS_MODULE_ROWS(record_shapes, nrecord_shapes);
+    HAS_MODULE_ROWS(record_accesses, nrecord_accesses);
+    HAS_MODULE_ROWS(record_merges, nrecord_merges);
+    HAS_MODULE_ROWS(options_bags, noptions_bags);
+    HAS_MODULE_ROWS(map_shapes, nmap_shapes);
+#undef HAS_MODULE_ROWS
+    return false;
+}
+
+static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence *target,
+                                                         const XgGlobalEvidence *package,
+                                                         const XgModuleImportMap *maps,
+                                                         uint32_t original_module_count) {
+    if (!target || !package || !maps || package_non_module_row_count(package) == 0)
+        return false;
+    for (uint32_t i = 0; i < package->nmodules; i++) {
+        if (module_id_existed_before_import(target, maps[i].to, original_module_count) &&
+            target_has_module_owned_rows(target, maps[i].to))
+            return true;
+    }
+    return false;
+}
+
 XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
                                                        const char *payload,
                                                        XgEvidencePackageImportReport *out_report) {
@@ -5132,6 +5189,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     XgPackageImportOffsets offsets;
     XgModuleImportMap *module_maps = NULL;
     XgEvidencePackageImportReport report;
+    uint32_t original_module_count;
     bool ok = false;
     if (out_report)
         memset(out_report, 0, sizeof(*out_report));
@@ -5149,7 +5207,11 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     if (!module_maps)
         goto done;
     collect_import_offsets(target, &offsets);
+    original_module_count = target->nmodules;
     if (!build_module_import_map(target, &package, module_maps, &report.modules_added))
+        goto done;
+    if (package_import_would_duplicate_existing_rows(target, &package, module_maps,
+                                                     original_module_count))
         goto done;
     report.modules_remapped = package.nmodules;
 
