@@ -3416,6 +3416,60 @@ static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const
     return body_add_json_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
 }
 
+static const AstNode *body_json_receiver_unwrap(const AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_MOVE_EXPR:
+                expr = expr->as.move_expr.expr;
+                break;
+            case AST_UNSAFE_EXPR:
+                expr = expr->as.unsafe_expr.operand;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return expr;
+        }
+    }
+    return NULL;
+}
+
+static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *bc,
+                                                                uint32_t type_key) {
+    const XgJsonShapeSummary *shape =
+        body_find_json_shape_for_type_key(bc, type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+    return shape ? shape->json_shape_id : XG_NO_ID;
+}
+
+static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr) {
+    XgLocalType *local;
+    const AstNode *receiver = body_json_receiver_unwrap(expr);
+    if (!bc || !receiver || receiver->type != AST_INDEX_GET)
+        return XG_NO_ID;
+    local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
+    if (!local || local->sequence_elem_type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
+}
+
+static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
+    const AstNode *receiver = body_json_receiver_unwrap(expr);
+    XgClassId receiver_class;
+    const XgClassFieldSummary *field;
+    if (!bc || !receiver || receiver->type != AST_MEMBER_ACCESS || !receiver->as.member_access.name)
+        return XG_NO_ID;
+    receiver_class = body_resolve_expr_class(bc, receiver->as.member_access.object);
+    field = body_find_class_field_in_hierarchy(bc, receiver_class,
+                                               hash_name32(receiver->as.member_access.name));
+    if (!field || field->type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_json_shape_for_type_key(bc, field->type_key);
+}
+
 static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(XgGlobalEvidence *evidence,
                                                                       XgModuleId module_id,
                                                                       const TypeAliasNode *alias,
@@ -3500,7 +3554,13 @@ static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *ex
     XgJsonShapeId shape_id = body_lookup_local_json_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
-    return body_lookup_call_json_return_shape(bc, expr, out_literal);
+    shape_id = body_lookup_call_json_return_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_sequence_json_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    return body_lookup_class_field_json_shape(bc, expr);
 }
 
 static int body_json_shape_static_field_index(XgBodyCollect *bc, XgJsonShapeId shape_id,
