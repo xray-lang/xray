@@ -55,5 +55,7 @@ check_output "vm_cluster_empty_stdlib" "true" \
 check_backend_diff "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr"
 check_backend_diff "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr"
 check_backend_diff "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr"
+check_backend_diff "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr"
+check_backend_diff "tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr"
 
 echo "stdlib embedded layout tests passed"
