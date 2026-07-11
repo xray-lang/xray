@@ -1363,14 +1363,24 @@ static XiValue *lower_parallel_module_intrinsic_or_error(XiLower *l, AstNode *no
     if (parallel_intrinsic || (l && l->had_error) || !lower_parallel_is_batch_method(method))
         return parallel_intrinsic;
 
-    int line = node ? node->line : -1;
-    fprintf(stderr,
-            "[LOWER] error: parallel.%s must lower to XI_PAR_*; stdlib reference body is "
-            "bootstrap-only (requires a Range literal, inline lambda callback(s), and "
-            "literal parallel.Options(...)) at line %d\n",
-            method, line);
     if (l)
         l->had_error = true;
+    if (strcmp(method, "mapInto") == 0) {
+        fprintf(stderr,
+                "error: parallel.mapInto expected (Range, output, inline (item) lambda[, "
+                "literal parallel.Options(...)]) at line %d\n",
+                node ? node->line : -1);
+    } else if (strcmp(method, "reduce") == 0) {
+        fprintf(stderr,
+                "error: parallel.reduce expected (Range, initial, inline (item) body, inline "
+                "combine lambda[, literal parallel.Options(...)]) at line %d\n",
+                node ? node->line : -1);
+    } else {
+        fprintf(stderr,
+                "error: parallel.%s expected (Range, inline (item) lambda[, literal "
+                "parallel.Options(...)]) at line %d\n",
+                method, node ? node->line : -1);
+    }
     return NULL;
 }
 
