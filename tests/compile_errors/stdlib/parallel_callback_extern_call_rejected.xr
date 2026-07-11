@@ -1,0 +1,8 @@
+import parallel
+
+@extern("C") fn abs(x: int32) -> int32
+
+parallel.forEach(0..4, (i) -> {
+    var value = unsafe { abs(-1) }
+    print(value)
+}, parallel.Options(2))
