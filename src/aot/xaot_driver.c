@@ -257,6 +257,85 @@ static bool xaot_reserve_discovered_package_payloads(XaotDiscoveredPackagePayloa
     return true;
 }
 
+static bool xaot_reserve_module_summaries(XgModuleSummary **items, uint32_t *cap, uint32_t needed) {
+    uint32_t new_cap;
+    XgModuleSummary *new_items;
+    if (!items || !cap)
+        return false;
+    if (*cap >= needed)
+        return true;
+    new_cap = *cap ? *cap : 4;
+    while (new_cap < needed) {
+        if (new_cap > UINT32_MAX / 2)
+            return false;
+        new_cap *= 2;
+    }
+    new_items = (XgModuleSummary *) xr_realloc(*items, (size_t) new_cap * sizeof(**items));
+    if (!new_items)
+        return false;
+    memset(new_items + *cap, 0, (size_t) (new_cap - *cap) * sizeof(*new_items));
+    *items = new_items;
+    *cap = new_cap;
+    return true;
+}
+
+static bool xaot_module_identity_seen(const XgModuleSummary *modules, uint32_t count,
+                                      const XgModuleSummary *candidate) {
+    if (!modules || !candidate)
+        return false;
+    for (uint32_t i = 0; i < count; i++) {
+        if (xg_module_summary_identity_matches(&modules[i], candidate))
+            return true;
+    }
+    return false;
+}
+
+static bool xaot_collect_imported_package_modules_from_payloads(const char *const *payloads,
+                                                                uint32_t payload_count,
+                                                                XgModuleSummary **out_modules,
+                                                                uint32_t *out_module_count) {
+    XgModuleSummary *modules = NULL;
+    uint32_t count = 0;
+    uint32_t cap = 0;
+    bool ok = false;
+    if (out_modules)
+        *out_modules = NULL;
+    if (out_module_count)
+        *out_module_count = 0;
+    if (!out_modules || !out_module_count || (payload_count > 0 && !payloads))
+        return false;
+    for (uint32_t i = 0; i < payload_count; i++) {
+        XgEvidenceCachePayloadInfo info;
+        XgGlobalEvidence package;
+        if (!payloads[i] || !xg_evidence_cache_payload_parse(payloads[i], &info) ||
+            info.phase != XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE)
+            goto done;
+        memset(&package, 0, sizeof(package));
+        if (!xg_evidence_cache_payload_materialize(payloads[i], &package)) {
+            xg_global_evidence_free(&package);
+            goto done;
+        }
+        for (uint32_t j = 0; j < package.nmodules; j++) {
+            if (!xg_module_summary_identity_complete(&package.modules[j]) ||
+                xaot_module_identity_seen(modules, count, &package.modules[j]) ||
+                !xaot_reserve_module_summaries(&modules, &cap, count + 1)) {
+                xg_global_evidence_free(&package);
+                goto done;
+            }
+            modules[count++] = package.modules[j];
+        }
+        xg_global_evidence_free(&package);
+    }
+    *out_modules = modules;
+    *out_module_count = count;
+    modules = NULL;
+    ok = true;
+
+done:
+    xr_free(modules);
+    return ok;
+}
+
 static int xaot_discovered_package_payload_compare(const XaotDiscoveredPackagePayload *a,
                                                    const XaotDiscoveredPackagePayload *b) {
     const char *ap = a && a->path ? a->path : "";
@@ -1124,6 +1203,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XaotDiscoveredPackagePayload *discovered_imported_summary_payloads = NULL;
     uint32_t discovered_imported_summary_payload_count = 0;
     const char **discovered_imported_summary_payload_view = NULL;
+    XgModuleSummary *imported_summary_modules = NULL;
+    uint32_t imported_summary_module_count = 0;
     XiCgenTypeNameProfile type_name_profile;
     int nmodules = 0;
     int entry_index = -1;
@@ -1229,12 +1310,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         fprintf(stderr, "Error: invalid imported package summary payload set\n");
         goto fail_free_graph;
     }
-    xr_free(discovered_imported_summary_payload_view);
-    discovered_imported_summary_payload_view = NULL;
-    xaot_free_discovered_package_payloads(discovered_imported_summary_payloads,
-                                          discovered_imported_summary_payload_count);
-    discovered_imported_summary_payloads = NULL;
-    discovered_imported_summary_payload_count = 0;
+    if (imported_summary_payload_count > 0 &&
+        !xaot_collect_imported_package_modules_from_payloads(
+            imported_summary_payloads, imported_summary_payload_count, &imported_summary_modules,
+            &imported_summary_module_count)) {
+        fprintf(stderr, "Error: invalid imported package module identities\n");
+        goto fail_free_graph;
+    }
     if (evidence_cache_dir && evidence_cache_dir[0]) {
         XgBuildKey preproducer_key;
         if (xg_build_key_from_module_graph(&preproducer_key, graph, xg_profile,
@@ -1312,8 +1394,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         if (evidence_cache_verbose)
             printf("[xi-native] evidence cache producer skip: pre_mono_generic_summary\n");
     } else {
-        if (!xg_global_evidence_build_from_module_graph(&pre_mono_generic_evidence, graph,
-                                                        xg_profile, imported_summary_hash)) {
+        if (!xg_global_evidence_build_from_module_graph_with_imported_modules(
+                &pre_mono_generic_evidence, graph, xg_profile, imported_summary_hash,
+                imported_summary_modules, imported_summary_module_count)) {
             fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
             goto fail_free_analyzer;
         }
@@ -1407,8 +1490,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         if (evidence_cache_verbose)
             printf("[xi-native] evidence cache producer skip: global_evidence_summary\n");
     } else {
-        if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph, xg_profile,
-                                                        imported_summary_hash)) {
+        if (!xg_global_evidence_build_from_module_graph_with_imported_modules(
+                &global_evidence, graph, xg_profile, imported_summary_hash,
+                imported_summary_modules, imported_summary_module_count)) {
             fprintf(stderr, "Error: failed to build global evidence\n");
             goto fail_free_ir;
         }
@@ -1420,7 +1504,31 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         }
         xg_global_evidence_free(&pre_mono_generic_evidence);
         pre_mono_generic_evidence_initialized = false;
+        if (imported_summary_payload_count > 0) {
+            XgEvidencePackageImportReport import_report;
+            if (!xg_global_evidence_import_package_payload_set(
+                    &global_evidence, imported_summary_payloads, imported_summary_payload_count,
+                    &import_report)) {
+                fprintf(stderr, "Error: failed to import package summary payloads\n");
+                goto fail_free_ir;
+            }
+            if (evidence_cache_verbose) {
+                printf("[xi-native] evidence cache producer skip: imported_package_summary "
+                       "payloads=%u modules=%u rows=%u\n",
+                       import_report.payloads_imported, import_report.modules_remapped,
+                       import_report.rows_imported);
+            }
+        }
     }
+    xr_free(discovered_imported_summary_payload_view);
+    discovered_imported_summary_payload_view = NULL;
+    xaot_free_discovered_package_payloads(discovered_imported_summary_payloads,
+                                          discovered_imported_summary_payload_count);
+    discovered_imported_summary_payloads = NULL;
+    discovered_imported_summary_payload_count = 0;
+    xr_free(imported_summary_modules);
+    imported_summary_modules = NULL;
+    imported_summary_module_count = 0;
     evidence_cache_manifest = xg_global_evidence_cache_manifest(&global_evidence);
     evidence_cache_manifest_valid =
         evidence_cache_manifest.phase_mask == ((1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u);
@@ -1755,6 +1863,7 @@ fail_free_analyzer:
         shared_analyzer = NULL;
     }
 fail_free_graph:
+    xr_free(imported_summary_modules);
     xr_free(discovered_imported_summary_payload_view);
     xaot_free_discovered_package_payloads(discovered_imported_summary_payloads,
                                           discovered_imported_summary_payload_count);
