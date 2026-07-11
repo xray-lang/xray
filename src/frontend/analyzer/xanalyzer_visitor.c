@@ -1525,6 +1525,21 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
     if (links && !links->file_path)
         links->file_path = ctx->file_path;
 
+    XaSymbol *prelude =
+        symbol->name ? xa_scope_lookup(ctx->analyzer->global_scope, symbol->name) : NULL;
+    if (prelude && prelude != symbol && prelude->is_builtin && prelude->kind == XA_SYM_ENUM &&
+        symbol->kind == XA_SYM_ENUM) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "'%s' is a builtin prelude enum and cannot be redeclared",
+                 symbol->name);
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = line > 0 ? line : (int) symbol->location.line,
+                          .column = (int) symbol->location.column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_REDEFINED_VAR, msg,
+                                   &loc);
+        return;
+    }
+
     XaSymbol *existing = symbol->name ? xa_scope_lookup_local(scope, symbol->name) : NULL;
     if (existing) {
         bool same_source_symbol = existing->kind == symbol->kind &&

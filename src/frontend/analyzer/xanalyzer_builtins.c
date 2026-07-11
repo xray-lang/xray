@@ -976,6 +976,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_json(NULL);
     } else if (base_len == 7 && strncmp(s, TYPE_NAME_UNKNOWN, 7) == 0) {
         type = xr_type_new_unknown(NULL);
+    } else if (base_len == 6 && strncmp(s, "Result", 6) == 0) {
+        type = xr_type_new_enum(X, "Result");
     } else if (base_len == 8 && strncmp(s, "Ordering", 8) == 0) {
         type = xr_type_new_enum(X, "Ordering");
     } else if (base_len == 6 && strncmp(s, "Endian", 6) == 0) {

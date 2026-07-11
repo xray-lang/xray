@@ -366,6 +366,10 @@ typedef struct CgPreludeEnumData {
 } CgPreludeEnumData;
 
 static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
+    static const CgPreludeEnumMember result[] = {
+        {"Ok", true},
+        {"Err", true},
+    };
     static const CgPreludeEnumMember ordering[] = {
         {"Relaxed", false},        {"Acquire", false}, {"Release", false},
         {"AcquireRelease", false}, {"SeqCst", false},
@@ -401,6 +405,7 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
         {"Failed", false},  {"Cancelled", false},
     };
     static const CgPreludeEnumData enums[] = {
+        {XR_GLOBAL_VAR_RESULT, "Result", result, 2},
         {XR_GLOBAL_VAR_ORDERING, "Ordering", ordering, 5},
         {XR_GLOBAL_VAR_ENDIAN, "Endian", endian, 3},
         {XR_GLOBAL_VAR_RECV, "Recv", recv, 4},

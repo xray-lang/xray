@@ -1,0 +1,16 @@
+// Canonical Result<T, E> must keep one enum identity across VM and native AOT.
+
+fn parseNumber(ok: bool) -> Result<int, string> {
+    if (ok) { return Result.Ok(42) }
+    return Result.Err("bad-number")
+}
+
+fn score(result: Result<int, string>) -> int {
+    return match (result) {
+        Result.Ok(value) -> value + 1,
+        Result.Err(message) -> message.length,
+    }
+}
+
+print(score(parseNumber(true)))
+print(score(parseNumber(false)))

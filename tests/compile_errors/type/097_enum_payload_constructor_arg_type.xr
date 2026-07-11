@@ -1,7 +1,7 @@
-enum Result {
+enum LocalResult {
     Ok(int),
     Err(string)
 }
 
-var value = Result.Ok("bad")
+var value = LocalResult.Ok("bad")
 print(value)
