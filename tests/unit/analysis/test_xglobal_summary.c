@@ -11786,6 +11786,85 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(storage_and_capture_plans_close_owner_actions) {
+    XgBuildKey key = {.source_hash = 0x194,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary entry = {
+        .func_id = 1, .module_id = 1, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x194};
+    XiFunc init_func;
+    XiFunc child;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    uint8_t slot_consts[2] = {1, 0};
+    XiConstLiteral constants[2];
+    XiConstLiteral shared[2];
+    XaotBundle bundle;
+    char verify_error[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&child, 0, sizeof(child));
+    memset(&module, 0, sizeof(module));
+    memset(constants, 0, sizeof(constants));
+    memset(shared, 0, sizeof(shared));
+
+    child.name = "capture_body";
+    child.ncaptures = 2;
+    child.captures[0].name = "module_const";
+    child.captures[0].capture_kind = XI_CAPTURE_MODULE_LIVE;
+    child.captures[1].name = "shared_state";
+    child.captures[1].capture_kind = XI_CAPTURE_SHARED;
+    child.captures[1].is_shared = true;
+    children[0] = &child;
+
+    init_func.name = "init";
+    init_func.xg_body_func_id = entry.func_id;
+    init_func.nshared = 2;
+    init_func.slot_owned_consts = slot_consts;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    constants[0].kind = XI_CONST_LITERAL_INT;
+    constants[0].int_value = 42;
+    shared[1].kind = XI_CONST_LITERAL_INT;
+    shared[1].int_value = 1;
+
+    module.path = "storage.xr";
+    module.name = "storage";
+    module.init = &init_func;
+    module.nslots = 2;
+    module.slot_const_literals = constants;
+    module.slot_shared_initializers = shared;
+    modules[0] = &module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotStoragePlan *module_const = xaot_storage_plan_find(&bundle, &module, 0);
+    const XaotStoragePlan *shared_state = xaot_storage_plan_find(&bundle, &module, 1);
+    const XaotCapturePlan *module_capture = xaot_capture_plan_find(&bundle, &child, 0);
+    const XaotCapturePlan *shared_capture = xaot_capture_plan_find(&bundle, &child, 1);
+    ASSERT_NOT_NULL(module_const);
+    ASSERT_NOT_NULL(shared_state);
+    ASSERT_NOT_NULL(module_capture);
+    ASSERT_NOT_NULL(shared_capture);
+    ASSERT_EQ_UINT(module_const->owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(module_const->mutability, XR_STORAGE_READONLY);
+    ASSERT_EQ_UINT(module_const->address_identity, XR_ADDRESS_MODULE_STABLE);
+    ASSERT_EQ_UINT(module_const->materialization_kind, XAOT_MATERIALIZE_MODULE_READONLY);
+    ASSERT_EQ_UINT(shared_state->owner, XR_STORAGE_SHARED_SYSTEM);
+    ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SHARED_STABLE);
+    ASSERT_EQ_UINT(module_capture->action, XAOT_CAPTURE_MODULE_READONLY);
+    ASSERT_EQ_UINT(shared_capture->action, XAOT_CAPTURE_SHARED_REF);
+    ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_adds_rows_and_grows);
@@ -11898,4 +11977,5 @@ RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
+RUN_TEST(storage_and_capture_plans_close_owner_actions);
 TEST_MAIN_END()

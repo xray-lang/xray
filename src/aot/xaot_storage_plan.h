@@ -92,6 +92,8 @@ XR_FUNC bool xaot_storage_capture_plans_verify(const struct XaotBundle *bundle, 
                                                size_t errbuf_len);
 XR_FUNC const XaotStoragePlan *xaot_storage_plan_find(const struct XaotBundle *bundle,
                                                       const struct XiModule *module, uint32_t slot);
+XR_FUNC const XaotCapturePlan *xaot_capture_plan_find(const struct XaotBundle *bundle,
+                                                      const struct XiFunc *func, uint16_t index);
 XR_FUNC const char *xaot_materialization_kind_name(uint8_t value);
 XR_FUNC const char *xaot_capture_action_name(uint8_t value);
 
