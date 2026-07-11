@@ -5791,6 +5791,23 @@ static void body_bind_sequence_json_shape_local(XgBodyCollect *bc, const char *n
     row->sequence_elem_json_shape_literal = literal;
 }
 
+static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *name,
+                                                 const XgLocalType *source) {
+    XgLocalType *row;
+    if (!bc || !name || !source || source->sequence_kind == 0)
+        return;
+    row = body_find_local(bc, name);
+    if (!row)
+        return;
+    row->sequence_kind = source->sequence_kind;
+    row->sequence_elem_type_key = source->sequence_elem_type_key;
+    row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
+    row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
+    row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
+    row->sequence_elem_map_key_type_key = source->sequence_elem_map_key_type_key;
+    row->sequence_elem_map_value_type_key = source->sequence_elem_map_value_type_key;
+}
+
 static void body_clear_sequence_json_shape(XgLocalType *row) {
     if (!row)
         return;
@@ -7124,6 +7141,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const XrTypeRef *sequence_elem_type_ref = NULL;
             const ObjectLiteralNode *sequence_json_literal = NULL;
             XgJsonShapeId sequence_json_shape_id = XG_NO_ID;
+            XgLocalType *source_sequence_local = NULL;
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             XgInterfaceId interface_id = producer_lookup_interface_from_tref(
@@ -7146,6 +7164,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             source_record_shape_id =
                 body_lookup_record_shape(bc, node->as.var_decl.initializer, &source_record_literal);
             source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
+            source_sequence_local = body_lookup_local_sequence(bc, node->as.var_decl.initializer);
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
@@ -7209,6 +7228,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
                                          sequence_elem_type_key, sequence_elem_type_ref);
+            if (source_sequence_local && !sequence_json_literal)
+                body_bind_sequence_local_from_source(bc, node->as.var_decl.name,
+                                                     source_sequence_local);
             if (sequence_json_literal) {
                 sequence_json_shape_id = body_add_json_shape_for_literal(
                     bc, sequence_json_literal, (uint32_t) node->line,
@@ -7234,6 +7256,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_lookup_record_shape(bc, node->as.assignment.value, &source_record_literal);
             XgLocalType *source_map_local =
                 body_lookup_local_map_shape(bc, node->as.assignment.value);
+            XgLocalType *source_sequence_local =
+                body_lookup_local_sequence(bc, node->as.assignment.value);
             XgClassId class_id;
             XgInterfaceId interface_id;
             uint32_t type_key;
@@ -7278,6 +7302,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (source_map_local)
                 body_bind_map_shape_local_from_source(bc, node->as.assignment.name,
                                                       source_map_local);
+            if (source_sequence_local)
+                body_bind_sequence_local_from_source(bc, node->as.assignment.name,
+                                                     source_sequence_local);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }
