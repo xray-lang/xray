@@ -663,13 +663,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ChunkedBody.trailerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "ChunkedBody.trailers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -843,6 +838,46 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "Headers",
+        .signature = "Headers",
+        .summary = "",
+    },
+    {
+        .name = "Headers.add",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "Headers.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Headers.entries",
+        .signature = "(): Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "Headers.get",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "Headers.getAll",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "Headers.has",
+        .signature = "(name: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "Headers.set",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
         .name = "HttpResponse",
         .signature = "HttpResponse",
         .summary = "",
@@ -854,7 +889,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.constructor",
-        .signature = "(status: int, statusText: string, headers: Json, body: string, error: string?): ()",
+        .signature = "(status: int, statusText: string, headers: Headers, body: string, error: string?): ()",
         .summary = "",
     },
     {
@@ -864,7 +899,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.headers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -963,13 +998,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestHead.headerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "RequestHead.headers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1028,13 +1058,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestMessage.trailerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "RequestMessage.trailers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1068,13 +1093,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ResponseHead.headerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "ResponseHead.headers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1133,13 +1153,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ResponseMessage.trailerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "ResponseMessage.trailers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -5433,8 +5448,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ChunkedBody.consumedBytes` | `: int` |  |\n"
             "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
             "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
-            "| `ChunkedBody.trailerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `ChunkedBody.trailers` | `: Json` |  |\n"
+            "| `ChunkedBody.trailers` | `: Headers` |  |\n"
             "| `Cookie` | `Cookie` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
             "| `Cookie.expires` | `: int` |  |\n"
@@ -5469,11 +5483,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FormData.maxFileSize` | `: int` |  |\n"
             "| `FormData.maxTotalSize` | `: int` |  |\n"
             "| `FormData.totalSize` | `: int` |  |\n"
+            "| `Headers` | `Headers` |  |\n"
+            "| `Headers.add` | `(name: string, value: string): ()` |  |\n"
+            "| `Headers.constructor` | `(): ()` |  |\n"
+            "| `Headers.entries` | `(): Array<(string, string)>` |  |\n"
+            "| `Headers.get` | `(name: string): string?` |  |\n"
+            "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
+            "| `Headers.has` | `(name: string): bool` |  |\n"
+            "| `Headers.set` | `(name: string, value: string): ()` |  |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: string` |  |\n"
-            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Json, body: string, error: string?): ()` |  |\n"
+            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Headers, body: string, error: string?): ()` |  |\n"
             "| `HttpResponse.error` | `: string?` |  |\n"
-            "| `HttpResponse.headers` | `: Json` |  |\n"
+            "| `HttpResponse.headers` | `: Headers` |  |\n"
             "| `HttpResponse.ok` | `: bool` |  |\n"
             "| `HttpResponse.status` | `: int` |  |\n"
             "| `HttpResponse.statusText` | `: string` |  |\n"
@@ -5493,8 +5515,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
             "| `RequestHead.headerBytes` | `: int` |  |\n"
-            "| `RequestHead.headerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `RequestHead.headers` | `: Json` |  |\n"
+            "| `RequestHead.headers` | `: Headers` |  |\n"
             "| `RequestHead.keepAlive` | `: bool` |  |\n"
             "| `RequestHead.method` | `: string` |  |\n"
             "| `RequestHead.target` | `: string` |  |\n"
@@ -5506,16 +5527,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `RequestMessage.head` | `: RequestHead` |  |\n"
-            "| `RequestMessage.trailerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `RequestMessage.trailers` | `: Json` |  |\n"
+            "| `RequestMessage.trailers` | `: Headers` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
             "| `ResponseHead.contentLength` | `: int` |  |\n"
             "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
             "| `ResponseHead.headerBytes` | `: int` |  |\n"
-            "| `ResponseHead.headerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `ResponseHead.headers` | `: Json` |  |\n"
+            "| `ResponseHead.headers` | `: Headers` |  |\n"
             "| `ResponseHead.keepAlive` | `: bool` |  |\n"
             "| `ResponseHead.reason` | `: string` |  |\n"
             "| `ResponseHead.status` | `: int` |  |\n"
@@ -5527,8 +5546,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
-            "| `ResponseMessage.trailerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `ResponseMessage.trailers` | `: Json` |  |\n"
+            "| `ResponseMessage.trailers` | `: Headers` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
             "| `RouteMatch.constructor` | `(value: unknown, params: Json): ()` |  |\n"
             "| `RouteMatch.params` | `: Json` |  |\n"
