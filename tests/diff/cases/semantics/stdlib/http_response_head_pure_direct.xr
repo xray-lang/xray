@@ -18,7 +18,7 @@ print(head.chunked)
 print(head.keepAlive)
 print(head.getHeader("location")!)
 print(head.getHeaders("set-cookie").join("|"))
-print(Json.get(head.headers, "Content-Length", ""))
+print(head.headers.get("Content-Length")!)
 
 var chunked = parseResponseHead("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")!
 print(chunked.status)

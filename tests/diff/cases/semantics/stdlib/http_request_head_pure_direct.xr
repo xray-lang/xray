@@ -17,7 +17,7 @@ print(head.chunked)
 print(head.keepAlive)
 print(head.getHeader("host")!)
 print(head.getHeaders("x-trace").join("|"))
-print(Json.get(head.headers, "X-Trace", ""))
+print(head.headers.get("X-Trace")!)
 print(raw.slice(head.headerBytes))
 
 var absolute = parseRequestHead("GET http://example.com/a HTTP/1.1\r\nHost: proxy\r\n\r\n")!

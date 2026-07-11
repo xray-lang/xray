@@ -13,7 +13,7 @@ print(parsed.consumedBytes)
 print(raw.slice(parsed.consumedBytes))
 print(parsed.getTrailer("expires")!)
 print(parsed.getTrailers("x-trailer").join("|"))
-print(Json.get(parsed.trailers, "X-Trailer", ""))
+print(parsed.trailers.get("X-Trailer")!)
 print(decodeChunkedBody(raw)!)
 
 var empty = parseChunkedBody("0\r\n\r\n")!
