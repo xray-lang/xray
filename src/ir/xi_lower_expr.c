@@ -5690,6 +5690,94 @@ static XiValue *lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, Xi
     return v;
 }
 
+static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node, XiValue *plan) {
+    if (!l || !l->func || !l->cur_block || !plan)
+        return NULL;
+
+    char name_buf[160];
+    snprintf(name_buf, sizeof(name_buf), "%s$parallel_plan_end_defer_%d",
+             l->func && l->func->name ? l->func->name : "<anon>", l->synthetic_id++);
+
+    XiLower child_l;
+    xi_lower_init(&child_l, l->analyzer, l->isolate);
+    child_l.parent = l;
+    child_l.repl_mode = l->repl_mode;
+    xi_lower_inherit_evidence(&child_l, l);
+
+    child_l.func = xi_func_new(name_buf, child_l.type_unit);
+    if (!child_l.func) {
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    child_l.func->parent_func = l->func;
+    child_l.func->analyzer = l->analyzer;
+    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0);
+    child_l.func->nparams = 0;
+    child_l.func->min_params = 0;
+    child_l.func->entry_type = 0;
+
+    XiBlock *entry = xi_block_new(child_l.func);
+    if (!entry) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    entry->sealed = true;
+    child_l.cur_block = entry;
+
+    XiCapture *cap = &child_l.func->captures[0];
+    cap->source = XI_CAPTURE_SRC_REG;
+    cap->index = 0;
+    cap->name = arena_strdup(child_l.func, "__parallel_plan");
+    cap->type = plan->type ? plan->type : child_l.type_any;
+    cap->value = plan;
+    cap->cell_index = -1;
+    cap->env_offset = -1;
+    cap->is_reassigned = false;
+    cap->is_shared = false;
+    cap->needs_cell = false;
+    child_l.func->ncaptures = 1;
+
+    XiValue *captured_plan =
+        xi_value_new(child_l.func, child_l.cur_block, XI_LOAD_UPVAL, cap->type, 0);
+    if (!captured_plan) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    captured_plan->aux_int = 0;
+    captured_plan->line = (uint32_t) (node ? node->line : 0);
+
+    if (!lower_parallel_plan_lifecycle_call(&child_l, node, captured_plan, "_end")) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    if (child_l.cur_block)
+        xi_block_set_return(child_l.cur_block, NULL);
+
+    XiFunc *result = child_l.had_error ? NULL : child_l.func;
+    if (result) {
+        result->stage = XI_STAGE_RAW;
+        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+        xi_lower_capture_source_vars(&child_l);
+    } else {
+        xi_func_free(child_l.func);
+    }
+    xi_lower_cleanup(&child_l);
+
+    if (!result)
+        return NULL;
+    return parallel_call_child_closure(l, result, node ? node->line : 0);
+}
+
+static bool lower_parallel_plan_register_end_defer(XiLower *l, AstNode *node, XiValue *plan) {
+    XiValue *end_closure = lower_parallel_plan_end_defer_closure(l, node, plan);
+    if (!end_closure)
+        return false;
+    return xi_lower_defer_register_closure(l, end_closure, node ? node->line : 0);
+}
+
 static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiValue *plan,
                                                  AstNode *range, AstNode *body_node) {
     RangeNode *rn = &range->as.range;
@@ -5699,6 +5787,12 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
         return NULL;
 
     if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+        l->had_error = true;
+        return NULL;
+    }
+    xi_lower_defer_scope_push(l);
+    if (!lower_parallel_plan_register_end_defer(l, node, plan)) {
+        xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
         l->had_error = true;
         return NULL;
     }
@@ -5774,8 +5868,8 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    XiValue *end_call = lower_parallel_plan_lifecycle_call(l, node, plan, "_end");
-    return end_call ? end_call : par;
+    xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+    return par;
 }
 
 static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *plan,
@@ -5788,6 +5882,12 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
         return NULL;
 
     if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+        l->had_error = true;
+        return NULL;
+    }
+    xi_lower_defer_scope_push(l);
+    if (!lower_parallel_plan_register_end_defer(l, node, plan)) {
+        xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
         l->had_error = true;
         return NULL;
     }
@@ -5884,7 +5984,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    (void) lower_parallel_plan_lifecycle_call(l, node, plan, "_end");
+    xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
 
     if (!into_array)
         return par;
@@ -5908,6 +6008,12 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
         return NULL;
 
     if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+        l->had_error = true;
+        return NULL;
+    }
+    xi_lower_defer_scope_push(l);
+    if (!lower_parallel_plan_register_end_defer(l, node, plan)) {
+        xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
         l->had_error = true;
         return NULL;
     }
@@ -6032,7 +6138,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    (void) lower_parallel_plan_lifecycle_call(l, node, plan, "_end");
+    xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
 

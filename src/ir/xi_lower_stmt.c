@@ -283,6 +283,22 @@ static XiValue *lower_defer_scope_ensure_mark(XiLower *l, int line) {
     return mark;
 }
 
+XR_FUNC bool xi_lower_defer_register_closure(XiLower *l, XiValue *callee, int line) {
+    if (!l || !l->cur_block || !callee)
+        return false;
+
+    if (!lower_defer_scope_ensure_mark(l, line))
+        return false;
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
+    if (!v)
+        return false;
+    v->args[0] = callee;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) line;
+    return true;
+}
+
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
     return v && v->op == XI_AGG_NEW && !xi_var_id_is_valid(v->var_id);
 }
@@ -2614,15 +2630,7 @@ static void lower_defer(XiLower *l, AstNode *node) {
     if (!callee || !l->cur_block)
         return;
 
-    if (!lower_defer_scope_ensure_mark(l, node->line))
-        return;
-
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
-    if (!v)
-        return;
-    v->args[0] = callee;
-    v->flags |= XI_FLAG_SIDE_EFFECT;
-    v->line = (uint32_t) node->line;
+    (void) xi_lower_defer_register_closure(l, callee, node->line);
 }
 
 static void lower_yield_stmt(XiLower *l, AstNode *node) {
