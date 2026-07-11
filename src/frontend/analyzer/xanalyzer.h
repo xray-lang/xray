@@ -151,6 +151,15 @@ XR_FUNC void xa_analyzer_set_strict_mode(XaAnalyzer *analyzer, bool enable);
 XR_FUNC void xa_analyzer_set_build_profile(XaAnalyzer *analyzer, XaAnalyzerBuildProfile profile);
 XR_FUNC bool xa_analyzer_is_freestanding(const XaAnalyzer *analyzer);
 
+// Freestanding stdlib policy shared by analyzer diagnostics and graph-level
+// AOT preflight.  The module-level predicate is intentionally profile-wide;
+// member-level narrowing only applies to modules that are already allowed.
+XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name);
+XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);
+XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
+                                                   const char *member_name);
+XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name);
+
 // Set module graph for cross-module type resolution.
 // The graph must outlive the analyzer. Pass NULL to disable.
 struct XrModuleGraph;
