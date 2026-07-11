@@ -12,6 +12,8 @@
 #include "../mem/xfixed_heap.h"
 #include <string.h>
 
+static _Thread_local XrExecutionContext *xr_tls_exec_context;
+
 void xr_alloc_context_init(XrAllocationContext *ctx, XrRuntimeCore *core, XrStorageOwner owner) {
     if (!ctx)
         return;
@@ -42,6 +44,30 @@ void xr_exec_context_init(XrExecutionContext *ctx, XrRuntimeCore *core,
 
 bool xr_exec_context_has_task(const XrExecutionContext *ctx) {
     return ctx && ctx->task != NULL;
+}
+
+XrExecutionContext *xr_exec_context_current(void) {
+    return xr_tls_exec_context;
+}
+
+XrExecutionContext *xr_exec_context_enter(XrExecutionContext *ctx) {
+    XrExecutionContext *previous = xr_tls_exec_context;
+    xr_tls_exec_context = ctx;
+    return previous;
+}
+
+void xr_exec_context_restore(XrExecutionContext *previous) {
+    xr_tls_exec_context = previous;
+}
+
+XrAllocationContext *xr_alloc_context_current(void) {
+    XrExecutionContext *ctx = xr_exec_context_current();
+    return ctx ? ctx->alloc : NULL;
+}
+
+XrVMRuntime *xr_exec_context_vm_owner(void) {
+    XrExecutionContext *ctx = xr_exec_context_current();
+    return ctx && ctx->core ? xr_runtime_core_vm_owner(ctx->core) : NULL;
 }
 
 const char *xr_storage_owner_name(XrStorageOwner owner) {

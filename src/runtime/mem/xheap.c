@@ -33,11 +33,13 @@ void xr_obj_header_print(XrObjHeader *obj) {
 /* ========== Unified Allocation Interface ========== */
 
 void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
-    XR_DCHECK(coro != NULL, "xr_alloc: coro must not be NULL");
+    if (!coro) {
+        XrAllocationContext *alloc = xr_alloc_context_current();
+        XR_DCHECK(alloc != NULL, "xr_alloc: no current allocation context");
+        return xr_alloc_context_new_object(alloc, size, type);
+    }
     XR_DCHECK(((XrObjHeader *) coro)->type == XR_TCOROUTINE,
               "xr_alloc: coro is not XrCoroutine (caller passed wrong type)");
-    if (!coro)
-        return NULL;
 
     XrCoroHeap *heap = xr_coro_ensure_heap(coro);
     if (heap) {

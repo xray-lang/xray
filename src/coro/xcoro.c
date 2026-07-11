@@ -1092,8 +1092,7 @@ XrCoroutine *xr_current_coro(XrVMRuntime *X) {
         if (c)
             return c;
     }
-    // Fallback: before VM starts, use main coroutine
-    return X->main_coro;
+    return NULL;
 }
 
 // xr_scheduler_ready - Wake coroutine on an explicit scheduler.

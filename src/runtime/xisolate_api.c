@@ -38,9 +38,9 @@ static int64_t xr_now_ns(void) {
 }
 
 struct XrCoroHeap *xr_isolate_get_heap(XrVMRuntime *X) {
-    if (!X || !X->main_coro)
-        return NULL;
-    return ((XrCoroutine *) X->main_coro)->heap;
+    (void) X;
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    return alloc ? alloc->local_heap : NULL;
 }
 
 /* ========== Module Subsystem ========== */

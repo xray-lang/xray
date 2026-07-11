@@ -332,7 +332,6 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap
 /* ========== Create and Destroy ========== */
 
 XrMap *xr_map_new(struct XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "map_new: NULL coro");
     XrMap *map = (XrMap *) xr_alloc(coro, sizeof(XrMap), XR_TMAP);
     if (!map)
         return NULL;
@@ -514,7 +513,6 @@ bool xr_map_is_empty(XrMap *map) {
 /* ========== Iteration (insertion order) ========== */
 
 XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
-    XR_DCHECK(coro != NULL, "map_keys: NULL coro");
     XR_DCHECK(map != NULL, "map_keys: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
@@ -531,7 +529,6 @@ XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
 }
 
 XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
-    XR_DCHECK(coro != NULL, "map_values: NULL coro");
     XR_DCHECK(map != NULL, "map_values: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
@@ -548,7 +545,6 @@ XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
 }
 
 XrArray *xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
-    XR_DCHECK(coro != NULL, "map_entries: NULL coro");
     XR_DCHECK(map != NULL, "map_entries: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 

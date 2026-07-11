@@ -25,11 +25,7 @@
 #include "../base/xlog.h"
 
 static XrArray *vm_api_root_array_new(XrVMRuntime *isolate) {
-    XrArray *array = (XrArray *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
-                                                     sizeof(XrArray), XR_TARRAY);
-    if (array)
-        xr_array_init_inplace(array, 4, XR_ELEM_ANY);
-    return array;
+    return xr_array_with_capacity_in(&isolate->core_rt->root_alloc, 4, XR_ELEM_ANY);
 }
 
 /* ========== VM Context Helper ========== */
@@ -49,9 +45,6 @@ XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
                 return xr_coro_vm_ctx(coro);
             return machine_ctx;
         }
-    }
-    if (isolate->main_coro) {
-        return xr_coro_vm_ctx((XrCoroutine *) isolate->main_coro);
     }
     return &isolate->vm_ctx;
 }
@@ -275,7 +268,7 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
 
 /*
 ** Execute function prototype
-** Uses main coroutine's vm_ctx uniformly
+** Uses the current execution context; a pure logical root has no coroutine.
 */
 XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_interpret_proto: NULL isolate");
@@ -286,8 +279,7 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     if (proto == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
-    XrCoroutine *main_coro = (XrCoroutine *) isolate->main_coro;
-    XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
+    XrClosure *closure = xr_closure_new(isolate, proto, xr_current_coro(isolate));
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
