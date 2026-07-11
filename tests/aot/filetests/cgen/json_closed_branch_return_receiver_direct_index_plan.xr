@@ -1,0 +1,14 @@
+fn makeJsonClosedBranchReturnPlan(flag: bool) -> Json {
+    if (flag) {
+        return { name: "ada", age: 1 }
+    } else {
+        return { name: "bob", age: 2 }
+    }
+    return { name: "eve", score: 3 }
+}
+
+fn jsonClosedBranchReturnReceiverPlan(flag: bool) -> int {
+    return makeJsonClosedBranchReturnPlan(flag).age
+}
+
+print(jsonClosedBranchReturnReceiverPlan(true))
