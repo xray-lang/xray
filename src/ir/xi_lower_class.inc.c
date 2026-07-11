@@ -271,6 +271,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
             st->args[1] = val;
             st->aux = (void *) arena_strdup(ml.func, f->name);
             st->aux_int = xi_lower_method_symbol(&ml, f->name);
+            xi_lower_bind_class_field_id(&ml, st, this_type, f->name);
             st->flags |= XI_FLAG_SIDE_EFFECT;
         }
     }

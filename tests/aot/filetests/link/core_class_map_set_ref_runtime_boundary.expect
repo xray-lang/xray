@@ -1,0 +1,30 @@
+contains=xaot-plan v0
+regex=class-field-plan [0-9]+ field=1 owner=1 .*native=15 ref_kind=2 storage=pointer_ref action=pointer_ref rep=pointer_ref ownership=owned drop=ref_release .*evidence=0x7f
+regex=class-field-plan [0-9]+ field=2 owner=1 .*native=16 ref_kind=3 storage=pointer_ref action=pointer_ref rep=pointer_ref ownership=owned drop=ref_release .*evidence=0x7f
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_caps": []
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="stdlib_symbols": []
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_caps": ["objects"]
+c_contains=typedef struct xrt_native_core_class_map_set_ref_runtime_boundary_Registry
+c_contains=xrt_map_t * f0;
+c_contains=xrt_set_t * f1;
+c_contains=static void xrt_native_core_class_map_set_ref_runtime_boundary_Registry_dtor(void *obj)
+c_contains=xrt_release(xr_mkptr((self)->f0, XR_TAG_MAP));
+c_contains=xrt_release(xr_mkptr((self)->f1, XR_TAG_SET));
+c_contains=xrt_retain(_new); xrt_release(xr_mkptr((p0)->f0, XR_TAG_MAP));
+c_contains=xrt_retain(_new); xrt_release(xr_mkptr((p0)->f1, XR_TAG_SET));
+c_contains=xrt_release(xr_mkptr(p0->f0, XR_TAG_MAP));
+c_contains=xrt_release(xr_mkptr(p0->f1, XR_TAG_SET));
+c_contains=xrt_map_set_i64_i64_typed(
+c_contains=xrt_map_get_i64_value_typed(
+c_contains=xrt_set_add_i64(
+c_contains=xrt_set_has_i64(
+c_contains=core_class_map_set_ref_runtime_boundary_mark
+c_contains=core_class_map_set_ref_runtime_boundary_replace
+c_not_contains=xrt_release((p0)->f0
+c_not_contains=xrt_release((p0)->f1
+c_not_contains=xrt_method_

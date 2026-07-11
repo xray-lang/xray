@@ -738,6 +738,27 @@ static const XgClassSummary *xi_lower_find_unique_class_by_name(const XgGlobalEv
     return xi_lower_find_unique_class_by_name_id(ev, name_id, true);
 }
 
+static const XgClassSummary *
+xi_lower_find_unique_class_by_receiver_type(const XgGlobalEvidence *ev,
+                                            const struct XrType *receiver_type) {
+    const XgClassSummary *match;
+    if (!ev || !receiver_type)
+        return NULL;
+    match = xi_lower_find_unique_class_by_name(ev, receiver_type->instance.class_name);
+    if (match)
+        return match;
+    if (receiver_type->instance.class_ref && receiver_type->instance.class_ref->name) {
+        match = xi_lower_find_unique_class_by_name(ev, receiver_type->instance.class_ref->name);
+        if (match)
+            return match;
+    }
+    const char *class_name = receiver_type->instance.class_name;
+    const char *tail = class_name ? strrchr(class_name, '.') : NULL;
+    if (tail && tail[1] != '\0')
+        return xi_lower_find_unique_class_by_name(ev, tail + 1);
+    return NULL;
+}
+
 static const XgClassFieldSummary *xi_lower_find_unique_own_class_field(const XgGlobalEvidence *ev,
                                                                        const XgClassSummary *cls,
                                                                        uint32_t field_name_id) {
@@ -773,13 +794,13 @@ XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
         return;
     if (receiver_type->kind != XR_KIND_CLASS && receiver_type->kind != XR_KIND_INSTANCE)
         return;
-    if (!receiver_type->instance.class_name)
+    if (!receiver_type->instance.class_name && !receiver_type->instance.class_ref)
         return;
     field_name_id = xg_name_id(field_name);
     if (field_name_id == 0)
         return;
     ev = l->global_evidence;
-    cls = xi_lower_find_unique_class_by_name(ev, receiver_type->instance.class_name);
+    cls = xi_lower_find_unique_class_by_receiver_type(ev, receiver_type);
     for (uint32_t depth = 0; cls && depth < 64; depth++) {
         const XgClassFieldSummary *field =
             xi_lower_find_unique_own_class_field(ev, cls, field_name_id);

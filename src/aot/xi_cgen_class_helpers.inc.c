@@ -408,10 +408,29 @@ static void emit_class_field_cache_flush(XiCgenCtx *ctx, FILE *out) {
         if (!entry->dirty)
             continue;
         if (cache->native_receiver && entry->layout_index >= 0) {
+            const XrAggregateFieldLayout *field =
+                cg_struct_field(cache->layout, (uint16_t) entry->layout_index);
+            const char *tag_name =
+                field ? cg_class_native_ref_field_tag_name(field->native_type) : NULL;
             fprintf(out, "    ");
-            emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
-            fprintf(out, " = (%s)", cg_struct_field_c_type(cache->layout, entry->layout_index));
-            emit_class_field_cache_var(out, i);
+            if (field && cg_class_native_field_is_ref(field) && tag_name) {
+                fprintf(out, "{ XrValue _new = xr_mkptr(");
+                emit_class_field_cache_var(out, i);
+                fprintf(out, ", %s); ", tag_name);
+                if (cg_class_native_field_plan_has_release_drop(
+                        ctx, cache->class_data, (uint32_t) entry->layout_index, field)) {
+                    fprintf(out, "xrt_retain(_new); xrt_release(xr_mkptr(");
+                    emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
+                    fprintf(out, ", %s)); ", tag_name);
+                }
+                emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
+                fprintf(out, " = (%s)_new.ptr; }",
+                        cg_struct_field_c_type(cache->layout, entry->layout_index));
+            } else {
+                emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
+                fprintf(out, " = (%s)", cg_struct_field_c_type(cache->layout, entry->layout_index));
+                emit_class_field_cache_var(out, i);
+            }
             fprintf(out, ";\n");
         } else {
             fprintf(out, "    xrt_map_set((xrt_map_t*)");

@@ -79,8 +79,9 @@ static void cg_class_native_report_field_plan_error(XiCgenCtx *ctx, const XiValu
         ctx->error = true;
     fprintf(stderr,
             "[xi_cgen] ERROR: stale class field plan for Xi value v%u "
-            "(class_field=%u%s%s",
-            v ? v->id : 0, v ? v->xg_class_field_id : 0, reason ? " " : "", reason ? reason : "");
+            "(class_field=%u%s%s field=%s",
+            v ? v->id : 0, v ? v->xg_class_field_id : 0, reason ? " " : "", reason ? reason : "",
+            v && v->aux ? (const char *) v->aux : "?");
     if (plan) {
         fprintf(stderr, " owner=%u slot=%u", (unsigned) plan->owner_class_id,
                 (unsigned) plan->instance_slot);
@@ -105,41 +106,52 @@ static void cg_class_native_report_field_slot_plan_error(XiCgenCtx *ctx, const X
     fprintf(stderr, ")\n");
 }
 
-static int cg_class_native_field_index_for_value(XiCgenCtx *ctx, const XiClassData *cd,
-                                                 const XrAggregateLayout *layout,
-                                                 const XiValue *v) {
+static const XaotClassFieldPlan *
+cg_class_native_field_plan_for_value(XiCgenCtx *ctx, const XiClassData *cd,
+                                     const XrAggregateLayout *layout, const XiValue *v) {
     if (!layout || !v)
-        return -1;
-    if (v->xg_class_field_id == 0)
-        return cg_class_native_field_index(layout, (const char *) v->aux);
+        return NULL;
+    if (v->xg_class_field_id == 0) {
+        if (v->aux && cg_class_native_field_index(layout, (const char *) v->aux) < 0)
+            return NULL;
+        cg_class_native_report_field_plan_error(ctx, v, "missing_field_id", NULL);
+        return NULL;
+    }
 
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XaotClassFieldPlan *plan =
         xaot_bundle_find_class_field_plan(bundle, (XgFieldId) v->xg_class_field_id);
     if (!plan) {
         cg_class_native_report_field_plan_error(ctx, v, "missing", NULL);
-        return -1;
+        return NULL;
     }
     if (plan->instance_slot == UINT32_MAX || plan->instance_slot >= layout->field_count) {
         cg_class_native_report_field_plan_error(ctx, v, "slot_out_of_range", plan);
-        return -1;
+        return NULL;
     }
 
     const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
     XgClassId receiver_class_id = cg_class_native_class_id_for_data(ctx, cd);
     if (!cg_class_native_class_is_descendant_or_self(ev, receiver_class_id, plan->owner_class_id)) {
         cg_class_native_report_field_plan_error(ctx, v, "owner_not_in_receiver_hierarchy", plan);
-        return -1;
+        return NULL;
     }
 
     if (v->aux) {
         int name_idx = cg_class_native_field_index(layout, (const char *) v->aux);
         if (name_idx < 0 || (uint32_t) name_idx != plan->instance_slot) {
             cg_class_native_report_field_plan_error(ctx, v, "name_slot_mismatch", plan);
-            return -1;
+            return NULL;
         }
     }
-    return (int) plan->instance_slot;
+    return plan;
+}
+
+static int cg_class_native_field_index_for_value(XiCgenCtx *ctx, const XiClassData *cd,
+                                                 const XrAggregateLayout *layout,
+                                                 const XiValue *v) {
+    const XaotClassFieldPlan *plan = cg_class_native_field_plan_for_value(ctx, cd, layout, v);
+    return plan ? (int) plan->instance_slot : -1;
 }
 
 static const XaotClassFieldPlan *
@@ -176,6 +188,10 @@ static bool cg_class_native_field_plan_has_release_drop(XiCgenCtx *ctx, const Xi
     const XaotClassFieldPlan *plan = cg_class_native_field_plan_for_slot(ctx, cd, slot);
     if (!plan)
         return false;
+    if (field && plan->native_type != field->native_type) {
+        cg_class_native_report_field_slot_plan_error(ctx, cd, slot, "native_type_mismatch", plan);
+        return false;
+    }
     if (plan->drop_kind == XAOT_CLASS_FIELD_DROP_VALUE_RELEASE ||
         plan->drop_kind == XAOT_CLASS_FIELD_DROP_REF_RELEASE)
         return true;
@@ -459,9 +475,31 @@ static bool cg_class_native_receiver_ref_field(XiCgenCtx *ctx, const XiFunc *f, 
         !cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     int idx = cg_class_native_field_index_for_value(ctx, info.class_data, info.layout, v);
+    if (idx < 0)
+        return false;
     const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
     if (!field || field->native_type != expected_native)
         return false;
+    const XaotClassFieldPlan *plan =
+        cg_class_native_field_plan_for_value(ctx, info.class_data, info.layout, v);
+    if (!plan)
+        return false;
+    if (plan->native_type != expected_native) {
+        cg_class_native_report_field_plan_error(ctx, v, "native_type_mismatch", plan);
+        return false;
+    }
+    if (expected_native == XR_NATIVE_ARRAY_REF && plan->ref_kind != XAOT_CLASS_FIELD_REF_ARRAY) {
+        cg_class_native_report_field_plan_error(ctx, v, "array_ref_kind_mismatch", plan);
+        return false;
+    }
+    if (expected_native == XR_NATIVE_MAP_REF && plan->ref_kind != XAOT_CLASS_FIELD_REF_MAP) {
+        cg_class_native_report_field_plan_error(ctx, v, "map_ref_kind_mismatch", plan);
+        return false;
+    }
+    if (expected_native == XR_NATIVE_SET_REF && plan->ref_kind != XAOT_CLASS_FIELD_REF_SET) {
+        cg_class_native_report_field_plan_error(ctx, v, "set_ref_kind_mismatch", plan);
+        return false;
+    }
     if (out_info)
         *out_info = info;
     if (out_idx)

@@ -2178,6 +2178,11 @@ static bool cg_value_is_elided_static_fixed_struct_array_index_ref(XiCgenCtx *ct
                                                                    const XiValue *v);
 
 #include "xi_cgen_struct_helpers.inc.c"
+static bool cg_class_native_field_is_ref(const XrAggregateFieldLayout *field);
+static const char *cg_class_native_ref_field_tag_name(uint8_t native_type);
+static bool cg_class_native_field_plan_has_release_drop(XiCgenCtx *ctx, const XiClassData *cd,
+                                                        uint32_t slot,
+                                                        const XrAggregateFieldLayout *field);
 #include "xi_cgen_class_helpers.inc.c"
 static bool cg_has_exception_handling(const XiFunc *f);
 
