@@ -1,1 +1,0 @@
-parallel for body cannot capture mutable variable 'scale'

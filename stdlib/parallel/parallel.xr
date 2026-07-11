@@ -1,0 +1,151 @@
+// parallel — structured CPU batch parallelism public API.
+//
+// This file is the canonical user surface and bootstrap/reference semantics.
+// Hosted VM/AOT calls to these exports are expected to lower to XI_PAR_* once
+// the intrinsic pass is enabled; the bodies below intentionally stay simple so
+// stdlib bootstrap, module export scans, and type checking have a source truth.
+
+enum ParallelError {
+    NegativeWorkers,
+    ClosedPlan,
+    ConcurrentDispatch
+}
+
+class Options {
+    workers: int
+
+    constructor(workers: int = 0) {
+        this.workers = workers
+    }
+}
+
+fn _checkOptions(options: Options) {
+    if (options.workers < 0) {
+        throw ParallelError.NegativeWorkers
+    }
+}
+
+fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
+    _checkOptions(options)
+    for (offset in 0..range.length) {
+        body(range[offset])
+    }
+}
+
+fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -> Array<T> {
+    _checkOptions(options)
+    var out: Array<T> = []
+    for (offset in 0..range.length) {
+        out.push(body(range[offset]))
+    }
+    return out
+}
+
+fn mapInto<T>(
+    range: Range,
+    output: Array<T>,
+    body: (int) -> T,
+    options: Options = Options()
+) -> Array<T> {
+    _checkOptions(options)
+    output.clear()
+    for (offset in 0..range.length) {
+        output.push(body(range[offset]))
+    }
+    return output
+}
+
+fn reduce<A>(
+    range: Range,
+    initial: A,
+    body: (int) -> A,
+    combine: (A, A) -> A,
+    options: Options = Options()
+) -> A {
+    _checkOptions(options)
+    var acc = initial
+    for (offset in 0..range.length) {
+        acc = combine(acc, body(range[offset]))
+    }
+    return acc
+}
+
+class Plan<S> {
+    options: Options
+    _state: S
+    _closed: bool
+    _active: bool
+
+    constructor(options: Options, state: S) {
+        _checkOptions(options)
+        this.options = options
+        this._state = state
+        this._closed = false
+        this._active = false
+    }
+
+    static create(options: Options, init: (int) -> S) -> Plan<S> {
+        _checkOptions(options)
+        return Plan<S>(options, init(0))
+    }
+
+    _begin() {
+        if (this._closed) {
+            throw ParallelError.ClosedPlan
+        }
+        if (this._active) {
+            throw ParallelError.ConcurrentDispatch
+        }
+        this._active = true
+    }
+
+    _end() {
+        this._active = false
+    }
+
+    forEach(range: Range, body: (S, int) -> ()) {
+        this._begin()
+        defer { this._end() }
+        for (offset in 0..range.length) {
+            body(this._state, range[offset])
+        }
+    }
+
+    map<T>(range: Range, body: (S, int) -> T) -> Array<T> {
+        this._begin()
+        defer { this._end() }
+        var out: Array<T> = []
+        for (offset in 0..range.length) {
+            out.push(body(this._state, range[offset]))
+        }
+        return out
+    }
+
+    mapInto<T>(range: Range, output: Array<T>, body: (S, int) -> T) -> Array<T> {
+        this._begin()
+        defer { this._end() }
+        output.clear()
+        for (offset in 0..range.length) {
+            output.push(body(this._state, range[offset]))
+        }
+        return output
+    }
+
+    reduce<A>(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A) -> A {
+        this._begin()
+        defer { this._end() }
+        var acc = initial
+        for (offset in 0..range.length) {
+            acc = combine(acc, body(this._state, range[offset]))
+        }
+        return acc
+    }
+
+    close() {
+        if (!this._closed) {
+            this._closed = true
+        }
+    }
+}
+
+export { Options, Plan, ParallelError, forEach, map, mapInto, reduce }

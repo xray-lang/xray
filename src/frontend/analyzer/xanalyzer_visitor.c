@@ -358,9 +358,9 @@ XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
 
 XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name) {
     static const char *modules[] = {
-        "prelude", "time",     "math", "path",     "base64", "regex", "mem",      "sync", "sys",
-        "url",     "datetime", "log",  "encoding", "_probe", "io",    "os",       "json", "net",
-        "http",    "crypto",   "csv",  "toml",     "yaml",   "xml",   "compress", "ws"};
+        "prelude", "time", "math",     "path", "base64",   "regex",  "mem", "sync",     "parallel",
+        "sys",     "url",  "datetime", "log",  "encoding", "_probe", "io",  "os",       "json",
+        "net",     "http", "crypto",   "csv",  "toml",     "yaml",   "xml", "compress", "ws"};
     if (!module_name)
         return false;
     for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {

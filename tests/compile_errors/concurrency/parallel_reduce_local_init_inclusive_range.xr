@@ -1,9 +1,0 @@
-fn main() {
-    var total = parallel reduce i in 0..=4 workers 2 worker wid
-        local acc = wid
-        init 0
-        combine (a: int, b: int) -> a + b {
-        acc + i
-    }
-    print(total)
-}

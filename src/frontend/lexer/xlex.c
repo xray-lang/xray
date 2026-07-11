@@ -1101,7 +1101,6 @@ static const char *token_names[] = {
     [TK_PROTECTED] = "protected",
     [TK_OPERATOR] = "operator",
     [TK_FINAL] = "final",
-    [TK_PARALLEL] = "parallel",
     [TK_ENUM] = "enum",
     [TK_MATCH] = "match",
     [TK_TYPE_ALIAS] = "type",

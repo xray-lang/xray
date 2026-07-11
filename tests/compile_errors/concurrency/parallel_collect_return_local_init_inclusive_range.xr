@@ -1,9 +1,0 @@
-fn main() {
-    var xs = parallel for i in 0..=4 workers 2 worker wid
-        local acc = wid
-        collect {
-        acc = acc + i
-        acc
-    }
-    print(xs.length)
-}
