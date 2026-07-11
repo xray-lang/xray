@@ -567,6 +567,9 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
         return true;
     }
 
+    if (value->type && xaot_type_contains_unresolved_type_param(value->type))
+        return false;
+
     if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 && value->op == XI_PARAM) {
         if (out_elem)
             *out_elem = self_elem;

@@ -1,6 +1,0 @@
-fn main() {
-    var n = 4
-    parallel for i in 0..n workers "many" {
-        print(i)
-    }
-}

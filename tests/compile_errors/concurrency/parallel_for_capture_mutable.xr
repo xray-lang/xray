@@ -1,7 +1,0 @@
-fn main() {
-    var n = 4
-    var scale = 2
-    parallel for i in 0..n workers 2 {
-        print(i * scale)
-    }
-}

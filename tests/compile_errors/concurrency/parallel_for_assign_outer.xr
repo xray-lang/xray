@@ -1,7 +1,0 @@
-fn main() {
-    var n = 4
-    var sum = 0
-    parallel for i in 0..n workers 2 {
-        sum = sum + i
-    }
-}

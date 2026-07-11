@@ -120,6 +120,63 @@ static bool elem_plan_uses_direct_map_helper(const XaotContainerElemPlan *elem) 
     return elem && (elem->storage_rep == XR_REP_I64 || elem->storage_rep == XR_REP_F64);
 }
 
+static bool type_contains_unresolved_type_param_depth(const XrType *type, uint8_t depth) {
+    if (!type || depth > 16)
+        return false;
+    if (type->kind == XR_KIND_TYPE_PARAM)
+        return true;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
+        case XR_KIND_SPAN:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+            return type_contains_unresolved_type_param_depth(type->container.element_type,
+                                                             depth + 1);
+        case XR_KIND_MAP:
+            return type_contains_unresolved_type_param_depth(type->map.key_type, depth + 1) ||
+                   type_contains_unresolved_type_param_depth(type->map.value_type, depth + 1);
+        case XR_KIND_FUNCTION:
+            for (int i = 0; i < type->function.param_count; i++) {
+                if (type_contains_unresolved_type_param_depth(
+                        type->function.param_types ? type->function.param_types[i] : NULL,
+                        depth + 1))
+                    return true;
+            }
+            return type_contains_unresolved_type_param_depth(type->function.return_type, depth + 1);
+        case XR_KIND_INSTANCE:
+            for (int i = 0; i < type->instance.type_arg_count; i++) {
+                if (type_contains_unresolved_type_param_depth(
+                        type->instance.type_args ? type->instance.type_args[i] : NULL, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (type_contains_unresolved_type_param_depth(
+                        type->tuple.element_types ? type->tuple.element_types[i] : NULL, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_UNION:
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (type_contains_unresolved_type_param_depth(
+                        type->union_type.members ? type->union_type.members[i] : NULL, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_FIXED_ARRAY:
+            return type_contains_unresolved_type_param_depth(type->fixed_array.element_type,
+                                                             depth + 1);
+        default:
+            return false;
+    }
+}
+
+XR_FUNC bool xaot_type_contains_unresolved_type_param(const XrType *type) {
+    return type_contains_unresolved_type_param_depth(type, 0);
+}
+
 XR_FUNC bool xaot_container_plan_for_type(const XrType *type, XaotContainerPlan *out) {
     const XrType *elem;
 

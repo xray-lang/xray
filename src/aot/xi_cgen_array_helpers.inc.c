@@ -2620,6 +2620,8 @@ static bool cg_array_value_storage_info(XiCgenCtx *ctx, const XiFunc *f, const X
     if (plan)
         return (plan->flags & required_flag) != 0 &&
                cg_array_elem_info_from_storage_plan(plan, out);
+    if (v && v->type && xaot_type_contains_unresolved_type_param(v->type))
+        return false;
     return v && cg_array_elem_info_from_type_ctx(ctx, v->type, out);
 }
 

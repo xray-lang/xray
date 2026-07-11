@@ -67,6 +67,7 @@ typedef struct XaotContainerPlan {
 XR_FUNC bool xaot_container_elem_plan_for_type(const XrType *type, XaotContainerElemPlan *out);
 XR_FUNC bool xaot_container_plan_for_type(const XrType *type, XaotContainerPlan *out);
 XR_FUNC bool xaot_container_plan_matches_type(const XaotContainerPlan *plan, const XrType *type);
+XR_FUNC bool xaot_type_contains_unresolved_type_param(const XrType *type);
 XR_FUNC bool xaot_type_key_equal(const XaotTypeKey *a, const XaotTypeKey *b);
 XR_FUNC const char *xaot_container_kind_name(XaotContainerKind kind);
 
