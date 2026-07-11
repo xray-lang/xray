@@ -503,6 +503,5 @@ XR_FUNC XrModule *xr_load_module_math(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_math_generated(isolate, mod);
 
-    mod->loaded = true;
     return mod;
 }

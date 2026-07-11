@@ -31,9 +31,11 @@
  *     XrModule* xr_load_module_example(XrVMRuntime *X) {
  *         XrModule *m = xr_module_create_native(X, "example");
  *         XRS_EXPORT(m, X, "myFn", my_fn);
- *         m->loaded = true;
  *         return m;
  *     }
+ *
+ * Native loaders only construct exports. The module registry owns the single
+ * INITIALIZING -> PUBLISHED transition after any script extension succeeds.
  */
 
 #ifndef XR_STDLIB_COMMON_H

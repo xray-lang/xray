@@ -1170,6 +1170,5 @@ XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
 #endif
 
     // 4. Mark as loaded
-    mod->loaded = true;
     return mod;
 }

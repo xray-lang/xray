@@ -166,6 +166,35 @@ static void module_init_exports(XrModule *module) {
     module->export_capacity = 0;
 }
 
+XrModuleState xr_module_state(const XrModule *module) {
+    if (!module)
+        return XR_MODULE_FAILED;
+    return (XrModuleState) atomic_load_explicit(&module->state, memory_order_acquire);
+}
+
+bool xr_module_begin_initialization(XrModule *module) {
+    if (!module)
+        return false;
+    uint8_t expected = XR_MODULE_NEW;
+    return atomic_compare_exchange_strong_explicit(&module->state, &expected,
+                                                   XR_MODULE_INITIALIZING, memory_order_acq_rel,
+                                                   memory_order_acquire);
+}
+
+bool xr_module_publish(XrModule *module) {
+    if (!module || xr_module_state(module) != XR_MODULE_INITIALIZING)
+        return false;
+    xr_module_build_export_index(module);
+    atomic_store_explicit(&module->state, XR_MODULE_PUBLISHED, memory_order_release);
+    return true;
+}
+
+void xr_module_fail(XrModule *module) {
+    if (!module)
+        return;
+    atomic_store_explicit(&module->state, XR_MODULE_FAILED, memory_order_release);
+}
+
 /*
 ** Create Native module
 */
@@ -182,8 +211,7 @@ XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name) {
 
     module_init_exports(module);
 
-    module->loaded = false;
-    module->loading = false;
+    atomic_init(&module->state, XR_MODULE_NEW);
     module->native_handle = NULL;
     module->native_handle_destroy = NULL;
     module->init_fn = NULL;
@@ -208,8 +236,7 @@ XrModule *xr_module_create_script(XrVMRuntime *isolate, const char *name, const 
 
     module_init_exports(module);
 
-    module->loaded = false;
-    module->loading = false;
+    atomic_init(&module->state, XR_MODULE_NEW);
     module->native_handle = NULL;
     module->native_handle_destroy = NULL;
     module->init_fn = NULL;
@@ -226,6 +253,11 @@ void xr_module_add_export_sym(XrVMRuntime *isolate, XrModule *module, SymbolId s
     (void) isolate;
     if (!module)
         return;
+    XrModuleState state = xr_module_state(module);
+    if (state != XR_MODULE_NEW && state != XR_MODULE_INITIALIZING) {
+        xr_log_warning("module", "cannot modify exports after module publication");
+        return;
+    }
 
     // Check if symbol already exists (update case)
     for (uint16_t i = 0; i < module->export_count; i++) {
@@ -292,7 +324,7 @@ XrValue xr_module_get_export(XrVMRuntime *isolate, XrModule *module, const char 
 
 /*
 ** Build sparse SymbolId→index lookup table
-** Call after all exports are added (e.g. when module->loaded = true)
+** Called by xr_module_publish after all exports are added.
 */
 void xr_module_build_export_index(XrModule *module) {
     if (!module || module->export_count == 0)
@@ -699,7 +731,7 @@ static bool proto_has_invalid_class_descriptors(XrProto *proto) {
 **
 ** After Native module is loaded, find and execute stdlib/<name>/<name>.xr script extension.
 ** Exports in the script will be added to the module's export table, can override C module exports.
-** The native module is already registered as "loading"; importing it from the extension is a
+** The native module is already INITIALIZING; importing it from the extension is a
 ** circular dependency and fails instead of exposing a partially initialized module.
 */
 static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const char *module_name) {
@@ -910,12 +942,17 @@ static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_nam
     }
 
     // 2. Add to cache BEFORE loading script extension as an in-progress marker.
-    //    Recursive imports hit module->loading and fail with E0504 instead of
+    //    Recursive imports observe INITIALIZING and fail with E0504 instead of
     //    observing a partially initialized C layer.
-    module->loading = true;
+    if (!xr_module_begin_initialization(module)) {
+        xr_log_warning("module", "native module '%s' entered an invalid initialization state",
+                       module_name);
+        xr_module_free(module);
+        return NULL;
+    }
     if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
         xr_log_warning("module", "out of memory caching native module '%s'", module_name);
-        module->loading = false;
+        xr_module_fail(module);
         xr_module_free(module);
         return NULL;
     }
@@ -924,15 +961,17 @@ static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_nam
     if (!load_script_extension(isolate, module, module_name)) {
         xr_log_warning("module", "failed to load extension for '%s'", module_name);
         xr_hashmap_delete(registry->loaded_modules, module_name);
-        module->loading = false;
+        xr_module_fail(module);
         xr_module_free(module);
         return NULL;
     }
 
-    // Build sparse index and mark as loaded
-    xr_module_build_export_index(module);
-    module->loading = false;
-    module->loaded = true;
+    if (!xr_module_publish(module)) {
+        xr_hashmap_delete(registry->loaded_modules, module_name);
+        xr_module_fail(module);
+        xr_module_free(module);
+        return NULL;
+    }
 
     return module;
 }
@@ -1027,10 +1066,6 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
 
     // 8. Restore context
     xr_isolate_set_current_module(isolate, prev_module);
-
-    // 9. Build sparse index and mark as loaded
-    xr_module_build_export_index(module);
-    module->loaded = true;
 
     return module;
 }
@@ -1145,14 +1180,21 @@ static XrModule *try_load_native_package(XrVMRuntime *isolate, const char *modul
     // imports (the loader would run again), so OOM fails the load.
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     XR_DCHECK(registry != NULL, "try_load_native_package: NULL registry");
-    module->loading = true;
-    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
-        xr_log_warning("module", "out of memory caching native package '%s'", module_name);
+    if (!xr_module_begin_initialization(module)) {
+        xr_log_warning("module", "native package '%s' entered an invalid initialization state",
+                       module_name);
         return NULL;
     }
-    xr_module_build_export_index(module);
-    module->loading = false;
-    module->loaded = true;
+    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
+        xr_log_warning("module", "out of memory caching native package '%s'", module_name);
+        xr_module_fail(module);
+        return NULL;
+    }
+    if (!xr_module_publish(module)) {
+        xr_hashmap_delete(registry->loaded_modules, module_name);
+        xr_module_fail(module);
+        return NULL;
+    }
 
     xr_log_notice("module", "loaded native package '%s' from '%s'", module_name, lib_path);
 
@@ -1195,12 +1237,13 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     // 1. Check cache (by module name or absolute path)
     XrModule *module = (XrModule *) xr_hashmap_get(registry->loaded_modules, module_name);
     if (module) {
-        if (module->loading) {
+        XrModuleState state = xr_module_state(module);
+        if (state == XR_MODULE_INITIALIZING) {
             xr_log_warning("module", "E0504: circular dependency: %s -> %s", module_name,
                            module_name);
             return xr_null();
         }
-        return xr_value_from_module(module);
+        return state == XR_MODULE_PUBLISHED ? xr_value_from_module(module) : xr_null();
     }
 
     // 2. Try to load Native module (standard library C layer)
@@ -1251,17 +1294,22 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     module = (XrModule *) xr_hashmap_get(registry->loaded_modules, path);
     if (module) {
         xr_free(path);
-        if (module->loading) {
+        XrModuleState state = xr_module_state(module);
+        if (state == XR_MODULE_INITIALIZING) {
             xr_log_warning("module", "E0504: circular dependency: %s", module_name);
             return xr_null();
         }
-        return xr_value_from_module(module);
+        return state == XR_MODULE_PUBLISHED ? xr_value_from_module(module) : xr_null();
     }
 
     // 4. Create and load script module
     module = xr_module_create_script(isolate, module_name, path);
     if (module) {
-        module->loading = true;
+        if (!xr_module_begin_initialization(module)) {
+            xr_module_fail(module);
+            xr_free(path);
+            return xr_null();
+        }
         /*
          * Use absolute path as cache key
          * Note: hashmap doesn't copy key, so path ownership transfers to hashmap
@@ -1271,6 +1319,7 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
          */
         if (!xr_hashmap_set(registry->loaded_modules, path, module)) {
             xr_log_warning("module", "out of memory caching module '%s'", module_name);
+            xr_module_fail(module);
             xr_free(path);
             return xr_null();
         }
@@ -1278,7 +1327,12 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
         XrModule *loaded = load_script_module(isolate, module, path);
 
         if (loaded) {
-            module->loading = false;
+            if (!xr_module_publish(module)) {
+                xr_hashmap_delete(registry->loaded_modules, path);
+                xr_module_fail(module);
+                xr_free(path);
+                return xr_null();
+            }
             // path now owned by hashmap, do not free
             return xr_value_from_module(module);
         } else {
@@ -1286,6 +1340,7 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
             // pointer; a value-NULL overwrite would leave the soon-freed
             // path dangling inside the map) and free the path.
             xr_hashmap_delete(registry->loaded_modules, path);
+            xr_module_fail(module);
             xr_free(path);
             return xr_null();
         }
