@@ -50,9 +50,5 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
                        type, size);
         return NULL;
     }
-
-    if (coro->core) {
-        return xr_fixed_heap_alloc(&coro->core->fixed_heap, size, type);
-    }
     return NULL;
 }

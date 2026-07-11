@@ -57,13 +57,14 @@ static XrValue m_reset(XrVMRuntime *isolate, XrValue self, XrValue *args, int na
 }
 
 static XrValue m_try_recv(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) isolate;
     (void) args;
     (void) nargs;
     XrResultGroup *g = xr_value_to_result_group(self);
     XR_DCHECK(g != NULL, "ResultGroup.tryRecv: NULL group");
     int64_t value = 0;
     bool ok = xr_result_group_try_recv(g, &value);
-    XrTuple *tuple = xr_tuple_new(xr_current_coro(isolate), 2);
+    XrTuple *tuple = xr_tuple_new(NULL, 2);
     if (!tuple)
         return xr_null();
     xr_tuple_set(tuple, 0, ok ? xr_int(value) : xr_null());

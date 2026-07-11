@@ -28,6 +28,7 @@
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../mem/xweak_registry.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
@@ -239,7 +240,8 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_obj_header_init_type(&set->hdr, XR_TSET);
-    set->owner_heap = xr_coro_get_heap(coro);
+    XrAllocationContext *alloc = coro ? NULL : xr_alloc_context_current();
+    set->owner_heap = coro ? xr_coro_get_heap(coro) : (alloc ? alloc->local_heap : NULL);
 
     set->count = 0;
     set->nentries = 0;

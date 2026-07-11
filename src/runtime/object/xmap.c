@@ -25,6 +25,7 @@
 #include "xmap.h"
 #include "xstring.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../mem/xweak_registry.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
@@ -337,7 +338,8 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_obj_header_init_type(&map->hdr, XR_TMAP);
-    map->owner_heap = xr_coro_get_heap(coro);
+    XrAllocationContext *alloc = coro ? NULL : xr_alloc_context_current();
+    map->owner_heap = coro ? xr_coro_get_heap(coro) : (alloc ? alloc->local_heap : NULL);
 
     map->count = 0;
     map->nentries = 0;

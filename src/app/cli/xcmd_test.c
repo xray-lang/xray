@@ -8,10 +8,10 @@
  * xcmd_test.c - 'xray test' command implementation
  *
  * KEY CONCEPT:
- *   Unified execution model: @test functions run on the same main_coro
- *   as top-level code (via xr_coro_reset_for_call), ensuring identical
- *   semantics with direct execution (xray file.xr). This keeps execution
- *   behavior consistent between test and direct modes.
+ *   Unified execution model: the test executor materializes one physical root
+ *   task on demand, then reuses it for hooks and @test functions. Isolate
+ *   creation itself remains task-free; the explicit test executor owns the
+ *   scheduler-backed root required by timeout/cancellation semantics.
  *
  *   Parallel execution: test files run concurrently on a thread pool
  *   (each file gets its own isolate). -j N controls parallelism.
@@ -35,6 +35,7 @@
 #include "../../runtime/core/xr_runtime_core.h"
 #include "../../module/xmodule.h"
 #include "../../vm/xvm_internal.h"
+#include "../../vm/xvm_coro_api.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../../frontend/parser/xparse.h"
@@ -216,12 +217,18 @@ static void watchdog_stop(FileWatchdog *wd, xr_thread_t tid) {
     xr_cond_destroy(&wd->cond);
 }
 
-/* ========== Unified Test Execution (reuse main_coro) ========== */
+/* ========== Unified Test Execution (reuse an on-demand physical root) ========== */
 
 // Run a closure on main_coro (identical semantics to xr_execute).
 // Returns 0 on success, -1 on failure.
 static int run_inline(XrVMRuntime *X, XrClosure *closure) {
     XrCoroutine *main_coro = xr_isolate_get_main_coro(X);
+    if (!main_coro) {
+        main_coro = xr_coro_create_bootstrap(X);
+        if (!main_coro)
+            return -1;
+        xr_isolate_set_main_coro(X, main_coro);
+    }
     xr_coro_reset_for_call(main_coro, X, closure);
     xr_main_thread_run(X, main_coro);
 

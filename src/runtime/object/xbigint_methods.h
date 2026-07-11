@@ -62,7 +62,7 @@ static inline XrValue xr_bigint_abs_method(XrVMRuntime *iso, XrValue self, XrVal
     (void) args;
     (void) argc;
     XR_DCHECK(iso != NULL, "xr_bigint_abs_method: NULL isolate");
-    XrBigInt *result = xr_bigint_abs(xr_current_coro(iso), xr_bigint_method_self(self));
+    XrBigInt *result = xr_bigint_abs(NULL, xr_bigint_method_self(self));
     return XR_FROM_PTR(result);
 }
 

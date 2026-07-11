@@ -130,6 +130,10 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     if (!isolate)
         return;
 
+    XrExecutionContext *active_exec = xr_exec_context_current();
+    if (active_exec && active_exec->core == isolate->core_rt)
+        xr_exec_context_restore(NULL);
+
     bool teardown_stats = isolate_teardown_stats_enabled();
     uint64_t teardown_start_ns = xr_time_monotonic_ns();
     uint64_t stage_start_ns = teardown_start_ns;

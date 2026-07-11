@@ -325,7 +325,8 @@ XrArray *xr_array_with_capacity_in(XrAllocationContext *alloc, int capacity,
 
 XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
                                       XrArrayElemType elem_type) {
-    return xr_array_with_capacity_alloc(NULL, coro, capacity, elem_type);
+    return xr_array_with_capacity_alloc(coro ? NULL : xr_alloc_context_current(), coro, capacity,
+                                        elem_type);
 }
 
 // Initialize array in-place (for shared arrays on system heap)

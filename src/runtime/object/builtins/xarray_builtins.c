@@ -31,7 +31,7 @@ XrValue xr_builtin_array_construct(XrVMRuntime *isolate, XrValue self, XrValue *
     XR_DCHECK(isolate != NULL, "array_construct: NULL isolate");
     if (nargs == 0) {
         // Array() - empty array
-        XrArray *arr = xr_array_new(xr_current_coro(isolate));
+        XrArray *arr = xr_array_new(NULL);
         return xr_value_from_array(arr);
     } else if (nargs == 1) {
         // Array(n) - length n, filled with null
@@ -46,7 +46,7 @@ XrValue xr_builtin_array_construct(XrVMRuntime *isolate, XrValue self, XrValue *
             return xr_null();
         }
 
-        XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), n);
+        XrArray *arr = xr_array_with_capacity(NULL, n);
         XrValue *adata = (XrValue *) arr->data;
         for (int i = 0; i < n; i++) {
             adata[i] = xr_null();
@@ -69,7 +69,7 @@ XrValue xr_builtin_array_construct(XrVMRuntime *isolate, XrValue self, XrValue *
 
         XrValue value = args[1];
 
-        XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), n);
+        XrArray *arr = xr_array_with_capacity(NULL, n);
         XrValue *adata = (XrValue *) arr->data;
         for (int i = 0; i < n; i++) {
             adata[i] = value;
@@ -97,7 +97,7 @@ XrValue xr_builtin_array_from(XrVMRuntime *isolate, XrValue self, XrValue *args,
     // From string
     if (XR_IS_STRING(source)) {
         XrString *str = XR_TO_STRING(source);
-        XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), (int) str->length);
+        XrArray *arr = xr_array_with_capacity(NULL, (int) str->length);
 
         for (size_t i = 0; i < str->length; i++) {
             char ch[2] = {str->data[i], '\0'};
@@ -112,7 +112,7 @@ XrValue xr_builtin_array_from(XrVMRuntime *isolate, XrValue self, XrValue *args,
     // From array (copy)
     if (XR_IS_ARRAY(source)) {
         XrArray *src = XR_TO_ARRAY(source);
-        XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), src->length);
+        XrArray *arr = xr_array_with_capacity(NULL, src->length);
 
         XrValue *dst = (XrValue *) arr->data;
         XrValue *srcd = (XrValue *) src->data;
@@ -127,7 +127,7 @@ XrValue xr_builtin_array_from(XrVMRuntime *isolate, XrValue self, XrValue *args,
     // From Set
     if (XR_IS_SET(source)) {
         XrSet *set = XR_TO_SET(source);
-        XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), set->count);
+        XrArray *arr = xr_array_with_capacity(NULL, set->count);
 
         if (set->entries) {
             for (uint32_t i = 0; i < set->nentries; i++) {
@@ -144,7 +144,7 @@ XrValue xr_builtin_array_from(XrVMRuntime *isolate, XrValue self, XrValue *args,
     // From Map (returns entries array)
     if (XR_IS_MAP(source)) {
         XrMap *map = XR_TO_MAP(source);
-        XrArray *arr = xr_map_entries(xr_current_coro(isolate), map);
+        XrArray *arr = xr_map_entries(NULL, map);
         return xr_value_from_array(arr);
     }
 
@@ -175,7 +175,7 @@ XrValue xr_builtin_array_range(XrVMRuntime *isolate, XrValue self, XrValue *args
     }
 
     int size = (int) (end - start + 1);
-    XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), size);
+    XrArray *arr = xr_array_with_capacity(NULL, size);
 
     for (int i = 0; i < size; i++) {
         ((XrValue *) arr->data)[i] = xr_int(start + i);
@@ -206,6 +206,6 @@ XrValue xr_builtin_array_with_capacity(XrVMRuntime *isolate, XrValue self, XrVal
         return xr_null();
     }
 
-    XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), capacity);
+    XrArray *arr = xr_array_with_capacity(NULL, capacity);
     return xr_value_from_array(arr);
 }

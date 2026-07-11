@@ -59,7 +59,7 @@ static void append_value(XrStringBuilder *sb, XrVMRuntime *iso, XrValue value) {
 XrValue xr_builtin_stringbuilder_new(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) self;
     XR_DCHECK(isolate != NULL, "stringbuilder_new: NULL isolate");
-    XrStringBuilder *sb = xr_stringbuilder_new(xr_current_coro(isolate));
+    XrStringBuilder *sb = xr_stringbuilder_new(NULL);
     if (!sb)
         return xr_null();
 

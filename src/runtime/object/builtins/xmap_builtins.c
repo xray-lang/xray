@@ -26,12 +26,13 @@ XrValue xr_builtin_map_construct(XrVMRuntime *isolate, XrValue self, XrValue *ar
     (void) args;
     if (argc != 0)
         return xr_null();
-    XrMap *map = xr_map_new(xr_current_coro(isolate));
+    XrMap *map = xr_map_new(NULL);
     return xr_value_from_map(map);
 }
 
 // Map.from(entries) or Map.from(keys, values)
 XrValue xr_builtin_map_from(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) isolate;
     (void) self;
     if (argc == 1) {
         // Map.from(entries) - array of [key, value] pairs
@@ -39,7 +40,7 @@ XrValue xr_builtin_map_from(XrVMRuntime *isolate, XrValue self, XrValue *args, i
             return xr_null();
 
         XrArray *entries = XR_TO_ARRAY(args[0]);
-        XrMap *map = xr_map_new(xr_current_coro(isolate));
+        XrMap *map = xr_map_new(NULL);
 
         XrValue *edata = (XrValue *) entries->data;
         for (int i = 0; i < entries->length; i++) {
@@ -64,7 +65,7 @@ XrValue xr_builtin_map_from(XrVMRuntime *isolate, XrValue self, XrValue *args, i
         XrArray *values = XR_TO_ARRAY(args[1]);
 
         int size = keys->length < values->length ? keys->length : values->length;
-        XrMap *map = xr_map_new(xr_current_coro(isolate));
+        XrMap *map = xr_map_new(NULL);
 
         for (int i = 0; i < size; i++) {
             xr_map_set(map, ((XrValue *) keys->data)[i], ((XrValue *) values->data)[i]);

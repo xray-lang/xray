@@ -45,13 +45,13 @@
 static XrValue xr_json_static_keys(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
+        return xr_value_from_array(xr_array_new(NULL));
 
     XrJson *json = xr_value_to_json(args[0]);
     if (!json || !json->klass)
-        return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
+        return xr_value_from_array(xr_array_new(NULL));
 
-    XrArray *keys = xr_array_new(xr_current_coro(isolate));
+    XrArray *keys = xr_array_new(NULL);
     XrClass *cls = json->klass;
     for (uint16_t i = 0; i < cls->field_count; i++) {
         const char *name = cls->fields[i].name;
@@ -65,15 +65,16 @@ static XrValue xr_json_static_keys(XrVMRuntime *isolate, XrValue self, XrValue *
 
 // Json.values(obj) -> Array
 static XrValue xr_json_static_values(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) isolate;
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
+        return xr_value_from_array(xr_array_new(NULL));
 
     XrJson *json = xr_value_to_json(args[0]);
     if (!json || !json->klass)
-        return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
+        return xr_value_from_array(xr_array_new(NULL));
 
-    XrArray *values = xr_array_new(xr_current_coro(isolate));
+    XrArray *values = xr_array_new(NULL);
     XrClass *cls = json->klass;
     for (uint16_t i = 0; i < cls->field_count; i++) {
         xr_array_push(values, xr_instance_get_dynamic_field(json, i));
@@ -87,14 +88,14 @@ static XrValue xr_json_static_entries(XrVMRuntime *isolate, XrValue self, XrValu
                                       int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
+        return xr_value_from_array(xr_array_new(NULL));
 
     XrJson *json = xr_value_to_json(args[0]);
     if (!json || !json->klass)
-        return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
+        return xr_value_from_array(xr_array_new(NULL));
 
-    XrArray *entries = xr_array_new(xr_current_coro(isolate));
-    XrCoroutine *coro = xr_current_coro(isolate);
+    XrArray *entries = xr_array_new(NULL);
+    XrCoroutine *coro = NULL;
     XrClass *cls = json->klass;
     for (uint16_t i = 0; i < cls->field_count; i++) {
         /* Each entry is a (key, value) tuple: heterogeneous arity-2

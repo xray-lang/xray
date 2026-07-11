@@ -87,44 +87,48 @@ static XrValue xr_set_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args
 }
 
 static XrValue xr_set_method_union(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return self;
-    XrSet *result = xr_set_union(xr_current_coro(iso), s, XR_TO_SET(args[0]));
+    XrSet *result = xr_set_union(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
 static XrValue xr_set_method_intersection(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0])) {
-        return xr_value_from_set(xr_set_new(xr_current_coro(iso)));
+        return xr_value_from_set(xr_set_new(NULL));
     }
-    XrSet *result = xr_set_intersection(xr_current_coro(iso), s, XR_TO_SET(args[0]));
+    XrSet *result = xr_set_intersection(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
 static XrValue xr_set_method_difference(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return self;
-    XrSet *result = xr_set_difference(xr_current_coro(iso), s, XR_TO_SET(args[0]));
+    XrSet *result = xr_set_difference(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
 static XrValue xr_set_method_symmetric_difference(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                   int argc) {
+    (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return self;
-    XrSet *result = xr_set_symmetric_difference(xr_current_coro(iso), s, XR_TO_SET(args[0]));
+    XrSet *result = xr_set_symmetric_difference(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
@@ -149,12 +153,13 @@ static XrValue xr_set_method_is_superset(XrVMRuntime *iso, XrValue self, XrValue
 }
 
 static XrValue xr_set_method_to_array(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
-    XrArray *arr = xr_set_values(xr_current_coro(iso), s);
+    XrArray *arr = xr_set_values(NULL, s);
     return xr_value_from_array(arr);
 }
 
@@ -182,12 +187,13 @@ static XrValue xr_set_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *ar
 }
 
 static XrValue xr_set_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
-    XrIterator *iter = xr_iterator_new_from_set(xr_current_coro(iso), s);
+    XrIterator *iter = xr_iterator_new_from_set(NULL, s);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 

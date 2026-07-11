@@ -22,6 +22,7 @@
 #include "xdeep_copy.h"
 #include "xsched_trace.h"
 #include "xtask.h"
+#include "../runtime/core/xr_exec_context.h"
 
 static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *coro) {
     int wr = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
@@ -686,5 +687,8 @@ XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     if (!coro || !coro->backend || !coro->backend->resume)
         return xr_coro_run_error(XR_NULL_VAL, false);
     xr_coro_finish_backend_resume_tokens(coro, xr_coro_resume_load(coro));
-    return coro->backend->resume(coro, &event, &run_ctx);
+    XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
+    XrCoroRunResult result = coro->backend->resume(coro, &event, &run_ctx);
+    xr_exec_context_restore(previous);
+    return result;
 }

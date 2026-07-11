@@ -279,7 +279,7 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     if (proto == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
-    XrClosure *closure = xr_closure_new(isolate, proto, xr_current_coro(isolate));
+    XrClosure *closure = xr_closure_new(isolate, proto, NULL);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
@@ -323,17 +323,22 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
 
+    XrExecutionContext *previous =
+        xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
+
     if (!xr_vm_bind_proto_shared_slots(isolate, proto)) {
+        xr_exec_context_restore(previous);
         return XR_VM_RUNTIME_ERROR;
     }
 
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    // Create module closure on current coroutine's Region heap (if any).
-    XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
-    XrClosure *closure = xr_closure_new(isolate, proto, coro);
+    // Module initialization owns its closure independently of any physical
+    // task whose VM stack happens to host the nested dispatch.
+    XrClosure *closure = xr_closure_new(isolate, proto, NULL);
     if (closure == NULL) {
+        xr_exec_context_restore(previous);
         return XR_VM_RUNTIME_ERROR;
     }
 
@@ -346,6 +351,7 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     // above the current stack_top. prepare_entry uses ctx->stack_top as the
     // baseline for "extra_stack" computation.
     if (!xr_vm_prepare_entry(ctx, proto->maxstacksize)) {
+        xr_exec_context_restore(previous);
         return XR_VM_RUNTIME_ERROR;
     }
 
@@ -385,6 +391,7 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     ctx->frame_count = saved_frame_count;
     ctx->stack_top = ctx->stack + saved_top_offset;
 
+    xr_exec_context_restore(previous);
     return result;
 }
 
