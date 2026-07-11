@@ -650,8 +650,8 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
             return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
         case AST_LITERAL_FALSE:
             return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
-        case AST_LITERAL_CHAR:
-            return xi_const_char(l->func, l->cur_block, node->as.literal.raw_value.char_val,
+        case AST_LITERAL_RUNE:
+            return xi_const_rune(l->func, l->cur_block, node->as.literal.raw_value.rune_val,
                                  l->type_char);
         case AST_LITERAL_NULL:
             return xi_const_null(l->func, l->cur_block, l->type_null);
@@ -676,7 +676,7 @@ static XiValue *lower_ct_scalar_value(XiLower *l, const XrCtValue *value) {
         case XR_CT_STRING:
             return xi_const_str(l->func, l->cur_block, value->as.string_val, l->type_string);
         case XR_CT_CHAR:
-            return xi_const_char(l->func, l->cur_block, value->as.char_val, l->type_char);
+            return xi_const_rune(l->func, l->cur_block, value->as.rune_val, l->type_char);
         case XR_CT_NULL:
             return xi_const_null(l->func, l->cur_block, l->type_null);
         default:
@@ -1713,7 +1713,7 @@ static bool xi_type_is_pod_span_elem(struct XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             return true;
         default:
             return false;
@@ -1750,8 +1750,8 @@ static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
             return type->native_width == XR_NATIVE_F32 ? XR_ELEM_F32 : XR_ELEM_F64;
         case XR_KIND_BOOL:
             return XR_ELEM_BOOL;
-        case XR_KIND_CHAR:
-            return XR_ELEM_CHAR;
+        case XR_KIND_RUNE:
+            return XR_ELEM_RUNE;
         default:
             return XR_ELEM_ANY;
     }
@@ -2630,8 +2630,8 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
-    /* typeof(x) → TypeId int. */
-    if (strcmp(fname, "typeof") == 0 && call->arg_count == 1) {
+    /* typeOf(x) → TypeId int. */
+    if (strcmp(fname, "typeOf") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEID, l->type_int, 1);
         if (!v)
@@ -2640,13 +2640,49 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return v;
     }
-    /* typename(x) → cold/debug type display name string. */
-    if (strcmp(fname, "typename") == 0 && call->arg_count == 1) {
+    /* typeName(x) → cold/debug type display name string. */
+    if (strcmp(fname, "typeName") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPENAME, l->type_string, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = arg;
+        v->line = (uint32_t) line;
+        return v;
+    }
+    /* len(x) is a compiler-known query, never an ordinary public member call. */
+    if (strcmp(fname, "len") == 0 && call->arg_count == 1) {
+        XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+        if (arg && arg->type && arg->type->kind == XR_KIND_FIXED_ARRAY)
+            return xi_const_int(l->func, l->cur_block, arg->type->fixed_array.length, l->type_int);
+
+        if (arg && arg->type &&
+            (arg->type->kind == XR_KIND_INSTANCE || arg->type->kind == XR_KIND_CLASS)) {
+            XrClassInfo *info = arg->type->instance.class_ref;
+            if (info && xa_class_info_lookup_member(info, "__operator_len")) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_int, 1);
+                if (!v)
+                    return xi_const_null(l->func, l->cur_block, l->type_null);
+                v->args[0] = arg;
+                v->aux = (void *) "__operator_len";
+                v->aux_int = (int64_t) xi_lower_method_symbol(l, "__operator_len") << 1;
+                v->line = (uint32_t) line;
+                return v;
+            }
+        }
+
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, l->type_int, 1);
+        if (!v)
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = arg;
+        v->aux = (void *) "len";
+        v->aux_int = arg && arg->type &&
+                             (arg->type->kind == XR_KIND_JSON || arg->type->kind == XR_KIND_UNKNOWN)
+                         ? 1
+                         : 0;
+        v->flags |= XI_FLAG_READS_MEM;
+        if (v->aux_int)
+            v->flags |= XI_FLAG_MAY_THROW;
         v->line = (uint32_t) line;
         return v;
     }
@@ -2762,7 +2798,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
             target = l->type_float;
         else if (strcmp(fname, "bool") == 0)
             target = l->type_bool;
-        else if (strcmp(fname, "char") == 0)
+        else if (strcmp(fname, "rune") == 0)
             target = l->type_char;
 
         if (target) {
@@ -3834,7 +3870,7 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
     if (XR_TYPE_IS_MAP(receiver_type)) {
         if (arg_count == 1 && strcmp(method, "get") == 0)
             *out_op = XG_KEY_ACCESS_GET;
-        else if (arg_count == 1 && strcmp(method, "has") == 0)
+        else if (arg_count == 1 && strcmp(method, "containsKey") == 0)
             *out_op = XG_KEY_ACCESS_HAS;
         else if (arg_count == 1 && strcmp(method, "delete") == 0)
             *out_op = XG_KEY_ACCESS_DELETE;
@@ -3843,7 +3879,7 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
         else if (arg_count == 0 && strcmp(method, "clear") == 0)
             *out_op = XG_KEY_ACCESS_CLEAR;
     } else if (XR_TYPE_IS_SET(receiver_type)) {
-        if (arg_count == 1 && strcmp(method, "has") == 0)
+        if (arg_count == 1 && strcmp(method, "contains") == 0)
             *out_op = XG_KEY_ACCESS_HAS;
         else if (arg_count == 1 && strcmp(method, "add") == 0)
             *out_op = XG_KEY_ACCESS_ADD;
@@ -5122,7 +5158,7 @@ static XiValue *parallel_call_child_closure(XiLower *l, XiFunc *child, int line)
 static bool parallel_call_type_can_use_scalar_map_callback(const struct XrType *type) {
     return type && !type->is_nullable &&
            (XR_TYPE_IS_INT(type) || XR_TYPE_IS_FLOAT(type) || XR_TYPE_IS_BOOL(type) ||
-            XR_TYPE_IS_CHAR(type));
+            XR_TYPE_IS_RUNE(type));
 }
 
 static XiValue *parallel_call_make_for_each(XiLower *l, AstNode *node, AstNode *range,
@@ -6138,9 +6174,9 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                 tid = 1;
                 tname = "bool";
                 break; /* XR_TID_BOOL */
-            case XR_TREF_CHAR:
-                tid = XR_TID_CHAR;
-                tname = "char";
+            case XR_TREF_RUNE:
+                tid = XR_TID_RUNE;
+                tname = "rune";
                 break;
             case XR_TREF_NULL:
                 tid = 0;
@@ -6634,7 +6670,7 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_STRING:
             return lower_literal(l, node);

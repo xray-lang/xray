@@ -4,8 +4,8 @@
 // functions take RawPtr/RawMut params (parsed as XR_KIND_POINTER, so a RawMut
 // argument coerces mut->const into the RawPtr param). rw = 0 read / 1 write.
 import mem
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var buf = unsafe { malloc(64) }
 unsafe { buf[0] = 3 }

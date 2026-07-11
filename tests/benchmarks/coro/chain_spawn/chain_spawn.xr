@@ -5,7 +5,7 @@
 import time
 
 var DEPTH = 100000  // 链深度
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     DEPTH = int(process.args[0]) ?? DEPTH
 }
 

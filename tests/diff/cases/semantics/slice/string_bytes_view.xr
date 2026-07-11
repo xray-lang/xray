@@ -1,12 +1,12 @@
 // anchor: slice-string-bytes-view
 fn main() {
     var text = "ABCD"
-    var bytes: ByteSpan = text.bytes()
-    print(bytes.length)
+    var bytes: Slice<byte> = text.bytes()
+    print(len(bytes))
     print(bytes[0])
     print(bytes[1])
-    var mid: ByteSpan = bytes[1:3]
-    print(mid.length)
+    var mid: Slice<byte> = bytes[1:3]
+    print(len(mid))
     print(mid[0])
     print(mid[1])
     var owned = copy(mid)

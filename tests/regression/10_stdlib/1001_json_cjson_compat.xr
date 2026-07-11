@@ -91,13 +91,13 @@ fn test_parse_big_numbers() {
     // parse_number_should_parse_big_numbers
     // Very large numbers overflow to Infinity (float) — just verify they parse without crash
     var v1 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567")
-    assert_eq(typename(v1), "float")
+    assert_eq(typeName(v1), "float")
 
     var v2 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567E10")
-    assert_eq(typename(v2), "float")
+    assert_eq(typeName(v2), "float")
 
     var v3 = Json.parse("999999999999999999999999999999999999999999999991234567890.1234567")
-    assert_eq(typename(v3), "float")
+    assert_eq(typeName(v3), "float")
     assert_true(v3 > 0.0)
 }
 
@@ -132,10 +132,10 @@ fn test_parse_escape_sequences() {
     assert_eq(s3, "/")
 
     var s4 = Json.parse("\"\\b\"")   // \b
-    assert_eq(s4.length, 1)
+    assert_eq(len(s4), 1)
 
     var s5 = Json.parse("\"\\f\"")   // \f
-    assert_eq(s5.length, 1)
+    assert_eq(len(s5), 1)
 
     var s6 = Json.parse("\"\\n\"")   // \n
     assert_eq(s6, "\n")
@@ -171,7 +171,7 @@ fn test_parse_utf16_surrogate_pairs() {
 fn test_parse_raw_control_characters() {
     // cJSON 允许解析原始控制字符
     var s = Json.parse("\"\\b\\f\\n\\r\\t\"")
-    assert_eq(s.length, 5)
+    assert_eq(len(s), 5)
 }
 
 @test
@@ -197,29 +197,29 @@ fn test_parse_invalid_string() {
 fn test_parse_empty_arrays() {
     // parse_array_should_parse_empty_arrays
     var arr1 = Json.parse("[]")
-    assert_eq(arr1.length, 0)
+    assert_eq(len(arr1), 0)
 
     var arr2 = Json.parse("[\n\t]")
-    assert_eq(arr2.length, 0)
+    assert_eq(len(arr2), 0)
 }
 
 @test
 fn test_parse_array_with_one_element() {
     // parse_array_should_parse_arrays_with_one_element
     var arr1 = Json.parse("[1]")
-    assert_eq(arr1.length, 1)
+    assert_eq(len(arr1), 1)
     assert_eq(arr1[0], 1)
 
     var arr2 = Json.parse("[\"hello!\"]")
-    assert_eq(arr2.length, 1)
+    assert_eq(len(arr2), 1)
     assert_eq(arr2[0], "hello!")
 
     var arr3 = Json.parse("[[]]")
-    assert_eq(arr3.length, 1)
-    assert_eq(arr3[0].length, 0)
+    assert_eq(len(arr3), 1)
+    assert_eq(len(arr3[0]), 0)
 
     var arr4 = Json.parse("[null]")
-    assert_eq(arr4.length, 1)
+    assert_eq(len(arr4), 1)
     assert_eq(arr4[0], null)
 }
 
@@ -227,19 +227,19 @@ fn test_parse_array_with_one_element() {
 fn test_parse_array_with_multiple_elements() {
     // parse_array_should_parse_arrays_with_multiple_elements
     var arr1 = Json.parse("[1\t,\n2, 3]")
-    assert_eq(arr1.length, 3)
+    assert_eq(len(arr1), 3)
     assert_eq(arr1[0], 1)
     assert_eq(arr1[1], 2)
     assert_eq(arr1[2], 3)
 
     // 混合类型数组
     var arr2 = Json.parse("[1, null, true, false, [], \"hello\", {}]")
-    assert_eq(arr2.length, 7)
+    assert_eq(len(arr2), 7)
     assert_eq(arr2[0], 1)
     assert_eq(arr2[1], null)
     assert_eq(arr2[2], true)
     assert_eq(arr2[3], false)
-    assert_eq(arr2[4].length, 0)  // []
+    assert_eq(len(arr2[4]), 0)  // []
     assert_eq(arr2[5], "hello")
     // arr2[6] 是空对象
 }
@@ -276,7 +276,7 @@ fn test_parse_object_with_one_element() {
     assert_eq(obj2.hello, "world!")
 
     var obj3 = Json.parse("{\"array\":[]}")
-    assert_eq(obj3.array.length, 0)
+    assert_eq(len(obj3.array), 0)
 
     var obj4 = Json.parse("{\"nullable\":null}")
     assert_eq(obj4.nullable, null)
@@ -296,7 +296,7 @@ fn test_parse_object_with_multiple_elements() {
     assert_eq(obj2.nullval, null)
     assert_eq(obj2.trueval, true)
     assert_eq(obj2.falseval, false)
-    assert_eq(obj2.array.length, 0)
+    assert_eq(len(obj2.array), 0)
     assert_eq(obj2.world, "hello")
 }
 
@@ -347,7 +347,7 @@ fn test_parse_value_string() {
 fn test_parse_value_array() {
     // parse_value_should_parse_array
     var arr = Json.parse("[]")
-    assert_eq(arr.length, 0)
+    assert_eq(len(arr), 0)
 }
 
 @test
@@ -387,17 +387,17 @@ fn test_stringify_positive_integers() {
 fn test_stringify_positive_reals() {
     // print_number_should_print_positive_reals
     var s1 = Json.stringify(0.123)
-    assert_true(s1.includes("0.123"))
+    assert_true(s1.contains("0.123"))
 
     var s2 = Json.stringify(3.1415926535897931)
-    assert_true(s2.includes("3.14159"))
+    assert_true(s2.contains("3.14159"))
 }
 
 @test
 fn test_stringify_negative_reals() {
     // print_number_should_print_negative_reals
     var s1 = Json.stringify(-0.0123)
-    assert_true(s1.includes("-0.0123"))
+    assert_true(s1.contains("-0.0123"))
 }
 
 // ============================================================
@@ -419,26 +419,26 @@ fn test_stringify_simple_string() {
 fn test_stringify_escape_characters() {
     // 双引号需要转义
     var s1 = Json.stringify("\"")
-    assert_true(s1.includes("\\\""))
+    assert_true(s1.contains("\\\""))
 
     // 反斜杠需要转义
     var s2 = Json.stringify("\\")
-    assert_true(s2.includes("\\\\"))
+    assert_true(s2.contains("\\\\"))
 
     // 换行符需要转义
     var s3 = Json.stringify("\n")
-    assert_true(s3.includes("\\n"))
+    assert_true(s3.contains("\\n"))
 
     // Tab 需要转义
     var s4 = Json.stringify("\t")
-    assert_true(s4.includes("\\t"))
+    assert_true(s4.contains("\\t"))
 }
 
 @test
 fn test_stringify_utf8() {
     // print_string_should_print_utf8
     var s = Json.stringify("ü猫慕")
-    assert_true(s.includes("ü猫慕"))
+    assert_true(s.contains("ü猫慕"))
 }
 
 // ============================================================
@@ -505,7 +505,7 @@ fn test_cjson_input_test2() {
     var jsonStr = "{\"menu\": {\"id\": \"file\", \"value\": \"File\", \"popup\": {\"menuitem\": [{\"value\": \"New\", \"onclick\": \"CreateNewDoc()\"}, {\"value\": \"Open\", \"onclick\": \"OpenDoc()\"}, {\"value\": \"Close\", \"onclick\": \"CloseDoc()\"}]}}}"
     var obj = Json.parse(jsonStr)
     assert_eq(obj.menu.id, "file")
-    assert_eq(obj.menu.popup.menuitem.length, 3)
+    assert_eq(len(obj.menu.popup.menuitem), 3)
     assert_eq(obj.menu.popup.menuitem[0].value, "New")
 }
 
@@ -525,7 +525,7 @@ fn test_cjson_input_test5() {
     var jsonStr = "{\"menu\": {\"header\": \"SVG Viewer\", \"items\": [{\"id\": \"Open\"}, {\"id\": \"OpenNew\", \"label\": \"Open New\"}, null, {\"id\": \"ZoomIn\", \"label\": \"Zoom In\"}, {\"id\": \"ZoomOut\", \"label\": \"Zoom Out\"}]}}"
     var obj = Json.parse(jsonStr)
     assert_eq(obj.menu.header, "SVG Viewer")
-    assert_eq(obj.menu.items.length, 5)
+    assert_eq(len(obj.menu.items), 5)
     assert_eq(obj.menu.items[0].id, "Open")
     assert_eq(obj.menu.items[2], null)  // 数组中的 null
     assert_eq(obj.menu.items[3].label, "Zoom In")
@@ -551,7 +551,7 @@ fn test_roundtrip_array() {
     var original: Json = [1, 2, 3, "four", true, null]
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 6)
+    assert_eq(len(parsed), 6)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[3], "four")
     assert_eq(parsed[4], true)
@@ -579,7 +579,7 @@ fn test_roundtrip_nested() {
     }
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.users.length, 2)
+    assert_eq(len(parsed.users), 2)
     assert_eq(parsed.users[0].name, "Alice")
     assert_eq(parsed.users[0].scores[0], 100)
     assert_eq(parsed.metadata.version, 1)
@@ -598,7 +598,7 @@ fn test_whitespace_handling() {
 
     var json2 = "[\n\t1,\n\t2,\n\t3\n]"
     var arr2 = Json.parse(json2)
-    assert_eq(arr2.length, 3)
+    assert_eq(len(arr2), 3)
 }
 
 @test
@@ -620,7 +620,7 @@ fn test_empty_structures() {
     assert_eq(Json.stringify(emptyObj), "{}")
 
     var emptyArr = Json.parse("[]")
-    assert_eq(emptyArr.length, 0)
+    assert_eq(len(emptyArr), 0)
 }
 
 @test

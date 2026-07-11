@@ -1,4 +1,4 @@
-fn fill(out: Bytes, src: Bytes) -> int {
+fn fill(out: Array<byte>, src: Array<byte>) -> int {
     out.resize(4)
     unsafe {
         var p = out.mutPtr()
@@ -8,16 +8,16 @@ fn fill(out: Bytes, src: Bytes) -> int {
     return out[2]
 }
 
-var src = Bytes(4)
+var src = Array<byte>(4)
 src[0] = 10
 src[1] = 20
 src[2] = 30
 src[3] = 40
 
-var bytes = Bytes.withCapacity(4)
+var bytes = Array<byte>.withCapacity(4)
 print(fill(bytes, src))
 
-var view: ByteSpan = bytes[:]
+var view: Slice<byte> = bytes[:]
 unsafe {
     var p = view.ptr()
     print(p[1])

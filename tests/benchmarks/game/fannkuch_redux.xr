@@ -106,7 +106,7 @@ fn fannkuch(n) {
 
 // 获取命令行参数或使用默认值
 var n = 10
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     n = int(process.args[0])
 }
 fannkuch(n)

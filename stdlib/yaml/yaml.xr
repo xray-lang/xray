@@ -14,19 +14,19 @@ fn _isWs(c: string) -> bool {
 }
 
 fn _isDigit(c: string) -> bool {
-    if (c.length == 0) { return false }
+    if (len(c) == 0) { return false }
     var o = c.ord()!
     return o >= 48 && o <= 57
 }
 
 fn _isAlpha(c: string) -> bool {
-    if (c.length == 0) { return false }
+    if (len(c) == 0) { return false }
     var o = c.ord()!
     return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
 }
 
 fn _isHexDigit(c: string) -> bool {
-    if (c.length == 0) { return false }
+    if (len(c) == 0) { return false }
     var o = c.ord()!
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
@@ -40,14 +40,14 @@ fn _hexValue(c: string) -> int {
 }
 
 fn _trimCR(line: string) -> string {
-    if (line.endsWith("\r")) { return line.slice(0, line.length - 1) }
+    if (line.endsWith("\r")) { return line.slice(0, len(line) - 1) }
     return line
 }
 
 fn _lines(data: string) -> Array<string> {
     var raw = data.split("\n")
     var out: Array<string> = []
-    for (var i = 0; i < raw.length; i++) {
+    for (var i = 0; i < len(raw); i++) {
         out.push(_trimCR(raw[i]))
     }
     return out
@@ -55,14 +55,14 @@ fn _lines(data: string) -> Array<string> {
 
 fn _countIndent(line: string) -> int {
     var n = 0
-    while (n < line.length && line.charAt(n) == " ") { n = n + 1 }
+    while (n < len(line) && line.charAt(n) == " ") { n = n + 1 }
     return n
 }
 
 fn _stripInlineComment(line: string) -> string {
     var quote = ""
     var escape = false
-    for (var i = 0; i < line.length; i++) {
+    for (var i = 0; i < len(line); i++) {
         var c = line.charAt(i)
         if (escape) {
             escape = false
@@ -93,15 +93,15 @@ fn _lineClean(line: string) -> string {
 }
 
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
-    if (pos < 0 || pos + prefix.length > s.length) { return false }
-    return s.slice(pos, pos + prefix.length) == prefix
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    return s.slice(pos, pos + len(prefix)) == prefix
 }
 
 fn _findTopColon(s: string) -> int {
     var quote = ""
     var escape = false
     var depth = 0
-    for (var i = 0; i < s.length; i++) {
+    for (var i = 0; i < len(s); i++) {
         var c = s.charAt(i)
         if (escape) {
             escape = false
@@ -134,7 +134,7 @@ fn _utf8Len(cp: int) -> int {
     return 4
 }
 
-fn _putUtf8(out: Bytes, oi: int, cp: int) -> int {
+fn _putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
     if (cp < 0x80) {
         out[oi] = cp
         return oi + 1
@@ -157,7 +157,7 @@ fn _putUtf8(out: Bytes, oi: int, cp: int) -> int {
 
 fn _codepointString(cp: int) -> string {
     if (cp <= 0 || cp > 0x10FFFF) { return "" }
-    var out = Bytes(_utf8Len(cp))
+    var out = Array<byte>(_utf8Len(cp))
     _putUtf8(out, 0, cp)
     return out.toString()
 }
@@ -165,7 +165,7 @@ fn _codepointString(cp: int) -> string {
 fn _decodeDoubleQuotedBody(body: string) -> string {
     var out = StringBuilder()
     var i = 0
-    while (i < body.length) {
+    while (i < len(body)) {
         var c = body.charAt(i)
         if (c != "\\") {
             out.append(c)
@@ -173,7 +173,7 @@ fn _decodeDoubleQuotedBody(body: string) -> string {
             continue
         }
         i = i + 1
-        if (i >= body.length) { break }
+        if (i >= len(body)) { break }
         var esc = body.charAt(i)
         if (esc == "n") { out.append("\n") }
         else if (esc == "t") { out.append("\t") }
@@ -187,7 +187,7 @@ fn _decodeDoubleQuotedBody(body: string) -> string {
             var ok = true
             for (var j = 0; j < digits; j++) {
                 i = i + 1
-                if (i >= body.length || !_isHexDigit(body.charAt(i))) {
+                if (i >= len(body) || !_isHexDigit(body.charAt(i))) {
                     ok = false
                     break
                 }
@@ -203,11 +203,11 @@ fn _decodeDoubleQuotedBody(body: string) -> string {
 }
 
 fn _parseQuotedLiteral(raw: string) -> string {
-    if (raw.length < 2) { return raw }
+    if (len(raw) < 2) { return raw }
     var q = raw.charAt(0)
     if (q != "\"" && q != "'") { return raw }
-    var end = raw.length - 1
-    if (raw.charAt(end) != q) { end = raw.length }
+    var end = len(raw) - 1
+    if (raw.charAt(end) != q) { end = len(raw) }
     var body = raw.slice(1, end)
     if (q == "\"") { return _decodeDoubleQuotedBody(body) }
     return body.replace("''", "'")
@@ -215,7 +215,7 @@ fn _parseQuotedLiteral(raw: string) -> string {
 
 fn _parseBaseInt(raw: string, base: int, start: int, sign: int) -> int {
     var out = 0
-    for (var i = start; i < raw.length; i++) {
+    for (var i = start; i < len(raw); i++) {
         var d = _hexValue(raw.charAt(i))
         if (d < 0 || d >= base) { break }
         out = out * base + d
@@ -224,12 +224,12 @@ fn _parseBaseInt(raw: string, base: int, start: int, sign: int) -> int {
 }
 
 fn _looksDecimalNumber(s: string) -> bool {
-    if (s.length == 0) { return false }
+    if (len(s) == 0) { return false }
     var i = 0
     if (s.charAt(0) == "-" || s.charAt(0) == "+") { i = 1 }
-    if (i >= s.length) { return false }
+    if (i >= len(s)) { return false }
     var sawDigit = false
-    while (i < s.length) {
+    while (i < len(s)) {
         var c = s.charAt(i)
         if (_isDigit(c)) {
             sawDigit = true
@@ -244,7 +244,7 @@ fn _looksDecimalNumber(s: string) -> bool {
 fn _parsePlainScalar(rawValue: string) -> unknown {
     var raw = rawValue.trim()
     var lower = raw.toLowerCase()
-    if (raw.length == 0) { return null }
+    if (len(raw) == 0) { return null }
     if (lower == "null" || raw == "~") { return null }
     if (lower == "true") { return true }
     if (lower == "false") { return false }
@@ -261,13 +261,13 @@ fn _parsePlainScalar(rawValue: string) -> unknown {
     } else if (raw.startsWith("+")) {
         offset = 1
     }
-    if (offset + 2 < raw.length && raw.charAt(offset) == "0") {
+    if (offset + 2 < len(raw) && raw.charAt(offset) == "0") {
         var p = raw.charAt(offset + 1).toLowerCase()
         if (p == "x") { return _parseBaseInt(raw, 16, offset + 2, sign) }
         if (p == "o") { return _parseBaseInt(raw, 8, offset + 2, sign) }
     }
     if (_looksDecimalNumber(raw)) {
-        if (raw.includes(".") || raw.includes("e") || raw.includes("E")) {
+        if (raw.contains(".") || raw.contains("e") || raw.contains("E")) {
             var f = raw.toFloat()
             if (f != null) { return f! }
         } else {
@@ -298,7 +298,7 @@ class YamlFlowParser {
     }
 
     atEnd() -> bool {
-        return this.pos >= this.src.length
+        return this.pos >= len(this.src)
     }
 
     peek() -> string {
@@ -308,7 +308,7 @@ class YamlFlowParser {
 
     advance() -> string {
         var c = this.peek()
-        if (c.length > 0) { this.pos = this.pos + 1 }
+        if (len(c) > 0) { this.pos = this.pos + 1 }
         return c
     }
 
@@ -450,7 +450,7 @@ class YamlParser {
     }
 
     atEnd() -> bool {
-        return this.index >= this.lines.length
+        return this.index >= len(this.lines)
     }
 
     cleanLine() -> string {
@@ -481,10 +481,10 @@ class YamlParser {
 
     nextIndent() -> int {
         var p = this.index
-        while (p < this.lines.length) {
+        while (p < len(this.lines)) {
             var clean = _lineClean(this.lines[p])
             var t = clean.trim()
-            if (t.length > 0 && t != "---" && t != "...") { return _countIndent(clean) }
+            if (len(t) > 0 && t != "---" && t != "...") { return _countIndent(clean) }
             p = p + 1
         }
         return -1
@@ -492,20 +492,20 @@ class YamlParser {
 
     parseValueText(text: string) -> unknown {
         var raw = _stripInlineComment(text).trim()
-        if (raw.length == 0) { return null }
+        if (len(raw) == 0) { return null }
         if (raw.startsWith("&")) {
             var i = 1
-            while (i < raw.length && !_isWs(raw.charAt(i))) { i = i + 1 }
+            while (i < len(raw) && !_isWs(raw.charAt(i))) { i = i + 1 }
             var name = raw.slice(1, i)
-            var rest = raw.slice(i, raw.length).trim()
+            var rest = raw.slice(i, len(raw)).trim()
             var value: unknown = null
-            if (rest.length > 0) { value = this.parseValueText(rest) }
+            if (len(rest) > 0) { value = this.parseValueText(rest) }
             this.anchors[name] = value
             return value
         }
         if (raw.startsWith("*")) {
             var nameEnd = 1
-            while (nameEnd < raw.length && !_isWs(raw.charAt(nameEnd))) { nameEnd = nameEnd + 1 }
+            while (nameEnd < len(raw) && !_isWs(raw.charAt(nameEnd))) { nameEnd = nameEnd + 1 }
             return Json.get(this.anchors, raw.slice(1, nameEnd), null)
         }
         if (raw.startsWith("[") || raw.startsWith("{")) {
@@ -518,7 +518,7 @@ class YamlParser {
     parseBlockScalar(header: string, parentIndent: int) -> string {
         var style = header.charAt(0)
         var chomp = ""
-        if (header.length > 1) {
+        if (len(header) > 1) {
             var c = header.charAt(1)
             if (c == "-" || c == "+") { chomp = c }
         }
@@ -527,7 +527,7 @@ class YamlParser {
         var parts: Array<string> = []
         while (!this.atEnd()) {
             var raw = _trimCR(this.lines[this.index])
-            if (raw.trim().length == 0) {
+            if (len(raw.trim()) == 0) {
                 if (blockIndent >= 0) { parts.push("") }
                 this.index = this.index + 1
                 continue
@@ -536,29 +536,29 @@ class YamlParser {
             if (indent <= parentIndent) { break }
             if (blockIndent < 0) { blockIndent = indent }
             if (indent < blockIndent) { break }
-            parts.push(raw.slice(blockIndent, raw.length))
+            parts.push(raw.slice(blockIndent, len(raw)))
             this.index = this.index + 1
         }
 
         var out = StringBuilder()
         if (style == "|") {
-            for (var i = 0; i < parts.length; i++) {
+            for (var i = 0; i < len(parts); i++) {
                 if (i > 0) { out.append("\n") }
                 out.append(parts[i])
             }
         } else {
-            for (var i = 0; i < parts.length; i++) {
+            for (var i = 0; i < len(parts); i++) {
                 var part = parts[i]
-                if (part.length == 0) {
+                if (len(part) == 0) {
                     out.append("\n")
                 } else {
                     var current = out.toString()
-                    if (current.length > 0 && !current.endsWith("\n")) { out.append(" ") }
+                    if (len(current) > 0 && !current.endsWith("\n")) { out.append(" ") }
                     out.append(part)
                 }
             }
         }
-        if (chomp != "-" && parts.length > 0) { out.append("\n") }
+        if (chomp != "-" && len(parts) > 0) { out.append("\n") }
         return out.toString()
     }
 
@@ -570,13 +570,13 @@ class YamlParser {
             return
         }
         var key = _parseKeyText(content.slice(0, colon))
-        var rest = content.slice(colon + 1, content.length).trim()
+        var rest = content.slice(colon + 1, len(content)).trim()
         if (rest.startsWith("|") || rest.startsWith(">")) {
             obj[key] = this.parseBlockScalar(rest, indent)
             return
         }
         this.index = this.index + 1
-        if (rest.length == 0) {
+        if (len(rest) == 0) {
             var ni = this.nextIndent()
             if (ni > indent) { obj[key] = this.parseBlock(ni, 0) }
             else { obj[key] = null }
@@ -597,7 +597,7 @@ class YamlParser {
             var lineIndent = _countIndent(clean)
             if (lineIndent < indent) { break }
             if (lineIndent > indent) { break }
-            var content = clean.slice(indent, clean.length)
+            var content = clean.slice(indent, len(clean))
             if (content.startsWith("-")) { break }
             this.parseMappingLineInto(obj, content, indent)
         }
@@ -612,12 +612,12 @@ class YamlParser {
             return obj
         }
         var key = _parseKeyText(afterDash.slice(0, colon))
-        var rest = afterDash.slice(colon + 1, afterDash.length).trim()
+        var rest = afterDash.slice(colon + 1, len(afterDash)).trim()
         if (rest.startsWith("|") || rest.startsWith(">")) {
             obj[key] = this.parseBlockScalar(rest, indent)
         } else {
             this.index = this.index + 1
-            if (rest.length == 0) {
+            if (len(rest) == 0) {
                 var ni = this.nextIndent()
                 if (ni > indent) { obj[key] = this.parseBlock(ni, depth + 1) }
                 else { obj[key] = null }
@@ -635,7 +635,7 @@ class YamlParser {
             if (t == "...") { break }
             var lineIndent = _countIndent(clean)
             if (lineIndent != tailIndent) { break }
-            var content = clean.slice(tailIndent, clean.length)
+            var content = clean.slice(tailIndent, len(clean))
             if (content.startsWith("-")) { break }
             this.parseMappingLineInto(obj, content, tailIndent)
         }
@@ -652,10 +652,10 @@ class YamlParser {
             if (t == "...") { break }
             var lineIndent = _countIndent(clean)
             if (lineIndent != indent) { break }
-            var content = clean.slice(indent, clean.length)
+            var content = clean.slice(indent, len(clean))
             if (!content.startsWith("-")) { break }
-            var afterDash = content.slice(1, content.length).trim()
-            if (afterDash.length == 0) {
+            var afterDash = content.slice(1, len(content)).trim()
+            if (len(afterDash) == 0) {
                 this.index = this.index + 1
                 var ni = this.nextIndent()
                 if (ni > indent) { arr.push(this.parseBlock(ni, depth + 1)) }
@@ -685,7 +685,7 @@ class YamlParser {
         if (clean.trim() == "...") { return null }
         var lineIndent = _countIndent(clean)
         if (lineIndent < indent) { return null }
-        var content = clean.slice(lineIndent, clean.length)
+        var content = clean.slice(lineIndent, len(clean))
         if (content.startsWith("-")) { return this.parseSequence(lineIndent, depth) }
         return this.parseMapping(lineIndent, depth)
     }
@@ -713,9 +713,9 @@ fn parseStrict(data: string) -> Json {
         data: value,
         errors: parser.errors,
         meta: {
-            lines: parser.lines.length,
+            lines: len(parser.lines),
             documents: 1,
-            anchors: parser.anchors.keys().length
+            anchors: len(parser.anchors.keys())
         }
     }
 }
@@ -724,10 +724,10 @@ fn parseAll(data: string) -> Array<Json> {
     var docs: Array<Json> = []
     var lines = _lines(data)
     var current: Array<string> = []
-    for (var i = 0; i < lines.length; i++) {
+    for (var i = 0; i < len(lines); i++) {
         var t = _lineClean(lines[i]).trim()
         if (t == "---") {
-            if (current.length > 0) {
+            if (len(current) > 0) {
                 docs.push(parse(current.join("\n")))
                 current = []
             }
@@ -738,7 +738,7 @@ fn parseAll(data: string) -> Array<Json> {
             current.push(lines[i])
         }
     }
-    if (current.length > 0) { docs.push(parse(current.join("\n"))) }
+    if (len(current) > 0) { docs.push(parse(current.join("\n"))) }
     return docs
 }
 
@@ -751,7 +751,7 @@ fn _indent(level: int, spaces: int) -> string {
 fn _quoteString(s: string) -> string {
     var out = StringBuilder()
     out.append("\"")
-    for (var i = 0; i < s.length; i++) {
+    for (var i = 0; i < len(s); i++) {
         var c = s.charAt(i)
         if (c == "\"") { out.append("\\\"") }
         else if (c == "\\") { out.append("\\\\") }
@@ -765,8 +765,8 @@ fn _quoteString(s: string) -> string {
 }
 
 fn _keyText(key: string) -> string {
-    if (key.length == 0) { return "\"\"" }
-    for (var i = 0; i < key.length; i++) {
+    if (len(key) == 0) { return "\"\"" }
+    for (var i = 0; i < len(key); i++) {
         var c = key.charAt(i)
         if (!_isAlpha(c) && !_isDigit(c) && c != "_" && c != "-") {
             return _quoteString(key)
@@ -777,7 +777,7 @@ fn _keyText(key: string) -> string {
 
 fn _scalarText(value: unknown) -> string {
     if (value == null) { return "null" }
-    var kind = typename(value)
+    var kind = typeName(value)
     if (kind == "string") { return _quoteString(value as string) }
     if (kind == "bool") {
         if (value as bool) { return "true" }
@@ -789,19 +789,19 @@ fn _scalarText(value: unknown) -> string {
 }
 
 fn _isScalar(value: unknown) -> bool {
-    var kind = typename(value)
+    var kind = typeName(value)
     return value == null || kind == "string" || kind == "bool" || kind == "int" ||
            kind == "float"
 }
 
 fn _emitValue(value: unknown, level: int, indent: int) -> string {
     if (_isScalar(value)) { return _scalarText(value) }
-    var kind = typename(value)
+    var kind = typeName(value)
     if (kind == "Array") {
         var arr = value as Array
-        if (arr.length == 0) { return "[]" }
+        if (len(arr) == 0) { return "[]" }
         var out = StringBuilder()
-        for (var i = 0; i < arr.length; i++) {
+        for (var i = 0; i < len(arr); i++) {
             out.append(_indent(level, indent))
             out.append("-")
             if (_isScalar(arr[i])) {
@@ -818,9 +818,9 @@ fn _emitValue(value: unknown, level: int, indent: int) -> string {
     if (kind == "Json") {
         var obj = value as Json
         var keys = obj.keys()
-        if (keys.length == 0) { return "{}" }
+        if (len(keys) == 0) { return "{}" }
         var out = StringBuilder()
-        for (var i = 0; i < keys.length; i++) {
+        for (var i = 0; i < len(keys); i++) {
             var key = keys[i]
             var item = Json.get(obj, key, null)
             out.append(_indent(level, indent))
@@ -843,10 +843,10 @@ fn _emitValue(value: unknown, level: int, indent: int) -> string {
 fn stringify(value: unknown, options: unknown = null) -> string {
     var indent = 2
     var opts = Json.encode(options)
-    if (typename(opts) == "Json") {
+    if (typeName(opts) == "Json") {
         var iv = Json.get(opts, "indent", indent)
-        if (typename(iv) == "int") { indent = iv }
-    } else if (typename(options) == "int") {
+        if (typeName(iv) == "int") { indent = iv }
+    } else if (typeName(options) == "int") {
         indent = options as int
     }
     if (indent <= 0) { indent = 2 }

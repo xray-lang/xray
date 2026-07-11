@@ -147,7 +147,7 @@ static bool const_literal_from_value(XiFunc *owner, const XiValue *v, XiConstLit
             out->kind = XI_CONST_LITERAL_BOOL;
             out->bool_value = v->aux_int != 0;
             return true;
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             out->kind = XI_CONST_LITERAL_CHAR;
             out->int_value = v->aux_int;
             return true;
@@ -1935,8 +1935,8 @@ static bool sr_method_name_is(const XiValue *v, const char *name) {
         return false;
 
     SymbolId symbol = (SymbolId) (v->aux_int >> 1);
-    if (strcmp(name, "has") == 0)
-        return symbol == SYMBOL_HAS;
+    if (strcmp(name, "containsKey") == 0)
+        return symbol == SYMBOL_CONTAINS_KEY;
     if (strcmp(name, "get") == 0)
         return symbol == SYMBOL_GET;
     return false;
@@ -2107,7 +2107,8 @@ static bool sr_block_has_no_guard_invalidating_effect_after(const XiBlock *blk,
 
 static bool sr_map_has_control_matches_get(const XiValue *control, const XiValue *get) {
     const XiValue *has = sr_unwrap_identity_value(control);
-    if (!has || has->op != XI_CALL_METHOD || has->nargs != 2 || !sr_method_name_is(has, "has"))
+    if (!has || has->op != XI_CALL_METHOD || has->nargs != 2 ||
+        !sr_method_name_is(has, "containsKey"))
         return false;
     if (!get || get->op != XI_CALL_METHOD || get->nargs != 2 || !sr_method_name_is(get, "get"))
         return false;

@@ -31,7 +31,7 @@ var a = [10, 20, 30]
 match (a) {
     [first, ..rest] -> {
         print(first)                    // 10
-        print(rest.length)              // 2
+        print(len(rest))              // 2
         print(rest[0])                  // 20
     }
     _ -> { print(-1) }
@@ -50,7 +50,7 @@ var single = [99]
 match (single) {
     [head, ..tail] -> {
         print(head)                     // 99
-        print(tail.length)              // 0
+        print(len(tail))              // 0
     }
     _ -> { print(-1) }
 }

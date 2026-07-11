@@ -1,5 +1,5 @@
 var dst = ["a", "b"]
 var src = ["c"]
-var dstSpan: Span<string> = dst[:]
-var srcSpan: Span<string> = src[:]
+var dstSpan: Slice<string> = dst[:]
+var srcSpan: Slice<string> = src[:]
 dstSpan.copyFrom(srcSpan)

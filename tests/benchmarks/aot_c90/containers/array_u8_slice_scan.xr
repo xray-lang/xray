@@ -1,15 +1,15 @@
 fn run(n: int) -> int {
-    var bytes: Array<uint8> = []
+    var bytes: Array<byte> = []
     var i = 0
     while (i < n) {
         bytes.push(i)
         i = i + 1
     }
 
-    var mid: ByteSpan = bytes[17:n - 17]
+    var mid: Slice<byte> = bytes[17:n - 17]
     var sum = 0
     i = 0
-    while (i < mid.length) {
+    while (i < len(mid)) {
         sum = sum + mid[i]
         i = i + 1
     }

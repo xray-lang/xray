@@ -1,7 +1,7 @@
 import io
 
 var root = io.tempDir() ?? ""
-print(root.length > 0)
+print(len(root) > 0)
 
 var dir = root + "/paths"
 print(io.mkdirp(dir))
@@ -15,8 +15,8 @@ print(io.readlink(missing) == null)
 
 var resolvedDir = io.realpath(dir) ?? ""
 var resolvedFile = io.realpath(file) ?? ""
-print(resolvedDir.length > 0)
-print(resolvedFile.length > 0)
+print(len(resolvedDir) > 0)
+print(len(resolvedFile) > 0)
 
 var oldCwd = io.cwd()
 print(io.chdir(dir))
@@ -27,7 +27,7 @@ var link = root + "/target-link.txt"
 var linkOk = io.symlink(file, link)
 if (linkOk) {
     var target = io.readlink(link) ?? ""
-    print(target.length > 0)
+    print(len(target) > 0)
     print((io.realpath(target) ?? "") == resolvedFile)
 } else {
     print(true)

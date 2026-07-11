@@ -6,6 +6,6 @@ values.push(3)
 var mapped = values.map(fn(x: int) -> int { return x + 2 })
 mapped.push(9)
 
-print(mapped.length)
+print(len(mapped))
 print(mapped[0])
 print(mapped[3])

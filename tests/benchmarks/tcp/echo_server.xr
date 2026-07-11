@@ -25,7 +25,7 @@ fn serveMessage(conn: NetConn) {
 
 fn serveBytes(conn: NetConn) {
     defer net.close(conn)
-    var buf = Bytes(65536)
+    var buf = Array<byte>(65536)
     while (true) {
         var n = net.readInto(conn, buf)
         if (n <= 0) {
@@ -114,17 +114,17 @@ fn handleConn(conn: NetConn, mode: string, extra: int) {
 }
 
 var port = 9001
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     port = int(process.args[0]) ?? 9001
 }
 
 var mode = "stream"
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     mode = process.args[1]
 }
 
 var extra = 67108864
-if (process.args.length > 2) {
+if (len(process.args) > 2) {
     extra = int(process.args[2]) ?? extra
 }
 

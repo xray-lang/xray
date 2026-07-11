@@ -46,7 +46,7 @@ print("apply(square, 7) = ${apply(square, 7)}")
 // === Rest parameters (no type annotation on rest param) ===
 fn sum(...nums) -> int {
     var total = 0
-    for (var i = 0; i < nums.length; i++) {
+    for (var i = 0; i < len(nums); i++) {
         total = total + nums[i]
     }
     return total

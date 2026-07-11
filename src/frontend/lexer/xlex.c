@@ -741,21 +741,21 @@ static Token char_literal(Scanner *scanner) {
         char c = peek(scanner);
         if (c == '\'') {
             advance(scanner);
-            return make_token(scanner, TK_LITERAL_CHAR);
+            return make_token(scanner, TK_LITERAL_RUNE);
         }
         if (c == '\n') {
-            return error_token(scanner, "Unterminated char literal");
+            return error_token(scanner, "Unterminated rune literal");
         }
         if (c == '\\') {
             advance(scanner);
             if (is_at_end(scanner) || peek(scanner) == '\n')
-                return error_token(scanner, "Unterminated char literal");
+                return error_token(scanner, "Unterminated rune literal");
             advance(scanner);
             continue;
         }
         advance(scanner);
     }
-    return error_token(scanner, "Unterminated char literal");
+    return error_token(scanner, "Unterminated rune literal");
 }
 
 // Raw string: r"..." (no escape processing, but ${} interpolation)
@@ -1168,7 +1168,7 @@ static const char *token_names[] = {
     [TK_LITERAL_FLOAT] = "LITERAL_FLOAT",
     [TK_LITERAL_BIGINT] = "LITERAL_BIGINT",
     [TK_LITERAL_STRING] = "LITERAL_STRING",
-    [TK_LITERAL_CHAR] = "LITERAL_CHAR",
+    [TK_LITERAL_RUNE] = "LITERAL_CHAR",
     [TK_LITERAL_REGEX] = "LITERAL_REGEX",
     [TK_NAME] = "NAME",
     [TK_TEMPLATE_STRING] = "TEMPLATE_STRING",

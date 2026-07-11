@@ -8,7 +8,7 @@ fn serveStaticRoutes(port: int) {
     http.route("GET", "/plain", "hello static")
     http.route("GET", "/empty", "")
     http.route("POST", "/dynamic", fn(req: Json) -> string {
-        return Json.has(req, "streaming") ? "handler:true" : "handler:false"
+        return Json.containsKey(req, "streaming") ? "handler:true" : "handler:false"
     })
     http.listen(port)
 }
@@ -52,7 +52,7 @@ fn runHttpStaticRouteFullParse() {
         "Host: 127.0.0.1\r\n" +
         "Connection: close\r\n\r\n"
     )
-    assert(plain.includes("HTTP/1.1 200 OK\r\n"))
+    assert(plain.contains("HTTP/1.1 200 OK\r\n"))
     assert(plain.endsWith("\r\n\r\nhello static"))
 
     var empty = sendRaw(
@@ -61,8 +61,8 @@ fn runHttpStaticRouteFullParse() {
         "Host: 127.0.0.1\r\n" +
         "Connection: close\r\n\r\n"
     )
-    assert(empty.includes("HTTP/1.1 200 OK\r\n"))
-    assert(empty.includes("Content-Length: 0\r\n"))
+    assert(empty.contains("HTTP/1.1 200 OK\r\n"))
+    assert(empty.contains("Content-Length: 0\r\n"))
     assert(empty.endsWith("\r\n\r\n"))
 
     var dynamic = sendRaw(
@@ -73,8 +73,8 @@ fn runHttpStaticRouteFullParse() {
         "Connection: close\r\n\r\n" +
         "hello"
     )
-    assert(dynamic.includes("HTTP/1.1 200 OK\r\n"))
-    assert(dynamic.includes("handler:false"))
+    assert(dynamic.contains("HTTP/1.1 200 OK\r\n"))
+    assert(dynamic.contains("handler:false"))
 
     var oversized = sendRaw(
         PORT,
@@ -84,8 +84,8 @@ fn runHttpStaticRouteFullParse() {
         "Connection: close\r\n\r\n" +
         "x"
     )
-    assert(oversized.includes("HTTP/1.1 413 Payload Too Large\r\n"))
-    assert(!oversized.includes("handler:"))
+    assert(oversized.contains("HTTP/1.1 413 Payload Too Large\r\n"))
+    assert(!oversized.contains("handler:"))
 
     http.stopServer()
 }

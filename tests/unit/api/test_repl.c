@@ -510,7 +510,7 @@ TEST(repl_function_mutates_array_cross_input) {
     xr_execute(iso, p3);
 
     XrProto *p4 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var n = arr.length\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var n = len(arr)\n");
     ASSERT_NOT_NULL(p4);
     xr_execute(iso, p4);
 

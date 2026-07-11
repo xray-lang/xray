@@ -48,8 +48,8 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_string(ctx, s, s ? (int) strlen(s) : 0);
             break;
         }
-        case AST_LITERAL_CHAR: {
-            uint32_t cp = node->as.literal.raw_value.char_val;
+        case AST_LITERAL_RUNE: {
+            uint32_t cp = node->as.literal.raw_value.rune_val;
             xfmt_write_char(ctx, '\'');
             switch (cp) {
                 case '\n':
@@ -347,7 +347,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:

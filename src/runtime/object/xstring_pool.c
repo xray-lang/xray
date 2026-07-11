@@ -13,6 +13,7 @@
 #include "../../base/xhash.h"
 #include "../../base/xlog.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xutf8.h"
 #include <string.h>
 
 void xr_global_pool_init(XrGlobalStringPool *pool) {
@@ -126,6 +127,7 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
             str->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
 
             str->length = (uint32_t) len;
+            str->rune_length = (uint32_t) xr_utf8_strlen(chars, len);
             str->hash = hash;
             memcpy(str->data, chars, len);
             str->data[len] = '\0';

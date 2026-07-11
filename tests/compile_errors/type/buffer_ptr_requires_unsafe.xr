@@ -1,6 +1,6 @@
 import mem
 
-fn raw() -> RawMut<uint8> {
+fn raw() -> RawMut<byte> {
     var b = mem.alloc(8)
     return b.ptr()
 }

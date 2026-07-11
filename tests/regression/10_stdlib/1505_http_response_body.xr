@@ -33,7 +33,7 @@ fn test_empty_response() {
 fn test_large_body() {
     var body = ""
     for (var i = 0; i < 1000; i++) { body = body + "x" }
-    assert_eq(body.length, 1000)
+    assert_eq(len(body), 1000)
 }
 
 print("All http response body tests passed")

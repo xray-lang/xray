@@ -1,2 +1,2 @@
-var chars: Array<char> = []
+var chars: Array<rune> = []
 chars.push(65)

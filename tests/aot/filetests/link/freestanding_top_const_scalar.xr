@@ -9,7 +9,7 @@ const MAGIC: int = 40 + 1
 const ENABLED: bool = true
 
 @used
-const CODE: char = 'A'
+const CODE: rune = 'A'
 
 @section("__DATA,.xray_scale")
 const SCALE: float = 0.5

@@ -51,7 +51,7 @@ struct XrCtValue {
         double float_val;
         bool bool_val;
         const char *string_val;
-        uint32_t char_val;
+        uint32_t rune_val;
         XrCtFixedArrayValue fixed_array_val;
         XrCtTupleValue tuple_val;
         XrCtStructValue struct_val;

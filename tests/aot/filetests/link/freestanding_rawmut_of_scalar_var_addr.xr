@@ -16,7 +16,7 @@ fn rawmutOfScalarVarAddr() -> int {
     return mem.addressOf(RawMut<int>.of(COUNTER)) +
         mem.addressOf(RawMut<float>.of(SCALE)) +
         mem.addressOf(RawMut<bool>.of(ENABLED)) +
-        mem.addressOf(RawMut<char>.of(LETTER)) +
+        mem.addressOf(RawMut<rune>.of(LETTER)) +
         mem.addressOf(RawMut<int>.of(ZERO)) + COUNTER + (ENABLED ? 1 : 0) +
         int(LETTER) + ZERO
 }

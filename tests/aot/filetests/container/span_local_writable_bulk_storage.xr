@@ -1,8 +1,8 @@
 fn byte_ops() -> int {
-    var bytes = Array<uint8>(8, 0)
-    var srcBytes = Array<uint8>(4, 3)
-    var view: ByteSpan = bytes[:]
-    var src: ByteSpan = srcBytes[:]
+    var bytes = Array<byte>(8, 0)
+    var srcBytes = Array<byte>(4, 3)
+    var view: Slice<byte> = bytes[:]
+    var src: Slice<byte> = srcBytes[:]
     view.fill(1)
     view.store<uint16>(2, 0x0203, Endian.LE)
     view.copyFrom(src)
@@ -13,8 +13,8 @@ fn byte_ops() -> int {
 fn word_ops() -> int {
     var words = Array<uint32>(4, 0)
     var srcWords = Array<uint32>(2, 9)
-    var view: Span<uint32> = words[:]
-    var src: Span<uint32> = srcWords[:]
+    var view: Slice<uint32> = words[:]
+    var src: Slice<uint32> = srcWords[:]
     view.fill(7)
     view.copyFrom(src)
     return int(view[0]) + int(view[1])

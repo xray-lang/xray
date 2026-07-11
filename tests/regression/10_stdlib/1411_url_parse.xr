@@ -170,17 +170,17 @@ fn test_build_query() {
     var q = url.parseQuery("a=1&b=2")
     var qs = url.buildQuery(q)
     // Order may vary in hash map, just check both pairs exist
-    assert_true(qs.includes("a=1"))
-    assert_true(qs.includes("b=2"))
+    assert_true(qs.contains("a=1"))
+    assert_true(qs.contains("b=2"))
 }
 
 @test
 fn test_build_query_encodes_form_values() {
     var q = url.parseQuery("msg=hello+world&key=a%26b&flag")
     var qs = url.buildQuery(q)
-    assert_true(qs.includes("msg=hello+world"))
-    assert_true(qs.includes("key=a%26b"))
-    assert_true(qs.includes("flag="))
+    assert_true(qs.contains("msg=hello+world"))
+    assert_true(qs.contains("key=a%26b"))
+    assert_true(qs.contains("flag="))
 }
 
 // ============================================================

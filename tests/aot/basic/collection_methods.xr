@@ -8,7 +8,7 @@ print("HELLO".toLowerCase())  // hello
 
 // split
 var parts = "a,b,c".split(",")
-print(parts.length)       // 3
+print(len(parts))       // 3
 print(parts[0])           // a
 print(parts[1])           // b
 print(parts[2])           // c
@@ -24,7 +24,7 @@ print("hello".indexOf("ll"))  // 2
 print("hello".indexOf("zz"))  // -1
 
 // includes, startsWith, endsWith
-print("hello".includes("ell"))     // true
+print("hello".contains("ell"))     // true
 print("hello".startsWith("he"))    // true
 print("hello".endsWith("lo"))      // true
 
@@ -40,12 +40,12 @@ print(arr.indexOf(30))    // 2
 print(arr.indexOf(99))    // -1
 
 // includes
-print(arr.includes(20))   // true
-print(arr.includes(99))   // false
+print(arr.contains(20))   // true
+print(arr.contains(99))   // false
 
 // slice expression
-var sub: Span<int> = arr[1:3]
-print(sub.length)         // 2
+var sub: Slice<int> = arr[1:3]
+print(len(sub))         // 2
 print(sub[0])             // 20
 print(sub[1])             // 30
 
@@ -62,26 +62,26 @@ print(rev[2])             // 1
 // --- Map methods ---
 var m = #{"a": 1, "b": 2, "c": 3}
 var keys = m.keys()
-print(keys.length)        // 3
+print(len(keys))        // 3
 
 var vals = m.values()
-print(vals.length)        // 3
+print(len(vals))        // 3
 
 // has / get / delete
-print(m.has("b"))         // true
+print(m.containsKey("b"))         // true
 print(m.get("a"))         // 1
 m.delete("b")
-print(m.has("b"))         // false
+print(m.containsKey("b"))         // false
 
 // --- Set methods ---
 var st: Set<int> = #[]
 st.add(1)
 st.add(2)
 st.add(1)
-print(st.length)          // 2
-print(st.has(2))          // true
+print(len(st))          // 2
+print(st.contains(2))          // true
 print(st.delete(2))       // true
-print(st.has(2))          // false
+print(st.contains(2))          // false
 var stVals = st.values()
-print(stVals.length)      // 1
+print(len(stVals))      // 1
 print(stVals[0])          // 1

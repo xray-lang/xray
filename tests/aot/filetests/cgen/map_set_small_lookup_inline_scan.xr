@@ -4,8 +4,8 @@ fn smallLookup() -> int {
     var fromIndex = scores["ada"]
     var viaGet = scores.get("lin")
     var total = fromIndex + viaGet
-    if (scores.has("lin")) {
-        if (seen.has("ada")) {
+    if (scores.containsKey("lin")) {
+        if (seen.contains("ada")) {
             return total
         }
     }

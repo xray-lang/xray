@@ -6,7 +6,7 @@ enum Color {
 
 var t = (1, "two", true)
 print(t)
-print(typename(t))
+print(typeName(t))
 var (a, b, c) = t
 print(a)
 print(b)

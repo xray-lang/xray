@@ -22,5 +22,5 @@ var values: Array<int> = [1, 2, 3]
 var holder = Holder()
 stash(values, holder)
 values.push(4)
-print(holder.items[0].length)
-print(values.length)
+print(len(holder.items[0]))
+print(len(values))

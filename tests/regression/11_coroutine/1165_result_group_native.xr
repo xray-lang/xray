@@ -4,18 +4,18 @@ shared rg: ResultGroup = ResultGroup(2)
 @test
 fn test_result_group_native() {
     assert_eq(rg.batchSize, 2)
-    assert_eq(rg.length, 0)
+    assert_eq(rg.readyCount, 0)
     assert_false(rg.isClosed)
 
     assert_true(rg.add(4))
-    assert_eq(rg.length, 0)
+    assert_eq(rg.readyCount, 0)
     assert_eq(rg.pendingCount, 1)
 
     assert_true(rg.add(5))
-    assert_eq(rg.length, 1)
+    assert_eq(rg.readyCount, 1)
     assert_eq(rg.pendingCount, 2)
     assert_eq(rg.recv(), 9)
-    assert_eq(rg.length, 0)
+    assert_eq(rg.readyCount, 0)
     assert_eq(rg.pendingCount, 0)
 
     var (_, empty_ok) = rg.tryRecv()

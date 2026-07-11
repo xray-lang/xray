@@ -281,8 +281,8 @@ TEST(xfmt_char_literal_roundtrip) {
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
     ASSERT_NOT_NULL(init);
-    ASSERT_EQ_INT(init->type, AST_LITERAL_CHAR);
-    ASSERT_EQ_INT(init->as.literal.raw_value.char_val, 0x1F600);
+    ASSERT_EQ_INT(init->type, AST_LITERAL_RUNE);
+    ASSERT_EQ_INT(init->as.literal.raw_value.rune_val, 0x1F600);
     xr_program_destroy(prog);
     xr_program_destroy(r);
     teardown();

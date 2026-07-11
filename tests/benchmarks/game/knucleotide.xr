@@ -11,7 +11,7 @@ var hs_probs = [0.302955, 0.197988, 0.197547, 0.301509]
 
 fn make_cumulative(probs) {
     var cp = 0
-    for (j in 0..probs.length) {
+    for (j in 0..len(probs)) {
         cp = cp + probs[j]
         probs[j] = cp
     }
@@ -20,12 +20,12 @@ fn make_cumulative(probs) {
 fn select_random(chars, probs) {
     seed = (seed * IA + IC) % IM
     var r = seed / IM
-    for (j in 0..probs.length) {
+    for (j in 0..len(probs)) {
         if (r < probs[j]) {
             return chars[j]
         }
     }
-    return chars[probs.length - 1]
+    return chars[len(probs) - 1]
 }
 
 fn generate_sequence(count) {
@@ -38,7 +38,7 @@ fn generate_sequence(count) {
 
 fn count_frequencies(seq, k) {
     var freq = #{}
-    var end = seq.length - k + 1
+    var end = len(seq) - k + 1
     for (j in 0..end) {
         var subseq = seq.substring(j, j + k)
         freq.increment(subseq)
@@ -67,16 +67,16 @@ fn format_float(value, decimals) {
 
 fn print_frequencies(seq, k) {
     var freq = count_frequencies(seq, k)
-    var total = seq.length - k + 1
+    var total = len(seq) - k + 1
     var keys = freq.keys()
     var counts = []
     for (key in keys) {
         counts.push(freq[key])
     }
     // 冒泡排序
-    var len = keys.length
-    for (a in 0..(len - 1)) {
-        for (b in 0..(len - 1 - a)) {
+    var keyCount = len(keys)
+    for (a in 0..(keyCount - 1)) {
+        for (b in 0..(keyCount - 1 - a)) {
             var swap = false
             if (counts[b] < counts[b + 1]) {
                 swap = true
@@ -94,7 +94,7 @@ fn print_frequencies(seq, k) {
         }
     }
     // 输出
-    for (idx in 0..keys.length) {
+    for (idx in 0..len(keys)) {
         var pct = counts[idx] * 100 / total
         print(keys[idx] + " " + format_float(pct, 3))
     }
@@ -102,9 +102,9 @@ fn print_frequencies(seq, k) {
 }
 
 fn print_count(seq, frag) {
-    var freq = count_frequencies(seq, frag.length)
+    var freq = count_frequencies(seq, len(frag))
     var count = 0
-    if (freq.has(frag)) {
+    if (freq.containsKey(frag)) {
         count = freq[frag]
     }
     print(string(count) + "	" + frag)
@@ -112,7 +112,7 @@ fn print_count(seq, frag) {
 
 // 执行
 var n = 1000
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     n = int(process.args[0])
 }
 make_cumulative(hs_probs)

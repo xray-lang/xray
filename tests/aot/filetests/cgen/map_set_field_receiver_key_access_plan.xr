@@ -11,8 +11,8 @@ class Registry {
         this.scores.set(1, value)
         this.scores[2] = value
         this.seen.add(1)
-        var hasOne = this.scores.has(1)
-        var sawOne = this.seen.has(1)
+        var hasOne = this.scores.containsKey(1)
+        var sawOne = this.seen.contains(1)
         var one = this.scores.get(1) ?? 0
         var two = this.scores[2]
         this.scores.delete(1)

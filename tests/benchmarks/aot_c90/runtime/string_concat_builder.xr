@@ -8,7 +8,7 @@ fn run(rounds: int, parts: int) -> int {
             s = s + "part-" + (i % 10).toString() + ";"
             i = i + 1
         }
-        total = total + s.length
+        total = total + len(s)
         r = r + 1
     }
     return total

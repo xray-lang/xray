@@ -1,2 +1,2 @@
-var key: [uint8; 4] = [1, 2, 3]
-print(key.length)
+var key: [byte; 4] = [1, 2, 3]
+print(len(key))

@@ -92,6 +92,8 @@ static inline void string_finish_runtime(XrString *str, const char *chars, size_
 static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length) {
     if (length > UINT32_MAX)
         return NULL;
+    if (length > 0 && (!chars || !xr_utf8_validate(chars, length)))
+        return NULL;
 
     size_t total_size = sizeof(XrString) + length + 1;
     XrCoroutine *coro = iso ? xr_current_coro(iso) : NULL;
@@ -101,6 +103,7 @@ static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length
         return NULL;
 
     str->length = (uint32_t) length;
+    str->rune_length = (uint32_t) xr_utf8_strlen(chars ? chars : "", length);
     if (chars)
         memcpy(str->data, chars, length);
     str->data[length] = '\0';
@@ -156,6 +159,10 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         xr_log_warning("string", "string_intern_core: chars is NULL");
         return NULL;
     }
+    if (!xr_utf8_validate(chars, length)) {
+        xr_log_warning("string", "string_intern_core: invalid UTF-8");
+        return NULL;
+    }
 
     if (hash == 0)
         hash = string_hash_nonzero(chars, length);
@@ -168,6 +175,7 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         XrString *str = (XrString *) xr_sysheap_alloc_shared(heap, total_size, XR_TSTRING);
         if (str) {
             str->length = (uint32_t) length;
+            str->rune_length = (uint32_t) xr_utf8_strlen(chars, length);
             str->hash = hash;
             memcpy(str->data, chars, length);
             str->data[length] = '\0';
@@ -238,6 +246,7 @@ XrString *xr_string_clone_shared_core(XrRuntimeCore *core, XrString *str) {
     if (!shared)
         return NULL;
     shared->length = str->length;
+    shared->rune_length = str->rune_length;
     shared->hash = str->hash ? str->hash : string_hash_nonzero(str->data, str->length);
     memcpy(shared->data, str->data, length);
     shared->data[length] = '\0';
@@ -1077,7 +1086,7 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
 size_t xr_string_char_length(XrString *str) {
     if (!str)
         return 0;
-    return xr_utf8_strlen(str->data, str->length);
+    return str->rune_length;
 }
 
 // charCodeAt - get Unicode codepoint at char index

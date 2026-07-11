@@ -1,10 +1,10 @@
 // 1434_net_bytes_loopback.xr
-// 测试：TCP Bytes path — net.readInto / net.writeBytes
+// 测试：TCP Array<byte> path — net.readInto / net.writeBytes
 
 import net
 
 fn serveBytesEcho(c: NetConn) {
-    var buf = Bytes(16)
+    var buf = Array<byte>(16)
     var n = net.readInto(c, buf)
     if (n > 0) {
         net.writeBytes(c, buf)
@@ -18,7 +18,7 @@ fn acceptBytesEcho(lst: NetListener) {
 }
 
 fn serveBytesMaxLen(c: NetConn) {
-    var buf = Bytes(16)
+    var buf = Array<byte>(16)
     var n = net.readInto(c, buf, 3)
     if (n > 0) {
         net.writeBytes(c, buf)
@@ -42,7 +42,7 @@ fn test_bytes_echo_roundtrip() {
     go acceptBytesEcho(lst)
 
     var c = net.dial("127.0.0.1", port)!
-    var payload = Bytes([65, 0, 255, 66])
+    var payload = Array<byte>([65, 0, 255, 66])
     assert_eq(net.writeBytes(c, payload), 4)
 
     var resp = net.read(c)!
@@ -67,7 +67,7 @@ fn test_read_into_maxlen_controls_length() {
     go acceptBytesMaxLen(lst)
 
     var c = net.dial("127.0.0.1", port)!
-    var payload = Bytes([80, 81, 82, 83, 84])
+    var payload = Array<byte>([80, 81, 82, 83, 84])
     assert_eq(net.writeBytes(c, payload), 5)
 
     var resp = net.read(c)!

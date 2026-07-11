@@ -6,10 +6,10 @@
 
 @test
 fn test_length() {
-    assert_eq("hello".length, 5)
-    assert_eq("".length, 0)
-    assert_eq("x".length, 1)
-    assert_eq("中文".length, 2)
+    assert_eq(len("hello"), 5)
+    assert_eq(len(""), 0)
+    assert_eq(len("x"), 1)
+    assert_eq(len("中文"), 2)
 }
 
 // ===== 拼接 =====
@@ -106,9 +106,9 @@ fn test_indexOf_empty() {
 @test
 fn test_contains() {
     var s = "hello world"
-    assert_eq(s.includes("hello"), true)
-    assert_eq(s.includes("world"), true)
-    assert_eq(s.includes("xyz"), false)
+    assert_eq(s.contains("hello"), true)
+    assert_eq(s.contains("world"), true)
+    assert_eq(s.contains("xyz"), false)
 }
 
 // ===== startsWith/endsWith =====
@@ -183,38 +183,38 @@ fn test_toFloat() {
 fn test_split() {
     var s = "a,b,c,d"
     var parts = s.split(",")
-    assert_eq(parts.length, 4)
+    assert_eq(len(parts), 4)
     assert_eq(parts[0], "a")
     assert_eq(parts[3], "d")
 
     var edges = "a,,b,".split(",")
-    assert_eq(edges.length, 4)
+    assert_eq(len(edges), 4)
     assert_eq(edges[0], "a")
     assert_eq(edges[1], "")
     assert_eq(edges[2], "b")
     assert_eq(edges[3], "")
 
     var chars = "ab".split("")
-    assert_eq(chars.length, 2)
+    assert_eq(len(chars), 2)
     assert_eq(chars[0], "a")
     assert_eq(chars[1], "b")
 
     var empty = "".split("")
-    assert_eq(empty.length, 0)
+    assert_eq(len(empty), 0)
 }
 
 @test
 fn test_split_spaces() {
     var s = "hello world test"
     var words = s.split(" ")
-    assert_eq(words.length, 3)
+    assert_eq(len(words), 3)
 }
 
 @test
 fn test_split_no_delimiter() {
     var s = "hello"
     var parts = s.split(",")
-    assert_eq(parts.length, 1)
+    assert_eq(len(parts), 1)
     assert_eq(parts[0], "hello")
 }
 
@@ -286,15 +286,15 @@ fn test_comparison() {
 @test
 fn test_empty_string_operations() {
     var s = ""
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
     assert_eq(s.trim(), "")
     assert_eq(s.toUpperCase(), "")
-    assert_eq(s.includes(""), true)
+    assert_eq(s.contains(""), true)
 }
 
 @test
 fn test_long_string() {
     var s = "a".repeat(1000)
-    assert_eq(s.length, 1000)
+    assert_eq(len(s), 1000)
     assert_eq(s.charAt(500), "a")
 }

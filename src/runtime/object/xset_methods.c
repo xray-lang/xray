@@ -39,7 +39,7 @@ static inline bool set_is_weak(const XrSet *s) {
     return (s->flags & XR_SET_FLAG_WEAK) != 0;
 }
 
-static XrValue xr_set_method_has(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(0);
@@ -51,13 +51,6 @@ static XrValue xr_set_method_delete(XrVMRuntime *iso, XrValue self, XrValue *arg
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_set_delete(set_self(self), args[0]));
-}
-
-static XrValue xr_set_method_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_set_is_empty(set_self(self)));
 }
 
 static XrValue xr_set_method_add(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -204,9 +197,8 @@ static XrValue xr_set_method_to_string(XrVMRuntime *iso, XrValue self, XrValue *
 
 void xr_set_register_native_type(XrVMRuntime *isolate) {
     static XrNativeMethod set_methods[] = {
-        {"has", xr_set_method_has, 1},
+        {"contains", xr_set_method_contains, 1},
         {"delete", xr_set_method_delete, 1},
-        {"isEmpty", xr_set_method_is_empty, 0},
         {"add", xr_set_method_add, 0},
         {"clear", xr_set_method_clear, 0},
         {"union", xr_set_method_union, 0},

@@ -8,10 +8,10 @@ fn run(n: int) -> int {
 
     values.sort()
 
-    var checksum = values[0].length + values[n / 2].length + values[n - 1].length
+    var checksum = len(values[0]) + len(values[n / 2]) + len(values[n - 1])
     i = 0
     while (i < n) {
-        checksum = checksum + values[i].length
+        checksum = checksum + len(values[i])
         i = i + 997
     }
     return checksum

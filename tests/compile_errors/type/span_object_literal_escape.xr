@@ -1,8 +1,8 @@
 fn bad() {
     var owner = [1, 2, 3]
-    var view: Span<int> = owner[0:2]
+    var view: Slice<int> = owner[0:2]
     var record = {view: view}
-    print(record.view.length)
+    print(len(record.view))
 }
 
 bad()

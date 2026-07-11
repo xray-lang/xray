@@ -1,28 +1,28 @@
-fn read16(src: ByteSpan, pos: int) -> int {
+fn read16(src: Slice<byte>, pos: int) -> int {
     var value: uint16 = src.load<uint16>(pos, Endian.LE)
     return int(value)
 }
 
-fn read32(src: ByteSpan, pos: int) -> int {
+fn read32(src: Slice<byte>, pos: int) -> int {
     var value: uint32 = src.load<uint32>(pos, Endian.LE)
     return int(value)
 }
 
-fn read64(src: ByteSpan, pos: int) -> int {
+fn read64(src: Slice<byte>, pos: int) -> int {
     var value: uint64 = src.load<uint64>(pos, Endian.LE)
     return int(value)
 }
 
-fn read32BE(src: ByteSpan, pos: int) -> int {
+fn read32BE(src: Slice<byte>, pos: int) -> int {
     var value: uint32 = src.load<uint32>(pos, Endian.BE)
     return int(value)
 }
 
-fn write16LE(dst: ByteSpan, pos: int, value: uint16) {
+fn write16LE(dst: Slice<byte>, pos: int, value: uint16) {
     dst.store<uint16>(pos, value, Endian.LE)
 }
 
-var bytes = Bytes.withCapacity(8)
+var bytes = Array<byte>.withCapacity(8)
 unsafe {
     bytes.push(1)
     bytes.push(2)
@@ -34,7 +34,7 @@ unsafe {
     bytes.push(8)
 }
 
-var view: ByteSpan = bytes[:]
+var view: Slice<byte> = bytes[:]
 print(read16(view, 0))
 print(read16(view, 3))
 print(read32(view, 0))

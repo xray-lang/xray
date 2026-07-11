@@ -66,8 +66,8 @@ print(filled.join(","))         // 7,7,7,7,7
 var nums: Array<int> = [10, 20, 30, 40, 50]
 print(nums.indexOf(30))         // 2
 print(nums.indexOf(99))         // -1
-print(nums.includes(40))        // true
-print(nums.includes(41))        // false
+print(nums.contains(40))        // true
+print(nums.contains(41))        // false
 
 var fnums: Array<float> = [1.5, 2.5, 3.5]
 print(fnums.indexOf(2.5))       // 1

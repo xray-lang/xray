@@ -213,13 +213,13 @@ TEST(lexer_char_literals) {
     Token t;
 
     t = scan_single("'a'");
-    assert_token(t, TK_LITERAL_CHAR, "'a'");
+    assert_token(t, TK_LITERAL_RUNE, "'a'");
 
     t = scan_single("'\\n'");
-    assert_token(t, TK_LITERAL_CHAR, "'\\n'");
+    assert_token(t, TK_LITERAL_RUNE, "'\\n'");
 
     t = scan_single("'\\u{1F600}'");
-    assert_token(t, TK_LITERAL_CHAR, "'\\u{1F600}'");
+    assert_token(t, TK_LITERAL_RUNE, "'\\u{1F600}'");
 }
 
 TEST(lexer_raw_single_quote_removed) {

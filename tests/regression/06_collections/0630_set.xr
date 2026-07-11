@@ -5,25 +5,25 @@
 @test
 fn test_set_literal() {
     var s = #[1, 2, 3]
-    assert_eq(s.length, 3)
+    assert_eq(len(s), 3)
 }
 
 @test
 fn test_empty_set() {
     var s = #[]
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
 }
 
 @test
 fn test_single_element() {
     var s = #[42]
-    assert_eq(s.length, 1)
+    assert_eq(len(s), 1)
 }
 
 @test
 fn test_set_dedup() {
     var s = #[1, 2, 2, 3, 3, 3]
-    assert_eq(s.length, 3)
+    assert_eq(len(s), 3)
 }
 
 // ===== 添加 =====
@@ -33,7 +33,7 @@ fn test_add_new() {
     s.add(1)
     s.add(2)
     s.add(3)
-    assert_eq(s.length, 3)
+    assert_eq(len(s), 3)
 }
 
 @test
@@ -41,21 +41,21 @@ fn test_add_duplicate() {
     var s = #[1, 2]
     s.add(2)
     // 重复
-    assert_eq(s.length, 2)
+    assert_eq(len(s), 2)
 }
 
 // ===== 检查 =====
 @test
 fn test_has() {
     var s = #[1, 2, 3]
-    assert_eq(s.has(2), true)
-    assert_eq(s.has(5), false)
+    assert_eq(s.contains(2), true)
+    assert_eq(s.contains(5), false)
 }
 
 @test
 fn test_has_empty() {
     var s = #[]
-    assert_eq(s.has(1), false)
+    assert_eq(s.contains(1), false)
 }
 
 // ===== 删除 =====
@@ -63,10 +63,10 @@ fn test_has_empty() {
 fn test_delete() {
     var s = #[1, 2, 3]
     s.delete(2)
-    assert_eq(s.length, 2)
-    assert_eq(s.has(2), false)
-    assert_eq(s.has(1), true)
-    assert_eq(s.has(3), true)
+    assert_eq(len(s), 2)
+    assert_eq(s.contains(2), false)
+    assert_eq(s.contains(1), true)
+    assert_eq(s.contains(3), true)
 }
 
 @test
@@ -74,7 +74,7 @@ fn test_delete_missing() {
     var s = #[1, 2]
     s.delete(5)
     // 不存在
-    assert_eq(s.length, 2)
+    assert_eq(len(s), 2)
 }
 
 // ===== 遍历 =====
@@ -103,16 +103,16 @@ fn test_iterate_empty() {
 fn test_clear() {
     var s = #[1, 2, 3]
     s.clear()
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
 }
 
 // ===== 字符串元素 =====
 @test
 fn test_string_elements() {
     var s = #["apple", "banana", "cherry"]
-    assert_eq(s.length, 3)
-    assert_eq(s.has("apple"), true)
-    assert_eq(s.has("grape"), false)
+    assert_eq(len(s), 3)
+    assert_eq(s.contains("apple"), true)
+    assert_eq(s.contains("grape"), false)
 }
 
 // ===== 转换为数组 =====
@@ -120,7 +120,7 @@ fn test_string_elements() {
 fn test_to_array() {
     var s = #[1, 2, 3]
     var arr = s.toArray()
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
 }
 
 // ===== 边界条件 =====
@@ -130,8 +130,8 @@ fn test_many_elements() {
     for (var i = 0; i < 100; i++) {
         s.add(i)
     }
-    assert_eq(s.length, 100)
-    assert_eq(s.has(50), true)
+    assert_eq(len(s), 100)
+    assert_eq(s.contains(50), true)
 }
 
 @test
@@ -141,8 +141,8 @@ fn test_add_and_delete() {
     s.add(2)
     s.delete(1)
     s.add(3)
-    assert_eq(s.length, 2)
-    assert_eq(s.has(1), false)
-    assert_eq(s.has(2), true)
-    assert_eq(s.has(3), true)
+    assert_eq(len(s), 2)
+    assert_eq(s.contains(1), false)
+    assert_eq(s.contains(2), true)
+    assert_eq(s.contains(3), true)
 }

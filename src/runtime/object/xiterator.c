@@ -384,7 +384,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
             return xr_null();
         uint32_t idx = iter->scan_index++;
         int32_t cp = xr_string_char_code_at(s, (size_t) idx);
-        XrValue ch = cp >= 0 ? xr_char((uint32_t) cp) : xr_null();
+        XrValue ch = cp >= 0 ? xr_rune((uint32_t) cp) : xr_null();
         if (iter->mode == XR_ITER_MODE_VALUES) {
             return ch;
         }

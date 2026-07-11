@@ -44,9 +44,9 @@ fn test_encrypt_decrypt_long_text() {
 fn test_encrypt_output_is_hex() {
     var encrypted = crypto.encrypt("key", "test")
     // Output should be hex string (IV 32 chars + at least 32 chars ciphertext)
-    assert_true(encrypted.length >= 64)
+    assert_true(len(encrypted) >= 64)
     // Length should be even
-    assert_eq(encrypted.length % 2, 0)
+    assert_eq(len(encrypted) % 2, 0)
 }
 
 @test

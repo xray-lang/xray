@@ -1,4 +1,4 @@
-var bytes: Array<uint8> = []
+var bytes: Array<byte> = []
 bytes.push(1)
 bytes.push(2)
 bytes.push(3)
@@ -6,6 +6,6 @@ bytes.push(3)
 var kept = bytes.filter(fn(x) { return x > 1 })
 kept.push(9)
 
-print(kept.length)
+print(len(kept))
 print(kept[0])
 print(kept[2])

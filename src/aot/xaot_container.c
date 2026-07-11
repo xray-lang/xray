@@ -89,8 +89,8 @@ static bool container_elem_plan_for_type(const XrType *type, XaotContainerElemPl
         return elem_plan_make(type, XAOT_REP_F64, "XR_ELEM_F64", out);
     if (type->kind == XR_KIND_BOOL)
         return elem_plan_make(type, XAOT_REP_BOOL, "XR_ELEM_BOOL", out);
-    if (allow_char && type->kind == XR_KIND_CHAR)
-        return elem_plan_make(type, XAOT_REP_CHAR, "XR_ELEM_CHAR", out);
+    if (allow_char && type->kind == XR_KIND_RUNE)
+        return elem_plan_make(type, XAOT_REP_RUNE, "XR_ELEM_RUNE", out);
     return false;
 }
 

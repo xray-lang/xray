@@ -1,7 +1,7 @@
 @c_export("xray_native_endian_u16")
 fn xray_native_endian_u16() -> int {
-    var bytes: [uint8; 4] = [0, 0, 0, 0]
-    var view: ByteSpan = bytes[:]
+    var bytes: [byte; 4] = [0, 0, 0, 0]
+    var view: Slice<byte> = bytes[:]
     view.store<uint16>(0, 0x1234, Endian.Native)
     return int(view.load<uint16>(0, Endian.Native))
 }

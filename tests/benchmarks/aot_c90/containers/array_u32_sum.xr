@@ -8,7 +8,7 @@ fn run(n: int) -> int {
 
     var sum = 0
     i = 0
-    while (i < vals.length) {
+    while (i < len(vals)) {
         sum = sum + vals[i]
         i = i + 1
     }

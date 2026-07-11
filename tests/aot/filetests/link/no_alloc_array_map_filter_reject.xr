@@ -8,12 +8,12 @@ fn xray_no_alloc_array_filter_keep(value: int) -> bool {
 
 @no_alloc
 fn xray_no_alloc_array_map_reject(values: Array<int>) -> int {
-    return values.map(xray_no_alloc_array_map_bump).length
+    return len(values.map(xray_no_alloc_array_map_bump))
 }
 
 @no_alloc
 fn xray_no_alloc_array_filter_reject(values: Array<int>) -> int {
-    return values.filter(xray_no_alloc_array_filter_keep).length
+    return len(values.filter(xray_no_alloc_array_filter_keep))
 }
 
 var xray_no_alloc_array_map_filter_values: Array<int> = [1, 2, 3]

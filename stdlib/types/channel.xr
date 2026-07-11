@@ -16,7 +16,6 @@ enum SendResult {
 
 @native
 class Channel<T> {
-    length: int
     capacity: int
     isClosed: bool
 

@@ -4,7 +4,7 @@ import { LE as directLE, BE as directBE } from "encoding"
 print(encoding.hexEncode("Hello"))
 var decoded = encoding.hexDecode("48656c6c6f")
 if (decoded != null) {
-    print(decoded.length)
+    print(len(decoded))
     print(decoded[0])
     print(decoded[4])
 }
@@ -13,7 +13,7 @@ print(encoding.hexDecode("gg") == null)
 print(encoding.hexDecode("abc") == null)
 var empty = encoding.hexDecode("")
 if (empty != null) {
-    print(empty.length)
+    print(len(empty))
 }
 print(encoding.hexValid("48656c6c6f"))
 print(encoding.hexValid("abc"))
@@ -26,7 +26,7 @@ print(directLE)
 print(directBE)
 
 var u16le = encoding.utf16Encode("AB")
-print(u16le.length)
+print(len(u16le))
 print(u16le[0])
 print(u16le[1])
 print(u16le[2])
@@ -39,11 +39,11 @@ print(u16be[1])
 print(encoding.utf16Decode(u16be, encoding.BE))
 print(encoding.utf16Decode(u16be, encoding.BE, false))
 
-var bom = Bytes(4)
+var bom = Array<byte>(4)
 bom[0] = 254
 bom[1] = 255
 bom[2] = 0
 bom[3] = 65
 print(encoding.utf16Decode(bom))
 print(encoding.utf16Decode(bom, encoding.BE, false) == "A")
-print(encoding.utf16Decode(Bytes(1)) == null)
+print(encoding.utf16Decode(Array<byte>(1)) == null)

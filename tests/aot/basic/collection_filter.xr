@@ -2,7 +2,7 @@
 var nums = [10, 20, 30, 40, 50, 60]
 
 // Length
-print(nums.length)
+print(len(nums))
 
 // Typed array access
 print(nums[0])
@@ -11,16 +11,16 @@ print(nums[4])
 
 // Push
 nums.push(70)
-print(nums.length)
+print(len(nums))
 
 // Map: double each element
 var doubled = nums.map(fn(x: int) -> int { return x * 2 })
-print(doubled.length)
+print(len(doubled))
 print(doubled[0])
 print(doubled[3])
 
 // Filter: keep elements > 30
 var big = nums.filter(fn(x: int) -> bool { return x > 30 })
-print(big.length)
+print(len(big))
 print(big[0])
 print(big[2])

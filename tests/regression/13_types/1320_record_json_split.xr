@@ -6,7 +6,7 @@ type User = { id: int, name: string }
 @test
 fn test_default_record() {
     var user = { id: 1, name: "Ada" }
-    assert_eq(typename(user), "Record")
+    assert_eq(typeName(user), "Record")
     assert_eq(user.id, 1)
     assert_eq(user.name, "Ada")
     user.name = "Grace"
@@ -16,7 +16,7 @@ fn test_default_record() {
 @test
 fn test_record_alias_assignment() {
     var user: User = { id: 7, name: "Lin" }
-    assert_eq(typename(user), "Record")
+    assert_eq(typeName(user), "Record")
     assert_eq(user.id, 7)
     assert_eq(user.name, "Lin")
 }
@@ -25,14 +25,14 @@ fn test_record_alias_assignment() {
 fn test_json_opt_in_object() {
     var payload: Json = { id: 1, name: "Ada" }
     payload.extra = true
-    assert_eq(typename(payload), "Json")
+    assert_eq(typeName(payload), "Json")
     assert_eq(payload.extra, true)
 }
 
 @test
 fn test_json_array_literal_context() {
     var payload: Json = [1, "two", true]
-    assert_eq(typename(payload), "Array")
+    assert_eq(typeName(payload), "Array")
 }
 
 @test
@@ -40,7 +40,7 @@ fn test_json_decode_record() {
     var data = Json.parse("{\"id\": 9, \"name\": \"Ray\"}")
     var user = Json.decode<User>(data)
     assert(user != null)
-    assert_eq(typename(user), "Record")
+    assert_eq(typeName(user), "Record")
     assert_eq(user!.id, 9)
     assert_eq(user!.name, "Ray")
 }

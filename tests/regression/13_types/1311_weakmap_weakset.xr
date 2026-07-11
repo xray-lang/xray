@@ -19,16 +19,16 @@ fn test_weakmap_weakset() {
     print("PASS: weakmap set/get")
 
     // Test 2: has
-    assert_eq(wm.has(key1), true)
+    assert_eq(wm.containsKey(key1), true)
     var key3 = { name: "charlie" }
-    assert_eq(wm.has(key3), false)
+    assert_eq(wm.containsKey(key3), false)
     print("PASS: weakmap has")
 
     // Test 3: delete
     wm.delete(key1)
-    assert_eq(wm.has(key1), false)
+    assert_eq(wm.containsKey(key1), false)
     assert_eq(wm.get(key1), null)
-    assert_eq(wm.has(key2), true)
+    assert_eq(wm.containsKey(key2), true)
     print("PASS: weakmap delete")
 
     // Test 4: update value
@@ -61,17 +61,17 @@ fn test_weakmap_weakset() {
     var ws = WeakSet()
     var obj1 = { id: 1 }
     var obj2 = { id: 2 }
-    assert_eq(ws.has(obj1), false)
+    assert_eq(ws.contains(obj1), false)
     ws.add(obj1)
     ws.add(obj2)
-    assert_eq(ws.has(obj1), true)
-    assert_eq(ws.has(obj2), true)
+    assert_eq(ws.contains(obj1), true)
+    assert_eq(ws.contains(obj2), true)
     print("PASS: weakset add/has")
 
     // Test 8: delete
     ws.delete(obj1)
-    assert_eq(ws.has(obj1), false)
-    assert_eq(ws.has(obj2), true)
+    assert_eq(ws.contains(obj1), false)
+    assert_eq(ws.contains(obj2), true)
     print("PASS: weakset delete")
 
     // Test 9: no duplicates
@@ -80,7 +80,7 @@ fn test_weakmap_weakset() {
     ws2.add(obj3)
     ws2.add(obj3)
     ws2.add(obj3)
-    assert_eq(ws2.has(obj3), true)
+    assert_eq(ws2.contains(obj3), true)
     print("PASS: weakset no duplicates")
 }
 

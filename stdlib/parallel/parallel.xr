@@ -27,7 +27,7 @@ fn _checkOptions(options: Options) {
 
 fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
     _checkOptions(options)
-    for (offset in 0..range.length) {
+    for (offset in 0..range.count()) {
         body(range[offset])
     }
 }
@@ -35,7 +35,7 @@ fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
 fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -> Array<T> {
     _checkOptions(options)
     var out: Array<T> = []
-    for (offset in 0..range.length) {
+    for (offset in 0..range.count()) {
         out.push(body(range[offset]))
     }
     return out
@@ -49,7 +49,7 @@ fn mapInto<T>(
 ) -> Array<T> {
     _checkOptions(options)
     output.clear()
-    for (offset in 0..range.length) {
+    for (offset in 0..range.count()) {
         output.push(body(range[offset]))
     }
     return output
@@ -64,7 +64,7 @@ fn reduce<A>(
 ) -> A {
     _checkOptions(options)
     var acc = initial
-    for (offset in 0..range.length) {
+    for (offset in 0..range.count()) {
         acc = combine(acc, body(range[offset]))
     }
     return acc
@@ -106,7 +106,7 @@ class Plan<S> {
     forEach(range: Range, body: (S, int) -> ()) {
         this._begin()
         defer { this._end() }
-        for (offset in 0..range.length) {
+        for (offset in 0..range.count()) {
             body(this._state, range[offset])
         }
     }
@@ -115,7 +115,7 @@ class Plan<S> {
         this._begin()
         defer { this._end() }
         var out: Array<T> = []
-        for (offset in 0..range.length) {
+        for (offset in 0..range.count()) {
             out.push(body(this._state, range[offset]))
         }
         return out
@@ -125,7 +125,7 @@ class Plan<S> {
         this._begin()
         defer { this._end() }
         output.clear()
-        for (offset in 0..range.length) {
+        for (offset in 0..range.count()) {
             output.push(body(this._state, range[offset]))
         }
         return output
@@ -135,7 +135,7 @@ class Plan<S> {
         this._begin()
         defer { this._end() }
         var acc = initial
-        for (offset in 0..range.length) {
+        for (offset in 0..range.count()) {
             acc = combine(acc, body(this._state, range[offset]))
         }
         return acc

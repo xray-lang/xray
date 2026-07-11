@@ -32,7 +32,7 @@ fn test_sha512_hello_world() {
 @test
 fn test_sha512_length() {
     // SHA-512 always returns 128 hex characters
-    assert_eq(crypto.sha512("test").length, 128)
+    assert_eq(len(crypto.sha512("test")), 128)
 }
 
 @test
@@ -49,13 +49,13 @@ fn test_sha512_long_string() {
 fn test_hmac_sha512_basic() {
     var hmac = crypto.hmac("sha512", "key", "message")!
     // HMAC-SHA512 length is 128 hex chars
-    assert_eq(hmac.length, 128)
+    assert_eq(len(hmac), 128)
 }
 
 @test
 fn test_hmac_sha512_empty_message() {
     var hmac = crypto.hmac("sha512", "key", "")!
-    assert_eq(hmac.length, 128)
+    assert_eq(len(hmac), 128)
 }
 
 @test

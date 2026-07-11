@@ -1,7 +1,7 @@
 import mem
 
 struct Header {
-    x: uint8
+    x: byte
 }
 
 var n = mem.offsetOf<Header>("missing")

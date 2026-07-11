@@ -89,14 +89,14 @@ fn test_format_noon() {
 fn test_format_now() {
     var dt = datetime.now()
     var formatted = dt.format("YYYY-MM-DD")
-    assert_eq(formatted.length, 10)
+    assert_eq(len(formatted), 10)
 }
 
 @test
 fn test_format_now_full() {
     var dt = datetime.now()
     var formatted = dt.format("YYYY-MM-DD HH:mm:ss")
-    assert_eq(formatted.length, 19)
+    assert_eq(len(formatted), 19)
 }
 
 // ============================================================
@@ -107,5 +107,5 @@ fn test_format_now_full() {
 fn test_to_iso_string_utc() {
     var dt = datetime.fromTimestamp(1718438400)
     var iso = dt.toISOString()
-    assert_true(iso.length > 20)
+    assert_true(len(iso) > 20)
 }

@@ -15,7 +15,7 @@ fn test_comptime_bool_string_char_expr() {
 @test
 fn test_comptime_typeid_constants() {
     var ids: [int; TYPE_BOOL_ID] = [TYPE_INT_ID; TYPE_BOOL_ID]
-    assert_eq(ids.length, 1)
+    assert_eq(len(ids), 1)
     assert_eq(ids[0], TYPE_INT_ID)
     assert_eq(TYPE_INT_ID == TYPE_BOOL_ID, false)
 }

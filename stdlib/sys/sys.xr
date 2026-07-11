@@ -41,12 +41,12 @@ class Pipe {
 
     writeEnd() -> int { return this._writeHandle }
 
-    read(maxBytes: int = 8192) -> Bytes? {
+    read(maxBytes: int = 8192) -> Array<byte>? {
         if (!this._readOpen || maxBytes < 0) { return null }
         return __pipeRead(this._readHandle, maxBytes)
     }
 
-    write(data: Bytes) -> int {
+    write(data: Array<byte>) -> int {
         if (!this._writeOpen) { return -1 }
         return __pipeWrite(this._writeHandle, data)
     }
@@ -73,7 +73,7 @@ class Pipe {
 
     static open() -> Pipe? {
         var ends = __pipeOpen()
-        if (ends == null || ends!.length < 2) { return null }
+        if (ends == null || len(ends!) < 2) { return null }
         return Pipe(ends![0], ends![1])
     }
 }
@@ -215,12 +215,12 @@ class ThreadLocal<T> {
             this._lock.lock()
             defer { this._lock.unlock() }
             _threadLocalPruneDeadSlots(this._values)
-            if (this._values.has(key)) {
+            if (this._values.containsKey(key)) {
                 var slot = this._values.get(key)!
                 return slot.value as T
             }
             _threadLocalPruneDeadFlags(this._initializing)
-            if (this._initializing.has(key)) {
+            if (this._initializing.containsKey(key)) {
                 throw _ThreadLocalError.RecursiveInit
             }
             this._initializing.set(key, true)
@@ -245,7 +245,7 @@ class ThreadLocal<T> {
             _threadLocalPruneDeadSlots(this._values)
             _threadLocalPruneDeadFlags(this._initializing)
             this._initializing.delete(key)
-            if (!this._values.has(key)) {
+            if (!this._values.containsKey(key)) {
                 this._values.set(key, _ThreadLocalSlot(value))
             }
             result = this._values.get(key)!.value
@@ -258,7 +258,7 @@ class ThreadLocal<T> {
         this._lock.lock()
         defer { this._lock.unlock() }
         _threadLocalPruneDeadSlots(this._values)
-        if (this._values.has(key)) {
+        if (this._values.containsKey(key)) {
             var slot = this._values.get(key)!
             slot.value = value
         } else {
@@ -277,7 +277,7 @@ class Dylib {
         this._open = handle != 0
     }
 
-    symbol(name: string) -> RawPtr<uint8>? {
+    symbol(name: string) -> RawPtr<byte>? {
         if (!this._open) { return null }
         return __dylibSymbol(this._handle, name)
     }

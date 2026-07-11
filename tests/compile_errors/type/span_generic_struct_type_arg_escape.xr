@@ -3,10 +3,10 @@ struct Slot<T> {
 }
 
 fn bad() {
-    var bytes = Bytes(4)
-    var view: ByteSpan = bytes[:]
-    var slot = Slot<ByteSpan>{value: view}
-    print(slot.value.length)
+    var bytes = Array<byte>(4)
+    var view: Slice<byte> = bytes[:]
+    var slot = Slot<Slice<byte>>{value: view}
+    print(len(slot.value))
 }
 
 bad()

@@ -1,17 +1,17 @@
 // base64 — RFC 4648 Base64 encoding/decoding, pure Xray.
 //
 // encode/decode work on the UTF-8 bytes of a string; encodeBytes/decodeToBytes
-// work on raw Bytes. Decoding accepts both the standard (+/) and URL-safe (-_)
+// work on raw Array<byte>. Decoding accepts both the standard (+/) and URL-safe (-_)
 // alphabets and tolerates missing padding; structurally invalid input returns
-// null. Byte-indexed scanning over Bytes keeps the hot path allocation-light.
+// null. Byte-indexed scanning over Array<byte> keeps the hot path allocation-light.
 
 const STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
-// Encode raw bytes with the given 64-char alphabet; append '=' padding when
+// Encode raw bytes with the given 64-rune alphabet; append '=' padding when
 // `padding` is true (standard) and omit it otherwise (URL-safe default).
-fn encodeAlpha(data: Bytes, alpha: string, padding: bool) -> string {
-    var n = data.length
+fn encodeAlpha(data: Array<byte>, alpha: string, padding: bool) -> string {
+    var n = len(data)
     var out = StringBuilder()
     var i = 0
     while (i + 3 <= n) {
@@ -54,13 +54,13 @@ fn decodeChar(c: int) -> int {
 
 // Decode a base64 string into raw bytes; returns null on any invalid input
 // (bad characters, misplaced padding, or a length that cannot form whole bytes).
-fn decodeBytes(s: string) -> Bytes? {
-    var src = s.toBytes()
-    var end = src.length
+fn decodeBytes(s: string) -> Array<byte>? {
+    var src = s.copyBytes()
+    var end = len(src)
     // Strip trailing '=' (byte 61) padding.
     while (end > 0 && src[end - 1] == 61) { end = end - 1 }
     // At most two padding chars, and no '=' before the tail.
-    if (src.length - end > 2) { return null }
+    if (len(src) - end > 2) { return null }
     for (var i = 0; i < end; i++) {
         if (src[i] == 61) { return null }
     }
@@ -72,7 +72,7 @@ fn decodeBytes(s: string) -> Bytes? {
     if (rem == 2) { outLen = outLen + 1 }
     else if (rem == 3) { outLen = outLen + 2 }
 
-    var out = Bytes(outLen)
+    var out = Array<byte>(outLen)
     var oi = 0
     var i = 0
     while (i + 4 <= end) {
@@ -105,7 +105,7 @@ fn decodeBytes(s: string) -> Bytes? {
 
 // encode — standard alphabet with padding, over the string's UTF-8 bytes.
 fn encode(data: string) -> string {
-    return encodeAlpha(data.toBytes(), STD, true)
+    return encodeAlpha(data.copyBytes(), STD, true)
 }
 
 // decode — standard/URL-safe input to a UTF-8 string; null on invalid input.
@@ -117,7 +117,7 @@ fn decode(data: string) -> string? {
 
 // encodeUrl — URL-safe alphabet, no padding.
 fn encodeUrl(data: string) -> string {
-    return encodeAlpha(data.toBytes(), URL, false)
+    return encodeAlpha(data.copyBytes(), URL, false)
 }
 
 // decodeUrl — the decoder already accepts both alphabets.
@@ -126,21 +126,21 @@ fn decodeUrl(data: string) -> string? {
 }
 
 // encodeBytes — standard alphabet with padding, over raw bytes.
-fn encodeBytes(data: Bytes) -> string {
+fn encodeBytes(data: Array<byte>) -> string {
     return encodeAlpha(data, STD, true)
 }
 
 // decodeToBytes — decode to raw bytes; null on invalid input.
-fn decodeToBytes(data: string) -> Bytes? {
+fn decodeToBytes(data: string) -> Array<byte>? {
     return decodeBytes(data)
 }
 
 // isValid — whether the input is structurally valid base64.
 fn isValid(data: string) -> bool {
-    var src = data.toBytes()
-    var end = src.length
+    var src = data.copyBytes()
+    var end = len(src)
     while (end > 0 && src[end - 1] == 61) { end = end - 1 }
-    if (src.length - end > 2) { return false }
+    if (len(src) - end > 2) { return false }
     for (var i = 0; i < end; i++) {
         if (src[i] == 61) { return false }
         if (decodeChar(src[i]) < 0) { return false }

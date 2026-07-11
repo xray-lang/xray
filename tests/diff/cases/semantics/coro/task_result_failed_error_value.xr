@@ -10,7 +10,7 @@ var result = task.awaitResult()
 
 match (result) {
     TaskResult.Failed(err) -> {
-        print(typename(err))
+        print(typeName(err))
         match (err) {
             TaskResultErr.Msg(message) -> print(message)
             _ -> print("unexpected payload")

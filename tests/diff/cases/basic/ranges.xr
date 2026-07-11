@@ -1,16 +1,16 @@
 // anchor: basic-ranges
 var r = 2..9
-print(r.length)
-print(r.includes(2))
-print(r.includes(8))
-print(r.includes(9))
+print(len(r))
+print(r.contains(2))
+print(r.contains(8))
+print(r.contains(9))
 print(r[0])
 print(r[-1])
 print(r[-7])
 print(r[-8])
 print(r.toString())
 var values = r.toArray()
-print(values.length)
+print(len(values))
 print(values[0])
 print(values[6])
 

@@ -2,8 +2,8 @@ fn boolLookup(flag: bool) -> int {
     var scores: Map<bool, int> = #{true: 7, false: 3}
     var seen: Set<bool> = #[true, false]
     var total = scores[flag]
-    if (scores.has(true)) {
-        if (seen.has(false)) {
+    if (scores.containsKey(true)) {
+        if (seen.contains(false)) {
             return total
         }
     }

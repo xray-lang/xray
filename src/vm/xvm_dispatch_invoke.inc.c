@@ -193,8 +193,8 @@ invoke_dispatch:;
         }
     }
 
-    if (XR_IS_CHAR(receiver)) {
-        uint32_t cp = XR_TO_CHAR(receiver);
+    if (XR_IS_RUNE(receiver)) {
+        uint32_t cp = XR_TO_RUNE(receiver);
         if (nargs == 0 && method_symbol == SYMBOL_TOSTRING) {
             R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
             vmbreak;
@@ -328,7 +328,8 @@ invoke_dispatch:;
         }
 
         /* Closure method: user-defined instance methods */
-        if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
+        if (method && (method->type == XMETHOD_CLOSURE || method->type == XMETHOD_OPERATOR) &&
+            method->as.closure) {
             XrClosure *closure = method->as.closure;
             XrProto *proto = closure->proto;
             int frame_argc = nargs + 1;  // includes receiver

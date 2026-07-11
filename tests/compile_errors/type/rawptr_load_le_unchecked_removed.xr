@@ -1,4 +1,4 @@
-fn read(src: Bytes) -> int {
+fn read(src: Array<byte>) -> int {
     unsafe {
         var p = src.ptr()
         return int(p.loadLEUnchecked<uint16>(0))

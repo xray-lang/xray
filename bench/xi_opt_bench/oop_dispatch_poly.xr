@@ -34,7 +34,7 @@ fn run(rounds: int) -> int {
     var animals = [DogBench(5), CatBench(7)]
     var total = 0
     for (var i = 0; i < rounds; i++) {
-        var a = animals[i % animals.length]
+        var a = animals[i % len(animals)]
         total = total + a.score(i % 17)
     }
     return total

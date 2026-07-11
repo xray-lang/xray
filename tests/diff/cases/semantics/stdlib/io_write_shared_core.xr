@@ -12,7 +12,7 @@ print(io.appendFile(textFile, "\nomega"))
 print(io.readFile(textFile) == "alpha\nomega")
 
 var bytesFile = root + "/bytes.bin"
-var bytes = Bytes(4)
+var bytes = Array<byte>(4)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 10
@@ -21,7 +21,7 @@ print(io.writeFileBytes(bytesFile, bytes))
 
 var readBytes = io.readFileBytes(bytesFile)
 if (readBytes != null) {
-    print(readBytes.length)
+    print(len(readBytes))
     print(readBytes[0])
     print(readBytes[1])
     print(readBytes[2])

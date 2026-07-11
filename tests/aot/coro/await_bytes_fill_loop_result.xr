@@ -1,5 +1,5 @@
-fn makeSample(n: int) -> Bytes {
-    var out = Bytes(0)
+fn makeSample(n: int) -> Array<byte> {
+    var out = Array<byte>(0)
     var i = 0
     while (i < n) {
         out.push((i * 3) & 0xFF)
@@ -8,11 +8,11 @@ fn makeSample(n: int) -> Bytes {
     return out
 }
 
-fn worker(n: int) -> Bytes {
+fn worker(n: int) -> Array<byte> {
     return makeSample(n)
 }
 
 var t = go worker(1024)
 var data = await t
-print(data.length)
+print(len(data))
 print(data[7])

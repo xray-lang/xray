@@ -105,36 +105,36 @@ static int char_hex_value(char c) {
     return -1;
 }
 
-static const char *parse_char_literal_payload(const char *src, size_t len, uint32_t *out_cp) {
+static const char *parse_rune_literal_payload(const char *src, size_t len, uint32_t *out_cp) {
     if (!src || len == 0)
-        return "char literal cannot be empty";
+        return "rune literal cannot be empty";
 
     if (src[0] == '\\') {
         if (len < 2)
-            return "unterminated char escape";
+            return "unterminated rune escape";
         uint32_t cp = 0;
         if (src[1] == 'u') {
             if (len < 4 || src[2] != '{')
-                return "char unicode escape must use \\u{...}";
+                return "rune unicode escape must use \\u{...}";
             size_t p = 3;
             uint32_t value = 0;
             int digits = 0;
             while (p < len && src[p] != '}') {
                 int h = char_hex_value(src[p]);
                 if (h < 0)
-                    return "invalid hex digit in char unicode escape";
+                    return "invalid hex digit in rune unicode escape";
                 if (digits >= 6)
-                    return "char unicode escape must contain at most 6 hex digits";
+                    return "rune unicode escape must contain at most 6 hex digits";
                 value = (value << 4) | (uint32_t) h;
                 digits++;
                 p++;
             }
             if (digits == 0)
-                return "char unicode escape requires at least one hex digit";
+                return "rune unicode escape requires at least one hex digit";
             if (p >= len || src[p] != '}')
-                return "unterminated char unicode escape";
+                return "unterminated rune unicode escape";
             if (p + 1 != len)
-                return "char literal must contain exactly one Unicode scalar value";
+                return "rune literal must contain exactly one Unicode scalar value";
             cp = value;
         } else {
             switch (src[1]) {
@@ -166,13 +166,13 @@ static const char *parse_char_literal_payload(const char *src, size_t len, uint3
                     cp = '\0';
                     break;
                 default:
-                    return "invalid char escape";
+                    return "invalid rune escape";
             }
             if (len != 2)
-                return "char literal must contain exactly one Unicode scalar value";
+                return "rune literal must contain exactly one Unicode scalar value";
         }
         if (!xr_unicode_is_scalar(cp))
-            return "char literal must be a valid Unicode scalar value";
+            return "rune literal must be a valid Unicode scalar value";
         *out_cp = cp;
         return NULL;
     }
@@ -180,13 +180,13 @@ static const char *parse_char_literal_payload(const char *src, size_t len, uint3
     uint32_t cp = 0;
     int consumed = xr_utf8_decode(src, len, &cp);
     if (consumed <= 0)
-        return "invalid UTF-8 in char literal";
+        return "invalid UTF-8 in rune literal";
     if ((unsigned char) src[0] >= 0x80 && consumed == 1 && cp == XR_UNICODE_INVALID)
-        return "invalid UTF-8 in char literal";
+        return "invalid UTF-8 in rune literal";
     if (!xr_unicode_is_scalar(cp))
-        return "char literal must be a valid Unicode scalar value";
+        return "rune literal must be a valid Unicode scalar value";
     if ((size_t) consumed != len)
-        return "char literal must contain exactly one Unicode scalar value";
+        return "rune literal must contain exactly one Unicode scalar value";
     *out_cp = cp;
     return NULL;
 }
@@ -244,11 +244,11 @@ AstNode *xr_parse_literal(Parser *parser) {
             return node;
         }
 
-        case TK_LITERAL_CHAR: {
+        case TK_LITERAL_RUNE: {
             const char *src = parser->previous.start + 1;
             size_t src_len = (size_t) parser->previous.length - 2;
             uint32_t cp = 0;
-            const char *err = parse_char_literal_payload(src, src_len, &cp);
+            const char *err = parse_rune_literal_payload(src, src_len, &cp);
             if (err)
                 xr_parser_error_at_previous(parser, err);
             AstNode *node =
@@ -380,8 +380,8 @@ AstNode *xr_parse_type_cast(Parser *parser) {
         case TK_BOOL:
             type_name = "bool";
             break;
-        case TK_CHAR:
-            type_name = "char";
+        case TK_RUNE:
+            type_name = "rune";
             break;
         default:
             xr_parser_error(parser, "expected type keyword");

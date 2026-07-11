@@ -1,5 +1,5 @@
 fn lenOf(a: Array<int>) -> int {
-    return a.length
+    return len(a)
 }
 
 fn first(m: Map<string, int>, k: string) -> int {

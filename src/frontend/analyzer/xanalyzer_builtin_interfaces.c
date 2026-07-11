@@ -286,8 +286,7 @@ static XaInterfaceMethod equatable_methods[] = {
  * Equivalent xray code for Lengthable:
  *
  *   interface Lengthable {
- *       // Returns the number of elements/characters
- *       length: int  // property, not method
+ *       operator len() -> int
  *   }
  *
  * Built-in types that implement Lengthable:
@@ -299,19 +298,16 @@ static XaInterfaceMethod equatable_methods[] = {
  *
  * Usage:
  *   fn isEmpty<T: Lengthable>(container: T): bool {
- *       return container.length == 0
+ *       return len(container) == 0
  *   }
  *
  *   fn last<T: Lengthable & Indexable>(arr: T) {
- *       return arr[arr.length - 1]
+ *       return arr[len(arr) - 1]
  *   }
  *
- * Note: Lengthable is a property-based interface, not method-based.
- * The compiler checks for .length property access.
+ * The compiler keeps this named operator outside ordinary member lookup.
  */
-static XaInterfaceMethod lengthable_methods[] = {
-    {"length", NULL, NULL, 0}  // property getter, return: int
-};
+static XaInterfaceMethod lengthable_methods[] = {{"__operator_len", NULL, NULL, 0}};
 
 /*
  * Equivalent xray code for Callable:

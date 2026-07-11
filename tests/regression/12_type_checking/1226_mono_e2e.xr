@@ -48,7 +48,7 @@ fn test_mono_e2e() {
 
     var wi = wrap<int>(77)
     assert_eq(wi[0], 77)
-    assert_eq(wi.length, 1)
+    assert_eq(len(wi), 1)
 
     var ws = wrap<string>("mono")
     assert_eq(ws[0], "mono")

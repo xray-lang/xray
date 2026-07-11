@@ -1,4 +1,4 @@
-var out = Bytes.withCapacity(4)
-var src = Bytes(4)
-var view: ByteSpan = src[:]
+var out = Array<byte>.withCapacity(4)
+var src = Array<byte>(4)
+var view: Slice<byte> = src[:]
 out.writeFromUnchecked(0, view, 0, 1)

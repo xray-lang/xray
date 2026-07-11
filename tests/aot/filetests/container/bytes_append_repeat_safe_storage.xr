@@ -1,6 +1,6 @@
-fn safeAppendRepeat(src: ByteSpan) -> Bytes {
-    var out = Bytes(0)
+fn safeAppendRepeat(src: Slice<byte>) -> Array<byte> {
+    var out = Array<byte>(0)
     out.appendFrom(src)
-    out.repeatFrom(src.length, src.length)
+    out.repeatFrom(len(src), len(src))
     return out
 }

@@ -99,11 +99,11 @@ fn test_multiple_messages() {
         }
     }
     
-    print("  发送/接收: " + success.toString() + "/" + messages.length.toString())
+    print("  发送/接收: " + success.toString() + "/" + len(messages).toString())
     
     ws.close(conn, null, null)
     
-    if (success == messages.length) {
+    if (success == len(messages)) {
         print("  ✓ 所有消息验证通过")
         return true
     } else {

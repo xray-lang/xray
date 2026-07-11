@@ -174,6 +174,7 @@
     _(ARRAY_SETC, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:Array[B] = R[C]")                            \
     _(ARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.push(R[B])")                                 \
     _(ARRAY_LEN, FMT_AB, KOP_AB_UNARY, "R[A] = len(R[B]:Array)")                                   \
+    _(LEN, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = len(R[B]), C=json-dynamic")                           \
     _(ARRAY_CLEAR, FMT_A, KOP_A_INOUT, "R[A]:Array.clear()")                                       \
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
@@ -365,7 +366,7 @@
      * the blob — may shift as internal VM-only ops are added. */                                \
     _(ARRAY_EXTEND, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.extend(R[B]:Array) — splice + retain")     \
     _(JSON_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Json.merge(R[B]:Json) — object spread")            \
-    _(TOCHAR, FMT_AB, KOP_AB_UNARY, "R[A] = char(R[B]) — int codepoint to Unicode scalar")         \
+    _(TORUNE, FMT_AB, KOP_AB_UNARY, "R[A] = rune(R[B]) — int codepoint to Unicode scalar")         \
     _(GEN_YIELD, FMT_A, KOP_A_USE, "generator yield: hand R[A] to the driver, suspend")            \
     _(GEN_START, FMT_ABC, KOP_ABC_BIN_LIT,                                                         \
       "R[A] = generator iterator over closure R[B] with C args at R[B+1..B+C]")                    \

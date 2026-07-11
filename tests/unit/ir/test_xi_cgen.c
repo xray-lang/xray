@@ -475,7 +475,7 @@ TEST(cgen_skips_unused_process_builtin_init) {
 }
 
 TEST(cgen_initializes_used_process_builtin) {
-    const char *src = "print(process.args.length)\n";
+    const char *src = "print(len(process.args))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -1820,7 +1820,7 @@ TEST(cgen_parallel_collect_into_multi_lanes_use_direct_storage) {
                       "parallel for i in 0..4 workers 2 worker wid collect into (ints, flags) {\n"
                       "    (i + wid, ((i + wid) % 2) == 0)\n"
                       "}\n"
-                      "print(ints.length + flags.length)\n";
+                      "print(len(ints) + len(flags))\n";
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
@@ -1860,7 +1860,7 @@ TEST(cgen_parallel_collect_into_local_init_uses_range_body) {
                       "    acc = acc + 1\n"
                       "    i + acc\n"
                       "}\n"
-                      "print(ints.length)\n";
+                      "print(len(ints))\n";
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
@@ -1893,7 +1893,7 @@ TEST(cgen_parallel_collect_return_local_init_uses_direct_storage) {
                       "    acc = acc + 1\n"
                       "    i + acc\n"
                       "}\n"
-                      "print(xs.length)\n"
+                      "print(len(xs))\n"
                       "print(xs[7])\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -1926,7 +1926,7 @@ TEST(cgen_parallel_collect_final_uses_range_body_executor) {
                       "    collect {\n"
                       "    i + wid\n"
                       "}\n"
-                      "print(xs.length)\n";
+                      "print(len(xs))\n";
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
@@ -1959,7 +1959,7 @@ TEST(cgen_parallel_collect_into_reference_lane_uses_direct_body_write) {
                       "parallel for i in 0..4 workers 2 collect into out {\n"
                       "    label\n"
                       "}\n"
-                      "print(out.length)\n"
+                      "print(len(out))\n"
                       "print(out[0])\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -2311,12 +2311,12 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
                       "    Err(int)\n"
                       "}\n"
                       "fn writePrepared(src: in ByteSpan, out: Bytes) -> FastResult<int> {\n"
-                      "    var mark = out.length\n"
+                      "    var mark = len(out)\n"
                       "    if (out.capacity < mark + 2) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
                       "    out.appendFrom(src[0:2])\n"
-                      "    return FastResult.Ok(out.length - mark)\n"
+                      "    return FastResult.Ok(len(out) - mark)\n"
                       "}\n"
                       "fn run(n: int) {\n"
                       "    var seed = Bytes.withCapacity(4)\n"
@@ -2369,8 +2369,8 @@ TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
                       "}\n"
                       "fn appendRange(src: in ByteSpan, out: Bytes, start: int, len: int) -> "
                       "FastResult<int> {\n"
-                      "    var mark = out.length\n"
-                      "    if (start < 0 || len < 0 || start + len > src.length || "
+                      "    var mark = len(out)\n"
+                      "    if (start < 0 || len < 0 || start + len > len(src) || "
                       "out.capacity < mark + len) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
@@ -2389,10 +2389,10 @@ TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
                       "    parallel for i in 0..n workers 2 {\n"
                       "        var out = outs.get(0)\n"
                       "        out.resize(0)\n"
-                      "        var result = appendRange(src, out, 0, src.length)\n"
+                      "        var result = appendRange(src, out, 0, len(src))\n"
                       "        match (result) {\n"
                       "            FastResult.Ok(written) -> {\n"
-                      "                assert(written == src.length)\n"
+                      "                assert(written == len(src))\n"
                       "            }\n"
                       "            FastResult.Err(code) -> {\n"
                       "                assert(code == 0)\n"
@@ -2426,7 +2426,7 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
                       "    Err(int)\n"
                       "}\n"
                       "fn readU32(src: in ByteSpan, pos: int) -> FastResult<int> {\n"
-                      "    if (pos < 0 || pos + 4 > src.length) {\n"
+                      "    if (pos < 0 || pos + 4 > len(src)) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
                       "    var value: uint32 = src.load<uint32>(pos, Endian.LE)\n"
@@ -2480,8 +2480,8 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
                       "}\n"
                       "fn prefix(src: in ByteSpan, left: int, right: int, len: int) -> "
                       "FastResult<int> {\n"
-                      "    if (left < 0 || right < 0 || len < 0 || left + len > src.length || "
-                      "right + len > src.length) {\n"
+                      "    if (left < 0 || right < 0 || len < 0 || left + len > len(src) || "
+                      "right + len > len(src)) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
                       "    var leftSpan: ByteSpan = src[left:left + len]\n"
@@ -2561,7 +2561,7 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
                       "    var values: Array<int> = []\n"
                       "    values.push(41)\n"
-                      "    return values[0] + values.length\n"
+                      "    return values[0] + len(values)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -2599,7 +2599,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
                       "        var value = 42\n"
                       "        bytes.set(0, value as uint8)\n"
                       "    }\n"
-                      "    return bytes[0] + bytes.length\n"
+                      "    return bytes[0] + len(bytes)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -2770,7 +2770,7 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
 TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     const char *src = "fn hot(dst: Bytes) -> int {\n"
                       "    dst.reserve(8)\n"
-                      "    return dst.length\n"
+                      "    return len(dst)\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var dst = Bytes(1)\n"
@@ -3048,7 +3048,7 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
 TEST(cgen_span_slice_elides_dead_err_check) {
     const char *src = "fn windowLen(src: in ByteSpan, start: int, n: int) -> int {\n"
                       "    const part: ByteSpan = src[start:start + n]\n"
-                      "    return part.length\n"
+                      "    return len(part)\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var bytes = Bytes(8)\n"
@@ -3091,7 +3091,7 @@ TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
                       "    var src = Bytes(8)\n"
                       "    const view: ByteSpan = src[:]\n"
                       "    appendRange(out, view, 2, 4)\n"
-                      "    return out.length\n"
+                      "    return len(out)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -3131,7 +3131,7 @@ TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
                       "    out.push(1)\n"
                       "    out.push(2)\n"
                       "    extend(out)\n"
-                      "    return out.length\n"
+                      "    return len(out)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -3364,7 +3364,7 @@ TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
                       "    var u32s: Array<uint32> = []\n"
                       "    i16s.push(32768)\n"
                       "    u32s.push(4294967295)\n"
-                      "    return i16s[0] + u32s[0] + i16s.length + u32s.length\n"
+                      "    return i16s[0] + u32s[0] + len(i16s) + len(u32s)\n"
                       "}\n"
                       "print(mix())\n";
 
@@ -3404,7 +3404,7 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
                       "    samples.push(1.25)\n"
                       "    flags.push(true)\n"
                       "    if (flags[0]) {\n"
-                      "        return values[0] + samples[0] + values.length\n"
+                      "        return values[0] + samples[0] + len(values)\n"
                       "    }\n"
                       "    return 0.0\n"
                       "}\n"
@@ -3456,10 +3456,10 @@ TEST(cgen_typed_array_char_uses_scalar_storage_with_char_boxing) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed char array fast path should generate");
-    assert(contains(code, "XR_ELEM_CHAR") && "Array<char> must use the CHAR typed element layout");
+    assert(contains(code, "XR_ELEM_RUNE") && "Array<char> must use the CHAR typed element layout");
     assert(contains(code, "uint32_t") && "Array<char> storage must be a compact scalar buffer");
-    assert(contains(code, "XR_TO_CHAR(") && "Array<char> writes must unbox tagged char values");
-    assert(contains(code, "XR_FROM_CHAR((uint32_t)") &&
+    assert(contains(code, "XR_TO_RUNE(") && "Array<char> writes must unbox tagged char values");
+    assert(contains(code, "XR_FROM_RUNE((uint32_t)") &&
            "Array<char> reads must re-box raw scalars as char");
     assert(!contains(code, "XR_ELEM_U32") && "Array<char> must not degrade to Array<uint32>");
     assert(!contains(code, "xrt_method_1(") &&
@@ -3760,7 +3760,7 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
                       "fn run() -> int {\n"
                       "    var key: [uint8; 4] = [1, 2, 3, 4]\n"
                       "    key[1] = 9\n"
-                      "    return key.length + first(key) + key[1] + at(key, 2)\n"
+                      "    return len(key) + first(key) + key[1] + at(key, 2)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -4048,7 +4048,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
                       "        var sum = 0\n"
                       "        while (r < rounds) {\n"
                       "            var i = 0\n"
-                      "            while (i < this.values.length) {\n"
+                      "            while (i < len(this.values)) {\n"
                       "                sum = sum + this.values[i]\n"
                       "                i = i + 1\n"
                       "            }\n"
@@ -4115,7 +4115,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "    }\n"
                       "    replace(next: Array<int>) -> int {\n"
                       "        this.values = next\n"
-                      "        return this.values.length\n"
+                      "        return len(this.values)\n"
                       "    }\n"
                       "}\n"
                       "fn make(values: Array<int>) -> Bag {\n"
@@ -4123,11 +4123,11 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "}\n"
                       "fn swap(b: Bag, next: Array<int>) -> int {\n"
                       "    b.values = next\n"
-                      "    return b.values.length\n"
+                      "    return len(b.values)\n"
                       "}\n"
                       "fn local(values: Array<int>) -> int {\n"
                       "    var bag = Bag(values)\n"
-                      "    return bag.values.length\n"
+                      "    return len(bag.values)\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var a = [1]\n"
@@ -4211,7 +4211,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
                       "            this.values.add(i)\n"
                       "            i = i + 1\n"
                       "        }\n"
-                      "        return this.values.length + this.values.size\n"
+                      "        return len(this.values) + len(this.values)\n"
                       "    }\n"
                       "}\n"
                       "var bag = Bag()\n"
@@ -4263,13 +4263,13 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "            this.values.add(i)\n"
                       "            i = i + 1\n"
                       "        }\n"
-                      "        return this.values.length\n"
+                      "        return len(this.values)\n"
                       "    }\n"
                       "    scan(n: int) -> int {\n"
                       "        var i = 0\n"
                       "        var hits = 0\n"
                       "        while (i < n) {\n"
-                      "            if (this.values.has(i)) {\n"
+                      "            if (this.values.contains(i)) {\n"
                       "                hits = hits + i\n"
                       "            }\n"
                       "            i = i + 1\n"
@@ -4343,13 +4343,13 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "            this.values.set(i, i * 3 + 1)\n"
                       "            i = i + 1\n"
                       "        }\n"
-                      "        return this.values.size\n"
+                      "        return len(this.values)\n"
                       "    }\n"
                       "    scan(n: int) -> int {\n"
                       "        var i = 0\n"
                       "        var hits = 0\n"
                       "        while (i < n) {\n"
-                      "            if (this.values.has(i)) {\n"
+                      "            if (this.values.containsKey(i)) {\n"
                       "                hits = hits + this.values.get(i)\n"
                       "            }\n"
                       "            i = i + 1\n"
@@ -4425,18 +4425,20 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     const char *src =
         "class Bag { values: Map<bool, float32>\n"
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 1.5); "
-        "this.values.set(false, 2.25); return this.values.size } "
-        "scan() -> float { var sum = 0.0; if (this.values.has(true)) { sum = sum + "
-        "this.values.get(true) }; if (this.values.has(false)) { sum = sum + this.values.get(false) "
+        "this.values.set(false, 2.25); return len(this.values) } "
+        "scan() -> float { var sum = 0.0; if (this.values.containsKey(true)) { sum = sum + "
+        "this.values.get(true) }; if (this.values.containsKey(false)) { sum = sum + "
+        "this.values.get(false) "
         "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
-        "this.values.length }; return 0 }\n"
+        "len(this.values) }; return 0 }\n"
         "} class IntBag { values: Map<bool, int>\n"
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 11); "
-        "this.values.set(false, 23); return this.values.size } "
-        "scan() -> int { var sum = 0; if (this.values.has(true)) { sum = sum + "
-        "this.values.get(true) }; if (this.values.has(false)) { sum = sum + this.values.get(false) "
+        "this.values.set(false, 23); return len(this.values) } "
+        "scan() -> int { var sum = 0; if (this.values.containsKey(true)) { sum = sum + "
+        "this.values.get(true) }; if (this.values.containsKey(false)) { sum = sum + "
+        "this.values.get(false) "
         "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
-        "this.values.length }; return 0 }\n"
+        "len(this.values) }; return 0 }\n"
         "} var bag = Bag(); print(bag.fill() + bag.prune()); print(bag.scan())\n"
         "var int_bag = IntBag(); print(int_bag.fill() + int_bag.prune()); print(int_bag.scan())\n";
     XiFunc *ir = compile_to_ir(src);
@@ -4485,9 +4487,10 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
         "class Bag { values: Map<int, bool>\n"
         "constructor() { this.values = #{} } "
         "fill(n: int) -> int { var i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
-        "i = i + 1 }; return this.values.size } "
+        "i = i + 1 }; return len(this.values) } "
         "count(n: int) -> int { var i = 0; var total = 0; while (i < n) { "
-        "if (this.values.has(i)) { if (this.values.get(i) == true) { total = total + 1 } }; "
+        "if (this.values.containsKey(i)) { if (this.values.get(i) == true) { total = total + 1 } "
+        "}; "
         "i = i + 1 }; return total }\n"
         "} var bag = Bag(); print(bag.fill(8)); print(bag.count(8))\n";
 
@@ -4639,7 +4642,7 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
                       "    var mid = bytes[1:3]\n"
-                      "    return mid[0] + mid.length\n"
+                      "    return mid[0] + len(mid)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -4675,7 +4678,7 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
                       "    var s = arr[0:2]\n"
                       "    var label = 42 as string\n"
                       "    if (typename(s) == \"Array\" && label == \"42\") {\n"
-                      "        return s.length\n"
+                      "        return len(s)\n"
                       "    }\n"
                       "    return 0\n"
                       "}\n"
@@ -4740,7 +4743,7 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
                       "    var mid = bytes[1:n - 1]\n"
                       "    var total = 0\n"
                       "    i = 0\n"
-                      "    while (i < mid.length) {\n"
+                      "    while (i < len(mid)) {\n"
                       "        total = total + mid[i]\n"
                       "        i = i + 1\n"
                       "    }\n"
@@ -4799,7 +4802,7 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
                       "    }\n"
                       "    var total = 0.0\n"
                       "    i = 0\n"
-                      "    while (i < values.length) {\n"
+                      "    while (i < len(values)) {\n"
                       "        total = total + values[i]\n"
                       "        i = i + 1\n"
                       "    }\n"
@@ -4844,7 +4847,7 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
                       "    bytes.push(3)\n"
                       "    var kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
                       "    kept.push(9)\n"
-                      "    return kept[0] + kept[2] + kept.length\n"
+                      "    return kept[0] + kept[2] + len(kept)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -4894,7 +4897,7 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
                       "    values.push(3)\n"
                       "    var mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
                       "    mapped.push(9)\n"
-                      "    return mapped[0] + mapped[3] + mapped.length\n"
+                      "    return mapped[0] + mapped[3] + len(mapped)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -4945,7 +4948,7 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
                       "    var mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
                       "    var i = 0\n"
                       "    var total = 0\n"
-                      "    while (i < mapped.length) {\n"
+                      "    while (i < len(mapped)) {\n"
                       "        total += mapped[i]\n"
                       "        i += 1\n"
                       "    }\n"
@@ -5233,7 +5236,7 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
                       "    var kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
                       "    var i = 0\n"
                       "    var total = 0\n"
-                      "    while (i < kept.length) {\n"
+                      "    while (i < len(kept)) {\n"
                       "        total += kept[i]\n"
                       "        i += 1\n"
                       "    }\n"
@@ -6513,7 +6516,7 @@ TEST(cgen_coro_go_clones_tagged_args) {
     const char *src = "fn worker(xs: Array<int>) -> int {\n"
                       "    xs.push(99)\n"
                       "    Coro.yield()\n"
-                      "    return xs.length\n"
+                      "    return len(xs)\n"
                       "}\n"
                       "var xs = [1, 2]\n"
                       "var task = go worker(copy(xs))\n"
@@ -6541,7 +6544,7 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "}\n"
                       "fn mutate_copy(xs: Array<int>) -> int {\n"
                       "    xs.push(99)\n"
-                      "    return xs.length\n"
+                      "    return len(xs)\n"
                       "}\n"
                       "fn identity_copy(xs: Array<int>) -> Array<int> {\n"
                       "    return xs\n"
@@ -6551,10 +6554,10 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "var xs = [1, 2]\n"
                       "var copied = go mutate_copy(copy(xs))\n"
                       "print(await copied)\n"
-                      "print(xs.length)\n"
+                      "print(len(xs))\n"
                       "var roundtrip = go identity_copy(copy(xs))\n"
                       "var ys = await roundtrip\n"
-                      "print(ys.length)\n";
+                      "print(len(ys))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -6969,7 +6972,7 @@ TEST(cgen_coro_await_clones_tagged_result) {
                       "}\n"
                       "var task = go worker()\n"
                       "var result = await task\n"
-                      "print(result.length)\n";
+                      "print(len(result))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -7052,7 +7055,7 @@ TEST(cgen_coro_await_array_task_index_borrows_checked_slot) {
                       "    var tasks: Array<Task<int>> = []\n"
                       "    tasks.push(go worker())\n"
                       "    var result = await tasks[0]\n"
-                      "    return result + tasks.length\n"
+                      "    return result + len(tasks)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -7100,7 +7103,7 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
                       "    }\n"
                       "    var total = 0\n"
                       "    var j = 0\n"
-                      "    while (j < tasks.length) {\n"
+                      "    while (j < len(tasks)) {\n"
                       "        total = total + await tasks[j]\n"
                       "        j = j + 1\n"
                       "    }\n"
@@ -7748,7 +7751,7 @@ TEST(cgen_coro_await_all_into_reuses_result_array) {
                       "    await all tasks into results\n"
                       "    var sum = 0\n"
                       "    i = 0\n"
-                      "    while (i < results.length) {\n"
+                      "    while (i < len(results)) {\n"
                       "        sum = sum + results[i]\n"
                       "        i = i + 1\n"
                       "    }\n"
@@ -7819,7 +7822,7 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
                       "await all tasks into results\n"
                       "var sum = 0\n"
                       "i = 0\n"
-                      "while (i < results.length) {\n"
+                      "while (i < len(results)) {\n"
                       "    sum = sum + results[i]\n"
                       "    i = i + 1\n"
                       "}\n"
@@ -8060,7 +8063,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
 
 TEST(cgen_channel_fields_use_aot_helpers) {
     const char *src = "shared ch = Channel<int>(2)\n"
-                      "print(ch.length)\n"
+                      "print(len(ch))\n"
                       "print(ch.capacity)\n"
                       "print(ch.isClosed)\n";
 
@@ -8072,7 +8075,7 @@ TEST(cgen_channel_fields_use_aot_helpers) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT Channel field reads should generate");
     assert(contains(code, "xr_aot_chan_length(") &&
-           "Channel.length must read through the AOT channel helper");
+           "len(Channel) must read through the AOT channel helper");
     assert(contains(code, "xr_aot_chan_capacity(") &&
            "Channel.capacity must read through the AOT channel helper");
     assert(contains(code, "xr_aot_chan_is_closed(") &&
@@ -8277,7 +8280,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
                       "    if (!ok) { return -1 }\n"
                       "    if (queue.isClosed) { return -2 }\n"
                       "    queue.close()\n"
-                      "    return value + queue.length + queue.shardCount\n"
+                      "    return value + len(queue) + queue.shardCount\n"
                       "}\n"
                       "print(use_queue())\n";
 
@@ -8297,7 +8300,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     assert(contains(code, "xr_aot_work_queue_try_pop_sync(") &&
            "WorkQueue.tryPop should use the sync AOT bridge outside suspendable code");
     assert(contains(code, "xr_aot_work_queue_length(") &&
-           "WorkQueue.length should read through the AOT helper");
+           "len(WorkQueue) should read through the AOT helper");
     assert(contains(code, "xr_aot_work_queue_shard_count(") &&
            "WorkQueue.shardCount should read through the AOT helper");
     assert(contains(code, "xr_aot_work_queue_is_closed(") &&

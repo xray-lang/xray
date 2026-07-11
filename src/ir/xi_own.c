@@ -51,7 +51,7 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_NULL:
         case XR_KIND_UNIT:
         case XR_KIND_NEVER:
@@ -78,7 +78,7 @@ XR_FUNC bool xi_own_type_may_be_ref(const XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_UNIT:
         case XR_KIND_NEVER:
         case XR_KIND_POINTER:

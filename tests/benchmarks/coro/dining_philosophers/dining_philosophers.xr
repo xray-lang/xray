@@ -6,10 +6,10 @@ import time
 
 var N = 5            // 哲学家数量
 var MEALS = 100000   // 每人进餐次数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     MEALS = int(process.args[1]) ?? MEALS
 }
 

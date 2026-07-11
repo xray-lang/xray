@@ -8,7 +8,7 @@ fn make_data(n: int, seed: int) -> Array<int> {
 
 fn vec_add_sum(a: Array<int>, b: Array<int>, rounds: int) -> int {
     var total = 0
-    var n = a.length
+    var n = len(a)
     for (var r = 0; r < rounds; r++) {
         for (var i = 0; i < n; i++) {
             total = total + a[i] + b[i]

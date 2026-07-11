@@ -8,15 +8,15 @@ var neg = -15
 print(neg.toHex())
 print((255).toHex())
 print((9).sqrt())
-print(typename((9).sqrt()))
+print(typeName((9).sqrt()))
 
 var f = 3.7
 print(f.floor())
-print(typename(f.floor()))
+print(typeName(f.floor()))
 print(f.ceil())
-print(typename(f.ceil()))
+print(typeName(f.ceil()))
 print(f.round())
-print(typename(f.round()))
+print(typeName(f.round()))
 
 var g = 1.25
 print(g.toFixed(2))

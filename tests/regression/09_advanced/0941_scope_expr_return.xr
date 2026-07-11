@@ -21,7 +21,7 @@ fn child_slow() -> int {
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -32,7 +32,7 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -43,7 +43,7 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 
 fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Cancelled -> { count = count + 1 }
             _ -> {}
@@ -53,7 +53,7 @@ fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn has_scope_error(outcomes: Array<TaskOutcome>, expected: string) -> bool {
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -77,7 +77,7 @@ fn test_supervisor_scope_returns_outcomes() {
         go child_fail("err_a")
         go child_fail("err_b")
     }
-    assert_eq(outcomes.length, 2)
+    assert_eq(len(outcomes), 2)
     assert_eq(count_failed(outcomes), 2)
     assert(has_scope_error(outcomes, "err_a"), "failed outcome should preserve err_a")
     assert(has_scope_error(outcomes, "err_b"), "failed outcome should preserve err_b")
@@ -89,7 +89,7 @@ fn test_supervisor_scope_all_success() {
         go child_ok()
         go child_ok()
     }
-    assert_eq(outcomes.length, 2)
+    assert_eq(len(outcomes), 2)
     assert_eq(count_success(outcomes), 2)
 }
 
@@ -100,7 +100,7 @@ fn test_supervisor_scope_mixed() {
         go child_fail("mixed_err")
         go child_ok()
     }
-    assert_eq(outcomes.length, 3)
+    assert_eq(len(outcomes), 3)
     assert_eq(count_success(outcomes), 2)
     assert_eq(count_failed(outcomes), 1)
     assert(has_scope_error(outcomes, "mixed_err"), "mixed failure should keep enum payload")
@@ -111,7 +111,7 @@ fn test_supervisor_scope_single_failure() {
     var outcomes = supervisor scope {
         go child_fail("single")
     }
-    assert_eq(outcomes.length, 1)
+    assert_eq(len(outcomes), 1)
     assert_eq(count_failed(outcomes), 1)
     assert(has_scope_error(outcomes, "single"), "single failure should keep enum payload")
 }
@@ -122,7 +122,7 @@ fn test_supervisor_scope_cancelled() {
         var task = go child_slow()
         task.cancel()
     }
-    assert_eq(outcomes.length, 1)
+    assert_eq(len(outcomes), 1)
     assert_eq(count_cancelled(outcomes), 1)
 }
 

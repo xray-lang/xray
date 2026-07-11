@@ -23,6 +23,7 @@
 #include "xarray.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 #include <stdatomic.h>
 #include "../../os/os_thread.h"
@@ -37,12 +38,14 @@ struct XrRuntimeCore;
  * Memory layout (header + data):
  *   [0-15]  object header
  *   [16-19] length (4 bytes, max 4GB)
- *   [20-23] hash (4 bytes, FNV-1a)
- *   [24+]   data[] (flexible array)
+ *   [20-23] rune_length (4 bytes)
+ *   [24-27] hash (4 bytes, FNV-1a)
+ *   [28+]   data[] (flexible array)
  */
 typedef struct XrString {
     XrObjHeader hdr;
-    uint32_t length;
+    uint32_t length;       // UTF-8 byte count
+    uint32_t rune_length;  // Unicode scalar count
     uint32_t hash;
     char data[];
 } XrString;
@@ -50,8 +53,7 @@ typedef struct XrString {
 // Get string data pointer
 #define XR_STRING_CHARS(s) ((s)->data)
 
-// Static assert: header(16) + length(4) + hash(4) = 24
-_Static_assert(sizeof(XrString) == 24, "XrString must be 24 bytes (16B header + length + hash)");
+_Static_assert(offsetof(XrString, data) == 28, "XrString data offset must include both counts");
 
 /* ========== Short/Long String Separation ========== */
 

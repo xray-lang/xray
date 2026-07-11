@@ -5,4 +5,4 @@ print(wm.get(r))
 
 var ws = WeakSet()
 ws.add(r)
-print(ws.has(r))
+print(ws.contains(r))

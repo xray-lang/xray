@@ -36,7 +36,7 @@ fn test_parse_null() {
 @test
 fn test_parse_array() {
     var arr = Json.parse("[1, 2, 3]")
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
     assert_eq(arr[0], 1)
     assert_eq(arr[2], 3)
 }
@@ -44,7 +44,7 @@ fn test_parse_array() {
 @test
 fn test_parse_empty_array() {
     var arr = Json.parse("[]")
-    assert_eq(arr.length, 0)
+    assert_eq(len(arr), 0)
 }
 
 @test
@@ -116,8 +116,8 @@ fn test_stringify_empty_array() {
 fn test_stringify_object() {
     var obj = { name: "Alice" }
     var s = Json.stringify(obj)
-    assert_eq(s.includes("name"), true)
-    assert_eq(s.includes("Alice"), true)
+    assert_eq(s.contains("name"), true)
+    assert_eq(s.contains("Alice"), true)
 }
 
 // ===== 往返测试 =====
@@ -135,7 +135,7 @@ fn test_roundtrip_array() {
     var original = [1, 2, 3]
     var s = Json.stringify(original)
     var parsed = Json.parse(s)
-    assert_eq(parsed.length, 3)
+    assert_eq(len(parsed), 3)
     assert_eq(parsed[0], 1)
 }
 
@@ -153,12 +153,12 @@ fn test_isValid() {
 
 @test
 fn test_typeof() {
-    assert_eq(typename(Json.parse("42")), "int")
-    assert_eq(typename(Json.parse("\"hello\"")), "string")
-    assert_eq(typename(Json.parse("true")), "bool")
-    assert_eq(typename(Json.parse("null")), "null")
-    assert_eq(typename(Json.parse("[1,2,3]")), "Array")
-    assert_eq(typename(Json.parse("{}")), "Json")
+    assert_eq(typeName(Json.parse("42")), "int")
+    assert_eq(typeName(Json.parse("\"hello\"")), "string")
+    assert_eq(typeName(Json.parse("true")), "bool")
+    assert_eq(typeName(Json.parse("null")), "null")
+    assert_eq(typeName(Json.parse("[1,2,3]")), "Array")
+    assert_eq(typeName(Json.parse("{}")), "Json")
 }
 
 // ===== 特殊字符 =====
@@ -166,7 +166,7 @@ fn test_typeof() {
 @test
 fn test_escape_characters() {
     var s = Json.parse("\"hello\\nworld\"")
-    assert_eq(s.includes("\n"), true)
+    assert_eq(s.contains("\n"), true)
 }
 
 @test

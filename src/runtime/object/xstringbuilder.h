@@ -28,7 +28,8 @@ struct XrCoroutine;
 typedef struct XrStringBuilder {
     XrObjHeader hdr;        // object header (type = XR_TINSTANCE)
     struct XrClass *klass;  // Points to stringBuilderClass
-    XrStrBuf *buffer;       // Native body: string buffer (at instance body offset)
+    XrStrBuf *buffer;       // Native body starts here.
+    size_t rune_length;     // Logical string length; buffer->length is UTF-8 bytes.
 } XrStringBuilder;
 
 /* ========== Creation and Destruction ========== */

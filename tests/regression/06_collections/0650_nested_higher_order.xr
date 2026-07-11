@@ -13,7 +13,7 @@ fn test_triple_chain_map() {
         return x * x
     })
     // [9, 25, 49, 81, 121]
-    assert_eq(result.length, 5)
+    assert_eq(len(result), 5)
     assert_eq(result[0], 9)
     assert_eq(result[4], 121)
 }
@@ -31,7 +31,7 @@ fn test_quad_chain_mixed() {
         return x / 6
     })
     // [2, 3, 4, 5]
-    assert_eq(result.length, 4)
+    assert_eq(len(result), 4)
     assert_eq(result[0], 2)
     assert_eq(result[3], 5)
 }
@@ -63,7 +63,7 @@ fn test_map_over_nested_array() {
             return x * 2
         })
     })
-    assert_eq(doubled.length, 3)
+    assert_eq(len(doubled), 3)
     assert_eq(doubled[0][0], 2)
     assert_eq(doubled[0][1], 4)
     assert_eq(doubled[2][1], 12)
@@ -80,8 +80,8 @@ fn test_filter_then_map_nested() {
         })
     })
     // [[4,6], [8]]
-    assert_eq(result.length, 2)
-    assert_eq(result[0].length, 2)
+    assert_eq(len(result), 2)
+    assert_eq(len(result[0]), 2)
     assert_eq(result[0][0], 4)
     assert_eq(result[1][0], 8)
 }
@@ -109,7 +109,7 @@ fn test_nested_reduce() {
             return a + b
         }, 0)
     })
-    assert_eq(rowSums.length, 3)
+    assert_eq(len(rowSums), 3)
     assert_eq(rowSums[0], 6)
     assert_eq(rowSums[1], 15)
     assert_eq(rowSums[2], 24)
@@ -125,7 +125,7 @@ fn test_flatten_with_reduce() {
     var flat = nested.reduce(fn(acc, arr) {
         return acc.concat(arr)
     }, [])
-    assert_eq(flat.length, 6)
+    assert_eq(len(flat), 6)
     assert_eq(flat[0], 1)
     assert_eq(flat[5], 6)
 }
@@ -140,7 +140,7 @@ fn test_map_to_objects_then_filter() {
     var filtered = objects.filter(fn(obj) {
         return obj.doubled > 4
     })
-    assert_eq(filtered.length, 3)
+    assert_eq(len(filtered), 3)
     assert_eq(filtered[0].value, 3)
     assert_eq(filtered[0].doubled, 6)
 }
@@ -149,14 +149,14 @@ fn test_map_to_objects_then_filter() {
 fn test_chain_with_type_change() {
     var words = ["apple", "banana", "cherry", "date"]
     var result = words.map(fn(w) {
-        return w.length
+        return len(w)
     }).filter(fn(len) {
         return len > 4
     }).map(fn(len) {
         return len.toString()
     })
     // ["5", "6", "6"]
-    assert_eq(result.length, 3)
+    assert_eq(len(result), 3)
     assert_eq(result[0], "5")
     assert_eq(result[1], "6")
 }
@@ -208,7 +208,7 @@ fn test_filter_with_external_predicate() {
         return x > threshold
     }
     var result = arr.filter(isAboveThreshold)
-    assert_eq(result.length, 2)
+    assert_eq(len(result), 2)
     assert_eq(result[0], 7)
 }
 
@@ -223,7 +223,7 @@ fn test_parallel_operations_then_combine() {
         return x * 3
     })
     var combined: Array<int> = []
-    for (var i = 0; i < arr.length; i++) {
+    for (var i = 0; i < len(arr); i++) {
         combined.push(doubled[i] + tripled[i])
     }
     assert_eq(combined[0], 5)
@@ -330,7 +330,7 @@ fn test_pipeline_of_operations() {
     for (op in operations) {
         result = op(result)
     }
-    assert_eq(result.length, 2)
+    assert_eq(len(result), 2)
     assert_eq(result[0], 30)
     assert_eq(result[1], 40)
 }
@@ -359,7 +359,7 @@ fn test_chain_with_single_element() {
     }).map(fn(x) {
         return x.toString()
     })
-    assert_eq(result.length, 1)
+    assert_eq(len(result), 1)
     assert_eq(result[0], "84")
 }
 
@@ -400,8 +400,8 @@ fn test_group_by_simulation() {
     var vegetables = items.filter(fn(item) {
         return item.category == "vegetable"
     })
-    assert_eq(fruits.length, 2)
-    assert_eq(vegetables.length, 2)
+    assert_eq(len(fruits), 2)
+    assert_eq(len(vegetables), 2)
     assert_eq(fruits[0].name, "apple")
 }
 
@@ -410,13 +410,13 @@ fn test_unique_via_reduce() {
     var arr = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]
     var seen = #[]
     var unique = arr.filter(fn(x) {
-        if (seen.has(x)) {
+        if (seen.contains(x)) {
             return false
         }
         seen.add(x)
         return true
     })
-    assert_eq(unique.length, 4)
+    assert_eq(len(unique), 4)
     assert_eq(unique[0], 1)
     assert_eq(unique[3], 4)
 }
@@ -445,7 +445,7 @@ fn test_mixed_return_types() {
     var lengths = arr.map(fn(x) {
         return "x".repeat(x)
     }).map(fn(s) {
-        return s.length
+        return len(s)
     })
     // [1, 2, 3]
     assert_eq(lengths[0], 1)
@@ -461,7 +461,7 @@ fn test_boolean_chain() {
         return b
     })
     // [true, true]
-    assert_eq(bools.length, 2)
+    assert_eq(len(bools), 2)
     assert_eq(bools[0], true)
 }
 
@@ -480,7 +480,7 @@ fn test_complex_data_pipeline() {
     }).map(fn(user) {
         return user.name
     })
-    assert_eq(highSpenders.length, 2)
+    assert_eq(len(highSpenders), 2)
     assert_eq(highSpenders[0], "Alice")
     assert_eq(highSpenders[1], "Carol")
 }

@@ -4,30 +4,30 @@ fn main() {
     var src = Array<uint32>(2, 0)
     src[0] = 17
     src[1] = 42
-    var dstSpan: Span<uint32> = dst[:]
-    var srcSpan: Span<uint32> = src[:]
-    var dstWindow: Span<uint32> = dstSpan[1:3]
-    var copied: Span<uint32> = dstWindow.copyFrom(srcSpan)
+    var dstSpan: Slice<uint32> = dst[:]
+    var srcSpan: Slice<uint32> = src[:]
+    var dstWindow: Slice<uint32> = dstSpan[1:3]
+    var copied: Slice<uint32> = dstWindow.copyFrom(srcSpan)
     print(int(dst[0]))
     print(int(dst[1]))
     print(int(dst[2]))
     print(int(dst[3]))
-    print(copied.length)
+    print(len(copied))
     var overlap = Array<uint16>(4, 0)
     overlap[0] = 1
     overlap[1] = 2
     overlap[2] = 3
     overlap[3] = 4
-    var overlapSpan: Span<uint16> = overlap[:]
-    var overlapDst: Span<uint16> = overlapSpan[1:4]
-    var overlapSrc: Span<uint16> = overlapSpan[0:3]
+    var overlapSpan: Slice<uint16> = overlap[:]
+    var overlapDst: Slice<uint16> = overlapSpan[1:4]
+    var overlapSrc: Slice<uint16> = overlapSpan[0:3]
     overlapDst.copyFrom(overlapSrc)
     print(int(overlap[0]))
     print(int(overlap[1]))
     print(int(overlap[2]))
     print(int(overlap[3]))
     try {
-        var tooSmall: Span<uint32> = dstSpan[0:1]
+        var tooSmall: Slice<uint32> = dstSpan[0:1]
         tooSmall.copyFrom(srcSpan)
         print(999)
     } catch panic (p) {

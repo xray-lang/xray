@@ -40,7 +40,7 @@ fn test_coro_stats() {
     // 测试 3：Coro.list() 
     print("test3: Coro.list()")
     var list = Coro.list()
-    print("  count:", list.length)
+    print("  count:", len(list))
     for (item in list) {
         print("    id:", item["id"], "name:", item["name"], "state:", item["state"])
     }

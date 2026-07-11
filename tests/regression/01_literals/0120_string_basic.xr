@@ -14,21 +14,21 @@ fn test_simple_string() {
 fn test_empty_string() {
     var s = ""
     assert_eq(s, "")
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
 }
 
 @test
 fn test_single_char() {
     var s = "x"
     assert_eq(s, "x")
-    assert_eq(s.length, 1)
+    assert_eq(len(s), 1)
 }
 
 @test
 fn test_spaces() {
     var s = "hello world"
     assert_eq(s, "hello world")
-    assert_eq(s.length, 11)
+    assert_eq(len(s), 11)
 }
 
 // ===== 转义序列 =====
@@ -36,25 +36,25 @@ fn test_spaces() {
 @test
 fn test_escape_newline() {
     var s = "line1\nline2"
-    assert_eq(s.includes("\n"), true)
+    assert_eq(s.contains("\n"), true)
 }
 
 @test
 fn test_escape_tab() {
     var s = "col1\tcol2"
-    assert_eq(s.includes("\t"), true)
+    assert_eq(s.contains("\t"), true)
 }
 
 @test
 fn test_escape_quote() {
     var s = "say \"hello\""
-    assert_eq(s.includes("\""), true)
+    assert_eq(s.contains("\""), true)
 }
 
 @test
 fn test_escape_backslash() {
     var s = "path\\to\\file"
-    assert_eq(s.includes("\\"), true)
+    assert_eq(s.contains("\\"), true)
 }
 
 // ===== Unicode =====
@@ -63,19 +63,19 @@ fn test_escape_backslash() {
 fn test_unicode_chinese() {
     var s = "你好世界"
     assert_eq(s, "你好世界")
-    assert_eq(s.length, 4)
+    assert_eq(len(s), 4)
 }
 
 @test
 fn test_unicode_emoji() {
     var s = "hello 🌍"
-    assert_eq(s.includes("🌍"), true)
+    assert_eq(s.contains("🌍"), true)
 }
 
 @test
 fn test_unicode_mixed() {
     var s = "Hello 世界 🎉"
-    assert_eq(s.length > 5, true)
+    assert_eq(len(s) > 5, true)
 }
 
 // ===== 模板字符串 =====
@@ -99,7 +99,7 @@ fn test_template_expression() {
 fn test_template_nested() {
     var x = 5
     var s = "Value: ${x * 2} (doubled)"
-    assert_eq(s.includes("10"), true)
+    assert_eq(s.contains("10"), true)
 }
 
 // ===== 边界条件 =====
@@ -107,13 +107,13 @@ fn test_template_nested() {
 @test
 fn test_long_string() {
     var s = "a".repeat(1000)
-    assert_eq(s.length, 1000)
+    assert_eq(len(s), 1000)
 }
 
 @test
 fn test_whitespace_only() {
     var s = "   "
-    assert_eq(s.length, 3)
+    assert_eq(len(s), 3)
     assert_eq(s.trim(), "")
 }
 

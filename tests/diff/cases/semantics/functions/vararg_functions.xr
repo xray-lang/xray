@@ -5,25 +5,25 @@
 
 fn sumInts(...n: int) -> int {
     var t = 0
-    for (var i = 0; i < n.length; i++) { t = t + n[i] }
+    for (var i = 0; i < len(n); i++) { t = t + n[i] }
     return t
 }
 
 fn sumFloats(...x: float) -> float {
     var t = 0.0
-    for (var i = 0; i < x.length; i++) { t = t + x[i] }
+    for (var i = 0; i < len(x); i++) { t = t + x[i] }
     return t
 }
 
 fn countTrue(...b: bool) -> int {
     var t = 0
-    for (var i = 0; i < b.length; i++) { if (b[i]) { t = t + 1 } }
+    for (var i = 0; i < len(b); i++) { if (b[i]) { t = t + 1 } }
     return t
 }
 
 fn joinStrings(sep: string, ...p: string) -> string {
     var s = ""
-    for (var i = 0; i < p.length; i++) {
+    for (var i = 0; i < len(p); i++) {
         if (i > 0) { s = s + sep }
         s = s + p[i]
     }

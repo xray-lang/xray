@@ -7,7 +7,7 @@ fn xray_builtin_string_reject(x: int) -> int {
 
 @c_export("xray_builtin_typename_reject")
 fn xray_builtin_typename_reject(x: int) -> int {
-    var s = typename(x)
+    var s = typeName(x)
     print(s)
     return 0
 }
@@ -20,7 +20,7 @@ fn xray_builtin_copy_reject(x: int) -> int {
 
 @c_export("xray_builtin_char_reject")
 fn xray_builtin_char_reject(x: int) -> int {
-    var c = char(x)
+    var c = rune(x)
     return c as int
 }
 

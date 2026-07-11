@@ -1,12 +1,12 @@
 // AOT test: standalone process.args is available in synchronous programs.
 
-print(process.args.length)
-if (process.args.length > 0) {
+print(len(process.args))
+if (len(process.args) > 0) {
     print(process.args[0])
 } else {
     print("none")
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     print(process.args[1])
 } else {
     print("none")

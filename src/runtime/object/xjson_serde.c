@@ -921,9 +921,9 @@ static void stringify_value(JsonWriter *w, XrValue val) {
     } else if (XR_IS_STRING(val)) {
         XrString *s = XR_TO_STRING(val);
         stringify_string(w, s->data, s->length);
-    } else if (XR_IS_CHAR(val)) {
+    } else if (XR_IS_RUNE(val)) {
         char buf[XR_UTF8_MAX_BYTES];
-        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        int n = xr_utf8_encode(XR_TO_RUNE(val), buf);
         if (n > 0)
             stringify_string(w, buf, (size_t) n);
         else
@@ -1113,9 +1113,9 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         return;
     }
 
-    if (XR_IS_CHAR(val)) {
+    if (XR_IS_RUNE(val)) {
         char buf[XR_UTF8_MAX_BYTES];
-        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        int n = xr_utf8_encode(XR_TO_RUNE(val), buf);
         *out = n > 0 ? xr_string_value(xr_string_new(e->isolate, buf, (size_t) n)) : xr_null();
         return;
     }

@@ -34,19 +34,19 @@
 #define XR_CHAR_IDENT 0x20
 #define XR_CHAR_PRINT 0x40
 
-XR_DATA const uint8_t xr_char_class[256];
+XR_DATA const uint8_t xr_rune_class[256];
 
 /* ========== Character Class Macros (O(1) lookup) ========== */
 
-#define XR_IS_DIGIT(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_DIGIT)
-#define XR_IS_ALPHA(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_ALPHA)
-#define XR_IS_ALNUM(c) (xr_char_class[(unsigned char) (c)] & (XR_CHAR_DIGIT | XR_CHAR_ALPHA))
-#define XR_IS_HEX(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_HEX)
-#define XR_IS_WS(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_WS)
-#define XR_IS_NEWLINE(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_NEWLINE)
-#define XR_IS_IDENT(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_IDENT)
-#define XR_IS_PRINT(c) (xr_char_class[(unsigned char) (c)] & XR_CHAR_PRINT)
-#define XR_IS_WHITESPACE(c) (xr_char_class[(unsigned char) (c)] & (XR_CHAR_WS | XR_CHAR_NEWLINE))
+#define XR_IS_DIGIT(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_DIGIT)
+#define XR_IS_ALPHA(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_ALPHA)
+#define XR_IS_ALNUM(c) (xr_rune_class[(unsigned char) (c)] & (XR_CHAR_DIGIT | XR_CHAR_ALPHA))
+#define XR_IS_HEX(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_HEX)
+#define XR_IS_WS(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_WS)
+#define XR_IS_NEWLINE(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_NEWLINE)
+#define XR_IS_IDENT(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_IDENT)
+#define XR_IS_PRINT(c) (xr_rune_class[(unsigned char) (c)] & XR_CHAR_PRINT)
+#define XR_IS_WHITESPACE(c) (xr_rune_class[(unsigned char) (c)] & (XR_CHAR_WS | XR_CHAR_NEWLINE))
 
 /* ========== Hex Conversion Table ========== */
 

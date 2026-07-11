@@ -26,7 +26,7 @@ fn test_dump_string() {
     var s = "hello"
     dump(s)
     assert_eq(s, "hello")
-    assert_eq(s.length, 5)
+    assert_eq(len(s), 5)
 }
 
 @test
@@ -47,7 +47,7 @@ fn test_dump_null() {
 fn test_dump_array() {
     var a = [1, 2, 3]
     dump(a)
-    assert_eq(a.length, 3)
+    assert_eq(len(a), 3)
     assert_eq(a[0], 1)
     assert_eq(a[1], 2)
     assert_eq(a[2], 3)
@@ -70,8 +70,8 @@ fn test_dump_map() {
 fn test_dump_set() {
     var s = #[1, 2, 3]
     dump(s)
-    assert_eq(s.length, 3)
-    assert_eq(s.has(2), true)
+    assert_eq(len(s), 3)
+    assert_eq(s.contains(2), true)
 }
 
 @test
@@ -106,7 +106,7 @@ fn test_dump_nested_expr() {
     dump(arr[idx])
     assert_eq(arr[idx], 20)
     assert_eq(idx, 1)
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
 }
 
 @test
@@ -123,5 +123,5 @@ fn test_dump_in_loop() {
 fn test_dump_return_is_null() {
     // dump() is statically unit-valued; the runtime sentinel remains null.
     var r = dump(42)
-    assert_eq(typename(r), "null")
+    assert_eq(typeName(r), "null")
 }

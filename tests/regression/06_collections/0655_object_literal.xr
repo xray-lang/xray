@@ -40,17 +40,17 @@ fn test_nested_object() {
     var rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
     assert_eq(rect.origin.x, 0)
     assert_eq(rect.origin.y, 0)
-    assert_eq(rect.size.width, 100)
-    assert_eq(rect.size.height, 50)
+    assert_eq(len(rect).width, 100)
+    assert_eq(len(rect).height, 50)
 }
 
 @test
 fn test_nested_object_modify() {
     var rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
-    rect.origin.x = 10
-    rect.size.width = 200
+    rect.origin.x = len(10
+    rect).width = 200
     assert_eq(rect.origin.x, 10)
-    assert_eq(rect.size.width, 200)
+    assert_eq(len(rect).width, 200)
 }
 
 // ===== 单字段对象 =====
@@ -98,7 +98,7 @@ fn test_object_as_return() {
 @test
 fn test_object_array() {
     var points = [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }, { "x": 2, "y": 2 }]
-    assert_eq(points.length, 3)
+    assert_eq(len(points), 3)
     assert_eq(points[0].x, 0)
     assert_eq(points[2].y, 2)
 }
@@ -107,8 +107,8 @@ fn test_object_array() {
 fn test_object_field_shorthand() {
     var users = ["alice", "bob"]
     var orders = [1, 2, 3]
-    var dashboard = { users, count: orders.length }
-    assert_eq(dashboard.users.length, 2)
+    var dashboard = { users, count: len(orders) }
+    assert_eq(len(dashboard.users), 2)
     assert_eq(dashboard.users[0], "alice")
     assert_eq(dashboard.count, 3)
 }

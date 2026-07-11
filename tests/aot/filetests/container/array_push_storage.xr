@@ -1,8 +1,8 @@
-fn write_bytes(out: Bytes) {
+fn write_bytes(out: Array<byte>) {
     out.push(7)
     out.push(9)
 }
 
-var out = Bytes.withCapacity(2)
+var out = Array<byte>.withCapacity(2)
 write_bytes(out)
-print(out.length + out[0] + out[1])
+print(len(out) + out[0] + out[1])

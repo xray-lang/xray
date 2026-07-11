@@ -17,12 +17,11 @@
 
 // Buffer methods
 static const XaBuiltinMember g_gen_buffer_members[] = {
-    {"length", "(): int", "Return the buffer length in bytes", true, false, false, false},
-    {"asSpan", "(): ByteSpan", "Borrow this buffer as a mutable ByteSpan value", true, false, false, false},
-    {"ptr", "(): RawMut<uint8>", "Return the underlying raw pointer; requires unsafe at the call site", true, false, false, false},
+    {"asSpan", "(): Slice<byte>", "Borrow this buffer as a mutable Slice<byte> value", true, false, false, false},
+    {"ptr", "(): RawMut<byte>", "Return the underlying raw pointer; requires unsafe at the call site", true, false, false, false},
     {"resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure", true, false, false, false},
 };
-#define GEN_BUFFER_MEMBER_COUNT 4
+#define GEN_BUFFER_MEMBER_COUNT 3
 
 // OsBarrier methods
 static const XaBuiltinMember g_gen_osbarrier_members[] = {
@@ -152,7 +151,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"readDir", "(path: string): Array<string>", "List directory entries", true, false, false, false},
     {"readDirRecursive", "(path: string): Array<string>", "List directory entries recursively", true, false, false, false},
     {"readFile", "(path: string): string?", "Read entire file as string", true, false, false, false},
-    {"readFileBytes", "(path: string): Array<uint8>?", "Read entire file as byte array", true, false, false, false},
+    {"readFileBytes", "(path: string): Array<byte>?", "Read entire file as byte array", true, false, false, false},
     {"readLines", "(path: string): Array<string>", "Read file as lines", true, false, false, false},
     {"readStdin", "(): string?", "Read all data from standard input", true, false, false, false},
     {"readlink", "(path: string): string?", "Read symlink target", true, false, false, false},
@@ -166,7 +165,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"tempFile", "(): string?", "Create temporary file", true, false, false, false},
     {"touch", "(path: string): bool", "Create or update file timestamp", true, false, false, false},
     {"writeFile", "(path: string, data: string): bool", "Write string to file", true, false, false, false},
-    {"writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", true, false, false, false},
+    {"writeFileBytes", "(path: string, data: Array<byte>): bool", "Write byte array to file", true, false, false, false},
 };
 #define GEN_IO_FUNCTION_COUNT 30
 
@@ -230,10 +229,10 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 // mem module functions
 static const XaBuiltinMember g_gen_mem_functions[] = {
     {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, false, false},
-    {"prefetch", "(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false},
-    {"cacheFlush", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false},
-    {"cacheInvalidate", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false},
-    {"nontemporalStore", "(ptr: RawMut<uint8>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, false, false},
+    {"prefetch", "(ptr: RawPtr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false},
+    {"cacheFlush", "(ptr: RawPtr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false},
+    {"cacheInvalidate", "(ptr: RawPtr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false},
+    {"nontemporalStore", "(ptr: RawMut<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, false, false},
     {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false, false, false},
     {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false, false, false},
     {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false},
@@ -241,17 +240,17 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, false, false},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, false, false},
     {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, false, false},
-    {"pageAlloc", "(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false},
-    {"pageProtect", "(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false},
-    {"pageFree", "(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false},
-    {"fromAddress", "(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false, false, false},
+    {"pageAlloc", "(bytes: int, prot?: int): RawMut<byte>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false},
+    {"pageProtect", "(ptr: RawMut<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false},
+    {"pageFree", "(ptr: RawMut<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false},
+    {"fromAddress", "(addr: int): RawMut<byte>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false, false, false},
     {"addressOf", "(ptr: RawPtr<unknown>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false, false, false},
-    {"copy", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, false, false},
-    {"move", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, false, false},
-    {"set", "(dst: RawMut<uint8>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false, false, false},
-    {"compare", "(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, false, false},
-    {"volatileLoad", "(ptr: RawPtr<uint8>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, false, false},
-    {"volatileStore", "(ptr: RawMut<uint8>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, false, false},
+    {"copy", "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, false, false},
+    {"move", "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, false, false},
+    {"set", "(dst: RawMut<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false, false, false},
+    {"compare", "(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, false, false},
+    {"volatileLoad", "(ptr: RawPtr<byte>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, false, false},
+    {"volatileStore", "(ptr: RawMut<byte>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, false, false},
     // Module constants (is_method=false)
     {"PROT_NONE", ": int", "No access protection for mem.pageAlloc/pageProtect", false, false, false, false},
     {"PROT_READ", ": int", "Readable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false},
@@ -278,9 +277,9 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true, false, false, false},
     {"accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, false, false},
     {"read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false, false, false},
-    {"readInto", "(conn: NetConn, buffer: Bytes, maxlen?: int): int", "Read data into a reusable Bytes buffer", true, false, false, false},
+    {"readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", true, false, false, false},
     {"write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, false, false},
-    {"writeBytes", "(conn: NetConn, data: Bytes): int", "Write Bytes data to connection", true, false, false, false},
+    {"writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, false, false},
     {"copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, false, false},
     {"copyBidirectional", "(a: NetConn, b: NetConn): Json", "Copy two TCP/TLS streams in both directions", true, false, false, false},
     {"shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, false, false},
@@ -397,7 +396,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__threadLocalAlive", "(id: int): bool", "Return whether an internal sys.ThreadLocal OS-thread token is still live", true, false, true, false},
     {"__onSignal", "(signal: int, handler: fn(): ()): bool", "Register a VM-hosted safe-point handler for a portable process signal", true, false, true, false},
     {"__dylibOpen", "(path: string): int", "Open a dynamic library and return an opaque handle token, or 0 on failure", true, false, true, false},
-    {"__dylibSymbol", "(handle: int, name: string): RawPtr<uint8>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true, false},
+    {"__dylibSymbol", "(handle: int, name: string): RawPtr<byte>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true, false},
     {"__dylibClose", "(handle: int): bool", "Close a dynamic library handle token", true, false, true, false},
     {"__dylibLastError", "(): string", "Return the platform dynamic-loader error message for the current thread", true, false, true, false},
     {"__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?, detached: bool): int", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true, false},
@@ -405,8 +404,8 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__processTryWait", "(id: int): int?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true, false},
     {"__processKill", "(id: int, signal: int): bool", "Send a portable process signal to a process handle token", true, false, true, false},
     {"__pipeOpen", "(): Array<int>?", "Create an anonymous pipe and return read/write endpoint tokens", true, false, true, false},
-    {"__pipeRead", "(handle: int, maxBytes: int): Bytes?", "Read one chunk from a pipe endpoint", true, false, true, false},
-    {"__pipeWrite", "(handle: int, data: Bytes): int", "Write one chunk to a pipe endpoint", true, false, true, false},
+    {"__pipeRead", "(handle: int, maxBytes: int): Array<byte>?", "Read one chunk from a pipe endpoint", true, false, true, false},
+    {"__pipeWrite", "(handle: int, data: Array<byte>): int", "Write one chunk to a pipe endpoint", true, false, true, false},
     {"__pipeClose", "(handle: int): bool", "Close a pipe endpoint", true, false, true, false},
 };
 #define GEN_SYS_FUNCTION_COUNT 25
@@ -433,7 +432,7 @@ static const XaBuiltinHandleField g_gen_ws_wsconn_fields[] = {
 
 // ws.WsMessage handle fields
 static const XaBuiltinHandleField g_gen_ws_wsmessage_fields[] = {
-    {"data", "string | Array<uint8> | null", true},
+    {"data", "string | Array<byte> | null", true},
     {"binary", "bool", true},
     {"error", "string?", true},
 };
@@ -447,7 +446,7 @@ static const XaBuiltinHandle g_gen_ws_handles[] = {
 // ws module functions
 static const XaBuiltinMember g_gen_ws_functions[] = {
     {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true, false, false, false},
-    {"send", "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool", "Send data over WebSocket connection", true, false, false, false},
+    {"send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", true, false, false, false},
     {"recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", true, false, false, false},
     {"close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", true, false, false, false},
     {"ping", "(conn: WsConn): bool", "Send a ping frame", true, false, false, false},

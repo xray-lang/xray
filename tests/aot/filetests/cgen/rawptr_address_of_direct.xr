@@ -1,7 +1,7 @@
 import mem
 
 @c_export("xray_rawptr_address_before")
-fn xray_rawptr_address_before(p: RawPtr<uint8>, q: RawPtr<uint8>) -> bool {
+fn xray_rawptr_address_before(p: RawPtr<byte>, q: RawPtr<byte>) -> bool {
     return mem.addressOf(p) < mem.addressOf(q)
 }
 

@@ -6,10 +6,10 @@ import time
 
 var STAGES = 100     // 管道级数
 var ITEMS = 100000   // 数据项数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     STAGES = int(process.args[0]) ?? STAGES
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     ITEMS = int(process.args[1]) ?? ITEMS
 }
 

@@ -2171,14 +2171,14 @@ static bool aot_collect_task_results_into_array(const XrAotContext *ctx, XrArray
                 tasks->length = 0;
             return true;
         }
-        case XR_ELEM_CHAR: {
+        case XR_ELEM_RUNE: {
             uint32_t *dst = (uint32_t *) results->data;
             for (int j = 0; j < count; j++) {
                 XrValue cv = aot_collect_task_input_value(tasks, task_values, j);
                 XrValue value = aot_collect_one_task_result(
                     ctx, cv, tasks_value, tasks, j, aggregate_one_shot, clear_each_task_slot);
-                if (XR_IS_CHAR(value))
-                    dst[j] = XR_TO_CHAR(value);
+                if (XR_IS_RUNE(value))
+                    dst[j] = XR_TO_RUNE(value);
             }
             if (truncate_source_tasks)
                 tasks->length = 0;
@@ -4028,7 +4028,7 @@ void xr_aot_result_group_close_void_sync(XrValue group_value) {
     xr_result_group_close(xr_value_to_result_group(group_value));
 }
 
-XrValue xr_aot_result_group_length(const XrAotContext *ctx, XrValue group_value) {
+XrValue xr_aot_result_group_ready_count(const XrAotContext *ctx, XrValue group_value) {
     (void) ctx;
     if (!xr_value_is_result_group(group_value))
         return XR_FROM_INT(0);

@@ -1,31 +1,31 @@
 import mem
 
 struct Header {
-    magic: uint8
+    magic: byte
     version: uint16
-    flags: uint8
+    flags: byte
     length: uint32
 }
 
 packed struct PackedHeader {
-    magic: uint8
+    magic: byte
     length: uint32
     flags: uint16
 }
 
 struct Inner {
     code: uint16
-    tag: uint8
+    tag: byte
 }
 
 struct Outer {
     header: Header
     inner: Inner
-    tail: uint8
+    tail: byte
 }
 
-print(mem.sizeOf<uint8>())
-print(mem.alignOf<uint8>())
+print(mem.sizeOf<byte>())
+print(mem.alignOf<byte>())
 print(mem.sizeOf<uint16>())
 print(mem.alignOf<uint16>())
 print(mem.sizeOf<uint32>())
@@ -36,8 +36,8 @@ print(mem.sizeOf<float32>())
 print(mem.alignOf<float32>())
 print(mem.sizeOf<float64>())
 print(mem.alignOf<float64>())
-print(mem.sizeOf<RawPtr<uint8>>())
-print(mem.alignOf<RawPtr<uint8>>())
+print(mem.sizeOf<RawPtr<byte>>())
+print(mem.alignOf<RawPtr<byte>>())
 print(mem.sizeOf<[uint16; 3]>())
 print(mem.alignOf<[uint16; 3]>())
 

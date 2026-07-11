@@ -572,7 +572,7 @@ static bool emit_key_access_abort_stmt_if_needed(XiCgenCtx *ctx, FILE *out) {
 }
 
 /* ===== Map has/get probe fusion =====================================
- * For `if (m.has(k)) ... m.get(k) ...` on the same map+key with no map mutation
+ * For `if (m.containsKey(k)) ... m.get(k) ...` on the same map+key with no map mutation
  * between (exactly the condition under which the get is emitted present-direct),
  * the has and get can share a single probe: the has writes the slot index into a
  * pre-declared _mf<hasid> temp and tests it >= 0; the present-direct get reuses
@@ -591,7 +591,7 @@ static bool cg_value_is_map_method(const XiValue *v, const char *name) {
  * has's even when identical). The single-predecessor requirement guarantees the
  * shared _mf temp is always assigned before the get reads it. */
 static const XiValue *cg_map_fusable_get_for_has(XiCgenCtx *ctx, const XiValue *has) {
-    if (!cg_value_is_map_method(has, "has") || !has->block)
+    if (!cg_value_is_map_method(has, "containsKey") || !has->block)
         return NULL;
     const XiBlock *hb = has->block;
     if (hb->kind != XI_BLOCK_IF || !hb->succs[0] || cg_unwrap_identity_value(hb->control) != has)
@@ -624,7 +624,7 @@ static const XiValue *cg_map_get_fusion_has(XiCgenCtx *ctx, const XiValue *get) 
     if (!p || p->kind != XI_BLOCK_IF || p->succs[0] != get->block)
         return NULL;
     const XiValue *has = cg_unwrap_identity_value(p->control);
-    if (!cg_value_is_map_method(has, "has"))
+    if (!cg_value_is_map_method(has, "containsKey"))
         return NULL;
     return cg_map_fusable_get_for_has(ctx, has) == get ? has : NULL;
 }
@@ -756,11 +756,11 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
-    if (nargs == 1 && strcmp(method, "has") == 0) {
-        const XaotKeyAccessPlan *key_plan =
-            cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_MAP, XG_KEY_ACCESS_HAS, "Map.has");
+    if (nargs == 1 && strcmp(method, "containsKey") == 0) {
+        const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
+            ctx, v, XG_MAP_CONTAINER_MAP, XG_KEY_ACCESS_HAS, "Map.containsKey");
         bool hash_helper =
-            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.has");
+            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.containsKey");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
@@ -869,7 +869,7 @@ static bool cg_class_native_map_method_call_is_direct(XiCgenCtx *ctx, const XiFu
         return strcmp(method, "length") == 0 || strcmp(method, "size") == 0 ||
                strcmp(method, "clear") == 0;
     if (nargs == 1)
-        return strcmp(method, "get") == 0 || strcmp(method, "has") == 0 ||
+        return strcmp(method, "get") == 0 || strcmp(method, "containsKey") == 0 ||
                strcmp(method, "delete") == 0;
     if (nargs == 2)
         return strcmp(method, "set") == 0;
@@ -1207,7 +1207,7 @@ static bool cg_local_typed_map_method_call_is_direct(XiCgenCtx *ctx, const XiFun
         return strcmp(method, "length") == 0 || strcmp(method, "size") == 0 ||
                strcmp(method, "clear") == 0;
     if (nargs == 1) {
-        if (strcmp(method, "has") == 0)
+        if (strcmp(method, "containsKey") == 0)
             return cg_map_direct_has_helper(&map_info) != NULL;
         if (strcmp(method, "delete") == 0)
             return cg_map_direct_delete_helper(&map_info) != NULL;
@@ -1307,11 +1307,11 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         }
         return false;
     }
-    if (nargs == 1 && strcmp(method, "has") == 0) {
-        const XaotKeyAccessPlan *key_plan =
-            cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_MAP, XG_KEY_ACCESS_HAS, "Map.has");
+    if (nargs == 1 && strcmp(method, "containsKey") == 0) {
+        const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
+            ctx, v, XG_MAP_CONTAINER_MAP, XG_KEY_ACCESS_HAS, "Map.containsKey");
         bool hash_helper =
-            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.has");
+            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.containsKey");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
         if (!hash_helper)
@@ -1591,11 +1591,11 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
-    if (nargs == 1 && strcmp(method, "has") == 0) {
-        const XaotKeyAccessPlan *key_plan =
-            cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_SET, XG_KEY_ACCESS_HAS, "Set.has");
+    if (nargs == 1 && strcmp(method, "contains") == 0) {
+        const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
+            ctx, v, XG_MAP_CONTAINER_SET, XG_KEY_ACCESS_HAS, "Set.contains");
         bool hash_helper =
-            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.has");
+            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.contains");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
@@ -1689,7 +1689,7 @@ static bool cg_class_native_set_method_call_is_direct(XiCgenCtx *ctx, const XiFu
         return strcmp(method, "length") == 0 || strcmp(method, "size") == 0 ||
                strcmp(method, "clear") == 0 || strcmp(method, "values") == 0;
     if (nargs == 1)
-        return strcmp(method, "add") == 0 || strcmp(method, "has") == 0 ||
+        return strcmp(method, "add") == 0 || strcmp(method, "contains") == 0 ||
                strcmp(method, "delete") == 0;
     return false;
 }
@@ -1847,7 +1847,7 @@ static bool cg_local_typed_set_method_call_is_direct(XiCgenCtx *ctx, const XiFun
         return strcmp(method, "length") == 0 || strcmp(method, "size") == 0 ||
                strcmp(method, "clear") == 0 || strcmp(method, "values") == 0;
     if (nargs == 1)
-        return strcmp(method, "add") == 0 || strcmp(method, "has") == 0 ||
+        return strcmp(method, "add") == 0 || strcmp(method, "contains") == 0 ||
                strcmp(method, "delete") == 0;
     return false;
 }
@@ -1926,11 +1926,11 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
-    if (nargs == 1 && strcmp(method, "has") == 0) {
-        const XaotKeyAccessPlan *key_plan =
-            cg_verified_key_access_plan(ctx, v, XG_MAP_CONTAINER_SET, XG_KEY_ACCESS_HAS, "Set.has");
+    if (nargs == 1 && strcmp(method, "contains") == 0) {
+        const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
+            ctx, v, XG_MAP_CONTAINER_SET, XG_KEY_ACCESS_HAS, "Set.contains");
         bool hash_helper =
-            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.has");
+            cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.contains");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
         if (!hash_helper)

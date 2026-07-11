@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_array_push_reject(xs: Array<int>, value: int) -> int {
     xs.push(value)
-    return xs.length
+    return len(xs)
 }
 
 var xs = Array<int>(0, 0)

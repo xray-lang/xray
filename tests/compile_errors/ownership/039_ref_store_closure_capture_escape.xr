@@ -2,7 +2,7 @@ var closures: Array<() -> int> = []
 
 fn stash(data: ref Array<int>) {
     closures.push(fn() -> int {
-        return data.length
+        return len(data)
     })
 }
 

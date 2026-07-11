@@ -10,7 +10,7 @@ class IntBag {
         var sum = 0
         while (r < rounds) {
             var i = 0
-            while (i < this.values.length) {
+            while (i < len(this.values)) {
                 sum = sum + this.values[i]
                 i = i + 1
             }

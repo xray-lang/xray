@@ -3,8 +3,8 @@ fn erase(x: unknown) -> unknown {
 }
 
 fn bad() {
-    var bytes = Bytes(4)
-    var view: ByteSpan = bytes[:]
+    var bytes = Array<byte>(4)
+    var view: Slice<byte> = bytes[:]
     var any = erase(view)
     var values = Array<unknown>()
     values.push(any)

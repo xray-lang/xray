@@ -21,12 +21,12 @@ fn test_hex_encode_special() {
     assert_eq(encoding.hexEncode("\n"), "0a")
 }
 
-// ===== Hex decode (returns Array<uint8>) =====
+// ===== Hex decode (returns Array<byte>) =====
 
 @test
 fn test_hex_decode_bytes() {
     var bytes = encoding.hexDecode("48656c6c6f")!
-    assert_eq(bytes.length, 5)
+    assert_eq(len(bytes), 5)
     assert_eq(bytes[0], 0x48)  // 'H'
     assert_eq(bytes[4], 0x6f)  // 'o'
 }
@@ -45,7 +45,7 @@ fn test_hex_decode_invalid() {
 @test
 fn test_hex_decode_empty() {
     var bytes = encoding.hexDecode("")!
-    assert_eq(bytes.length, 0)
+    assert_eq(len(bytes), 0)
 }
 
 @test
@@ -83,7 +83,7 @@ fn test_utf8_count() {
 @test
 fn test_utf8_byte_length() {
     assert_eq(encoding.utf8ByteLength("Hello"), 5)
-    assert_eq(encoding.utf8ByteLength("你好"), 6)  // 3 bytes per CJK char
+    assert_eq(encoding.utf8ByteLength("你好"), 6)  // 3 bytes per CJK rune
     assert_eq(encoding.utf8ByteLength(""), 0)
 }
 
@@ -92,7 +92,7 @@ fn test_utf8_byte_length() {
 @test
 fn test_utf16_encode_decode_le() {
     var u16 = encoding.utf16Encode("AB")
-    assert_eq(u16.length, 4)
+    assert_eq(len(u16), 4)
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
     assert_eq(u16[0], 0x41)
     assert_eq(u16[1], 0x00)
@@ -103,7 +103,7 @@ fn test_utf16_encode_decode_le() {
 @test
 fn test_utf16_encode_decode_be() {
     var u16 = encoding.utf16Encode("AB", encoding.BE)
-    assert_eq(u16.length, 4)
+    assert_eq(len(u16), 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
     assert_eq(u16[0], 0x00)
     assert_eq(u16[1], 0x41)
@@ -114,7 +114,7 @@ fn test_utf16_encode_decode_be() {
 @test
 fn test_utf16_cjk() {
     var u16 = encoding.utf16Encode("你好")
-    assert_eq(u16.length, 4)  // 2 BMP chars x 2 bytes
+    assert_eq(len(u16), 4)  // 2 BMP chars x 2 bytes
     var decoded = encoding.utf16Decode(u16)
     assert_eq(decoded, "你好")
 }
@@ -122,14 +122,14 @@ fn test_utf16_cjk() {
 @test
 fn test_utf16_empty() {
     var u16 = encoding.utf16Encode("")
-    assert_eq(u16.length, 0)
+    assert_eq(len(u16), 0)
     var decoded = encoding.utf16Decode(u16)
     assert_eq(decoded, "")
 }
 
 @test
 fn test_utf16_odd_length_invalid() {
-    assert_eq(encoding.utf16Decode(Bytes(1)), null)
+    assert_eq(encoding.utf16Decode(Array<byte>(1)), null)
 }
 
 @test

@@ -1,4 +1,4 @@
-fn bytesView(bytes: Span<uint8>) -> int {
-    var raw: ByteSpan = bytes.asBytes()
-    return raw.length
+fn bytesView(bytes: Slice<byte>) -> int {
+    var raw: Slice<byte> = bytes.asBytes()
+    return len(raw)
 }

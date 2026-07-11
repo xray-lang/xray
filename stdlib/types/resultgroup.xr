@@ -3,7 +3,7 @@
 
 @native
 class ResultGroup {
-    length: int
+    readyCount: int
     pendingCount: int
     batchSize: int
     isClosed: bool

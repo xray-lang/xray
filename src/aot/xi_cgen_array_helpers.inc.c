@@ -1462,7 +1462,7 @@ static void cg_emit_static_fixed_array_value(XiCgenCtx *ctx, FILE *out,
             fprintf(out, "%d", value->as.bool_val ? 1 : 0);
             return;
         case XR_CT_CHAR:
-            fprintf(out, "0x%X", (unsigned) value->as.char_val);
+            fprintf(out, "0x%X", (unsigned) value->as.rune_val);
             return;
         case XR_CT_INT:
         default:
@@ -4728,7 +4728,7 @@ static bool cg_array_fill_value_is_zero_bits_literal(const XiValue *value) {
     if (!v || v->op != XI_CONST || !v->type)
         return false;
     if (v->type->kind == XR_KIND_INT || v->type->kind == XR_KIND_BOOL ||
-        v->type->kind == XR_KIND_CHAR)
+        v->type->kind == XR_KIND_RUNE)
         return v->aux_int == 0;
     if (v->type->kind == XR_KIND_FLOAT) {
         double f = 0.0;

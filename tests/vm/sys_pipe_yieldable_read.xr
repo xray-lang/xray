@@ -8,7 +8,7 @@ pipe.closeWrite()
 
 fn readPipe() -> int {
     var chunk = pipe.read(16)
-    var n = chunk == null ? -1 : chunk!.length
+    var n = chunk == null ? -1 : len(chunk!)
     print("read " + string(n))
     return n
 }

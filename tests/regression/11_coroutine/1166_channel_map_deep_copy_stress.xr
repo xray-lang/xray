@@ -19,7 +19,7 @@ fn producer(id: int) -> int {
 
 fn recv_map_size() -> int {
     return match (maps.recv()) {
-        Recv.Value(m) -> m.size
+        Recv.Value(m) -> len(m)
         _ -> -1
     }
 }

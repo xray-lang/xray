@@ -27,19 +27,19 @@ fn test_null_in_condition() {
 @test
 fn test_empty_array_operations() {
     var arr: Array<int> = []
-    assert_eq(arr.length, 0)
+    assert_eq(len(arr), 0)
 
     // 对空数组的 map/filter
     var mapped = arr.map((x) -> x * 2)
-    assert_eq(mapped.length, 0)
+    assert_eq(len(mapped), 0)
 }
 
 @test
 fn test_empty_string() {
     var s = ""
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
     assert_eq(s == "", true)
-    assert_eq(s.includes(""), true)
+    assert_eq(s.contains(""), true)
 }
 
 // ===== 单元素集合 =====
@@ -47,7 +47,7 @@ fn test_empty_string() {
 @test
 fn test_single_element_array() {
     var arr = [42]
-    assert_eq(arr.length, 1)
+    assert_eq(len(arr), 1)
     assert_eq(arr[0], 42)
     var doubled = arr.map((x) -> x * 2)
     assert_eq(doubled[0], 84)
@@ -111,7 +111,7 @@ fn test_zero_division_float() {
 @test
 fn test_string_edge_cases() {
     var s = "a"
-    assert_eq(s.length, 1)
+    assert_eq(len(s), 1)
     assert_eq(s.charAt(0), "a")
     assert_eq(s.toUpperCase(), "A")
 }
@@ -119,7 +119,7 @@ fn test_string_edge_cases() {
 @test
 fn test_unicode_string() {
     var s = "你好"
-    assert_eq(s.length > 0, true)
+    assert_eq(len(s) > 0, true)
 }
 
 // ===== 嵌套结构边界 =====

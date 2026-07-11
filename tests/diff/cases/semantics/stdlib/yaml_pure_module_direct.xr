@@ -4,7 +4,7 @@ var doc = yaml.parse("app:\n  name: xray\n  ports: [80, 443]\n  limits: {max: 10
 print(doc["app"]["name"])
 print(doc["app"]["ports"][1])
 print(doc["app"]["limits"]["max"])
-print(doc["items"].length)
+print(len(doc["items"]))
 print(doc["items"][0]["status"])
 print(doc["items"][1]["id"])
 
@@ -14,7 +14,7 @@ print(aliases["alias"])
 
 var block = yaml.parse("text: |-\n  line one\n  line two")
 var blockText = string(block["text"])
-if (blockText.includes("line one")) {
+if (blockText.contains("line one")) {
     print("has-line")
 } else {
     print("missing-line")
@@ -26,13 +26,13 @@ if (blockText.endsWith("\n")) {
 }
 
 var docs = yaml.parseAll("---\na: 1\n...\nb: 2")
-print(docs.length)
+print(len(docs))
 print(docs[0]["a"])
 print(docs[1]["b"])
 
 var strict = yaml.parseStrict("name: Alice\nage: 30")
 print(strict["data"]["name"])
-print(strict["errors"].length)
+print(len(strict["errors"]))
 print(strict["meta"]["anchors"])
 
 var out = yaml.stringify({name: "xray", version: 1, debug: false})

@@ -19,15 +19,15 @@ fn createQueue(capacity: int) {
 
 fn enqueue(q, item) {
     q.data[q.tail] = item
-    q.tail = (q.tail + 1) % q.capacity
-    q.size = q.size + 1
+    q.tail = (q.tail + 1) % len(q.capacity
+    q) = len(q) + 1
 }
 
 fn dequeue(q) {
     var item = q.data[q.head]
     q.data[q.head] = null
-    q.head = (q.head + 1) % q.capacity
-    q.size = q.size - 1
+    q.head = (q.head + 1) % len(q.capacity
+    q) = len(q) - 1
     return item
 }
 
@@ -44,7 +44,7 @@ fn run(n: int) {
         enqueue(q, { "id": i, "payload": "data_" + i })
         i = i + 1
     }
-    print("Queue initialized: size=" + q.size)
+    print("Queue initialized: size=" + len(q))
 
     // Steady-state: produce and consume at same rate
     var checksum = 0
@@ -70,7 +70,7 @@ fn run(n: int) {
             i = i + 1
         }
         // Consume all
-        while (burstQ.size > 0) {
+        while (len(burstQ) > 0) {
             var item = dequeue(burstQ)
             total = total + item.v
         }
@@ -108,5 +108,5 @@ fn run(n: int) {
     print("Phase 3 (cross-ref x" + (n * 100) + "): checksum=" + checksum)
 }
 
-var n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500
 run(n)

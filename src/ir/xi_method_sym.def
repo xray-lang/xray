@@ -154,6 +154,10 @@ XI_METHOD_SYM(MUL_OVERFLOWS,  227, MUL_OVERFLOWS,  "mulOverflows")
 XI_METHOD_SYM(AS_SPAN,        228, AS_SPAN,        "asSpan")
 XI_METHOD_SYM(PTR,            229, PTR,            "ptr")
 XI_METHOD_SYM(APPEND_FROM,    230, APPEND_FROM,    "appendFrom")
+XI_METHOD_SYM(CONTAINS_KEY,   231, CONTAINS_KEY,   "containsKey")
+XI_METHOD_SYM(CONTAINS_VALUE, 232, CONTAINS_VALUE, "containsValue")
+XI_METHOD_SYM(OP_LEN,         233, OP_LEN,         "__operator_len")
+XI_METHOD_SYM(COUNT,          234, COUNT,          "count")
 
 /* --- DateTime methods --- */
 XI_METHOD_SYM(FORMAT,      88,  FORMAT,       "format")

@@ -1,6 +1,6 @@
 fn main() {
     var source: Array<int> = [1, 2, 3]
     var moved = move source
-    print(moved.length)
-    print(source.length)
+    print(len(moved))
+    print(len(source))
 }

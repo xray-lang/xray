@@ -35,18 +35,19 @@ static inline bool map_is_weak(const XrMap *m) {
     return (m->flags & XR_MAP_FLAG_WEAK) != 0;
 }
 
-static XrValue xr_map_method_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_map_is_empty(map_self(self)));
-}
-
-static XrValue xr_map_method_has(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_contains_key(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_map_has(map_self(self), args[0]));
+}
+
+static XrValue xr_map_method_contains_value(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                            int argc) {
+    (void) iso;
+    if (argc < 1)
+        return xr_bool(0);
+    return xr_bool(xr_map_has_value(map_self(self), args[0]));
 }
 
 static XrValue xr_map_method_get(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -172,8 +173,8 @@ static XrValue xr_map_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *ar
 
 void xr_map_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod map_methods[] = {
-        {"isEmpty", xr_map_method_is_empty, 0},
-        {"has", xr_map_method_has, 1},
+        {"containsKey", xr_map_method_contains_key, 1},
+        {"containsValue", xr_map_method_contains_value, 1},
         {"get", xr_map_method_get, 1},
         {"set", xr_map_method_set, 0},
         {"delete", xr_map_method_delete, 1},

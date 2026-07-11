@@ -115,7 +115,7 @@ fn test_step_range_forward() {
     for (i in StepRange(0, 10, 2)) {
         values.push(i)
     }
-    assert_eq(values.length, 5)
+    assert_eq(len(values), 5)
     assert_eq(values[0], 0)
     assert_eq(values[1], 2)
     assert_eq(values[2], 4)
@@ -129,7 +129,7 @@ fn test_step_range_backward() {
     for (i in StepRange(10, 0, -2)) {
         values.push(i)
     }
-    assert_eq(values.length, 5)
+    assert_eq(len(values), 5)
     assert_eq(values[0], 10)
     assert_eq(values[1], 8)
     assert_eq(values[2], 6)
@@ -184,7 +184,7 @@ fn test_fibonacci_iterator() {
     for (n in Fibonacci(8)) {
         values.push(n)
     }
-    assert_eq(values.length, 8)
+    assert_eq(len(values), 8)
     assert_eq(values[0], 0)
     assert_eq(values[1], 1)
     assert_eq(values[2], 1)
@@ -207,7 +207,7 @@ class CharIterator {
     }
     
     hasNext() -> bool {
-        return this.index < this.str.length
+        return this.index < len(this.str)
     }
     
     next() -> string {
@@ -235,7 +235,7 @@ fn test_char_iterator() {
     for (ch in Chars("hello")) {
         chars.push(ch)
     }
-    assert_eq(chars.length, 5)
+    assert_eq(len(chars), 5)
     assert_eq(chars[0], "h")
     assert_eq(chars[1], "e")
     assert_eq(chars[2], "l")
@@ -253,7 +253,7 @@ fn test_nested_iteration() {
             pairs.push("${i},${j}")
         }
     }
-    assert_eq(pairs.length, 9)
+    assert_eq(len(pairs), 9)
     assert_eq(pairs[0], "1,1")
     assert_eq(pairs[4], "2,2")
     assert_eq(pairs[8], "3,3")

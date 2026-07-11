@@ -1,11 +1,11 @@
-fn buildBytes(src: Bytes) -> Bytes {
-    var out = Bytes.withCapacity(12)
+fn buildBytes(src: Array<byte>) -> Array<byte> {
+    var out = Array<byte>.withCapacity(12)
     out.appendFrom(src[1:4])
     out.repeatFrom(2, 4)
     return out
 }
 
-var src = Bytes(6)
+var src = Array<byte>(6)
 src[0] = 10
 src[1] = 20
 src[2] = 30
@@ -14,6 +14,6 @@ src[4] = 50
 src[5] = 60
 
 var out = buildBytes(src)
-print(out.length)
+print(len(out))
 print(out[0])
 print(out[6])

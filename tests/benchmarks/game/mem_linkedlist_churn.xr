@@ -57,5 +57,5 @@ fn run(n: int) {
     print("Phase 3 (long lists x" + n + "): sum=" + total)
 }
 
-var n = process.args.length > 0 ? int(process.args[0]) ?? 1000 : 1000
+var n = len(process.args) > 0 ? int(process.args[0]) ?? 1000 : 1000
 run(n)

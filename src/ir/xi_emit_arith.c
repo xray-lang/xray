@@ -263,8 +263,8 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         case XR_KIND_BOOL:
             emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
             break;
-        case XR_KIND_CHAR:
-            emit_inst(ctx, CREATE_ABC(OP_TOCHAR, dst, src, 0));
+        case XR_KIND_RUNE:
+            emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, src, 0));
             break;
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
@@ -411,8 +411,8 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
             return;
         }
-        if (tid == XR_TID_CHAR) {
-            emit_inst(ctx, CREATE_ABC(OP_TOCHAR, dst, src, 0));
+        if (tid == XR_TID_RUNE) {
+            emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, src, 0));
             return;
         }
     }

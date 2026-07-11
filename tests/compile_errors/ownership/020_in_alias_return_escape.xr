@@ -4,4 +4,4 @@ fn leak(data: in Array<int>) -> Array<int> {
 }
 
 var values: Array<int> = [1, 2]
-print(leak(values).length)
+print(len(leak(values)))

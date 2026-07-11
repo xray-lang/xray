@@ -24,7 +24,7 @@ fn test_byte_at_out_of_bounds() {
 // ===== byteAt + ord on raw octets (binary I/O) =====
 // Single-byte strings from byteAt() on binary buffers are raw octets, not
 // UTF-8 code units. ord() must return the unsigned byte 0..255 directly,
-// never the UTF-8 replacement char (0xFFFD). codePointAt() must NOT be used
+// never the UTF-8 replacement rune (0xFFFD). codePointAt() must NOT be used
 // to recover high bytes — it UTF-8-decodes and corrupts octets >= 0x80.
 
 @test
@@ -46,7 +46,7 @@ fn test_byte_at_ord_ascii_matches_octet() {
     assert_eq(s.byteAt(3)!.ord(), 84)
 }
 
-// ===== reverse (ASCII data only — Unicode reverse is char-aware) =====
+// ===== reverse (ASCII data only — Unicode reverse is rune-aware) =====
 
 @test
 fn test_reverse_ascii() {
@@ -77,8 +77,8 @@ fn reverseComplement(seq: string) -> string {
     var reversed = seq.reverse()
     var sb = StringBuilder()
     var j = 0
-    var len = seq.byteLength
-    while (j < len) {
+    var byteCount = len(seq.bytes())
+    while (j < byteCount) {
         // byteAt is declared string? (null out of bounds); j < len keeps
         // this access in bounds, so unwrap directly.
         var c = reversed.byteAt(j)!

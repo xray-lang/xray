@@ -5,32 +5,32 @@ import math
 import { min as mmin, max as mmax, clamp as cclamp } from "math"
 
 var a = math.abs(-42)
-print(typename(a))
+print(typeName(a))
 print(a)
 
 var amin = math.abs(math.MIN_INT)
-print(typename(amin))
+print(typeName(amin))
 
-print(typename(math.min()))
+print(typeName(math.min()))
 print(math.min())
 
 var mn = math.min(3, 7, 5)
-print(typename(mn))
+print(typeName(mn))
 print(mn)
 
 var mx = math.max(3, 7, 5)
-print(typename(mx))
+print(typeName(mx))
 print(mx)
 
 var cl = math.clamp(5, 10, 0)
-print(typename(cl))
+print(typeName(cl))
 print(cl)
 
 print(mmin(9, 4, 6))
 print(mmax(9, 4, 6))
 print(cclamp(15, 10, 0))
 
-print(typename(math.min(3.5, 7.2)))
+print(typeName(math.min(3.5, 7.2)))
 print(math.clamp(5.5, 10.0, 0.0))
 
 print(math.floor(1.8))

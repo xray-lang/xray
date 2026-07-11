@@ -34,9 +34,9 @@ fn dot(a: in Vec2, b: in Vec2) -> float {
     return a.x * b.x + a.y * b.y
 }
 fn normalize(v: ref Vec2) {
-    var len = length_sq(v)
-    if (len > 0.0) {
-        var inv = 1.0 / len
+    var lengthValue = length_sq(v)
+    if (lengthValue > 0.0) {
+        var inv = 1.0 / lengthValue
         v.x = v.x * inv
         v.y = v.y * inv
     }

@@ -1,8 +1,8 @@
-// anchor: string-char-scalar
-var a: char = 'A'
-var digit: char = '7'
-var ws: char = '\n'
-var face: char = '\u{1F600}'
+// anchor: string-rune-scalar
+var a: rune = 'A'
+var digit: rune = '7'
+var ws: rune = '\n'
+var face: rune = '\u{1F600}'
 
 print(a)
 print(a.toString())
@@ -18,7 +18,7 @@ print(face)
 print(face.ord())
 
 var s = "aé😀z"
-print(s.length)
+print(len(s))
 print(s[0])
 print(s[1])
 print(s[2])
@@ -37,6 +37,6 @@ for (i, ch in s) {
 }
 
 var e = s.entries()
-print(e.length)
+print(len(e))
 print(e[1].0)
 print(e[1].1)

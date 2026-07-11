@@ -56,28 +56,28 @@ fn test_null_comparison() {
 fn test_null_in_array() {
     var arr = [1, null, 3]
     assert_eq(arr[1], null)
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
 }
 
 @test
 fn test_null_in_map() {
     var m = #{"key": null}
     assert_eq(m.get("key"), null)
-    assert_eq(m.has("key"), true)
+    assert_eq(m.containsKey("key"), true)
 }
 
 // ===== 空字符串 =====
 @test
 fn test_empty_string() {
     var s = ""
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
     assert_eq(s == "", true)
 }
 
 @test
 fn test_whitespace_string() {
     var s = "   "
-    assert_eq(s.length, 3)
+    assert_eq(len(s), 3)
     assert_eq(s.trim(), "")
 }
 
@@ -85,19 +85,19 @@ fn test_whitespace_string() {
 @test
 fn test_empty_array() {
     var arr: Array<int> = []
-    assert_eq(arr.length, 0)
+    assert_eq(len(arr), 0)
 }
 
 @test
 fn test_empty_map() {
     var m = #{}
-    assert_eq(m.length, 0)
+    assert_eq(len(m), 0)
 }
 
 @test
 fn test_empty_set() {
     var s = #[]
-    assert_eq(s.length, 0)
+    assert_eq(len(s), 0)
 }
 
 // ===== 零值 =====

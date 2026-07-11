@@ -56,6 +56,6 @@ fn test_weakmap_weakset_contract_error() {
     // Object element still succeeds.
     var obj = { id: 1 }
     ws.add(obj)
-    assert_eq(ws.has(obj), true)
+    assert_eq(ws.contains(obj), true)
 }
 

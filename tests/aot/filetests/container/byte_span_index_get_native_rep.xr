@@ -1,3 +1,3 @@
-fn readByteAsInt(b: ByteSpan, i: int) -> int {
+fn readByteAsInt(b: Slice<byte>, i: int) -> int {
     return int(b[i])
 }

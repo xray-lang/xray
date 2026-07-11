@@ -1,24 +1,24 @@
 // anchor: basic-arrays
 fn main() {
     var a = [1, 2, 3, 4, 5]
-    print(a.length)
+    print(len(a))
     a.push(6)
     print(a[5])
     var doubled = a.map(x -> x * 2)
-    for (i in 0..doubled.length) {
+    for (i in 0..len(doubled)) {
         print(doubled[i])
     }
     var evens = a.filter(x -> x % 2 == 0)
-    print(evens.length)
+    print(len(evens))
     var total = a.reduce((acc, x) -> acc + x, 0)
     print(total)
-    var tail: Span<int> = a[-4:-1]
-    print(tail.length)
+    var tail: Slice<int> = a[-4:-1]
+    print(len(tail))
     print(tail[0])
     tail[1] = 33
     print(a[3])
-    var syntax_tail: Span<int> = a[-4:-1]
-    print(syntax_tail.length)
+    var syntax_tail: Slice<int> = a[-4:-1]
+    print(len(syntax_tail))
     print(syntax_tail[1])
     var fill_range = [1, 2, 3, 4, 5, 6]
     fill_range.fill(9, 2, 5)
@@ -30,7 +30,7 @@ fn main() {
     fill_range.fill(4, 4)
     print(fill_range[4])
     print(fill_range[5])
-    var bytes = Bytes(6)
+    var bytes = Array<byte>(6)
     bytes.fill(1)
     bytes.fill(255, 1, 4)
     print(bytes[0])
@@ -39,9 +39,9 @@ fn main() {
     print(bytes[4])
     print(bytes.indexOf(255))
     print(bytes.indexOf(42))
-    print(bytes.includes(255))
-    print(bytes.includes(42))
-    var packet = Bytes(8)
+    print(bytes.contains(255))
+    print(bytes.contains(42))
+    var packet = Array<byte>(8)
     packet[0] = 1
     packet[1] = 2
     packet[2] = 3
@@ -50,17 +50,17 @@ fn main() {
     packet[5] = 6
     packet[6] = 7
     packet[7] = 8
-    var packetView: ByteSpan = packet[:]
+    var packetView: Slice<byte> = packet[:]
     var packet32: uint32 = packetView.load<uint32>(0, Endian.LE)
     var packet64: uint64 = packetView.load<uint64>(0, Endian.LE)
     print(int(packet32))
     print(int(packet64))
-    var copied = Bytes.withCapacity(6)
+    var copied = Array<byte>.withCapacity(6)
     copied.appendFrom(packetView[1:4])
     print(copied[0])
     print(copied[2])
-    var repeated = Bytes.withCapacity(9)
-    var seed = Bytes(3)
+    var repeated = Array<byte>.withCapacity(9)
+    var seed = Array<byte>(3)
     seed[0] = 65
     seed[1] = 66
     seed[2] = 67

@@ -43,7 +43,7 @@ fn test_preempt_test() {
         ids.push(id)
     }
     ids.sort()
-    for (var i = 0; i < ids.length; i++) {
+    for (var i = 0; i < len(ids); i++) {
         print("协程 " + string(ids[i]) + " 完成")
     }
     assert(received == WORKER_COUNT, "scheduling test failed: only " + string(received) + " coroutines completed")

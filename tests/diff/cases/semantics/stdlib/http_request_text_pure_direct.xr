@@ -27,8 +27,8 @@ var customHost = requestText("GET", "/", { "Host": "override.test" })
 line("custom-host", customHost)
 
 var customEncoding = requestText("GET", "/", { "Accept-Encoding": "identity" }, "", "example.com")!
-print(customEncoding.includes("Accept-Encoding: identity"))
-print(customEncoding.includes("Accept-Encoding: gzip, deflate"))
+print(customEncoding.contains("Accept-Encoding: identity"))
+print(customEncoding.contains("Accept-Encoding: gzip, deflate"))
 
 var emptyHeaders: Json = {}
 var stripped = requestText(
@@ -43,9 +43,9 @@ var stripped = requestText(
     "api.test",
     true
 )
-print(stripped!.includes("Authorization"))
-print(stripped!.includes("Proxy-Authorization"))
-print(stripped!.includes("Accept: application/json"))
+print(stripped!.contains("Authorization"))
+print(stripped!.contains("Proxy-Authorization"))
+print(stripped!.contains("Accept: application/json"))
 
 print(requestText("GET", "/bad path", emptyHeaders, "", "example.com") == null)
 print(requestText("GET", "/", { "X-Bad": "a\r\nInjected: y" }, "", "example.com") == null)

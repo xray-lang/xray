@@ -10,8 +10,8 @@ print(castU32)
 print(assignedU32)
 
 var neg = -1
-var castU8 = neg as uint8
-var assignedU8: uint8 = neg
+var castU8 = neg as byte
+var assignedU8: byte = neg
 print(castU8)
 print(assignedU8)
 

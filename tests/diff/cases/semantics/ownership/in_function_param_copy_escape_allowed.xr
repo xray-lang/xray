@@ -10,5 +10,5 @@ var values: Array<int> = [1, 2, 3, 4]
 var out: Array<Array<int>> = []
 stash(values, out)
 values.push(5)
-print(out[0].length)
-print(values.length)
+print(len(out[0]))
+print(len(values))

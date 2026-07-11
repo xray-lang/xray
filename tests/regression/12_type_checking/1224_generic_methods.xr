@@ -54,7 +54,7 @@ fn test_generic_methods() {
     c.add(42)
     c.add(100)
     c.add(7)
-    assert_eq(c.items.length, 3)
+    assert_eq(len(c.items), 3)
     assert_eq(c.items[0], 42)
     assert_eq(c.items[1], 100)
     assert_eq(c.items[2], 7)

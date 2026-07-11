@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_array_with_capacity_reject() -> int {
     var xs = Array.withCapacity(16)
-    return xs.length
+    return len(xs)
 }
 
 print(xray_no_alloc_array_with_capacity_reject())

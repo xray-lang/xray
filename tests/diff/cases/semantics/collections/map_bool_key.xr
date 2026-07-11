@@ -5,8 +5,8 @@
 // narrowing) must be byte-identical across backends.
 
 fn dump_int(m: Map<bool, int>) {
-    print("size=" + m.size.toString())
-    print("has true=" + m.has(true).toString() + " has false=" + m.has(false).toString())
+    print("size=" + len(m).toString())
+    print("has true=" + m.containsKey(true).toString() + " has false=" + m.containsKey(false).toString())
     for (k, v in m) { print("pair " + k.toString() + "=" + v.toString()) }
     for (k in m.keys()) { print("key " + k.toString()) }
     for (v in m.values()) { print("val " + v.toString()) }
@@ -37,13 +37,13 @@ dump_int(b)
 print("-- delete to empty --")
 b.delete(true)
 b.delete(false)
-print("size=" + b.size.toString() + " has true=" + b.has(true).toString())
+print("size=" + len(b).toString() + " has true=" + b.containsKey(true).toString())
 
 print("-- float32 narrowing --")
 var c: Map<bool, float32> = #{}
 c.set(true, 1.5)
 c.set(false, 2.25)
-print("csize=" + c.size.toString())
+print("csize=" + len(c).toString())
 print("cget true=" + c.get(true)!.toString() + " cget false=" + c.get(false)!.toString())
 for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
 
@@ -56,12 +56,12 @@ class BoolIntMapBag {
     fill() -> int {
         this.values.set(true, 21)
         this.values.set(false, 34)
-        return this.values.size
+        return len(this.values)
     }
     probe() -> int {
         var sum = 0
-        if (this.values.has(true)) { sum = sum + this.values.get(true) }
-        if (this.values.has(false)) { sum = sum + this.values.get(false) }
+        if (this.values.containsKey(true)) { sum = sum + this.values.get(true) }
+        if (this.values.containsKey(false)) { sum = sum + this.values.get(false) }
         return sum
     }
 }

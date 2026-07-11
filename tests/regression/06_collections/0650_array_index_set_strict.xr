@@ -22,15 +22,15 @@ fn test_index_set_strict() {
     a[2] = 30
     assert_eq(a[0], 10)
     assert_eq(a[2], 30)
-    assert_eq(a.length, 3)
+    assert_eq(len(a), 3)
 
     // Assignment at exactly length is out of bounds (no append).
     assert_eq(set_at(a, 3, 9), 430)
-    assert_eq(a.length, 3)
+    assert_eq(len(a), 3)
 
     // Beyond length is out of bounds (no sparse growth).
     assert_eq(set_at(a, 10, 9), 430)
-    assert_eq(a.length, 3)
+    assert_eq(len(a), 3)
 
     // Negative index does not wrap from the end.
     assert_eq(set_at(a, -1, 9), 430)

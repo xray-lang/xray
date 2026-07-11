@@ -1,3 +1,3 @@
-var bytes = Bytes(4)
-var span: ByteSpan = bytes[:]
-var view: ByteView = span[0:2]
+var bytes = Array<byte>(4)
+var span: Slice<byte> = bytes[:]
+var view: Slice<byte> = span[0:2]

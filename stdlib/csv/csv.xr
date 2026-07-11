@@ -83,31 +83,31 @@ class CsvResult {
 
 fn _jsonString(options: Json, key: string, fallback: string) -> string {
     var v = Json.get(options, key, fallback)
-    if (typename(v) == "string") { return v }
+    if (typeName(v) == "string") { return v }
     return fallback
 }
 
 fn _jsonChar(options: Json, key: string, fallback: string) -> string {
     var s = _jsonString(options, key, fallback)
-    if (s.length == 0) { return fallback }
+    if (len(s) == 0) { return fallback }
     return s.charAt(0)
 }
 
 fn _jsonBool(options: Json, key: string, fallback: bool) -> bool {
     var v = Json.get(options, key, fallback)
-    if (typename(v) == "bool") { return v }
+    if (typeName(v) == "bool") { return v }
     return fallback
 }
 
 fn _jsonInt(options: Json, key: string, fallback: int) -> int {
     var v = Json.get(options, key, fallback)
-    if (typename(v) == "int") { return v }
+    if (typeName(v) == "int") { return v }
     return fallback
 }
 
 fn _config(optionsValue: unknown) -> CsvConfig {
     var options = Json.encode(optionsValue)
-    if (typename(options) != "Json") {
+    if (typeName(options) != "Json") {
         var emptyOptions: Json = {}
         options = emptyOptions
     }
@@ -126,17 +126,17 @@ fn _config(optionsValue: unknown) -> CsvConfig {
     cfg.relaxQuotes = _jsonBool(options, "relaxQuotes", false)
     cfg.relaxColumns = _jsonBool(options, "relaxColumns", false)
     cfg.linebreak = _jsonString(options, "linebreak", "\n")
-    if (cfg.linebreak.length == 0) { cfg.linebreak = "\n" }
+    if (len(cfg.linebreak) == 0) { cfg.linebreak = "\n" }
 
     var cols = Json.get(options, "columns", null)
-    if (typename(cols) == "Array") {
+    if (typeName(cols) == "Array") {
         cfg.columns = cols
         cfg.hasColumns = true
     }
 
-    if (Json.has(options, "nullStrings")) {
+    if (Json.containsKey(options, "nullStrings")) {
         var ns = Json.get(options, "nullStrings", [])
-        if (typename(ns) == "Array") {
+        if (typeName(ns) == "Array") {
             cfg.nullStrings = ns
             cfg.hasNullStrings = true
         }
@@ -161,25 +161,25 @@ fn _isDigitCode(c: int) -> bool {
 }
 
 fn _numberKind(s: string) -> int {
-    if (s.length == 0) { return 0 }
+    if (len(s) == 0) { return 0 }
     var i = 0
     if (s.charAt(i) == "+" || s.charAt(i) == "-") {
         i = i + 1
-        if (i >= s.length) { return 0 }
+        if (i >= len(s)) { return 0 }
     }
 
     var wholeDigits = 0
-    while (i < s.length && _isDigitCode(s.charAt(i).ord()!)) {
+    while (i < len(s) && _isDigitCode(s.charAt(i).ord()!)) {
         wholeDigits = wholeDigits + 1
         i = i + 1
     }
 
     var isFloat = false
     var fracDigits = 0
-    if (i < s.length && s.charAt(i) == ".") {
+    if (i < len(s) && s.charAt(i) == ".") {
         isFloat = true
         i = i + 1
-        while (i < s.length && _isDigitCode(s.charAt(i).ord()!)) {
+        while (i < len(s) && _isDigitCode(s.charAt(i).ord()!)) {
             fracDigits = fracDigits + 1
             i = i + 1
         }
@@ -188,21 +188,21 @@ fn _numberKind(s: string) -> int {
 
     if (wholeDigits == 0 && fracDigits == 0) { return 0 }
 
-    if (i < s.length && (s.charAt(i) == "e" || s.charAt(i) == "E")) {
+    if (i < len(s) && (s.charAt(i) == "e" || s.charAt(i) == "E")) {
         isFloat = true
         i = i + 1
-        if (i < s.length && (s.charAt(i) == "+" || s.charAt(i) == "-")) {
+        if (i < len(s) && (s.charAt(i) == "+" || s.charAt(i) == "-")) {
             i = i + 1
         }
         var expDigits = 0
-        while (i < s.length && _isDigitCode(s.charAt(i).ord()!)) {
+        while (i < len(s) && _isDigitCode(s.charAt(i).ord()!)) {
             expDigits = expDigits + 1
             i = i + 1
         }
         if (expDigits == 0) { return 0 }
     }
 
-    if (i != s.length) { return 0 }
+    if (i != len(s)) { return 0 }
     if (isFloat) { return 2 }
     return 1
 }
@@ -210,12 +210,12 @@ fn _numberKind(s: string) -> int {
 fn _matchesConfiguredNull(field: string, cfg: CsvConfig) -> bool {
     if (cfg.hasNullStrings) {
         for (v in cfg.nullStrings) {
-            if (typename(v) == "string" && field == string(v)) { return true }
+            if (typeName(v) == "string" && field == string(v)) { return true }
         }
         return false
     }
     var lower = field.toLowerCase()
-    return field.length == 0 || lower == "null"
+    return len(field) == 0 || lower == "null"
 }
 
 fn _convertValue(field: string, cfg: CsvConfig) -> Json {
@@ -247,20 +247,20 @@ fn _finishField(result: CsvResult, cfg: CsvConfig, fieldBuilder: StringBuilder) 
 }
 
 fn _startsWith(s: string, prefix: string) -> bool {
-    if (prefix.length == 0) { return false }
-    if (s.length < prefix.length) { return false }
-    return s.slice(0, prefix.length) == prefix
+    if (len(prefix) == 0) { return false }
+    if (len(s) < len(prefix)) { return false }
+    return s.slice(0, len(prefix)) == prefix
 }
 
 fn _isSkippedEmptyRow(row: Json) -> bool {
-    if (row.length == 0) { return true }
-    if (row.length != 1) { return false }
+    if (len(row) == 0) { return true }
+    if (len(row) != 1) { return false }
     var first = row[0]
-    return typename(first) == "string" && string(first).length == 0
+    return typeName(first) == "string" && len(string(first)) == 0
 }
 
 fn _finishRow(result: CsvResult, cfg: CsvConfig, header: Json, mapRows: bool) -> bool {
-    var colCount = result.currentRow.length
+    var colCount = len(result.currentRow)
 
     if (cfg.skipEmptyLines && _isSkippedEmptyRow(result.currentRow)) {
         result.currentRow = []
@@ -268,9 +268,9 @@ fn _finishRow(result: CsvResult, cfg: CsvConfig, header: Json, mapRows: bool) ->
         return false
     }
 
-    if (cfg.comments.length > 0 && colCount > 0) {
+    if (len(cfg.comments) > 0 && colCount > 0) {
         var first = result.currentRow[0]
-        if (typename(first) == "string" && _startsWith(string(first), cfg.comments)) {
+        if (typeName(first) == "string" && _startsWith(string(first), cfg.comments)) {
             result.currentRow = []
             result.currentColNum = 0
             return false
@@ -295,7 +295,7 @@ fn _finishRow(result: CsvResult, cfg: CsvConfig, header: Json, mapRows: bool) ->
     if (mapRows) {
         var obj: Json = {}
         var n = colCount
-        if (header.length < n) { n = header.length }
+        if (len(header) < n) { n = len(header) }
         for (var i = 0; i < n; i++) {
             obj[string(header[i])] = result.currentRow[i]
         }
@@ -321,8 +321,8 @@ fn _consumeHeader(result: CsvResult) -> Json {
     result.currentRow = []
     result.currentColNum = 0
     result.currentRowNum = result.currentRowNum + 1
-    result.expectedColumns = header.length
-    result.columns = header.length
+    result.expectedColumns = len(header)
+    result.columns = len(header)
     return header
 }
 
@@ -331,7 +331,7 @@ fn _isNewline(c: string) -> bool {
 }
 
 fn _skipCRLF(data: string, pos: int, result: CsvResult) -> int {
-    if (pos + 1 < data.length && data.charAt(pos) == "\r" && data.charAt(pos + 1) == "\n") {
+    if (pos + 1 < len(data) && data.charAt(pos) == "\r" && data.charAt(pos + 1) == "\n") {
         result.linebreak = "\r\n"
         return pos + 1
     }
@@ -347,9 +347,9 @@ fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
     var state = STATE_FIELD_START
 
     var pos = 0
-    if (data.length > 0 && data.charAt(0) == "\u{FEFF}") { pos = 1 }
+    if (len(data) > 0 && data.charAt(0) == "\u{FEFF}") { pos = 1 }
 
-    while (pos < data.length) {
+    while (pos < len(data)) {
         var c = data.charAt(pos)
 
         if (state == STATE_FIELD_START) {
@@ -388,7 +388,7 @@ fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
                 field.append(c)
             }
         } else if (state == STATE_QUOTED) {
-            if (c == cfg.escapeChar && pos + 1 < data.length &&
+            if (c == cfg.escapeChar && pos + 1 < len(data) &&
                 data.charAt(pos + 1) == cfg.quoteChar) {
                 field.append(cfg.quoteChar)
                 pos = pos + 1
@@ -436,11 +436,11 @@ fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
         return result
     }
 
-    if (field.length > 0 || result.currentColNum > 0 || result.currentRow.length > 0) {
+    if (len(field) > 0 || result.currentColNum > 0 || len(result.currentRow) > 0) {
         _finishField(result, cfg, field)
     }
 
-    if (result.currentRow.length > 0) {
+    if (len(result.currentRow) > 0) {
         if (cfg.header && !hasHeader && result.currentRowNum == 0) {
             header = _consumeHeader(result)
             hasHeader = true
@@ -456,7 +456,7 @@ fn _detectDelimiter(data: string) -> string {
     var candidates: Array<string> = [",", "\t", ";", "|"]
     var counts: Array<int> = [0, 0, 0, 0]
     var inQuote = false
-    var limit = data.length
+    var limit = len(data)
     if (limit > 4096) { limit = 4096 }
 
     for (var i = 0; i < limit; i++) {
@@ -466,14 +466,14 @@ fn _detectDelimiter(data: string) -> string {
             continue
         }
         if (inQuote || _isNewline(c)) { continue }
-        for (var j = 0; j < candidates.length; j++) {
+        for (var j = 0; j < len(candidates); j++) {
             if (c == candidates[j]) { counts[j] = counts[j] + 1 }
         }
     }
 
     var best = ","
     var bestCount = 0
-    for (var j = 0; j < candidates.length; j++) {
+    for (var j = 0; j < len(candidates); j++) {
         if (counts[j] > bestCount) {
             bestCount = counts[j]
             best = candidates[j]
@@ -521,12 +521,12 @@ fn parseAuto(data: string, options: unknown = null) -> Array<Json> {
 }
 
 fn _needsQuoting(s: string, cfg: CsvConfig) -> bool {
-    if (s.length == 0) { return false }
+    if (len(s) == 0) { return false }
     if (s.charAt(0) == " " || s.charAt(0) == "\t" ||
-        s.charAt(s.length - 1) == " " || s.charAt(s.length - 1) == "\t") {
+        s.charAt(len(s) - 1) == " " || s.charAt(len(s) - 1) == "\t") {
         return true
     }
-    for (var i = 0; i < s.length; i++) {
+    for (var i = 0; i < len(s); i++) {
         var c = s.charAt(i)
         if (c == cfg.delimiter || c == cfg.quoteChar || c == cfg.escapeChar || _isNewline(c)) {
             return true
@@ -542,7 +542,7 @@ fn _writeField(out: StringBuilder, value: string, cfg: CsvConfig) {
     }
     out.append(cfg.quoteChar)
     var prefixMode = cfg.escapeChar != cfg.quoteChar
-    for (var i = 0; i < value.length; i++) {
+    for (var i = 0; i < len(value); i++) {
         var c = value.charAt(i)
         if (c == cfg.quoteChar || (prefixMode && c == cfg.escapeChar)) {
             if (prefixMode) {
@@ -560,7 +560,7 @@ fn _writeField(out: StringBuilder, value: string, cfg: CsvConfig) {
 }
 
 fn _fieldText(value: Json) -> string {
-    var kind = typename(value)
+    var kind = typeName(value)
     if (value == null) { return "" }
     if (kind == "string") { return string(value) }
     if (kind == "int" || kind == "float" || kind == "bool") { return string(value) }
@@ -569,8 +569,8 @@ fn _fieldText(value: Json) -> string {
 
 fn _writeRow(out: StringBuilder, rowValue: unknown, cfg: CsvConfig) {
     var row = Json.encode(rowValue)
-    if (typename(row) != "Array") { return }
-    for (var i = 0; i < row.length; i++) {
+    if (typeName(row) != "Array") { return }
+    for (var i = 0; i < len(row); i++) {
         if (i > 0) { out.append(cfg.delimiter) }
         _writeField(out, _fieldText(row[i]), cfg)
     }
@@ -580,27 +580,27 @@ fn _writeRow(out: StringBuilder, rowValue: unknown, cfg: CsvConfig) {
 // stringify - Convert row arrays or Json object rows to CSV text.
 fn stringify(data: unknown, options: unknown = null) -> string {
     var rows = Json.encode(data)
-    if (typename(rows) != "Array") { return "" }
+    if (typeName(rows) != "Array") { return "" }
     var cfg = _config(options)
     var out = StringBuilder()
 
     var headers: Array<string> = []
     var isObjectRows = false
-    if (rows.length > 0 && typename(rows[0]) == "Json") {
+    if (len(rows) > 0 && typeName(rows[0]) == "Json") {
         isObjectRows = true
         headers = rows[0].keys()
         if (cfg.header) { _writeRow(out, headers, cfg) }
     }
 
-    for (var i = 0; i < rows.length; i++) {
+    for (var i = 0; i < len(rows); i++) {
         var row = rows[i]
-        if (isObjectRows && typename(row) == "Json") {
+        if (isObjectRows && typeName(row) == "Json") {
             var values: Json = []
             for (key in headers) {
                 values.push(Json.get(row, key, null))
             }
             _writeRow(out, values, cfg)
-        } else if (typename(row) == "Array") {
+        } else if (typeName(row) == "Array") {
             _writeRow(out, row, cfg)
         }
     }

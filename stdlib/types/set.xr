@@ -2,10 +2,8 @@
 
 @native
 class Set<T: Hashable> {
-    length: int
-    size: int
     add(value: T)
-    has(value: T) -> bool
+    contains(value: T) -> bool
     delete(value: T) -> bool
     clear()
     values() -> Array<T>

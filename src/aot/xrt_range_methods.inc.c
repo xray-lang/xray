@@ -2,10 +2,8 @@
 
 static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
     xrt_range_t *r = (xrt_range_t *) recv.ptr;
-    if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
+    if (sym == XRT_SYM_COUNT)
         return XR_FROM_INT(xrt_range_length_ptr(r));
-    if (sym == XRT_SYM_IS_EMPTY)
-        return XR_FROM_BOOL(xrt_range_length_ptr(r) == 0);
     if (sym == XRT_SYM_TOSTRING)
         return xrt_range_to_string(recv);
     if (sym == XRT_SYM_VALUES || sym == XRT_SYM_TO_ARRAY) {
@@ -27,7 +25,7 @@ static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
 }
 
 static inline XrValue xrt_range_method_1(XrValue recv, int sym, XrValue arg0) {
-    if ((sym == XRT_SYM_INCLUDES || sym == XRT_SYM_CONTAINS) && arg0.tag == XR_TAG_I64)
+    if (sym == XRT_SYM_CONTAINS && arg0.tag == XR_TAG_I64)
         return XR_FROM_BOOL(xrt_range_contains_ptr((xrt_range_t *) recv.ptr, arg0.i));
     return XR_NULL_VAL;
 }

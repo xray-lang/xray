@@ -240,7 +240,7 @@ TEST(vm_vararg_entry) {
     const char *src = "enum VmApiErr { CheckFailed }\n"
                       "fn sumAll(...nums) -> int {\n"
                       "  var total = 0\n"
-                      "  for (var i = 0; i < nums.length; i = i + 1) {\n"
+                      "  for (var i = 0; i < len(nums); i = i + 1) {\n"
                       "    total = total + nums[i]\n"
                       "  }\n"
                       "  return total\n"
