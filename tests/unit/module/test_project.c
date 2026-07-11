@@ -68,6 +68,10 @@ TEST(load_target_config) {
                        "linker_script = \"kernel.ld\"\n"
                        "objcopy = \"llvm-objcopy\"\n"
                        "objcopy_output = \"kernel.bin\"\n"
+                       "runtime_provider = \"kernel-executor-v1\"\n"
+                       "runtime_capabilities = [\"coroutine\", \"task\"]\n"
+                       "runtime_hooks = [\"task_alloc\", \"submit\", \"park_wake\", "
+                       "\"executor_pump\"]\n"
                        "cc_flags = [\"-ffunction-sections\", \"-fdata-sections\"]\n"
                        "ld_flags = [\"-Wl,--gc-sections\", \"-Wl,-Map,kernel.map\"]\n"
                        "objcopy_flags = [\"-O\", \"binary\"]\n");
@@ -87,6 +91,12 @@ TEST(load_target_config) {
     ASSERT_STR_EQ(cfg->linker_script, "kernel.ld");
     ASSERT_STR_EQ(cfg->objcopy, "llvm-objcopy");
     ASSERT_STR_EQ(cfg->objcopy_output, "kernel.bin");
+    ASSERT_STR_EQ(cfg->runtime_provider, "kernel-executor-v1");
+    ASSERT_EQ_INT(cfg->n_runtime_capabilities, 2);
+    ASSERT_STR_EQ(cfg->runtime_capabilities[0], "coroutine");
+    ASSERT_STR_EQ(cfg->runtime_capabilities[1], "task");
+    ASSERT_EQ_INT(cfg->n_runtime_hooks, 4);
+    ASSERT_STR_EQ(cfg->runtime_hooks[3], "executor_pump");
     ASSERT_EQ_INT(cfg->n_cc_flags, 2);
     ASSERT_STR_EQ(cfg->cc_flags[0], "-ffunction-sections");
     ASSERT_STR_EQ(cfg->cc_flags[1], "-fdata-sections");

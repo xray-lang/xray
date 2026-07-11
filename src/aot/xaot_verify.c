@@ -29,24 +29,16 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
 
 static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     XrEntryPlan expected;
+    XaotBundle root_view;
     if (!bundle || !bundle->has_entry_plan)
         return set_error(errbuf, errbuf_len, "AOT bundle has no mandatory entry plan");
-    /* Library and plan-isolation bundles intentionally have no executable
-     * root.  Their attached plan must stay the exact zero-requirement plan;
-     * assigning a module later in a unit harness does not turn the artifact
-     * into an executable product. */
-    if (bundle->entry_plan.entry_func_id == XG_NO_ID) {
-        if (bundle->entry_plan.reachable_body_count != 0 ||
-            bundle->entry_plan.reachable_effect_bits != 0 ||
-            bundle->entry_plan.required_capability_bits != 0 ||
-            bundle->entry_plan.runtime_component_bits != 0 ||
-            bundle->entry_plan.root_representation != XR_ROOT_ELIDED ||
-            bundle->entry_plan.scheduler_mode != XR_SCHED_NONE ||
-            bundle->entry_plan.unproven_reason != XR_ENTRY_PROVEN)
-            return set_error(errbuf, errbuf_len, "AOT rootless entry plan is stale");
-        return true;
+    root_view = *bundle;
+    if ((bundle->entry_plan.evidence & XR_ENTRY_EV_ARTIFACT_ROOT_SET) == 0) {
+        root_view.modules = NULL;
+        root_view.nmodules = 0;
+        root_view.entry_module = 0;
     }
-    if (!xaot_entry_plan_derive(bundle, bundle->global_evidence_plan.evidence,
+    if (!xaot_entry_plan_derive(&root_view, bundle->global_evidence_plan.evidence,
                                 bundle->global_evidence_plan.profile, &expected))
         return set_error(errbuf, errbuf_len, "AOT entry plan could not be re-derived");
     if (expected.entry_func_id != bundle->entry_plan.entry_func_id ||
@@ -2932,10 +2924,13 @@ static uint32_t verify_metadata_profile_action(uint32_t profile, uint32_t metada
     return XAOT_CAPABILITY_ACTION_LINK;
 }
 
-static uint32_t verify_capability_profile_action(uint32_t profile, uint32_t capability) {
+static uint32_t verify_capability_profile_action(const XaotBundle *bundle, uint32_t capability) {
+    uint32_t profile = bundle->global_evidence_plan.profile;
     if (capability == XG_CAP_INSTANCEOF)
         return XAOT_CAPABILITY_ACTION_ALLOW;
     if (profile == XG_BUILD_FREESTANDING) {
+        if ((bundle->target_provider.provided_capability_bits & capability) != 0)
+            return XAOT_CAPABILITY_ACTION_LINK;
         switch (capability) {
             case XG_CAP_NATIVE:
             case XG_CAP_EXTERN:
@@ -5971,7 +5966,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         uint32_t transfer_count;
         uint32_t expected_evidence = 0;
         const XaotCapabilityPlan *plan;
-        if (bundle->entry_plan.entry_func_id != XG_NO_ID) {
+        if ((bundle->entry_plan.evidence & XR_ENTRY_EV_ARTIFACT_ROOT_SET) != 0) {
             body_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
         } else {
             for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
@@ -6001,8 +5996,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (plan->evidence != expected_evidence ||
             plan->unproven_reason != XAOT_CAPABILITY_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT capability plan lacks evidence");
-        if (plan->profile_action !=
-            verify_capability_profile_action(bundle->global_evidence_plan.profile, cap))
+        if (plan->profile_action != verify_capability_profile_action(bundle, cap))
             return set_error(errbuf, errbuf_len,
                              "AOT capability profile action does not re-derive");
     }

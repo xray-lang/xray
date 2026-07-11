@@ -2620,6 +2620,121 @@ static bool xg_interface_callsite_compose_target_set(const XgGlobalEvidence *evi
     return target_count > 0;
 }
 
+static bool xg_body_reachability_mark_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
+                                          uint8_t *reachable, uint32_t reachable_count);
+
+static bool xg_body_reachability_mark_method(const XgGlobalEvidence *evidence, XgMethodId method_id,
+                                             uint8_t *reachable, uint32_t reachable_count) {
+    uint32_t target_index = 0;
+    return xg_global_evidence_find_body_index_by_method(evidence, method_id, &target_index) &&
+           xg_body_reachability_mark_rec(evidence, target_index, reachable, reachable_count);
+}
+
+static bool xg_body_reachability_mark_call(const XgGlobalEvidence *evidence,
+                                           const XgCallsiteSummary *call, uint8_t *reachable,
+                                           uint32_t reachable_count) {
+    uint32_t target_index = 0;
+    if (!call)
+        return false;
+    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN)
+        return true;
+    if (call->kind == XG_CALL_DIRECT_FUNC ||
+        (call->kind == XG_CALL_CLOSURE && call->static_target_func_id != XG_NO_ID)) {
+        return xg_global_evidence_find_body_index_by_func(evidence, call->static_target_func_id,
+                                                          &target_index) &&
+               xg_body_reachability_mark_rec(evidence, target_index, reachable, reachable_count);
+    }
+    if (call->kind == XG_CALL_CLOSURE)
+        /* Closure and builtin calls carry their local effect/capability
+         * contract on the owner body.  Concrete direct function targets are
+         * recorded above; no declaration-tree fallback is permitted here. */
+        return true;
+    if (xg_method_callsite_is_direct_dispatch(evidence, call))
+        return xg_body_reachability_mark_method(evidence, call->method_id, reachable,
+                                                reachable_count);
+    if (call->kind == XG_CALL_INTERFACE) {
+        XgMethodId direct = XG_NO_ID;
+        uint32_t target_count = 0;
+        if (xg_interface_callsite_direct_target_method(evidence, call, &direct))
+            return xg_body_reachability_mark_method(evidence, direct, reachable, reachable_count);
+        for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
+            const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
+            const XgMethodSummary *target;
+            if (!xg_global_evidence_interface_impl_matches(evidence, impl->interface_id,
+                                                           call->receiver_static_interface_id) ||
+                xg_global_evidence_effective_interface_implementor_seen(
+                    evidence, call->receiver_static_interface_id, impl->implementor_class_id, i))
+                continue;
+            target = xg_global_evidence_find_method_by_signature_in_hierarchy(
+                evidence, impl->implementor_class_id, call->method_name_id,
+                call->method_signature_key);
+            if (!target)
+                return false;
+            if ((target->flags & XG_METHOD_NATIVE) == 0 &&
+                !xg_body_reachability_mark_method(evidence, target->method_id, reachable,
+                                                  reachable_count))
+                return false;
+            target_count++;
+        }
+        return target_count > 0;
+    }
+    if (call->kind == XG_CALL_METHOD) {
+        uint32_t target_count = 0;
+        for (uint32_t i = 0; i < evidence->nclasses; i++) {
+            const XgClassSummary *candidate = &evidence->classes[i];
+            const XgMethodSummary *target;
+            if (!xg_class_summary_is_runtime_class(candidate) ||
+                !xg_global_evidence_class_is_descendant_or_self(evidence, candidate->class_id,
+                                                                call->receiver_static_class_id))
+                continue;
+            target = xg_global_evidence_find_method_by_signature_in_hierarchy(
+                evidence, candidate->class_id, call->method_name_id, call->method_signature_key);
+            if (!target)
+                return false;
+            if ((target->flags & XG_METHOD_NATIVE) == 0 &&
+                !xg_body_reachability_mark_method(evidence, target->method_id, reachable,
+                                                  reachable_count))
+                return false;
+            target_count++;
+        }
+        return target_count > 0;
+    }
+    return false;
+}
+
+static bool xg_body_reachability_mark_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
+                                          uint8_t *reachable, uint32_t reachable_count) {
+    const XgBodySummary *body;
+    if (!evidence || !reachable || body_index >= evidence->nbodies || body_index >= reachable_count)
+        return false;
+    if (reachable[body_index])
+        return true;
+    reachable[body_index] = 1;
+    body = &evidence->bodies[body_index];
+    if ((body->effect_bits & XG_BODY_MAY_CALL) == 0)
+        return true;
+    if (body->callsite_count == 0)
+        return false;
+    for (uint32_t i = 0; i < body->callsite_count; i++) {
+        const XgCallsiteSummary *call =
+            xg_global_evidence_find_callsite(evidence, (XgCallsiteId) (body->callsite_start + i));
+        if (!call || call->owner_func_id != body->func_id || call->body_ordinal != i ||
+            !xg_body_reachability_mark_call(evidence, call, reachable, reachable_count))
+            return false;
+    }
+    return true;
+}
+
+XR_FUNC bool xg_body_reachability_mark_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                          XgFuncId root_func_id, uint8_t *reachable,
+                                                          uint32_t reachable_count) {
+    uint32_t root_index = 0;
+    if (!evidence || !reachable || reachable_count < evidence->nbodies ||
+        !xg_global_evidence_find_body_index_by_func(evidence, root_func_id, &root_index))
+        return false;
+    return xg_body_reachability_mark_rec(evidence, root_index, reachable, reachable_count);
+}
+
 static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
                                         uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits) {
     const XgBodySummary *body;

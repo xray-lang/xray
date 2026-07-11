@@ -1,0 +1,9 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains=root=elided scheduler=none hooks=0x0
+contains="runtime_caps": []
+contains="runtime_objects": []
+c_contains=#include "xrt_core_freestanding.h"
+c_not_contains=xr_aot_spawn
+c_not_contains=_aot_desc
+not_contains=pthread

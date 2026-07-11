@@ -449,6 +449,62 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     passed++;
 }
 
+static bool manifest_has_define(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_defines; i++) {
+        if (manifest->defines[i] && strcmp(manifest->defines[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void test_driver_validates_freestanding_runtime_provider(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    XaotTargetCapabilityProvider provider = {
+        .abi_version = XAOT_PROVIDER_ABI_VERSION,
+        .provided_capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK,
+        .hook_bits = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
+                     XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_EXECUTOR_PUMP,
+        .target_metadata_hash = 0x197195,
+    };
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-provider-%ld.xr", (long) getpid());
+    ASSERT_TRUE(write_file_text(source_path, "fn worker() -> int {\n"
+                                             "    return 1\n"
+                                             "}\n"
+                                             "await go worker()\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    provider.hook_bits &= ~XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    options.capability_provider = &provider;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    provider.hook_bits |= XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.link_manifest.n_runtime_objects == 0);
+    ASSERT_TRUE(result.link_manifest.n_runtime_caps == 0);
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_TARGET_RUNTIME_PROVIDER=1"));
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_PROVIDER_ABI=1"));
+    xaot_build_result_free(&result);
+
+    xaot_target_free(&target);
+    unlink(source_path);
+    passed++;
+}
+
 static void test_driver_auto_discovers_package_summary_payloads(void) {
     char root[PATH_MAX];
     char home_dir[PATH_MAX];
@@ -629,6 +685,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
 int main(void) {
     test_driver_consumes_imported_summary_payload_set();
     test_driver_rejects_invalid_imported_summary_payload_set();
+    test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();
     test_driver_auto_discovers_package_dependency_summary_payload();

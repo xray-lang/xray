@@ -145,8 +145,6 @@ XR_FUNC XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
-XR_FUNC void check_closure_capture(XaInferContext *ctx, AstNode *node, int line);
-XR_FUNC void check_coro_capture(XaInferContext *ctx, AstNode *node, int line);
 XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
 XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
 XR_FUNC bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node);

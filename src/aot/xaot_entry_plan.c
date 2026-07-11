@@ -20,14 +20,26 @@ static uint32_t xaot_freestanding_core_capabilities(void) {
     return UINT32_MAX & ~hosted_only;
 }
 
-static int body_index_for_func(const XgGlobalEvidence *evidence, XgFuncId func_id) {
-    if (!evidence || func_id == XG_NO_ID)
-        return -1;
-    for (uint32_t i = 0; i < evidence->nbodies; i++) {
-        if (evidence->bodies[i].func_id == func_id)
-            return (int) i;
-    }
-    return -1;
+uint32_t xaot_entry_plan_required_provider_hooks(const XrEntryPlan *plan) {
+    uint32_t hooks = 0;
+    uint32_t caps;
+    if (!plan)
+        return 0;
+    caps = plan->required_capability_bits;
+    if ((caps & (XR_CAP_COROUTINE | XR_CAP_TASK | XR_CAP_CHANNEL | XR_CAP_SCOPE | XR_CAP_GENERATOR |
+                 XR_CAP_PARALLEL | XR_CAP_SYS_THREAD)) != 0)
+        hooks |= XAOT_PROVIDER_HOOK_TASK_ALLOC;
+    if ((plan->reachable_effect_bits & XR_EFFECT_MAY_SPAWN) != 0 ||
+        (caps & (XR_CAP_PARALLEL | XR_CAP_SYS_THREAD)) != 0)
+        hooks |= XAOT_PROVIDER_HOOK_SUBMIT;
+    if (plan->root_representation != XR_ROOT_ELIDED ||
+        (caps & (XR_CAP_TASK | XR_CAP_CHANNEL | XR_CAP_SCOPE | XR_CAP_TIMER)) != 0)
+        hooks |= XAOT_PROVIDER_HOOK_PARK_WAKE;
+    if ((caps & XR_CAP_TIMER) != 0)
+        hooks |= XAOT_PROVIDER_HOOK_TIMER;
+    if (plan->root_representation != XR_ROOT_ELIDED)
+        hooks |= XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    return hooks;
 }
 
 static XgFuncId entry_func_id(const XaotBundle *bundle, const XgGlobalEvidence *evidence) {
@@ -51,21 +63,10 @@ static XgFuncId entry_func_id(const XaotBundle *bundle, const XgGlobalEvidence *
     return fallback;
 }
 
-static void enqueue_target(const XgGlobalEvidence *evidence, XgFuncId func_id, uint8_t *seen,
-                           uint32_t *queue, uint32_t *tail) {
-    int index = body_index_for_func(evidence, func_id);
-    if (index < 0 || seen[index])
-        return;
-    seen[index] = 1;
-    queue[(*tail)++] = (uint32_t) index;
-}
-
 bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *evidence,
                             uint32_t profile, XrEntryPlan *out) {
-    uint8_t *seen;
-    uint32_t *queue;
-    uint32_t head = 0;
-    uint32_t tail = 0;
+    uint8_t *reachable;
+    bool has_root = false;
     uint32_t provided;
     XgFuncId root;
     if (!bundle || !evidence || !out)
@@ -74,37 +75,57 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     root = entry_func_id(bundle, evidence);
     out->entry_func_id = root;
     if (root == XG_NO_ID) {
+        for (uint32_t di = 0; di < evidence->ndecls && !has_root; di++)
+            has_root = (evidence->decls[di].flags & XG_DECL_C_EXPORT) != 0;
+    } else {
+        has_root = true;
+    }
+    if (!has_root) {
         /* Plan-only unit bundles and libraries may intentionally have no
          * executable root.  Their exact requirement set is empty and the
          * physical root is therefore proven elided. */
         out->provided_capability_bits =
             profile == XG_BUILD_FREESTANDING ? xaot_freestanding_core_capabilities() : UINT32_MAX;
         out->evidence = XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XR_ENTRY_EV_TARGET_PROVIDER;
+        if (bundle->nmodules != 0)
+            out->evidence |= XR_ENTRY_EV_ARTIFACT_ROOT_SET;
         return true;
     }
-    seen = (uint8_t *) xr_calloc(evidence->nbodies ? evidence->nbodies : 1, sizeof(uint8_t));
-    queue = (uint32_t *) xr_calloc(evidence->nbodies ? evidence->nbodies : 1, sizeof(uint32_t));
-    if (!seen || !queue) {
-        xr_free(seen);
-        xr_free(queue);
+    reachable = (uint8_t *) xr_calloc(evidence->nbodies ? evidence->nbodies : 1, sizeof(uint8_t));
+    if (!reachable) {
         return false;
     }
-    enqueue_target(evidence, root, seen, queue, &tail);
-    while (head < tail) {
-        const XgBodySummary *body = &evidence->bodies[queue[head++]];
+    if (root != XG_NO_ID && !xg_body_reachability_mark_closed_world_calls(evidence, root, reachable,
+                                                                          evidence->nbodies)) {
+        out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
+        xr_free(reachable);
+        return true;
+    }
+    for (uint32_t di = 0; di < evidence->ndecls; di++) {
+        const XgDeclSummary *decl = &evidence->decls[di];
+        if ((decl->flags & XG_DECL_C_EXPORT) == 0)
+            continue;
+        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+            if (evidence->bodies[bi].owner_decl_id != decl->decl_id)
+                continue;
+            if (!xg_body_reachability_mark_closed_world_calls(
+                    evidence, evidence->bodies[bi].func_id, reachable, evidence->nbodies)) {
+                out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
+                xr_free(reachable);
+                return true;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < evidence->nbodies; i++) {
+        const XgBodySummary *body;
+        if (!reachable[i])
+            continue;
+        body = &evidence->bodies[i];
         out->reachable_body_count++;
         out->reachable_effect_bits |= body->effect_bits;
         out->required_capability_bits |= body->capability_bits;
-        for (uint32_t ci = 0; ci < body->callsite_count; ci++) {
-            uint32_t index = body->callsite_start + ci;
-            const XgCallsiteSummary *call =
-                index > 0 && index <= evidence->ncallsites ? &evidence->callsites[index - 1] : NULL;
-            if (call && call->kind == XG_CALL_DIRECT_FUNC)
-                enqueue_target(evidence, call->static_target_func_id, seen, queue, &tail);
-        }
     }
-    xr_free(seen);
-    xr_free(queue);
+    xr_free(reachable);
 
     out->runtime_component_bits = out->required_capability_bits;
     if ((out->reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
@@ -130,16 +151,22 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
             out->unproven_reason = XR_ENTRY_PROVIDER_ABI;
             return true;
         }
-        provided = bundle->target_provider.provided_capability_bits;
-        out->provider_hook_bits = bundle->target_provider.hook_bits;
+        provided = xaot_freestanding_core_capabilities() |
+                   bundle->target_provider.provided_capability_bits;
     } else {
         provided = xaot_freestanding_core_capabilities();
     }
     out->provided_capability_bits = provided;
     out->evidence = XR_ENTRY_EV_GLOBAL_BODY | XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY |
                     XR_ENTRY_EV_ROOT_EFFECT | XR_ENTRY_EV_TARGET_PROVIDER;
+    if (bundle->nmodules != 0)
+        out->evidence |= XR_ENTRY_EV_ARTIFACT_ROOT_SET;
     if ((out->required_capability_bits & ~provided) != 0)
         out->unproven_reason = XR_ENTRY_MISSING_CAPABILITY;
+    out->provider_hook_bits = xaot_entry_plan_required_provider_hooks(out);
+    if (out->unproven_reason == XR_ENTRY_PROVEN && profile == XG_BUILD_FREESTANDING &&
+        (out->provider_hook_bits & ~bundle->target_provider.hook_bits) != 0)
+        out->unproven_reason = XR_ENTRY_MISSING_PROVIDER_HOOK;
     return true;
 }
 
@@ -177,6 +204,10 @@ const char *xaot_entry_unproven_reason_name(uint8_t value) {
             return "provider_abi";
         case XR_ENTRY_MISSING_CAPABILITY:
             return "missing_capability";
+        case XR_ENTRY_MISSING_PROVIDER_HOOK:
+            return "missing_provider_hook";
+        case XR_ENTRY_OPEN_REACHABILITY:
+            return "open_reachability";
         case XR_ENTRY_MODULE_INIT_SUSPENDS:
             return "module_init_suspends";
     }

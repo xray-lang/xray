@@ -160,7 +160,18 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
     out->evidence =
         XAOT_ADDRESS_EV_POINTER_TYPE | XAOT_ADDRESS_EV_LIFETIME | XAOT_ADDRESS_EV_ESCAPE_SCAN;
     if (value->op == XI_STATIC_ADDR) {
-        storage = xaot_storage_plan_find(bundle, module, (uint32_t) value->aux_int);
+        const XiModule *storage_module = module;
+        uint32_t storage_slot = (uint32_t) value->aux_int;
+        if (value->aux_int >= 0 && value->aux_int < module->nslots && module->slot_imports) {
+            const XiImportRef *ref = module->slot_imports[value->aux_int];
+            if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
+                (uint32_t) ref->resolved_mod_index < bundle->nmodules &&
+                bundle->modules[ref->resolved_mod_index]) {
+                storage_module = bundle->modules[ref->resolved_mod_index];
+                storage_slot = (uint32_t) ref->resolved_shared_slot;
+            }
+        }
+        storage = xaot_storage_plan_find(bundle, storage_module, storage_slot);
         if (!storage)
             return false;
         out->provenance.storage_id = storage->decl_id;

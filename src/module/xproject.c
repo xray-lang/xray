@@ -93,8 +93,12 @@ static XrTargetConfig *load_target_config(const char *name, XrTomlValue *tbl) {
     cfg->linker_script = get_toml_str(tbl, "linker_script");
     cfg->objcopy = get_toml_str(tbl, "objcopy");
     cfg->objcopy_output = get_toml_str(tbl, "objcopy_output");
+    cfg->runtime_provider = get_toml_str(tbl, "runtime_provider");
     if (!cfg->name || !get_toml_str_array(tbl, "cc_flags", &cfg->cc_flags, &cfg->n_cc_flags) ||
         !get_toml_str_array(tbl, "ld_flags", &cfg->ld_flags, &cfg->n_ld_flags) ||
+        !get_toml_str_array(tbl, "runtime_capabilities", &cfg->runtime_capabilities,
+                            &cfg->n_runtime_capabilities) ||
+        !get_toml_str_array(tbl, "runtime_hooks", &cfg->runtime_hooks, &cfg->n_runtime_hooks) ||
         !get_toml_str_array(tbl, "objcopy_flags", &cfg->objcopy_flags, &cfg->n_objcopy_flags)) {
         free_target_config(cfg);
         return NULL;
@@ -243,6 +247,9 @@ static void free_target_config(XrTargetConfig *cfg) {
     xr_free(cfg->linker_script);
     xr_free(cfg->objcopy);
     xr_free(cfg->objcopy_output);
+    xr_free(cfg->runtime_provider);
+    free_string_list(cfg->runtime_capabilities, cfg->n_runtime_capabilities);
+    free_string_list(cfg->runtime_hooks, cfg->n_runtime_hooks);
     free_string_list(cfg->cc_flags, cfg->n_cc_flags);
     free_string_list(cfg->ld_flags, cfg->n_ld_flags);
     free_string_list(cfg->objcopy_flags, cfg->n_objcopy_flags);

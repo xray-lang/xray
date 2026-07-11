@@ -43,6 +43,11 @@ typedef struct XrTargetConfig {
     char *linker_script;
     char *objcopy;
     char *objcopy_output;
+    char *runtime_provider;
+    char **runtime_capabilities;
+    int n_runtime_capabilities;
+    char **runtime_hooks;
+    int n_runtime_hooks;
     char **cc_flags;
     int n_cc_flags;
     char **ld_flags;

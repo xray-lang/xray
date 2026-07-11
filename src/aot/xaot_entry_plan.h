@@ -24,6 +24,7 @@ enum {
     XAOT_PROVIDER_HOOK_PARK_WAKE = 1u << 2,
     XAOT_PROVIDER_HOOK_TIMER = 1u << 3,
     XAOT_PROVIDER_HOOK_EXECUTOR_PUMP = 1u << 4,
+    XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE = 1u << 5,
 };
 
 typedef struct XaotTargetCapabilityProvider {
@@ -36,6 +37,7 @@ typedef struct XaotTargetCapabilityProvider {
 XR_FUNC bool xaot_entry_plan_derive(const struct XaotBundle *bundle,
                                     const XgGlobalEvidence *evidence, uint32_t profile,
                                     XrEntryPlan *out);
+XR_FUNC uint32_t xaot_entry_plan_required_provider_hooks(const XrEntryPlan *plan);
 XR_FUNC const char *xaot_root_representation_name(uint8_t value);
 XR_FUNC const char *xaot_scheduler_mode_name(uint8_t value);
 XR_FUNC const char *xaot_entry_unproven_reason_name(uint8_t value);

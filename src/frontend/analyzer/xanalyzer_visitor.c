@@ -3572,8 +3572,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_CHANNEL_NEW:
-            xa_freestanding_report_unavailable(ctx, node, "Channel construction",
-                                               "channels require the hosted coroutine runtime");
             // Visit buffer size expression to resolve variable symbol_ids
             if (node->as.channel_new.buffer_size)
                 xa_visit_infer_expr(ctx, node->as.channel_new.buffer_size);
@@ -3730,8 +3728,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                          : xr_type_new_unknown(NULL);
             break;
         case AST_SCOPE_BLOCK:
-            xa_freestanding_report_unavailable(ctx, node, "scope block",
-                                               "structured concurrency is hosted-only");
             if (node->as.scope_block.body)
                 xa_visit_infer_stmt(ctx, node->as.scope_block.body);
             if (node->as.scope_block.scope_mode == 2) {
@@ -3742,8 +3738,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             }
             break;
         case AST_CANCELLED_EXPR:
-            xa_freestanding_report_unavailable(ctx, node, "cancelled() expression",
-                                               "task cancellation is hosted-only");
             result = xr_type_new_bool(NULL);
             break;
         default:
@@ -4945,14 +4939,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, node->as.defer_stmt.expr);
             break;
         case AST_SCOPE_BLOCK:
-            xa_freestanding_report_unavailable(ctx, node, "scope block",
-                                               "structured concurrency is hosted-only");
             if (node->as.scope_block.body)
                 xa_visit_infer_stmt(ctx, node->as.scope_block.body);
             break;
         case AST_SELECT_STMT: {
-            xa_freestanding_report_unavailable(ctx, node, "select statement",
-                                               "channels require the hosted coroutine runtime");
             SelectStmtNode *sel = &node->as.select_stmt;
             for (int i = 0; i < sel->case_count; i++) {
                 if (sel->cases[i])
@@ -5059,8 +5049,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_YIELD_STMT: {
-            xa_freestanding_report_unavailable(ctx, node, "yield statement",
-                                               "generators require hosted runtime state");
             /* `yield expr` produces a generator value. The enclosing function
              * must be a generator declared `-> Iterator<T>`; the yielded value
              * must be assignable to T. Mark the function as a generator so IR
