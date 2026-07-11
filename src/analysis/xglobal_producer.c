@@ -3457,6 +3457,9 @@ static bool return_literal_merge_branch_locals(XgReturnObjectLiteralScan *scan,
 }
 
 static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstNode *node);
+static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
+                                                const AstNode *value,
+                                                const ObjectLiteralNode **out_literal);
 
 static bool return_literal_scan_node_list(XgReturnObjectLiteralScan *scan, AstNode *const *nodes,
                                           int count) {
@@ -3477,6 +3480,15 @@ static bool return_literal_scan_assignment(XgReturnObjectLiteralScan *scan, cons
         return false;
     local_index = return_literal_local_index(scan, name, symbol_id);
     if (local_index >= 0) {
+        XgReturnObjectLiteralScan resolved_scan = *scan;
+        if (return_literal_resolve_return_value(&resolved_scan, value, &literal) && literal) {
+            *scan = resolved_scan;
+            local_index = return_literal_local_index(scan, name, symbol_id);
+            if (local_index < 0)
+                return false;
+            scan->locals[local_index].literal = literal;
+            return true;
+        }
         literal = body_static_object_literal(value);
         if (literal) {
             scan->locals[local_index].literal = literal;
@@ -3609,12 +3621,21 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL: {
-            const ObjectLiteralNode *literal =
-                body_static_object_literal(node->as.var_decl.initializer);
+            const AstNode *initializer = node->as.var_decl.initializer;
+            const ObjectLiteralNode *literal = body_static_object_literal(initializer);
             if (literal)
                 return return_literal_push_local(scan, node->as.var_decl.name,
                                                  node->as.var_decl.symbol_id, literal);
-            return return_literal_scan_node(scan, node->as.var_decl.initializer);
+            if (initializer) {
+                XgReturnObjectLiteralScan resolved_scan = *scan;
+                if (return_literal_resolve_return_value(&resolved_scan, initializer, &literal) &&
+                    literal) {
+                    *scan = resolved_scan;
+                    return return_literal_push_local(scan, node->as.var_decl.name,
+                                                     node->as.var_decl.symbol_id, literal);
+                }
+            }
+            return return_literal_scan_node(scan, initializer);
         }
         case AST_ASSIGNMENT:
             return return_literal_scan_assignment(scan, node->as.assignment.name,
