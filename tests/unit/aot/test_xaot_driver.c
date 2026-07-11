@@ -56,6 +56,118 @@ static bool add_package_link_dependency(XgGlobalEvidence *package, XgModuleId mo
     return xg_global_evidence_add_link_dependency(package, &dep) != NULL;
 }
 
+static bool add_package_function_storage_decls(XgGlobalEvidence *package, XgModuleId module_id,
+                                               const char *source_path) {
+    FILE *f;
+    long size;
+    char *source;
+    char *cursor;
+    if (!package || !source_path || !(f = fopen(source_path, "rb")))
+        return false;
+    if (fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
+    source = (char *) xr_malloc((size_t) size + 1);
+    if (!source || fread(source, 1, (size_t) size, f) != (size_t) size) {
+        xr_free(source);
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+    source[size] = '\0';
+    cursor = source;
+    while ((cursor = strstr(cursor, "fn ")) != NULL) {
+        char name[128];
+        size_t len = 0;
+        XgDeclSummary decl;
+        cursor += 3;
+        while ((cursor[len] == '_' || (cursor[len] >= 'a' && cursor[len] <= 'z') ||
+                (cursor[len] >= 'A' && cursor[len] <= 'Z') ||
+                (len > 0 && cursor[len] >= '0' && cursor[len] <= '9')) &&
+               len + 1 < sizeof(name))
+            len++;
+        if (len == 0)
+            continue;
+        memcpy(name, cursor, len);
+        name[len] = '\0';
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.decl_id = package->ndecls + 1;
+        decl.source_node_id = xg_stable_source_node_id(module_id, 1, decl.decl_id, 1);
+        decl.kind = XG_DECL_FUNC;
+        decl.name_id = xg_name_id(name);
+        decl.source_span_id = decl.decl_id;
+        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+        if (!xg_global_evidence_add_decl(package, &decl)) {
+            xr_free(source);
+            return false;
+        }
+        {
+            XgBodySummary body;
+            memset(&body, 0, sizeof(body));
+            body.func_id = package->nbodies + 1;
+            body.module_id = module_id;
+            body.source_node_id = decl.source_node_id;
+            body.owner_decl_id = decl.decl_id;
+            body.name_id = decl.name_id;
+            body.source_span_id = decl.source_span_id;
+            body.kind = XG_BODY_FUNCTION;
+            body.body_hash = (uint64_t) decl.name_id + 1;
+            if (!xg_global_evidence_add_body(package, &body)) {
+                xr_free(source);
+                return false;
+            }
+        }
+        cursor += len;
+    }
+    cursor = source;
+    while ((cursor = strstr(cursor, "import \"")) != NULL) {
+        char *line_end = strchr(cursor, '\n');
+        char *as = strstr(cursor, "\" as ");
+        char name[128];
+        size_t len = 0;
+        XgDeclSummary decl;
+        if (!as || (line_end && as >= line_end)) {
+            cursor += 8;
+            continue;
+        }
+        as += 5;
+        while ((as[len] == '_' || (as[len] >= 'a' && as[len] <= 'z') ||
+                (as[len] >= 'A' && as[len] <= 'Z') ||
+                (len > 0 && as[len] >= '0' && as[len] <= '9')) &&
+               len + 1 < sizeof(name))
+            len++;
+        if (len == 0) {
+            cursor = as;
+            continue;
+        }
+        memcpy(name, as, len);
+        name[len] = '\0';
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.decl_id = package->ndecls + 1;
+        decl.source_node_id = xg_stable_source_node_id(module_id, 2, decl.decl_id, 1);
+        decl.kind = XG_DECL_GLOBAL;
+        decl.name_id = xg_name_id(name);
+        decl.source_span_id = decl.decl_id;
+        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+        if (!xg_global_evidence_add_decl(package, &decl)) {
+            xr_free(source);
+            return false;
+        }
+        cursor = as + len;
+    }
+    xr_free(source);
+    return true;
+}
+
 static bool write_file_text(const char *path, const char *text) {
     FILE *f = fopen(path, "w");
     if (!f)
@@ -108,6 +220,7 @@ static char *make_package_payload_for_source(const char *canonical, const char *
         return NULL;
     xg_global_evidence_init(&package, key);
     if (!xg_global_evidence_add_module(&package, &module) ||
+        !add_package_function_storage_decls(&package, module.module_id, source_path) ||
         !add_package_link_dependency(&package, module.module_id)) {
         xg_global_evidence_free(&package);
         return NULL;
@@ -146,7 +259,8 @@ static char *make_package_payload_for_ordered_sources(const char *const *canonic
     for (uint32_t i = 0; i < count; i++) {
         XgModuleSummary module;
         if (!xg_module_summary_from_module_spec(&module, i + 1, &specs[i]) ||
-            !xg_global_evidence_add_module(&package, &module))
+            !xg_global_evidence_add_module(&package, &module) ||
+            !add_package_function_storage_decls(&package, module.module_id, source_paths[i]))
             goto done;
     }
     if (!add_package_link_dependency(&package, 1))

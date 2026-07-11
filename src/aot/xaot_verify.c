@@ -2262,12 +2262,41 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         if (decl->module_id == XG_NO_ID || decl->source_node_id == 0)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence declaration source identity is missing");
+        if (decl->storage_owner == XR_STORAGE_NONE) {
+            if (decl->storage_flags != 0 || decl->storage_mutability != XR_STORAGE_READONLY ||
+                decl->address_identity != XR_ADDRESS_NONE ||
+                decl->materialization_kind != XR_MATERIALIZE_INLINE)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence non-storage declaration has provenance");
+        } else if (decl->storage_owner == XR_STORAGE_MODULE) {
+            if (decl->address_identity != XR_ADDRESS_MODULE_STABLE ||
+                (decl->materialization_kind != XR_MATERIALIZE_MODULE_READONLY &&
+                 decl->materialization_kind != XR_MATERIALIZE_MODULE_RUNTIME))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence module storage provenance is stale");
+        } else if (decl->storage_owner == XR_STORAGE_SHARED_SYSTEM) {
+            if (decl->address_identity != XR_ADDRESS_SHARED_STABLE ||
+                decl->materialization_kind != XR_MATERIALIZE_SHARED_SYSTEM)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence shared storage provenance is stale");
+        } else if (decl->storage_owner == XR_STORAGE_FOREIGN) {
+            if (decl->address_identity != XR_ADDRESS_FOREIGN)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence foreign storage provenance is stale");
+        } else {
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence declaration storage owner is invalid");
+        }
         for (uint32_t j = i + 1; j < ev->ndecls; j++) {
             const XgDeclSummary *other = &ev->decls[j];
             if (other->module_id == decl->module_id &&
                 other->source_node_id == decl->source_node_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence declaration source identity is duplicated");
+            if (decl->storage_owner != XR_STORAGE_NONE && other->storage_owner != XR_STORAGE_NONE &&
+                other->module_id == decl->module_id && other->name_id == decl->name_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence storage identity is duplicated");
         }
     }
     for (uint32_t i = 0; i < ev->ncallsites; i++) {

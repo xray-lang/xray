@@ -20,25 +20,8 @@ struct XaotBundle;
 struct XiFunc;
 struct XiModule;
 
-typedef enum XaotMaterializationKind {
-    XAOT_MATERIALIZE_INLINE = 0,
-    XAOT_MATERIALIZE_EXEC_LOCAL,
-    XAOT_MATERIALIZE_MODULE_READONLY,
-    XAOT_MATERIALIZE_MODULE_RUNTIME,
-    XAOT_MATERIALIZE_SHARED_SYSTEM,
-    XAOT_MATERIALIZE_REJECT,
-} XaotMaterializationKind;
-
-enum {
-    XAOT_STORAGE_DEEP_READONLY = 1u << 0,
-    XAOT_STORAGE_SHARE_SAFE = 1u << 1,
-    XAOT_STORAGE_CONTAINS_EXEC_LOCAL_REF = 1u << 2,
-    XAOT_STORAGE_CONTAINS_BORROW = 1u << 3,
-    XAOT_STORAGE_CONTAINS_FOREIGN_REF = 1u << 4,
-    XAOT_STORAGE_REQUIRES_DROP = 1u << 5,
-};
-
 typedef struct XaotStoragePlan {
+    XgDeclId decl_id;
     uint32_t module_index;
     uint32_t slot;
     uint32_t flags;

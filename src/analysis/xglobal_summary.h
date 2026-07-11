@@ -12,6 +12,7 @@
 #define XGLOBAL_SUMMARY_H
 
 #include "../base/xdefs.h"
+#include "../base/xstorage.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -56,7 +57,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 19,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 20,
 };
 
 typedef enum XgBuildProfile {
@@ -672,6 +673,11 @@ typedef struct XgDeclSummary {
     uint32_t signature_key;
     uint32_t source_span_id;
     uint32_t derive_flags;
+    uint32_t storage_flags;
+    uint8_t storage_owner;
+    uint8_t storage_mutability;
+    uint8_t address_identity;
+    uint8_t materialization_kind;
 } XgDeclSummary;
 
 typedef struct XgClassSummary {

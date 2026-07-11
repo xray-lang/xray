@@ -29,31 +29,63 @@ static bool reserve_rows(void **rows, uint32_t *cap, uint32_t need, size_t elem_
     return true;
 }
 
-static XaotStoragePlan derive_storage(const XiModule *module, uint32_t module_index,
-                                      uint32_t slot) {
-    XaotStoragePlan plan;
-    const XiConstLiteral *constant =
-        module->slot_const_literals ? &module->slot_const_literals[slot] : NULL;
-    const XiConstLiteral *shared =
-        module->slot_shared_initializers ? &module->slot_shared_initializers[slot] : NULL;
-    bool is_const = module->init && module->init->slot_owned_consts &&
-                    slot < module->init->nshared && module->init->slot_owned_consts[slot] != 0;
-    bool is_shared = shared && shared->kind != XI_CONST_LITERAL_NONE;
-    bool has_static_value = constant && constant->kind != XI_CONST_LITERAL_NONE;
-    memset(&plan, 0, sizeof(plan));
-    plan.module_index = module_index;
-    plan.slot = slot;
-    plan.owner = is_shared ? XR_STORAGE_SHARED_SYSTEM : XR_STORAGE_MODULE;
-    plan.mutability = is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE;
-    plan.address_identity = is_shared ? XR_ADDRESS_SHARED_STABLE : XR_ADDRESS_MODULE_STABLE;
-    if (is_shared)
-        plan.materialization_kind = XAOT_MATERIALIZE_SHARED_SYSTEM;
-    else if (is_const && has_static_value) {
-        plan.materialization_kind = XAOT_MATERIALIZE_MODULE_READONLY;
-        plan.flags |= XAOT_STORAGE_DEEP_READONLY | XAOT_STORAGE_SHARE_SAFE;
-    } else
-        plan.materialization_kind = XAOT_MATERIALIZE_MODULE_RUNTIME;
-    return plan;
+static const XgDeclSummary *find_storage_decl(const XaotBundle *bundle, const XiModule *module,
+                                              uint32_t module_index, uint32_t slot) {
+    const XgGlobalEvidence *evidence;
+    XgModuleId module_id;
+    const char *name;
+    uint32_t name_id;
+    const XgDeclSummary *match = NULL;
+    if (!bundle || !module || !module->init || !module->init->slot_owned_names ||
+        slot >= module->init->nshared)
+        return NULL;
+    name = module->init->slot_owned_names[slot];
+    if (!name)
+        return NULL;
+    evidence = bundle->global_evidence_plan.evidence;
+    if (!evidence)
+        return NULL;
+    module_id = XG_NO_ID;
+    if (module->init->xg_body_func_id != XG_NO_ID) {
+        for (uint32_t i = 0; i < evidence->nbodies; i++) {
+            if (evidence->bodies[i].func_id == module->init->xg_body_func_id) {
+                module_id = evidence->bodies[i].module_id;
+                break;
+            }
+        }
+    }
+    if (module_id == XG_NO_ID && module_index < evidence->nmodules)
+        module_id = evidence->modules[module_index].module_id;
+    if (module_id == XG_NO_ID)
+        return NULL;
+    name_id = xg_name_id(name);
+    for (uint32_t i = 0; i < evidence->ndecls; i++) {
+        const XgDeclSummary *decl = &evidence->decls[i];
+        if (decl->module_id != module_id || decl->name_id != name_id ||
+            decl->storage_owner == XR_STORAGE_NONE)
+            continue;
+        if (match)
+            return NULL;
+        match = decl;
+    }
+    return match;
+}
+
+static bool derive_storage(const XaotBundle *bundle, const XiModule *module, uint32_t module_index,
+                           uint32_t slot, XaotStoragePlan *out) {
+    const XgDeclSummary *decl = find_storage_decl(bundle, module, module_index, slot);
+    if (!out || !decl)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->decl_id = decl->decl_id;
+    out->module_index = module_index;
+    out->slot = slot;
+    out->flags = decl->storage_flags;
+    out->owner = decl->storage_owner;
+    out->mutability = decl->storage_mutability;
+    out->address_identity = decl->address_identity;
+    out->materialization_kind = decl->materialization_kind;
+    return true;
 }
 
 static XaotCapturePlan derive_capture(const XiFunc *func, uint16_t index) {
@@ -138,10 +170,15 @@ bool xaot_storage_capture_plans_build(XaotBundle *bundle) {
         if (bundle->module_init_plans[bundle->nmodule_init_plans - 1].may_suspend)
             return false;
         for (uint32_t slot = 0; slot < module->nslots; slot++) {
+            XaotStoragePlan plan;
+            if (!module->init->slot_owned_names || !module->init->slot_owned_names[slot])
+                continue;
+            if (!derive_storage(bundle, module, mi, slot, &plan))
+                return false;
             if (!reserve_rows((void **) &bundle->storage_plans, &bundle->storage_plan_cap,
                               bundle->nstorage_plans + 1, sizeof(XaotStoragePlan)))
                 return false;
-            bundle->storage_plans[bundle->nstorage_plans++] = derive_storage(module, mi, slot);
+            bundle->storage_plans[bundle->nstorage_plans++] = plan;
         }
         if (!add_captures_recursive(bundle, module->init))
             return false;
@@ -177,7 +214,14 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *module = bundle->modules[mi];
         for (uint32_t slot = 0; module && slot < module->nslots; slot++) {
-            XaotStoragePlan expected = derive_storage(module, mi, slot);
+            XaotStoragePlan expected;
+            if (!module->init->slot_owned_names || !module->init->slot_owned_names[slot])
+                continue;
+            if (!derive_storage(bundle, module, mi, slot, &expected)) {
+                if (errbuf && errbuf_len)
+                    snprintf(errbuf, errbuf_len, "AOT storage provenance evidence is missing");
+                return false;
+            }
             if (storage_index >= bundle->nstorage_plans ||
                 memcmp(&expected, &bundle->storage_plans[storage_index], sizeof(expected)) != 0) {
                 if (errbuf && errbuf_len)
