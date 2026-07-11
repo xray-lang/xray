@@ -321,6 +321,7 @@ XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t por
     cluster_outq_init(&node->outq);
     atomic_store(&node->writer_running, false);
     atomic_store(&node->writer_exited, false);
+    atomic_store(&node->reader_running, false);
     cluster_phi_init(&node->phi);
     node->next = NULL;
     return node;
@@ -410,7 +411,7 @@ int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len)
 // Async send — encode frame and enqueue for writer coroutine
 // Uses zero-copy for large frames (>4KB) to avoid extra memcpy
 int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
-                               uint32_t payload_len) {
+                            uint32_t payload_len) {
     if (!node || !node->conn || node->state == XR_NODE_CLOSING)
         return -1;
 
@@ -443,7 +444,7 @@ int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8
 }
 
 int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
-                               uint32_t buf_size, uint32_t *payload_len_out) {
+                            uint32_t buf_size, uint32_t *payload_len_out) {
     if (!node || !node->conn)
         return -1;
 
@@ -607,8 +608,7 @@ void cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
     // on notify_pipe[0] (coroutine-aware suspend instead of thread block).
     node->isolate = X;
     atomic_store(&node->writer_running, true);
-    XrCoroutine *coro =
-        xr_coro_create_native(X, cluster_node_writer_loop, node, "cluster_writer");
+    XrCoroutine *coro = xr_coro_create_native(X, cluster_node_writer_loop, node, "cluster_writer");
     if (coro) {
         xr_coro_spawn(X, coro);
     } else {
@@ -620,20 +620,12 @@ void cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
  * Frame-processing reader coroutine.
  *
  * Ownership contract:
- *   - The reader does NOT own the XrClusterNode struct. It runs until
- *     the peer disconnects (recv_frame returns -1) or the cluster is
- *     stopped (c->running cleared).
- *   - Cleanup of the node (remove from cluster list, mark dead, fire
- *     monitors, free struct) happens in the heartbeat thread's
- *     cluster_health_check_heartbeats path when phi/missed-heartbeat
- *     thresholds trip. That thread already owns the removal lock
- *     discipline; duplicating it in the reader would race against
- *     writer_running teardown.
- *
- * We therefore just exit the frame loop on disconnect, letting the
- * heartbeat thread garbage-collect the node. This also means outbound
- * sends that race with the disconnect will eventually notice the
- * writer coroutine failing through the existing service/topic error path.
+ *   - cluster_process_node owns disconnect cleanup once it starts:
+ *     it removes the node, fires monitors, stops the writer, and frees
+ *     the XrClusterNode.
+ *   - The reader loop must therefore not dereference node after
+ *     cluster_process_node returns. That includes reader_running; the
+ *     frame loop clears it immediately before teardown.
  */
 typedef struct XrReaderContext {
     struct XrCluster *cluster;
@@ -654,6 +646,7 @@ static void cluster_reader_loop(void *arg) {
 
     if (cluster && node) {
         cluster_process_node(cluster, node);
+        return;
     }
 
     if (node)
@@ -786,8 +779,7 @@ int cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     uint8_t recv_buf[512];
     uint8_t frame_type;
     uint32_t payload_len;
-    if (cluster_node_recv_frame(node, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) !=
-            0 ||
+    if (cluster_node_recv_frame(node, &frame_type, recv_buf, sizeof(recv_buf), &payload_len) != 0 ||
         frame_type != XR_FRAME_HANDSHAKE_ACK) {
         cluster_handshake_set_deadline(cluster, node->conn, 0);
         cluster_node_close(node);
