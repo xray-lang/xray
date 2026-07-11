@@ -13,7 +13,7 @@ from typing import Any
 
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 is unsupported by CI
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.9 build hosts
     tomllib = None  # type: ignore[assignment]
 
 
@@ -131,16 +131,20 @@ def _load_toml_subset(path: Path) -> dict[str, Any]:
     return raw
 
 
+def load_toml(path: Path) -> dict[str, Any]:
+    """Load a repository TOML manifest on both Python 3.9 and 3.11+."""
+    if tomllib is None:
+        return _load_toml_subset(path)
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
 def load_manifest(root: Path) -> BoundaryManifest:
     root = root.resolve()
     path = root / MANIFEST_PATH
     if not path.is_file():
         raise RuntimeError(f"missing stdlib boundary manifest: {path}")
-    if tomllib is None:
-        raw = _load_toml_subset(path)
-    else:
-        with path.open("rb") as handle:
-            raw = tomllib.load(handle)
+    raw = load_toml(path)
     return BoundaryManifest(
         root=root,
         raw=raw,

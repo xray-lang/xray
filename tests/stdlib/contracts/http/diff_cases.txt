@@ -1,0 +1,4 @@
+tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr
