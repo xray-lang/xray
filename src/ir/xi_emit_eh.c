@@ -1045,7 +1045,7 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     const XiParallelReduceData *data = (const XiParallelReduceData *) v->aux;
-    if (!data->body_func || !data->combine_func) {
+    if (!data->body_func || !data->combine_func || (data->plan_state && v->nargs < 7)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
@@ -1056,6 +1056,9 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg initial = reg_of_cell_deref(ctx, v->args[3]);
     XiEmitReg body_closure = reg_of(ctx, v->args[4]);
     XiEmitReg combine_closure = reg_of(ctx, v->args[5]);
+    XiEmitReg states = 0;
+    if (data->plan_state)
+        states = reg_of(ctx, v->args[6]);
     (void) workers;
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -1069,8 +1072,11 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg += 8;
+    ctx->next_reg += data->plan_state ? 9 : 8;
     XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg state_value = 0;
+    if (data->plan_state)
+        state_value = (XiEmitReg) ctx->next_reg++;
     XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
     ctx->next_reg += 4;
     if (ctx->next_reg > ctx->max_reg)
@@ -1089,6 +1095,8 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint8_t par_flags = data->inclusive_end ? 0x01 : 0;
     if (data->range_body)
         par_flags |= 0x02;
+    if (data->plan_state)
+        par_flags |= 0x04;
     emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, par_handled, 0, 0));
     emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, par_true, 0, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, par_base, start, 0));
@@ -1097,8 +1105,14 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 3), initial, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 4), body_closure, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 5), combine_closure, 0));
-    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 6), 0, 0));
-    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 7), 0, 0));
+    if (data->plan_state) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 6), states, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 7), 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 8), 0, 0));
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 6), 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 7), 0, 0));
+    }
     emit_inst(ctx, CREATE_ABC(OP_PAR_REDUCE, par_handled, par_base, par_flags));
     int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
 
@@ -1127,9 +1141,17 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.iter, r.limit, false);
 
         emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, body_closure, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), r.iter, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.lane, 0));
-        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        if (data->plan_state) {
+            emit_inst(ctx, CREATE_ABC(OP_ARRAY_GET, state_value, states, r.lane));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), state_value, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.iter, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), r.lane, 0));
+            emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+        } else {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), r.iter, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.lane, 0));
+            emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        }
         emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
 
         emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, combine_closure, 0));
@@ -1155,13 +1177,14 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     int handled_pc = current_pc(ctx);
     patch_jump_to(ctx, par_handled_jmp_pc, handled_pc);
-    emit_inst(ctx, CREATE_ABC(OP_ARRAY_LEN, r.participants, (XiEmitReg) (par_base + 7), 0));
+    XiEmitReg partials_reg = (XiEmitReg) (par_base + (data->plan_state ? 8 : 7));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_LEN, r.participants, partials_reg, 0));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.lane, 0));
 
     int handled_loop_pc = current_pc(ctx);
     int handled_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.lane, r.participants, false);
 
-    emit_inst(ctx, CREATE_ABC(OP_ARRAY_GET, item_result, (XiEmitReg) (par_base + 7), r.lane));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_GET, item_result, partials_reg, r.lane));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, combine_closure, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), dst, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), item_result, 0));

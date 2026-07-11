@@ -141,6 +141,9 @@ typedef void (*XrParallelRangeStateI64Fn)(struct xrt_closure *closure, XrValue s
                                           int64_t begin, int64_t end, int64_t worker_id);
 typedef bool (*XrParallelReduceRangeI64Fn)(struct xrt_closure *closure, int64_t begin, int64_t end,
                                            int64_t worker_id, int64_t *out);
+typedef bool (*XrParallelReduceRangeStateI64Fn)(struct xrt_closure *closure, XrValue states,
+                                                int64_t begin, int64_t end, int64_t worker_id,
+                                                int64_t *out);
 typedef int64_t (*XrParallelReduceCombineI64Fn)(struct xrt_closure *closure, int64_t acc,
                                                 int64_t value);
 typedef bool (*XrParallelReduceRangeAggFn)(struct xrt_closure *closure, int64_t begin, int64_t end,
@@ -284,6 +287,12 @@ XR_FUNC bool xr_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int6
                                     XrParallelReduceRangeI64Fn body,
                                     XrParallelReduceCombineI64Fn combine,
                                     struct xrt_closure *closure, int64_t *out);
+XR_FUNC bool xr_parallel_reduce_state_i64(const XrAotContext *ctx, int64_t start, int64_t end,
+                                          int64_t workers, int64_t initial,
+                                          XrParallelReduceRangeStateI64Fn body,
+                                          XrParallelReduceCombineI64Fn combine,
+                                          struct xrt_closure *closure, XrValue states,
+                                          int64_t *out);
 XR_FUNC bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
                                     int64_t workers, size_t value_size, const void *initial,
                                     XrParallelReduceRangeAggFn body,

@@ -614,8 +614,10 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     XrValue *initial_slot = &base[arg_base + 3];
     XrValue *body_slot = &base[arg_base + 4];
     XrValue *combine_slot = &base[arg_base + 5];
-    XrValue *batch_slot = &base[arg_base + 6];
-    XrValue *partials_slot = &base[arg_base + 7];
+    bool plan_state = (flags & XR_VM_PAR_FLAG_PLAN_STATE) != 0;
+    XrValue *states_slot = plan_state ? &base[arg_base + 6] : NULL;
+    XrValue *batch_slot = &base[arg_base + (plan_state ? 7 : 6)];
+    XrValue *partials_slot = &base[arg_base + (plan_state ? 8 : 7)];
 
     XrVmParBatch *resume_batch = vm_par_batch_from_value(*batch_slot);
     if (resume_batch)
@@ -662,6 +664,14 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     XrClosure *combine = (XrClosure *) XR_TO_PTR(*combine_slot);
     if (!vm_par_closure_safe_to_share(body) || !vm_par_closure_safe_to_share(combine))
         return XR_DISP_NEXT;
+    XrArray *states = NULL;
+    if (plan_state) {
+        if (!states_slot || !XR_IS_ARRAY(*states_slot))
+            return XR_DISP_NEXT;
+        states = XR_TO_ARRAY(*states_slot);
+        if (!states || states->length < lane_count)
+            return XR_DISP_NEXT;
+    }
 
     XrCoroutine *current = vm_get_coro(vm_ctx);
     if (!current)
@@ -673,9 +683,9 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     partials->length = lane_count;
     *partials_slot = xr_value_from_array(partials);
 
-    XrVmParBatch *batch =
-        vm_par_batch_new(isolate, runtime, body, combine, partials, NULL, start, end_excl,
-                         lane_count, (flags & XR_VM_PAR_FLAG_RANGE_BODY) != 0, false, false, true);
+    XrVmParBatch *batch = vm_par_batch_new(
+        isolate, runtime, body, combine, partials, states, start, end_excl, lane_count,
+        (flags & XR_VM_PAR_FLAG_RANGE_BODY) != 0, plan_state, false, true);
     if (!batch) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.reduce batch allocation failed");
     }

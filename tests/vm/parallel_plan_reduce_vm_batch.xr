@@ -1,0 +1,39 @@
+import parallel
+import sys
+
+shared initCount = Atomic<int>(0)
+shared tls = sys.ThreadLocal<int>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
+shared touched = Atomic<int>(0)
+shared lane0 = Atomic<int>(0)
+shared lane1 = Atomic<int>(0)
+shared lane2 = Atomic<int>(0)
+shared lane3 = Atomic<int>(0)
+
+var plan = parallel.Plan<int>(parallel.Options(4), (lane) -> lane)
+
+var total = plan.reduce(0..20000, 0, (state, i) -> {
+    var token = tls.get()
+    if (token >= 0) {
+        touched.add(1, Ordering.Relaxed)
+    }
+    if (state == 0) {
+        lane0.store(1, Ordering.Relaxed)
+    } else if (state == 1) {
+        lane1.store(1, Ordering.Relaxed)
+    } else if (state == 2) {
+        lane2.store(1, Ordering.Relaxed)
+    } else if (state == 3) {
+        lane3.store(1, Ordering.Relaxed)
+    }
+    return i
+}, (a, b) -> a + b)
+
+var initializedThreads = initCount.load(Ordering.Acquire)
+var lanesSeen = lane0.load(Ordering.Relaxed) + lane1.load(Ordering.Relaxed) +
+    lane2.load(Ordering.Relaxed) + lane3.load(Ordering.Relaxed)
+
+print(total == 199990000)
+print(touched.load(Ordering.Relaxed) == 20000)
+print(lanesSeen == 4)
+print(initializedThreads >= 2)
+print(initializedThreads <= 4)
