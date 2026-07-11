@@ -159,6 +159,12 @@ expect_output_workers \
     $'seq-concurrent\ntrue\nvm-concurrent\ntrue' \
     2
 
+expect_output_workers \
+    "parallel_plan_vm_scaling_baseline" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_vm_scaling_baseline.xr" \
+    $'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue' \
+    8
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

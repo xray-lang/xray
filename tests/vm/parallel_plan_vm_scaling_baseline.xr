@@ -1,0 +1,96 @@
+import parallel
+
+shared touched = Atomic<int>(0)
+shared lane0 = Atomic<int>(0)
+shared lane1 = Atomic<int>(0)
+shared lane2 = Atomic<int>(0)
+shared lane3 = Atomic<int>(0)
+shared lane4 = Atomic<int>(0)
+shared lane5 = Atomic<int>(0)
+shared lane6 = Atomic<int>(0)
+shared lane7 = Atomic<int>(0)
+
+fn reset() {
+    touched.store(0, Ordering.Relaxed)
+    lane0.store(0, Ordering.Relaxed)
+    lane1.store(0, Ordering.Relaxed)
+    lane2.store(0, Ordering.Relaxed)
+    lane3.store(0, Ordering.Relaxed)
+    lane4.store(0, Ordering.Relaxed)
+    lane5.store(0, Ordering.Relaxed)
+    lane6.store(0, Ordering.Relaxed)
+    lane7.store(0, Ordering.Relaxed)
+}
+
+fn lanesSeen() -> int {
+    return lane0.load(Ordering.Relaxed) + lane1.load(Ordering.Relaxed) +
+        lane2.load(Ordering.Relaxed) + lane3.load(Ordering.Relaxed) +
+        lane4.load(Ordering.Relaxed) + lane5.load(Ordering.Relaxed) +
+        lane6.load(Ordering.Relaxed) + lane7.load(Ordering.Relaxed)
+}
+
+reset()
+var plan1 = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
+plan1.forEach(0..8000, (state, i) -> {
+    touched.add(1, Ordering.Relaxed)
+    if (state == 0) {
+        lane0.store(1, Ordering.Relaxed)
+    }
+})
+print(touched.load(Ordering.Relaxed) == 8000)
+print(lanesSeen() == 1)
+
+reset()
+var plan2 = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+plan2.forEach(0..16000, (state, i) -> {
+    touched.add(1, Ordering.Relaxed)
+    if (state == 0) {
+        lane0.store(1, Ordering.Relaxed)
+    } else if (state == 1) {
+        lane1.store(1, Ordering.Relaxed)
+    }
+})
+print(touched.load(Ordering.Relaxed) == 16000)
+print(lanesSeen() == 2)
+
+reset()
+var plan4 = parallel.Plan<int>(parallel.Options(4), (lane) -> lane)
+plan4.forEach(0..32000, (state, i) -> {
+    touched.add(1, Ordering.Relaxed)
+    if (state == 0) {
+        lane0.store(1, Ordering.Relaxed)
+    } else if (state == 1) {
+        lane1.store(1, Ordering.Relaxed)
+    } else if (state == 2) {
+        lane2.store(1, Ordering.Relaxed)
+    } else if (state == 3) {
+        lane3.store(1, Ordering.Relaxed)
+    }
+})
+print(touched.load(Ordering.Relaxed) == 32000)
+print(lanesSeen() == 4)
+
+reset()
+var plan8 = parallel.Plan<int>(parallel.Options(8), (lane) -> lane)
+plan8.forEach(0..64000, (state, i) -> {
+    touched.add(1, Ordering.Relaxed)
+    if (state == 0) {
+        lane0.store(1, Ordering.Relaxed)
+    } else if (state == 1) {
+        lane1.store(1, Ordering.Relaxed)
+    } else if (state == 2) {
+        lane2.store(1, Ordering.Relaxed)
+    } else if (state == 3) {
+        lane3.store(1, Ordering.Relaxed)
+    } else if (state == 4) {
+        lane4.store(1, Ordering.Relaxed)
+    } else if (state == 5) {
+        lane5.store(1, Ordering.Relaxed)
+    } else if (state == 6) {
+        lane6.store(1, Ordering.Relaxed)
+    } else if (state == 7) {
+        lane7.store(1, Ordering.Relaxed)
+    }
+})
+print(touched.load(Ordering.Relaxed) == 64000)
+print(lanesSeen() == 8)
