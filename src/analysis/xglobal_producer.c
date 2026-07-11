@@ -95,6 +95,7 @@ typedef struct XgPendingBody {
 
 typedef struct XgLocalType {
     const char *name;
+    const char *nominal_name;
     XgClassId class_id;
     XgInterfaceId interface_id;
     uint32_t type_key;
@@ -1484,7 +1485,7 @@ static bool body_push_name_local(XgBodyCollect *bc, const char *name, uint32_t s
 
 static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
                             XgClassId class_id, XgInterfaceId interface_id, uint32_t type_key,
-                            bool inferred) {
+                            const char *nominal_name, bool inferred) {
     XgLocalType *row;
     if (!bc)
         return true;
@@ -1496,6 +1497,7 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
         return false;
     row = &bc->locals[bc->nlocals++];
     row->name = name;
+    row->nominal_name = nominal_name;
     row->class_id = class_id;
     row->interface_id = interface_id;
     row->type_key = type_key;
@@ -1581,7 +1583,7 @@ static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symb
     if (class_id == XG_NO_ID && interface_id == XG_NO_ID && type_key == 0)
         return;
     if (!row) {
-        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, type_key, true);
+        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, type_key, NULL, true);
         return;
     }
     if (!row->inferred)
@@ -5525,9 +5527,18 @@ static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNod
         return false;
     receiver =
         body_find_class_summary(bc, body_resolve_expr_class(bc, callee->as.member_access.object));
-    if (!receiver || !callee->as.member_access.name)
+    if (receiver) {
+        class_name = receiver->name_id;
+    } else if (callee->as.member_access.object->type == AST_VARIABLE) {
+        XgLocalType *local = body_find_local(bc, callee->as.member_access.object->as.variable.name);
+        if (!local || !local->nominal_name)
+            return false;
+        class_name = hash_name32(local->nominal_name);
+    } else {
         return false;
-    class_name = receiver->name_id;
+    }
+    if (!callee->as.member_access.name)
+        return false;
     method_name = hash_name32(callee->as.member_access.name);
     argc = call->as.call_expr.arg_count;
     if (class_name == hash_name32("Channel"))
@@ -5550,6 +5561,17 @@ static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNod
     if (class_name == hash_name32("EventCount"))
         return method_name == hash_name32("wait") && (argc == 1 || argc == 2);
     return false;
+}
+
+static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const char *module;
+    if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
+        callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
+        return false;
+    module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+    return module && strcmp(module, "time") == 0 &&
+           strcmp(callee->as.member_access.name, "sleep") == 0;
 }
 
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
@@ -5579,7 +5601,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR:
-            if (body_builtin_method_call_may_suspend(bc, node)) {
+            if (body_builtin_method_call_may_suspend(bc, node) ||
+                body_stdlib_call_may_suspend(bc, node)) {
                 bc->effect_bits |= XG_BODY_MAY_SUSPEND;
                 bc->capability_bits |= XG_CAP_COROUTINE;
             }
@@ -5701,8 +5724,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 type_key = hash_named_type_key32("Json", NULL, 0);
             if (record_literal && type_key == 0)
                 type_key = body_record_type_key(record_literal);
-            (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
-                                   class_id, interface_id, type_key, inferred);
+            (void) body_push_local(
+                bc, node->as.var_decl.name, node->as.var_decl.symbol_id, class_id, interface_id,
+                type_key,
+                node->as.var_decl.type_annotation ? node->as.var_decl.type_annotation->name : NULL,
+                inferred);
             body_bind_record_bridge_shapes_for_type_key(bc, node->as.var_decl.name, type_key);
             if (json_literal) {
                 json_shape_id = body_add_json_shape_for_literal(bc, json_literal,
@@ -6001,7 +6027,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
              * descriptor-only root instead of a resumable main frame. */
             bc->effect_bits |= XG_BODY_MAY_SPAWN | XG_BODY_MAY_ALLOC;
             bc->escape_bits |= XG_BODY_ESCAPE_CORO;
-            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL | XG_CAP_OBJECTS;
+            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_OBJECTS;
             if (node->as.go_expr.spawn_kind == XR_SPAWN_THREAD)
                 bc->capability_bits |= XG_CAP_SYS_THREAD;
             walk_body_for_calls(bc, node->as.go_expr.expr);
@@ -6034,6 +6060,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.defer_stmt.expr);
             break;
         case AST_SCOPE_BLOCK:
+            /* Scope exit joins linked children and is therefore a real
+             * suspension point even when the body contains no explicit
+             * await expression. */
+            bc->effect_bits |= XG_BODY_MAY_SUSPEND;
             bc->capability_bits |= XG_CAP_SCOPE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.scope_block.body);
             break;
@@ -6089,9 +6119,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
             (void) body_push_name_local(bc, node->as.for_in_stmt.value_name,
                                         node->as.for_in_stmt.value_symbol_id);
-            (void) body_push_local(bc, node->as.for_in_stmt.item_name,
-                                   node->as.for_in_stmt.item_symbol_id, item_class, item_interface,
-                                   item_type_key, false);
+            (void) body_push_local(
+                bc, node->as.for_in_stmt.item_name, node->as.for_in_stmt.item_symbol_id, item_class,
+                item_interface, item_type_key,
+                node->as.for_in_stmt.item_type ? node->as.for_in_stmt.item_type->name : NULL,
+                false);
             walk_body_for_calls(bc, node->as.for_in_stmt.body);
             bc->nlocals = base_locals;
             bc->nname_locals = base_name_locals;
@@ -6142,8 +6174,11 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
         (void) body_add_interface_object_uses_for_type_ref(
             bc, method->param_types ? method->param_types[i] : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
             0);
-        (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
-                               interface_id, type_key, false);
+        (void) body_push_local(
+            bc, method->parameters ? method->parameters[i] : NULL, 0, class_id, interface_id,
+            type_key,
+            method->param_types && method->param_types[i] ? method->param_types[i]->name : NULL,
+            false);
         body_bind_map_shape_local_for_type_ref(
             bc, method->parameters ? method->parameters[i] : NULL,
             method->param_types ? method->param_types[i] : NULL, 0);
@@ -6174,7 +6209,8 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             bc, param ? param->type : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
             param && param->line > 0 ? (uint32_t) param->line : 0);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
-                               class_id, interface_id, type_key, false);
+                               class_id, interface_id, type_key,
+                               param && param->type ? param->type->name : NULL, false);
         body_bind_map_shape_local_for_type_ref(
             bc, param ? param->name : NULL, param ? param->type : NULL,
             param && param->line > 0 ? (uint32_t) param->line : 0);

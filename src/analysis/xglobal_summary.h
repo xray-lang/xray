@@ -1497,6 +1497,9 @@ XR_FUNC const XgHashEqSummary *xg_global_evidence_find_hash_eq(const XgGlobalEvi
 XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *evidence,
                                                         const XgBodySummary *body,
                                                         uint32_t *out_effect_bits);
+XR_FUNC bool xg_body_reachability_mark_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                          XgFuncId root_func_id, uint8_t *reachable,
+                                                          uint32_t reachable_count);
 
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
 XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *evidence,

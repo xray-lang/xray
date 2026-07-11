@@ -1420,8 +1420,6 @@ static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) 
 
 static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node,
                                               CallExprNode *call) {
-    xa_freestanding_report_unavailable(ctx, node, "sys.Thread.spawn", "OS threads are hosted-only");
-
     int body_index = xa_thread_spawn_body_arg_index(call);
     if (body_index < 0 || !call->arguments[body_index]) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1440,7 +1438,6 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
     ctx->os_thread_body_depth = saved_os_thread_body_depth;
     if (body && body->type == AST_CALL_EXPR)
         xa_check_spawn_call_boundary_args(ctx, node, &body->as.call_expr);
-    check_coro_capture(ctx, body, node->line);
     xa_check_thread_spawn_sync_body(ctx, body);
 
     XrType *result_type = xr_type_new_unit(NULL);

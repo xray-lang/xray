@@ -135,6 +135,7 @@ typedef enum XaotBuildProfile {
 
 typedef struct XaotBuildOptions {
     const XaotTarget *target;
+    const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;
     XiCgenTypeNameProfile type_name_profile;
     bool emit_plan_dump;

@@ -8632,7 +8632,12 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
     if (f->c_export || f->aot_used || f->aot_naked || f->aot_weak || f->aot_section ||
         (f->aot_interrupt_abi && f->aot_interrupt_abi[0]))
         return true;
-    return cg_func_is_module_export(ctx, f) || cg_func_is_class_member(ctx, f);
+    if (cg_func_is_class_member(ctx, f))
+        return !ctx->emit_main;
+    /* An executable is closed-world: language-level module exports are not
+     * external roots.  Only explicit @c_export/interrupt/used roots above
+     * survive.  Shared-library emission keeps module exports as roots. */
+    return !ctx->emit_main && cg_func_is_module_export(ctx, f);
 }
 
 static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth) {

@@ -3562,10 +3562,13 @@ static bool xaot_bundle_add_metadata_plans(XaotBundle *bundle, const XgGlobalEvi
     return true;
 }
 
-static uint32_t xaot_capability_profile_action(uint32_t profile, uint32_t capability) {
+static uint32_t xaot_capability_profile_action(const XaotBundle *bundle, uint32_t capability) {
+    uint32_t profile = bundle->global_evidence_plan.profile;
     if (capability == XG_CAP_INSTANCEOF)
         return XAOT_CAPABILITY_ACTION_ALLOW;
     if (profile == XG_BUILD_FREESTANDING) {
+        if ((bundle->target_provider.provided_capability_bits & capability) != 0)
+            return XAOT_CAPABILITY_ACTION_LINK;
         switch (capability) {
             case XG_CAP_NATIVE:
             case XG_CAP_EXTERN:
@@ -3627,8 +3630,7 @@ static bool xaot_bundle_add_capability_plan(XaotBundle *bundle, uint32_t capabil
     plan->body_count = body_count;
     plan->transfer_count = transfer_count;
     plan->evidence = evidence;
-    plan->profile_action =
-        xaot_capability_profile_action(bundle->global_evidence_plan.profile, capability);
+    plan->profile_action = xaot_capability_profile_action(bundle, capability);
     plan->unproven_reason = XAOT_CAPABILITY_UNPROVEN_NONE;
     return true;
 }
@@ -3639,7 +3641,7 @@ static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalE
     for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];
         uint32_t body_count = 0;
-        if (bundle->entry_plan.entry_func_id != XG_NO_ID) {
+        if ((bundle->entry_plan.evidence & XR_ENTRY_EV_ARTIFACT_ROOT_SET) != 0) {
             body_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
         } else {
             for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
@@ -4043,8 +4045,19 @@ XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
 
 XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
                                                  const XaotTargetCapabilityProvider *provider) {
+    uint32_t capability_count = 0;
+    const uint32_t *capabilities = xg_capability_catalog(&capability_count);
+    uint32_t known_capabilities = 0;
+    const uint32_t known_hooks = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
+                                 XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_TIMER |
+                                 XAOT_PROVIDER_HOOK_EXECUTOR_PUMP |
+                                 XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE;
+    for (uint32_t i = 0; i < capability_count; i++)
+        known_capabilities |= capabilities[i];
     if (!bundle || !provider || bundle->global_evidence_plan.evidence ||
-        provider->abi_version != XAOT_PROVIDER_ABI_VERSION)
+        provider->abi_version != XAOT_PROVIDER_ABI_VERSION || provider->target_metadata_hash == 0 ||
+        (provider->provided_capability_bits & ~known_capabilities) != 0 ||
+        (provider->hook_bits & ~known_hooks) != 0)
         return false;
     bundle->target_provider = *provider;
     return true;

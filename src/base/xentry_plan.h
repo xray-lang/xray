@@ -69,6 +69,7 @@ enum {
     XR_ENTRY_EV_ROOT_EFFECT = 1u << 2,
     XR_ENTRY_EV_TARGET_PROVIDER = 1u << 3,
     XR_ENTRY_EV_VERIFIED_BYTECODE = 1u << 4,
+    XR_ENTRY_EV_ARTIFACT_ROOT_SET = 1u << 5,
 };
 
 typedef enum XrEntryUnprovenReason {
@@ -76,6 +77,8 @@ typedef enum XrEntryUnprovenReason {
     XR_ENTRY_NO_ROOT_BODY,
     XR_ENTRY_PROVIDER_ABI,
     XR_ENTRY_MISSING_CAPABILITY,
+    XR_ENTRY_MISSING_PROVIDER_HOOK,
+    XR_ENTRY_OPEN_REACHABILITY,
     XR_ENTRY_MODULE_INIT_SUSPENDS,
 } XrEntryUnprovenReason;
 

@@ -11453,7 +11453,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_CHANNEL), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SCOPE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_ATOMIC), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_WORK_QUEUE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_RESULT_GROUP), 1);
@@ -11695,7 +11695,7 @@ TEST(global_evidence_producer_marks_module_init_body) {
     ASSERT_EQ_UINT(function_bodies, 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_CHANNEL), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_OBJECTS), 1);
 
     XaotBundle bundle;
@@ -11744,7 +11744,7 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
         .abi_version = XAOT_PROVIDER_ABI_VERSION,
         .provided_capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK,
         .hook_bits = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
-                     XAOT_PROVIDER_HOOK_PARK_WAKE,
+                     XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_EXECUTOR_PUMP,
         .target_metadata_hash = 0x197197,
     };
 
@@ -11780,8 +11780,11 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
     ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
     ASSERT_TRUE(xaot_bundle_set_capability_provider(&bundle, &provider));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_FREESTANDING));
-    ASSERT_EQ_UINT(bundle.entry_plan.provided_capability_bits, provider.provided_capability_bits);
-    ASSERT_EQ_UINT(bundle.entry_plan.provider_hook_bits, provider.hook_bits);
+    ASSERT_TRUE((bundle.entry_plan.provided_capability_bits & provider.provided_capability_bits) ==
+                provider.provided_capability_bits);
+    ASSERT_EQ_UINT(bundle.entry_plan.provider_hook_bits,
+                   XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
+                       XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_EXECUTOR_PUMP);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
 }
