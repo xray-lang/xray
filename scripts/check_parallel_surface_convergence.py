@@ -4,8 +4,8 @@
 Task 193 removes the dedicated `parallel for/range/reduce/collect` grammar.
 The only user surface is `import parallel` plus the stdlib functions/classes.
 This checker is intentionally mechanical: it blocks old user-source syntax,
-old parser/AST entry points, and the old `tests/aot/coro/parallel_*.xr`
-migration bucket from reappearing.
+active spec/demo/API-doc text, old parser/AST entry points, and the old
+`tests/aot/coro/parallel_*.xr` migration bucket from reappearing.
 """
 
 from __future__ import annotations
@@ -16,7 +16,15 @@ import sys
 from pathlib import Path
 
 
-USER_SOURCE_DIRS = ("stdlib", "tests", "docs")
+USER_XR_SOURCE_DIRS = ("stdlib", "tests", "demos")
+PUBLIC_TEXT_DIRS = (
+    "spec",
+    "demos",
+    "docs/spec",
+    "docs/language",
+    "docs/knowledge",
+    "docs/rules",
+)
 ALLOWED_LEGACY_XR = {
     Path("tests/compile_errors/stdlib/parallel_keyword_for_removed.xr"),
 }
@@ -42,11 +50,15 @@ LEGACY_SOURCE_PATTERNS = (
     (re.compile(r"\bXiParallelCollect(Data)?\b"), "legacy collect IR data"),
 )
 
+PUBLIC_TEXT_SUFFIXES = {".md", ".xr"}
 SOURCE_SUFFIXES = {".c", ".h", ".inc.c", ".def"}
 
 
 def rel(root: Path, path: Path) -> Path:
-    return path.resolve().relative_to(root)
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return path.resolve().relative_to(root)
 
 
 def iter_files(root: Path, dirs: tuple[str, ...], suffixes: set[str]):
@@ -74,9 +86,24 @@ def scan_text_file(root: Path, path: Path, patterns) -> list[str]:
 
 def check_legacy_xr_surface(root: Path) -> list[str]:
     errors: list[str] = []
-    for path in iter_files(root, USER_SOURCE_DIRS, {".xr"}):
+    for path in iter_files(root, USER_XR_SOURCE_DIRS, {".xr"}):
         if rel(root, path) in ALLOWED_LEGACY_XR:
             continue
+        errors.extend(scan_text_file(root, path, LEGACY_XR_PATTERNS))
+    return errors
+
+
+def check_legacy_public_text(root: Path) -> list[str]:
+    # `docs/` is a symlink to the docs repo and intentionally contains
+    # historical task/export/review records. Gate only active public-doc
+    # subtrees; task-history docs remain evidence, not current API surface.
+    errors: list[str] = []
+    seen: set[Path] = set()
+    for path in iter_files(root, PUBLIC_TEXT_DIRS, PUBLIC_TEXT_SUFFIXES):
+        rel_path = rel(root, path)
+        if rel_path in seen or rel_path in ALLOWED_LEGACY_XR:
+            continue
+        seen.add(rel_path)
         errors.extend(scan_text_file(root, path, LEGACY_XR_PATTERNS))
     return errors
 
@@ -107,6 +134,7 @@ def main() -> int:
     root = Path(args.root).resolve()
     errors = (
         check_legacy_xr_surface(root)
+        + check_legacy_public_text(root)
         + check_legacy_source_symbols(root)
         + check_migrated_aot_coro_bucket(root)
     )
@@ -121,7 +149,7 @@ def main() -> int:
         )
         return 1
 
-    print("OK: parallel surface has no legacy grammar/parser/AOT-coro residue")
+    print("OK: parallel surface has no legacy grammar/parser/spec-demo-doc/AOT-coro residue")
     return 0
 
 

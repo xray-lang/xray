@@ -2,9 +2,10 @@
 """Guard Task 193 parallel backend ABI/name convergence.
 
 The stdlib `parallel` surface lowers to VM OP_PAR_* dispatch and AOT
-`xr_parallel_*` runtime helpers. This checker blocks old AOT-private names from
-returning and makes the current descriptor/runtime ABI expectations explicit in
-source and cgen fixtures.
+`xr_parallel_*` runtime helpers. This checker blocks old AOT-private names and
+global-pool wording from returning, including active spec/demo/API-doc text, and
+makes the current descriptor/runtime ABI expectations explicit in source and
+cgen fixtures.
 """
 
 from __future__ import annotations
@@ -15,7 +16,17 @@ import sys
 from pathlib import Path
 
 
-SCAN_DIRS = ("src", "stdlib", "tests")
+SCAN_DIRS = (
+    "src",
+    "stdlib",
+    "tests",
+    "spec",
+    "demos",
+    "docs/spec",
+    "docs/language",
+    "docs/knowledge",
+    "docs/rules",
+)
 SCAN_SUFFIXES = {
     ".c",
     ".h",
@@ -24,6 +35,7 @@ SCAN_SUFFIXES = {
     ".xr",
     ".expect",
     ".expected",
+    ".md",
 }
 
 LEGACY_BACKEND_PATTERNS = (
@@ -32,6 +44,7 @@ LEGACY_BACKEND_PATTERNS = (
     (re.compile(r"\bXR_AOT_PAR[A-Z0-9_]*\b"), "legacy XR_AOT_PAR* constant"),
     (re.compile(r"\bXrParallelPool\b"), "legacy global XrParallelPool"),
     (re.compile(r"\bxr_parallel_pool_[A-Za-z0-9_]+\b"), "legacy xr_parallel_pool_* helper"),
+    (re.compile(r"\bparallel_pool\b"), "legacy global parallel_pool helper/name"),
 )
 
 REQUIRED_TEXT = {
@@ -109,7 +122,10 @@ REQUIRED_TEXT = {
 
 
 def rel(root: Path, path: Path) -> Path:
-    return path.resolve().relative_to(root)
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return path.resolve().relative_to(root)
 
 
 def iter_files(root: Path):
