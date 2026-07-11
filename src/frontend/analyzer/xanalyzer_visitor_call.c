@@ -1915,10 +1915,13 @@ static const char *xa_parallel_plan_callback_label_for_arg(const char *member, i
     return NULL;
 }
 
-static const char *xa_parallel_any_callback_label_for_arg(const char *member,
-                                                          const char *plan_member, int arg_index) {
-    const char *label = xa_parallel_callback_label_for_arg(member, arg_index);
-    return label ? label : xa_parallel_plan_callback_label_for_arg(plan_member, arg_index);
+static const char *xa_parallel_callback_label_for_plan(const XaParallelCallPlan *plan,
+                                                       int arg_index) {
+    if (!plan)
+        return NULL;
+    const char *member = xa_parallel_call_kind_name(plan->kind);
+    return plan->is_plan_method ? xa_parallel_plan_callback_label_for_arg(member, arg_index)
+                                : xa_parallel_callback_label_for_arg(member, arg_index);
 }
 
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
@@ -3276,6 +3279,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     xa_record_parallel_call_plan(ctx, node, parallel_call_member, false);
     xa_record_parallel_call_plan(ctx, node, parallel_plan_member, true);
     xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
+    const XaParallelCallPlan *parallel_call_plan =
+        xa_analyzer_get_parallel_call_plan(ctx->analyzer, node);
 
     const char *payload_enum_name = NULL;
     const char *payload_variant_name = NULL;
@@ -3694,8 +3699,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             param_slot = rest_param_index;
 
         if (param_slot < 0 || param_slot >= param_count) {
-            const char *parallel_callback_label = xa_parallel_any_callback_label_for_arg(
-                parallel_call_member, parallel_plan_member, i);
+            const char *parallel_callback_label =
+                xa_parallel_callback_label_for_plan(parallel_call_plan, i);
             XrType *arg_type =
                 xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
             if (effective_arg_types && slot < arg_count)
@@ -3715,7 +3720,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (xa_call_is_copy_builtin(call) && slot == 0)
             ctx->allow_view_expr_for_copy = true;
         const char *parallel_callback_label =
-            xa_parallel_any_callback_label_for_arg(parallel_call_member, parallel_plan_member, i);
+            xa_parallel_callback_label_for_plan(parallel_call_plan, i);
         XrType *arg_type =
             xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
         ctx->allow_view_expr_for_copy = saved_copy_view;
