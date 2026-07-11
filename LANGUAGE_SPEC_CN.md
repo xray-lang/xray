@@ -1522,7 +1522,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
-- 捕获规则：见 §7.4 闭包捕获。**`go` 协程闭包对普通 `var` / `const` 局部引用值的捕获是编译错误**——必须显式 `shared`、`copy(...)`、`move`、或参数传递。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、module-readonly 与 shared identity 可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move` 或改用 `shared`。
 
 ### 3.13 `match` 表达式
 
@@ -1963,7 +1963,7 @@ shared PRIMES = [2, 3, 5, 7, 11]
 shared counter = Atomic(0)
 ```
 
-- 存储在**全局堆**，refcount 管理。
+- 由 **shared/system owner** 直接物化并持有稳定共享身份；具体堆布局不是语言语义。
 - 绑定名不可重新赋值，也不能作为 `move` 源。
 - 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
 - `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
@@ -4948,18 +4948,20 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 
 | 区域 | 用途 |
 |--|--|
-| **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared` / `shared`，引用计数 |
-| **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
+| **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
+| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
+| **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
+| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，引用计数 |
+| **execution owner** | root、task 或直接入口的局部 RC 对象图；不要求存在物理 coroutine identity |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
 ### 16.3 内存模型
 
-- 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
+- 默认 **per-execution reference counting**。AllocationContext 显式选择 module、shared/system 或 execution owner；普通分配不以 `current_coro` 作为唯一入口。最后一个强引用释放时，对象进入对应 owner 的释放路径。
 - **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
 - **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 只报告当前协程堆的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 ExecutionContext 的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 
