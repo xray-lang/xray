@@ -89,6 +89,5 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
 
     // 3. Mark as loaded
     mod->requires_script = true;
-    mod->loaded = true;
     return mod;
 }

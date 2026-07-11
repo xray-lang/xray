@@ -688,6 +688,5 @@ XR_FUNC XrModule *xr_load_module_regex(XrVMRuntime *isolate) {
 
     // The Regex XrClass itself is registered up front by the prelude
     // module — no need to do it again here.
-    mod->loaded = true;
     return mod;
 }

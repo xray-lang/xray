@@ -1225,6 +1225,5 @@ XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
     xr_stdlib_vm_bind_io_generated(isolate, mod);
 
     // Mark as loaded
-    mod->loaded = true;
     return mod;
 }
