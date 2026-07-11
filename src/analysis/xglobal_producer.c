@@ -3474,6 +3474,7 @@ static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
 static bool return_literal_resolve_match_value(XgReturnObjectLiteralScan *scan,
                                                const AstNode *value,
                                                const ObjectLiteralNode **out_literal);
+static bool return_literal_scan_match_expr(XgReturnObjectLiteralScan *scan, const AstNode *value);
 
 static bool return_literal_scan_node_list(XgReturnObjectLiteralScan *scan, AstNode *const *nodes,
                                           int count) {
@@ -3642,6 +3643,59 @@ static bool return_literal_resolve_match_value(XgReturnObjectLiteralScan *scan,
         return false;
     *scan = merged_scan;
     *out_literal = match_literal;
+    return true;
+}
+
+static bool return_literal_scan_match_expr(XgReturnObjectLiteralScan *scan, const AstNode *value) {
+    uint32_t base_locals;
+    uint32_t base_returns;
+    XgReturnObjectLiteralScan base_scan;
+    XgReturnObjectLiteralScan merged_fallthrough;
+    bool have_fallthrough = false;
+    if (!scan || !value || value->type != AST_MATCH_EXPR)
+        return false;
+    if (!return_literal_scan_node(scan, value->as.match_expr.expr) || scan->failed)
+        return false;
+    if (value->as.match_expr.arm_count <= 0 || !value->as.match_expr.arms)
+        return false;
+    base_locals = scan->nlocals;
+    base_returns = scan->return_count;
+    base_scan = *scan;
+    for (int i = 0; i < value->as.match_expr.arm_count; i++) {
+        AstNode *arm_node = value->as.match_expr.arms[i];
+        if (!arm_node || arm_node->type != AST_MATCH_ARM)
+            return false;
+        MatchArmNode *arm = &arm_node->as.match_arm;
+        XgReturnObjectLiteralScan arm_scan = base_scan;
+        if (arm->guard && (!return_literal_scan_node(&arm_scan, arm->guard) || arm_scan.failed))
+            return false;
+        if (!return_literal_scan_node(&arm_scan, arm->body) || arm_scan.failed)
+            return false;
+        if (arm_scan.return_count > base_returns &&
+            !return_literal_record_branch_return(scan, &arm_scan, base_returns))
+            return false;
+        if (!arm_scan.terminated) {
+            if (!have_fallthrough) {
+                merged_fallthrough = arm_scan;
+                have_fallthrough = true;
+            } else {
+                XgReturnObjectLiteralScan tmp_scan = base_scan;
+                if (!return_literal_merge_branch_locals(&tmp_scan, &merged_fallthrough, &arm_scan,
+                                                        base_locals))
+                    return false;
+                merged_fallthrough = tmp_scan;
+            }
+        }
+    }
+    if (have_fallthrough) {
+        for (uint32_t i = 0; i < base_locals; i++)
+            scan->locals[i].literal = merged_fallthrough.locals[i].literal;
+        scan->nlocals = base_locals;
+        scan->terminated = false;
+    } else {
+        scan->nlocals = base_locals;
+        scan->terminated = true;
+    }
     return true;
 }
 
@@ -3830,11 +3884,12 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
         case AST_FOR_STMT:
         case AST_FOR_IN_STMT:
         case AST_TRY_CATCH:
-        case AST_MATCH_EXPR:
         case AST_SELECT_STMT:
         case AST_SCOPE_BLOCK:
             scan->failed = true;
             return false;
+        case AST_MATCH_EXPR:
+            return return_literal_scan_match_expr(scan, node);
         default:
             return true;
     }
