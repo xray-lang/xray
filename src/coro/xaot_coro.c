@@ -67,57 +67,57 @@ typedef struct XrAotEnumBoxCompat {
 } XrAotEnumBoxCompat;
 
 enum {
-    XR_AOT_PAR_FOR_MAX_WORKERS = 256,
+    XR_PARALLEL_MAX_WORKERS = 256,
 };
 
-typedef enum XrAotParJobKind {
-    XR_AOT_PAR_JOB_NONE = 0,
-    XR_AOT_PAR_JOB_FOR_RANGE,
-    XR_AOT_PAR_JOB_REDUCE_I64,
-    XR_AOT_PAR_JOB_REDUCE_AGG,
-} XrAotParJobKind;
+typedef enum XrParallelJobKind {
+    XR_PARALLEL_JOB_NONE = 0,
+    XR_PARALLEL_JOB_FOR_RANGE,
+    XR_PARALLEL_JOB_REDUCE_I64,
+    XR_PARALLEL_JOB_REDUCE_AGG,
+} XrParallelJobKind;
 
-typedef struct XrAotParForPool XrAotParForPool;
+typedef struct XrParallelPool XrParallelPool;
 
-typedef struct XrAotParWorkerArg {
-    XrAotParForPool *pool;
+typedef struct XrParallelWorkerArg {
+    XrParallelPool *pool;
     int worker_index;
-} XrAotParWorkerArg;
+} XrParallelWorkerArg;
 
-typedef struct XrAotParForPool {
+typedef struct XrParallelPool {
     xr_mutex_t mutex;
     xr_cond_t has_job;
     xr_cond_t done;
     xr_thread_t *threads;
-    XrAotParWorkerArg **thread_args;
+    XrParallelWorkerArg **thread_args;
     int thread_count;
     int active_workers;
     bool stop;
     bool job_active;
-    XrAotParJobKind job_kind;
+    XrParallelJobKind job_kind;
     uint64_t generation;
     int64_t start;
     int64_t end;
     int64_t participants;
-    XrAotParForRangeI64Fn for_body;
-    XrAotParReduceRangeI64Fn reduce_body;
-    XrAotParReduceCombineI64Fn reduce_combine;
-    XrAotParReduceRangeAggFn reduce_agg_body;
-    XrAotParReduceCombineAggFn reduce_agg_combine;
-    int64_t reduce_partials[XR_AOT_PAR_FOR_MAX_WORKERS];
+    XrParallelRangeI64Fn for_body;
+    XrParallelReduceRangeI64Fn reduce_body;
+    XrParallelReduceCombineI64Fn reduce_combine;
+    XrParallelReduceRangeAggFn reduce_agg_body;
+    XrParallelReduceCombineAggFn reduce_agg_combine;
+    int64_t reduce_partials[XR_PARALLEL_MAX_WORKERS];
     unsigned char *reduce_agg_partials;
     size_t reduce_agg_partials_cap;
     size_t reduce_agg_size;
-    bool reduce_valid[XR_AOT_PAR_FOR_MAX_WORKERS];
+    bool reduce_valid[XR_PARALLEL_MAX_WORKERS];
     _Atomic bool reduce_failed;
     struct xrt_closure *closure;
     int remaining_workers;
-} XrAotParForPool;
+} XrParallelPool;
 
-static xr_mutex_t xr_aot_parallel_pool_create_mutex = XR_MUTEX_INITIALIZER;
+static xr_mutex_t xr_parallel_pool_create_mutex = XR_MUTEX_INITIALIZER;
 
-static XrAotParForPool *xr_aot_par_for_pool_new(void) {
-    XrAotParForPool *pool = (XrAotParForPool *) xr_calloc(1, sizeof(XrAotParForPool));
+static XrParallelPool *xr_parallel_for_pool_new(void) {
+    XrParallelPool *pool = (XrParallelPool *) xr_calloc(1, sizeof(XrParallelPool));
     if (!pool)
         return NULL;
     xr_mutex_init(&pool->mutex);
@@ -126,25 +126,25 @@ static XrAotParForPool *xr_aot_par_for_pool_new(void) {
     return pool;
 }
 
-static XrAotParForPool *xr_aot_parallel_pool_for_context(const XrAotContext *ctx) {
+static XrParallelPool *xr_parallel_pool_for_context(const XrAotContext *ctx) {
     XrAotRuntime *runtime = ctx && ctx->runtime ? ctx->runtime : xr_aot_runtime_current();
     if (!runtime)
         return NULL;
-    XrAotParForPool *pool = (XrAotParForPool *) runtime->parallel_pool;
+    XrParallelPool *pool = (XrParallelPool *) runtime->parallel_pool;
     if (pool)
         return pool;
-    xr_mutex_lock(&xr_aot_parallel_pool_create_mutex);
-    pool = (XrAotParForPool *) runtime->parallel_pool;
+    xr_mutex_lock(&xr_parallel_pool_create_mutex);
+    pool = (XrParallelPool *) runtime->parallel_pool;
     if (!pool) {
-        pool = xr_aot_par_for_pool_new();
+        pool = xr_parallel_for_pool_new();
         runtime->parallel_pool = pool;
     }
-    xr_mutex_unlock(&xr_aot_parallel_pool_create_mutex);
+    xr_mutex_unlock(&xr_parallel_pool_create_mutex);
     return pool;
 }
 
-static bool xr_aot_par_for_lane_bounds(int64_t start, int64_t end, int64_t participants,
-                                       int64_t worker_id, int64_t *out_begin, int64_t *out_end) {
+static bool xr_parallel_for_lane_bounds(int64_t start, int64_t end, int64_t participants,
+                                        int64_t worker_id, int64_t *out_begin, int64_t *out_end) {
     if (!out_begin || !out_end || participants <= 0 || worker_id < 0 || worker_id >= participants ||
         end <= start)
         return false;
@@ -164,26 +164,26 @@ static bool xr_aot_par_for_lane_bounds(int64_t start, int64_t end, int64_t parti
     return true;
 }
 
-static void xr_aot_par_for_run_lane(XrAotParForRangeI64Fn body, struct xrt_closure *closure,
-                                    int64_t start, int64_t end, int64_t participants,
-                                    int64_t worker_id) {
+static void xr_parallel_for_run_lane(XrParallelRangeI64Fn body, struct xrt_closure *closure,
+                                     int64_t start, int64_t end, int64_t participants,
+                                     int64_t worker_id) {
     if (!body)
         return;
     int64_t begin = 0;
     int64_t limit = 0;
-    if (xr_aot_par_for_lane_bounds(start, end, participants, worker_id, &begin, &limit))
+    if (xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit))
         body(closure, begin, limit, worker_id);
 }
 
-static void xr_aot_par_reduce_i64_run_lane(XrAotParForPool *pool, XrAotParReduceRangeI64Fn body,
-                                           struct xrt_closure *closure, int64_t start, int64_t end,
-                                           int64_t participants, int64_t worker_id) {
-    if (!pool || !body || worker_id < 0 || worker_id >= XR_AOT_PAR_FOR_MAX_WORKERS)
+static void xr_parallel_reduce_i64_run_lane(XrParallelPool *pool, XrParallelReduceRangeI64Fn body,
+                                            struct xrt_closure *closure, int64_t start, int64_t end,
+                                            int64_t participants, int64_t worker_id) {
+    if (!pool || !body || worker_id < 0 || worker_id >= XR_PARALLEL_MAX_WORKERS)
         return;
 
     int64_t begin = 0;
     int64_t limit = 0;
-    if (!xr_aot_par_for_lane_bounds(start, end, participants, worker_id, &begin, &limit)) {
+    if (!xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit)) {
         pool->reduce_valid[worker_id] = false;
         return;
     }
@@ -198,10 +198,10 @@ static void xr_aot_par_reduce_i64_run_lane(XrAotParForPool *pool, XrAotParReduce
     pool->reduce_valid[worker_id] = true;
 }
 
-static void xr_aot_par_reduce_agg_run_lane(XrAotParForPool *pool, XrAotParReduceRangeAggFn body,
-                                           struct xrt_closure *closure, int64_t start, int64_t end,
-                                           int64_t participants, int64_t worker_id) {
-    if (!pool || !body || worker_id < 0 || worker_id >= XR_AOT_PAR_FOR_MAX_WORKERS ||
+static void xr_parallel_reduce_agg_run_lane(XrParallelPool *pool, XrParallelReduceRangeAggFn body,
+                                            struct xrt_closure *closure, int64_t start, int64_t end,
+                                            int64_t participants, int64_t worker_id) {
+    if (!pool || !body || worker_id < 0 || worker_id >= XR_PARALLEL_MAX_WORKERS ||
         pool->reduce_agg_size == 0 || !pool->reduce_agg_partials)
         return;
 
@@ -210,7 +210,7 @@ static void xr_aot_par_reduce_agg_run_lane(XrAotParForPool *pool, XrAotParReduce
 
     int64_t begin = 0;
     int64_t limit = 0;
-    if (!xr_aot_par_for_lane_bounds(start, end, participants, worker_id, &begin, &limit)) {
+    if (!xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit)) {
         pool->reduce_valid[worker_id] = false;
         return;
     }
@@ -223,13 +223,13 @@ static void xr_aot_par_reduce_agg_run_lane(XrAotParForPool *pool, XrAotParReduce
     pool->reduce_valid[worker_id] = true;
 }
 
-static void xr_aot_par_for_complete_participant_locked(XrAotParForPool *pool) {
+static void xr_parallel_for_complete_participant_locked(XrParallelPool *pool) {
     if (!pool)
         return;
     pool->remaining_workers--;
     if (pool->remaining_workers == 0) {
         pool->job_active = false;
-        pool->job_kind = XR_AOT_PAR_JOB_NONE;
+        pool->job_kind = XR_PARALLEL_JOB_NONE;
         pool->for_body = NULL;
         pool->reduce_body = NULL;
         pool->reduce_combine = NULL;
@@ -241,9 +241,9 @@ static void xr_aot_par_for_complete_participant_locked(XrAotParForPool *pool) {
     }
 }
 
-static void *xr_aot_par_for_worker_main(void *arg) {
-    XrAotParWorkerArg *worker_arg = (XrAotParWorkerArg *) arg;
-    XrAotParForPool *pool = worker_arg ? worker_arg->pool : NULL;
+static void *xr_parallel_for_worker_main(void *arg) {
+    XrParallelWorkerArg *worker_arg = (XrParallelWorkerArg *) arg;
+    XrParallelPool *pool = worker_arg ? worker_arg->pool : NULL;
     int worker_index = worker_arg ? worker_arg->worker_index : -1;
     if (!pool)
         return NULL;
@@ -265,10 +265,10 @@ static void *xr_aot_par_for_worker_main(void *arg) {
             xr_mutex_unlock(&pool->mutex);
             continue;
         }
-        XrAotParJobKind job_kind = pool->job_kind;
-        XrAotParForRangeI64Fn for_body = pool->for_body;
-        XrAotParReduceRangeI64Fn reduce_body = pool->reduce_body;
-        XrAotParReduceRangeAggFn reduce_agg_body = pool->reduce_agg_body;
+        XrParallelJobKind job_kind = pool->job_kind;
+        XrParallelRangeI64Fn for_body = pool->for_body;
+        XrParallelReduceRangeI64Fn reduce_body = pool->reduce_body;
+        XrParallelReduceRangeAggFn reduce_agg_body = pool->reduce_agg_body;
         struct xrt_closure *closure = pool->closure;
         int64_t start = pool->start;
         int64_t end = pool->end;
@@ -276,34 +276,34 @@ static void *xr_aot_par_for_worker_main(void *arg) {
         xr_mutex_unlock(&pool->mutex);
 
         switch (job_kind) {
-            case XR_AOT_PAR_JOB_FOR_RANGE:
-                xr_aot_par_for_run_lane(for_body, closure, start, end, participants, worker_index);
+            case XR_PARALLEL_JOB_FOR_RANGE:
+                xr_parallel_for_run_lane(for_body, closure, start, end, participants, worker_index);
                 break;
-            case XR_AOT_PAR_JOB_REDUCE_I64:
-                xr_aot_par_reduce_i64_run_lane(pool, reduce_body, closure, start, end, participants,
-                                               worker_index);
+            case XR_PARALLEL_JOB_REDUCE_I64:
+                xr_parallel_reduce_i64_run_lane(pool, reduce_body, closure, start, end,
+                                                participants, worker_index);
                 break;
-            case XR_AOT_PAR_JOB_REDUCE_AGG:
-                xr_aot_par_reduce_agg_run_lane(pool, reduce_agg_body, closure, start, end,
-                                               participants, worker_index);
+            case XR_PARALLEL_JOB_REDUCE_AGG:
+                xr_parallel_reduce_agg_run_lane(pool, reduce_agg_body, closure, start, end,
+                                                participants, worker_index);
                 break;
-            case XR_AOT_PAR_JOB_NONE:
+            case XR_PARALLEL_JOB_NONE:
                 break;
         }
 
         xr_mutex_lock(&pool->mutex);
-        xr_aot_par_for_complete_participant_locked(pool);
+        xr_parallel_for_complete_participant_locked(pool);
         xr_mutex_unlock(&pool->mutex);
     }
 }
 
-static int xr_aot_par_for_ensure_workers_locked(XrAotParForPool *pool, int wanted) {
+static int xr_parallel_for_ensure_workers_locked(XrParallelPool *pool, int wanted) {
     if (!pool)
         return 0;
     if (wanted <= pool->thread_count)
         return pool->thread_count;
-    if (wanted > XR_AOT_PAR_FOR_MAX_WORKERS - 1)
-        wanted = XR_AOT_PAR_FOR_MAX_WORKERS - 1;
+    if (wanted > XR_PARALLEL_MAX_WORKERS - 1)
+        wanted = XR_PARALLEL_MAX_WORKERS - 1;
 
     xr_thread_t *threads =
         (xr_thread_t *) xr_realloc(pool->threads, (size_t) wanted * sizeof(xr_thread_t));
@@ -311,20 +311,21 @@ static int xr_aot_par_for_ensure_workers_locked(XrAotParForPool *pool, int wante
         return pool->thread_count;
     pool->threads = threads;
 
-    XrAotParWorkerArg **thread_args = (XrAotParWorkerArg **) xr_realloc(
-        pool->thread_args, (size_t) wanted * sizeof(XrAotParWorkerArg *));
+    XrParallelWorkerArg **thread_args = (XrParallelWorkerArg **) xr_realloc(
+        pool->thread_args, (size_t) wanted * sizeof(XrParallelWorkerArg *));
     if (!thread_args)
         return pool->thread_count;
     pool->thread_args = thread_args;
 
     while (pool->thread_count < wanted) {
         xr_thread_t thread;
-        XrAotParWorkerArg *arg = (XrAotParWorkerArg *) xr_malloc(sizeof(XrAotParWorkerArg));
+        XrParallelWorkerArg *arg = (XrParallelWorkerArg *) xr_malloc(sizeof(XrParallelWorkerArg));
         if (!arg)
             break;
         arg->pool = pool;
         arg->worker_index = pool->thread_count;
-        if (!xr_thread_create_ex(&thread, xr_aot_par_for_worker_main, arg, XR_WORKER_STACK_BYTES)) {
+        if (!xr_thread_create_ex(&thread, xr_parallel_for_worker_main, arg,
+                                 XR_WORKER_STACK_BYTES)) {
             xr_free(arg);
             break;
         }
@@ -334,9 +335,9 @@ static int xr_aot_par_for_ensure_workers_locked(XrAotParForPool *pool, int wante
     return pool->thread_count;
 }
 
-static void xr_aot_par_for_run_range_sequential(int64_t start, int64_t end,
-                                                XrAotParForRangeI64Fn body,
-                                                struct xrt_closure *closure) {
+static void xr_parallel_for_run_range_sequential(int64_t start, int64_t end,
+                                                 XrParallelRangeI64Fn body,
+                                                 struct xrt_closure *closure) {
     body(closure, start, end, 0);
 }
 
@@ -346,7 +347,7 @@ static bool xr_aot_env_flag_enabled(const char *name) {
                  strcmp(v, "yes") == 0 || strcmp(v, "on") == 0);
 }
 
-static int64_t xr_aot_parallel_resolve_workers(int64_t requested) {
+static int64_t xr_parallel_resolve_workers(int64_t requested) {
     if (requested < 0)
         return -1;
     if (requested != 0)
@@ -359,41 +360,40 @@ static int64_t xr_aot_parallel_resolve_workers(int64_t requested) {
     unsigned int cpus = xr_os_cpu_count();
     if (cpus == 0)
         return 1;
-    if (cpus > XR_AOT_PAR_FOR_MAX_WORKERS)
-        return XR_AOT_PAR_FOR_MAX_WORKERS;
+    if (cpus > XR_PARALLEL_MAX_WORKERS)
+        return XR_PARALLEL_MAX_WORKERS;
     return (int64_t) cpus;
 }
 
-bool xr_aot_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end,
-                                   int64_t workers, XrAotParForRangeI64Fn body,
-                                   struct xrt_closure *closure) {
+bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end, int64_t workers,
+                               XrParallelRangeI64Fn body, struct xrt_closure *closure) {
     if (!body)
         return false;
     if (end <= start)
         return true;
 
-    workers = xr_aot_parallel_resolve_workers(workers);
+    workers = xr_parallel_resolve_workers(workers);
     if (workers < 0)
         return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1) {
-        xr_aot_par_for_run_range_sequential(start, end, body, closure);
+        xr_parallel_for_run_range_sequential(start, end, body, closure);
         return true;
     }
 
     int64_t participants = workers;
     if (participants > count)
         participants = count;
-    if (participants > XR_AOT_PAR_FOR_MAX_WORKERS)
-        participants = XR_AOT_PAR_FOR_MAX_WORKERS;
+    if (participants > XR_PARALLEL_MAX_WORKERS)
+        participants = XR_PARALLEL_MAX_WORKERS;
     int background_workers = (int) participants - 1;
     if (background_workers <= 0) {
-        xr_aot_par_for_run_range_sequential(start, end, body, closure);
+        xr_parallel_for_run_range_sequential(start, end, body, closure);
         return true;
     }
 
-    XrAotParForPool *pool = xr_aot_parallel_pool_for_context(ctx);
+    XrParallelPool *pool = xr_parallel_pool_for_context(ctx);
     if (!pool)
         return false;
 
@@ -401,12 +401,12 @@ bool xr_aot_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64
     while (pool->job_active)
         xr_cond_wait(&pool->done, &pool->mutex);
 
-    int available_workers = xr_aot_par_for_ensure_workers_locked(pool, background_workers);
+    int available_workers = xr_parallel_for_ensure_workers_locked(pool, background_workers);
     if (available_workers < background_workers)
         background_workers = available_workers;
     if (background_workers <= 0) {
         xr_mutex_unlock(&pool->mutex);
-        xr_aot_par_for_run_range_sequential(start, end, body, closure);
+        xr_parallel_for_run_range_sequential(start, end, body, closure);
         return true;
     }
 
@@ -414,7 +414,7 @@ bool xr_aot_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64
     pool->start = start;
     pool->end = end;
     pool->participants = actual_participants;
-    pool->job_kind = XR_AOT_PAR_JOB_FOR_RANGE;
+    pool->job_kind = XR_PARALLEL_JOB_FOR_RANGE;
     pool->for_body = body;
     pool->reduce_body = NULL;
     pool->reduce_combine = NULL;
@@ -430,21 +430,21 @@ bool xr_aot_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64
     xr_cond_broadcast(&pool->has_job);
     xr_mutex_unlock(&pool->mutex);
 
-    xr_aot_par_for_run_lane(body, closure, start, end, actual_participants,
-                            (int64_t) background_workers);
+    xr_parallel_for_run_lane(body, closure, start, end, actual_participants,
+                             (int64_t) background_workers);
 
     xr_mutex_lock(&pool->mutex);
-    xr_aot_par_for_complete_participant_locked(pool);
+    xr_parallel_for_complete_participant_locked(pool);
     while (pool->job_active)
         xr_cond_wait(&pool->done, &pool->mutex);
     xr_mutex_unlock(&pool->mutex);
     return true;
 }
 
-static bool xr_aot_par_reduce_i64_run_range_sequential(int64_t start, int64_t end, int64_t initial,
-                                                       XrAotParReduceRangeI64Fn body,
-                                                       XrAotParReduceCombineI64Fn combine,
-                                                       struct xrt_closure *closure, int64_t *out) {
+static bool xr_parallel_reduce_i64_run_range_sequential(int64_t start, int64_t end, int64_t initial,
+                                                        XrParallelReduceRangeI64Fn body,
+                                                        XrParallelReduceCombineI64Fn combine,
+                                                        struct xrt_closure *closure, int64_t *out) {
     if (!out || !body || !combine)
         return false;
     if (end <= start) {
@@ -458,11 +458,11 @@ static bool xr_aot_par_reduce_i64_run_range_sequential(int64_t start, int64_t en
     return true;
 }
 
-static bool xr_aot_par_reduce_agg_run_range_sequential(int64_t start, int64_t end,
-                                                       size_t value_size, const void *initial,
-                                                       XrAotParReduceRangeAggFn body,
-                                                       XrAotParReduceCombineAggFn combine,
-                                                       struct xrt_closure *closure, void *out) {
+static bool xr_parallel_reduce_agg_run_range_sequential(int64_t start, int64_t end,
+                                                        size_t value_size, const void *initial,
+                                                        XrParallelReduceRangeAggFn body,
+                                                        XrParallelReduceCombineAggFn combine,
+                                                        struct xrt_closure *closure, void *out) {
     if (!out || !initial || !body || !combine || value_size == 0)
         return false;
     memcpy(out, initial, value_size);
@@ -478,10 +478,10 @@ static bool xr_aot_par_reduce_agg_run_range_sequential(int64_t start, int64_t en
     return ok;
 }
 
-static bool xr_aot_par_reduce_agg_ensure_partials_locked(XrAotParForPool *pool, size_t value_size) {
-    if (!pool || value_size == 0 || value_size > SIZE_MAX / XR_AOT_PAR_FOR_MAX_WORKERS)
+static bool xr_parallel_reduce_agg_ensure_partials_locked(XrParallelPool *pool, size_t value_size) {
+    if (!pool || value_size == 0 || value_size > SIZE_MAX / XR_PARALLEL_MAX_WORKERS)
         return false;
-    size_t required = value_size * XR_AOT_PAR_FOR_MAX_WORKERS;
+    size_t required = value_size * XR_PARALLEL_MAX_WORKERS;
     if (required <= pool->reduce_agg_partials_cap)
         return true;
     unsigned char *partials = (unsigned char *) xr_realloc(pool->reduce_agg_partials, required);
@@ -492,10 +492,10 @@ static bool xr_aot_par_reduce_agg_ensure_partials_locked(XrAotParForPool *pool, 
     return true;
 }
 
-bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end,
-                                int64_t workers, int64_t initial, XrAotParReduceRangeI64Fn body,
-                                XrAotParReduceCombineI64Fn combine, struct xrt_closure *closure,
-                                int64_t *out) {
+bool xr_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end, int64_t workers,
+                            int64_t initial, XrParallelReduceRangeI64Fn body,
+                            XrParallelReduceCombineI64Fn combine, struct xrt_closure *closure,
+                            int64_t *out) {
     if (!out || !body || !combine)
         return false;
     if (end <= start) {
@@ -503,26 +503,26 @@ bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t 
         return true;
     }
 
-    workers = xr_aot_parallel_resolve_workers(workers);
+    workers = xr_parallel_resolve_workers(workers);
     if (workers < 0)
         return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1)
-        return xr_aot_par_reduce_i64_run_range_sequential(start, end, initial, body, combine,
-                                                          closure, out);
+        return xr_parallel_reduce_i64_run_range_sequential(start, end, initial, body, combine,
+                                                           closure, out);
 
     int64_t participants = workers;
     if (participants > count)
         participants = count;
-    if (participants > XR_AOT_PAR_FOR_MAX_WORKERS)
-        participants = XR_AOT_PAR_FOR_MAX_WORKERS;
+    if (participants > XR_PARALLEL_MAX_WORKERS)
+        participants = XR_PARALLEL_MAX_WORKERS;
     int background_workers = (int) participants - 1;
     if (background_workers <= 0)
-        return xr_aot_par_reduce_i64_run_range_sequential(start, end, initial, body, combine,
-                                                          closure, out);
+        return xr_parallel_reduce_i64_run_range_sequential(start, end, initial, body, combine,
+                                                           closure, out);
 
-    XrAotParForPool *pool = xr_aot_parallel_pool_for_context(ctx);
+    XrParallelPool *pool = xr_parallel_pool_for_context(ctx);
     if (!pool)
         return false;
 
@@ -530,13 +530,13 @@ bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t 
     while (pool->job_active)
         xr_cond_wait(&pool->done, &pool->mutex);
 
-    int available_workers = xr_aot_par_for_ensure_workers_locked(pool, background_workers);
+    int available_workers = xr_parallel_for_ensure_workers_locked(pool, background_workers);
     if (available_workers < background_workers)
         background_workers = available_workers;
     if (background_workers <= 0) {
         xr_mutex_unlock(&pool->mutex);
-        return xr_aot_par_reduce_i64_run_range_sequential(start, end, initial, body, combine,
-                                                          closure, out);
+        return xr_parallel_reduce_i64_run_range_sequential(start, end, initial, body, combine,
+                                                           closure, out);
     }
 
     int64_t actual_participants = (int64_t) background_workers + 1;
@@ -545,7 +545,7 @@ bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t 
     pool->start = start;
     pool->end = end;
     pool->participants = actual_participants;
-    pool->job_kind = XR_AOT_PAR_JOB_REDUCE_I64;
+    pool->job_kind = XR_PARALLEL_JOB_REDUCE_I64;
     pool->for_body = NULL;
     pool->reduce_body = body;
     pool->reduce_combine = combine;
@@ -560,11 +560,11 @@ bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t 
     xr_cond_broadcast(&pool->has_job);
     xr_mutex_unlock(&pool->mutex);
 
-    xr_aot_par_reduce_i64_run_lane(pool, body, closure, start, end, actual_participants,
-                                   (int64_t) background_workers);
+    xr_parallel_reduce_i64_run_lane(pool, body, closure, start, end, actual_participants,
+                                    (int64_t) background_workers);
 
     xr_mutex_lock(&pool->mutex);
-    xr_aot_par_for_complete_participant_locked(pool);
+    xr_parallel_for_complete_participant_locked(pool);
     while (pool->job_active)
         xr_cond_wait(&pool->done, &pool->mutex);
 
@@ -581,10 +581,10 @@ bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t 
     return ok;
 }
 
-bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
-                                int64_t workers, size_t value_size, const void *initial,
-                                XrAotParReduceRangeAggFn body, XrAotParReduceCombineAggFn combine,
-                                struct xrt_closure *closure, void *out) {
+bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end, int64_t workers,
+                            size_t value_size, const void *initial, XrParallelReduceRangeAggFn body,
+                            XrParallelReduceCombineAggFn combine, struct xrt_closure *closure,
+                            void *out) {
     if (!out || !initial || !body || !combine || value_size == 0)
         return false;
     if (end <= start) {
@@ -592,26 +592,26 @@ bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t 
         return true;
     }
 
-    workers = xr_aot_parallel_resolve_workers(workers);
+    workers = xr_parallel_resolve_workers(workers);
     if (workers < 0)
         return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1)
-        return xr_aot_par_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
-                                                          combine, closure, out);
+        return xr_parallel_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
+                                                           combine, closure, out);
 
     int64_t participants = workers;
     if (participants > count)
         participants = count;
-    if (participants > XR_AOT_PAR_FOR_MAX_WORKERS)
-        participants = XR_AOT_PAR_FOR_MAX_WORKERS;
+    if (participants > XR_PARALLEL_MAX_WORKERS)
+        participants = XR_PARALLEL_MAX_WORKERS;
     int background_workers = (int) participants - 1;
     if (background_workers <= 0)
-        return xr_aot_par_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
-                                                          combine, closure, out);
+        return xr_parallel_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
+                                                           combine, closure, out);
 
-    XrAotParForPool *pool = xr_aot_parallel_pool_for_context(ctx);
+    XrParallelPool *pool = xr_parallel_pool_for_context(ctx);
     if (!pool)
         return false;
 
@@ -619,14 +619,14 @@ bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t 
     while (pool->job_active)
         xr_cond_wait(&pool->done, &pool->mutex);
 
-    int available_workers = xr_aot_par_for_ensure_workers_locked(pool, background_workers);
+    int available_workers = xr_parallel_for_ensure_workers_locked(pool, background_workers);
     if (available_workers < background_workers)
         background_workers = available_workers;
     if (background_workers <= 0 ||
-        !xr_aot_par_reduce_agg_ensure_partials_locked(pool, value_size)) {
+        !xr_parallel_reduce_agg_ensure_partials_locked(pool, value_size)) {
         xr_mutex_unlock(&pool->mutex);
-        return xr_aot_par_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
-                                                          combine, closure, out);
+        return xr_parallel_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
+                                                           combine, closure, out);
     }
 
     int64_t actual_participants = (int64_t) background_workers + 1;
@@ -635,7 +635,7 @@ bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t 
     pool->start = start;
     pool->end = end;
     pool->participants = actual_participants;
-    pool->job_kind = XR_AOT_PAR_JOB_REDUCE_AGG;
+    pool->job_kind = XR_PARALLEL_JOB_REDUCE_AGG;
     pool->for_body = NULL;
     pool->reduce_body = NULL;
     pool->reduce_combine = NULL;
@@ -650,11 +650,11 @@ bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t 
     xr_cond_broadcast(&pool->has_job);
     xr_mutex_unlock(&pool->mutex);
 
-    xr_aot_par_reduce_agg_run_lane(pool, body, closure, start, end, actual_participants,
-                                   (int64_t) background_workers);
+    xr_parallel_reduce_agg_run_lane(pool, body, closure, start, end, actual_participants,
+                                    (int64_t) background_workers);
 
     xr_mutex_lock(&pool->mutex);
-    xr_aot_par_for_complete_participant_locked(pool);
+    xr_parallel_for_complete_participant_locked(pool);
     while (pool->job_active)
         xr_cond_wait(&pool->done, &pool->mutex);
 
@@ -673,15 +673,15 @@ bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t 
     return ok;
 }
 
-void xr_aot_parallel_runtime_shutdown(XrAotRuntime *runtime) {
+void xr_parallel_runtime_shutdown(XrAotRuntime *runtime) {
     if (!runtime || !runtime->parallel_pool)
         return;
 
-    XrAotParForPool *pool = (XrAotParForPool *) runtime->parallel_pool;
+    XrParallelPool *pool = (XrParallelPool *) runtime->parallel_pool;
     runtime->parallel_pool = NULL;
 
     xr_thread_t *threads = NULL;
-    XrAotParWorkerArg **thread_args = NULL;
+    XrParallelWorkerArg **thread_args = NULL;
     int thread_count = 0;
 
     xr_mutex_lock(&pool->mutex);
