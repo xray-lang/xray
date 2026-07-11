@@ -1,0 +1,12 @@
+args=--profile freestanding
+c_contains=xray_top_var_aggregate_reassign
+c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_reassign_
+c_contains=_xctstruct_freestanding_top_var_aggregate_reassign_
+c_contains=memcpy(&_xctstruct_freestanding_top_var_aggregate_reassign_
+c_contains=&_st
+c_not_contains=xrt_shared[0] =
+c_not_contains=xrt_arc_alloc
+c_not_contains=xr_aggregate_ref
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core

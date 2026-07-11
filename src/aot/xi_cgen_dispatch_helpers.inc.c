@@ -1023,6 +1023,18 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if (shared_init && ctx && ctx->freestanding_profile &&
         shared_init->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        const XiValue *origin = cg_trace_struct_new(value);
+        int64_t static_slot = -1;
+        if (origin && cg_struct_can_inline_static_whole_store(ctx, f, origin) &&
+            cg_static_struct_whole_store_target(ctx, v, (const XrAggregateLayout *) origin->aux,
+                                                &static_slot)) {
+            fprintf(out, "(memcpy(&");
+            cg_emit_static_struct_name(ctx, out, ctx ? ctx->module : NULL, static_slot);
+            fprintf(out, ", &_st%u, sizeof(", origin->id);
+            cg_emit_static_struct_name(ctx, out, ctx ? ctx->module : NULL, static_slot);
+            fprintf(out, ")), XR_NULL_VAL)");
+            return;
+        }
         fprintf(stderr,
                 "[xi_cgen] ERROR: freestanding profile rejects whole-value assignment to static "
                 "aggregate top-level var; mutate fields directly in the current slice\n");
@@ -6446,7 +6458,7 @@ static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     XR_DCHECK(v->nargs >= 1, "xicgen_struct_new: need class arg");
     if (cg_value_plan_is_struct_aggregate(ctx, v)) {
         emit_value_plan_zero_expr(ctx, out, v);
-    } else if (cg_struct_can_inline(f, v)) {
+    } else if (cg_struct_inline_local_storage(ctx, f, v)) {
         /* Inlined struct initialization is emitted by the statement path. */
         fprintf(out, "XR_NULL_VAL");
     } else {
@@ -6470,7 +6482,7 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
-    if (origin && cg_struct_can_inline(f, origin)) {
+    if (origin && cg_struct_inline_local_storage(ctx, f, origin)) {
         emit_struct_inline_field_get_expr(out, (XrAggregateLayout *) origin->aux, origin,
                                           v->aux_int, cg_value_plan_storage_rep(ctx, v));
     } else {
@@ -6497,7 +6509,7 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
-    if (origin && cg_struct_can_inline(f, origin)) {
+    if (origin && cg_struct_inline_local_storage(ctx, f, origin)) {
         emit_struct_inline_field_set_expr(ctx, out, (XrAggregateLayout *) origin->aux, origin,
                                           v->aux_int, v->args[1]);
     } else {
