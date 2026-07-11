@@ -87,27 +87,19 @@ static bool xaot_evidence_cache_phase_dir(const char *cache_dir, uint32_t phase,
 
 static bool xaot_payload_materializes_for_preproducer(const char *payload,
                                                       const XgEvidenceCacheRequestKey *request,
-                                                      bool *out_materialized,
-                                                      bool *out_unsupported) {
+                                                      bool *out_materialized) {
     XgGlobalEvidence materialized;
     XgEvidenceCachePayloadInfo info;
     XgEvidenceCacheKey materialized_key;
     bool ok;
     if (out_materialized)
         *out_materialized = false;
-    if (out_unsupported)
-        *out_unsupported = false;
     if (!payload || !request || !xg_evidence_cache_payload_parse(payload, &info))
         return false;
     if (info.phase != request->phase ||
         info.request_hash != xg_evidence_cache_request_key_hash(request) ||
         !xg_evidence_cache_request_key_matches(&info.request_key, request))
         return false;
-    if (request->phase == XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE) {
-        if (out_unsupported)
-            *out_unsupported = true;
-        return true;
-    }
     memset(&materialized, 0, sizeof(materialized));
     ok = xg_evidence_cache_payload_materialize(payload, &materialized);
     if (ok) {
@@ -122,15 +114,13 @@ static bool xaot_payload_materializes_for_preproducer(const char *payload,
 
 static bool xaot_probe_preproducer_payload(const char *cache_dir,
                                            const XgEvidenceCacheRequestKey *request,
-                                           bool *out_materialized, bool *out_unsupported) {
+                                           bool *out_materialized) {
     char phase_dir[PATH_MAX];
     XrDirIter *it;
     XrDirEntry entry;
     bool hit = false;
     if (out_materialized)
         *out_materialized = false;
-    if (out_unsupported)
-        *out_unsupported = false;
     if (!cache_dir || !request ||
         !xaot_evidence_cache_phase_dir(cache_dir, request->phase, phase_dir, sizeof(phase_dir)))
         return false;
@@ -151,8 +141,7 @@ static bool xaot_probe_preproducer_payload(const char *cache_dir,
         if (!payload)
             continue;
         (void) size;
-        if (xaot_payload_materializes_for_preproducer(payload, request, out_materialized,
-                                                      out_unsupported)) {
+        if (xaot_payload_materializes_for_preproducer(payload, request, out_materialized)) {
             hit = true;
             xr_free(payload);
             break;
@@ -169,7 +158,6 @@ static void xaot_probe_preproducer_evidence_cache(const char *cache_dir,
     uint32_t request_hits = 0;
     uint32_t request_misses = 0;
     uint32_t materialized = 0;
-    uint32_t unsupported = 0;
     if (!cache_dir || !build_key)
         return;
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
@@ -177,17 +165,13 @@ static void xaot_probe_preproducer_evidence_cache(const char *cache_dir,
         XgEvidenceCacheRequestKey request =
             xg_evidence_cache_request_key_from_build_key(build_key, phase);
         bool is_materialized = false;
-        bool is_unsupported = false;
         bool hit = false;
         if (!force_rebuild)
-            hit = xaot_probe_preproducer_payload(cache_dir, &request, &is_materialized,
-                                                 &is_unsupported);
+            hit = xaot_probe_preproducer_payload(cache_dir, &request, &is_materialized);
         if (hit) {
             request_hits++;
             if (is_materialized)
                 materialized++;
-            if (is_unsupported)
-                unsupported++;
         } else {
             request_misses++;
         }
@@ -196,15 +180,13 @@ static void xaot_probe_preproducer_evidence_cache(const char *cache_dir,
                    "materialized=%s)%s\n",
                    xg_evidence_cache_phase_name(phase), hit ? "hit" : "miss",
                    (unsigned long long) xg_evidence_cache_request_key_hash(&request),
-                   is_materialized ? "yes" : (is_unsupported ? "unsupported" : "no"),
-                   force_rebuild ? " rebuild" : "");
+                   is_materialized ? "yes" : "no", force_rebuild ? " rebuild" : "");
         }
     }
     if (verbose) {
         printf("[xi-native] evidence cache preproducer summary: request_hits=%u "
-               "request_misses=%u materialized=%u unsupported=%u%s\n",
-               request_hits, request_misses, materialized, unsupported,
-               force_rebuild ? " rebuild" : "");
+               "request_misses=%u materialized=%u%s\n",
+               request_hits, request_misses, materialized, force_rebuild ? " rebuild" : "");
     }
 }
 

@@ -165,8 +165,8 @@ expect_evidence_summary() {
 }
 
 expect_evidence_preproducer_summary() {
-    local log="$1" hits="$2" misses="$3" materialized="$4" unsupported="$5" name="$6" suffix="${7:-}"
-    local pattern="evidence cache preproducer summary: request_hits=$hits request_misses=$misses materialized=$materialized unsupported=$unsupported$suffix"
+    local log="$1" hits="$2" misses="$3" materialized="$4" name="$5" suffix="${6:-}"
+    local pattern="evidence cache preproducer summary: request_hits=$hits request_misses=$misses materialized=$materialized$suffix"
     if grep -q "$pattern" "$log"; then
         record_pass "$name: $pattern"
     else
@@ -315,14 +315,14 @@ XR_EOF
 
     require_build "evidence-cold" "$dir/log1" \
         build_log "$cache" "$app" "$dir/ev1" "$dir/log1" || return 1
-    expect_evidence_preproducer_summary "$dir/log1" 0 4 0 0 "evidence-cold"
+    expect_evidence_preproducer_summary "$dir/log1" 0 4 0 "evidence-cold"
     expect_evidence_summary "$dir/log1" 0 4 "evidence-cold"
     expect_evidence_sidecars "$cache" "evidence-cold"
     expect_output "$dir/ev1" "7" "evidence-cold"
 
     require_build "evidence-warm" "$dir/log2" \
         build_log "$cache" "$app" "$dir/ev2" "$dir/log2" || return 1
-    expect_evidence_preproducer_summary "$dir/log2" 4 0 3 1 "evidence-warm"
+    expect_evidence_preproducer_summary "$dir/log2" 4 0 4 "evidence-warm"
     expect_evidence_summary "$dir/log2" 4 0 "evidence-warm"
     expect_output "$dir/ev2" "7" "evidence-warm"
 
@@ -356,7 +356,7 @@ XR_EOF
 
     require_build "evidence-body-change" "$dir/log3" \
         build_log "$cache" "$app" "$dir/ev3" "$dir/log3" || return 1
-    expect_evidence_preproducer_summary "$dir/log3" 0 4 0 0 "evidence-body-change"
+    expect_evidence_preproducer_summary "$dir/log3" 0 4 0 "evidence-body-change"
     expect_evidence_phase "$dir/log3" declarations hit "evidence-body-change"
     expect_evidence_phase "$dir/log3" semantic_graph hit "evidence-body-change"
     expect_evidence_phase "$dir/log3" body_summary miss "evidence-body-change"
@@ -383,7 +383,7 @@ XR_EOF
 
     require_build "evidence-rebuild" "$dir/log5" \
         build_log "$cache" "$app" "$dir/ev5" "$dir/log5" --rebuild || return 1
-    expect_evidence_preproducer_summary "$dir/log5" 0 4 0 0 "evidence-rebuild" " rebuild"
+    expect_evidence_preproducer_summary "$dir/log5" 0 4 0 "evidence-rebuild" " rebuild"
     expect_evidence_summary "$dir/log5" 0 4 "evidence-rebuild" " rebuild"
     expect_output "$dir/ev5" "9" "evidence-rebuild"
 }
