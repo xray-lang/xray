@@ -1654,6 +1654,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
     gctx->current_coro = coro;
     if (gctx->isolate != isolate)
         gctx->isolate = isolate;
+    XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
 
     XrVMResult res;
     uint32_t flags = xr_coro_flags_load(coro);
@@ -1672,6 +1673,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
         xr_coro_transition_to_ready(coro);
         if (out)
             *out = coro->result;
+        xr_exec_context_restore(previous);
         return XR_CORO_RUN_YIELD;
     }
     if (res == XR_VM_OK && XR_IS_NULL(gctx->pending_error)) {
@@ -1679,6 +1681,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
         if (out)
             *out = coro->result;
+        xr_exec_context_restore(previous);
         return XR_CORO_RUN_DONE;
     }
 
@@ -1696,6 +1699,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
         *out = err;
     gctx->pending_error = xr_null();
     gctx->current_exception = xr_null();
+    xr_exec_context_restore(previous);
     return XR_CORO_RUN_ERROR;
 }
 
