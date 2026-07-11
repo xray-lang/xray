@@ -1,0 +1,1 @@
+parallel.Options.workers must be >= 0, got -1

@@ -1,11 +1,11 @@
 import parallel
 import { Options, Plan } from parallel
 
-var seen = 0
+shared seen: Atomic<int> = Atomic<int>(0)
 parallel.forEach(0..5, (i) -> {
-    seen = seen + i
+    seen.add(i, Ordering.Relaxed)
 }, Options(2))
-print(seen)
+print(seen.load(Ordering.Relaxed))
 
 var mapped = parallel.map(0..4, (i) -> i * i, Options(0))
 print(mapped.length)

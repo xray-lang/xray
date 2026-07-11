@@ -291,8 +291,8 @@ static bool loop_alloc_closure_uses_are_scoped_par_for_callbacks(const XiFunc *f
  * single-execution (non-loop) allocation is left at NO_ESCAPE and still becomes
  * a safe one-shot stack allocation in AOT.
  *
- * Exception: a closure used only as a synchronous `parallel for` body callback
- * or `parallel reduce` range/combine callback can be lowered by AOT into a
+ * Exception: a closure used only as a synchronous `parallel.forEach` body callback
+ * or `parallel.reduce` range/combine callback can be lowered by AOT into a
  * block-scoped C closure env at the parallel boundary. It is not implemented with alloca, so
  * it does not accumulate across loop iterations. Keep it at NO_ESCAPE so
  * stack_alloc_rewrite can mark the stronger ownership fact for ARC/CGen. */

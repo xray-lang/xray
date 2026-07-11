@@ -402,6 +402,9 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
 XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                              XrInstruction instr, XrValue *base,
                                              XrBcCallFrame *frame, XrInstruction *pc);
+XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                                XrInstruction instr, XrValue *base,
+                                                XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_time_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                           XrInstruction *pc);
