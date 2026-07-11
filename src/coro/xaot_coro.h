@@ -57,6 +57,7 @@ typedef enum {
     XR_AOT_CAP_COUNTDOWN_LATCH = 1u << 10,
     XR_AOT_CAP_SEMAPHORE = 1u << 11,
     XR_AOT_CAP_EVENT_COUNT = 1u << 12,
+    XR_AOT_CAP_PARALLEL = 1u << 13,
 } XrAotRuntimeCap;
 
 typedef enum {
@@ -270,17 +271,20 @@ XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDe
 XR_FUNC XrAotSpawnResult xr_aot_spawn_deferred(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                                void *frame, int link_mode, bool fire_and_forget,
                                                bool one_shot_await, const char *name);
-XR_FUNC bool xr_aot_parallel_for_range_i64(int64_t start, int64_t end, int64_t workers,
-                                           XrAotParForRangeI64Fn body, struct xrt_closure *closure);
-XR_FUNC bool xr_aot_parallel_reduce_i64(int64_t start, int64_t end, int64_t workers,
-                                        int64_t initial, XrAotParReduceRangeI64Fn body,
+XR_FUNC bool xr_aot_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end,
+                                           int64_t workers, XrAotParForRangeI64Fn body,
+                                           struct xrt_closure *closure);
+XR_FUNC bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end,
+                                        int64_t workers, int64_t initial,
+                                        XrAotParReduceRangeI64Fn body,
                                         XrAotParReduceCombineI64Fn combine,
                                         struct xrt_closure *closure, int64_t *out);
-XR_FUNC bool xr_aot_parallel_reduce_agg(int64_t start, int64_t end, int64_t workers,
-                                        size_t value_size, const void *initial,
+XR_FUNC bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
+                                        int64_t workers, size_t value_size, const void *initial,
                                         XrAotParReduceRangeAggFn body,
                                         XrAotParReduceCombineAggFn combine,
                                         struct xrt_closure *closure, void *out);
+XR_FUNC void xr_aot_parallel_runtime_shutdown(XrAotRuntime *runtime);
 
 // Construct a coroutine-backed iterator over a generator function. The producer
 // coroutine is created from desc+frame but NOT scheduled; it is pull-driven by

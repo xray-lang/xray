@@ -1,0 +1,9 @@
+fn jsonClosureCapturePlan() -> string {
+    var j: Json = { name: "ada", age: 1 }
+    const read = fn() -> string {
+        return j.name
+    }
+    return read()
+}
+
+print(jsonClosureCapturePlan())

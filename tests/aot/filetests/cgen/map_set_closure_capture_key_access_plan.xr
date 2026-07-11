@@ -1,0 +1,16 @@
+fn mapSetClosureCapturePlan(value: int) -> int {
+    var scores: Map<int, int> = #{}
+    scores.set(1, value)
+    var seen: Set<int> = #[]
+    seen.add(1)
+    const read = fn() -> int {
+        var one = scores.get(1) ?? 0
+        if (seen.has(1)) {
+            return one + scores[1]
+        }
+        return one
+    }
+    return read()
+}
+
+print(mapSetClosureCapturePlan(7))

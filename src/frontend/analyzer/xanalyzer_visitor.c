@@ -430,41 +430,44 @@ XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
 
 XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, XaSymbol *sym,
                                        bool is_write) {
-    if (!ctx || !ctx->in_parallel_for_body || !ctx->parallel_for_scope || !loc_node || !sym)
+    if (!ctx || !ctx->in_parallel_callback_body || !ctx->parallel_callback_scope || !loc_node ||
+        !sym)
         return;
-    if (sym->scope == ctx->parallel_for_scope ||
-        xa_scope_is_descendant(sym->scope, ctx->parallel_for_scope)) {
+    if (sym->scope == ctx->parallel_callback_scope ||
+        xa_scope_is_descendant(sym->scope, ctx->parallel_callback_scope)) {
         return;
     }
     if (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER)
         return;
 
     const char *name = sym->name ? sym->name : "?";
+    const char *callback_name =
+        ctx->parallel_callback_name ? ctx->parallel_callback_name : "parallel callback";
     XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
     char msg[256];
     XrType *sym_type = xa_analyzer_get_type(ctx->analyzer, sym);
 
     if (is_write) {
         snprintf(msg, sizeof(msg),
-                 "parallel for body cannot assign to captured variable '%s'; use Atomic<T>, "
-                 "worker-local context, or parallel reduce",
-                 name);
+                 "%s cannot assign to captured variable '%s'; use Atomic<T>, parallel.reduce, "
+                 "or Plan state",
+                 callback_name, name);
     } else if (sym->is_shared) {
         return;
     } else if (xa_type_is_concurrency_handle(sym_type)) {
         return;
     } else if (sym->kind == XA_SYM_PARAMETER) {
         snprintf(msg, sizeof(msg),
-                 "parallel for body cannot capture parameter '%s'; pass immutable data through "
-                 "shared or future TaskGroup context",
-                 name);
+                 "%s cannot capture parameter '%s'; copy immutable data to a const or shared "
+                 "binding",
+                 callback_name, name);
     } else if (sym->is_const) {
         return;
     } else {
         snprintf(msg, sizeof(msg),
-                 "parallel for body cannot capture mutable variable '%s'; copy it to a const, "
-                 "use Atomic<T>, or pass worker-local context",
-                 name);
+                 "%s cannot capture mutable variable '%s'; copy it to a const, use Atomic<T>, "
+                 "or use Plan state",
+                 callback_name, name);
     }
 
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
