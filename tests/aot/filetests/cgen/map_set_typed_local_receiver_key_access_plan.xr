@@ -1,0 +1,31 @@
+fn makeScores() -> Map<int, int> {
+    return #{}
+}
+
+fn makeSeen() -> Set<int> {
+    return #[]
+}
+
+fn mapSetTypedLocalReceiverPlan(value: int) -> int {
+    var scores: Map<int, int> = makeScores()
+    var seen: Set<int> = makeSeen()
+    scores.set(1, value)
+    scores[2] = value
+    seen.add(1)
+    var hasOne = scores.has(1)
+    var sawOne = seen.has(1)
+    var one = scores.get(1) ?? 0
+    var two = scores[2]
+    scores.delete(1)
+    seen.delete(1)
+    scores.clear()
+    seen.clear()
+    if (hasOne) {
+        if (sawOne) {
+            return one + two
+        }
+    }
+    return 0
+}
+
+print(mapSetTypedLocalReceiverPlan(7))
