@@ -57,6 +57,9 @@ typedef struct XgStdlibImportRow {
     const char *member_name;
 } XgStdlibImportRow;
 
+typedef struct XgLocalType XgLocalType;
+typedef struct XgLocalName XgLocalName;
+
 typedef struct XgProducer {
     XgGlobalEvidence *evidence;
     XgClassNameRow *classes;
@@ -91,9 +94,13 @@ typedef struct XgPendingBody {
     const AstNode *body;
     const MethodDeclNode *method;
     const FunctionDeclNode *function;
+    XgLocalType *captured_locals;
+    uint32_t captured_local_count;
+    XgLocalName *captured_name_locals;
+    uint32_t captured_name_local_count;
 } XgPendingBody;
 
-typedef struct XgLocalType {
+struct XgLocalType {
     const char *name;
     XgClassId class_id;
     XgInterfaceId interface_id;
@@ -113,12 +120,12 @@ typedef struct XgLocalType {
     uint32_t sequence_elem_map_key_type_key;
     uint32_t sequence_elem_map_value_type_key;
     bool inferred;
-} XgLocalType;
+};
 
-typedef struct XgLocalName {
+struct XgLocalName {
     const char *name;
     uint32_t symbol_id;
-} XgLocalName;
+};
 
 typedef struct XgBodyCollect {
     XgProducer *producer;
@@ -989,6 +996,47 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
     return true;
 }
 
+static bool producer_snapshot_body_captures(XgPendingBody *row, const XgBodyCollect *bc) {
+    if (!row || !bc)
+        return true;
+    if (bc->nlocals > 0) {
+        row->captured_locals =
+            (XgLocalType *) xr_malloc((size_t) bc->nlocals * sizeof(*row->captured_locals));
+        if (!row->captured_locals)
+            return false;
+        memcpy(row->captured_locals, bc->locals,
+               (size_t) bc->nlocals * sizeof(*row->captured_locals));
+        row->captured_local_count = bc->nlocals;
+    }
+    if (bc->nname_locals > 0) {
+        row->captured_name_locals = (XgLocalName *) xr_malloc((size_t) bc->nname_locals *
+                                                              sizeof(*row->captured_name_locals));
+        if (!row->captured_name_locals) {
+            xr_free(row->captured_locals);
+            row->captured_locals = NULL;
+            row->captured_local_count = 0;
+            return false;
+        }
+        memcpy(row->captured_name_locals, bc->name_locals,
+               (size_t) bc->nname_locals * sizeof(*row->captured_name_locals));
+        row->captured_name_local_count = bc->nname_locals;
+    }
+    return true;
+}
+
+static void producer_free_bodies(XgProducer *p) {
+    if (!p)
+        return;
+    for (uint32_t i = 0; i < p->nbodies; i++) {
+        xr_free(p->bodies[i].captured_locals);
+        xr_free(p->bodies[i].captured_name_locals);
+    }
+    xr_free(p->bodies);
+    p->bodies = NULL;
+    p->nbodies = 0;
+    p->body_cap = 0;
+}
+
 static bool producer_register_class(XgProducer *p, XgModuleId module_id, const char *name,
                                     const char *super_name, XgClassId class_id,
                                     uint32_t summary_index) {
@@ -1699,6 +1747,7 @@ static void capture_scan_function_expr(XgCaptureScan *scan, const FunctionDeclNo
     if (!scan || !fn)
         return;
     base_locals = scan->nlocals;
+    (void) capture_push_local(scan, fn->name, fn->symbol_id);
     capture_scan_function_params(scan, fn);
     capture_scan_node(scan, fn->body);
     scan->nlocals = base_locals;
@@ -5514,6 +5563,53 @@ static uint32_t static_data_bits_for_comptime_expr(const AstNode *expr) {
 
 static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *function);
 
+static bool body_seed_captured_locals(XgBodyCollect *bc, const XgPendingBody *pending) {
+    if (!bc || !pending)
+        return true;
+    if (pending->captured_name_local_count > 0) {
+        if (!body_reserve_name_locals(bc, pending->captured_name_local_count))
+            return false;
+        memcpy(bc->name_locals, pending->captured_name_locals,
+               (size_t) pending->captured_name_local_count * sizeof(*bc->name_locals));
+        bc->nname_locals = pending->captured_name_local_count;
+    }
+    if (pending->captured_local_count > 0) {
+        if (!body_reserve_locals(bc, pending->captured_local_count))
+            return false;
+        memcpy(bc->locals, pending->captured_locals,
+               (size_t) pending->captured_local_count * sizeof(*bc->locals));
+        bc->nlocals = pending->captured_local_count;
+    }
+    return true;
+}
+
+static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *node,
+                                             const FunctionDeclNode *fn) {
+    XgFuncId child_func_id;
+    XgPendingBody *pending;
+    const char *name;
+    uint32_t source_node_id;
+    uint32_t signature_key;
+    if (!bc || !bc->producer || !node || !fn || !fn->body)
+        return;
+    child_func_id = producer_next_func_id(bc->producer);
+    name = fn->name ? fn->name : "<anonymous>";
+    source_node_id = producer_source_node_id(bc->module_id, node);
+    signature_key = hash_function_signature(fn);
+    if (!producer_enqueue_body(bc->producer, child_func_id, bc->module_id, XG_NO_ID,
+                               bc->current_class_id, XG_NO_ID, hash_name32(name), signature_key,
+                               source_node_id, (uint32_t) node->line, XG_BODY_FUNCTION, fn->body,
+                               NULL, fn))
+        return;
+    pending = &bc->producer->bodies[bc->producer->nbodies - 1];
+    if (!producer_snapshot_body_captures(pending, bc)) {
+        xr_free(pending->captured_locals);
+        xr_free(pending->captured_name_locals);
+        memset(pending, 0, sizeof(*pending));
+        bc->producer->nbodies--;
+    }
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -5549,24 +5645,21 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.call_expr.arguments[i]);
             break;
+        case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR: {
-            uint32_t base_locals = bc->nlocals;
-            uint32_t base_name_locals = bc->nname_locals;
-            const XrTypeRef *outer_return_type = bc->return_type;
-            bool captures = body_function_expr_captures_current_locals(bc, &node->as.function_expr);
+            const FunctionDeclNode *fn =
+                node->type == AST_FUNCTION_DECL ? &node->as.function_decl : &node->as.function_expr;
+            bool captures = body_function_expr_captures_current_locals(bc, fn);
             if (captures) {
                 bc->escape_bits |= XG_BODY_ESCAPE_CAPTURE;
                 bc->effect_bits |= XG_BODY_MAY_ALLOC;
                 (void) body_add_interface_capture_uses(bc, (uint32_t) node->line);
             }
-            if (node->as.function_expr.is_generator)
+            if (fn->is_generator)
                 bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
-            bc->return_type = node->as.function_expr.return_type;
-            body_add_function_params(bc, &node->as.function_expr);
-            walk_body_for_calls(bc, node->as.function_expr.body);
-            bc->return_type = outer_return_type;
-            bc->nlocals = base_locals;
-            bc->nname_locals = base_name_locals;
+            if (node->type == AST_FUNCTION_DECL)
+                (void) body_push_name_local(bc, fn->name, fn->symbol_id);
+            body_enqueue_child_function_body(bc, node, fn);
             break;
         }
         case AST_SUPER_CALL:
@@ -6145,8 +6238,11 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
 static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending) {
     XgBodyCollect bc;
     XgBodySummary row;
+    XgPendingBody pending_copy;
     if (!producer || !pending || !pending->body)
         return true;
+    pending_copy = *pending;
+    pending = &pending_copy;
     memset(&bc, 0, sizeof(bc));
     bc.producer = producer;
     bc.evidence = producer->evidence;
@@ -6156,6 +6252,11 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     bc.return_type = pending->method     ? pending->method->return_type
                      : pending->function ? pending->function->return_type
                                          : NULL;
+    if (!body_seed_captured_locals(&bc, pending)) {
+        xr_free(bc.locals);
+        xr_free(bc.name_locals);
+        return false;
+    }
     body_add_method_params(&bc, pending->method);
     body_add_function_params(&bc, pending->function);
     if (pending->function && pending->function->is_generator)
@@ -6779,7 +6880,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
             xr_free(producer.interfaces);
             xr_free(producer.funcs);
             xr_free(producer.stdlib_imports);
-            xr_free(producer.bodies);
+            producer_free_bodies(&producer);
             xg_global_evidence_free(evidence);
             return false;
         }
@@ -6790,7 +6891,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
             xr_free(producer.interfaces);
             xr_free(producer.funcs);
             xr_free(producer.stdlib_imports);
-            xr_free(producer.bodies);
+            producer_free_bodies(&producer);
             xg_global_evidence_free(evidence);
             return false;
         }
@@ -6801,7 +6902,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
         xr_free(producer.interfaces);
         xr_free(producer.funcs);
         xr_free(producer.stdlib_imports);
-        xr_free(producer.bodies);
+        producer_free_bodies(&producer);
         xg_global_evidence_free(evidence);
         return false;
     }
@@ -6809,7 +6910,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
     xr_free(producer.interfaces);
     xr_free(producer.funcs);
     xr_free(producer.stdlib_imports);
-    xr_free(producer.bodies);
+    producer_free_bodies(&producer);
     return true;
 }
 
