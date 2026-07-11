@@ -1,0 +1,31 @@
+fn makeScores(value: int) -> Map<int, int> {
+    var scores: Map<int, int> = #{}
+    scores.set(1, value)
+    scores[2] = value
+    return scores
+}
+
+fn makeSeen(value: int) -> Set<int> {
+    var seen: Set<int> = #[]
+    seen.add(value)
+    return seen
+}
+
+fn mapSetContainerReceiverPlan(value: int) -> int {
+    var scoreMaps: Array<Map<int, int>> = []
+    scoreMaps.push(makeScores(value))
+    var seenSets: Array<Set<int>> = []
+    seenSets.push(makeSeen(value))
+    var one = scoreMaps[0].get(1) ?? 0
+    var two = scoreMaps[0][2]
+    var hasOne = scoreMaps[0].has(1)
+    var sawOne = seenSets[0].has(1)
+    if (hasOne) {
+        if (sawOne) {
+            return one + two
+        }
+    }
+    return 0
+}
+
+print(mapSetContainerReceiverPlan(7))
