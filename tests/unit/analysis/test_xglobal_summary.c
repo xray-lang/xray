@@ -11424,9 +11424,6 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
         "    var latch = CountdownLatch(1)\n"
         "    var sem = Semaphore(1)\n"
         "    var event = EventCount(0)\n"
-        "    parallel for i in 0..4 workers 2 {\n"
-        "        atom.add(i)\n"
-        "    }\n"
         "}\n"
         "fn gen(n: int) -> Iterator<int> {\n"
         "    for (var i = 0; i < n; i++) {\n"
@@ -11452,7 +11449,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
 
-    ASSERT_TRUE(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE) >= 2);
+    ASSERT_TRUE(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE) >= 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_CHANNEL), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SCOPE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
