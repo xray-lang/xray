@@ -375,15 +375,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 30
 
-// parallel module symbols
-static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {
-    {"forEach", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): (), options: Options = Options())", "", NULL, 0},
-    {"Options", XLSP_SYM_CLASS, "type Options", "Class type", NULL, 0},
-    {"Plan", XLSP_SYM_CLASS, "type Plan", "Class type", NULL, 0},
-    {"ParallelError", XLSP_SYM_CLASS, "type ParallelError", "Enum type", NULL, 0},
-};
-#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 4
-
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
     {"isAbsolute", XLSP_SYM_FUNCTION, "fn(p: string): bool", "POSIX: a leading '/'.", NULL, 0},
@@ -580,7 +571,6 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"mem", "mem standard library module", g_xlsp_stdlib_mem_symbols, GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT},
     {"net", "net standard library module", g_xlsp_stdlib_net_symbols, GEN_XLSP_STDLIB_NET_SYMBOL_COUNT},
     {"os", "os standard library module", g_xlsp_stdlib_os_symbols, GEN_XLSP_STDLIB_OS_SYMBOL_COUNT},
-    {"parallel", "parallel standard library module", g_xlsp_stdlib_parallel_symbols, GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT},
     {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
     {"runtime", "runtime standard library module", g_xlsp_stdlib_runtime_symbols, GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT},

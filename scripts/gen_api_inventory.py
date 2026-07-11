@@ -87,7 +87,6 @@ GLOBAL_SUMMARIES = {
 }
 
 PRELUDE_ENUMS = {
-    "Result": ["Ok", "Err"],
     "Ordering": ["Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"],
     "Endian": ["Native", "LE", "BE"],
     "Recv": ["Value", "Empty", "Timeout", "Closed"],

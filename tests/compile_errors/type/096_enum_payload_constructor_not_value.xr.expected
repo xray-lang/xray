@@ -1,1 +1,1 @@
-payload enum variant 'LocalResult.Ok' is a constructor
+payload enum variant 'Result.Ok' is a constructor

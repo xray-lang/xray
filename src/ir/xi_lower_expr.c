@@ -78,7 +78,6 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         const char *name;
         int index;
     } builtin_classes[] = {
-        {"Result", XR_GLOBAL_VAR_RESULT},
         {"Array", XR_GLOBAL_VAR_ARRAY},
         {"Set", XR_GLOBAL_VAR_SET},
         {"Map", XR_GLOBAL_VAR_MAP},

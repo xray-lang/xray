@@ -39,8 +39,6 @@
 static int prelude_enum_builtin_index(const char *enum_name) {
     if (!enum_name)
         return -1;
-    if (strcmp(enum_name, "Result") == 0)
-        return XR_GLOBAL_VAR_RESULT;
     if (strcmp(enum_name, "Ordering") == 0)
         return XR_GLOBAL_VAR_ORDERING;
     if (strcmp(enum_name, "Endian") == 0)
