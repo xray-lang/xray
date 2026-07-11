@@ -5777,33 +5777,200 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     return end_call ? end_call : par;
 }
 
+static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *plan,
+                                            AstNode *range, AstNode *body_node,
+                                            XiValue *into_array) {
+    RangeNode *rn = &range->as.range;
+    XiValue *start = xi_lower_expr(l, rn->start);
+    XiValue *end = xi_lower_expr(l, rn->end);
+    if (!start || !end || !plan)
+        return NULL;
+
+    if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    struct XrType *plan_state_type = lower_parallel_plan_state_type(l, plan->type);
+    struct XrType *states_type =
+        xr_type_new_array(l->isolate, plan_state_type ? plan_state_type : l->type_any);
+    XiValue *states = lower_emit_field_load(l, plan, "_states", states_type, node->line);
+    XiValue *workers = lower_emit_field_load(l, states, "length", l->type_int, node->line);
+    if (!states || !workers)
+        return NULL;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    struct XrType *elem_type = NULL;
+    if (into_array && into_array->type && XR_TYPE_IS_ARRAY(into_array->type))
+        elem_type = xi_get_container_elem_type(into_array->type);
+    if (!elem_type && result_type && XR_TYPE_IS_ARRAY(result_type))
+        elem_type = xi_get_container_elem_type(result_type);
+    if (!elem_type)
+        elem_type = l->type_any;
+    if (!result_type || !XR_TYPE_IS_ARRAY(result_type))
+        result_type = into_array && into_array->type ? into_array->type
+                                                     : xr_type_new_array(l->isolate, elem_type);
+
+    FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
+    struct XrType *state_type = parallel_call_param_type(l, body_expr->params[0], plan_state_type);
+    struct XrType *abi_types[3] = {state_type ? state_type : l->type_any, l->type_int, l->type_int};
+    ParallelCallParamBinding bindings[2] = {{
+                                                .param = body_expr->params[0],
+                                                .abi_index = 0,
+                                                .type = abi_types[0],
+                                            },
+                                            {
+                                                .param = body_expr->params[1],
+                                                .abi_index = 1,
+                                                .type = l->type_int,
+                                            }};
+    XiFunc *body = parallel_call_lower_lambda_func(l, body_node, "plan_map_body", elem_type,
+                                                   XI_NATIVE_CALLBACK_NONE, 3, abi_types, bindings,
+                                                   2, node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *closure = parallel_call_child_closure(l, body, node->line);
+    if (!closure)
+        return NULL;
+    uint16_t ncap = body->ncaptures;
+    uint16_t extra_count = (uint16_t) (1u + (into_array ? 1u : 0u));
+    uint16_t capture_base = (uint16_t) (4u + extra_count);
+
+    XiParallelMapData *data =
+        (XiParallelMapData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiParallelMapData));
+    if (!data) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(data, 0, sizeof(*data));
+    data->body_func = body;
+    data->element_type = elem_type;
+    data->state_type = abi_types[0];
+    data->state_name =
+        body_expr->params[0] ? arena_strdup(l->func, body_expr->params[0]->name) : NULL;
+    data->item_name =
+        body_expr->params[1] ? arena_strdup(l->func, body_expr->params[1]->name) : NULL;
+    data->state_symbol_id = body_expr->params[0] ? body_expr->params[0]->symbol_id : 0;
+    data->item_symbol_id = body_expr->params[1] ? body_expr->params[1]->symbol_id : 0;
+    data->body_child_index = (uint16_t) closure->aux_int;
+    data->result_capture_index = ncap;
+    data->start_capture_index = (uint16_t) (ncap + 1u);
+    data->lane_count = 1;
+    data->inclusive_end = rn->inclusive_end;
+    data->into_result = into_array != NULL;
+    data->plan_state = true;
+
+    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_MAP, result_type,
+                                (uint16_t) (capture_base + ncap));
+    if (!par) {
+        l->had_error = true;
+        return NULL;
+    }
+    par->args[0] = start;
+    par->args[1] = end;
+    par->args[2] = workers;
+    par->args[3] = closure;
+    par->args[4] = states;
+    if (into_array)
+        par->args[5] = into_array;
+    for (uint16_t ci = 0; ci < ncap; ci++)
+        par->args[capture_base + ci] = closure->args[ci];
+    par->aux = data;
+    par->aux_kind = XI_AUX_KIND_PAR_MAP;
+    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    par->line = (uint32_t) node->line;
+
+    (void) lower_parallel_plan_lifecycle_call(l, node, plan, "_end");
+
+    if (!into_array)
+        return par;
+
+    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    if (!copy)
+        return into_array;
+    copy->args[0] = into_array;
+    copy->line = (uint32_t) node->line;
+    return copy;
+}
+
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                    XiValue *plan, const char *method) {
     if (!l || !node || !call || !plan || !method)
         return NULL;
-    if (strcmp(method, "forEach") != 0)
-        return NULL;
 
-    if (call->arg_count != 2) {
-        fprintf(stderr,
-                "[LOWER] error: parallel.Plan.forEach must lower to XI_PAR_FOR; expected "
-                "(Range, inline lambda) at line %d\n",
-                node ? node->line : -1);
-        l->had_error = true;
-        return NULL;
-    }
-    AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
-    if (!range || range->type != AST_RANGE ||
-        !parallel_call_is_plain_lambda(call->arguments[1], 2)) {
-        fprintf(stderr,
-                "[LOWER] error: parallel.Plan.forEach must lower to XI_PAR_FOR; expected a Range "
-                "literal and inline (state, item) lambda at line %d\n",
-                node ? node->line : -1);
-        l->had_error = true;
-        return NULL;
+    if (strcmp(method, "forEach") == 0) {
+        if (call->arg_count != 2) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.forEach must lower to XI_PAR_FOR; expected "
+                    "(Range, inline lambda) at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[1], 2)) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.forEach must lower to XI_PAR_FOR; expected a "
+                    "Range literal and inline (state, item) lambda at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        return parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
     }
 
-    return parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
+    if (strcmp(method, "map") == 0) {
+        if (call->arg_count != 2) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.map must lower to XI_PAR_MAP; expected "
+                    "(Range, inline lambda) at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[1], 2)) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.map must lower to XI_PAR_MAP; expected a Range "
+                    "literal and inline (state, item) lambda at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        return parallel_plan_call_make_map(l, node, plan, range, call->arguments[1], NULL);
+    }
+
+    if (strcmp(method, "mapInto") == 0) {
+        if (call->arg_count != 3) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.mapInto must lower to XI_PAR_MAP; expected "
+                    "(Range, output, inline lambda) at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[2], 2)) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.mapInto must lower to XI_PAR_MAP; expected a "
+                    "Range literal, output array, and inline (state, item) lambda at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *into = xi_lower_expr(l, call->arguments[1]);
+        if (!into)
+            return NULL;
+        return parallel_plan_call_make_map(l, node, plan, range, call->arguments[2], into);
+    }
+
+    return NULL;
 }
 
 /* Shared construction lowering used by both `T(args)` calls (lower_call) and
