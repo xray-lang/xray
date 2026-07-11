@@ -1,0 +1,1 @@
+parallel.forEach callback cannot throw or suspend; select statement is not allowed in a parallel callback

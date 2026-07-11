@@ -1,0 +1,10 @@
+import parallel
+
+shared ch: Channel<int> = Channel<int>(4)
+
+parallel.forEach(0..4, (i) -> {
+    select {
+        msg from ch -> { print(msg) }
+        _ -> {}
+    }
+}, parallel.Options(2))

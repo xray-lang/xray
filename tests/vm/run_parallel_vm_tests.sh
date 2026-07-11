@@ -105,6 +105,12 @@ expect_output_workers \
     "10" \
     2
 
+expect_output_workers \
+    "parallel_callback_channel_try_ops_safe" \
+    "$PROJECT_DIR/tests/vm/parallel_callback_channel_try_ops_safe.xr" \
+    "4" \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1
