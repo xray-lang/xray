@@ -1,0 +1,21 @@
+class JsonMethodReturnLocalFactory {
+    makeUser() -> Json {
+        return { name: "ada", age: 7 }
+    }
+}
+
+fn jsonMethodReturnLocalPlan() -> int {
+    var f = JsonMethodReturnLocalFactory()
+    var j = f.makeUser()
+    return j.age
+}
+
+fn jsonMethodAssignedReturnLocalPlan() -> string {
+    var f = JsonMethodReturnLocalFactory()
+    var j: Json = { name: "zero", age: 0 }
+    j = f.makeUser()
+    return j.name
+}
+
+print(jsonMethodReturnLocalPlan())
+print(jsonMethodAssignedReturnLocalPlan())

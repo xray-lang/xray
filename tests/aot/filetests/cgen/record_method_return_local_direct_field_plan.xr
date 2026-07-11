@@ -1,0 +1,23 @@
+type User = { name: string, age: int }
+
+class RecordMethodReturnLocalFactory {
+    makeUser() -> User {
+        return { name: "ada", age: 7 }
+    }
+}
+
+fn recordMethodReturnLocalPlan() -> int {
+    var f = RecordMethodReturnLocalFactory()
+    var user = f.makeUser()
+    return user.age
+}
+
+fn recordMethodAssignedReturnLocalPlan() -> string {
+    var f = RecordMethodReturnLocalFactory()
+    var user: User = { name: "zero", age: 0 }
+    user = f.makeUser()
+    return user.name
+}
+
+print(recordMethodReturnLocalPlan())
+print(recordMethodAssignedReturnLocalPlan())

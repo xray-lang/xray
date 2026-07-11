@@ -12852,6 +12852,159 @@ TEST(global_evidence_producer_propagates_json_array_method_return_shape_through_
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals) {
+    setup_parser_session();
+    const char *source = "type User = { name: string, age: int }\n"
+                         "fn makeArrayReturnLocalUsers() -> Array<Json> {\n"
+                         "    return [{ name: \"ada\", age: 7 }, { name: \"bob\", age: 8 }]\n"
+                         "}\n"
+                         "class LocalReturnFactory {\n"
+                         "    makeJson() -> Json {\n"
+                         "        return { name: \"ada\", age: 7 }\n"
+                         "    }\n"
+                         "    makeRecord() -> User {\n"
+                         "        return { name: \"ada\", age: 7 }\n"
+                         "    }\n"
+                         "}\n"
+                         "fn readJsonMethodLocalAge() -> int {\n"
+                         "    var f = LocalReturnFactory()\n"
+                         "    var j = f.makeJson()\n"
+                         "    return j.age\n"
+                         "}\n"
+                         "fn readJsonMethodAssignedName() -> string {\n"
+                         "    var f = LocalReturnFactory()\n"
+                         "    var j: Json = { name: \"zero\", age: 0 }\n"
+                         "    j = f.makeJson()\n"
+                         "    return j.name\n"
+                         "}\n"
+                         "fn readRecordMethodLocalAge() -> int {\n"
+                         "    var f = LocalReturnFactory()\n"
+                         "    var user = f.makeRecord()\n"
+                         "    return user.age\n"
+                         "}\n"
+                         "fn readRecordMethodAssignedName() -> string {\n"
+                         "    var f = LocalReturnFactory()\n"
+                         "    var user: User = { name: \"zero\", age: 0 }\n"
+                         "    user = f.makeRecord()\n"
+                         "    return user.name\n"
+                         "}\n"
+                         "fn readArrayReturnLocalAge() -> int {\n"
+                         "    var users = makeArrayReturnLocalUsers()\n"
+                         "    return users[0].age\n"
+                         "}\n"
+                         "fn readArrayReturnAssignedName() -> string {\n"
+                         "    var users: Array<Json> = []\n"
+                         "    users = makeArrayReturnLocalUsers()\n"
+                         "    return users[0].name\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *json_age = evidence_find_body_by_name(&ev, "readJsonMethodLocalAge");
+    const XgBodySummary *json_name = evidence_find_body_by_name(&ev, "readJsonMethodAssignedName");
+    const XgBodySummary *record_age = evidence_find_body_by_name(&ev, "readRecordMethodLocalAge");
+    const XgBodySummary *record_name =
+        evidence_find_body_by_name(&ev, "readRecordMethodAssignedName");
+    const XgBodySummary *array_age = evidence_find_body_by_name(&ev, "readArrayReturnLocalAge");
+    const XgBodySummary *array_name =
+        evidence_find_body_by_name(&ev, "readArrayReturnAssignedName");
+    ASSERT_NOT_NULL(json_age);
+    ASSERT_NOT_NULL(json_name);
+    ASSERT_NOT_NULL(record_age);
+    ASSERT_NOT_NULL(record_name);
+    ASSERT_NOT_NULL(array_age);
+    ASSERT_NOT_NULL(array_name);
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+
+    uint32_t matched_json_accesses = 0;
+    bool saw_json_age = false;
+    bool saw_json_name = false;
+    bool saw_array_age = false;
+    bool saw_array_name = false;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+        uint16_t expected_field = UINT16_MAX;
+        ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
+        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == json_age->func_id) {
+            expected_field = 1;
+            saw_json_age = true;
+        } else if (access->owner_func_id == json_name->func_id) {
+            expected_field = 0;
+            saw_json_name = true;
+        } else if (access->owner_func_id == array_age->func_id) {
+            expected_field = 1;
+            saw_array_age = true;
+        } else if (access->owner_func_id == array_name->func_id) {
+            expected_field = 0;
+            saw_array_name = true;
+        } else {
+            continue;
+        }
+        matched_json_accesses++;
+        ASSERT_EQ_UINT(access->field_ordinal, expected_field);
+        const XaotJsonAccessPlan *plan =
+            xaot_bundle_find_json_access_plan(&bundle, access->json_access_id);
+        ASSERT_NOT_NULL(plan);
+        ASSERT_EQ_UINT(plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    }
+    ASSERT_EQ_UINT(matched_json_accesses, 4);
+    ASSERT_TRUE(saw_json_age);
+    ASSERT_TRUE(saw_json_name);
+    ASSERT_TRUE(saw_array_age);
+    ASSERT_TRUE(saw_array_name);
+    uint32_t matched_record_accesses = 0;
+    bool saw_record_age = false;
+    bool saw_record_name = false;
+    for (uint32_t i = 0; i < ev.nrecord_accesses; i++) {
+        const XgRecordAccessSummary *access = &ev.record_accesses[i];
+        uint16_t expected_field = UINT16_MAX;
+        ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
+        ASSERT_EQ_UINT(access->access_kind, XG_RECORD_ACCESS_FIELD_GET);
+        ASSERT_TRUE((access->flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == record_age->func_id) {
+            expected_field = 1;
+            saw_record_age = true;
+        } else if (access->owner_func_id == record_name->func_id) {
+            expected_field = 0;
+            saw_record_name = true;
+        } else {
+            continue;
+        }
+        matched_record_accesses++;
+        ASSERT_EQ_UINT(access->field_ordinal, expected_field);
+        const XaotRecordAccessPlan *plan =
+            xaot_bundle_find_record_access_plan(&bundle, access->record_access_id);
+        ASSERT_NOT_NULL(plan);
+        ASSERT_EQ_UINT(plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    }
+    ASSERT_EQ_UINT(matched_record_accesses, 2);
+    ASSERT_TRUE(saw_record_age);
+    ASSERT_TRUE(saw_record_name);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set) {
     setup_parser_session();
     const char *source = "fn readAfterMismatchedSet() -> int {\n"
@@ -14374,6 +14527,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_alias_cont
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_return_container);
 RUN_TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers);
 RUN_TEST(global_evidence_producer_propagates_json_array_method_return_shape_through_locals);
+RUN_TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals);
 RUN_TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set);
 RUN_TEST(
     global_evidence_producer_propagates_json_bridge_shape_through_field_and_container_receivers);
