@@ -3727,21 +3727,50 @@ static XiValue *lower_raw_pointer_static_call(XiLower *l, AstNode *node, CallExp
         return v;
     }
     if (strcmp(ma->name, "of") != 0 || call->arg_count != 1 || call->type_arg_count != 0 ||
-        !call->arguments || !call->arguments[0] || call->arguments[0]->type != AST_VARIABLE)
+        !call->arguments || !call->arguments[0])
         return NULL;
 
     AstNode *arg = call->arguments[0];
-    XiTopBinding tb = xi_lower_find_current_or_parent_top_binding(l, arg->as.variable.symbol_id,
-                                                                  arg->as.variable.name);
+    if (arg->type == AST_VARIABLE) {
+        XiTopBinding tb = xi_lower_find_current_or_parent_top_binding(l, arg->as.variable.symbol_id,
+                                                                      arg->as.variable.name);
+        if (!xi_top_binding_valid(tb))
+            return NULL;
+
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_STATIC_ADDR, result_type, 0);
+        if (v) {
+            v->aux_int = tb.slot;
+            v->line = (uint32_t) node->line;
+        }
+        return v;
+    }
+
+    if (!ptr_type->ptr_is_mut || arg->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *field = &arg->as.member_access;
+    if (!field->object || field->object->type != AST_VARIABLE || !field->name)
+        return NULL;
+    XiTopBinding tb = xi_lower_find_current_or_parent_top_binding(
+        l, field->object->as.variable.symbol_id, field->object->as.variable.name);
     if (!xi_top_binding_valid(tb))
         return NULL;
-
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_STATIC_ADDR, result_type, 0);
-    if (v) {
-        v->aux_int = tb.slot;
-        v->line = (uint32_t) node->line;
-    }
-    return v;
+    uint32_t field_offset = 0;
+    if (!xr_type_has_static_field_offset(tb.type, field->name, &field_offset))
+        return NULL;
+    XrType *base_type = xr_type_new_pointer(l->isolate, tb.type ? tb.type : l->type_any, true);
+    XiValue *base = xi_value_new(l->func, l->cur_block, XI_STATIC_ADDR, base_type, 0);
+    if (!base)
+        return NULL;
+    base->aux_int = tb.slot;
+    base->line = (uint32_t) node->line;
+    XiValue *offset = xi_const_int(l->func, l->cur_block, (int64_t) field_offset, l->type_int);
+    XiValue *addr = xi_value_new(l->func, l->cur_block, XI_ADD, result_type, 2);
+    if (!addr)
+        return NULL;
+    addr->args[0] = base;
+    addr->args[1] = offset;
+    addr->line = (uint32_t) node->line;
+    return addr;
 }
 
 static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, CallExprNode *call,

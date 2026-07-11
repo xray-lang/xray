@@ -2110,6 +2110,60 @@ else
     sed 's/^/      /' "$FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_RAWMUT_TOP_VAR_FIELD_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_top_var_field_addr.xr"
+FREESTANDING_RAWMUT_TOP_VAR_FIELD_OBJ="$WORK/freestanding_rawmut_of_top_var_field_addr.o"
+FREESTANDING_RAWMUT_TOP_VAR_FIELD_LOG="$WORK/freestanding_rawmut_of_top_var_field_addr.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_OBJ" \
+        "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_SRC" >"$FREESTANDING_RAWMUT_TOP_VAR_FIELD_LOG" 2>&1; then
+    FREESTANDING_RAWMUT_TOP_VAR_FIELD_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" ]; then
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_field_addr_" \
+            "freestanding-profile/rawmut-top-var-field-addr: materializes mutable struct as static data"
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" ".limit =" \
+            "freestanding-profile/rawmut-top-var-field-addr: writes struct field directly"
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" \
+            "&_xctstruct_freestanding_rawmut_of_top_var_field_addr_" \
+            "freestanding-profile/rawmut-top-var-field-addr: takes mutable static base address"
+        expect_log_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "(intptr_t)(INT64_C(8))" \
+            "freestanding-profile/rawmut-top-var-field-addr: applies static field byte offset"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" \
+            "const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_field_addr_" \
+            "freestanding-profile/rawmut-top-var-field-addr: keeps storage non-const"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_shared[0] =" \
+            "freestanding-profile/rawmut-top-var-field-addr: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_mem_address_of" \
+            "freestanding-profile/rawmut-top-var-field-addr: avoids hosted address helper"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_arc_alloc" \
+            "freestanding-profile/rawmut-top-var-field-addr: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xr_aggregate_ref" \
+            "freestanding-profile/rawmut-top-var-field-addr: avoids runtime aggregate refs"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "#include \"xrt.h\"" \
+            "freestanding-profile/rawmut-top-var-field-addr: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/rawmut-top-var-field-addr: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_RAWMUT_TOP_VAR_FIELD_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_OBJ")"
+    FREESTANDING_RAWMUT_TOP_VAR_FIELD_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/rawmut-top-var-field-addr: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/rawmut-top-var-field-addr: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/rawmut-top-var-field-addr: object build failed"
+    sed 's/^/      /' "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_RAWMUT_SCALAR_VAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_scalar_var_addr.xr"
 FREESTANDING_RAWMUT_SCALAR_VAR_OBJ="$WORK/freestanding_rawmut_of_scalar_var_addr.o"
 FREESTANDING_RAWMUT_SCALAR_VAR_LOG="$WORK/freestanding_rawmut_of_scalar_var_addr.log"
