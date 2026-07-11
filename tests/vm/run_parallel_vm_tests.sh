@@ -141,6 +141,12 @@ expect_output_workers \
     $'true\ntrue\ntrue\ntrue\ntrue\ntrue' \
     4
 
+expect_output_workers \
+    "parallel_plan_cleanup_after_panic" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_cleanup_after_panic.xr" \
+    $'caught\ntrue' \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

@@ -172,6 +172,7 @@ XR_FUNC void xi_lower_defer_scope_push(XiLower *l);
 XR_FUNC void xi_lower_defer_scope_pop_normal(XiLower *l, int line);
 XR_FUNC void xi_lower_defer_run_to_depth(XiLower *l, int target_depth, int line);
 XR_FUNC bool xi_lower_defer_has_active_mark(XiLower *l);
+XR_FUNC bool xi_lower_defer_register_closure(XiLower *l, XiValue *callee, int line);
 
 /* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
 struct XrTypeRef;
