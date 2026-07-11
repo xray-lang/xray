@@ -1,0 +1,49 @@
+import parallel
+
+shared seqPlan = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
+
+try {
+    seqPlan.forEach(0..4, (state, i) -> {
+        if (i == 0) {
+            seqPlan.forEach(0..1, (innerState, j) -> {
+                print(innerState + j)
+            })
+        }
+    })
+    print("seq-miss")
+} catch (e) {
+    match (e) {
+        parallel.ParallelError.ConcurrentDispatch -> print("seq-concurrent")
+        _ -> print("seq-other")
+    }
+}
+
+shared seqTouched = Atomic<int>(0)
+seqPlan.forEach(0..4, (state, i) -> {
+    seqTouched.add(1, Ordering.Relaxed)
+})
+print(seqTouched.load(Ordering.Relaxed) == 4)
+
+shared vmPlan = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+
+try {
+    vmPlan.forEach(0..20000, (state, i) -> {
+        if (i == 10000) {
+            vmPlan.forEach(0..1, (innerState, j) -> {
+                print(innerState + j)
+            })
+        }
+    })
+    print("vm-miss")
+} catch (e) {
+    match (e) {
+        parallel.ParallelError.ConcurrentDispatch -> print("vm-concurrent")
+        _ -> print("vm-other")
+    }
+}
+
+shared vmTouched = Atomic<int>(0)
+vmPlan.forEach(0..4, (state, i) -> {
+    vmTouched.add(1, Ordering.Relaxed)
+})
+print(vmTouched.load(Ordering.Relaxed) == 4)

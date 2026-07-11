@@ -153,6 +153,12 @@ expect_output_workers \
     $'true\ntrue\ntrue' \
     2
 
+expect_output_workers \
+    "parallel_plan_nested_dispatch_gate" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_nested_dispatch_gate.xr" \
+    $'seq-concurrent\ntrue\nvm-concurrent\ntrue' \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

@@ -5389,7 +5389,10 @@ static XiValue *parallel_call_make_for_each(XiLower *l, AstNode *node, AstNode *
         par->args[4 + ci] = closure->args[ci];
     par->aux = data;
     par->aux_kind = XI_AUX_KIND_PAR_FOR;
+    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
+    xi_lower_insert_err_check(l, node);
     return par;
 }
 
@@ -5474,6 +5477,7 @@ static XiValue *parallel_call_make_map(XiLower *l, AstNode *node, AstNode *range
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
+    xi_lower_insert_err_check(l, node);
 
     if (!into_array)
         return par;
@@ -5598,6 +5602,7 @@ static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *ra
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
+    xi_lower_insert_err_check(l, node);
     return par;
 }
 
@@ -5868,6 +5873,7 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
+    xi_lower_insert_err_check(l, node);
     xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
@@ -5984,6 +5990,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
+    xi_lower_insert_err_check(l, node);
     xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
 
     if (!into_array)
@@ -6138,6 +6145,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
+    xi_lower_insert_err_check(l, node);
     xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
