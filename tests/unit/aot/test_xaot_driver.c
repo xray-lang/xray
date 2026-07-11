@@ -123,6 +123,42 @@ static bool write_global_payload_to_cache(const char *cache_dir, const char *pay
     return write_file_text(payload_path, payload);
 }
 
+static char *install_package_payload(const char *home_dir, const char *cache_dir,
+                                     const char *canonical, const char *source_text) {
+    const char *slash;
+    size_t owner_len;
+    char pkg_dir[PATH_MAX];
+    char pkg_source[PATH_MAX];
+    char real_pkg_source[PATH_MAX];
+    char *payload;
+    int n;
+    if (!home_dir || !cache_dir || !canonical || !source_text)
+        return NULL;
+    slash = strchr(canonical, '/');
+    if (!slash || slash == canonical || !slash[1])
+        return NULL;
+    owner_len = (size_t) (slash - canonical);
+    if (owner_len > 120 || strlen(slash + 1) > 120)
+        return NULL;
+    n = snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%.*s/%s/1.0.0/src", home_dir,
+                 (int) owner_len, canonical, slash + 1);
+    if (n < 0 || (size_t) n >= sizeof(pkg_dir) || !mkdir_p(pkg_dir))
+        return NULL;
+    n = snprintf(pkg_source, sizeof(pkg_source), "%s/main.xr", pkg_dir);
+    if (n < 0 || (size_t) n >= sizeof(pkg_source) || !write_file_text(pkg_source, source_text))
+        return NULL;
+    if (!realpath(pkg_source, real_pkg_source))
+        return NULL;
+    payload = make_package_payload_for_source(canonical, real_pkg_source);
+    if (!payload)
+        return NULL;
+    if (!write_global_payload_to_cache(cache_dir, payload)) {
+        xr_free(payload);
+        return NULL;
+    }
+    return payload;
+}
+
 static char *dup_env_value(const char *name) {
     const char *value = getenv(name);
     return value ? xr_strdup(value) : NULL;
@@ -229,9 +265,6 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
 static void test_driver_auto_discovers_package_summary_payloads(void) {
     char root[PATH_MAX];
     char home_dir[PATH_MAX];
-    char pkg_dir[PATH_MAX];
-    char pkg_source[PATH_MAX];
-    char real_pkg_source[PATH_MAX];
     char entry_source[PATH_MAX];
     char cache_dir[PATH_MAX];
     XaotTarget target = {0};
@@ -245,24 +278,19 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     memset(&result, 0, sizeof(result));
     snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-%ld", (long) getpid());
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
-    snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/codex/pkg/1.0.0/src", home_dir);
-    snprintf(pkg_source, sizeof(pkg_source), "%s/main.xr", pkg_dir);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
-    ASSERT_TRUE(mkdir_p(pkg_dir));
-    ASSERT_TRUE(write_file_text(pkg_source, "fn package_value() -> int {\n"
-                                            "    return 5\n"
-                                            "}\n"));
+    payload = install_package_payload(home_dir, cache_dir, "codex/pkg",
+                                      "fn package_value() -> int {\n"
+                                      "    return 5\n"
+                                      "}\n");
+    ASSERT_TRUE(payload != NULL);
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkg\" as pkg\n"
                                               "fn value() -> int {\n"
                                               "    return 7\n"
                                               "}\n"));
-    ASSERT_TRUE(realpath(pkg_source, real_pkg_source) != NULL);
-    payload = make_package_payload_for_source("codex/pkg", real_pkg_source);
-    ASSERT_TRUE(payload != NULL);
     payloads[0] = payload;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
-    ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload));
     old_home = dup_env_value("HOME");
     setenv("HOME", home_dir, 1);
 
@@ -280,7 +308,64 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     restore_env_value("HOME", old_home);
     xr_free(payload);
     unlink(entry_source);
-    unlink(pkg_source);
+    passed++;
+}
+
+static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
+    char root[PATH_MAX];
+    char home_dir[PATH_MAX];
+    char entry_source[PATH_MAX];
+    char cache_dir[PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    char *payload_a = NULL;
+    char *payload_b = NULL;
+    const char *payloads[2];
+    uint64_t imported_hash = 0;
+    char *old_home;
+
+    memset(&result, 0, sizeof(result));
+    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-multi-%ld", (long) getpid());
+    snprintf(home_dir, sizeof(home_dir), "%s/home", root);
+    snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
+    payload_a = install_package_payload(home_dir, cache_dir, "codex/pkga",
+                                        "fn package_a() -> int {\n"
+                                        "    return 11\n"
+                                        "}\n");
+    payload_b = install_package_payload(home_dir, cache_dir, "codex/pkgb",
+                                        "fn package_b() -> int {\n"
+                                        "    return 13\n"
+                                        "}\n");
+    ASSERT_TRUE(payload_a != NULL);
+    ASSERT_TRUE(payload_b != NULL);
+    ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
+                                              "import \"codex/pkgb\" as b\n"
+                                              "fn value() -> int {\n"
+                                              "    return 17\n"
+                                              "}\n"));
+    payloads[0] = payload_a;
+    payloads[1] = payload_b;
+    ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 2, &imported_hash));
+    old_home = dup_env_value("HOME");
+    setenv("HOME", home_dir, 1);
+
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.emit_global_evidence_dump = true;
+    options.evidence_cache_dir = cache_dir;
+
+    ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    restore_env_value("HOME", old_home);
+    xr_free(payload_a);
+    xr_free(payload_b);
+    unlink(entry_source);
     passed++;
 }
 
@@ -288,6 +373,7 @@ int main(void) {
     test_driver_consumes_imported_summary_payload_set();
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_auto_discovers_package_summary_payloads();
+    test_driver_auto_discovers_multiple_package_summary_payloads();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }
