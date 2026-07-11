@@ -2,6 +2,7 @@ schema = 1
 module = "http"
 contract_revision = 3
 legacy_commit = "c4ead56205b25b7bde418cf2b8c782e592916a61"
+legacy_oracle = "classification_only"
 legacy_public_surface = ["requestText", "responseText", "parseRequestHead", "parseResponseHead"]
 intentional_semantic_changes = [
   "HTTP control-plane helpers are owned by stdlib/http/http.xr",

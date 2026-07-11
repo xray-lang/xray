@@ -54,6 +54,7 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
                 "module": module,
                 "contract_revision": contract.get("contract_revision"),
                 "legacy_commit": contract.get("legacy_commit"),
+                "legacy_oracle": contract.get("legacy_oracle"),
                 "case_count": case_count,
                 "equivalence": contract.get("equivalence", []),
             }
@@ -84,6 +85,11 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
     }
     missing_contracts = sorted(expected_contracts - contract_names)
     missing_benchmarks = sorted(governed_suites - benchmark_suites)
+    non_executable_legacy = sorted(
+        str(contract["module"])
+        for contract in contracts
+        if contract.get("legacy_oracle") != "executable"
+    )
     completion_blockers: list[dict[str, Any]] = []
     if dynamic_report.get("migration_debt_count", 0):
         completion_blockers.append(
@@ -99,6 +105,10 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
     if missing_benchmarks:
         completion_blockers.append(
             {"kind": "missing_active_benchmarks", "suites": missing_benchmarks}
+        )
+    if non_executable_legacy:
+        completion_blockers.append(
+            {"kind": "non_executable_legacy_oracles", "modules": non_executable_legacy}
         )
 
     report = {
