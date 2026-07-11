@@ -19,8 +19,6 @@
 #include "http_internal.h"
 #include "../net/io.h"
 #include "../net/tls.h"
-#include "../../src/io/xdns.h"
-#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +30,7 @@ typedef struct XrH2PoolEntry {
     char *host;
     int port;
     XrH2Conn *conn;
-    XrTlsConn *tls_conn;
+    XrIOConn *io;
     XrTlsContext *tls_ctx;
     uint64_t last_used;
     bool in_use;
@@ -74,10 +72,8 @@ void http2_client_pool_destroy(XrH2Pool *pool) {
 
             if (entry->conn)
                 http2_conn_free(entry->conn);
-            if (entry->tls_conn) {
-                xr_tls_conn_close(entry->tls_conn);
-                xr_tls_conn_free(entry->tls_conn);
-            }
+            if (entry->io)
+                xr_io_close(entry->io);
             if (entry->tls_ctx)
                 xr_tls_context_free(entry->tls_ctx);
             xr_free(entry->host);
@@ -129,10 +125,8 @@ static XrH2PoolEntry *http2_client_pool_acquire(XrVMRuntime *X, XrH2Pool *pool, 
 
             if (entry->conn)
                 http2_conn_free(entry->conn);
-            if (entry->tls_conn) {
-                xr_tls_conn_close(entry->tls_conn);
-                xr_tls_conn_free(entry->tls_conn);
-            }
+            if (entry->io)
+                xr_io_close(entry->io);
             if (entry->tls_ctx)
                 xr_tls_context_free(entry->tls_ctx);
             xr_free(entry->host);
@@ -194,10 +188,8 @@ static void h2_pool_entry_free(XrH2PoolEntry *entry) {
 
     if (entry->conn)
         http2_conn_free(entry->conn);
-    if (entry->tls_conn) {
-        xr_tls_conn_close(entry->tls_conn);
-        xr_tls_conn_free(entry->tls_conn);
-    }
+    if (entry->io)
+        xr_io_close(entry->io);
     if (entry->tls_ctx)
         xr_tls_context_free(entry->tls_ctx);
     xr_free(entry->host);
@@ -242,50 +234,8 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
     entry->in_use = true;
     entry->last_used = get_time_ms();
 
-    // DNS resolution (with the runtime cache when h2Request is called from a VM isolate).
-    XrSockAddr resolved_addr;
-    if (!xr_dns_resolve(X, host, &resolved_addr, XR_AF_UNSPEC)) {
-        xr_free(entry->host);
-        xr_free(entry);
-        return NULL;
-    }
-
-    // Create socket
-    int fd = socket(resolved_addr.family, SOCK_STREAM, 0);
-    if (fd < 0) {
-        xr_free(entry->host);
-        xr_free(entry);
-        return NULL;
-    }
-
-    // Set TCP_NODELAY
-    int flag = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-
-    // Connect
-    struct sockaddr *sa;
-    socklen_t sa_len;
-    if (resolved_addr.family == AF_INET) {
-        resolved_addr.addr.v4.sin_port = htons(port);
-        sa = (struct sockaddr *) &resolved_addr.addr.v4;
-        sa_len = sizeof(struct sockaddr_in);
-    } else {
-        resolved_addr.addr.v6.sin6_port = htons(port);
-        sa = (struct sockaddr *) &resolved_addr.addr.v6;
-        sa_len = sizeof(struct sockaddr_in6);
-    }
-
-    if (connect(fd, sa, sa_len) < 0) {
-        xr_closesocket(fd);
-        xr_free(entry->host);
-        xr_free(entry);
-        return NULL;
-    }
-
-    // TLS handshake
     entry->tls_ctx = xr_tls_context_new_client();
     if (!entry->tls_ctx) {
-        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -294,49 +244,32 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
     // Set ALPN
     xr_tls_context_set_alpn(entry->tls_ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
 
-    entry->tls_conn = xr_tls_conn_new(entry->tls_ctx, fd);
-    if (!entry->tls_conn) {
+    entry->io = xr_io_connect_tls_with_ctx(X, entry->tls_ctx, host, port, 30000);
+    if (!entry->io) {
         xr_tls_context_free(entry->tls_ctx);
-        xr_closesocket(fd);
-        xr_free(entry->host);
-        xr_free(entry);
-        return NULL;
-    }
-
-    xr_tls_conn_set_hostname(entry->tls_conn, host);
-
-    if (xr_tls_conn_handshake_client(X, entry->tls_conn) != XR_TLS_OK) {
-        xr_tls_conn_free(entry->tls_conn);
-        xr_tls_context_free(entry->tls_ctx);
-        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
     }
 
     // Check ALPN negotiation result
-    const char *alpn = xr_tls_conn_get_alpn(entry->tls_conn);
+    const char *alpn = xr_tls_conn_get_alpn(entry->io->tls);
     if (!alpn || strcmp(alpn, "h2") != 0) {
         // HTTP/2 not supported, close connection
-        xr_tls_conn_close(entry->tls_conn);
-        xr_tls_conn_free(entry->tls_conn);
+        xr_io_close(entry->io);
         xr_tls_context_free(entry->tls_ctx);
-        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
     }
 
     // Create HTTP/2 connection
-    entry->conn = http2_conn_new(X, fd, entry->tls_conn, true);
+    entry->conn = http2_conn_new(X, entry->io->fd, entry->io->tls, true);
     if (!entry->conn) {
-        if (entry->tls_conn) {
-            xr_tls_conn_close(entry->tls_conn);
-            xr_tls_conn_free(entry->tls_conn);
-        }
+        if (entry->io)
+            xr_io_close(entry->io);
         if (entry->tls_ctx)
             xr_tls_context_free(entry->tls_ctx);
-        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -345,13 +278,10 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
     // Send connection preface and SETTINGS
     if (http2_conn_init(entry->conn) < 0) {
         http2_conn_free(entry->conn);
-        if (entry->tls_conn) {
-            xr_tls_conn_close(entry->tls_conn);
-            xr_tls_conn_free(entry->tls_conn);
-        }
+        if (entry->io)
+            xr_io_close(entry->io);
         if (entry->tls_ctx)
             xr_tls_context_free(entry->tls_ctx);
-        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
