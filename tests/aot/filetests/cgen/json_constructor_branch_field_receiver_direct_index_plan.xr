@@ -1,0 +1,22 @@
+class BranchFieldHolder {
+    payload: Json
+
+    constructor() {
+        var flag = true
+        if (flag) {
+            this.payload = { name: "ada", age: 7 }
+        } else {
+            this.payload = { name: "bob", age: 8 }
+        }
+    }
+
+    jsonConstructorBranchFieldReceiverPlan() -> int {
+        return this.payload.age
+    }
+}
+
+fn mainValue() -> int {
+    return BranchFieldHolder().jsonConstructorBranchFieldReceiverPlan()
+}
+
+print(mainValue())
