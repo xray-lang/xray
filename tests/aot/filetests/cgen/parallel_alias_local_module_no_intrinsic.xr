@@ -1,0 +1,8 @@
+import "./_parallel_shadow_lib" as parallel
+
+var total = 0
+parallel.forEach(0..5, (i) -> {
+    total = total + i
+})
+
+print(total)
