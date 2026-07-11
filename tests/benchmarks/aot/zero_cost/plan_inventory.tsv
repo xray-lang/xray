@@ -53,6 +53,7 @@ interface_object_use_evidence|covered|interface-object-use|tests/unit/analysis|I
 json_shape_guard|covered|json-access-plan .*action=shape_guard_index|tests/aot/filetests/cgen|Json open-shape static-key access emits shape guard plus fallback helpers.
 json_computed_key_guard|covered|json-access-plan .*action=computed_key_guard|tests/aot/filetests/cgen|Json computed-key access consumes receiver-shape guarded lookup helpers in generated C.
 map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/aot/filetests/cgen|Small Map/Set literal lookup consumes inline scan plans in generated C.
+map_set_small_mutation_boundary|covered|smallMutationBoundary|tests/aot/filetests/cgen|Small literal Map/Set mutating key operations deliberately stay on verified prehashed mutation helpers instead of pretending small lookup tables are mutation-specialized.
 map_set_dense_lookup|covered|key-access-plan .*action=direct_dense_index|tests/aot/filetests/cgen|Dense ordinal int Map/Set literal lookup consumes direct dense-index plans in generated C.
 map_bool_direct|covered|map-shape-plan .*container=map .*action=bool_direct|tests/aot/filetests/cgen|Bool-keyed Map literals with boolmap-supported scalar values produce verified bool-direct storage plans and lookup plans; Set<bool> stays on small-scan until a boolset representation exists.
 user_hash_eq_direct_backend|covered|map_set_user_hash_eq_direct_backend_hash_|tests/aot/filetests/cgen|User Hash/Eq direct-call backend consumption passes verified target function pointers to Map/Set helpers.

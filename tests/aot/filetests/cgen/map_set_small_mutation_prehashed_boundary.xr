@@ -1,0 +1,21 @@
+fn smallMutationBoundary() -> int {
+    var scores = #{"ada": 7, "lin": 9}
+    scores.set("grace", 11)
+    scores["lin"] = 10
+    var removedMap = scores.delete("ada")
+
+    var seen: Set<string> = #["ada", "lin"]
+    seen.add("grace")
+    var removedSet = seen.delete("lin")
+
+    var total = 0
+    if (removedMap) {
+        total = total + 1
+    }
+    if (removedSet) {
+        total = total + 2
+    }
+    return total
+}
+
+print(smallMutationBoundary())
