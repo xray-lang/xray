@@ -1,7 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=freestanding profile rejects enum methods
-contains=freestanding enums support static variants only
-not_contains=xrt_map_new
-not_contains=xrt_shared
-not_contains=CRASH

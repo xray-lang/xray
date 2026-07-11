@@ -5894,12 +5894,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_ENUM_DECL: {
             EnumDeclNode *ed = &node->as.enum_decl;
-            if (xa_freestanding_profile_enabled(ctx->analyzer) && ed->method_count > 0) {
-                xa_freestanding_report_unavailable(
-                    ctx, node, "enum methods",
-                    "freestanding enums support static variants only; enum methods need hosted "
-                    "namespace/function initialization until method lowering is static");
-            }
             XaSymbol *enum_sym =
                 ed->name ? xa_scope_lookup(ctx->analyzer->current_scope, ed->name) : NULL;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
