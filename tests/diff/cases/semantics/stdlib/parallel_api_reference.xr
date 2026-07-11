@@ -21,11 +21,18 @@ print(out[2])
 var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b, Options(1))
 print(total)
 
-var plan = Plan<int>(Options(3), 100)
+var initSeen: Array<int> = []
+var plan = Plan<int>(Options(3), (lane) -> {
+    initSeen.push(lane)
+    return 100 + lane
+})
+print(initSeen.length)
+print(initSeen[0])
+print(initSeen[2])
 var planSum = plan.reduce(0..4, 0, (state, i) -> state + i, (a, b) -> a + b)
 print(planSum)
 
-var planValues = plan.map(0..3, (state, i) -> state - i)
+var planValues = plan.map(0..3, (state, i) -> state + i)
 print(planValues[0])
 print(planValues[2])
 

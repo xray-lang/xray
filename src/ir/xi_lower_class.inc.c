@@ -66,6 +66,48 @@ static XiClassData *class_find_native_super(XiLower *l, const ClassDeclNode *cd)
     return NULL;
 }
 
+static uint32_t class_method_evidence_source_node_id(XiLower *l, const ClassDeclNode *cd,
+                                                     const AstNode *method_node) {
+    uint32_t fallback = xi_lower_source_node_id(l, method_node);
+    const XgGlobalEvidence *ev = l ? l->global_evidence : NULL;
+    const MethodDeclNode *method = NULL;
+    uint32_t class_name_id;
+    uint32_t method_name_id;
+    const XgClassSummary *owner = NULL;
+    const XgMethodSummary *match = NULL;
+    if (!l || !cd || !method_node || method_node->type != AST_METHOD_DECL || !ev || !cd->name)
+        return fallback;
+    method = &method_node->as.method_decl;
+    if (!method->name)
+        return fallback;
+    class_name_id = xg_name_id(cd->name);
+    method_name_id = xg_name_id(method->name);
+    if (class_name_id == 0 || method_name_id == 0)
+        return fallback;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        if (cls->module_id == l->xg_module_id && cls->name_id == class_name_id) {
+            if (owner)
+                return fallback;
+            owner = cls;
+        }
+    }
+    if (!owner || owner->method_start == 0 || owner->method_count == 0)
+        return fallback;
+    uint32_t start = owner->method_start - 1;
+    if (start >= ev->nmethods || owner->method_count > ev->nmethods - start)
+        return fallback;
+    for (uint32_t i = 0; i < owner->method_count; i++) {
+        const XgMethodSummary *candidate = &ev->methods[start + i];
+        if (candidate->owner_class_id != owner->class_id || candidate->name_id != method_name_id)
+            continue;
+        if (match)
+            return fallback;
+        match = candidate;
+    }
+    return match && match->source_node_id != 0 ? match->source_node_id : fallback;
+}
+
 static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
                                                             uint16_t *out_inherited) {
     if (!l || !l->func || !l->isolate || !cd)
@@ -338,8 +380,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(l, m, true, cd, NULL,
-                                             xi_lower_source_node_id(l, cd->methods[i]));
+        XiFunc *mf = xi_lower_method_as_func(
+            l, m, true, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (!mf)
             continue;
         xi_lower_func_add_child(l->func, mf);
@@ -370,8 +412,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || !m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(l, m, false, cd, NULL,
-                                             xi_lower_source_node_id(l, cd->methods[i]));
+        XiFunc *mf = xi_lower_method_as_func(
+            l, m, false, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (!mf)
             continue;
         xi_lower_func_add_child(l->func, mf);
@@ -426,8 +468,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor)
             continue;
-        XiFunc *cf = xi_lower_method_as_func(l, m, false, cd, NULL,
-                                             xi_lower_source_node_id(l, cd->methods[i]));
+        XiFunc *cf = xi_lower_method_as_func(
+            l, m, false, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (cf) {
             xi_lower_func_add_child(l->func, cf);
             clinit_idx = (int) (l->func->nchildren - 1);

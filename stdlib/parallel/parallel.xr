@@ -25,6 +25,14 @@ fn _checkOptions(options: Options) {
     }
 }
 
+fn _referenceLaneCount(options: Options) -> int {
+    _checkOptions(options)
+    if (options.workers > 0) {
+        return options.workers
+    }
+    return 1
+}
+
 fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
     _checkOptions(options)
     for (offset in 0..range.length) {
@@ -72,24 +80,23 @@ fn reduce<A>(
 
 class Plan<S> {
     options: Options
-    _state: S
-    _closed: bool
-    _active: bool
+    private _states: Array<S>
+    private _closed: bool
+    private _active: bool
 
-    constructor(options: Options, state: S) {
-        _checkOptions(options)
+    constructor(options: Options, init: (int) -> S) {
+        var laneCount = _referenceLaneCount(options)
+        var states: Array<S> = []
+        for (lane in 0..laneCount) {
+            states.push(init(lane))
+        }
         this.options = options
-        this._state = state
+        this._states = states
         this._closed = false
         this._active = false
     }
 
-    static create(options: Options, init: (int) -> S) -> Plan<S> {
-        _checkOptions(options)
-        return Plan<S>(options, init(0))
-    }
-
-    _begin() {
+    private _begin() {
         if (this._closed) {
             throw ParallelError.ClosedPlan
         }
@@ -99,15 +106,21 @@ class Plan<S> {
         this._active = true
     }
 
-    _end() {
+    private _end() {
         this._active = false
+    }
+
+    private _stateFor(offset: int) -> S {
+        var laneCount = this._states.length
+        var lane = offset % laneCount
+        return this._states[lane]
     }
 
     forEach(range: Range, body: (S, int) -> ()) {
         this._begin()
         defer { this._end() }
         for (offset in 0..range.length) {
-            body(this._state, range[offset])
+            body(this._stateFor(offset), range[offset])
         }
     }
 
@@ -116,7 +129,7 @@ class Plan<S> {
         defer { this._end() }
         var out: Array<T> = []
         for (offset in 0..range.length) {
-            out.push(body(this._state, range[offset]))
+            out.push(body(this._stateFor(offset), range[offset]))
         }
         return out
     }
@@ -126,7 +139,7 @@ class Plan<S> {
         defer { this._end() }
         output.clear()
         for (offset in 0..range.length) {
-            output.push(body(this._state, range[offset]))
+            output.push(body(this._stateFor(offset), range[offset]))
         }
         return output
     }
@@ -136,7 +149,7 @@ class Plan<S> {
         defer { this._end() }
         var acc = initial
         for (offset in 0..range.length) {
-            acc = combine(acc, body(this._state, range[offset]))
+            acc = combine(acc, body(this._stateFor(offset), range[offset]))
         }
         return acc
     }
@@ -144,6 +157,7 @@ class Plan<S> {
     close() {
         if (!this._closed) {
             this._closed = true
+            this._states.clear()
         }
     }
 }

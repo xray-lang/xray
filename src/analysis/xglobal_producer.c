@@ -268,6 +268,120 @@ static uint32_t producer_unique_body_source_node_id(const XgProducer *p, XgModul
     return candidate;
 }
 
+static bool producer_decl_source_seen(const XgProducer *p, XgModuleId module_id,
+                                      uint32_t source_node_id) {
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->ndecls; i++) {
+        const XgDeclSummary *decl = &p->evidence->decls[i];
+        if (decl->module_id == module_id && decl->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t producer_unique_decl_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                                    uint32_t source_node_id, uint32_t kind,
+                                                    uint32_t name_id, uint32_t signature_key) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return source_node_id;
+    while (producer_decl_source_seen(p, module_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, kind);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, signature_key);
+        h = fold_u64(h, p->evidence->ndecls);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
+static XgModuleId producer_class_module_id(const XgProducer *p, XgClassId class_id) {
+    if (!p || !p->evidence || class_id == XG_NO_ID)
+        return XG_NO_ID;
+    for (uint32_t i = 0; i < p->evidence->nclasses; i++) {
+        const XgClassSummary *cls = &p->evidence->classes[i];
+        if (cls->class_id == class_id)
+            return cls->module_id;
+    }
+    return XG_NO_ID;
+}
+
+static bool producer_method_source_seen(const XgProducer *p, XgModuleId module_id,
+                                        XgClassId current_class_id, uint32_t source_node_id) {
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->nmethods; i++) {
+        const XgMethodSummary *method = &p->evidence->methods[i];
+        XgModuleId owner_module = method->owner_class_id == current_class_id
+                                      ? module_id
+                                      : producer_class_module_id(p, method->owner_class_id);
+        if (owner_module == module_id && method->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t producer_unique_method_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                                      XgClassId owner_class_id,
+                                                      uint32_t source_node_id, uint32_t name_id,
+                                                      uint32_t signature_key) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return source_node_id;
+    while (producer_method_source_seen(p, module_id, owner_class_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, owner_class_id);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, signature_key);
+        h = fold_u64(h, p->evidence->nmethods);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
+static bool producer_class_field_source_seen(const XgProducer *p, XgModuleId module_id,
+                                             uint32_t source_node_id) {
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->nclass_fields; i++) {
+        const XgClassFieldSummary *field = &p->evidence->class_fields[i];
+        if (field->module_id == module_id && field->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t
+producer_unique_class_field_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                           uint32_t source_node_id, XgClassId owner_class_id,
+                                           uint32_t name_id, uint32_t decl_ordinal) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return source_node_id;
+    while (producer_class_field_source_seen(p, module_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, owner_class_id);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, decl_ordinal);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
 static bool producer_stdlib_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
 }
@@ -6571,11 +6685,13 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = decl_id;
     decl.kind = XG_DECL_FUNC;
     decl.name_id = hash_name32(fn->name);
     decl.signature_key = hash_function_signature(fn);
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (native_attr)
         decl.flags |= XG_DECL_NATIVE;
@@ -6651,10 +6767,12 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = decl_id;
     decl.kind = (uint8_t) kind;
     decl.name_id = hash_name32(cls->name);
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (cls->is_native)
         decl.flags |= XG_DECL_NATIVE;
@@ -6677,9 +6795,11 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&method, 0, sizeof(method));
         method.method_id = (XgMethodId) (p->evidence->nmethods + 1);
         method.owner_class_id = class_id;
-        method.source_node_id = producer_source_node_id(module_id, method_node);
         method.name_id = hash_name32(m->name);
         method.signature_key = hash_method_signature(m);
+        method.source_node_id = producer_unique_method_source_node_id(
+            p, module_id, class_id, producer_source_node_id(module_id, method_node), method.name_id,
+            method.signature_key);
         if (m->is_static)
             method.flags |= XG_METHOD_STATIC;
         if (m->is_constructor)
@@ -6705,11 +6825,13 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&summary, 0, sizeof(summary));
         summary.field_id = (XgFieldId) (p->evidence->nclass_fields + 1);
         summary.module_id = module_id;
-        summary.source_node_id = producer_source_node_id(module_id, field_node);
         summary.owner_class_id = class_id;
         summary.name_id = hash_name32(field->name);
         summary.type_key = hash_tref32(field->field_type);
         summary.decl_ordinal = (uint32_t) i;
+        summary.source_node_id = producer_unique_class_field_source_node_id(
+            p, module_id, producer_source_node_id(module_id, field_node), class_id, summary.name_id,
+            summary.decl_ordinal);
         summary.instance_slot = field->is_static ? UINT32_MAX : instance_field_count++;
         class_field_fill_type_facts(&summary, field->field_type);
         summary.flags = class_field_flags(field, summary.semantic_kind, summary.flags);
@@ -6788,11 +6910,13 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     XgInterfaceId interface_id = (XgInterfaceId) hash_name32(iface->name);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_INTERFACE;
     decl.name_id = interface_id;
     decl.signature_key = (uint32_t) iface->method_count;
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
@@ -6835,11 +6959,13 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_ENUM;
     decl.name_id = hash_name32(e->name);
     decl.signature_key = (uint32_t) e->member_count;
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
