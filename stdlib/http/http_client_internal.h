@@ -8,7 +8,7 @@
  * http_client_internal.h - Internal HTTP/1.x client native boundary
  *
  * KEY CONCEPT:
- *   Internal HTTP/1.x client data-plane used by http.request and xpkg.
+ *   Internal HTTP/1.x client data-plane kept for xpkg and native tooling.
  *   User-facing protocol helpers live in stdlib/http/http.xr.
  */
 
