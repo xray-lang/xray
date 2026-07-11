@@ -1,0 +1,13 @@
+import { Options, ParallelError, Plan } from parallel
+
+var plan = Plan<int>(Options(2), (lane) -> lane)
+
+plan.reduce(
+    0..4,
+    0,
+    (state, i) -> state + i,
+    (a, b) -> {
+        throw ParallelError.ConcurrentDispatch
+        return a + b
+    }
+)

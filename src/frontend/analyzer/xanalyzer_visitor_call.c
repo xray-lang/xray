@@ -1694,6 +1694,63 @@ static bool xa_parallel_intrinsic_member_name(const char *name) {
                     strcmp(name, "mapInto") == 0 || strcmp(name, "reduce") == 0);
 }
 
+static bool xa_path_is_parallel_stdlib_module(const char *file) {
+    if (!file)
+        return false;
+    const char *suffixes[] = {"stdlib/parallel/parallel.xr",
+                              "<embedded stdlib>/parallel/parallel.xr"};
+    for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
+        size_t flen = strlen(file);
+        size_t slen = strlen(suffixes[i]);
+        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info) {
+    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
+        return false;
+    if (xa_path_is_parallel_stdlib_module(info->location.file))
+        return true;
+    if (!ctx || !ctx->analyzer)
+        return false;
+    for (int i = 0; i < info->method_count; i++) {
+        XaSymbol *method = info->methods ? info->methods[i] : NULL;
+        XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
+        if (links && xa_path_is_parallel_stdlib_module(links->file_path))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_symbol_is_parallel_plan_class(XaInferContext *ctx, XaSymbol *sym, const char *name) {
+    if (!ctx || !ctx->analyzer || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    const char *member_name =
+        links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
+    if (!member_name || strcmp(member_name, "Plan") != 0)
+        return false;
+    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0)
+        return true;
+    if (links && xa_path_is_parallel_stdlib_module(links->file_path))
+        return true;
+    return links && xa_class_info_is_parallel_plan(ctx, links->class_info);
+}
+
+static bool xa_type_is_parallel_plan(XaInferContext *ctx, XrType *type) {
+    if (!type || !XR_TYPE_IS_INSTANCE(type))
+        return false;
+    const char *class_name = xr_type_get_class_name(type);
+    if (!class_name || strcmp(class_name, "Plan") != 0)
+        return false;
+    if (type->instance.class_ref && xa_class_info_is_parallel_plan(ctx, type->instance.class_ref))
+        return true;
+    XaSymbol *sym = xa_lookup_visible_class_symbol(ctx, class_name);
+    return sym && xa_symbol_is_parallel_plan_class(ctx, sym, class_name);
+}
+
 static const char *xa_parallel_call_member_name(XaInferContext *ctx, CallExprNode *call,
                                                 XaSymbolLinks *links, XaSymbol *fn_sym) {
     if (!call || !call->callee)
@@ -1711,6 +1768,13 @@ static const char *xa_parallel_call_member_name(XaInferContext *ctx, CallExprNod
             return name;
     }
     return NULL;
+}
+
+static const char *xa_parallel_plan_call_member_name(XaInferContext *ctx, XrType *receiver_type,
+                                                     const char *method_name) {
+    if (!method_name || !xa_parallel_intrinsic_member_name(method_name))
+        return NULL;
+    return xa_type_is_parallel_plan(ctx, receiver_type) ? method_name : NULL;
 }
 
 static AstNode *xa_call_unwrap_grouping(AstNode *node) {
@@ -1801,6 +1865,30 @@ static const char *xa_parallel_callback_label_for_arg(const char *member, int ar
             return "parallel.reduce combine callback";
     }
     return NULL;
+}
+
+static const char *xa_parallel_plan_callback_label_for_arg(const char *member, int arg_index) {
+    if (!member)
+        return NULL;
+    if (strcmp(member, "forEach") == 0)
+        return arg_index == 1 ? "parallel.Plan.forEach callback" : NULL;
+    if (strcmp(member, "map") == 0)
+        return arg_index == 1 ? "parallel.Plan.map callback" : NULL;
+    if (strcmp(member, "mapInto") == 0)
+        return arg_index == 2 ? "parallel.Plan.mapInto callback" : NULL;
+    if (strcmp(member, "reduce") == 0) {
+        if (arg_index == 2)
+            return "parallel.Plan.reduce body callback";
+        if (arg_index == 3)
+            return "parallel.Plan.reduce combine callback";
+    }
+    return NULL;
+}
+
+static const char *xa_parallel_any_callback_label_for_arg(const char *member,
+                                                          const char *plan_member, int arg_index) {
+    const char *label = xa_parallel_callback_label_for_arg(member, arg_index);
+    return label ? label : xa_parallel_plan_callback_label_for_arg(plan_member, arg_index);
 }
 
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
@@ -3481,6 +3569,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     XrType *saved_acc_type = ctx->callback_accumulator_type;
     XrType *saved_arr_type = ctx->callback_array_type;
     const char *parallel_call_member = xa_parallel_call_member_name(ctx, call, fn_links, fn_sym);
+    const char *parallel_plan_member =
+        xa_parallel_plan_call_member_name(ctx, callee_obj_type, method_name);
     xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
 
     // Set callback context if this is a container method with callbacks
@@ -3571,8 +3661,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             param_slot = rest_param_index;
 
         if (param_slot < 0 || param_slot >= param_count) {
-            const char *parallel_callback_label =
-                xa_parallel_callback_label_for_arg(parallel_call_member, i);
+            const char *parallel_callback_label = xa_parallel_any_callback_label_for_arg(
+                parallel_call_member, parallel_plan_member, i);
             XrType *arg_type =
                 xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
             if (effective_arg_types && slot < arg_count)
@@ -3592,7 +3682,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (xa_call_is_copy_builtin(call) && slot == 0)
             ctx->allow_view_expr_for_copy = true;
         const char *parallel_callback_label =
-            xa_parallel_callback_label_for_arg(parallel_call_member, i);
+            xa_parallel_any_callback_label_for_arg(parallel_call_member, parallel_plan_member, i);
         XrType *arg_type =
             xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
         ctx->allow_view_expr_for_copy = saved_copy_view;

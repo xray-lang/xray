@@ -1,0 +1,12 @@
+import { Options, Plan } from parallel
+
+fn worker() -> int {
+    return 1
+}
+
+var plan = Plan<int>(Options(2), (lane) -> lane)
+
+plan.forEach(0..4, (state, i) -> {
+    var value = await go worker()
+    print(state + value + i)
+})
