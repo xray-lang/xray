@@ -1294,12 +1294,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "requestText",
-        .signature = "(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?",
+        .signature = "(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?",
         .summary = "",
     },
     {
         .name = "responseText",
-        .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?",
+        .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
         .summary = "",
     },
     {
@@ -5594,8 +5594,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: Json): HttpResponse` |  |\n"
-            "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
-            "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?` |  |\n"
+            "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
+            "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: unknown): ()` |  |\n"
             "| `http.router` | `(): Router` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"

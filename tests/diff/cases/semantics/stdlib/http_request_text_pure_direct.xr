@@ -1,6 +1,12 @@
 // Pure-Xray HTTP/1.1 request text helper.
 import http
-import { requestText } from http
+import { Headers, HttpError, requestText } from http
+
+fn withHeader(name: string, value: string) -> Headers {
+    var headers = Headers()
+    headers.add(name, value)
+    return headers
+}
 
 fn line(label: string, value: string?) {
     print(label)
@@ -11,34 +17,34 @@ fn line(label: string, value: string?) {
     }
 }
 
-var basic = requestText("get", "/api?q=1", { "X-Test": "ok" }, "", "example.com")
+var basic = requestText("get", "/api?q=1", withHeader("X-Test", "ok"), "", "example.com")
 line("basic", basic)
 
 var body = requestText(
     "post",
     "/submit",
-    { "Content-Type": "text/plain" },
+    withHeader("Content-Type", "text/plain"),
     "hello",
     "example.com"
 )
 line("body", body)
 
-var customHost = requestText("GET", "/", { "Host": "override.test" })
+var customHost = requestText("GET", "/", withHeader("Host", "override.test"))
 line("custom-host", customHost)
 
-var customEncoding = requestText("GET", "/", { "Accept-Encoding": "identity" }, "", "example.com")!
+var customEncoding = requestText("GET", "/", withHeader("Accept-Encoding", "identity"), "", "example.com")!
 print(customEncoding.includes("Accept-Encoding: identity"))
 print(customEncoding.includes("Accept-Encoding: gzip, deflate"))
 
-var emptyHeaders: Json = {}
+var emptyHeaders = Headers()
+var privateHeaders = Headers()
+privateHeaders.add("Authorization", "secret")
+privateHeaders.add("Proxy-Authorization", "proxy-secret")
+privateHeaders.add("Accept", "application/json")
 var stripped = requestText(
     "GET",
     "/private",
-    {
-        "Authorization": "secret",
-        "Proxy-Authorization": "proxy-secret",
-        "Accept": "application/json"
-    },
+    privateHeaders,
     "",
     "api.test",
     true
@@ -48,6 +54,13 @@ print(stripped!.includes("Proxy-Authorization"))
 print(stripped!.includes("Accept: application/json"))
 
 print(requestText("GET", "/bad path", emptyHeaders, "", "example.com") == null)
-print(requestText("GET", "/", { "X-Bad": "a\r\nInjected: y" }, "", "example.com") == null)
+var injectionRejected = false
+try {
+    var badHeaders = Headers()
+    badHeaders.add("X-Bad", "a\r\nInjected: y")
+} catch (e: HttpError) {
+    injectionRejected = true
+}
+print(injectionRejected)
 print(requestText("GET", "/", emptyHeaders, "", "bad host") == null)
 print(http.requestText("GET", "/", emptyHeaders, "", "example.com") != null)

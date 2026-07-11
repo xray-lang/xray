@@ -3,3 +3,5 @@ tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr
+tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr
