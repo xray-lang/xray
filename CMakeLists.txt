@@ -1459,6 +1459,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME stdlib_self_hosting_report
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --check
+    )
+    set_tests_properties(stdlib_self_hosting_report PROPERTIES
+        LABELS "stdlib;boundary;report"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_def_migration_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_def_migration_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
