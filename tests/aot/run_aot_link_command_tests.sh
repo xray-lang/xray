@@ -3406,7 +3406,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_rawptr_of_local_reject" \
     "$WORK/freestanding_rawptr_of_local_reject.log" \
     "freestanding-profile/static-address: rejects local RawPtr.of" \
-    "RawPtr.of can only take the name of a top-level const static object"
+    "RawPtr.of classified this expression as stack local (escape cannot be proven)"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_import_nonweak_reject.xr" \
@@ -3420,14 +3420,14 @@ expect_freestanding_reject \
     "$WORK/freestanding_rawmut_of_static_reject" \
     "$WORK/freestanding_rawmut_of_static_reject.log" \
     "freestanding-profile/static-address: rejects RawMut.of static const" \
-    "RawMut.of can only take the name of a top-level mutable scalar or aggregate static object"
+    "RawMut.of classified this expression as module static (readonly storage)"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_string_var_reject.xr" \
     "$WORK/freestanding_rawmut_of_string_var_reject" \
     "$WORK/freestanding_rawmut_of_string_var_reject.log" \
     "freestanding-profile/static-address: rejects RawMut.of string var" \
-    "RawMut.of can only take the name of a top-level mutable scalar or aggregate static object"
+    "RawMut.of classified this expression as module static (addressable)"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_heap_constructs_reject.xr" \

@@ -1,0 +1,4 @@
+args=--profile freestanding
+status=fail
+contains=RawPtr.of classified this expression as owner element (dynamic owner element)
+not_contains=CRASH

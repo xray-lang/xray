@@ -1,0 +1,4 @@
+args=--profile freestanding
+status=fail
+contains=RawPtr.of classified this expression as field (escape cannot be proven)
+not_contains=CRASH

@@ -645,9 +645,10 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                 ptr_type->ptr_is_mut
-                    ? "RawMut.of is only supported in freestanding AOT profile for static data"
-                    : "RawPtr.of is only supported in freestanding AOT profile for static const "
-                      "data",
+                    ? "RawMut.of general lvalue address-taking is not enabled; the current "
+                      "surface only exposes verified freestanding static data"
+                    : "RawPtr.of general lvalue address-taking is not enabled; the current "
+                      "surface only exposes verified freestanding static const data",
                 &loc);
             return xr_type_new_unknown(ctx->analyzer->isolate);
         }

@@ -1,0 +1,4 @@
+args=--profile freestanding
+status=fail
+contains=RawPtr.of classified this expression as none (temporary expression)
+not_contains=CRASH

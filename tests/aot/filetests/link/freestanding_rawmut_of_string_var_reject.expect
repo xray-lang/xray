@@ -1,4 +1,4 @@
 args=--profile freestanding
 status=fail
-contains=RawMut.of can only take the name of a top-level mutable scalar or aggregate static object
+contains=RawMut.of classified this expression as module static (addressable)
 not_contains=CRASH
