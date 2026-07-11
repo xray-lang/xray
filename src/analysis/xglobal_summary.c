@@ -4670,6 +4670,837 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
     return true;
 }
 
+typedef struct XgModuleImportMap {
+    XgModuleId from;
+    XgModuleId to;
+} XgModuleImportMap;
+
+typedef struct XgPackageImportOffsets {
+    uint32_t class_field_index;
+    uint32_t method_index;
+    uint32_t interface_impl_index;
+    uint32_t derived_field_index;
+    uint32_t derived_method_index;
+    uint32_t map_entry_index;
+    XgDeclId decl_id;
+    XgClassId class_id;
+    XgInterfaceId interface_id;
+    XgFieldId class_field_id;
+    XgMethodId method_id;
+    XgInterfaceMethodId interface_method_id;
+    XgInterfaceObjectUseId interface_object_use_id;
+    XgFuncId func_id;
+    XgCallsiteId callsite_id;
+    XgLinkId link_id;
+    XgGenericInstId generic_inst_id;
+    XgGenericBodyUseId generic_body_use_id;
+    XgGenericStorageId generic_storage_id;
+    XgGenericCodeSizeId generic_code_size_id;
+    XgSequenceAccessId sequence_access_id;
+    XgCapacityOpId capacity_op_id;
+    XgBulkOpId bulk_op_id;
+    XgEncodingOpId encoding_op_id;
+    XgDeriveId derive_id;
+    XgDerivedFieldId derived_field_id;
+    XgDerivedMethodId derived_method_id;
+    XgJsonShapeId json_shape_id;
+    XgJsonFieldId json_field_id;
+    XgJsonAccessId json_access_id;
+    XgJsonCodecId json_codec_id;
+    XgRecordShapeId record_shape_id;
+    XgRecordFieldId record_field_id;
+    XgRecordAccessId record_access_id;
+    XgRecordMergeId record_merge_id;
+    XgOptionsId options_id;
+    XgMapShapeId map_shape_id;
+    XgMapEntryId map_entry_id;
+    XgKeyAccessId key_access_id;
+    XgHashEqId hash_eq_id;
+} XgPackageImportOffsets;
+
+static uint32_t max_u32(uint32_t a, uint32_t b) {
+    return a > b ? a : b;
+}
+
+static bool add_u32_checked(uint32_t a, uint32_t b, uint32_t *out) {
+    if (!out || UINT32_MAX - a < b)
+        return false;
+    *out = a + b;
+    return true;
+}
+
+static bool remap_offset_id(uint32_t value, uint32_t offset, uint32_t *out) {
+    if (!out)
+        return false;
+    if (value == XG_NO_ID) {
+        *out = XG_NO_ID;
+        return true;
+    }
+    return add_u32_checked(value, offset, out);
+}
+
+static bool remap_index_start(uint32_t start, uint32_t base_count, uint32_t *out) {
+    if (!out)
+        return false;
+    if (start == 0) {
+        *out = 0;
+        return true;
+    }
+    return add_u32_checked(start, base_count, out);
+}
+
+static bool module_identity_complete(const XgModuleSummary *module) {
+    return module && module->module_id != XG_NO_ID && module->name_id != 0 &&
+           module->canonical_hash != 0 && module->source_hash != 0 && module->kind != 0;
+}
+
+static bool module_identity_matches(const XgModuleSummary *a, const XgModuleSummary *b) {
+    return a && b && a->name_id == b->name_id && a->canonical_hash == b->canonical_hash &&
+           a->source_hash == b->source_hash && a->kind == b->kind;
+}
+
+static bool validate_package_module_identities(const XgGlobalEvidence *package) {
+    if (!package || package->nmodules == 0)
+        return false;
+    for (uint32_t i = 0; i < package->nmodules; i++) {
+        const XgModuleSummary *module = &package->modules[i];
+        if (!module_identity_complete(module))
+            return false;
+        for (uint32_t j = i + 1; j < package->nmodules; j++) {
+            const XgModuleSummary *other = &package->modules[j];
+            if (module->module_id == other->module_id || module_identity_matches(module, other))
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool remap_module_id(const XgModuleImportMap *maps, uint32_t map_count, XgModuleId from,
+                            XgModuleId *out) {
+    if (!out)
+        return false;
+    if (from == XG_NO_ID) {
+        *out = XG_NO_ID;
+        return true;
+    }
+    for (uint32_t i = 0; i < map_count; i++) {
+        if (maps[i].from == from) {
+            *out = maps[i].to;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void collect_import_offsets(const XgGlobalEvidence *target,
+                                   XgPackageImportOffsets *offsets) {
+    memset(offsets, 0, sizeof(*offsets));
+    if (!target)
+        return;
+    offsets->class_field_index = target->nclass_fields;
+    offsets->method_index = target->nmethods;
+    offsets->interface_impl_index = target->ninterface_impls;
+    offsets->derived_field_index = target->nderived_fields;
+    offsets->derived_method_index = target->nderived_methods;
+    offsets->map_entry_index = target->nmap_entries;
+    for (uint32_t i = 0; i < target->ndecls; i++)
+        offsets->decl_id = max_u32(offsets->decl_id, target->decls[i].decl_id);
+    for (uint32_t i = 0; i < target->nclasses; i++) {
+        const XgClassSummary *row = &target->classes[i];
+        offsets->class_id = max_u32(offsets->class_id, row->class_id);
+        offsets->class_id = max_u32(offsets->class_id, row->parent_class_id);
+        offsets->class_id = max_u32(offsets->class_id, row->generic_origin_class_id);
+    }
+    for (uint32_t i = 0; i < target->nclass_fields; i++) {
+        const XgClassFieldSummary *row = &target->class_fields[i];
+        offsets->class_field_id = max_u32(offsets->class_field_id, row->field_id);
+        offsets->class_id = max_u32(offsets->class_id, row->owner_class_id);
+        offsets->class_id = max_u32(offsets->class_id, row->target_class_id);
+        offsets->interface_id = max_u32(offsets->interface_id, row->target_interface_id);
+    }
+    for (uint32_t i = 0; i < target->nmethods; i++) {
+        const XgMethodSummary *row = &target->methods[i];
+        offsets->method_id = max_u32(offsets->method_id, row->method_id);
+        offsets->method_id = max_u32(offsets->method_id, row->override_of);
+        offsets->method_id = max_u32(offsets->method_id, row->root_method_id);
+        offsets->class_id = max_u32(offsets->class_id, row->owner_class_id);
+    }
+    for (uint32_t i = 0; i < target->ninterface_impls; i++) {
+        offsets->class_id =
+            max_u32(offsets->class_id, target->interface_impls[i].implementor_class_id);
+        offsets->interface_id =
+            max_u32(offsets->interface_id, target->interface_impls[i].interface_id);
+    }
+    for (uint32_t i = 0; i < target->ninterface_extends; i++) {
+        offsets->interface_id =
+            max_u32(offsets->interface_id, target->interface_extends[i].child_interface_id);
+        offsets->interface_id =
+            max_u32(offsets->interface_id, target->interface_extends[i].parent_interface_id);
+    }
+    for (uint32_t i = 0; i < target->ninterface_methods; i++) {
+        offsets->interface_method_id =
+            max_u32(offsets->interface_method_id, target->interface_methods[i].interface_method_id);
+        offsets->interface_id =
+            max_u32(offsets->interface_id, target->interface_methods[i].owner_interface_id);
+    }
+    for (uint32_t i = 0; i < target->ninterface_object_uses; i++) {
+        offsets->interface_object_use_id =
+            max_u32(offsets->interface_object_use_id, target->interface_object_uses[i].use_id);
+        offsets->interface_id =
+            max_u32(offsets->interface_id, target->interface_object_uses[i].interface_id);
+        offsets->func_id =
+            max_u32(offsets->func_id, target->interface_object_uses[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nbodies; i++) {
+        const XgBodySummary *row = &target->bodies[i];
+        offsets->func_id = max_u32(offsets->func_id, row->func_id);
+        offsets->decl_id = max_u32(offsets->decl_id, row->owner_decl_id);
+        offsets->class_id = max_u32(offsets->class_id, row->owner_class_id);
+        offsets->method_id = max_u32(offsets->method_id, row->owner_method_id);
+        offsets->callsite_id = max_u32(offsets->callsite_id, row->callsite_start);
+    }
+    for (uint32_t i = 0; i < target->ncallsites; i++) {
+        const XgCallsiteSummary *row = &target->callsites[i];
+        offsets->callsite_id = max_u32(offsets->callsite_id, row->callsite_id);
+        offsets->func_id = max_u32(offsets->func_id, row->owner_func_id);
+        offsets->func_id = max_u32(offsets->func_id, row->static_target_func_id);
+        offsets->class_id = max_u32(offsets->class_id, row->receiver_static_class_id);
+        offsets->interface_id = max_u32(offsets->interface_id, row->receiver_static_interface_id);
+        offsets->method_id = max_u32(offsets->method_id, row->method_id);
+    }
+    for (uint32_t i = 0; i < target->nlink_deps; i++) {
+        offsets->link_id = max_u32(offsets->link_id, target->link_deps[i].link_id);
+        offsets->decl_id = max_u32(offsets->decl_id, target->link_deps[i].decl_id);
+    }
+    for (uint32_t i = 0; i < target->ngeneric_insts; i++) {
+        const XgGenericInstSummary *row = &target->generic_insts[i];
+        offsets->generic_inst_id = max_u32(offsets->generic_inst_id, row->generic_inst_id);
+        offsets->decl_id = max_u32(offsets->decl_id, row->origin_decl_id);
+        offsets->func_id = max_u32(offsets->func_id, row->origin_func_id);
+        offsets->method_id = max_u32(offsets->method_id, row->origin_method_id);
+        offsets->class_id = max_u32(offsets->class_id, row->origin_class_id);
+        offsets->func_id = max_u32(offsets->func_id, row->specialized_func_id);
+        offsets->class_id = max_u32(offsets->class_id, row->specialized_class_id);
+        offsets->callsite_id = max_u32(offsets->callsite_id, row->root_callsite_id);
+        offsets->interface_id = max_u32(offsets->interface_id, row->constraint_interface_id);
+    }
+    for (uint32_t i = 0; i < target->ngeneric_body_uses; i++) {
+        const XgGenericBodyUseSummary *row = &target->generic_body_uses[i];
+        offsets->generic_body_use_id = max_u32(offsets->generic_body_use_id, row->use_id);
+        offsets->generic_inst_id = max_u32(offsets->generic_inst_id, row->generic_inst_id);
+        offsets->func_id = max_u32(offsets->func_id, row->owner_func_id);
+        offsets->func_id = max_u32(offsets->func_id, row->origin_body_func_id);
+        offsets->func_id = max_u32(offsets->func_id, row->specialized_body_func_id);
+        offsets->callsite_id = max_u32(offsets->callsite_id, row->root_callsite_id);
+    }
+    for (uint32_t i = 0; i < target->ngeneric_storages; i++) {
+        offsets->generic_storage_id =
+            max_u32(offsets->generic_storage_id, target->generic_storages[i].storage_id);
+        offsets->generic_inst_id =
+            max_u32(offsets->generic_inst_id, target->generic_storages[i].generic_inst_id);
+    }
+    for (uint32_t i = 0; i < target->ngeneric_code_sizes; i++) {
+        offsets->generic_code_size_id =
+            max_u32(offsets->generic_code_size_id, target->generic_code_sizes[i].code_size_id);
+        offsets->generic_inst_id =
+            max_u32(offsets->generic_inst_id, target->generic_code_sizes[i].generic_inst_id);
+        offsets->generic_body_use_id =
+            max_u32(offsets->generic_body_use_id, target->generic_code_sizes[i].body_use_id);
+    }
+    for (uint32_t i = 0; i < target->nsequence_accesses; i++) {
+        offsets->sequence_access_id =
+            max_u32(offsets->sequence_access_id, target->sequence_accesses[i].access_id);
+        offsets->func_id = max_u32(offsets->func_id, target->sequence_accesses[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->ncapacity_ops; i++) {
+        offsets->capacity_op_id = max_u32(offsets->capacity_op_id, target->capacity_ops[i].op_id);
+        offsets->func_id = max_u32(offsets->func_id, target->capacity_ops[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nbulk_ops; i++) {
+        offsets->bulk_op_id = max_u32(offsets->bulk_op_id, target->bulk_ops[i].op_id);
+        offsets->func_id = max_u32(offsets->func_id, target->bulk_ops[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nencoding_ops; i++) {
+        offsets->encoding_op_id = max_u32(offsets->encoding_op_id, target->encoding_ops[i].op_id);
+        offsets->func_id = max_u32(offsets->func_id, target->encoding_ops[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nderives; i++) {
+        offsets->derive_id = max_u32(offsets->derive_id, target->derives[i].derive_id);
+        offsets->decl_id = max_u32(offsets->decl_id, target->derives[i].owner_decl_id);
+    }
+    for (uint32_t i = 0; i < target->nderived_fields; i++) {
+        offsets->derived_field_id =
+            max_u32(offsets->derived_field_id, target->derived_fields[i].field_id);
+        offsets->derive_id = max_u32(offsets->derive_id, target->derived_fields[i].derive_id);
+        offsets->class_field_id =
+            max_u32(offsets->class_field_id, target->derived_fields[i].source_field_id);
+    }
+    for (uint32_t i = 0; i < target->nderived_methods; i++) {
+        offsets->derived_method_id =
+            max_u32(offsets->derived_method_id, target->derived_methods[i].method_id);
+        offsets->derive_id = max_u32(offsets->derive_id, target->derived_methods[i].derive_id);
+        offsets->func_id =
+            max_u32(offsets->func_id, target->derived_methods[i].generated_body_func_id);
+    }
+    for (uint32_t i = 0; i < target->njson_shapes; i++) {
+        offsets->json_shape_id =
+            max_u32(offsets->json_shape_id, target->json_shapes[i].json_shape_id);
+        offsets->func_id = max_u32(offsets->func_id, target->json_shapes[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->njson_fields; i++) {
+        offsets->json_field_id = max_u32(offsets->json_field_id, target->json_fields[i].field_id);
+        offsets->json_shape_id = max_u32(offsets->json_shape_id, target->json_fields[i].shape_id);
+    }
+    for (uint32_t i = 0; i < target->njson_accesses; i++) {
+        offsets->json_access_id =
+            max_u32(offsets->json_access_id, target->json_accesses[i].json_access_id);
+        offsets->func_id = max_u32(offsets->func_id, target->json_accesses[i].owner_func_id);
+        offsets->json_shape_id =
+            max_u32(offsets->json_shape_id, target->json_accesses[i].receiver_shape_id);
+    }
+    for (uint32_t i = 0; i < target->njson_codecs; i++) {
+        offsets->json_codec_id = max_u32(offsets->json_codec_id, target->json_codecs[i].codec_id);
+        offsets->func_id = max_u32(offsets->func_id, target->json_codecs[i].owner_func_id);
+        offsets->json_shape_id =
+            max_u32(offsets->json_shape_id, target->json_codecs[i].input_shape_id);
+        offsets->json_shape_id =
+            max_u32(offsets->json_shape_id, target->json_codecs[i].output_shape_id);
+    }
+    for (uint32_t i = 0; i < target->nrecord_shapes; i++) {
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->record_shapes[i].record_shape_id);
+        offsets->func_id = max_u32(offsets->func_id, target->record_shapes[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nrecord_fields; i++) {
+        offsets->record_field_id =
+            max_u32(offsets->record_field_id, target->record_fields[i].field_id);
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->record_fields[i].shape_id);
+    }
+    for (uint32_t i = 0; i < target->nrecord_accesses; i++) {
+        offsets->record_access_id =
+            max_u32(offsets->record_access_id, target->record_accesses[i].record_access_id);
+        offsets->func_id = max_u32(offsets->func_id, target->record_accesses[i].owner_func_id);
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->record_accesses[i].receiver_shape_id);
+    }
+    for (uint32_t i = 0; i < target->nrecord_merges; i++) {
+        const XgRecordMergeSummary *row = &target->record_merges[i];
+        offsets->record_merge_id = max_u32(offsets->record_merge_id, row->merge_id);
+        offsets->func_id = max_u32(offsets->func_id, row->owner_func_id);
+        offsets->record_shape_id = max_u32(offsets->record_shape_id, row->base_shape_id);
+        offsets->record_shape_id = max_u32(offsets->record_shape_id, row->patch_shape_id);
+        offsets->record_shape_id = max_u32(offsets->record_shape_id, row->result_shape_id);
+    }
+    for (uint32_t i = 0; i < target->noptions_bags; i++) {
+        offsets->options_id = max_u32(offsets->options_id, target->options_bags[i].options_id);
+        offsets->func_id = max_u32(offsets->func_id, target->options_bags[i].owner_func_id);
+        offsets->callsite_id = max_u32(offsets->callsite_id, target->options_bags[i].callsite_id);
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->options_bags[i].param_shape_id);
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->options_bags[i].supplied_shape_id);
+    }
+    for (uint32_t i = 0; i < target->nmap_shapes; i++) {
+        offsets->map_shape_id = max_u32(offsets->map_shape_id, target->map_shapes[i].shape_id);
+        offsets->func_id = max_u32(offsets->func_id, target->map_shapes[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nmap_entries; i++) {
+        offsets->map_entry_id = max_u32(offsets->map_entry_id, target->map_entries[i].entry_id);
+        offsets->map_shape_id = max_u32(offsets->map_shape_id, target->map_entries[i].shape_id);
+    }
+    for (uint32_t i = 0; i < target->nkey_accesses; i++) {
+        offsets->key_access_id = max_u32(offsets->key_access_id, target->key_accesses[i].access_id);
+        offsets->func_id = max_u32(offsets->func_id, target->key_accesses[i].owner_func_id);
+        offsets->map_shape_id =
+            max_u32(offsets->map_shape_id, target->key_accesses[i].receiver_shape_id);
+    }
+    for (uint32_t i = 0; i < target->nhash_eqs; i++) {
+        offsets->hash_eq_id = max_u32(offsets->hash_eq_id, target->hash_eqs[i].hash_eq_id);
+        offsets->derive_id = max_u32(offsets->derive_id, target->hash_eqs[i].eq_derive_id);
+        offsets->derive_id = max_u32(offsets->derive_id, target->hash_eqs[i].hash_derive_id);
+        offsets->func_id = max_u32(offsets->func_id, target->hash_eqs[i].eq_func_id);
+        offsets->func_id = max_u32(offsets->func_id, target->hash_eqs[i].hash_func_id);
+    }
+}
+
+static bool reserve_import_capacity(XgGlobalEvidence *target, const XgGlobalEvidence *package) {
+    uint32_t capacity;
+#define RESERVE_IMPORTED(COUNT, FN)                                                                \
+    do {                                                                                           \
+        if (!add_u32_checked(target->COUNT, package->COUNT, &capacity) || !FN(target, capacity))   \
+            return false;                                                                          \
+    } while (0)
+    RESERVE_IMPORTED(nmodules, xg_global_evidence_reserve_modules);
+    RESERVE_IMPORTED(ndecls, xg_global_evidence_reserve_decls);
+    RESERVE_IMPORTED(nclasses, xg_global_evidence_reserve_classes);
+    RESERVE_IMPORTED(nclass_fields, xg_global_evidence_reserve_class_fields);
+    RESERVE_IMPORTED(nmethods, xg_global_evidence_reserve_methods);
+    RESERVE_IMPORTED(ninterface_impls, xg_global_evidence_reserve_interface_impls);
+    RESERVE_IMPORTED(ninterface_extends, xg_global_evidence_reserve_interface_extends);
+    RESERVE_IMPORTED(ninterface_methods, xg_global_evidence_reserve_interface_methods);
+    RESERVE_IMPORTED(ninterface_object_uses, xg_global_evidence_reserve_interface_object_uses);
+    RESERVE_IMPORTED(nbodies, xg_global_evidence_reserve_bodies);
+    RESERVE_IMPORTED(ncallsites, xg_global_evidence_reserve_callsites);
+    RESERVE_IMPORTED(nlink_deps, xg_global_evidence_reserve_link_deps);
+    RESERVE_IMPORTED(ngeneric_insts, xg_global_evidence_reserve_generic_insts);
+    RESERVE_IMPORTED(ngeneric_body_uses, xg_global_evidence_reserve_generic_body_uses);
+    RESERVE_IMPORTED(ngeneric_storages, xg_global_evidence_reserve_generic_storages);
+    RESERVE_IMPORTED(ngeneric_code_sizes, xg_global_evidence_reserve_generic_code_sizes);
+    RESERVE_IMPORTED(nsequence_accesses, xg_global_evidence_reserve_sequence_accesses);
+    RESERVE_IMPORTED(ncapacity_ops, xg_global_evidence_reserve_capacity_ops);
+    RESERVE_IMPORTED(nbulk_ops, xg_global_evidence_reserve_bulk_ops);
+    RESERVE_IMPORTED(nencoding_ops, xg_global_evidence_reserve_encoding_ops);
+    RESERVE_IMPORTED(nderives, xg_global_evidence_reserve_derives);
+    RESERVE_IMPORTED(nderived_fields, xg_global_evidence_reserve_derived_fields);
+    RESERVE_IMPORTED(nderived_methods, xg_global_evidence_reserve_derived_methods);
+    RESERVE_IMPORTED(njson_shapes, xg_global_evidence_reserve_json_shapes);
+    RESERVE_IMPORTED(njson_fields, xg_global_evidence_reserve_json_fields);
+    RESERVE_IMPORTED(njson_accesses, xg_global_evidence_reserve_json_accesses);
+    RESERVE_IMPORTED(njson_codecs, xg_global_evidence_reserve_json_codecs);
+    RESERVE_IMPORTED(nrecord_shapes, xg_global_evidence_reserve_record_shapes);
+    RESERVE_IMPORTED(nrecord_fields, xg_global_evidence_reserve_record_fields);
+    RESERVE_IMPORTED(nrecord_accesses, xg_global_evidence_reserve_record_accesses);
+    RESERVE_IMPORTED(nrecord_merges, xg_global_evidence_reserve_record_merges);
+    RESERVE_IMPORTED(noptions_bags, xg_global_evidence_reserve_options_bags);
+    RESERVE_IMPORTED(nmap_shapes, xg_global_evidence_reserve_map_shapes);
+    RESERVE_IMPORTED(nmap_entries, xg_global_evidence_reserve_map_entries);
+    RESERVE_IMPORTED(nkey_accesses, xg_global_evidence_reserve_key_accesses);
+    RESERVE_IMPORTED(nhash_eqs, xg_global_evidence_reserve_hash_eqs);
+#undef RESERVE_IMPORTED
+    return true;
+}
+
+static bool build_module_import_map(XgGlobalEvidence *target, const XgGlobalEvidence *package,
+                                    XgModuleImportMap *maps, uint32_t *out_added) {
+    XgModuleId next_module_id = 1;
+    uint32_t added = 0;
+    if (!target || !package || !maps || !out_added)
+        return false;
+    for (uint32_t i = 0; i < target->nmodules; i++) {
+        if (target->modules[i].module_id == UINT32_MAX)
+            return false;
+        next_module_id = max_u32(next_module_id, target->modules[i].module_id + 1);
+    }
+    for (uint32_t i = 0; i < package->nmodules; i++) {
+        const XgModuleSummary *source = &package->modules[i];
+        XgModuleSummary imported = *source;
+        bool found = false;
+        for (uint32_t j = 0; j < target->nmodules; j++) {
+            if (module_identity_matches(&target->modules[j], source)) {
+                maps[i].from = source->module_id;
+                maps[i].to = target->modules[j].module_id;
+                found = true;
+                break;
+            }
+        }
+        if (found)
+            continue;
+        if (next_module_id == XG_NO_ID)
+            return false;
+        imported.module_id = next_module_id++;
+        if (!xg_global_evidence_add_module(target, &imported))
+            return false;
+        maps[i].from = source->module_id;
+        maps[i].to = imported.module_id;
+        added++;
+    }
+    *out_added = added;
+    return true;
+}
+
+static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
+    return package->ndecls + package->nclasses + package->nclass_fields + package->nmethods +
+           package->ninterface_impls + package->ninterface_extends + package->ninterface_methods +
+           package->ninterface_object_uses + package->nbodies + package->ncallsites +
+           package->nlink_deps + package->ngeneric_insts + package->ngeneric_body_uses +
+           package->ngeneric_storages + package->ngeneric_code_sizes + package->nsequence_accesses +
+           package->ncapacity_ops + package->nbulk_ops + package->nencoding_ops +
+           package->nderives + package->nderived_fields + package->nderived_methods +
+           package->njson_shapes + package->njson_fields + package->njson_accesses +
+           package->njson_codecs + package->nrecord_shapes + package->nrecord_fields +
+           package->nrecord_accesses + package->nrecord_merges + package->noptions_bags +
+           package->nmap_shapes + package->nmap_entries + package->nkey_accesses +
+           package->nhash_eqs;
+}
+
+XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
+                                                       const char *payload,
+                                                       XgEvidencePackageImportReport *out_report) {
+    XgEvidenceCachePayloadInfo info;
+    XgGlobalEvidence package;
+    XgPackageImportOffsets offsets;
+    XgModuleImportMap *module_maps = NULL;
+    XgEvidencePackageImportReport report;
+    bool ok = false;
+    if (out_report)
+        memset(out_report, 0, sizeof(*out_report));
+    if (!target || !payload || !xg_evidence_cache_payload_parse(payload, &info) ||
+        info.phase != XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE)
+        return false;
+    memset(&package, 0, sizeof(package));
+    memset(&report, 0, sizeof(report));
+    if (!xg_evidence_cache_payload_materialize(payload, &package))
+        return false;
+    report.package_hash = xg_global_evidence_hash(&package);
+    if (!validate_package_module_identities(&package) || !reserve_import_capacity(target, &package))
+        goto done;
+    module_maps = (XgModuleImportMap *) xr_calloc(package.nmodules, sizeof(*module_maps));
+    if (!module_maps)
+        goto done;
+    collect_import_offsets(target, &offsets);
+    if (!build_module_import_map(target, &package, module_maps, &report.modules_added))
+        goto done;
+    report.modules_remapped = package.nmodules;
+
+#define REMAP_MODULE(VALUE)                                                                        \
+    do {                                                                                           \
+        XgModuleId remapped_module = 0;                                                            \
+        if (!remap_module_id(module_maps, package.nmodules, (VALUE), &remapped_module))            \
+            goto done;                                                                             \
+        (VALUE) = remapped_module;                                                                 \
+    } while (0)
+#define REMAP_ID(VALUE, OFFSET)                                                                    \
+    do {                                                                                           \
+        uint32_t remapped_id = 0;                                                                  \
+        if (!remap_offset_id((VALUE), (OFFSET), &remapped_id))                                     \
+            goto done;                                                                             \
+        (VALUE) = remapped_id;                                                                     \
+    } while (0)
+#define REMAP_START(VALUE, BASE)                                                                   \
+    do {                                                                                           \
+        uint32_t remapped_start = 0;                                                               \
+        if (!remap_index_start((VALUE), (BASE), &remapped_start))                                  \
+            goto done;                                                                             \
+        (VALUE) = remapped_start;                                                                  \
+    } while (0)
+
+    for (uint32_t i = 0; i < package.ndecls; i++) {
+        XgDeclSummary row = package.decls[i];
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.decl_id, offsets.decl_id);
+        if (!xg_global_evidence_add_decl(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nclasses; i++) {
+        XgClassSummary row = package.classes[i];
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.decl_id, offsets.decl_id);
+        REMAP_ID(row.class_id, offsets.class_id);
+        REMAP_ID(row.parent_class_id, offsets.class_id);
+        REMAP_START(row.field_start, offsets.class_field_index);
+        REMAP_START(row.method_start, offsets.method_index);
+        REMAP_START(row.interface_start, offsets.interface_impl_index);
+        REMAP_ID(row.generic_origin_class_id, offsets.class_id);
+        if (!xg_global_evidence_add_class(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nclass_fields; i++) {
+        XgClassFieldSummary row = package.class_fields[i];
+        REMAP_ID(row.field_id, offsets.class_field_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_class_id, offsets.class_id);
+        REMAP_ID(row.target_class_id, offsets.class_id);
+        REMAP_ID(row.target_interface_id, offsets.interface_id);
+        if (!xg_global_evidence_add_class_field(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nmethods; i++) {
+        XgMethodSummary row = package.methods[i];
+        REMAP_ID(row.method_id, offsets.method_id);
+        REMAP_ID(row.owner_class_id, offsets.class_id);
+        REMAP_ID(row.override_of, offsets.method_id);
+        REMAP_ID(row.root_method_id, offsets.method_id);
+        if (!xg_global_evidence_add_method(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ninterface_impls; i++) {
+        XgInterfaceImplSummary row = package.interface_impls[i];
+        REMAP_ID(row.implementor_class_id, offsets.class_id);
+        REMAP_ID(row.interface_id, offsets.interface_id);
+        if (!xg_global_evidence_add_interface_impl(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ninterface_extends; i++) {
+        XgInterfaceExtendsSummary row = package.interface_extends[i];
+        REMAP_ID(row.child_interface_id, offsets.interface_id);
+        REMAP_ID(row.parent_interface_id, offsets.interface_id);
+        if (!xg_global_evidence_add_interface_extends(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ninterface_methods; i++) {
+        XgInterfaceMethodSummary row = package.interface_methods[i];
+        REMAP_ID(row.interface_method_id, offsets.interface_method_id);
+        REMAP_ID(row.owner_interface_id, offsets.interface_id);
+        if (!xg_global_evidence_add_interface_method(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ninterface_object_uses; i++) {
+        XgInterfaceObjectUseSummary row = package.interface_object_uses[i];
+        REMAP_ID(row.use_id, offsets.interface_object_use_id);
+        REMAP_ID(row.interface_id, offsets.interface_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_interface_object_use(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nbodies; i++) {
+        XgBodySummary row = package.bodies[i];
+        REMAP_ID(row.func_id, offsets.func_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_decl_id, offsets.decl_id);
+        REMAP_ID(row.owner_class_id, offsets.class_id);
+        REMAP_ID(row.owner_method_id, offsets.method_id);
+        REMAP_ID(row.callsite_start, offsets.callsite_id);
+        if (!xg_global_evidence_add_body(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ncallsites; i++) {
+        XgCallsiteSummary row = package.callsites[i];
+        REMAP_ID(row.callsite_id, offsets.callsite_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.static_target_func_id, offsets.func_id);
+        REMAP_ID(row.receiver_static_class_id, offsets.class_id);
+        REMAP_ID(row.receiver_static_interface_id, offsets.interface_id);
+        REMAP_ID(row.method_id, offsets.method_id);
+        if (!xg_global_evidence_add_callsite(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nlink_deps; i++) {
+        XgLinkDependencySummary row = package.link_deps[i];
+        REMAP_ID(row.link_id, offsets.link_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.decl_id, offsets.decl_id);
+        if (!xg_global_evidence_add_link_dependency(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ngeneric_insts; i++) {
+        XgGenericInstSummary row = package.generic_insts[i];
+        REMAP_ID(row.generic_inst_id, offsets.generic_inst_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.origin_decl_id, offsets.decl_id);
+        REMAP_ID(row.origin_func_id, offsets.func_id);
+        REMAP_ID(row.origin_method_id, offsets.method_id);
+        REMAP_ID(row.origin_class_id, offsets.class_id);
+        REMAP_ID(row.specialized_func_id, offsets.func_id);
+        REMAP_ID(row.specialized_class_id, offsets.class_id);
+        REMAP_ID(row.root_callsite_id, offsets.callsite_id);
+        REMAP_ID(row.constraint_interface_id, offsets.interface_id);
+        if (!xg_global_evidence_add_generic_inst(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ngeneric_body_uses; i++) {
+        XgGenericBodyUseSummary row = package.generic_body_uses[i];
+        REMAP_ID(row.use_id, offsets.generic_body_use_id);
+        REMAP_ID(row.generic_inst_id, offsets.generic_inst_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.origin_body_func_id, offsets.func_id);
+        REMAP_ID(row.specialized_body_func_id, offsets.func_id);
+        REMAP_ID(row.root_callsite_id, offsets.callsite_id);
+        if (!xg_global_evidence_add_generic_body_use(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ngeneric_storages; i++) {
+        XgGenericStorageSummary row = package.generic_storages[i];
+        REMAP_ID(row.storage_id, offsets.generic_storage_id);
+        REMAP_ID(row.generic_inst_id, offsets.generic_inst_id);
+        REMAP_MODULE(row.module_id);
+        if (!xg_global_evidence_add_generic_storage(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ngeneric_code_sizes; i++) {
+        XgGenericCodeSizeSummary row = package.generic_code_sizes[i];
+        REMAP_ID(row.code_size_id, offsets.generic_code_size_id);
+        REMAP_ID(row.generic_inst_id, offsets.generic_inst_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.body_use_id, offsets.generic_body_use_id);
+        if (!xg_global_evidence_add_generic_code_size(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nsequence_accesses; i++) {
+        XgSequenceAccessSummary row = package.sequence_accesses[i];
+        REMAP_ID(row.access_id, offsets.sequence_access_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_sequence_access(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ncapacity_ops; i++) {
+        XgCapacityOpSummary row = package.capacity_ops[i];
+        REMAP_ID(row.op_id, offsets.capacity_op_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_capacity_op(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nbulk_ops; i++) {
+        XgBulkOpSummary row = package.bulk_ops[i];
+        REMAP_ID(row.op_id, offsets.bulk_op_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_bulk_op(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nencoding_ops; i++) {
+        XgEncodingOpSummary row = package.encoding_ops[i];
+        REMAP_ID(row.op_id, offsets.encoding_op_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_encoding_op(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nderives; i++) {
+        XgDeriveSummary row = package.derives[i];
+        REMAP_ID(row.derive_id, offsets.derive_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_decl_id, offsets.decl_id);
+        REMAP_START(row.field_start, offsets.derived_field_index);
+        REMAP_START(row.method_start, offsets.derived_method_index);
+        if (!xg_global_evidence_add_derive(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nderived_fields; i++) {
+        XgDerivedFieldSummary row = package.derived_fields[i];
+        REMAP_ID(row.field_id, offsets.derived_field_id);
+        REMAP_ID(row.derive_id, offsets.derive_id);
+        REMAP_ID(row.source_field_id, offsets.class_field_id);
+        if (!xg_global_evidence_add_derived_field(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nderived_methods; i++) {
+        XgDerivedMethodSummary row = package.derived_methods[i];
+        REMAP_ID(row.method_id, offsets.derived_method_id);
+        REMAP_ID(row.derive_id, offsets.derive_id);
+        REMAP_ID(row.generated_body_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_derived_method(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.njson_shapes; i++) {
+        XgJsonShapeSummary row = package.json_shapes[i];
+        REMAP_ID(row.json_shape_id, offsets.json_shape_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_json_shape(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.njson_fields; i++) {
+        XgJsonFieldSummary row = package.json_fields[i];
+        REMAP_ID(row.field_id, offsets.json_field_id);
+        REMAP_ID(row.shape_id, offsets.json_shape_id);
+        if (!xg_global_evidence_add_json_field(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.njson_accesses; i++) {
+        XgJsonAccessSummary row = package.json_accesses[i];
+        REMAP_ID(row.json_access_id, offsets.json_access_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.receiver_shape_id, offsets.json_shape_id);
+        if (!xg_global_evidence_add_json_access(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.njson_codecs; i++) {
+        XgJsonCodecSummary row = package.json_codecs[i];
+        REMAP_ID(row.codec_id, offsets.json_codec_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.input_shape_id, offsets.json_shape_id);
+        REMAP_ID(row.output_shape_id, offsets.json_shape_id);
+        if (!xg_global_evidence_add_json_codec(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nrecord_shapes; i++) {
+        XgRecordShapeSummary row = package.record_shapes[i];
+        REMAP_ID(row.record_shape_id, offsets.record_shape_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_record_shape(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nrecord_fields; i++) {
+        XgRecordFieldSummary row = package.record_fields[i];
+        REMAP_ID(row.field_id, offsets.record_field_id);
+        REMAP_ID(row.shape_id, offsets.record_shape_id);
+        if (!xg_global_evidence_add_record_field(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nrecord_accesses; i++) {
+        XgRecordAccessSummary row = package.record_accesses[i];
+        REMAP_ID(row.record_access_id, offsets.record_access_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.receiver_shape_id, offsets.record_shape_id);
+        if (!xg_global_evidence_add_record_access(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nrecord_merges; i++) {
+        XgRecordMergeSummary row = package.record_merges[i];
+        REMAP_ID(row.merge_id, offsets.record_merge_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.base_shape_id, offsets.record_shape_id);
+        REMAP_ID(row.patch_shape_id, offsets.record_shape_id);
+        REMAP_ID(row.result_shape_id, offsets.record_shape_id);
+        if (!xg_global_evidence_add_record_merge(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.noptions_bags; i++) {
+        XgOptionsBagSummary row = package.options_bags[i];
+        REMAP_ID(row.options_id, offsets.options_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.callsite_id, offsets.callsite_id);
+        REMAP_ID(row.param_shape_id, offsets.record_shape_id);
+        REMAP_ID(row.supplied_shape_id, offsets.record_shape_id);
+        if (!xg_global_evidence_add_options_bag(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nmap_shapes; i++) {
+        XgMapShapeSummary row = package.map_shapes[i];
+        REMAP_ID(row.shape_id, offsets.map_shape_id);
+        REMAP_MODULE(row.module_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_START(row.entry_start, offsets.map_entry_index);
+        if (!xg_global_evidence_add_map_shape(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nmap_entries; i++) {
+        XgMapEntrySummary row = package.map_entries[i];
+        REMAP_ID(row.entry_id, offsets.map_entry_id);
+        REMAP_ID(row.shape_id, offsets.map_shape_id);
+        if (!xg_global_evidence_add_map_entry(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nkey_accesses; i++) {
+        XgKeyAccessSummary row = package.key_accesses[i];
+        REMAP_ID(row.access_id, offsets.key_access_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        REMAP_ID(row.receiver_shape_id, offsets.map_shape_id);
+        if (!xg_global_evidence_add_key_access(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nhash_eqs; i++) {
+        XgHashEqSummary row = package.hash_eqs[i];
+        REMAP_ID(row.hash_eq_id, offsets.hash_eq_id);
+        REMAP_ID(row.eq_derive_id, offsets.derive_id);
+        REMAP_ID(row.hash_derive_id, offsets.derive_id);
+        REMAP_ID(row.eq_func_id, offsets.func_id);
+        REMAP_ID(row.hash_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_hash_eq(target, &row))
+            goto done;
+    }
+
+#undef REMAP_START
+#undef REMAP_ID
+#undef REMAP_MODULE
+
+    report.rows_imported = package_non_module_row_count(&package);
+    if (out_report)
+        *out_report = report;
+    ok = true;
+
+done:
+    xr_free(module_maps);
+    xg_global_evidence_free(&package);
+    return ok;
+}
+
 typedef const char *(*XgBitNameFn)(uint32_t bit);
 
 static void dump_named_bitset(FILE *out, uint32_t bits, const uint32_t *catalog,

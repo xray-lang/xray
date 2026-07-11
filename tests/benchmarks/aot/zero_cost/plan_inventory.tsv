@@ -65,4 +65,4 @@ stable_source_identity|covered|global_evidence_source_identity_survives_body_onl
 summary_payload_module_identity|covered|materialized\.nmodules|tests/unit/analysis|Evidence payload carries module identity rows needed for package id remap.
 summary_payload_preproducer_probe|covered|evidence cache preproducer summary|tests/aot/run_aot_incremental_cache.sh|AOT computes request keys before the producer and validates all four materializable payload phases by request.
 summary_payload_global_producer_skip|covered|global_evidence_summary|tests/aot/run_aot_incremental_cache.sh|Exact-source global payload hits skip the pre-monomorphization and final global evidence producers.
-cross_package_summary_reuse|gap|payload_v2|src/analysis|Immutable package evidence reuse and cross-package id remap contract are not implemented yet.
+cross_package_summary_reuse|covered|xg_global_evidence_import_package_payload|src/analysis|Immutable package evidence reuse has an explicit global-payload import API with module identity validation and row-family id remap.
