@@ -4457,6 +4457,173 @@ static XgLocalType *body_lookup_local_map_shape(XgBodyCollect *bc, const AstNode
     return row && row->map_shape_id != XG_NO_ID ? row : NULL;
 }
 
+static const AstNode *body_map_receiver_unwrap(const AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_MOVE_EXPR:
+                expr = expr->as.move_expr.expr;
+                break;
+            case AST_UNSAFE_EXPR:
+                expr = expr->as.unsafe_expr.operand;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return expr;
+        }
+    }
+    return NULL;
+}
+
+static const XgClassSummary *body_find_class_summary(XgBodyCollect *bc, XgClassId class_id) {
+    if (!bc || !bc->evidence || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bc->evidence->nclasses; i++) {
+        const XgClassSummary *cls = &bc->evidence->classes[i];
+        if (cls->class_id == class_id)
+            return cls;
+    }
+    return NULL;
+}
+
+static const XgClassFieldSummary *
+body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32_t field_name_id) {
+    uint32_t depth = 0;
+    while (class_id != XG_NO_ID && depth++ < 64) {
+        const XgClassSummary *cls = body_find_class_summary(bc, class_id);
+        if (!cls)
+            return NULL;
+        if (cls->field_start != 0 && cls->field_count > 0) {
+            uint32_t start = cls->field_start - 1;
+            if (start >= bc->evidence->nclass_fields ||
+                cls->field_count > bc->evidence->nclass_fields - start)
+                return NULL;
+            for (uint32_t i = 0; i < cls->field_count; i++) {
+                const XgClassFieldSummary *field = &bc->evidence->class_fields[start + i];
+                if (field->owner_class_id == cls->class_id && field->name_id == field_name_id &&
+                    (field->flags & XG_CLASS_FIELD_STATIC) == 0)
+                    return field;
+            }
+        }
+        class_id = cls->parent_class_id;
+    }
+    return NULL;
+}
+
+static bool body_class_field_map_parts(const XgClassFieldSummary *field,
+                                       uint8_t *out_container_kind, uint32_t *out_key_type_key,
+                                       uint32_t *out_value_type_key) {
+    uint8_t container_kind = 0;
+    uint32_t key_type_key = 0;
+    uint32_t value_type_key = 0;
+    if (out_container_kind)
+        *out_container_kind = 0;
+    if (out_key_type_key)
+        *out_key_type_key = 0;
+    if (out_value_type_key)
+        *out_value_type_key = 0;
+    if (!field)
+        return false;
+    if (field->semantic_kind == XG_CLASS_FIELD_TYPE_MAP) {
+        container_kind = XG_MAP_CONTAINER_MAP;
+        key_type_key = field->key_type_key != 0 ? field->key_type_key : field->element_type_key;
+        value_type_key = field->value_type_key;
+    } else if (field->semantic_kind == XG_CLASS_FIELD_TYPE_SET) {
+        container_kind = XG_MAP_CONTAINER_SET;
+        key_type_key = field->key_type_key != 0 ? field->key_type_key : field->element_type_key;
+    } else {
+        return false;
+    }
+    if (key_type_key == 0 || (container_kind == XG_MAP_CONTAINER_MAP && value_type_key == 0))
+        return false;
+    if (out_container_kind)
+        *out_container_kind = container_kind;
+    if (out_key_type_key)
+        *out_key_type_key = key_type_key;
+    if (out_value_type_key)
+        *out_value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
+    return true;
+}
+
+static XgMapShapeId body_add_map_shape_for_static_type(XgBodyCollect *bc, uint8_t container_kind,
+                                                       uint32_t key_type_key,
+                                                       uint32_t value_type_key,
+                                                       uint32_t source_span_id) {
+    XgMapShapeSummary shape;
+    uint32_t stored_value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
+    uint64_t shape_hash;
+    if (!bc || !bc->evidence || key_type_key == 0 ||
+        (container_kind == XG_MAP_CONTAINER_MAP && stored_value_type_key == 0))
+        return XG_NO_ID;
+    shape_hash = body_map_shape_hash(container_kind, key_type_key, stored_value_type_key, NULL, 0);
+    for (uint32_t i = 0; i < bc->evidence->nmap_shapes; i++) {
+        const XgMapShapeSummary *existing = &bc->evidence->map_shapes[i];
+        if (existing->owner_func_id == bc->owner_func_id &&
+            existing->container_kind == container_kind &&
+            existing->source == XG_MAP_SHAPE_SRC_STATIC && existing->key_type_key == key_type_key &&
+            existing->value_type_key == stored_value_type_key && existing->shape_hash == shape_hash)
+            return existing->shape_id;
+    }
+    memset(&shape, 0, sizeof(shape));
+    shape.shape_id = (XgMapShapeId) (bc->evidence->nmap_shapes + 1);
+    shape.module_id = bc->module_id;
+    shape.owner_func_id = bc->owner_func_id;
+    shape.source_span_id = source_span_id;
+    shape.container_kind = container_kind;
+    shape.source = XG_MAP_SHAPE_SRC_STATIC;
+    shape.key_type_key = key_type_key;
+    shape.value_type_key = stored_value_type_key;
+    shape.flags = XG_MAP_SHAPE_STATIC;
+    shape.shape_hash = shape_hash;
+    if (!xg_global_evidence_add_map_shape(bc->evidence, &shape))
+        return XG_NO_ID;
+    body_ensure_hash_eq(bc, key_type_key);
+    return shape.shape_id;
+}
+
+static bool body_lookup_map_receiver_shape(XgBodyCollect *bc, const AstNode *expr,
+                                           uint32_t source_span_id, XgLocalType *out) {
+    const AstNode *unwrapped;
+    XgLocalType *local;
+    XgClassId receiver_class;
+    const XgClassFieldSummary *field;
+    uint8_t container_kind;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    XgMapShapeId shape_id;
+    if (!bc || !expr || !out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    local = body_lookup_local_map_shape(bc, expr);
+    if (local) {
+        *out = *local;
+        return true;
+    }
+    unwrapped = body_map_receiver_unwrap(expr);
+    if (!unwrapped || unwrapped->type != AST_MEMBER_ACCESS || !unwrapped->as.member_access.name)
+        return false;
+    receiver_class = body_resolve_expr_class(bc, unwrapped->as.member_access.object);
+    field = body_find_class_field_in_hierarchy(bc, receiver_class,
+                                               hash_name32(unwrapped->as.member_access.name));
+    if (!body_class_field_map_parts(field, &container_kind, &key_type_key, &value_type_key))
+        return false;
+    shape_id = body_add_map_shape_for_static_type(bc, container_kind, key_type_key, value_type_key,
+                                                  source_span_id);
+    if (shape_id == XG_NO_ID)
+        return false;
+    out->map_shape_id = shape_id;
+    out->map_container_kind = container_kind;
+    out->map_key_type_key = key_type_key;
+    out->map_value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
+    out->map_receiver_type_key =
+        body_map_receiver_type_key(container_kind, key_type_key, out->map_value_type_key);
+    return true;
+}
+
 static void body_add_map_key_access_row(XgBodyCollect *bc, const AstNode *node,
                                         const XgLocalType *local, const AstNode *key, uint8_t op,
                                         bool mutating, bool missing_panics) {
@@ -4490,7 +4657,7 @@ static void body_add_map_key_access_row(XgBodyCollect *bc, const AstNode *node,
 static void body_add_map_index_key_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const IndexGetNode *get;
     const IndexSetNode *set;
-    XgLocalType *local;
+    XgLocalType receiver_shape;
     const AstNode *receiver;
     const AstNode *key;
     if (!bc || !node)
@@ -4506,10 +4673,10 @@ static void body_add_map_index_key_access(XgBodyCollect *bc, const AstNode *node
     } else {
         return;
     }
-    local = body_lookup_local_map_shape(bc, receiver);
-    if (!local || local->map_container_kind != XG_MAP_CONTAINER_MAP)
+    if (!body_lookup_map_receiver_shape(bc, receiver, (uint32_t) node->line, &receiver_shape) ||
+        receiver_shape.map_container_kind != XG_MAP_CONTAINER_MAP)
         return;
-    body_add_map_key_access_row(bc, node, local, key,
+    body_add_map_key_access_row(bc, node, &receiver_shape, key,
                                 mutating ? XG_KEY_ACCESS_SET : XG_KEY_ACCESS_INDEX_GET, mutating,
                                 !mutating);
 }
@@ -4517,7 +4684,7 @@ static void body_add_map_index_key_access(XgBodyCollect *bc, const AstNode *node
 static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *node) {
     const CallExprNode *call;
     const MemberAccessNode *member;
-    XgLocalType *local;
+    XgLocalType receiver_shape;
     const AstNode *key = NULL;
     uint8_t op = 0;
     bool mutating = false;
@@ -4529,11 +4696,10 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
     member = &call->callee->as.member_access;
     if (!member->name)
         return;
-    local = body_lookup_local_map_shape(bc, member->object);
-    if (!local)
+    if (!body_lookup_map_receiver_shape(bc, member->object, (uint32_t) node->line, &receiver_shape))
         return;
 
-    if (local->map_container_kind == XG_MAP_CONTAINER_MAP) {
+    if (receiver_shape.map_container_kind == XG_MAP_CONTAINER_MAP) {
         if (strcmp(member->name, "get") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_GET;
             key = call->arguments ? call->arguments[0] : NULL;
@@ -4552,7 +4718,7 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
             op = XG_KEY_ACCESS_CLEAR;
             mutating = true;
         }
-    } else if (local->map_container_kind == XG_MAP_CONTAINER_SET) {
+    } else if (receiver_shape.map_container_kind == XG_MAP_CONTAINER_SET) {
         if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_HAS;
             key = call->arguments ? call->arguments[0] : NULL;
@@ -4572,7 +4738,7 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
 
     if (op == 0)
         return;
-    body_add_map_key_access_row(bc, node, local, key, op, mutating, false);
+    body_add_map_key_access_row(bc, node, &receiver_shape, key, op, mutating, false);
 }
 
 static uint32_t body_sequence_receiver_type_key(uint8_t sequence_kind, uint32_t elem_type_key) {
