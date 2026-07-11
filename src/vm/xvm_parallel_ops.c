@@ -27,6 +27,7 @@
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xobj_header.h"
+#include "../runtime/object/xarray.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
@@ -52,8 +53,11 @@ struct XrVmParBatch {
     XrRuntime *runtime;
     XrCountdownLatch *latch;
     XrClosure *closure; /* Borrowed from the parent frame; parent blocks until latch completion. */
+    XrArray *output;    /* Borrowed typed result array for map lanes; parent waits before use. */
+    int64_t start;
     int lane_count;
     bool range_body;
+    bool map_body;
     _Atomic bool failed;
     XrVmParLane *lanes;
     XrCoroutine **coros;
@@ -146,7 +150,6 @@ static XrCFuncResult vm_par_lane_call_next(XrVMRuntime *isolate, XrVmParLane *la
 
 static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrValue resume_value,
                                           void *ctx, XrValue *result) {
-    (void) resume_value;
     XrVmParLane *lane = (XrVmParLane *) ctx;
     if (!lane || !lane->batch)
         return XR_CFUNC_ERROR;
@@ -157,6 +160,21 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         if (result)
             *result = xr_null();
         return XR_CFUNC_DONE;
+    }
+    XrVmParBatch *batch = lane->batch;
+    if (batch->map_body) {
+        XrArray *output = batch->output;
+        int64_t out_index = lane->iter - batch->start;
+        if (!output || output->elem_type == XR_ELEM_ANY || out_index < 0 ||
+            out_index >= output->length || out_index > INT32_MAX ||
+            (output->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(resume_value))) {
+            atomic_store_explicit(&batch->failed, true, memory_order_release);
+            vm_par_lane_done(lane);
+            if (result)
+                *result = xr_null();
+            return XR_CFUNC_DONE;
+        }
+        xr_array_set_element(output, (int32_t) out_index, resume_value);
     }
     if (lane->batch->range_body)
         lane->iter = lane->limit;
@@ -201,8 +219,8 @@ static XrCFuncResult vm_par_lane_entry(XrVMRuntime *isolate, XrValue *args, int 
 }
 
 static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, XrClosure *closure,
-                                      int64_t start, int64_t end_excl, int lane_count,
-                                      bool range_body) {
+                                      XrArray *output, int64_t start, int64_t end_excl,
+                                      int lane_count, bool range_body, bool map_body) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core || !runtime || !closure || lane_count <= 1)
         return NULL;
@@ -216,8 +234,11 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
     batch->core = core;
     batch->runtime = runtime;
     batch->closure = closure;
+    batch->output = output;
+    batch->start = start;
     batch->lane_count = lane_count;
     batch->range_body = range_body;
+    batch->map_body = map_body;
     atomic_store_explicit(&batch->failed, false, memory_order_relaxed);
 
     batch->lanes = (XrVmParLane *) xr_calloc((size_t) lane_count, sizeof(XrVmParLane));
@@ -242,7 +263,8 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
 
         XrValue args[2] = {vm_par_batch_to_value(batch), xr_int(lane)};
         batch->coros[lane] =
-            xr_coro_create_vm_cfunc(isolate, vm_par_lane_entry, args, 2, "parallel.forEach.lane");
+            xr_coro_create_vm_cfunc(isolate, vm_par_lane_entry, args, 2,
+                                    map_body ? "parallel.map.lane" : "parallel.forEach.lane");
         if (!batch->coros[lane]) {
             vm_par_batch_cancel_unspawned(batch);
             vm_par_batch_free(batch);
@@ -279,11 +301,14 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
         VM_THROW(frame, pc, XR_ERR_RUNTIME, "parallel.forEach wait failed");
     }
     bool failed = atomic_load_explicit(&batch->failed, memory_order_acquire);
+    XrArray *map_output = (!failed && batch->map_body) ? batch->output : NULL;
     vm_par_batch_free(batch);
     *batch_slot = xr_null();
     if (failed) {
-        VM_THROW(frame, pc, XR_ERR_RUNTIME, "parallel.forEach lane failed");
+        VM_THROW(frame, pc, XR_ERR_RUNTIME, "parallel lane failed");
     }
+    if (map_output)
+        XR_ARRAY_MARK_MUTATED(map_output);
     *handled_slot = xr_bool(true);
     return XR_DISP_NEXT;
 }
@@ -345,10 +370,87 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
     if (!vm_par_closure_safe_to_share(closure))
         return XR_DISP_NEXT;
 
-    XrVmParBatch *batch = vm_par_batch_new(isolate, runtime, closure, start, end_excl, lane_count,
-                                           (flags & XR_VM_PAR_FLAG_RANGE_BODY) != 0);
+    XrVmParBatch *batch =
+        vm_par_batch_new(isolate, runtime, closure, NULL, start, end_excl, lane_count,
+                         (flags & XR_VM_PAR_FLAG_RANGE_BODY) != 0, false);
     if (!batch) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.forEach batch allocation failed");
+    }
+
+    *batch_slot = vm_par_batch_to_value(batch);
+    xr_runtime_spawn_batch(runtime, batch->coros, batch->lane_count);
+    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, batch,
+                                 false);
+}
+
+XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                             XrInstruction instr, XrValue *base,
+                                             XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!isolate || !vm_ctx || !base || !frame) {
+        return XR_DISP_FATAL;
+    }
+
+    int out = GETARG_A(instr);
+    int arg_base = GETARG_B(instr);
+    int flags = GETARG_C(instr);
+    XrValue *handled_slot = &base[out];
+    XrValue *start_slot = &base[arg_base + 0];
+    XrValue *end_slot = &base[arg_base + 1];
+    XrValue *workers_slot = &base[arg_base + 2];
+    XrValue *closure_slot = &base[arg_base + 3];
+    XrValue *output_slot = &base[arg_base + 4];
+    XrValue *batch_slot = &base[arg_base + 5];
+
+    XrVmParBatch *resume_batch = vm_par_batch_from_value(*batch_slot);
+    if (resume_batch)
+        return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot,
+                                     resume_batch, true);
+
+    *handled_slot = xr_bool(false);
+    if (!XR_IS_INT(*workers_slot))
+        return XR_DISP_NEXT;
+    int64_t workers = XR_TO_INT(*workers_slot);
+    if (workers < 0) {
+        VM_THROW(frame, pc, XR_ERR_RUNTIME, "parallel.Options.workers must be >= 0, got %" PRId64,
+                 workers);
+    }
+    if (!XR_IS_INT(*start_slot) || !XR_IS_INT(*end_slot) || !XR_IS_PTR(*closure_slot) ||
+        XR_HEAP_TYPE(*closure_slot) != XR_TFUNCTION || !XR_IS_ARRAY(*output_slot)) {
+        return XR_DISP_NEXT;
+    }
+
+    XrArray *output = XR_TO_ARRAY(*output_slot);
+    if (!output || output->elem_type == XR_ELEM_ANY)
+        return XR_DISP_NEXT;
+
+    int64_t start = XR_TO_INT(*start_slot);
+    int64_t end_excl = XR_TO_INT(*end_slot);
+    if ((flags & XR_VM_PAR_FLAG_INCLUSIVE_END) != 0) {
+        if (end_excl == INT64_MAX)
+            return XR_DISP_NEXT;
+        end_excl++;
+    }
+    int64_t item_count = end_excl - start;
+    if (item_count <= 0) {
+        *handled_slot = xr_bool(true);
+        return XR_DISP_NEXT;
+    }
+    if (item_count > output->length || item_count > INT32_MAX)
+        return XR_DISP_NEXT;
+
+    XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
+    int lane_count = vm_par_resolve_lanes(runtime, item_count, workers);
+    if (lane_count <= 1)
+        return XR_DISP_NEXT;
+
+    XrClosure *closure = (XrClosure *) XR_TO_PTR(*closure_slot);
+    if (!vm_par_closure_safe_to_share(closure))
+        return XR_DISP_NEXT;
+
+    XrVmParBatch *batch = vm_par_batch_new(isolate, runtime, closure, output, start, end_excl,
+                                           lane_count, false, true);
+    if (!batch) {
+        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.map batch allocation failed");
     }
 
     *batch_slot = vm_par_batch_to_value(batch);

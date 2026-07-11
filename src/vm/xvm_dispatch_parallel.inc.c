@@ -10,3 +10,9 @@ vmcase(OP_PAR_FOR) {
     XrDispatchAction _action = vm_par_for_dispatch(isolate, vm_ctx, i, base, frame, pc);
     VM_DISPATCH(_action);
 }
+
+vmcase(OP_PAR_MAP) {
+    TRACE_EXECUTION();
+    XrDispatchAction _action = vm_par_map_dispatch(isolate, vm_ctx, i, base, frame, pc);
+    VM_DISPATCH(_action);
+}
