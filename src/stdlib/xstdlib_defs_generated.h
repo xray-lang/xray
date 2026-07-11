@@ -337,10 +337,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", "net_udp_bind_handle", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"net", "sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", "net_send_to_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 4, false},
     {"net", "recvFrom", "(handle: NetConn, maxlen?: int): UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", "net_recv_from_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"http", "route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", "http_route", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
-    {"http", "listen", "(port: int): bool", "Start HTTP server accept loop", "http_listen_impl", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"http", "ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", "http_ws_route", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"http", "stopServer", "(): ()", "Stop the HTTP server", "http_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"cluster", "start", "(config: Json): ()", "Start cluster node", "cluster_start", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"cluster", "join", "(addr: string): bool", "Join cluster by address", "cluster_join", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
@@ -414,16 +410,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_net_UdpPacket[]
     {"net", "UdpPacket", "port", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpRequest[] = {
-    {"http", "HttpRequest", "method", "string", true},
-    {"http", "HttpRequest", "path", "string", true},
-    {"http", "HttpRequest", "query", "Json", true},
-    {"http", "HttpRequest", "headers", "Json", true},
-    {"http", "HttpRequest", "body", "string", true},
-    {"http", "HttpRequest", "contentLength", "int", true},
-    {"http", "HttpRequest", "params", "Json", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
     {"ws", "WsConn", "wsid", "int", true},
     {"ws", "WsConn", "url", "string", false},
@@ -440,7 +426,6 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"os", "ExecResult", "Native handle type", xr_stdlib_handle_fields_os_ExecResult, 3},
     {"io", "FileStat", "Native handle type", xr_stdlib_handle_fields_io_FileStat, 10},
     {"net", "UdpPacket", "Native handle type", xr_stdlib_handle_fields_net_UdpPacket, 3},
-    {"http", "HttpRequest", "Native handle type", xr_stdlib_handle_fields_http_HttpRequest, 7},
     {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
     {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
 };

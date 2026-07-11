@@ -85,12 +85,6 @@ TEST(generated_handle_types_surface_as_classes) {
     ASSERT(path_info != NULL);
     ASSERT(path_info->kind == XLSP_SYM_CLASS);
     ASSERT_STR_EQ(path_info->signature, "type PathInfo");
-
-    const XlspModuleInfo *http = xlsp_stdlib_find_module("http");
-    ASSERT(http != NULL);
-    const XlspSymbolInfo *request = xlsp_stdlib_find_symbol(http, "HttpRequest");
-    ASSERT(request != NULL);
-    ASSERT(request->kind == XLSP_SYM_CLASS);
 }
 
 int main(void) {

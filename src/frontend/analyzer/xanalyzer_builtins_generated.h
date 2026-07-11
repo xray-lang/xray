@@ -110,31 +110,11 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 10
 
-// http.HttpRequest handle fields
-static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
-    {"method", "string", true},
-    {"path", "string", true},
-    {"query", "Json", true},
-    {"headers", "Json", true},
-    {"body", "string", true},
-    {"contentLength", "int", true},
-    {"params", "Json", true},
-};
-
-static const XaBuiltinHandle g_gen_http_handles[] = {
-    {"HttpRequest", g_gen_http_httprequest_fields, 7, NULL, 0},
-};
-#define GEN_HTTP_HANDLE_COUNT 1
-
 // http module functions
 static const XaBuiltinMember g_gen_http_functions[] = {
-    {"route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", true, false, false, false},
-    {"listen", "(port: int): bool", "Start HTTP server accept loop", true, false, false, false},
-    {"ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", true, false, false, false},
-    {"stopServer", "(): ()", "Stop the HTTP server", true, false, false, false},
     {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 5
+#define GEN_HTTP_FUNCTION_COUNT 1
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
@@ -481,7 +461,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
-    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
+    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0},

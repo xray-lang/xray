@@ -25,7 +25,7 @@
 
 | 语言 | 库 | 文件 |
 |------|------|------|
-| **xray** | stdlib/http (C) | `http_server.xr` |
+| **xray** | stdlib/http (纯 Xray 控制面 + net I/O) | `http_server.xr` |
 | **Go** | net/http (标准库) | `http_server.go` |
 | **Go** | fasthttp | `http_server_fasthttp.go` |
 | **Node.js** | http (标准库) | `http_server.js` |

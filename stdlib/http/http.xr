@@ -1,10 +1,10 @@
-// http - pure-Xray helpers layered on top of the native HTTP runtime.
+// http - pure-Xray HTTP helpers and HTTP/1.x client/server control plane.
 //
-// Socket I/O, TLS, streaming, server state, and HTTP/2 remain native runtime
-// boundaries. Public formatting, percent-encoding, and multipart assembly live
-// here.
+// Socket/TLS primitives and HTTP/2 data-plane remain native runtime boundaries.
+// Public HTTP/1.x request/response formatting, client, routing, and server
+// dispatch live here.
 
-import { encode, decodeForm, parse as parseUrl, resolve as resolveUrl } from url
+import { encode, decodeForm, parse as parseUrl, parseQuery, resolve as resolveUrl } from url
 import crypto
 import io
 import net
@@ -14,6 +14,10 @@ const COOKIE_MAX_INPUT_LEN = 8192
 const COOKIE_SECONDS_PER_DAY = 86400
 const HTTP_DEFAULT_TIMEOUT_MS = 30000
 const HTTP_MAX_RESPONSE_BYTES = 104857600
+const HTTP_SERVER_MAX_BODY_BYTES = 1048576
+const HTTP_SERVER_READ_CHUNK_BYTES = 8192
+const HTTP_SERVER_ACCEPT_POLL_MS = 100
+const HTTP_SERVER_BACKLOG = 1024
 
 fn _floorDiv(a: int, b: int) -> int {
     var q = a / b
@@ -653,6 +657,293 @@ class Router {
 
 fn router() -> Router {
     return Router()
+}
+
+class _RouteHandler {
+    handler: (Json) -> unknown
+
+    constructor(handler: (Json) -> unknown) {
+        this.handler = handler
+    }
+}
+
+class _ServerRouteMatch {
+    value: unknown
+    handler: _RouteHandler?
+    params: Json
+
+    constructor(value: unknown, params: Json, handler: _RouteHandler? = null) {
+        this.value = value
+        this.params = params
+        this.handler = handler
+    }
+}
+
+class _ServerRouteEntry {
+    method: string
+    path: string
+    value: unknown
+    handler: _RouteHandler?
+
+    constructor(method: string, path: string, value: unknown, handler: _RouteHandler? = null) {
+        this.method = method
+        this.path = path
+        this.value = value
+        this.handler = handler
+    }
+}
+
+class _ServerRouter {
+    routes: Array<_ServerRouteEntry>
+
+    constructor() {
+        this.routes = []
+    }
+
+    add(method: string, path: string, value: unknown) -> bool {
+        return this.addRoute(method, path, value, null)
+    }
+
+    addRoute(method: string, path: string, value: unknown, handler: _RouteHandler?) -> bool {
+        var m = _routeMethodKey(method)
+        if (m.length == 0 || !_routePatternValid(path)) { return false }
+        for (var i = 0; i < this.routes.length; i++) {
+            var entry = this.routes[i]
+            if (entry.method == m && entry.path == path) {
+                this.routes[i] = _ServerRouteEntry(m, path, value, handler)
+                return true
+            }
+        }
+        this.routes.push(_ServerRouteEntry(m, path, value, handler))
+        return true
+    }
+
+    find(method: string, path: string) -> _ServerRouteMatch? {
+        var m = _routeMethodKey(method)
+        if (m.length == 0 || !_routeValidPath(path)) { return null }
+
+        var dynamicMatch: _ServerRouteMatch? = null
+        for (var i = 0; i < this.routes.length; i++) {
+            var entry = this.routes[i]
+            if (entry.method != m) { continue }
+            var params = _matchRoutePath(entry.path, path)
+            if (params != null) {
+                var found = _ServerRouteMatch(entry.value, params, entry.handler)
+                if (_routePatternIsStatic(entry.path)) { return found }
+                if (dynamicMatch == null) { dynamicMatch = found }
+            }
+        }
+        return dynamicMatch
+    }
+}
+
+var _serverRouter = _ServerRouter()
+var _serverRunning = false
+var _serverListener: NetListener? = null
+
+fn route(method: string, path: string, handler: unknown) {
+    if (typename(handler) == "function") {
+        _serverRouter.addRoute(method, path, handler, _RouteHandler(handler as (Json) -> unknown))
+        return
+    }
+    _serverRouter.add(method, path, handler)
+}
+
+fn _serverTargetPath(target: string) -> string {
+    var q = target.indexOf("?")
+    if (q >= 0) { return target.slice(0, q) }
+    return target
+}
+
+fn _serverTargetQuery(target: string) -> Json {
+    var q = target.indexOf("?")
+    if (q < 0) {
+        var empty: Json = {}
+        return empty
+    }
+    return parseQuery(target.slice(q + 1))
+}
+
+fn _serverRequestJson(msg: RequestMessage, params: Json) -> Json {
+    var req: Json = {}
+    req["method"] = msg.head.method
+    req["path"] = _serverTargetPath(msg.head.target)
+    req["query"] = _serverTargetQuery(msg.head.target)
+    req["headers"] = msg.head.headers
+    req["body"] = msg.body
+    req["contentLength"] = msg.head.contentLength
+    req["params"] = params
+    return req
+}
+
+fn _serverStatusResponse(status: int, body: string, keepAlive: bool = false) -> string {
+    var text = responseText(status, body, "text/plain; charset=utf-8", null, keepAlive)
+    if (text != null) { return text! }
+    return "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\nConnection: close\r\n\r\nInternal Server Error"
+}
+
+fn _serverHeadersFrom(value: unknown) -> Json {
+    if (value == null) { return null }
+    var encoded = Json.encode(value)
+    if (typename(encoded) == "Json") { return encoded }
+    return null
+}
+
+fn _serverArrayResponse(value: unknown, keepAlive: bool) -> string {
+    var arr = value as Array
+    var status = 200
+    var contentType = "text/plain; charset=utf-8"
+    var body = ""
+    var headers: Json = null
+
+    if (arr.length >= 1 && typename(arr[0]) == "int") { status = int(arr[0]) }
+    if (arr.length >= 2 && typename(arr[1]) == "string") { contentType = string(arr[1]) }
+    if (arr.length >= 3 && arr[2] != null) { body = string(arr[2]) }
+    if (arr.length >= 4) { headers = _serverHeadersFrom(arr[3]) }
+
+    var text = responseText(status, body, contentType, headers, keepAlive)
+    if (text != null) { return text! }
+    return _serverStatusResponse(500, "Internal Server Error", false)
+}
+
+fn _serverResponseFor(value: unknown, keepAlive: bool) -> string {
+    var kind = typename(value)
+    if (kind == "null") { return _serverStatusResponse(204, "", keepAlive) }
+    if (kind == "Array") { return _serverArrayResponse(value, keepAlive) }
+    if (kind == "string") {
+        return responseText(200, string(value), "text/plain; charset=utf-8", null, keepAlive)!
+    }
+    if (kind == "int" || kind == "float" || kind == "bool") {
+        return responseText(200, string(value), "text/plain; charset=utf-8", null, keepAlive)!
+    }
+    return responseText(200, Json.stringify(value), "application/json; charset=utf-8", null,
+                        keepAlive)!
+}
+
+fn _serverWriteAll(conn: NetConn, data: string) -> bool {
+    var pos = 0
+    while (pos < data.byteLength) {
+        var chunk = _byteSlice(data, pos, data.byteLength)
+        if (chunk == null) { return false }
+        var n = net.write(conn, chunk!)
+        if (n <= 0) { return false }
+        pos = pos + n
+    }
+    return true
+}
+
+fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
+    var path = _serverTargetPath(msg.head.target)
+    var found = _serverRouter.find(msg.head.method, path)
+    if (found == null) {
+        return _serverWriteAll(conn, _serverStatusResponse(404, "Not Found", msg.head.keepAlive)) &&
+               msg.head.keepAlive
+    }
+
+    var result: unknown = found!.value
+    if (found!.handler != null) {
+        var req = _serverRequestJson(msg, found!.params)
+        try {
+            var handler = found!.handler!.handler
+            result = handler(req)
+        } catch (e) {
+            var body = "Internal Server Error: " + string(e)
+            _serverWriteAll(conn, _serverStatusResponse(500, body, false))
+            return false
+        }
+
+        if (typename(result) == "string") {
+            // Keep dynamic handler strings in this frame; AOT can lose payloads
+            // when that unknown value crosses another helper boundary.
+            var body = string(result)
+            return _serverWriteAll(
+                conn,
+                responseText(200, body, "text/plain; charset=utf-8", null, msg.head.keepAlive)!
+            ) && msg.head.keepAlive
+        }
+    }
+
+    return _serverWriteAll(conn, _serverResponseFor(result, msg.head.keepAlive)) &&
+           msg.head.keepAlive
+}
+
+fn _serveHttpConnection(conn: NetConn) {
+    var raw = ""
+    while (_serverRunning) {
+        var headEnd = _responseHeadEnd(raw)
+        if (headEnd >= 0) {
+            var head = parseRequestHead(raw)
+            if (head == null) {
+                _serverWriteAll(conn, _serverStatusResponse(400, "Bad Request", false))
+                net.close(conn)
+                return
+            }
+            if (head!.contentLength > HTTP_SERVER_MAX_BODY_BYTES) {
+                _serverWriteAll(conn, _serverStatusResponse(413, "Payload Too Large", false))
+                net.close(conn)
+                return
+            }
+
+            var msg = parseRequestText(raw, HTTP_SERVER_MAX_BODY_BYTES)
+            if (msg != null) {
+                var keep = _serverDispatch(conn, msg!)
+                if (!keep) {
+                    net.close(conn)
+                    return
+                }
+                var rest = _byteSlice(raw, msg!.consumedBytes, raw.byteLength)
+                raw = rest ?? ""
+                if (raw.byteLength > 0) { continue }
+            }
+        }
+        if (raw.byteLength > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
+            _serverWriteAll(conn, _serverStatusResponse(413, "Payload Too Large", false))
+            net.close(conn)
+            return
+        }
+
+        var chunk = net.read(conn, HTTP_SERVER_READ_CHUNK_BYTES)
+        if (chunk == null) {
+            net.close(conn)
+            return
+        }
+        raw = raw + chunk!
+    }
+    net.close(conn)
+}
+
+fn listen(port: int) -> bool {
+    if (_serverRunning) { return false }
+    var listener = net.listen(port, HTTP_SERVER_BACKLOG)
+    if (listener == null) { return false }
+
+    _serverListener = listener
+    _serverRunning = true
+    while (_serverRunning) {
+        net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
+        var conn = net.accept(listener!)
+        if (conn != null) {
+            go _serveHttpConnection(conn!)
+            continue
+        }
+        var err = net.lastError(listener!)
+        if (!_serverRunning || err == "closed") { break }
+        if (err == "timeout") { continue }
+        break
+    }
+
+    _serverRunning = false
+    net.close(listener!)
+    _serverListener = null
+    return true
+}
+
+fn stopServer() {
+    _serverRunning = false
+    if (_serverListener != null) {
+        net.close(_serverListener!)
+        _serverListener = null
+    }
 }
 
 // MultipartBody - Built multipart/form-data payload and matching Content-Type.
@@ -1925,27 +2216,65 @@ fn requestText(
 }
 
 fn _statusReason(status: int) -> string {
+    if (status == 100) { return "Continue" }
+    if (status == 101) { return "Switching Protocols" }
+    if (status == 102) { return "Processing" }
+    if (status == 103) { return "Early Hints" }
     if (status == 200) { return "OK" }
     if (status == 201) { return "Created" }
+    if (status == 202) { return "Accepted" }
+    if (status == 203) { return "Non-Authoritative Information" }
     if (status == 204) { return "No Content" }
+    if (status == 205) { return "Reset Content" }
+    if (status == 206) { return "Partial Content" }
+    if (status == 300) { return "Multiple Choices" }
     if (status == 301) { return "Moved Permanently" }
     if (status == 302) { return "Found" }
     if (status == 303) { return "See Other" }
     if (status == 304) { return "Not Modified" }
+    if (status == 305) { return "Use Proxy" }
     if (status == 307) { return "Temporary Redirect" }
     if (status == 308) { return "Permanent Redirect" }
     if (status == 400) { return "Bad Request" }
     if (status == 401) { return "Unauthorized" }
+    if (status == 402) { return "Payment Required" }
     if (status == 403) { return "Forbidden" }
     if (status == 404) { return "Not Found" }
     if (status == 405) { return "Method Not Allowed" }
+    if (status == 406) { return "Not Acceptable" }
+    if (status == 407) { return "Proxy Authentication Required" }
+    if (status == 408) { return "Request Timeout" }
     if (status == 409) { return "Conflict" }
+    if (status == 410) { return "Gone" }
+    if (status == 411) { return "Length Required" }
+    if (status == 412) { return "Precondition Failed" }
+    if (status == 413) { return "Payload Too Large" }
+    if (status == 414) { return "URI Too Long" }
+    if (status == 415) { return "Unsupported Media Type" }
+    if (status == 416) { return "Range Not Satisfiable" }
+    if (status == 417) { return "Expectation Failed" }
+    if (status == 418) { return "I'm a teapot" }
+    if (status == 421) { return "Misdirected Request" }
+    if (status == 422) { return "Unprocessable Content" }
+    if (status == 423) { return "Locked" }
+    if (status == 424) { return "Failed Dependency" }
+    if (status == 425) { return "Too Early" }
+    if (status == 426) { return "Upgrade Required" }
+    if (status == 428) { return "Precondition Required" }
     if (status == 429) { return "Too Many Requests" }
+    if (status == 431) { return "Request Header Fields Too Large" }
+    if (status == 451) { return "Unavailable For Legal Reasons" }
     if (status == 500) { return "Internal Server Error" }
+    if (status == 501) { return "Not Implemented" }
     if (status == 502) { return "Bad Gateway" }
     if (status == 503) { return "Service Unavailable" }
     if (status == 504) { return "Gateway Timeout" }
-    return "OK"
+    if (status == 505) { return "HTTP Version Not Supported" }
+    if (status == 507) { return "Insufficient Storage" }
+    if (status == 508) { return "Loop Detected" }
+    if (status == 510) { return "Not Extended" }
+    if (status == 511) { return "Network Authentication Required" }
+    return "Unknown"
 }
 
 // urlEncode - Percent-encode using the HTTP module's historical URL helper
@@ -2021,6 +2350,9 @@ export {
     RequestMessage,
     ResponseMessage,
     router,
+    route,
+    listen,
+    stopServer,
     urlEncode,
     urlDecode,
     responseText,
