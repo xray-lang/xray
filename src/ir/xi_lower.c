@@ -1945,8 +1945,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 slot_meta.shared_initializers[next_shared] = lit;
         } else if (s && s->type == AST_VAR_DECL && !s->as.var_decl.initializer) {
             XiConstLiteral lit;
-            if (shared_default_initializer_from_type(type, &lit))
+            if (shared_default_initializer_from_type(type, &lit)) {
+                lit.data_mutable = true;
                 slot_meta.shared_initializers[next_shared] = lit;
+            }
         }
         if (is_exported)
             slot_meta.export_names[next_shared] = name;

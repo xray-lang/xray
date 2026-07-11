@@ -886,6 +886,10 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         cg_emit_freestanding_static_scalar_const_ref(ctx, out, v, static_lit)) {
         return;
     }
+    if (cg_freestanding_static_scalar_var_literal(ctx, v ? v->aux_int : -1, &static_lit) &&
+        cg_emit_freestanding_static_scalar_var_ref(ctx, out, v, static_lit)) {
+        return;
+    }
     const XiModule *import_const_module = NULL;
     int64_t import_const_slot = -1;
     const XiConstLiteral *import_lit = cg_import_slot_const_literal(
@@ -1024,6 +1028,12 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                 "aggregate top-level var; mutate fields directly in the current slice\n");
         ctx->error = true;
         emit_codegen_abort_expr(out);
+        return;
+    }
+    const XiConstLiteral *static_scalar_var = NULL;
+    if (cg_freestanding_static_scalar_var_literal(ctx, v ? v->aux_int : -1, &static_scalar_var) &&
+        cg_emit_freestanding_static_scalar_var_store(
+            ctx, out, ctx ? ctx->module : NULL, v ? v->aux_int : -1, f, value, static_scalar_var)) {
         return;
     }
     if (ctx && ctx->freestanding_profile &&
@@ -8589,6 +8599,19 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
                 return true;
             case XI_CONST_LITERAL_NULL:
                 cg_emit_static_value_const_name(ctx, out, module, slot);
+                return true;
+            default:
+                return false;
+        }
+    }
+    if (want_mutable &&
+        cg_freestanding_static_scalar_var_literal_in_module(ctx, module, slot, &static_lit)) {
+        switch (static_lit->kind) {
+            case XI_CONST_LITERAL_INT:
+            case XI_CONST_LITERAL_FLOAT:
+            case XI_CONST_LITERAL_BOOL:
+            case XI_CONST_LITERAL_CHAR:
+                cg_emit_static_scalar_const_name(ctx, out, module, slot);
                 return true;
             default:
                 return false;

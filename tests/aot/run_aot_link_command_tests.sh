@@ -2062,6 +2062,60 @@ else
     sed 's/^/      /' "$FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_RAWMUT_SCALAR_VAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_scalar_var_addr.xr"
+FREESTANDING_RAWMUT_SCALAR_VAR_OBJ="$WORK/freestanding_rawmut_of_scalar_var_addr.o"
+FREESTANDING_RAWMUT_SCALAR_VAR_LOG="$WORK/freestanding_rawmut_of_scalar_var_addr.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_RAWMUT_SCALAR_VAR_OBJ" \
+        "$FREESTANDING_RAWMUT_SCALAR_VAR_SRC" >"$FREESTANDING_RAWMUT_SCALAR_VAR_LOG" 2>&1; then
+    FREESTANDING_RAWMUT_SCALAR_VAR_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_RAWMUT_SCALAR_VAR_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_RAWMUT_SCALAR_VAR_C" ]; then
+        expect_log_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" \
+            "static int64_t _xctscalar_freestanding_rawmut_of_scalar_var_addr_" \
+            "freestanding-profile/rawmut-scalar-var-addr: materializes mutable integer/bool/char data"
+        expect_log_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" \
+            "static double _xctscalar_freestanding_rawmut_of_scalar_var_addr_" \
+            "freestanding-profile/rawmut-scalar-var-addr: materializes mutable float data"
+        expect_log_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" \
+            "&_xctscalar_freestanding_rawmut_of_scalar_var_addr_" \
+            "freestanding-profile/rawmut-scalar-var-addr: takes mutable scalar address directly"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_shared[0]" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for first scalar"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_shared[1]" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for second scalar"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_shared[2]" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for third scalar"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_shared[3]" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for fourth scalar"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_shared[4]" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for default scalar"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_mem_address_of" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids hosted address helper"
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "#include \"xrt.h\"" \
+            "freestanding-profile/rawmut-scalar-var-addr: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/rawmut-scalar-var-addr: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_RAWMUT_SCALAR_VAR_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_RAWMUT_SCALAR_VAR_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_RAWMUT_SCALAR_VAR_OBJ")"
+    FREESTANDING_RAWMUT_SCALAR_VAR_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_RAWMUT_SCALAR_VAR_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_RAWMUT_SCALAR_VAR_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/rawmut-scalar-var-addr: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/rawmut-scalar-var-addr: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_RAWMUT_SCALAR_VAR_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/rawmut-scalar-var-addr: object build failed"
+    sed 's/^/      /' "$FREESTANDING_RAWMUT_SCALAR_VAR_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_VAR_DEFAULT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_default.xr"
 FREESTANDING_TOP_VAR_DEFAULT_OBJ="$WORK/freestanding_top_var_default.o"
 FREESTANDING_TOP_VAR_DEFAULT_LOG="$WORK/freestanding_top_var_default.log"
@@ -3137,14 +3191,14 @@ expect_freestanding_reject \
     "$WORK/freestanding_rawmut_of_static_reject" \
     "$WORK/freestanding_rawmut_of_static_reject.log" \
     "freestanding-profile/static-address: rejects RawMut.of static const" \
-    "RawMut.of can only take the name of a top-level mutable aggregate static object"
+    "RawMut.of can only take the name of a top-level mutable scalar or aggregate static object"
 
 expect_freestanding_reject \
-    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_scalar_var_reject.xr" \
-    "$WORK/freestanding_rawmut_of_scalar_var_reject" \
-    "$WORK/freestanding_rawmut_of_scalar_var_reject.log" \
-    "freestanding-profile/static-address: rejects RawMut.of scalar var" \
-    "RawMut.of can only take the name of a top-level mutable aggregate static object"
+    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_string_var_reject.xr" \
+    "$WORK/freestanding_rawmut_of_string_var_reject" \
+    "$WORK/freestanding_rawmut_of_string_var_reject.log" \
+    "freestanding-profile/static-address: rejects RawMut.of string var" \
+    "RawMut.of can only take the name of a top-level mutable scalar or aggregate static object"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_heap_constructs_reject.xr" \

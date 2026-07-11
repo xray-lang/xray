@@ -1,4 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=RawMut.of can only take the name of a top-level mutable aggregate static object
-not_contains=CRASH
