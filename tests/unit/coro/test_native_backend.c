@@ -408,6 +408,13 @@ TEST(aot_runtime_owns_core_without_isolate) {
     ASSERT_NULL(xr_aot_runtime_scheduler(runtime));
     ASSERT_NULL(xr_aot_runtime_core(runtime)->fixed_heap.isolate);
     ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->userdata, &userdata);
+    ASSERT_EQ_PTR(xr_runtime_core_root_exec(xr_aot_runtime_core(runtime))->core,
+                  xr_aot_runtime_core(runtime));
+    ASSERT_EQ_INT(xr_runtime_core_root_exec(xr_aot_runtime_core(runtime))->alloc->owner,
+                  XR_STORAGE_EXEC_LOCAL);
+    ASSERT_FALSE(xr_exec_context_has_task(xr_runtime_core_root_exec(xr_aot_runtime_core(runtime))));
+    ASSERT_EQ_INT(xr_runtime_core_module_exec(xr_aot_runtime_core(runtime))->alloc->owner,
+                  XR_STORAGE_MODULE);
     ASSERT_STR_EQ(xr_aot_runtime_core(runtime)->script_info.file, "main.xr");
     ASSERT_EQ_INT(xr_aot_runtime_core(runtime)->script_info.argc, 2);
     ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->script_info.argv, argv);
