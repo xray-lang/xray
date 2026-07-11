@@ -15,6 +15,7 @@
 #include "../base/xsource_cache.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/parser/xast_api.h"
 #include "../frontend/parser/xstring_pool.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/value/xtype.h"
@@ -38,6 +39,9 @@ struct XrCompilerSession {
 
     struct XrReplSymbolTable *repl_symbols;
     struct XaAnalyzer *repl_analyzer;
+    AstNode **repl_programs;
+    size_t repl_program_count;
+    size_t repl_program_capacity;
 
     struct XrModuleGraph *module_graph;
 };
@@ -70,6 +74,9 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
             xr_type_set_current_pool(NULL, NULL);
         xa_analyzer_free(session->repl_analyzer);
     }
+    for (size_t i = 0; i < session->repl_program_count; i++)
+        xr_program_destroy(session->repl_programs[i]);
+    xr_free(session->repl_programs);
     if (session->repl_symbols)
         xr_repl_symbols_free(session->repl_symbols);
     if (xr_type_get_current_pool() == session->analyzer_pool)
@@ -189,6 +196,23 @@ struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *s
 
 struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session) {
     return session ? session->repl_analyzer : NULL;
+}
+
+bool xr_compiler_session_retain_repl_program(XrCompilerSession *session, AstNode *program) {
+    if (!session || !program)
+        return false;
+    if (session->repl_program_count == session->repl_program_capacity) {
+        size_t next_capacity =
+            session->repl_program_capacity ? session->repl_program_capacity * 2 : 8;
+        AstNode **next = (AstNode **) xr_realloc(session->repl_programs,
+                                                 next_capacity * sizeof(*session->repl_programs));
+        if (!next)
+            return false;
+        session->repl_programs = next;
+        session->repl_program_capacity = next_capacity;
+    }
+    session->repl_programs[session->repl_program_count++] = program;
+    return true;
 }
 
 void xr_compiler_session_set_module_graph(XrCompilerSession *session, struct XrModuleGraph *graph) {

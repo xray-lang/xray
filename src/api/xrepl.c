@@ -457,6 +457,10 @@ XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host, const
         xr_program_destroy(ast);
         return NULL;
     }
+    if (!xr_compiler_session_retain_repl_program(session, ast)) {
+        xr_program_destroy(ast);
+        return NULL;
+    }
 
     /* Per-input state reset on the persistent analyzer.  Diagnostics and
      * per-AST side tables must not leak across inputs because prior AST
@@ -466,10 +470,8 @@ XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host, const
 
     /* Create compiler context that borrows the persistent analyzer. */
     XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(session, repl_analyzer);
-    if (!ctx) {
-        xr_program_destroy(ast);
+    if (!ctx)
         return NULL;
-    }
     ctx->source_file = "<repl>";
     ctx->repl_mode = true;
 
@@ -478,6 +480,11 @@ XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host, const
     xr_repl_symbols_seed_context(repl_symbols, ctx);
 
     XrProto *proto = xr_compile(ctx, ast);
+
+    if (proto && !ctx->had_error && !xr_vm_entry_plan_derive(proto)) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+    }
 
     if (proto && !ctx->had_error) {
         /* Collect new declarations from the Xi IR output so the REPL
@@ -492,8 +499,6 @@ XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host, const
      * continue allocating into it.  A script-mode compile would restore
      * session-owned analyzer_pool here, but REPL never uses that pool. */
     xr_type_set_current_pool(repl_analyzer->type_pool, &repl_analyzer->type_pool->next_type_id);
-
-    xr_program_destroy(ast);
 
     return proto;
 }
