@@ -2,5 +2,9 @@ fn inc(x: int) -> int {
     return x + 1
 }
 
-var task = go inc(41)
-print(await task)
+fn main() {
+    var task = go inc(41)
+    print(await task)
+}
+
+main()

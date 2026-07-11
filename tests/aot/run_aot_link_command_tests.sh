@@ -4805,7 +4805,7 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_TASK_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_TASK_LOG" \
-        "freestanding profile rejects go expression" \
+        "entry runtime requirements are not provided by the target" \
         "freestanding-profile: rejects coroutine constructs"
 fi
 
