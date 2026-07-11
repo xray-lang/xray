@@ -1185,6 +1185,32 @@ static bool lower_call_object_is_module(XiLower *l, AstNode *object, const char 
     return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
+static const char *lower_call_callee_imported_member(XiLower *l, AstNode *callee,
+                                                     const char *module_name) {
+    if (!l || !l->analyzer || !callee || callee->type != AST_VARIABLE || !module_name)
+        return NULL;
+
+    VariableNode *var = &callee->as.variable;
+    XaSymbol *sym = NULL;
+    if (var->symbol_id)
+        sym = xa_scope_lookup_by_id(l->analyzer->global_scope, var->symbol_id);
+    if (!sym && var->name)
+        sym = xa_analyzer_lookup(l->analyzer, var->name);
+    if (!sym && var->name)
+        sym = xa_analyzer_lookup_in_scope(l->analyzer, var->name, l->analyzer->global_scope);
+    if (!sym && var->name)
+        sym = xa_analyzer_lookup_deep(l->analyzer, var->name);
+    if (!sym)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    if (!links || !links->module_name || strcmp(links->module_name, module_name) != 0)
+        return NULL;
+
+    return links->import_member_name ? links->import_member_name
+                                     : (sym->name ? sym->name : var->name);
+}
+
 static bool lower_mem_layout_member_name(const char *name) {
     return name && (strcmp(name, "sizeOf") == 0 || strcmp(name, "alignOf") == 0 ||
                     strcmp(name, "offsetOf") == 0);
@@ -4621,6 +4647,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * and emit specialized Xi ops instead of generic XI_CALL. */
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fname = call->callee->as.variable.name;
+        const char *parallel_member =
+            lower_call_callee_imported_member(l, call->callee, "parallel");
+        if (parallel_member) {
+            XiValue *parallel_intrinsic =
+                lower_parallel_module_intrinsic_call(l, node, call, parallel_member);
+            if (parallel_intrinsic || l->had_error)
+                return parallel_intrinsic;
+        }
         XiValue *bi = lower_builtin_call(l, node, fname, call);
         if (bi)
             return bi;
