@@ -142,6 +142,12 @@ expect_output_workers \
     4
 
 expect_output_workers \
+    "parallel_reduce_generic_failure_cleanup" \
+    "$PROJECT_DIR/tests/vm/parallel_reduce_generic_failure_cleanup.xr" \
+    $'true\ntrue\ntrue\n1000' \
+    4
+
+expect_output_workers \
     "parallel_plan_cleanup_after_panic" \
     "$PROJECT_DIR/tests/vm/parallel_plan_cleanup_after_panic.xr" \
     $'caught\ntrue' \

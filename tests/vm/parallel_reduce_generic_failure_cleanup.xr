@@ -1,0 +1,37 @@
+import parallel
+
+shared touched = Atomic<int>(0)
+
+try {
+    var failed = parallel.reduce(
+        0..20000,
+        "",
+        (i) -> {
+            touched.add(1, Ordering.Relaxed)
+            if (i == 10000) {
+                var zero = i - 10000
+                return string(10 / zero)
+            }
+            return "x"
+        },
+        (a, b) -> a + b,
+        parallel.Options(4)
+    )
+    print(failed.length)
+    print("miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.includes("division by zero"))
+}
+
+print(touched.load(Ordering.Relaxed) > 0)
+
+var after = parallel.reduce(
+    0..1000,
+    "",
+    (i) -> "a",
+    (a, b) -> a + b,
+    parallel.Options(4)
+)
+
+print(after.length)
