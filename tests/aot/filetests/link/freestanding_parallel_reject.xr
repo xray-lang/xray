@@ -1,0 +1,10 @@
+import parallel
+
+@c_export("xray_freestanding_parallel_reject")
+fn xray_freestanding_parallel_reject(n: int) -> int {
+    var total = 0
+    parallel.forEach(0..n, (i) -> {
+        total = total + i
+    })
+    return total
+}

@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects stdlib module 'parallel'
+contains=parallel uses the hosted CPU batch executor
+not_contains=CRASH
+not_contains=unsupported AOT
