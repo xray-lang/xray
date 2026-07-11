@@ -96,7 +96,9 @@ static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length
     size_t total_size = sizeof(XrString) + length + 1;
     XrCoroutine *coro = iso ? xr_current_coro(iso) : NULL;
 
-    XrString *str = (XrString *) xr_alloc(coro, total_size, XR_TSTRING);
+    XrString *str = coro ? (XrString *) xr_alloc(coro, total_size, XR_TSTRING)
+                         : (XrString *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(iso),
+                                                            total_size, XR_TSTRING);
     if (!str)
         return NULL;
 

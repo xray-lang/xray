@@ -18,8 +18,19 @@
 #include "../coro/xworker.h"
 #include "../coro/xcoroutine.h"
 #include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xheap.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
+
+static XrArray *vm_api_root_array_new(XrVMRuntime *isolate) {
+    XrArray *array = (XrArray *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
+                                                     sizeof(XrArray), XR_TARRAY);
+    if (array)
+        xr_array_init_inplace(array, 4, XR_ELEM_ANY);
+    return array;
+}
 
 /* ========== VM Context Helper ========== */
 
@@ -202,7 +213,7 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
         // Collect extra arguments into rest array (matches OP_CALL vararg path)
         int extra = nargs > proto->numparams ? nargs - proto->numparams : 0;
         XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
-        XrArray *rest = xr_array_new(coro);
+        XrArray *rest = coro ? xr_array_new(coro) : vm_api_root_array_new(isolate);
         if (extra > 0) {
             for (int j = 0; j < extra; j++) {
                 xr_array_push(rest, func_base[proto->numparams + j]);

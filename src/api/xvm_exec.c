@@ -28,6 +28,51 @@
 
 XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
 
+typedef enum XrVMEntryMode {
+    XR_VM_ENTRY_ELIDED = 0,
+    XR_VM_ENTRY_DESCRIPTOR,
+    XR_VM_ENTRY_RESUMABLE,
+} XrVMEntryMode;
+
+static XrVMEntryMode xr_vm_proto_entry_mode(const XrProto *proto) {
+    XrVMEntryMode mode = XR_VM_ENTRY_ELIDED;
+    int count = proto ? DYNARRAY_COUNT(&proto->code) : 0;
+    for (int i = 0; i < count; i++) {
+        XrInstruction instruction = DYNARRAY_GET(&proto->code, i, XrInstruction);
+        switch (GET_OPCODE(instruction)) {
+            case OP_GO:
+            case OP_THREAD_SPAWN:
+            case OP_PAR_FOR:
+            case OP_PAR_MAP:
+            case OP_CHAN_NEW:
+            case OP_CHAN_NEW_CAP:
+            case OP_CHAN_NEW_NAMED:
+            case OP_TIME_AFTER:
+            case OP_SCOPE_ENTER:
+                mode = XR_VM_ENTRY_DESCRIPTOR;
+                break;
+            case OP_AWAIT:
+            case OP_AWAIT_TIMEOUT:
+            case OP_AWAIT_ALL:
+            case OP_AWAIT_ALL_INTO:
+            case OP_AWAIT_ANY:
+            case OP_YIELD:
+            case OP_CHAN_SEND:
+            case OP_CHAN_RECV:
+            case OP_CHAN_SEND_TIMEOUT:
+            case OP_CHAN_RECV_TIMEOUT:
+            case OP_SCOPE_EXIT:
+            case OP_SLEEP:
+            case OP_SELECT_BLOCK:
+            case OP_GEN_YIELD:
+                return XR_VM_ENTRY_RESUMABLE;
+            default:
+                break;
+        }
+    }
+    return mode;
+}
+
 static bool xr_vm_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProto *proto,
                                                     int offset) {
     if (!proto)
@@ -65,9 +110,8 @@ bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto) {
 
 /* ========== Execution API ========== */
 
-// Execute bytecode
-// main_coro already exists (created as bootstrap during isolate init),
-// just upgrade it with the compiled closure.
+// Execute bytecode. A physical root task is created only for scheduler-backed
+// execution; the direct VM path keeps the logical root on the native stack.
 int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "xr_execute: NULL isolate");
     XR_DCHECK(proto != NULL, "xr_execute: NULL proto");
@@ -79,7 +123,8 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
         return -1;
 
     XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
-    if (!runtime) {
+    XrVMEntryMode entry_mode = xr_vm_proto_entry_mode(proto);
+    if (!runtime || entry_mode == XR_VM_ENTRY_ELIDED) {
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
         if (result == XR_VM_OK && !XR_IS_NULL(isolate->vm.pending_error)) {
             return -1;
@@ -89,8 +134,10 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
 
     XrCoroutine *main_coro = isolate->main_coro;
     if (!main_coro) {
-        xr_log_warning("vm", "main_coro not initialized");
-        return -1;
+        main_coro = xr_coro_create_bootstrap(isolate);
+        if (!main_coro)
+            return -1;
+        isolate->main_coro = main_coro;
     }
 
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
@@ -123,13 +170,11 @@ static void init_globals(XrVMRuntime *isolate) {
 
     xr_shared_array_init(&isolate->vm.shared);
 
-    /* Name-keyed top-level binding dict.  XrMap allocation lives on
-     * the fixed heap, so the main coroutine — already constructed in
-     * xray_vm_new before xr_vm_init — must exist here. */
-    XR_DCHECK(isolate->main_coro != NULL, "init_globals: main_coro must precede globals dict");
+    /* Name-keyed top-level bindings are module storage on the fixed heap;
+     * creating a VM never materializes a task merely to host globals. */
     isolate->vm.globals = (XrGlobalDict *) xr_malloc(sizeof(XrGlobalDict));
     XR_CHECK(isolate->vm.globals != NULL, "init_globals: dict allocation failed");
-    xr_global_dict_init(isolate->vm.globals, isolate->main_coro);
+    xr_global_dict_init(isolate->vm.globals, isolate);
 
     // Core class registration is done in isolate_init_full() (xisolate_full.c)
     // because isolate->core is NULL at this point.
