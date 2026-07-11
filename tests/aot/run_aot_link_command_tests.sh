@@ -3471,13 +3471,52 @@ expect_freestanding_reject \
     "freestanding-profile/mem: rejects removed selective free import" \
     "stdlib module 'mem' has no member 'free'"
 
-expect_freestanding_reject \
-    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_method_reject.xr" \
-    "$WORK/freestanding_enum_method_reject" \
-    "$WORK/freestanding_enum_method_reject.log" \
-    "freestanding-profile/enum: rejects enum methods" \
-    "freestanding profile rejects enum methods" \
-    "freestanding enums support static variants only"
+FREESTANDING_ENUM_METHOD_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_method_static.xr"
+FREESTANDING_ENUM_METHOD_OBJ="$WORK/freestanding_enum_method_static.o"
+FREESTANDING_ENUM_METHOD_LOG="$WORK/freestanding_enum_method_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ENUM_METHOD_OBJ" \
+        "$FREESTANDING_ENUM_METHOD_SRC" >"$FREESTANDING_ENUM_METHOD_LOG" 2>&1; then
+    FREESTANDING_ENUM_METHOD_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_ENUM_METHOD_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ENUM_METHOD_C" ]; then
+        expect_log_contains "$FREESTANDING_ENUM_METHOD_C" "xray_enum_method_static" \
+            "freestanding-profile/enum-method: exports C ABI entry"
+        expect_log_contains "$FREESTANDING_ENUM_METHOD_C" "INT64_C(10)" \
+            "freestanding-profile/enum-method: lowers instance method argument in scalar path"
+        expect_log_contains "$FREESTANDING_ENUM_METHOD_C" "INT64_C(40)" \
+            "freestanding-profile/enum-method: lowers static method result in scalar path"
+        expect_log_not_contains "$FREESTANDING_ENUM_METHOD_C" "xrt_shared[" \
+            "freestanding-profile/enum-method: avoids shared-slot method state"
+        expect_log_not_contains "$FREESTANDING_ENUM_METHOD_C" "xrt_func_alloc" \
+            "freestanding-profile/enum-method: avoids closure allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_METHOD_C" "xrt_arc_alloc" \
+            "freestanding-profile/enum-method: avoids heap allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_METHOD_C" "xrt_map_new" \
+            "freestanding-profile/enum-method: avoids enum namespace map allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_METHOD_C" "#include \"xrt.h\"" \
+            "freestanding-profile/enum-method: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/enum-method: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ENUM_METHOD_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ENUM_METHOD_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_ENUM_METHOD_OBJ")"
+    FREESTANDING_ENUM_METHOD_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_ENUM_METHOD_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_ENUM_METHOD_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/enum-method: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/enum-method: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_ENUM_METHOD_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/enum-method: object build failed"
+    sed 's/^/      /' "$FREESTANDING_ENUM_METHOD_LOG" | sed -n '1,120p'
+fi
 
 FREESTANDING_ENUM_NAME_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_name_static.xr"
 FREESTANDING_ENUM_NAME_OBJ="$WORK/freestanding_enum_name_static.o"

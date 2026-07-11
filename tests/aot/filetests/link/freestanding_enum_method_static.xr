@@ -1,0 +1,25 @@
+enum FsMode {
+    Boot,
+    Run,
+    Halt
+
+    fn code(offset: int) -> int {
+        return this.ordinal + offset
+    }
+
+    static fn base() -> int {
+        return 40
+    }
+}
+
+@c_export("xray_enum_method_static")
+fn xray_enum_method_static(flag: int) -> int {
+    var mode = FsMode.Boot
+    if (flag == 1) {
+        mode = FsMode.Run
+    }
+    if (flag == 2) {
+        mode = FsMode.Halt
+    }
+    return mode.code(10) + FsMode.base()
+}
