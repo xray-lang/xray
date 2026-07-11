@@ -29,7 +29,37 @@
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
+
+static char *aot_test_dup_env_value(const char *value) {
+    if (!value)
+        return NULL;
+    size_t len = strlen(value) + 1;
+    char *copy = (char *) malloc(len);
+    if (!copy) {
+        fprintf(stderr, "aot_test_dup_env_value: out of memory\n");
+        abort();
+    }
+    memcpy(copy, value, len);
+    return copy;
+}
+
+static void aot_test_set_env(const char *name, const char *value) {
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value)
+        setenv(name, value, 1);
+    else
+        unsetenv(name);
+#endif
+}
+
+static void aot_test_restore_env(const char *name, char *saved) {
+    aot_test_set_env(name, saved);
+    free(saved);
+}
 
 static void native_increment(void *arg) {
     int *value = (int *) arg;
@@ -1249,6 +1279,58 @@ TEST(parallel_for_auto_workers_uses_scheduler_worker_count) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(parallel_for_deterministic_scheduler_uses_single_lane) {
+    char *old_det = aot_test_dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
+    char *old_workers = aot_test_dup_env_value(getenv("XRAY_WORKERS"));
+    aot_test_set_env("XRAY_CORO_DETERMINISTIC", "1");
+    aot_test_set_env("XRAY_WORKERS", "4");
+
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_PARALLEL;
+    cfg.scheduler_workers = 4;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    aot_test_restore_env("XRAY_CORO_DETERMINISTIC", old_det);
+    aot_test_restore_env("XRAY_WORKERS", old_workers);
+
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_NOT_NULL(xr_aot_runtime_scheduler(runtime));
+    ASSERT_TRUE(xr_runtime_deterministic_mode(xr_aot_runtime_scheduler(runtime)));
+    ASSERT_EQ_INT(xr_aot_runtime_scheduler(runtime)->worker_count, 1);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    aot_par_for_reset_lane_records();
+    ASSERT_TRUE(xr_parallel_for_range_i64(&ctx, 0, 16, 4, aot_par_for_record_lane_body, NULL));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_begin[0], memory_order_relaxed), 0);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_end[0], memory_order_relaxed), 16);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[0], memory_order_relaxed), 1);
+    for (int i = 1; i < 8; i++)
+        ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[i], memory_order_relaxed), 0);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(parallel_for_small_range_uses_single_lane) {
+    XrAotRuntime *runtime = aot_test_parallel_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    aot_par_for_reset_lane_records();
+    ASSERT_TRUE(xr_parallel_for_range_i64(&ctx, 42, 43, 4, aot_par_for_record_lane_body, NULL));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_begin[0], memory_order_relaxed), 42);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_end[0], memory_order_relaxed), 43);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[0], memory_order_relaxed), 1);
+    for (int i = 1; i < 8; i++)
+        ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[i], memory_order_relaxed), 0);
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(parallel_for_dispatch_is_runtime_scoped) {
     XrAotRuntime *runtime_a = aot_test_parallel_runtime_new();
     ASSERT_NOT_NULL(runtime_a);
@@ -1413,6 +1495,8 @@ RUN_TEST(runtime_deferred_array_submit_cache_tracks_content_version);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 RUN_TEST(parallel_for_range_i64_runs_static_lanes);
 RUN_TEST(parallel_for_auto_workers_uses_scheduler_worker_count);
+RUN_TEST(parallel_for_deterministic_scheduler_uses_single_lane);
+RUN_TEST(parallel_for_small_range_uses_single_lane);
 RUN_TEST(parallel_for_dispatch_is_runtime_scoped);
 RUN_TEST(parallel_for_nested_worker_wait_helps_join);
 RUN_TEST(parallel_reduce_i64_runs_range_reducer);
