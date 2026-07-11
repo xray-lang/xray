@@ -1,0 +1,15 @@
+schema = 1
+module = "path"
+contract_revision = 1
+legacy_commit = "9cbce85aa99c3686a99a74a88fbccc3b401f1b9a"
+legacy_public_surface = ["join", "normalize", "resolve", "relative", "parse", "format"]
+intentional_semantic_changes = ["PathInfo is the typed parse result"]
+known_legacy_bugs = []
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/path/diff_cases.txt"
+benchmark_suite = "stdlib/path"
+
+[[legacy_behavior]]
+id = "platform-separator"
+classification = "required"
+new_behavior = "normalization follows the selected platform contract"

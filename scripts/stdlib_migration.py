@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Validate and execute task-196 stdlib migration contracts."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+from stdlib_manifest import load_manifest, load_toml
+
+
+REQUIRED_EQUIVALENCE = {"value", "error", "effect", "complexity"}
+LEGACY_CLASSIFICATIONS = {"required", "bug", "accidental", "removed"}
+CONTRACT_ROOT = Path("tests/stdlib/contracts")
+
+
+def read_jsonl(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    if not path.is_file():
+        return rows, [f"missing JSONL corpus: {path}"]
+    for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{path}:{lineno}: invalid JSON: {exc}")
+            continue
+        if not isinstance(row, dict):
+            errors.append(f"{path}:{lineno}: row must be a JSON object")
+            continue
+        rows.append(row)
+    return rows, errors
+
+
+def load_contract(root: Path, module: str) -> tuple[Path, dict[str, Any]]:
+    path = root / CONTRACT_ROOT / module / "contract.toml"
+    if not path.is_file():
+        raise RuntimeError(f"missing stdlib migration contract: {path}")
+    return path, load_toml(path)
+
+
+def validate_contract(root: Path, module: str) -> tuple[list[str], dict[str, Any]]:
+    path, contract = load_contract(root, module)
+    errors: list[str] = []
+    if contract.get("schema") != 1:
+        errors.append(f"{path}: schema must be 1")
+    if contract.get("module") != module:
+        errors.append(f"{path}: module must be {module!r}")
+    legacy = str(contract.get("legacy_commit", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", legacy):
+        errors.append(f"{path}: legacy_commit must be a full commit id")
+    elif subprocess.run(
+        ["git", "cat-file", "-e", f"{legacy}^{{commit}}"], cwd=root, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode:
+        errors.append(f"{path}: legacy_commit is not available in this repository: {legacy}")
+    equivalence = set(contract.get("equivalence", ()))
+    if equivalence != REQUIRED_EQUIVALENCE:
+        errors.append(
+            f"{path}: equivalence must be exactly {', '.join(sorted(REQUIRED_EQUIVALENCE))}"
+        )
+    manifest_rel = contract.get("diff_cases_manifest")
+    manifest_path = root / str(manifest_rel or "")
+    if not manifest_rel or not manifest_path.is_file():
+        errors.append(f"{path}: diff_cases_manifest does not exist: {manifest_rel}")
+    else:
+        for lineno, raw in enumerate(manifest_path.read_text(encoding="utf-8").splitlines(), 1):
+            case = raw.strip()
+            if not case or case.startswith("#"):
+                continue
+            if not (root / case).is_file():
+                errors.append(f"{manifest_path}:{lineno}: diff case does not exist: {case}")
+    cases_path = path.parent / "cases.jsonl"
+    rows, row_errors = read_jsonl(cases_path)
+    errors.extend(row_errors)
+    seen: set[str] = set()
+    for index, row in enumerate(rows, 1):
+        case_id = str(row.get("case", ""))
+        if not case_id or case_id in seen:
+            errors.append(f"{cases_path}: row {index} has missing or duplicate case id {case_id!r}")
+        seen.add(case_id)
+        row_equivalence = set(row.get("equivalence", ()))
+        if not row_equivalence or not row_equivalence <= REQUIRED_EQUIVALENCE:
+            errors.append(f"{cases_path}: row {index} has invalid equivalence categories")
+        if not row.get("oracle"):
+            errors.append(f"{cases_path}: row {index} must name an independent oracle")
+    required_lists = ("legacy_public_surface", "intentional_semantic_changes", "known_legacy_bugs")
+    for field in required_lists:
+        if not isinstance(contract.get(field), list):
+            errors.append(f"{path}: {field} must be an explicit list")
+    behaviors = contract.get("legacy_behavior", ())
+    if not behaviors:
+        errors.append(f"{path}: at least one legacy_behavior classification is required")
+    behavior_ids: set[str] = set()
+    for behavior in behaviors:
+        behavior_id = str(behavior.get("id", ""))
+        if not behavior_id or behavior_id in behavior_ids:
+            errors.append(f"{path}: legacy_behavior id is missing or duplicated: {behavior_id!r}")
+        behavior_ids.add(behavior_id)
+        if behavior.get("classification") not in LEGACY_CLASSIFICATIONS:
+            errors.append(
+                f"{path}: legacy_behavior {behavior_id!r} has invalid classification "
+                f"{behavior.get('classification')!r}"
+            )
+        if not behavior.get("new_behavior"):
+            errors.append(f"{path}: legacy_behavior {behavior_id!r} must state new_behavior")
+    return errors, contract
+
+
+def contract_modules(root: Path) -> list[str]:
+    base = root / CONTRACT_ROOT
+    return sorted(path.parent.name for path in base.glob("*/contract.toml"))
+
+
+def find_xray(root: Path, value: str | None) -> Path:
+    candidates = [Path(value)] if value else []
+    candidates.extend((root / "build/xray", root / "build-release/xray"))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+    raise RuntimeError("xray executable not found; pass --xray or build the xray target")
+
+
+def run_diff(root: Path, contract: dict[str, Any], xray: Path) -> int:
+    env = os.environ.copy()
+    env["XRAY_DIFF_CASES_FILE"] = str(root / str(contract["diff_cases_manifest"]))
+    env["XRAY_DIFF_EXTRA_CASES_FILE"] = ""
+    env["XRAY_DIFF_BACKENDS"] = "vm,aot"
+    return subprocess.run(
+        [str(root / "tests/diff/run_backend_diff.sh"), str(xray)], cwd=root, env=env
+    ).returncode
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("check", "verify"))
+    parser.add_argument("module", nargs="?")
+    parser.add_argument("--root", default=".")
+    parser.add_argument("--xray")
+    parser.add_argument("--metadata-only", action="store_true")
+    args = parser.parse_args()
+    root = Path(args.root).resolve()
+    modules = [args.module] if args.module else contract_modules(root)
+    if not modules:
+        print("no stdlib migration contracts found", file=sys.stderr)
+        return 1
+    boundary = load_manifest(root)
+    errors: list[str] = []
+    contracts: dict[str, dict[str, Any]] = {}
+    for module in modules:
+        if module not in boundary.by_name:
+            errors.append(f"migration contract module is absent from stdlib boundary: {module}")
+            continue
+        module_errors, contract = validate_contract(root, module)
+        errors.extend(module_errors)
+        contracts[module] = contract
+    if errors:
+        print("stdlib migration contract check failed:", file=sys.stderr)
+        for error in errors:
+            print(f"  {error}", file=sys.stderr)
+        return 1
+    if args.command == "verify" and not args.metadata_only:
+        try:
+            xray = find_xray(root, args.xray)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        for module in modules:
+            print(f"== stdlib migration diff: {module} ==")
+            if run_diff(root, contracts[module], xray):
+                return 1
+    print(f"OK: {len(modules)} stdlib migration contract(s) verified")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1436,6 +1436,29 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME stdlib_migration_contracts
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stdlib_migration.py
+                check --root ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_migration_contracts PROPERTIES
+        LABELS "stdlib;contract;migration"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_perf_manifest
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/stdlib/run.py
+                --validate-only
+    )
+    set_tests_properties(stdlib_perf_manifest PROPERTIES
+        LABELS "stdlib;performance;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_def_migration_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_def_migration_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}

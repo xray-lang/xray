@@ -1,0 +1,20 @@
+schema = 1
+module = "http"
+contract_revision = 1
+legacy_commit = "c4ead56205b25b7bde418cf2b8c782e592916a61"
+legacy_public_surface = ["requestText", "responseText", "parseRequestHead", "parseResponseHead"]
+intentional_semantic_changes = ["HTTP control-plane helpers are owned by stdlib/http/http.xr"]
+known_legacy_bugs = ["legacy helper behavior is not authoritative for conflicting framing headers"]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/http/diff_cases.txt"
+benchmark_suite = "stdlib/http"
+
+[[legacy_behavior]]
+id = "header-order-and-duplicates"
+classification = "required"
+new_behavior = "wire order and duplicate header observations are preserved"
+
+[[legacy_behavior]]
+id = "conflicting-content-length"
+classification = "bug"
+new_behavior = "conflicting framing is rejected by the typed HTTP contract"
