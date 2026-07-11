@@ -209,6 +209,276 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     ASSERT_NOT_NULL(xg_global_evidence_add_derived_method(ev, &derived_method));
 }
 
+static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
+    XgGenericBodyUseSummary body_use = {0};
+    XgGenericStorageSummary storage = {0};
+    XgGenericCodeSizeSummary code_size = {0};
+    XgSequenceAccessSummary seq = {0};
+    XgCapacityOpSummary cap = {0};
+    XgBulkOpSummary bulk = {0};
+    XgEncodingOpSummary enc = {0};
+    XgJsonShapeSummary json_shape = {0};
+    XgJsonFieldSummary json_field = {0};
+    XgJsonAccessSummary json_access = {0};
+    XgJsonCodecSummary json_codec = {0};
+    XgRecordShapeSummary record_shape = {0};
+    XgRecordFieldSummary record_field = {0};
+    XgRecordAccessSummary record_access = {0};
+    XgRecordMergeSummary record_merge = {0};
+    XgOptionsBagSummary options = {0};
+    XgMapShapeSummary map_shape = {0};
+    XgMapEntrySummary map_entry = {0};
+    XgKeyAccessSummary key_access = {0};
+    XgHashEqSummary hash_eq = {0};
+
+    body_use.use_id = 91;
+    body_use.generic_inst_id = 3;
+    body_use.module_id = 7;
+    body_use.owner_func_id = 11;
+    body_use.origin_body_func_id = 11;
+    body_use.specialized_body_func_id = 31;
+    body_use.root_callsite_id = 1;
+    body_use.type_key = 400;
+    body_use.type_arg_key_start = 401;
+    body_use.type_arg_count = 1;
+    body_use.estimated_body_size = 12;
+    body_use.flags = XG_GENERIC_BODY_EXPLICIT_ROOT;
+    body_use.body_use_hash = UINT64_C(0xabcd);
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_body_use(ev, &body_use));
+
+    storage.storage_id = 92;
+    storage.generic_inst_id = 3;
+    storage.module_id = 7;
+    storage.storage_kind = XG_GENERIC_STORAGE_ARRAY;
+    storage.origin_type_key = 400;
+    storage.specialized_type_key = 401;
+    storage.elem_type_key = 402;
+    storage.container_plan_id = 55;
+    storage.flags = XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD;
+    storage.storage_hash = UINT64_C(0xbcde);
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_storage(ev, &storage));
+
+    code_size.code_size_id = 93;
+    code_size.generic_inst_id = 3;
+    code_size.module_id = 7;
+    code_size.body_use_id = 91;
+    code_size.origin_body_size_estimate = 20;
+    code_size.specialized_body_size_estimate = 12;
+    code_size.instantiation_count = 1;
+    code_size.threshold = 64;
+    code_size.flags = XG_GENERIC_CODESIZE_ALLOW_CLONE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_code_size(ev, &code_size));
+
+    seq.access_id = 94;
+    seq.owner_func_id = 11;
+    seq.source_span_id = 21;
+    seq.body_ordinal = 3;
+    seq.sequence_kind = XG_SEQ_ARRAY;
+    seq.access_kind = XG_SEQ_ACCESS_INDEX_GET;
+    seq.receiver_type_key = 500;
+    seq.elem_type_key = 501;
+    seq.index_expr_id = 502;
+    seq.length_expr_id = 503;
+    seq.flags = XG_SEQ_ACCESS_CONST_INDEX;
+    ASSERT_NOT_NULL(xg_global_evidence_add_sequence_access(ev, &seq));
+
+    cap.op_id = 95;
+    cap.owner_func_id = 11;
+    cap.source_span_id = 22;
+    cap.body_ordinal = 4;
+    cap.sequence_kind = XG_SEQ_STRING_BUILDER;
+    cap.op_kind = XG_CAPACITY_PUSH;
+    cap.receiver_type_key = 510;
+    cap.elem_type_key = 511;
+    cap.count_expr_id = 512;
+    cap.loop_id = 513;
+    cap.flags = XG_CAPACITY_MAY_GROW;
+    ASSERT_NOT_NULL(xg_global_evidence_add_capacity_op(ev, &cap));
+
+    bulk.op_id = 96;
+    bulk.owner_func_id = 11;
+    bulk.source_span_id = 23;
+    bulk.body_ordinal = 5;
+    bulk.op_kind = XG_BULK_COPY;
+    bulk.elem_type_key = 520;
+    bulk.src_type_key = 521;
+    bulk.dst_type_key = 522;
+    bulk.length_expr_id = 523;
+    bulk.flags = XG_BULK_POD;
+    ASSERT_NOT_NULL(xg_global_evidence_add_bulk_op(ev, &bulk));
+
+    enc.op_id = 97;
+    enc.owner_func_id = 11;
+    enc.source_span_id = 24;
+    enc.body_ordinal = 6;
+    enc.op_kind = XG_ENCODING_STRING_TO_BYTES;
+    enc.input_type_key = 530;
+    enc.output_type_key = 531;
+    enc.flags = XG_ENCODING_KNOWN_UTF8;
+    ASSERT_NOT_NULL(xg_global_evidence_add_encoding_op(ev, &enc));
+
+    json_shape.json_shape_id = 101;
+    json_shape.module_id = 7;
+    json_shape.owner_func_id = 11;
+    json_shape.source_span_id = 25;
+    json_shape.type_key = 600;
+    json_shape.field_name_start = 610;
+    json_shape.field_count = 1;
+    json_shape.shape_kind = XG_JSON_SHAPE_SHAPED;
+    json_shape.flags = XG_JSON_SHAPE_STATIC_KEYS;
+    json_shape.shape_hash = UINT64_C(0xcafe);
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(ev, &json_shape));
+
+    json_field.field_id = 102;
+    json_field.shape_id = 101;
+    json_field.field_ordinal = 0;
+    json_field.name_id = xg_name_id("name");
+    json_field.type_key = 601;
+    json_field.flags = XG_JSON_FIELD_STATIC_KEY;
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &json_field));
+
+    json_access.json_access_id = 103;
+    json_access.module_id = 7;
+    json_access.owner_func_id = 11;
+    json_access.receiver_shape_id = 101;
+    json_access.source_span_id = 26;
+    json_access.key_name_id = json_field.name_id;
+    json_access.result_type_key = 601;
+    json_access.field_ordinal = 0;
+    json_access.access_kind = XG_JSON_ACCESS_FIELD_GET;
+    json_access.flags = XG_JSON_ACCESS_STATIC_KEY | XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_access(ev, &json_access));
+
+    json_codec.codec_id = 104;
+    json_codec.module_id = 7;
+    json_codec.owner_func_id = 11;
+    json_codec.source_span_id = 27;
+    json_codec.codec_kind = XG_JSON_CODEC_DECODE;
+    json_codec.input_type_key = 600;
+    json_codec.target_type_key = 601;
+    json_codec.input_shape_id = 101;
+    json_codec.output_shape_id = 101;
+    json_codec.field_count = 1;
+    json_codec.flags = XG_JSON_CODEC_HAS_INPUT_SHAPE | XG_JSON_CODEC_HAS_TARGET_TYPE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(ev, &json_codec));
+
+    record_shape.record_shape_id = 201;
+    record_shape.module_id = 7;
+    record_shape.owner_func_id = 11;
+    record_shape.source_span_id = 28;
+    record_shape.type_key = 700;
+    record_shape.field_name_start = 710;
+    record_shape.field_count = 1;
+    record_shape.shape_kind = XG_RECORD_SHAPE_LITERAL;
+    record_shape.flags = XG_RECORD_SHAPE_STATIC_KEYS;
+    record_shape.shape_hash = UINT64_C(0xd00d);
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(ev, &record_shape));
+
+    record_field.field_id = 202;
+    record_field.shape_id = 201;
+    record_field.field_ordinal = 0;
+    record_field.name_id = xg_name_id("value");
+    record_field.type_key = 701;
+    record_field.default_value_id = 702;
+    record_field.flags = XG_RECORD_FIELD_REQUIRED;
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_field(ev, &record_field));
+
+    record_access.record_access_id = 203;
+    record_access.module_id = 7;
+    record_access.owner_func_id = 11;
+    record_access.receiver_shape_id = 201;
+    record_access.source_span_id = 29;
+    record_access.field_name_id = record_field.name_id;
+    record_access.result_type_key = 701;
+    record_access.field_ordinal = 0;
+    record_access.access_kind = XG_RECORD_ACCESS_FIELD_GET;
+    record_access.flags = XG_RECORD_ACCESS_STATIC_FIELD | XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN;
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_access(ev, &record_access));
+
+    record_merge.merge_id = 204;
+    record_merge.module_id = 7;
+    record_merge.owner_func_id = 11;
+    record_merge.source_span_id = 30;
+    record_merge.base_shape_id = 201;
+    record_merge.patch_shape_id = 201;
+    record_merge.result_shape_id = 201;
+    record_merge.base_field_count = 1;
+    record_merge.patch_field_count = 1;
+    record_merge.result_field_count = 1;
+    record_merge.overwrite_count = 1;
+    record_merge.copy_table_id = 800;
+    record_merge.flags = XG_RECORD_MERGE_BASE_SHAPE_PROVEN | XG_RECORD_MERGE_RESULT_SHAPE_PROVEN;
+    record_merge.merge_hash = UINT64_C(0xd0d0);
+    ASSERT_NOT_NULL(xg_global_evidence_add_record_merge(ev, &record_merge));
+
+    options.options_id = 205;
+    options.module_id = 7;
+    options.owner_func_id = 11;
+    options.callsite_id = 1;
+    options.param_shape_id = 201;
+    options.supplied_shape_id = 201;
+    options.source_span_id = 31;
+    options.supplied_field_mask_id = 810;
+    options.default_field_mask_id = 811;
+    options.required_field_mask_id = 812;
+    options.supplied_count = 1;
+    options.default_count = 0;
+    options.required_count = 1;
+    options.action = XG_OPTIONS_DEFAULT_ELIDED;
+    options.flags = XG_OPTIONS_ALL_SUPPLIED | XG_OPTIONS_CALLSITE_PROVEN;
+    ASSERT_NOT_NULL(xg_global_evidence_add_options_bag(ev, &options));
+
+    map_shape.shape_id = 301;
+    map_shape.module_id = 7;
+    map_shape.owner_func_id = 11;
+    map_shape.source_span_id = 32;
+    map_shape.container_kind = XG_MAP_CONTAINER_MAP;
+    map_shape.source = XG_MAP_SHAPE_SRC_LITERAL;
+    map_shape.key_type_key = 900;
+    map_shape.value_type_key = 901;
+    map_shape.entry_start = 302;
+    map_shape.entry_count = 1;
+    map_shape.literal_count = 1;
+    map_shape.flags = XG_MAP_SHAPE_LITERAL | XG_MAP_SHAPE_SMALL;
+    map_shape.shape_hash = UINT64_C(0xe00e);
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_shape(ev, &map_shape));
+
+    map_entry.entry_id = 302;
+    map_entry.shape_id = 301;
+    map_entry.entry_ordinal = 0;
+    map_entry.key_const_id = 910;
+    map_entry.value_const_id = 911;
+    map_entry.key_i64 = -7;
+    map_entry.prehash = UINT64_C(0xee00);
+    map_entry.flags = XG_MAP_ENTRY_CONST_KEY | XG_MAP_ENTRY_INT_KEY;
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_entry(ev, &map_entry));
+
+    key_access.access_id = 303;
+    key_access.owner_func_id = 11;
+    key_access.source_span_id = 33;
+    key_access.body_ordinal = 7;
+    key_access.container_kind = XG_MAP_CONTAINER_MAP;
+    key_access.op = XG_KEY_ACCESS_INDEX_GET;
+    key_access.receiver_shape_id = 301;
+    key_access.receiver_type_key = 920;
+    key_access.key_type_key = 900;
+    key_access.value_type_key = 901;
+    key_access.key_const_id = 910;
+    key_access.key_prehash = UINT64_C(0xee00);
+    key_access.flags = XG_KEY_ACCESS_CONST_KEY;
+    ASSERT_NOT_NULL(xg_global_evidence_add_key_access(ev, &key_access));
+
+    hash_eq.hash_eq_id = 304;
+    hash_eq.type_key = 900;
+    hash_eq.kind = XG_HASH_EQ_BUILTIN;
+    hash_eq.eq_derive_id = 60;
+    hash_eq.hash_derive_id = 60;
+    hash_eq.eq_func_id = 11;
+    hash_eq.hash_func_id = 31;
+    hash_eq.flags = XG_HASH_EQ_NO_ALLOC | XG_HASH_EQ_PURE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_hash_eq(ev, &hash_eq));
+}
+
 TEST(cache_payload_parse_exposes_validated_body) {
     XgGlobalEvidence ev = {0};
     XgGlobalEvidence materialized = {0};
@@ -405,16 +675,61 @@ TEST(cache_payload_parse_rejects_request_drift) {
     xg_global_evidence_free(&ev);
 }
 
-TEST(cache_payload_materialize_rejects_global_count_only_payload) {
+TEST(cache_payload_materializes_global_evidence) {
     XgGlobalEvidence ev = {0};
     XgGlobalEvidence materialized = {0};
+    XgEvidenceCacheKey expected;
+    XgEvidenceCacheKey materialized_key;
     char *payload;
 
+    ev.key.module_id = 7;
+    ev.key.source_hash = UINT64_C(0x10101010);
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    ev.key.compiler_semver_hash = UINT64_C(0x1111);
+    ev.key.profile_hash = UINT64_C(0x2222);
+    ev.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_semantic_summary(&ev);
     add_sample_body_summary(&ev);
+    add_sample_global_extra_summary(&ev);
+
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
-    ASSERT(!xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_NOT_NULL(strstr(payload, "payload-global v1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v1 generic_body_uses=1"));
+    expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    materialized_key =
+        xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.ndecls, 2);
+    ASSERT_EQ_UINT(materialized.nclasses, 1);
+    ASSERT_EQ_UINT(materialized.nbodies, 1);
+    ASSERT_EQ_UINT(materialized.ngeneric_body_uses, 1);
+    ASSERT_EQ_UINT(materialized.ngeneric_storages, 1);
+    ASSERT_EQ_UINT(materialized.ngeneric_code_sizes, 1);
+    ASSERT_EQ_UINT(materialized.nsequence_accesses, 1);
+    ASSERT_EQ_UINT(materialized.ncapacity_ops, 1);
+    ASSERT_EQ_UINT(materialized.nbulk_ops, 1);
+    ASSERT_EQ_UINT(materialized.nencoding_ops, 1);
+    ASSERT_EQ_UINT(materialized.njson_shapes, 1);
+    ASSERT_EQ_UINT(materialized.njson_fields, 1);
+    ASSERT_EQ_UINT(materialized.njson_accesses, 1);
+    ASSERT_EQ_UINT(materialized.njson_codecs, 1);
+    ASSERT_EQ_UINT(materialized.nrecord_shapes, 1);
+    ASSERT_EQ_UINT(materialized.nrecord_fields, 1);
+    ASSERT_EQ_UINT(materialized.nrecord_accesses, 1);
+    ASSERT_EQ_UINT(materialized.nrecord_merges, 1);
+    ASSERT_EQ_UINT(materialized.noptions_bags, 1);
+    ASSERT_EQ_UINT(materialized.nmap_shapes, 1);
+    ASSERT_EQ_UINT(materialized.nmap_entries, 1);
+    ASSERT_EQ_UINT(materialized.nkey_accesses, 1);
+    ASSERT_EQ_UINT(materialized.nhash_eqs, 1);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].use_id, 91);
+    ASSERT_EQ_UINT(materialized.json_shapes[0].json_shape_id, 101);
+    ASSERT_EQ_UINT(materialized.record_merges[0].merge_id, 204);
+    ASSERT_EQ_UINT(materialized.key_accesses[0].access_id, 303);
 
+    xg_global_evidence_free(&materialized);
     xr_free(payload);
     xg_global_evidence_free(&ev);
 }
@@ -428,6 +743,6 @@ RUN_TEST(cache_payload_materializes_semantic_graph_summary);
 RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_parse_rejects_request_drift);
-RUN_TEST(cache_payload_materialize_rejects_global_count_only_payload);
+RUN_TEST(cache_payload_materializes_global_evidence);
 
 TEST_MAIN_END()

@@ -3293,37 +3293,217 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
     }
 }
 
-static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidence) {
+static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-count decls=%u classes=%u class_fields=%u methods=%u impls=%u extends=%u "
-            "interface_methods=%u interface_object_uses=%u bodies=%u callsites=%u link_deps=%u "
-            "generic_insts=%u "
-            "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u seq=%u capacity=%u "
-            "bulk=%u encoding=%u derives=%u derived_fields=%u derived_methods=%u json_shapes=%u "
-            "json_fields=%u json_accesses=%u json_codecs=%u record_shapes=%u record_fields=%u "
+            "payload-extra v1 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
+            "seq=%u capacity=%u bulk=%u encoding=%u json_shapes=%u json_fields=%u "
+            "json_accesses=%u json_codecs=%u record_shapes=%u record_fields=%u "
             "record_accesses=%u record_merges=%u options=%u map_shapes=%u map_entries=%u "
-            "key_accesses=%u "
-            "hash_eqs=%u global_hash=%016" PRIx64 "\n",
-            evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
-            evidence ? evidence->nclass_fields : 0, evidence ? evidence->nmethods : 0,
-            evidence ? evidence->ninterface_impls : 0, evidence ? evidence->ninterface_extends : 0,
-            evidence ? evidence->ninterface_methods : 0,
-            evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->nbodies : 0,
-            evidence ? evidence->ncallsites : 0, evidence ? evidence->nlink_deps : 0,
-            evidence ? evidence->ngeneric_insts : 0, evidence ? evidence->ngeneric_body_uses : 0,
-            evidence ? evidence->ngeneric_storages : 0,
+            "key_accesses=%u hash_eqs=%u\n",
+            evidence ? evidence->ngeneric_body_uses : 0, evidence ? evidence->ngeneric_storages : 0,
             evidence ? evidence->ngeneric_code_sizes : 0,
             evidence ? evidence->nsequence_accesses : 0, evidence ? evidence->ncapacity_ops : 0,
             evidence ? evidence->nbulk_ops : 0, evidence ? evidence->nencoding_ops : 0,
-            evidence ? evidence->nderives : 0, evidence ? evidence->nderived_fields : 0,
-            evidence ? evidence->nderived_methods : 0, evidence ? evidence->njson_shapes : 0,
-            evidence ? evidence->njson_fields : 0, evidence ? evidence->njson_accesses : 0,
-            evidence ? evidence->njson_codecs : 0, evidence ? evidence->nrecord_shapes : 0,
-            evidence ? evidence->nrecord_fields : 0, evidence ? evidence->nrecord_accesses : 0,
-            evidence ? evidence->nrecord_merges : 0, evidence ? evidence->noptions_bags : 0,
-            evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
-            evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0,
+            evidence ? evidence->njson_shapes : 0, evidence ? evidence->njson_fields : 0,
+            evidence ? evidence->njson_accesses : 0, evidence ? evidence->njson_codecs : 0,
+            evidence ? evidence->nrecord_shapes : 0, evidence ? evidence->nrecord_fields : 0,
+            evidence ? evidence->nrecord_accesses : 0, evidence ? evidence->nrecord_merges : 0,
+            evidence ? evidence->noptions_bags : 0, evidence ? evidence->nmap_shapes : 0,
+            evidence ? evidence->nmap_entries : 0, evidence ? evidence->nkey_accesses : 0,
+            evidence ? evidence->nhash_eqs : 0);
+    if (!evidence)
+        return;
+    for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
+        const XgGenericBodyUseSummary *u = &evidence->generic_body_uses[i];
+        fprintf(out,
+                "generic-body-use id=%u inst=%u module=%u owner=%u origin_body=%u "
+                "specialized_body=%u root=%u type=%u args=%u+%u size=%u flags=0x%x "
+                "hash=%016" PRIx64 "\n",
+                u->use_id, u->generic_inst_id, u->module_id, u->owner_func_id,
+                u->origin_body_func_id, u->specialized_body_func_id, u->root_callsite_id,
+                u->type_key, u->type_arg_key_start, (unsigned) u->type_arg_count,
+                u->estimated_body_size, u->flags, u->body_use_hash);
+    }
+    for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
+        const XgGenericStorageSummary *s = &evidence->generic_storages[i];
+        fprintf(out,
+                "generic-storage id=%u inst=%u module=%u kind=%u origin_type=%u "
+                "specialized_type=%u elem_type=%u key_type=%u value_type=%u container_plan=%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                s->storage_id, s->generic_inst_id, s->module_id, (unsigned) s->storage_kind,
+                s->origin_type_key, s->specialized_type_key, s->elem_type_key, s->key_type_key,
+                s->value_type_key, s->container_plan_id, s->flags, s->storage_hash);
+    }
+    for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++) {
+        const XgGenericCodeSizeSummary *s = &evidence->generic_code_sizes[i];
+        fprintf(out,
+                "generic-code-size id=%u inst=%u module=%u body_use=%u origin=%u specialized=%u "
+                "count=%u threshold=%u flags=0x%x\n",
+                s->code_size_id, s->generic_inst_id, s->module_id, s->body_use_id,
+                s->origin_body_size_estimate, s->specialized_body_size_estimate,
+                s->instantiation_count, s->threshold, s->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nsequence_accesses; i++) {
+        const XgSequenceAccessSummary *s = &evidence->sequence_accesses[i];
+        fprintf(out,
+                "sequence-access id=%u owner=%u span=%u ordinal=%u kind=%u access=%u "
+                "receiver_type=%u elem_type=%u index=%u length=%u flags=0x%x\n",
+                s->access_id, s->owner_func_id, s->source_span_id, s->body_ordinal,
+                (unsigned) s->sequence_kind, (unsigned) s->access_kind, s->receiver_type_key,
+                s->elem_type_key, s->index_expr_id, s->length_expr_id, s->flags);
+    }
+    for (uint32_t i = 0; i < evidence->ncapacity_ops; i++) {
+        const XgCapacityOpSummary *c = &evidence->capacity_ops[i];
+        fprintf(out,
+                "capacity-op id=%u owner=%u span=%u ordinal=%u kind=%u op=%u receiver_type=%u "
+                "elem_type=%u count=%u loop=%u flags=0x%x\n",
+                c->op_id, c->owner_func_id, c->source_span_id, c->body_ordinal,
+                (unsigned) c->sequence_kind, (unsigned) c->op_kind, c->receiver_type_key,
+                c->elem_type_key, c->count_expr_id, c->loop_id, c->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nbulk_ops; i++) {
+        const XgBulkOpSummary *b = &evidence->bulk_ops[i];
+        fprintf(out,
+                "bulk-op id=%u owner=%u span=%u ordinal=%u op=%u elem_type=%u src_type=%u "
+                "dst_type=%u length=%u flags=0x%x\n",
+                b->op_id, b->owner_func_id, b->source_span_id, b->body_ordinal,
+                (unsigned) b->op_kind, b->elem_type_key, b->src_type_key, b->dst_type_key,
+                b->length_expr_id, b->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nencoding_ops; i++) {
+        const XgEncodingOpSummary *e = &evidence->encoding_ops[i];
+        fprintf(out,
+                "encoding-op id=%u owner=%u span=%u ordinal=%u op=%u input_type=%u "
+                "output_type=%u flags=0x%x\n",
+                e->op_id, e->owner_func_id, e->source_span_id, e->body_ordinal,
+                (unsigned) e->op_kind, e->input_type_key, e->output_type_key, e->flags);
+    }
+    for (uint32_t i = 0; i < evidence->njson_shapes; i++) {
+        const XgJsonShapeSummary *s = &evidence->json_shapes[i];
+        fprintf(out,
+                "json-shape id=%u module=%u func=%u type=%u kind=%u span=%u fields=%u+%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                s->json_shape_id, s->module_id, s->owner_func_id, s->type_key,
+                (unsigned) s->shape_kind, s->source_span_id, s->field_name_start,
+                (unsigned) s->field_count, s->flags, s->shape_hash);
+    }
+    for (uint32_t i = 0; i < evidence->njson_fields; i++) {
+        const XgJsonFieldSummary *f = &evidence->json_fields[i];
+        fprintf(out, "json-field id=%u shape=%u ordinal=%u name=%u type=%u flags=0x%x\n",
+                f->field_id, f->shape_id, (unsigned) f->field_ordinal, f->name_id, f->type_key,
+                f->flags);
+    }
+    for (uint32_t i = 0; i < evidence->njson_accesses; i++) {
+        const XgJsonAccessSummary *a = &evidence->json_accesses[i];
+        fprintf(out,
+                "json-access id=%u module=%u func=%u shape=%u kind=%u span=%u key=%u "
+                "result_type=%u field=%u flags=0x%x\n",
+                a->json_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
+                (unsigned) a->access_kind, a->source_span_id, a->key_name_id, a->result_type_key,
+                (unsigned) a->field_ordinal, a->flags);
+    }
+    for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
+        const XgJsonCodecSummary *c = &evidence->json_codecs[i];
+        fprintf(out,
+                "json-codec id=%u module=%u func=%u kind=%u span=%u input_type=%u "
+                "target_type=%u input_shape=%u output_shape=%u fields=%u flags=0x%x\n",
+                c->codec_id, c->module_id, c->owner_func_id, (unsigned) c->codec_kind,
+                c->source_span_id, c->input_type_key, c->target_type_key, c->input_shape_id,
+                c->output_shape_id, (unsigned) c->field_count, c->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
+        const XgRecordShapeSummary *s = &evidence->record_shapes[i];
+        fprintf(out,
+                "record-shape id=%u module=%u func=%u type=%u kind=%u span=%u fields=%u+%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                s->record_shape_id, s->module_id, s->owner_func_id, s->type_key,
+                (unsigned) s->shape_kind, s->source_span_id, s->field_name_start,
+                (unsigned) s->field_count, s->flags, s->shape_hash);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_fields; i++) {
+        const XgRecordFieldSummary *f = &evidence->record_fields[i];
+        fprintf(out,
+                "record-field id=%u shape=%u ordinal=%u name=%u type=%u default=%u flags=0x%x\n",
+                f->field_id, f->shape_id, (unsigned) f->field_ordinal, f->name_id, f->type_key,
+                f->default_value_id, f->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_accesses; i++) {
+        const XgRecordAccessSummary *a = &evidence->record_accesses[i];
+        fprintf(out,
+                "record-access id=%u module=%u func=%u shape=%u kind=%u span=%u field_name=%u "
+                "result_type=%u field=%u flags=0x%x\n",
+                a->record_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
+                (unsigned) a->access_kind, a->source_span_id, a->field_name_id, a->result_type_key,
+                (unsigned) a->field_ordinal, a->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nrecord_merges; i++) {
+        const XgRecordMergeSummary *m = &evidence->record_merges[i];
+        fprintf(out,
+                "record-merge id=%u module=%u func=%u span=%u base_shape=%u patch_shape=%u "
+                "result_shape=%u base_fields=%u patch_fields=%u result_fields=%u overwrites=%u "
+                "copy_table=%u flags=0x%x hash=%016" PRIx64 "\n",
+                m->merge_id, m->module_id, m->owner_func_id, m->source_span_id, m->base_shape_id,
+                m->patch_shape_id, m->result_shape_id, (unsigned) m->base_field_count,
+                (unsigned) m->patch_field_count, (unsigned) m->result_field_count,
+                (unsigned) m->overwrite_count, m->copy_table_id, m->flags, m->merge_hash);
+    }
+    for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
+        const XgOptionsBagSummary *o = &evidence->options_bags[i];
+        fprintf(out,
+                "options-bag id=%u module=%u func=%u callsite=%u param_shape=%u "
+                "supplied_shape=%u action=%u span=%u supplied_mask=%u default_mask=%u "
+                "required_mask=%u supplied=%u defaults=%u required=%u flags=0x%x\n",
+                o->options_id, o->module_id, o->owner_func_id, o->callsite_id, o->param_shape_id,
+                o->supplied_shape_id, (unsigned) o->action, o->source_span_id,
+                o->supplied_field_mask_id, o->default_field_mask_id, o->required_field_mask_id,
+                (unsigned) o->supplied_count, (unsigned) o->default_count,
+                (unsigned) o->required_count, o->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nmap_shapes; i++) {
+        const XgMapShapeSummary *s = &evidence->map_shapes[i];
+        fprintf(out,
+                "map-shape id=%u module=%u func=%u container=%u source=%u span=%u key_type=%u "
+                "value_type=%u entries=%u+%u literal_count=%u flags=0x%x hash=%016" PRIx64 "\n",
+                s->shape_id, s->module_id, s->owner_func_id, (unsigned) s->container_kind,
+                (unsigned) s->source, s->source_span_id, s->key_type_key, s->value_type_key,
+                s->entry_start, (unsigned) s->entry_count, s->literal_count, s->flags,
+                s->shape_hash);
+    }
+    for (uint32_t i = 0; i < evidence->nmap_entries; i++) {
+        const XgMapEntrySummary *e = &evidence->map_entries[i];
+        fprintf(out,
+                "map-entry id=%u shape=%u ordinal=%u key_const=%u value_const=%u key_i64=%" PRId64
+                " prehash=%016" PRIx64 " flags=0x%x\n",
+                e->entry_id, e->shape_id, e->entry_ordinal, e->key_const_id, e->value_const_id,
+                e->key_i64, e->prehash, e->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nkey_accesses; i++) {
+        const XgKeyAccessSummary *a = &evidence->key_accesses[i];
+        fprintf(out,
+                "key-access id=%u func=%u span=%u ordinal=%u container=%u op=%u shape=%u "
+                "receiver_type=%u key_type=%u value_type=%u key_const=%u prehash=%016" PRIx64
+                " flags=0x%x\n",
+                a->access_id, a->owner_func_id, a->source_span_id, a->body_ordinal,
+                (unsigned) a->container_kind, (unsigned) a->op, a->receiver_shape_id,
+                a->receiver_type_key, a->key_type_key, a->value_type_key, a->key_const_id,
+                a->key_prehash, a->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nhash_eqs; i++) {
+        const XgHashEqSummary *h = &evidence->hash_eqs[i];
+        fprintf(out,
+                "hash-eq id=%u type=%u kind=%u eq_derive=%u hash_derive=%u eq_func=%u "
+                "hash_func=%u flags=0x%x\n",
+                h->hash_eq_id, h->type_key, (unsigned) h->kind, h->eq_derive_id, h->hash_derive_id,
+                h->eq_func_id, h->hash_func_id, h->flags);
+    }
+}
+
+static void dump_cache_payload_global(FILE *out, const XgGlobalEvidence *evidence) {
+    fprintf(out, "payload-global v1 global_hash=%016" PRIx64 "\n",
             evidence ? xg_global_evidence_hash(evidence) : 0);
+    dump_cache_payload_semantic(out, evidence);
+    dump_cache_payload_body(out, evidence);
+    dump_cache_payload_global_extra(out, evidence);
 }
 
 static void dump_cache_payload_body_for_phase(FILE *out, const XgGlobalEvidence *evidence,
@@ -3501,8 +3681,7 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
     return true;
 }
 
-static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evidence) {
-    const char *cursor = body;
+static bool materialize_payload_semantic_cursor(const char **cursor, XgGlobalEvidence *evidence) {
     char line[1024];
     uint32_t decl_count = 0;
     uint32_t class_count = 0;
@@ -3516,7 +3695,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     uint32_t derived_method_count = 0;
     uint32_t parsed_decl_count = 0;
     char trailing = '\0';
-    if (!body || !evidence || !evidence_cache_next_line(&cursor, line, sizeof(line)))
+    if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
                "payload-count decls=%" SCNu32 " classes=%" SCNu32 " class_fields=%" SCNu32
@@ -3527,7 +3706,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
                &extends_count, &interface_method_count, &derive_count, &derived_field_count,
                &derived_method_count, &trailing) != 10)
         return false;
-    if (!materialize_payload_declarations(&cursor, evidence, &parsed_decl_count) ||
+    if (!materialize_payload_declarations(cursor, evidence, &parsed_decl_count) ||
         parsed_decl_count != decl_count)
         return false;
     if (!xg_global_evidence_reserve_classes(evidence, class_count) ||
@@ -3545,7 +3724,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         uint32_t type_arg_count = 0;
         uint32_t decl_kind = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3570,7 +3749,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         uint32_t semantic_kind = 0;
         uint32_t native_width = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3597,7 +3776,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     for (uint32_t i = 0; i < method_count; i++) {
         XgMethodSummary row;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3614,7 +3793,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     for (uint32_t i = 0; i < impl_count; i++) {
         XgInterfaceImplSummary row;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3629,7 +3808,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     for (uint32_t i = 0; i < extends_count; i++) {
         XgInterfaceExtendsSummary row;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3644,7 +3823,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
     for (uint32_t i = 0; i < interface_method_count; i++) {
         XgInterfaceMethodSummary row;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3663,7 +3842,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         uint32_t field_count = 0;
         uint32_t method_count_row = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3684,7 +3863,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         XgDerivedFieldSummary row;
         uint32_t field_ordinal = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3701,7 +3880,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         XgDerivedMethodSummary row;
         uint32_t method_kind = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3714,11 +3893,15 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
         if (!xg_global_evidence_add_derived_method(evidence, &row))
             return false;
     }
-    return *cursor == '\0';
+    return true;
 }
 
-static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidence) {
+static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evidence) {
     const char *cursor = body;
+    return materialize_payload_semantic_cursor(&cursor, evidence) && *cursor == '\0';
+}
+
+static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidence *evidence) {
     char line[1024];
     uint32_t body_count = 0;
     uint32_t callsite_count = 0;
@@ -3726,7 +3909,7 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
     uint32_t link_dep_count = 0;
     uint32_t generic_inst_count = 0;
     char trailing = '\0';
-    if (!body || !evidence || !evidence_cache_next_line(&cursor, line, sizeof(line)))
+    if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
                "payload-count bodies=%" SCNu32 " callsites=%" SCNu32
@@ -3745,7 +3928,7 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
         XgBodySummary row;
         uint32_t kind = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3769,7 +3952,7 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
         uint32_t kind = 0;
         uint32_t arg_count = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3791,7 +3974,7 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
     for (uint32_t i = 0; i < interface_object_use_count; i++) {
         XgInterfaceObjectUseSummary row;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3809,7 +3992,7 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
         uint32_t kind = 0;
         char name[XG_LINK_DEP_NAME_MAX];
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         memset(name, 0, sizeof(name));
@@ -3829,7 +4012,7 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
         uint32_t type_arg_count = 0;
         uint32_t kind = 0;
         trailing = '\0';
-        if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
@@ -3849,7 +4032,513 @@ static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidenc
         if (!xg_global_evidence_add_generic_inst(evidence, &row))
             return false;
     }
-    return *cursor == '\0';
+    return true;
+}
+
+static bool materialize_payload_body(const char *body, XgGlobalEvidence *evidence) {
+    const char *cursor = body;
+    return materialize_payload_body_cursor(&cursor, evidence) && *cursor == '\0';
+}
+
+static bool materialize_payload_global_extra(const char **cursor, XgGlobalEvidence *evidence) {
+    char line[1024];
+    uint32_t generic_body_use_count = 0;
+    uint32_t generic_storage_count = 0;
+    uint32_t generic_code_size_count = 0;
+    uint32_t sequence_access_count = 0;
+    uint32_t capacity_op_count = 0;
+    uint32_t bulk_op_count = 0;
+    uint32_t encoding_op_count = 0;
+    uint32_t json_shape_count = 0;
+    uint32_t json_field_count = 0;
+    uint32_t json_access_count = 0;
+    uint32_t json_codec_count = 0;
+    uint32_t record_shape_count = 0;
+    uint32_t record_field_count = 0;
+    uint32_t record_access_count = 0;
+    uint32_t record_merge_count = 0;
+    uint32_t options_bag_count = 0;
+    uint32_t map_shape_count = 0;
+    uint32_t map_entry_count = 0;
+    uint32_t key_access_count = 0;
+    uint32_t hash_eq_count = 0;
+    char trailing = '\0';
+
+    if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
+        return false;
+    if (sscanf(line,
+               "payload-extra v1 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
+               " generic_code_sizes=%" SCNu32 " seq=%" SCNu32 " capacity=%" SCNu32 " bulk=%" SCNu32
+               " encoding=%" SCNu32 " json_shapes=%" SCNu32 " json_fields=%" SCNu32
+               " json_accesses=%" SCNu32 " json_codecs=%" SCNu32 " record_shapes=%" SCNu32
+               " record_fields=%" SCNu32 " record_accesses=%" SCNu32 " record_merges=%" SCNu32
+               " options=%" SCNu32 " map_shapes=%" SCNu32 " map_entries=%" SCNu32
+               " key_accesses=%" SCNu32 " hash_eqs=%" SCNu32 " %c",
+               &generic_body_use_count, &generic_storage_count, &generic_code_size_count,
+               &sequence_access_count, &capacity_op_count, &bulk_op_count, &encoding_op_count,
+               &json_shape_count, &json_field_count, &json_access_count, &json_codec_count,
+               &record_shape_count, &record_field_count, &record_access_count, &record_merge_count,
+               &options_bag_count, &map_shape_count, &map_entry_count, &key_access_count,
+               &hash_eq_count, &trailing) != 20)
+        return false;
+
+    if (!xg_global_evidence_reserve_generic_body_uses(evidence, generic_body_use_count) ||
+        !xg_global_evidence_reserve_generic_storages(evidence, generic_storage_count) ||
+        !xg_global_evidence_reserve_generic_code_sizes(evidence, generic_code_size_count) ||
+        !xg_global_evidence_reserve_sequence_accesses(evidence, sequence_access_count) ||
+        !xg_global_evidence_reserve_capacity_ops(evidence, capacity_op_count) ||
+        !xg_global_evidence_reserve_bulk_ops(evidence, bulk_op_count) ||
+        !xg_global_evidence_reserve_encoding_ops(evidence, encoding_op_count) ||
+        !xg_global_evidence_reserve_json_shapes(evidence, json_shape_count) ||
+        !xg_global_evidence_reserve_json_fields(evidence, json_field_count) ||
+        !xg_global_evidence_reserve_json_accesses(evidence, json_access_count) ||
+        !xg_global_evidence_reserve_json_codecs(evidence, json_codec_count) ||
+        !xg_global_evidence_reserve_record_shapes(evidence, record_shape_count) ||
+        !xg_global_evidence_reserve_record_fields(evidence, record_field_count) ||
+        !xg_global_evidence_reserve_record_accesses(evidence, record_access_count) ||
+        !xg_global_evidence_reserve_record_merges(evidence, record_merge_count) ||
+        !xg_global_evidence_reserve_options_bags(evidence, options_bag_count) ||
+        !xg_global_evidence_reserve_map_shapes(evidence, map_shape_count) ||
+        !xg_global_evidence_reserve_map_entries(evidence, map_entry_count) ||
+        !xg_global_evidence_reserve_key_accesses(evidence, key_access_count) ||
+        !xg_global_evidence_reserve_hash_eqs(evidence, hash_eq_count))
+        return false;
+
+    for (uint32_t i = 0; i < generic_body_use_count; i++) {
+        XgGenericBodyUseSummary row;
+        uint32_t type_arg_count = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "generic-body-use id=%" SCNu32 " inst=%" SCNu32 " module=%" SCNu32
+                   " owner=%" SCNu32 " origin_body=%" SCNu32 " specialized_body=%" SCNu32
+                   " root=%" SCNu32 " type=%" SCNu32 " args=%" SCNu32 "+%" SCNu32 " size=%" SCNu32
+                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.use_id, &row.generic_inst_id, &row.module_id, &row.owner_func_id,
+                   &row.origin_body_func_id, &row.specialized_body_func_id, &row.root_callsite_id,
+                   &row.type_key, &row.type_arg_key_start, &type_arg_count,
+                   &row.estimated_body_size, &row.flags, &row.body_use_hash, &trailing) != 13)
+            return false;
+        row.type_arg_count = (uint16_t) type_arg_count;
+        if (!xg_global_evidence_add_generic_body_use(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < generic_storage_count; i++) {
+        XgGenericStorageSummary row;
+        uint32_t storage_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "generic-storage id=%" SCNu32 " inst=%" SCNu32 " module=%" SCNu32
+                   " kind=%" SCNu32 " origin_type=%" SCNu32 " specialized_type=%" SCNu32
+                   " elem_type=%" SCNu32 " key_type=%" SCNu32 " value_type=%" SCNu32
+                   " container_plan=%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.storage_id, &row.generic_inst_id, &row.module_id, &storage_kind,
+                   &row.origin_type_key, &row.specialized_type_key, &row.elem_type_key,
+                   &row.key_type_key, &row.value_type_key, &row.container_plan_id, &row.flags,
+                   &row.storage_hash, &trailing) != 12)
+            return false;
+        row.storage_kind = (uint8_t) storage_kind;
+        if (!xg_global_evidence_add_generic_storage(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < generic_code_size_count; i++) {
+        XgGenericCodeSizeSummary row;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "generic-code-size id=%" SCNu32 " inst=%" SCNu32 " module=%" SCNu32
+                   " body_use=%" SCNu32 " origin=%" SCNu32 " specialized=%" SCNu32 " count=%" SCNu32
+                   " threshold=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.code_size_id, &row.generic_inst_id, &row.module_id, &row.body_use_id,
+                   &row.origin_body_size_estimate, &row.specialized_body_size_estimate,
+                   &row.instantiation_count, &row.threshold, &row.flags, &trailing) != 9)
+            return false;
+        if (!xg_global_evidence_add_generic_code_size(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < sequence_access_count; i++) {
+        XgSequenceAccessSummary row;
+        uint32_t sequence_kind = 0;
+        uint32_t access_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "sequence-access id=%" SCNu32 " owner=%" SCNu32 " span=%" SCNu32
+                   " ordinal=%" SCNu32 " kind=%" SCNu32 " access=%" SCNu32 " receiver_type=%" SCNu32
+                   " elem_type=%" SCNu32 " index=%" SCNu32 " length=%" SCNu32 " flags=0x%" SCNx32
+                   " %c",
+                   &row.access_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal,
+                   &sequence_kind, &access_kind, &row.receiver_type_key, &row.elem_type_key,
+                   &row.index_expr_id, &row.length_expr_id, &row.flags, &trailing) != 11)
+            return false;
+        row.sequence_kind = (uint8_t) sequence_kind;
+        row.access_kind = (uint8_t) access_kind;
+        if (!xg_global_evidence_add_sequence_access(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < capacity_op_count; i++) {
+        XgCapacityOpSummary row;
+        uint32_t sequence_kind = 0;
+        uint32_t op_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "capacity-op id=%" SCNu32 " owner=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32
+                   " kind=%" SCNu32 " op=%" SCNu32 " receiver_type=%" SCNu32 " elem_type=%" SCNu32
+                   " count=%" SCNu32 " loop=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.op_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal,
+                   &sequence_kind, &op_kind, &row.receiver_type_key, &row.elem_type_key,
+                   &row.count_expr_id, &row.loop_id, &row.flags, &trailing) != 11)
+            return false;
+        row.sequence_kind = (uint8_t) sequence_kind;
+        row.op_kind = (uint8_t) op_kind;
+        if (!xg_global_evidence_add_capacity_op(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < bulk_op_count; i++) {
+        XgBulkOpSummary row;
+        uint32_t op_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "bulk-op id=%" SCNu32 " owner=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32
+                   " op=%" SCNu32 " elem_type=%" SCNu32 " src_type=%" SCNu32 " dst_type=%" SCNu32
+                   " length=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.op_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal, &op_kind,
+                   &row.elem_type_key, &row.src_type_key, &row.dst_type_key, &row.length_expr_id,
+                   &row.flags, &trailing) != 10)
+            return false;
+        row.op_kind = (uint8_t) op_kind;
+        if (!xg_global_evidence_add_bulk_op(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < encoding_op_count; i++) {
+        XgEncodingOpSummary row;
+        uint32_t op_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "encoding-op id=%" SCNu32 " owner=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32
+                   " op=%" SCNu32 " input_type=%" SCNu32 " output_type=%" SCNu32 " flags=0x%" SCNx32
+                   " %c",
+                   &row.op_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal, &op_kind,
+                   &row.input_type_key, &row.output_type_key, &row.flags, &trailing) != 8)
+            return false;
+        row.op_kind = (uint8_t) op_kind;
+        if (!xg_global_evidence_add_encoding_op(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < json_shape_count; i++) {
+        XgJsonShapeSummary row;
+        uint32_t field_count = 0;
+        uint32_t shape_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "json-shape id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " type=%" SCNu32
+                   " kind=%" SCNu32 " span=%" SCNu32 " fields=%" SCNu32 "+%" SCNu32
+                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.json_shape_id, &row.module_id, &row.owner_func_id, &row.type_key,
+                   &shape_kind, &row.source_span_id, &row.field_name_start, &field_count,
+                   &row.flags, &row.shape_hash, &trailing) != 10)
+            return false;
+        row.shape_kind = (uint8_t) shape_kind;
+        row.field_count = (uint16_t) field_count;
+        if (!xg_global_evidence_add_json_shape(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < json_field_count; i++) {
+        XgJsonFieldSummary row;
+        uint32_t field_ordinal = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "json-field id=%" SCNu32 " shape=%" SCNu32 " ordinal=%" SCNu32 " name=%" SCNu32
+                   " type=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.field_id, &row.shape_id, &field_ordinal, &row.name_id, &row.type_key,
+                   &row.flags, &trailing) != 6)
+            return false;
+        row.field_ordinal = (uint16_t) field_ordinal;
+        if (!xg_global_evidence_add_json_field(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < json_access_count; i++) {
+        XgJsonAccessSummary row;
+        uint32_t access_kind = 0;
+        uint32_t field_ordinal = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "json-access id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " shape=%" SCNu32
+                   " kind=%" SCNu32 " span=%" SCNu32 " key=%" SCNu32 " result_type=%" SCNu32
+                   " field=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.json_access_id, &row.module_id, &row.owner_func_id, &row.receiver_shape_id,
+                   &access_kind, &row.source_span_id, &row.key_name_id, &row.result_type_key,
+                   &field_ordinal, &row.flags, &trailing) != 10)
+            return false;
+        row.access_kind = (uint8_t) access_kind;
+        row.field_ordinal = (uint16_t) field_ordinal;
+        if (!xg_global_evidence_add_json_access(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < json_codec_count; i++) {
+        XgJsonCodecSummary row;
+        uint32_t codec_kind = 0;
+        uint32_t field_count = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "json-codec id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " kind=%" SCNu32
+                   " span=%" SCNu32 " input_type=%" SCNu32 " target_type=%" SCNu32
+                   " input_shape=%" SCNu32 " output_shape=%" SCNu32 " fields=%" SCNu32
+                   " flags=0x%" SCNx32 " %c",
+                   &row.codec_id, &row.module_id, &row.owner_func_id, &codec_kind,
+                   &row.source_span_id, &row.input_type_key, &row.target_type_key,
+                   &row.input_shape_id, &row.output_shape_id, &field_count, &row.flags,
+                   &trailing) != 11)
+            return false;
+        row.codec_kind = (uint8_t) codec_kind;
+        row.field_count = (uint16_t) field_count;
+        if (!xg_global_evidence_add_json_codec(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < record_shape_count; i++) {
+        XgRecordShapeSummary row;
+        uint32_t field_count = 0;
+        uint32_t shape_kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "record-shape id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " type=%" SCNu32
+                   " kind=%" SCNu32 " span=%" SCNu32 " fields=%" SCNu32 "+%" SCNu32
+                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.record_shape_id, &row.module_id, &row.owner_func_id, &row.type_key,
+                   &shape_kind, &row.source_span_id, &row.field_name_start, &field_count,
+                   &row.flags, &row.shape_hash, &trailing) != 10)
+            return false;
+        row.shape_kind = (uint8_t) shape_kind;
+        row.field_count = (uint16_t) field_count;
+        if (!xg_global_evidence_add_record_shape(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < record_field_count; i++) {
+        XgRecordFieldSummary row;
+        uint32_t field_ordinal = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "record-field id=%" SCNu32 " shape=%" SCNu32 " ordinal=%" SCNu32 " name=%" SCNu32
+                   " type=%" SCNu32 " default=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.field_id, &row.shape_id, &field_ordinal, &row.name_id, &row.type_key,
+                   &row.default_value_id, &row.flags, &trailing) != 7)
+            return false;
+        row.field_ordinal = (uint16_t) field_ordinal;
+        if (!xg_global_evidence_add_record_field(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < record_access_count; i++) {
+        XgRecordAccessSummary row;
+        uint32_t access_kind = 0;
+        uint32_t field_ordinal = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "record-access id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " shape=%" SCNu32
+                   " kind=%" SCNu32 " span=%" SCNu32 " field_name=%" SCNu32 " result_type=%" SCNu32
+                   " field=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.record_access_id, &row.module_id, &row.owner_func_id,
+                   &row.receiver_shape_id, &access_kind, &row.source_span_id, &row.field_name_id,
+                   &row.result_type_key, &field_ordinal, &row.flags, &trailing) != 10)
+            return false;
+        row.access_kind = (uint8_t) access_kind;
+        row.field_ordinal = (uint16_t) field_ordinal;
+        if (!xg_global_evidence_add_record_access(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < record_merge_count; i++) {
+        XgRecordMergeSummary row;
+        uint32_t base_field_count = 0;
+        uint32_t patch_field_count = 0;
+        uint32_t result_field_count = 0;
+        uint32_t overwrite_count = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "record-merge id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " span=%" SCNu32
+                   " base_shape=%" SCNu32 " patch_shape=%" SCNu32 " result_shape=%" SCNu32
+                   " base_fields=%" SCNu32 " patch_fields=%" SCNu32 " result_fields=%" SCNu32
+                   " overwrites=%" SCNu32 " copy_table=%" SCNu32 " flags=0x%" SCNx32
+                   " hash=%" SCNx64 " %c",
+                   &row.merge_id, &row.module_id, &row.owner_func_id, &row.source_span_id,
+                   &row.base_shape_id, &row.patch_shape_id, &row.result_shape_id, &base_field_count,
+                   &patch_field_count, &result_field_count, &overwrite_count, &row.copy_table_id,
+                   &row.flags, &row.merge_hash, &trailing) != 14)
+            return false;
+        row.base_field_count = (uint16_t) base_field_count;
+        row.patch_field_count = (uint16_t) patch_field_count;
+        row.result_field_count = (uint16_t) result_field_count;
+        row.overwrite_count = (uint16_t) overwrite_count;
+        if (!xg_global_evidence_add_record_merge(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < options_bag_count; i++) {
+        XgOptionsBagSummary row;
+        uint32_t action = 0;
+        uint32_t supplied_count = 0;
+        uint32_t default_count = 0;
+        uint32_t required_count = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "options-bag id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32
+                   " callsite=%" SCNu32 " param_shape=%" SCNu32 " supplied_shape=%" SCNu32
+                   " action=%" SCNu32 " span=%" SCNu32 " supplied_mask=%" SCNu32
+                   " default_mask=%" SCNu32 " required_mask=%" SCNu32 " supplied=%" SCNu32
+                   " defaults=%" SCNu32 " required=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.options_id, &row.module_id, &row.owner_func_id, &row.callsite_id,
+                   &row.param_shape_id, &row.supplied_shape_id, &action, &row.source_span_id,
+                   &row.supplied_field_mask_id, &row.default_field_mask_id,
+                   &row.required_field_mask_id, &supplied_count, &default_count, &required_count,
+                   &row.flags, &trailing) != 15)
+            return false;
+        row.action = (uint8_t) action;
+        row.supplied_count = (uint16_t) supplied_count;
+        row.default_count = (uint16_t) default_count;
+        row.required_count = (uint16_t) required_count;
+        if (!xg_global_evidence_add_options_bag(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < map_shape_count; i++) {
+        XgMapShapeSummary row;
+        uint32_t container_kind = 0;
+        uint32_t source = 0;
+        uint32_t entry_count = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "map-shape id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " container=%" SCNu32
+                   " source=%" SCNu32 " span=%" SCNu32 " key_type=%" SCNu32 " value_type=%" SCNu32
+                   " entries=%" SCNu32 "+%" SCNu32 " literal_count=%" SCNu32 " flags=0x%" SCNx32
+                   " hash=%" SCNx64 " %c",
+                   &row.shape_id, &row.module_id, &row.owner_func_id, &container_kind, &source,
+                   &row.source_span_id, &row.key_type_key, &row.value_type_key, &row.entry_start,
+                   &entry_count, &row.literal_count, &row.flags, &row.shape_hash, &trailing) != 13)
+            return false;
+        row.container_kind = (uint8_t) container_kind;
+        row.source = (uint8_t) source;
+        row.entry_count = (uint16_t) entry_count;
+        if (!xg_global_evidence_add_map_shape(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < map_entry_count; i++) {
+        XgMapEntrySummary row;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "map-entry id=%" SCNu32 " shape=%" SCNu32 " ordinal=%" SCNu32
+                   " key_const=%" SCNu32 " value_const=%" SCNu32 " key_i64=%" SCNd64
+                   " prehash=%" SCNx64 " flags=0x%" SCNx32 " %c",
+                   &row.entry_id, &row.shape_id, &row.entry_ordinal, &row.key_const_id,
+                   &row.value_const_id, &row.key_i64, &row.prehash, &row.flags, &trailing) != 8)
+            return false;
+        if (!xg_global_evidence_add_map_entry(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < key_access_count; i++) {
+        XgKeyAccessSummary row;
+        uint32_t container_kind = 0;
+        uint32_t op = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "key-access id=%" SCNu32 " func=%" SCNu32 " span=%" SCNu32 " ordinal=%" SCNu32
+                   " container=%" SCNu32 " op=%" SCNu32 " shape=%" SCNu32 " receiver_type=%" SCNu32
+                   " key_type=%" SCNu32 " value_type=%" SCNu32 " key_const=%" SCNu32
+                   " prehash=%" SCNx64 " flags=0x%" SCNx32 " %c",
+                   &row.access_id, &row.owner_func_id, &row.source_span_id, &row.body_ordinal,
+                   &container_kind, &op, &row.receiver_shape_id, &row.receiver_type_key,
+                   &row.key_type_key, &row.value_type_key, &row.key_const_id, &row.key_prehash,
+                   &row.flags, &trailing) != 13)
+            return false;
+        row.container_kind = (uint8_t) container_kind;
+        row.op = (uint8_t) op;
+        if (!xg_global_evidence_add_key_access(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < hash_eq_count; i++) {
+        XgHashEqSummary row;
+        uint32_t kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "hash-eq id=%" SCNu32 " type=%" SCNu32 " kind=%" SCNu32 " eq_derive=%" SCNu32
+                   " hash_derive=%" SCNu32 " eq_func=%" SCNu32 " hash_func=%" SCNu32
+                   " flags=0x%" SCNx32 " %c",
+                   &row.hash_eq_id, &row.type_key, &kind, &row.eq_derive_id, &row.hash_derive_id,
+                   &row.eq_func_id, &row.hash_func_id, &row.flags, &trailing) != 8)
+            return false;
+        row.kind = (uint8_t) kind;
+        if (!xg_global_evidence_add_hash_eq(evidence, &row))
+            return false;
+    }
+    return true;
+}
+
+static bool materialize_payload_global(const char *body, XgGlobalEvidence *evidence) {
+    const char *cursor = body;
+    char line[1024];
+    uint64_t global_hash = 0;
+    char trailing = '\0';
+    if (!body || !evidence || !evidence_cache_next_line(&cursor, line, sizeof(line)))
+        return false;
+    if (sscanf(line, "payload-global v1 global_hash=%" SCNx64 " %c", &global_hash, &trailing) != 1)
+        return false;
+    if (!materialize_payload_semantic_cursor(&cursor, evidence) ||
+        !materialize_payload_body_cursor(&cursor, evidence) ||
+        !materialize_payload_global_extra(&cursor, evidence) || *cursor != '\0')
+        return false;
+    return xg_global_evidence_hash(evidence) == global_hash;
 }
 
 XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
@@ -3860,8 +4549,6 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
     XgEvidenceCacheKey materialized_key;
     bool ok = false;
     if (!out_evidence || !xg_evidence_cache_payload_parse(text, &info))
-        return false;
-    if (info.phase == XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE)
         return false;
     memset(&key, 0, sizeof(key));
     key.module_id = info.key.module_id;
@@ -3882,6 +4569,9 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
             break;
         case XG_EVIDENCE_CACHE_BODY_SUMMARY:
             ok = materialize_payload_body(info.body, &evidence);
+            break;
+        case XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE:
+            ok = materialize_payload_global(info.body, &evidence);
             break;
         default:
             ok = false;
