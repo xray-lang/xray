@@ -30,6 +30,8 @@ record_json_bridge|covered|XG_JSON_SHAPE_RECORD_BRIDGE|tests/unit/analysis|Recor
 record_access_direct|covered|record-access-plan .*action=direct_field|tests/aot/filetests/cgen|Record field access consumes a verified direct-field plan.
 record_closure_capture_shape|covered|recordClosureCapturePlan|tests/aot/filetests/cgen|Record receivers captured by closures keep child-body shape evidence and direct-field generated C helpers.
 record_param_receiver_shape|covered|recordParamReceiverPlan|tests/aot/filetests/cgen|Record typed parameter receivers keep static shape evidence and direct-field generated C helpers.
+record_field_receiver_shape|covered|recordFieldReceiverPlan|tests/aot/filetests/cgen|Record typed class field receivers keep static shape evidence and direct-field generated C helpers.
+record_container_receiver_shape|covered|recordContainerReceiverPlan|tests/aot/filetests/cgen|Record receivers loaded from typed Array<Record> containers keep static shape evidence and direct-field generated C helpers.
 record_return_receiver_shape|covered|recordReturnReceiverPlan|tests/aot/filetests/cgen|Record direct function-call return receivers with a static return type shape keep direct-field evidence and generated C helpers.
 record_return_local_shape|covered|recordReturnLocalPlan|tests/aot/filetests/cgen|Record locals initialized from static return type shapes keep direct-field evidence and generated C helpers.
 record_spread_merge_plan|covered|record-merge-plan .*action=copy_with_overwrite|tests/aot/filetests|Record spread merge consumes an explicit copy/overwrite merge plan from shape evidence.
