@@ -1,0 +1,27 @@
+fn makeScores(value: int) -> Map<int, int> {
+    var scores: Map<int, int> = #{}
+    scores.set(1, value)
+    scores[2] = value
+    return scores
+}
+
+fn makeSeen(value: int) -> Set<int> {
+    var seen: Set<int> = #[]
+    seen.add(value)
+    return seen
+}
+
+fn mapSetReturnReceiverPlan(value: int) -> int {
+    var one = makeScores(value).get(1) ?? 0
+    var two = makeScores(value)[2]
+    var hasOne = makeScores(value).has(1)
+    var sawOne = makeSeen(1).has(1)
+    if (hasOne) {
+        if (sawOne) {
+            return one + two
+        }
+    }
+    return 0
+}
+
+print(mapSetReturnReceiverPlan(7))
