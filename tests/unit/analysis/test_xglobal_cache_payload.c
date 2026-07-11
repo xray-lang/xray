@@ -996,6 +996,105 @@ TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module) {
     xg_global_evidence_free(&package);
 }
 
+TEST(cache_payload_import_set_imports_multiple_payloads) {
+    XgGlobalEvidence package = {0};
+    XgGlobalEvidence second = {0};
+    XgGlobalEvidence target = {0};
+    XgEvidencePackageImportReport report;
+    char *payload = NULL;
+    char *second_payload = NULL;
+    const char *payloads[2];
+
+    package.key.module_id = 7;
+    package.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_semantic_summary(&package);
+    add_sample_body_summary(&package);
+    add_sample_global_extra_summary(&package);
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+
+    second.key = package.key;
+    add_sample_semantic_summary(&second);
+    add_sample_body_summary(&second);
+    add_sample_global_extra_summary(&second);
+    second.modules[0].name_id = xg_name_id("sample2");
+    second.modules[0].canonical_hash = UINT64_C(0xabc8);
+    second.modules[0].source_hash = UINT64_C(0xdef8);
+    second_payload =
+        xg_global_evidence_cache_payload_dump(&second, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(second_payload);
+
+    payloads[0] = payload;
+    payloads[1] = second_payload;
+    ASSERT(xg_global_evidence_import_package_payload_set(&target, payloads, 2, &report));
+    ASSERT_EQ_UINT(report.payloads_imported, 2);
+    ASSERT_EQ_UINT(report.modules_remapped, 2);
+    ASSERT_EQ_UINT(report.modules_added, 2);
+    ASSERT_EQ_UINT(report.rows_imported, 72);
+    ASSERT_EQ_UINT(target.nmodules, 2);
+    ASSERT_EQ_UINT(target.ndecls, 4);
+    ASSERT_EQ_UINT(target.nbodies, 2);
+
+    xr_free(payload);
+    xr_free(second_payload);
+    xg_global_evidence_free(&target);
+    xg_global_evidence_free(&package);
+    xg_global_evidence_free(&second);
+}
+
+TEST(cache_payload_import_set_is_atomic_on_conflict) {
+    XgGlobalEvidence package = {0};
+    XgGlobalEvidence second = {0};
+    XgGlobalEvidence target = {0};
+    XgModuleSummary existing_module = {0};
+    XgDeclSummary existing_decl = {0};
+    char *payload = NULL;
+    char *second_payload = NULL;
+    const char *payloads[2];
+
+    package.key.module_id = 7;
+    package.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_semantic_summary(&package);
+    add_sample_body_summary(&package);
+    add_sample_global_extra_summary(&package);
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+
+    second.key = package.key;
+    add_sample_semantic_summary(&second);
+    add_sample_body_summary(&second);
+    add_sample_global_extra_summary(&second);
+    second.modules[0].name_id = xg_name_id("sample2");
+    second.modules[0].canonical_hash = UINT64_C(0xabc8);
+    second.modules[0].source_hash = UINT64_C(0xdef8);
+    second_payload =
+        xg_global_evidence_cache_payload_dump(&second, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(second_payload);
+
+    existing_module = second.modules[0];
+    existing_module.module_id = 100;
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&target, &existing_module));
+    existing_decl.decl_id = 1;
+    existing_decl.module_id = existing_module.module_id;
+    existing_decl.kind = XG_DECL_FUNC;
+    existing_decl.name_id = xg_name_id("already_loaded");
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&target, &existing_decl));
+
+    payloads[0] = payload;
+    payloads[1] = second_payload;
+    ASSERT(!xg_global_evidence_import_package_payload_set(&target, payloads, 2, NULL));
+    ASSERT_EQ_UINT(target.nmodules, 1);
+    ASSERT_EQ_UINT(target.ndecls, 1);
+    ASSERT_EQ_UINT(target.modules[0].module_id, 100);
+    ASSERT_EQ_UINT(target.decls[0].decl_id, 1);
+
+    xr_free(payload);
+    xr_free(second_payload);
+    xg_global_evidence_free(&target);
+    xg_global_evidence_free(&package);
+    xg_global_evidence_free(&second);
+}
+
 TEST(imported_summary_hash_folds_valid_package_payloads) {
     XgGlobalEvidence package = {0};
     XgGlobalEvidence second = {0};
@@ -1130,6 +1229,8 @@ RUN_TEST(cache_payload_materializes_global_evidence);
 RUN_TEST(cache_payload_imports_package_with_id_remap);
 RUN_TEST(cache_payload_import_reuses_module_stub_without_duplicate_module);
 RUN_TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module);
+RUN_TEST(cache_payload_import_set_imports_multiple_payloads);
+RUN_TEST(cache_payload_import_set_is_atomic_on_conflict);
 RUN_TEST(imported_summary_hash_folds_valid_package_payloads);
 RUN_TEST(cache_payload_import_rejects_non_global_or_missing_module_identity);
 

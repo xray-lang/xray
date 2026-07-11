@@ -638,6 +638,7 @@ typedef struct XgEvidencePackageImportReport {
     uint32_t modules_remapped;
     uint32_t modules_added;
     uint32_t rows_imported;
+    uint32_t payloads_imported;
 } XgEvidencePackageImportReport;
 
 typedef enum XgModuleFlags {
@@ -1531,6 +1532,10 @@ XR_FUNC bool xg_imported_summary_hash_from_package_payloads(uint64_t seed,
 XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
                                                        const char *payload,
                                                        XgEvidencePackageImportReport *out_report);
+XR_FUNC bool
+xg_global_evidence_import_package_payload_set(XgGlobalEvidence *target, const char *const *payloads,
+                                              uint32_t payload_count,
+                                              XgEvidencePackageImportReport *out_report);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H

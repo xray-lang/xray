@@ -1368,6 +1368,72 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     memset(evidence, 0, sizeof(*evidence));
 }
 
+static bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEvidence *src) {
+    if (!out || !src)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->key = src->key;
+
+#define XG_CLONE_ARRAY(field, count_field, cap_field)                                              \
+    do {                                                                                           \
+        out->count_field = src->count_field;                                                       \
+        if (src->count_field > 0) {                                                                \
+            if (!src->field)                                                                       \
+                goto fail;                                                                         \
+            out->field = xr_malloc((size_t) src->count_field * sizeof(*out->field));               \
+            if (!out->field)                                                                       \
+                goto fail;                                                                         \
+            memcpy(out->field, src->field, (size_t) src->count_field * sizeof(*out->field));       \
+            out->cap_field = src->count_field;                                                     \
+        }                                                                                          \
+    } while (0)
+
+    XG_CLONE_ARRAY(modules, nmodules, module_cap);
+    XG_CLONE_ARRAY(decls, ndecls, decl_cap);
+    XG_CLONE_ARRAY(classes, nclasses, class_cap);
+    XG_CLONE_ARRAY(class_fields, nclass_fields, class_field_cap);
+    XG_CLONE_ARRAY(methods, nmethods, method_cap);
+    XG_CLONE_ARRAY(interface_impls, ninterface_impls, interface_impl_cap);
+    XG_CLONE_ARRAY(interface_extends, ninterface_extends, interface_extend_cap);
+    XG_CLONE_ARRAY(interface_methods, ninterface_methods, interface_method_cap);
+    XG_CLONE_ARRAY(interface_object_uses, ninterface_object_uses, interface_object_use_cap);
+    XG_CLONE_ARRAY(bodies, nbodies, body_cap);
+    XG_CLONE_ARRAY(callsites, ncallsites, callsite_cap);
+    XG_CLONE_ARRAY(link_deps, nlink_deps, link_dep_cap);
+    XG_CLONE_ARRAY(generic_insts, ngeneric_insts, generic_inst_cap);
+    XG_CLONE_ARRAY(generic_body_uses, ngeneric_body_uses, generic_body_use_cap);
+    XG_CLONE_ARRAY(generic_storages, ngeneric_storages, generic_storage_cap);
+    XG_CLONE_ARRAY(generic_code_sizes, ngeneric_code_sizes, generic_code_size_cap);
+    XG_CLONE_ARRAY(sequence_accesses, nsequence_accesses, sequence_access_cap);
+    XG_CLONE_ARRAY(capacity_ops, ncapacity_ops, capacity_op_cap);
+    XG_CLONE_ARRAY(bulk_ops, nbulk_ops, bulk_op_cap);
+    XG_CLONE_ARRAY(encoding_ops, nencoding_ops, encoding_op_cap);
+    XG_CLONE_ARRAY(derives, nderives, derive_cap);
+    XG_CLONE_ARRAY(derived_fields, nderived_fields, derived_field_cap);
+    XG_CLONE_ARRAY(derived_methods, nderived_methods, derived_method_cap);
+    XG_CLONE_ARRAY(json_shapes, njson_shapes, json_shape_cap);
+    XG_CLONE_ARRAY(json_fields, njson_fields, json_field_cap);
+    XG_CLONE_ARRAY(json_accesses, njson_accesses, json_access_cap);
+    XG_CLONE_ARRAY(json_codecs, njson_codecs, json_codec_cap);
+    XG_CLONE_ARRAY(record_shapes, nrecord_shapes, record_shape_cap);
+    XG_CLONE_ARRAY(record_fields, nrecord_fields, record_field_cap);
+    XG_CLONE_ARRAY(record_accesses, nrecord_accesses, record_access_cap);
+    XG_CLONE_ARRAY(record_merges, nrecord_merges, record_merge_cap);
+    XG_CLONE_ARRAY(options_bags, noptions_bags, options_bag_cap);
+    XG_CLONE_ARRAY(map_shapes, nmap_shapes, map_shape_cap);
+    XG_CLONE_ARRAY(map_entries, nmap_entries, map_entry_cap);
+    XG_CLONE_ARRAY(key_accesses, nkey_accesses, key_access_cap);
+    XG_CLONE_ARRAY(hash_eqs, nhash_eqs, hash_eq_cap);
+
+#undef XG_CLONE_ARRAY
+
+    return true;
+
+fail:
+    xg_global_evidence_free(out);
+    return false;
+}
+
 XR_FUNC bool xg_global_evidence_reserve_modules(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->modules, &evidence->module_cap, capacity,
                                      sizeof(XgModuleSummary));
@@ -5676,6 +5742,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
 #undef REMAP_MODULE
 
     report.rows_imported = package_non_module_row_count(&package);
+    report.payloads_imported = 1;
     if (out_report)
         *out_report = report;
     ok = true;
@@ -5683,6 +5750,57 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
 done:
     xr_free(module_maps);
     xg_global_evidence_free(&package);
+    return ok;
+}
+
+XR_FUNC bool
+xg_global_evidence_import_package_payload_set(XgGlobalEvidence *target, const char *const *payloads,
+                                              uint32_t payload_count,
+                                              XgEvidencePackageImportReport *out_report) {
+    XgGlobalEvidence scratch;
+    XgEvidencePackageImportReport total;
+    uint64_t validated_hash = 0;
+    bool ok = false;
+    if (out_report)
+        memset(out_report, 0, sizeof(*out_report));
+    if (!target || (payload_count > 0 && !payloads))
+        return false;
+    memset(&scratch, 0, sizeof(scratch));
+    memset(&total, 0, sizeof(total));
+    if (payload_count == 0) {
+        if (out_report)
+            *out_report = total;
+        return true;
+    }
+    if (!xg_imported_summary_hash_from_package_payloads(0, payloads, payload_count,
+                                                        &validated_hash))
+        return false;
+    if (!xg_global_evidence_clone(&scratch, target))
+        return false;
+    total.package_hash = hash_u32(XR_FNV64_OFFSET_BASIS, payload_count);
+    for (uint32_t i = 0; i < payload_count; i++) {
+        XgEvidencePackageImportReport item;
+        if (!xg_global_evidence_import_package_payload(&scratch, payloads[i], &item))
+            goto done;
+        total.package_hash = hash_u64(total.package_hash, item.package_hash);
+        total.modules_remapped += item.modules_remapped;
+        total.modules_added += item.modules_added;
+        total.rows_imported += item.rows_imported;
+        total.payloads_imported += item.payloads_imported;
+    }
+    total.package_hash = hash_u64(total.package_hash, validated_hash);
+    {
+        XgGlobalEvidence old = *target;
+        *target = scratch;
+        memset(&scratch, 0, sizeof(scratch));
+        xg_global_evidence_free(&old);
+    }
+    if (out_report)
+        *out_report = total;
+    ok = true;
+
+done:
+    xg_global_evidence_free(&scratch);
     return ok;
 }
 
