@@ -391,10 +391,10 @@ typedef enum {
     XI_AWAIT,        /* await task: args[0]=task */
 
     /* Batch-parallel high-level ops.
-     * These are semantic placeholders for TaskGroup / parallelFor lowering:
-     * they must survive long enough for VM/AOT to choose persistent worker,
-     * epoch broadcast, worker-local context, native result buffer and
-     * consuming join/reduce strategies. */
+     * These are semantic placeholders for stdlib parallel.* intrinsic lowering:
+     * they carry enough information for VM/AOT to choose persistent workers,
+     * lane batching, native result buffers and reducer strategies without
+     * preserving the removed dedicated grammar surface. */
     XI_PAR_FOR,
     XI_PAR_MAP,
     XI_PAR_REDUCE,
