@@ -171,6 +171,12 @@ expect_output_workers \
     $'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue' \
     8
 
+expect_output_workers \
+    "parallel_plan_fallback_single_lane" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_fallback_single_lane.xr" \
+    $'0\n128\n0\n128\n0' \
+    1
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

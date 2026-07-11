@@ -1,0 +1,33 @@
+import parallel
+
+shared maxForState = Atomic<int>(0)
+shared maxMapState = Atomic<int>(0)
+shared maxReduceState = Atomic<int>(0)
+
+var plan = parallel.Plan<int>(parallel.Options(128), (lane) -> lane)
+
+plan.forEach(0..128, (state, i) -> {
+    if (state > maxForState.load(Ordering.Relaxed)) {
+        maxForState.store(state, Ordering.Relaxed)
+    }
+})
+
+var mapped = plan.map(0..128, (state, i) -> {
+    if (state > maxMapState.load(Ordering.Relaxed)) {
+        maxMapState.store(state, Ordering.Relaxed)
+    }
+    return i
+})
+
+var reduced = plan.reduce(0..128, "", (state, i) -> {
+    if (state > maxReduceState.load(Ordering.Relaxed)) {
+        maxReduceState.store(state, Ordering.Relaxed)
+    }
+    return "x"
+}, (a, b) -> a + b)
+
+print(maxForState.load(Ordering.Relaxed))
+print(mapped.length)
+print(maxMapState.load(Ordering.Relaxed))
+print(reduced.length)
+print(maxReduceState.load(Ordering.Relaxed))

@@ -14,6 +14,8 @@
 #include "../shared/xr_elem_type.h"
 #include <stdio.h>
 
+#define XI_PAR_FALLBACK_MAX_LANES XR_MAX_WORKERS
+
 static void emit_channel_transfer_annotation(EmitCtx *ctx, uint8_t mode) {
     if (mode == XR_TRANSFER_SHARE)
         return;
@@ -489,8 +491,10 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 /* xi.par.for VM path: first try the hosted runtime batch opcode.  It submits a
  * small number of VM lane coroutines to scheduler workers when the range and
  * closure are safe/profitable.  If that opcode reports handled=false (small
- * range, single worker, deterministic profile, private capture, etc.), execute
- * the same lane split sequentially as the cost-model/safety fallback. */
+ * range, single worker, deterministic profile, private capture, etc.), it writes
+ * the effective fallback worker request back to par_base+2.  The sequential
+ * fallback uses that VM-owned value, so Options.workers remains a max request
+ * instead of becoming a stable lane identity when no parallel batch ran. */
 XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (!ctx || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_FOR || !v->aux) {
@@ -521,7 +525,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    if (ctx->next_reg + (data->range_body ? 27 : (plan_state ? 27 : 24)) > MAX_REGS) {
+    if (ctx->next_reg + (data->range_body ? 28 : (plan_state ? 28 : 25)) > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
@@ -535,6 +539,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
     XiEmitReg one = (XiEmitReg) ctx->next_reg++;
     XiEmitReg max_participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg fallback_workers = (XiEmitReg) ctx->next_reg++;
     XiEmitReg lane = (XiEmitReg) ctx->next_reg++;
     XiEmitReg base = (XiEmitReg) ctx->next_reg++;
     XiEmitReg rem = (XiEmitReg) ctx->next_reg++;
@@ -574,17 +579,18 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     emit_inst(ctx, CREATE_ABC(OP_PAR_FOR, par_handled, par_base, par_flags));
     int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, fallback_workers, (XiEmitReg) (par_base + 2), 0));
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, end_excl, end, 0));
     if (data->inclusive_end)
         emit_inst(ctx, CREATE_ABC(OP_ADDI, end_excl, end_excl, 1));
     emit_inst(ctx, CREATE_ABC(OP_SUB, count, end_excl, start));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, one, 1));
-    emit_inst(ctx, CREATE_AsBx(OP_LOADI, max_participants, 256));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, max_participants, XI_PAR_FALLBACK_MAX_LANES));
 
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, start, end_excl, false);
 
-    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, workers, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, fallback_workers, 0));
     int participants_auto_jmp = emit_jump_if_cmp(ctx, OP_LT, participants, one, true);
     int participants_auto_done_jmp = current_pc(ctx);
     emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
@@ -709,7 +715,7 @@ typedef struct {
     XiEmitReg lane, base, rem, lane_count, extra_before, offset, iter, limit;
 } ParLaneRegs;
 
-/* Clamp participants to [1, min(count, 256)] and derive base/rem.
+/* Clamp participants to [1, min(count, XR_MAX_WORKERS)] and derive base/rem.
  * workers == 0 is the stdlib "auto" request. The current VM emitter still
  * executes lanes sequentially, but it keeps the same lane-splitting semantics
  * as hosted parallel execution by treating auto as the max lane request before
@@ -857,7 +863,7 @@ static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, X
         emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, targets[i], r.count, fill_value));
     }
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.one, 1));
-    emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, 256));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, XI_PAR_FALLBACK_MAX_LANES));
     emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, err_true, 0, 0));
 
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.start, r.end_excl, false);
@@ -948,24 +954,19 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         elem_tid = xr_type_to_tid(v->type->container.element_type);
     uint8_t array_c = (uint8_t) (elem_tid << 2);
     XrArrayElemType elem_type = xr_tid_to_elem_type(elem_tid);
-    bool try_vm_parallel = elem_type != XR_ELEM_ANY;
 
     ParLaneRegs r;
     memset(&r, 0, sizeof(r));
     r.start = start;
     r.workers = workers;
-    if (!par_lane_regs_alloc(
-            ctx, &r, try_vm_parallel ? (data->plan_state ? 19 : 16) : (data->plan_state ? 10 : 8)))
+    if (!par_lane_regs_alloc(ctx, &r, data->plan_state ? 20 : 17))
         return;
-    XiEmitReg par_handled = 0;
-    XiEmitReg par_true = 0;
-    XiEmitReg par_base = 0;
-    if (try_vm_parallel) {
-        par_handled = (XiEmitReg) ctx->next_reg++;
-        par_true = (XiEmitReg) ctx->next_reg++;
-        par_base = (XiEmitReg) ctx->next_reg;
-        ctx->next_reg += data->plan_state ? 7 : 6;
-    }
+    XiEmitReg fallback_workers = (XiEmitReg) ctx->next_reg++;
+    r.workers = fallback_workers;
+    XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += data->plan_state ? 7 : 6;
     XiEmitReg err_has = (XiEmitReg) ctx->next_reg++;
     XiEmitReg err_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg map_idx = (XiEmitReg) ctx->next_reg++;
@@ -993,30 +994,28 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         xi_emit_load_array_zero_value(ctx, elem_type, fill_value);
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, target_array, r.count, fill_value));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.one, 1));
-    emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, 256));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, XI_PAR_FALLBACK_MAX_LANES));
     emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, err_true, 0, 0));
 
-    int par_handled_jmp_pc = -1;
-    if (try_vm_parallel) {
-        uint8_t par_flags = data->inclusive_end ? 0x01 : 0;
-        if (data->plan_state)
-            par_flags |= 0x04;
-        emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, par_handled, 0, 0));
-        emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, par_true, 0, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, par_base, start, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 1), end, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 2), workers, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 3), closure, 0));
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 4), target_array, 0));
-        if (data->plan_state) {
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 5), states, 0));
-            emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 6), 0, 0));
-        } else {
-            emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 5), 0, 0));
-        }
-        emit_inst(ctx, CREATE_ABC(OP_PAR_MAP, par_handled, par_base, par_flags));
-        par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
+    uint8_t par_flags = data->inclusive_end ? 0x01 : 0;
+    if (data->plan_state)
+        par_flags |= 0x04;
+    emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, par_handled, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, par_true, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, par_base, start, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 1), end, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 2), workers, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 3), closure, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 4), target_array, 0));
+    if (data->plan_state) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 5), states, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 6), 0, 0));
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 5), 0, 0));
     }
+    emit_inst(ctx, CREATE_ABC(OP_PAR_MAP, par_handled, par_base, par_flags));
+    int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, fallback_workers, (XiEmitReg) (par_base + 2), 0));
 
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.start, r.end_excl, false);
 
@@ -1058,8 +1057,7 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
 
     int exit_pc = current_pc(ctx);
-    if (par_handled_jmp_pc >= 0)
-        patch_jump_to(ctx, par_handled_jmp_pc, exit_pc);
+    patch_jump_to(ctx, par_handled_jmp_pc, exit_pc);
     patch_jump_to(ctx, empty_jmp_pc, exit_pc);
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
     patch_jump_list_to(ctx, err_jump_pcs, err_jump_count, exit_pc);
@@ -1100,8 +1098,10 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     memset(&r, 0, sizeof(r));
     r.start = start;
     r.workers = workers;
-    if (!par_lane_regs_alloc(ctx, &r, data->plan_state ? 18 : 16))
+    if (!par_lane_regs_alloc(ctx, &r, data->plan_state ? 19 : 17))
         return;
+    XiEmitReg fallback_workers = (XiEmitReg) ctx->next_reg++;
+    r.workers = fallback_workers;
     XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
@@ -1124,7 +1124,7 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_ADDI, r.end_excl, r.end_excl, 1));
     emit_inst(ctx, CREATE_ABC(OP_SUB, r.count, r.end_excl, r.start));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.one, 1));
-    emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, 256));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, XI_PAR_FALLBACK_MAX_LANES));
 
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.start, r.end_excl, false);
 
@@ -1152,6 +1152,7 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_PAR_REDUCE, par_handled, par_base, par_flags));
     err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
     int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, fallback_workers, (XiEmitReg) (par_base + 2), 0));
 
     emit_par_participants_clamp(ctx, &r);
 
