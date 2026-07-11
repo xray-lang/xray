@@ -756,6 +756,204 @@ TEST(cache_payload_materializes_global_evidence) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(cache_payload_imports_package_with_id_remap) {
+    XgGlobalEvidence package = {0};
+    XgGlobalEvidence target = {0};
+    XgEvidencePackageImportReport report;
+    XgModuleSummary consumer_module = {0};
+    XgDeclSummary consumer_decl = {0};
+    XgClassSummary consumer_class = {0};
+    XgClassFieldSummary consumer_field = {0};
+    XgMethodSummary consumer_method = {0};
+    XgInterfaceObjectUseSummary consumer_iface_use = {0};
+    XgBodySummary consumer_body = {0};
+    XgCallsiteSummary consumer_call = {0};
+    XgJsonShapeSummary consumer_json = {0};
+    XgMapShapeSummary consumer_map = {0};
+    XgMapEntrySummary consumer_entry = {0};
+    uint64_t package_hash;
+    char *payload;
+
+    package.key.module_id = 7;
+    package.key.source_hash = UINT64_C(0x10101010);
+    package.key.profile = XG_BUILD_NATIVE_RELEASE;
+    package.key.compiler_semver_hash = UINT64_C(0x1111);
+    package.key.profile_hash = UINT64_C(0x2222);
+    package.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_semantic_summary(&package);
+    add_sample_body_summary(&package);
+    add_sample_global_extra_summary(&package);
+    package.classes[0].method_start = 1;
+    package.classes[0].interface_start = 1;
+    package.derives[0].field_start = 1;
+    package.derives[0].method_start = 1;
+    package.map_shapes[0].entry_start = 1;
+    package_hash = xg_global_evidence_hash(&package);
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+
+    consumer_module.module_id = 100;
+    consumer_module.name_id = xg_name_id("consumer");
+    consumer_module.canonical_hash = UINT64_C(0xc001);
+    consumer_module.source_hash = UINT64_C(0xc002);
+    consumer_module.kind = 1;
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&target, &consumer_module));
+
+    consumer_decl.decl_id = 100;
+    consumer_decl.module_id = consumer_module.module_id;
+    consumer_decl.kind = XG_DECL_FUNC;
+    consumer_decl.name_id = xg_name_id("main");
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&target, &consumer_decl));
+
+    consumer_class.class_id = 200;
+    consumer_class.module_id = consumer_module.module_id;
+    consumer_class.decl_id = consumer_decl.decl_id;
+    consumer_class.name_id = xg_name_id("Consumer");
+    consumer_class.field_start = 1;
+    consumer_class.field_count = 1;
+    consumer_class.method_start = 1;
+    consumer_class.method_count = 1;
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&target, &consumer_class));
+
+    consumer_field.field_id = 300;
+    consumer_field.module_id = consumer_module.module_id;
+    consumer_field.owner_class_id = consumer_class.class_id;
+    consumer_field.name_id = xg_name_id("value");
+    consumer_field.semantic_kind = XG_CLASS_FIELD_TYPE_I64;
+    ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&target, &consumer_field));
+
+    consumer_method.method_id = 400;
+    consumer_method.owner_class_id = consumer_class.class_id;
+    consumer_method.name_id = xg_name_id("value");
+    consumer_method.root_method_id = consumer_method.method_id;
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&target, &consumer_method));
+
+    consumer_body.func_id = 500;
+    consumer_body.module_id = consumer_module.module_id;
+    consumer_body.owner_decl_id = consumer_decl.decl_id;
+    consumer_body.name_id = consumer_decl.name_id;
+    consumer_body.kind = XG_BODY_FUNCTION;
+    consumer_body.callsite_start = 401;
+    consumer_body.callsite_count = 1;
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&target, &consumer_body));
+
+    consumer_call.callsite_id = 401;
+    consumer_call.owner_func_id = consumer_body.func_id;
+    consumer_call.kind = XG_CALL_CLOSURE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&target, &consumer_call));
+
+    consumer_iface_use.use_id = 650;
+    consumer_iface_use.interface_id = 700;
+    consumer_iface_use.owner_func_id = consumer_body.func_id;
+    consumer_iface_use.reason = XG_INTERFACE_OBJECT_USE_VALUE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_object_use(&target, &consumer_iface_use));
+
+    consumer_json.json_shape_id = 800;
+    consumer_json.module_id = consumer_module.module_id;
+    consumer_json.owner_func_id = consumer_body.func_id;
+    consumer_json.shape_kind = XG_JSON_SHAPE_SHAPED;
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&target, &consumer_json));
+
+    consumer_map.shape_id = 900;
+    consumer_map.module_id = consumer_module.module_id;
+    consumer_map.owner_func_id = consumer_body.func_id;
+    consumer_map.container_kind = XG_MAP_CONTAINER_MAP;
+    consumer_map.source = XG_MAP_SHAPE_SRC_LITERAL;
+    consumer_map.entry_start = 1;
+    consumer_map.entry_count = 1;
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_shape(&target, &consumer_map));
+
+    consumer_entry.entry_id = 950;
+    consumer_entry.shape_id = consumer_map.shape_id;
+    ASSERT_NOT_NULL(xg_global_evidence_add_map_entry(&target, &consumer_entry));
+
+    ASSERT(xg_global_evidence_import_package_payload(&target, payload, &report));
+    ASSERT_EQ_UINT(report.package_hash, package_hash);
+    ASSERT_EQ_UINT(report.modules_remapped, 1);
+    ASSERT_EQ_UINT(report.modules_added, 1);
+    ASSERT_EQ_UINT(report.rows_imported, 36);
+
+    ASSERT_EQ_UINT(target.nmodules, 2);
+    ASSERT_EQ_UINT(target.modules[1].module_id, 101);
+    ASSERT_EQ_UINT(target.modules[1].canonical_hash, UINT64_C(0xabc7));
+    ASSERT_EQ_UINT(target.ndecls, 3);
+    ASSERT_EQ_UINT(target.decls[1].decl_id, 110);
+    ASSERT_EQ_UINT(target.decls[1].module_id, 101);
+    ASSERT_EQ_UINT(target.decls[2].decl_id, 101);
+    ASSERT_EQ_UINT(target.decls[2].module_id, 101);
+    ASSERT_EQ_UINT(target.nclasses, 2);
+    ASSERT_EQ_UINT(target.classes[1].class_id, 220);
+    ASSERT_EQ_UINT(target.classes[1].decl_id, 110);
+    ASSERT_EQ_UINT(target.classes[1].field_start, 2);
+    ASSERT_EQ_UINT(target.classes[1].method_start, 2);
+    ASSERT_EQ_UINT(target.classes[1].interface_start, 1);
+    ASSERT_EQ_UINT(target.class_fields[1].field_id, 301);
+    ASSERT_EQ_UINT(target.class_fields[1].module_id, 101);
+    ASSERT_EQ_UINT(target.class_fields[1].owner_class_id, 220);
+    ASSERT_EQ_UINT(target.class_fields[1].target_class_id, 220);
+    ASSERT_EQ_UINT(target.methods[1].method_id, 430);
+    ASSERT_EQ_UINT(target.methods[1].root_method_id, 430);
+    ASSERT_EQ_UINT(target.interface_impls[0].implementor_class_id, 220);
+    ASSERT_EQ_UINT(target.interface_impls[0].interface_id, 741);
+    ASSERT_EQ_UINT(target.interface_methods[0].interface_method_id, 50);
+    ASSERT_EQ_UINT(target.interface_methods[0].owner_interface_id, 741);
+    ASSERT_EQ_UINT(target.bodies[1].func_id, 511);
+    ASSERT_EQ_UINT(target.bodies[1].module_id, 101);
+    ASSERT_EQ_UINT(target.bodies[1].owner_decl_id, 101);
+    ASSERT_EQ_UINT(target.bodies[1].callsite_start, 402);
+    ASSERT_EQ_UINT(target.callsites[1].callsite_id, 402);
+    ASSERT_EQ_UINT(target.callsites[1].owner_func_id, 511);
+    ASSERT_EQ_UINT(target.callsites[1].static_target_func_id, 511);
+    ASSERT_EQ_UINT(target.generic_insts[0].generic_inst_id, 3);
+    ASSERT_EQ_UINT(target.generic_insts[0].module_id, 101);
+    ASSERT_EQ_UINT(target.generic_insts[0].origin_decl_id, 101);
+    ASSERT_EQ_UINT(target.generic_insts[0].origin_func_id, 511);
+    ASSERT_EQ_UINT(target.generic_insts[0].specialized_func_id, 531);
+    ASSERT_EQ_UINT(target.generic_insts[0].root_callsite_id, 402);
+    ASSERT_EQ_UINT(target.generic_body_uses[0].generic_inst_id, 3);
+    ASSERT_EQ_UINT(target.generic_body_uses[0].owner_func_id, 511);
+    ASSERT_EQ_UINT(target.json_shapes[1].json_shape_id, 901);
+    ASSERT_EQ_UINT(target.json_shapes[1].module_id, 101);
+    ASSERT_EQ_UINT(target.json_accesses[0].receiver_shape_id, 901);
+    ASSERT_EQ_UINT(target.map_shapes[1].shape_id, 1201);
+    ASSERT_EQ_UINT(target.map_shapes[1].entry_start, 2);
+    ASSERT_EQ_UINT(target.map_entries[1].entry_id, 1252);
+    ASSERT_EQ_UINT(target.map_entries[1].shape_id, 1201);
+    ASSERT_EQ_UINT(target.key_accesses[0].receiver_shape_id, 1201);
+    ASSERT_EQ_UINT(target.hash_eqs[0].eq_derive_id, 60);
+    ASSERT_EQ_UINT(target.hash_eqs[0].eq_func_id, 511);
+    ASSERT_EQ_UINT(target.hash_eqs[0].hash_func_id, 531);
+
+    xr_free(payload);
+    xg_global_evidence_free(&target);
+    xg_global_evidence_free(&package);
+}
+
+TEST(cache_payload_import_rejects_non_global_or_missing_module_identity) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence target = {0};
+    char *payload;
+
+    ev.key.module_id = 7;
+    add_sample_semantic_summary(&ev);
+    add_sample_body_summary(&ev);
+    add_sample_global_extra_summary(&ev);
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT_NOT_NULL(payload);
+    ASSERT(!xg_global_evidence_import_package_payload(&target, payload, NULL));
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+
+    memset(&ev, 0, sizeof(ev));
+    add_sample_body_summary(&ev);
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    ASSERT(!xg_global_evidence_import_package_payload(&target, payload, NULL));
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+    xg_global_evidence_free(&target);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Global Evidence Cache Payload");
@@ -766,5 +964,7 @@ RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_parse_rejects_request_drift);
 RUN_TEST(cache_payload_materializes_global_evidence);
+RUN_TEST(cache_payload_imports_package_with_id_remap);
+RUN_TEST(cache_payload_import_rejects_non_global_or_missing_module_identity);
 
 TEST_MAIN_END()

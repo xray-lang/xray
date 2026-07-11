@@ -633,6 +633,13 @@ typedef struct XgEvidenceCachePayloadInfo {
     uint32_t phase;
 } XgEvidenceCachePayloadInfo;
 
+typedef struct XgEvidencePackageImportReport {
+    uint64_t package_hash;
+    uint32_t modules_remapped;
+    uint32_t modules_added;
+    uint32_t rows_imported;
+} XgEvidencePackageImportReport;
+
 typedef enum XgModuleFlags {
     XG_MODULE_EMBEDDED_SOURCE = 1u << 0,
 } XgModuleFlags;
@@ -1514,6 +1521,9 @@ XR_FUNC bool xg_evidence_cache_payload_request_matches(const char *text,
                                                        const XgEvidenceCacheRequestKey *expected);
 XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
                                                    XgGlobalEvidence *out_evidence);
+XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
+                                                       const char *payload,
+                                                       XgEvidencePackageImportReport *out_report);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
 
 #endif  // XGLOBAL_SUMMARY_H
