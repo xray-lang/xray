@@ -30,6 +30,7 @@
 #include "../module/xmodule_resolver.h"
 #include "../module/xmodule.h"
 #include "../base/xmalloc.h"
+#include "../base/xhash.h"
 #include "../base/xfileio.h"
 #include "../base/xmemstream.h"
 #include "../base/xglobal_indices.h"
@@ -591,20 +592,31 @@ static XrVMRuntime *create_isolate(void) {
 
 /* ========== Module Name Helpers ========== */
 
-/* Derive a C-safe module name from absolute path.  Caller must free. */
-static char *derive_module_name(const char *path) {
-    XR_DCHECK(path != NULL, "derive_module_name: NULL path");
+/* Derive a stable C-safe module prefix.  Basenames collide for package layouts
+ * like entry main.xr importing package src/main.xr, so suffix the readable
+ * basename with the canonical module identity hash. */
+static char *derive_module_name(const XrModuleSpec *spec) {
+    const char *path;
+    const char *identity;
+    uint64_t identity_hash;
+    char suffix[18];
+    char *name;
+    XR_DCHECK(spec != NULL, "derive_module_name: NULL spec");
+    path = spec && spec->source_path ? spec->source_path : "module";
+    identity = spec && spec->canonical ? spec->canonical : path;
+    identity_hash = identity ? xr_hash_bytes64(identity, strlen(identity)) : 0;
+    snprintf(suffix, sizeof(suffix), "_%016llx", (unsigned long long) identity_hash);
     const char *base = strrchr(path, '/');
     base = base ? base + 1 : path;
     size_t len = strlen(base);
     if (len > 3 && strcmp(base + len - 3, ".xr") == 0)
         len -= 3;
-    char *name = (char *) xr_malloc(len + 1);
+    name = (char *) xr_malloc(len + strlen(suffix) + 1);
     if (!name)
         return NULL;
     for (size_t i = 0; i < len; i++)
         name[i] = (base[i] == '-' || base[i] == '.') ? '_' : base[i];
-    name[len] = '\0';
+    memcpy(name + len, suffix, strlen(suffix) + 1);
     return name;
 }
 
@@ -1348,7 +1360,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
         paths[ti] = xr_strdup(spec->source_path);
-        mod_names[ti] = derive_module_name(spec->source_path);
+        mod_names[ti] = derive_module_name(spec);
         mono_roots[ti] = (AstNode *) spec->ast;
         if (strcmp(spec->source_path, real_input) == 0)
             entry_index = ti;
