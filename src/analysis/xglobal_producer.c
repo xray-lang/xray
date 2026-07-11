@@ -117,6 +117,8 @@ struct XgLocalType {
     uint32_t map_value_type_key;
     uint8_t sequence_kind;
     uint32_t sequence_elem_type_key;
+    XgJsonShapeId sequence_elem_json_shape_id;
+    const ObjectLiteralNode *sequence_elem_json_shape_literal;
     uint8_t sequence_elem_map_container_kind;
     uint32_t sequence_elem_map_key_type_key;
     uint32_t sequence_elem_map_value_type_key;
@@ -1714,6 +1716,8 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->map_value_type_key = 0;
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
+    row->sequence_elem_json_shape_id = XG_NO_ID;
+    row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
@@ -1802,6 +1806,8 @@ static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symb
     row->map_receiver_type_key = 0;
     row->map_key_type_key = 0;
     row->map_value_type_key = 0;
+    row->sequence_elem_json_shape_id = XG_NO_ID;
+    row->sequence_elem_json_shape_literal = NULL;
 }
 
 typedef struct XgCaptureScan {
@@ -3139,6 +3145,33 @@ static uint64_t body_json_shape_hash(const ObjectLiteralNode *obj) {
     return h ? h : 1;
 }
 
+static const ObjectLiteralNode *body_static_json_array_element_literal(const AstNode *node) {
+    const ArrayLiteralNode *array;
+    const ObjectLiteralNode *first;
+    uint64_t first_hash;
+    if (!node)
+        return NULL;
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    if (!node || node->type != AST_ARRAY_LITERAL)
+        return NULL;
+    array = &node->as.array_literal;
+    if (array->is_repeat)
+        return body_static_object_literal(array->repeat_value);
+    if (array->count <= 0 || !array->elements)
+        return NULL;
+    first = body_static_object_literal(array->elements[0]);
+    if (!first)
+        return NULL;
+    first_hash = body_json_shape_hash(first);
+    for (int i = 1; i < array->count; i++) {
+        const ObjectLiteralNode *next = body_static_object_literal(array->elements[i]);
+        if (!next || next->count != first->count || body_json_shape_hash(next) != first_hash)
+            return NULL;
+    }
+    return first;
+}
+
 static const XrTypeRef *body_type_alias_record_type_ref(const TypeAliasNode *alias) {
     if (!alias || !alias->resolved_type || alias->resolved_type->kind != XR_TREF_OBJECT)
         return NULL;
@@ -3447,7 +3480,8 @@ static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *b
     return shape ? shape->json_shape_id : XG_NO_ID;
 }
 
-static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr) {
+static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                     const ObjectLiteralNode **out_literal) {
     XgLocalType *local;
     const AstNode *receiver = body_json_receiver_unwrap(expr);
     if (!bc || !receiver || receiver->type != AST_INDEX_GET)
@@ -3455,6 +3489,11 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
     local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
     if (!local || local->sequence_elem_type_key == 0)
         return XG_NO_ID;
+    if (local->sequence_elem_json_shape_id != XG_NO_ID) {
+        if (out_literal)
+            *out_literal = local->sequence_elem_json_shape_literal;
+        return local->sequence_elem_json_shape_id;
+    }
     return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
 }
 
@@ -3601,7 +3640,7 @@ static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *ex
     shape_id = body_lookup_call_json_return_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
-    shape_id = body_lookup_sequence_json_shape(bc, expr);
+    shape_id = body_lookup_sequence_json_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
     return body_lookup_class_field_json_shape(bc, expr);
@@ -4985,6 +5024,8 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
         return;
     row->sequence_kind = sequence_kind;
     row->sequence_elem_type_key = elem_type_key;
+    row->sequence_elem_json_shape_id = XG_NO_ID;
+    row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
@@ -4993,6 +5034,19 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
                                 &row->sequence_elem_map_value_type_key) &&
         row->sequence_elem_map_container_kind == XG_MAP_CONTAINER_SET)
         row->sequence_elem_map_value_type_key = 0;
+}
+
+static void body_bind_sequence_json_shape_local(XgBodyCollect *bc, const char *name,
+                                                XgJsonShapeId shape_id,
+                                                const ObjectLiteralNode *literal) {
+    XgLocalType *row;
+    if (!bc || !name || shape_id == XG_NO_ID)
+        return;
+    row = body_find_local(bc, name);
+    if (!row || row->sequence_kind == 0)
+        return;
+    row->sequence_elem_json_shape_id = shape_id;
+    row->sequence_elem_json_shape_literal = literal;
 }
 
 static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
@@ -5004,6 +5058,8 @@ static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
         return;
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
+    row->sequence_elem_json_shape_id = XG_NO_ID;
+    row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
@@ -6239,6 +6295,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             XgLocalType *source_map_local = NULL;
             uint8_t sequence_kind = 0;
             uint32_t sequence_elem_type_key = 0;
+            const XrTypeRef *sequence_elem_type_ref = NULL;
+            const ObjectLiteralNode *sequence_json_literal = NULL;
+            XgJsonShapeId sequence_json_shape_id = XG_NO_ID;
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             XgInterfaceId interface_id = producer_lookup_interface_from_tref(
@@ -6246,6 +6305,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bool inferred = false;
             (void) body_type_ref_sequence_parts(node->as.var_decl.type_annotation, &sequence_kind,
                                                 &sequence_elem_type_key);
+            sequence_elem_type_ref =
+                body_type_ref_sequence_elem_type_ref(node->as.var_decl.type_annotation);
+            if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref))
+                sequence_json_literal =
+                    body_static_json_array_element_literal(node->as.var_decl.initializer);
             (void) body_add_interface_object_uses_for_type_ref(
                 bc, node->as.var_decl.type_annotation, 0, (uint32_t) node->line);
             bc->capability_bits |=
@@ -6317,9 +6381,16 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                                        (uint32_t) node->line);
             }
             if (sequence_kind != 0)
-                body_bind_sequence_local(
-                    bc, node->as.var_decl.name, sequence_kind, sequence_elem_type_key,
-                    body_type_ref_sequence_elem_type_ref(node->as.var_decl.type_annotation));
+                body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
+                                         sequence_elem_type_key, sequence_elem_type_ref);
+            if (sequence_json_literal) {
+                sequence_json_shape_id = body_add_json_shape_for_literal(
+                    bc, sequence_json_literal, (uint32_t) node->line,
+                    sequence_elem_type_key ? sequence_elem_type_key
+                                           : hash_named_type_key32("Json", NULL, 0));
+                body_bind_sequence_json_shape_local(bc, node->as.var_decl.name,
+                                                    sequence_json_shape_id, sequence_json_literal);
+            }
             body_add_generic_array_storage(bc, node->as.var_decl.type_annotation,
                                            (uint32_t) node->line);
             break;
