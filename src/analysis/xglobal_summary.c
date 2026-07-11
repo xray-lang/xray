@@ -5171,6 +5171,42 @@ static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence 
     return false;
 }
 
+XR_FUNC bool xg_imported_summary_hash_from_package_payloads(uint64_t seed,
+                                                            const char *const *payloads,
+                                                            uint32_t payload_count,
+                                                            uint64_t *out_hash) {
+    uint64_t hash = hash_u32(seed, payload_count);
+    if (!out_hash || (payload_count > 0 && !payloads))
+        return false;
+    for (uint32_t i = 0; i < payload_count; i++) {
+        XgEvidenceCachePayloadInfo info;
+        XgGlobalEvidence package;
+        uint64_t package_hash;
+        if (!payloads[i] || !xg_evidence_cache_payload_parse(payloads[i], &info) ||
+            info.phase != XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE)
+            return false;
+        memset(&package, 0, sizeof(package));
+        if (!xg_evidence_cache_payload_materialize(payloads[i], &package))
+            return false;
+        if (!validate_package_module_identities(&package)) {
+            xg_global_evidence_free(&package);
+            return false;
+        }
+        package_hash = xg_global_evidence_hash(&package);
+        hash = hash_u64(hash, info.request_hash);
+        hash = hash_u64(hash, info.key_hash);
+        hash = hash_u64(hash, info.payload_hash);
+        hash = hash_u64(hash, info.key.content_hash);
+        hash = hash_u64(hash, package_hash);
+        hash = hash_u32(hash, package.nmodules);
+        for (uint32_t m = 0; m < package.nmodules; m++)
+            hash = hash_module_summary(hash, &package.modules[m]);
+        xg_global_evidence_free(&package);
+    }
+    *out_hash = hash ? hash : 1;
+    return true;
+}
+
 XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
                                                        const char *payload,
                                                        XgEvidencePackageImportReport *out_report) {

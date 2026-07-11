@@ -996,6 +996,70 @@ TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module) {
     xg_global_evidence_free(&package);
 }
 
+TEST(imported_summary_hash_folds_valid_package_payloads) {
+    XgGlobalEvidence package = {0};
+    XgGlobalEvidence changed = {0};
+    XgGlobalEvidence missing_module = {0};
+    char *payload = NULL;
+    char *changed_payload = NULL;
+    char *body_payload = NULL;
+    char *missing_module_payload = NULL;
+    const char *payloads[1];
+    uint64_t hash = 0;
+    uint64_t hash_again = 0;
+    uint64_t changed_hash = 0;
+
+    package.key.module_id = 7;
+    package.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_semantic_summary(&package);
+    add_sample_body_summary(&package);
+    add_sample_global_extra_summary(&package);
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    body_payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT_NOT_NULL(payload);
+    ASSERT_NOT_NULL(body_payload);
+
+    payloads[0] = payload;
+    ASSERT(xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), payloads, 1, &hash));
+    ASSERT(
+        xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), payloads, 1, &hash_again));
+    ASSERT_EQ_UINT(hash, hash_again);
+    ASSERT_NE(hash, UINT64_C(0xabc));
+
+    changed.key = package.key;
+    add_sample_semantic_summary(&changed);
+    add_sample_body_summary(&changed);
+    add_sample_global_extra_summary(&changed);
+    changed.bodies[0].body_hash ^= UINT64_C(0x55);
+    changed_payload =
+        xg_global_evidence_cache_payload_dump(&changed, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(changed_payload);
+    payloads[0] = changed_payload;
+    ASSERT(xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), payloads, 1,
+                                                          &changed_hash));
+    ASSERT_NE(hash, changed_hash);
+
+    payloads[0] = body_payload;
+    ASSERT(!xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), payloads, 1,
+                                                           &changed_hash));
+
+    add_sample_body_summary(&missing_module);
+    missing_module_payload =
+        xg_global_evidence_cache_payload_dump(&missing_module, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(missing_module_payload);
+    payloads[0] = missing_module_payload;
+    ASSERT(!xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), payloads, 1,
+                                                           &changed_hash));
+
+    xr_free(payload);
+    xr_free(changed_payload);
+    xr_free(body_payload);
+    xr_free(missing_module_payload);
+    xg_global_evidence_free(&package);
+    xg_global_evidence_free(&changed);
+    xg_global_evidence_free(&missing_module);
+}
+
 TEST(cache_payload_import_rejects_non_global_or_missing_module_identity) {
     XgGlobalEvidence ev = {0};
     XgGlobalEvidence target = {0};
@@ -1034,6 +1098,7 @@ RUN_TEST(cache_payload_materializes_global_evidence);
 RUN_TEST(cache_payload_imports_package_with_id_remap);
 RUN_TEST(cache_payload_import_reuses_module_stub_without_duplicate_module);
 RUN_TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module);
+RUN_TEST(imported_summary_hash_folds_valid_package_payloads);
 RUN_TEST(cache_payload_import_rejects_non_global_or_missing_module_identity);
 
 TEST_MAIN_END()

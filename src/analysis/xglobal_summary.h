@@ -1521,6 +1521,10 @@ XR_FUNC bool xg_evidence_cache_payload_request_matches(const char *text,
                                                        const XgEvidenceCacheRequestKey *expected);
 XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
                                                    XgGlobalEvidence *out_evidence);
+XR_FUNC bool xg_imported_summary_hash_from_package_payloads(uint64_t seed,
+                                                            const char *const *payloads,
+                                                            uint32_t payload_count,
+                                                            uint64_t *out_hash);
 XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
                                                        const char *payload,
                                                        XgEvidencePackageImportReport *out_report);
