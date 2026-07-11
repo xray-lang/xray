@@ -147,6 +147,12 @@ expect_output_workers \
     $'caught\ntrue' \
     2
 
+expect_output_workers \
+    "parallel_lane_panic_propagates_original" \
+    "$PROJECT_DIR/tests/vm/parallel_lane_panic_propagates_original.xr" \
+    $'true\ntrue\ntrue' \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1
