@@ -39,7 +39,7 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 
 ### `check_parallel_surface_convergence.py`
 
-扫描 active `.xr` 用户源码、active `spec/`/`demos/`/API docs 文本、前端/IR 源码和 `tests/aot/coro` 迁移桶。除保留的 compile-error 负例外，旧 `parallel for/range/reduce/collect` 语法、旧 parallel `local/final` grammar、`TK_PARALLEL`、`AST_PARALLEL_*`、`XI_PAR_COLLECT` 等旧表面一律失败。`docs/` 是历史任务文档 symlink，脚本只扫描其中的 `spec/`、`language/`、`knowledge/`、`rules/` 等当前 public API 子树。该脚本接入 CTest 的 `parallel_surface_convergence`。
+扫描 active `.xr` 用户源码、active `spec/`/`demos`/API docs 文本、前端/IR 源码和 `tests/aot/coro` 迁移桶。除保留的 compile-error 负例外，旧 `parallel for/range/reduce/collect` 语法、旧 parallel `local/final` grammar、`TK_PARALLEL`、`AST_PARALLEL_*`、`XI_PAR_COLLECT` 等旧表面一律失败。当前 public API docs 还会拒绝 `worker_id`、`worker id`、`lane arrays`、`lanes[...]` 这类手写 worker-id/lane-array 推荐示例，避免重新把 executor 内部身份暴露给用户。`docs/` 是历史任务文档 symlink，脚本只扫描其中的 `spec/`、`language/`、`knowledge/`、`rules/` 等当前 public API 子树。该脚本接入 CTest 的 `parallel_surface_convergence`。
 
 ### `check_parallel_backend_abi_convergence.py`
 

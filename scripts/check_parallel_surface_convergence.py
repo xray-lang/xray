@@ -50,6 +50,12 @@ LEGACY_SOURCE_PATTERNS = (
     (re.compile(r"\bXiParallelCollect(Data)?\b"), "legacy collect IR data"),
 )
 
+PUBLIC_PARALLEL_RECOMMENDATION_PATTERNS = (
+    (re.compile(r"\bworker[_ -]?id\b", re.IGNORECASE), "worker-id parallel recommendation"),
+    (re.compile(r"\blane arrays?\b", re.IGNORECASE), "manual lane-array recommendation"),
+    (re.compile(r"\blanes\s*\[", re.IGNORECASE), "manual lane indexing recommendation"),
+)
+
 PUBLIC_TEXT_SUFFIXES = {".md", ".xr"}
 SOURCE_SUFFIXES = {".c", ".h", ".inc.c", ".def"}
 
@@ -108,6 +114,20 @@ def check_legacy_public_text(root: Path) -> list[str]:
     return errors
 
 
+def check_public_parallel_recommendations(root: Path) -> list[str]:
+    # Public docs should teach `Options(workers)` and `Plan<S>` logical state,
+    # not old worker-id/lane-array examples that leak executor internals.
+    errors: list[str] = []
+    seen: set[Path] = set()
+    for path in iter_files(root, PUBLIC_TEXT_DIRS, PUBLIC_TEXT_SUFFIXES):
+        rel_path = rel(root, path)
+        if rel_path in seen or rel_path in ALLOWED_LEGACY_XR:
+            continue
+        seen.add(rel_path)
+        errors.extend(scan_text_file(root, path, PUBLIC_PARALLEL_RECOMMENDATION_PATTERNS))
+    return errors
+
+
 def check_legacy_source_symbols(root: Path) -> list[str]:
     return [
         error
@@ -135,6 +155,7 @@ def main() -> int:
     errors = (
         check_legacy_xr_surface(root)
         + check_legacy_public_text(root)
+        + check_public_parallel_recommendations(root)
         + check_legacy_source_symbols(root)
         + check_migrated_aot_coro_bucket(root)
     )
@@ -144,12 +165,15 @@ def main() -> int:
             print(f"  {error}", file=sys.stderr)
         print(
             "\nUse the stdlib `parallel` module API only; do not restore parser aliases, "
-            "legacy AST nodes, or old AOT coro fixtures.",
+            "legacy AST nodes, old AOT coro fixtures, or worker-id/lane-array examples.",
             file=sys.stderr,
         )
         return 1
 
-    print("OK: parallel surface has no legacy grammar/parser/spec-demo-doc/AOT-coro residue")
+    print(
+        "OK: parallel surface has no legacy grammar/parser/spec-demo-doc/AOT-coro/"
+        "worker-id residue"
+    )
     return 0
 
 
