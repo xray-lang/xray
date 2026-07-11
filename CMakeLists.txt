@@ -1410,7 +1410,7 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    foreach(_xray_stdlib_boundary_check IN ITEMS manifest semantic fastpath dynamic)
+    foreach(_xray_stdlib_boundary_check IN ITEMS manifest semantic error-model fastpath dynamic)
         add_test(
             NAME stdlib_boundary_${_xray_stdlib_boundary_check}
             COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_boundary.py

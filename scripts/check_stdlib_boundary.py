@@ -112,6 +112,52 @@ def check_semantic_owners(root: Path) -> list[str]:
     return errors
 
 
+def check_error_model_policy(root: Path) -> list[str]:
+    """Keep the superseded global Result track out of the prelude.
+
+    User and module-defined enums named Result remain ordinary legal ADTs. This
+    gate is intentionally limited to compiler/prelude registration surfaces.
+    """
+    manifest = load_manifest(root)
+    governance = manifest.raw.get("governance", {})
+    errors: list[str] = []
+    if governance.get("error_model") != "enum_value_channel":
+        errors.append("governance.error_model must be 'enum_value_channel'")
+    if governance.get("failure_as_data") != "domain_adt":
+        errors.append("governance.failure_as_data must be 'domain_adt'")
+
+    forbidden = governance.get("forbidden_prelude_symbols", ())
+    if not isinstance(forbidden, list) or not forbidden:
+        errors.append("governance.forbidden_prelude_symbols must be a non-empty list")
+        return errors
+
+    high_risk_sources = (
+        root / "src/base/xglobal_indices.h",
+        root / "stdlib/prelude/prelude.c",
+        root / "src/frontend/analyzer/xanalyzer.c",
+        root / "src/api/xisolate_runtime.c",
+        root / "src/coro/xaot_coro.c",
+        root / "scripts/gen_api_inventory.py",
+    )
+    for raw_symbol in forbidden:
+        symbol = str(raw_symbol)
+        type_decl = root / "stdlib/types" / f"{symbol.lower()}.xr"
+        if type_decl.exists():
+            errors.append(f"forbidden prelude symbol {symbol}: declaration exists: {type_decl}")
+
+        macro = "XR_GLOBAL_VAR_" + re.sub(r"[^A-Za-z0-9]", "_", symbol).upper()
+        patterns = (
+            re.compile(rf"\b{re.escape(macro)}\b"),
+            re.compile(rf"\b(?:register|make)_prelude_enum(?:_full)?\s*\([^;]*\"{re.escape(symbol)}\"", re.S),
+            re.compile(rf"\bPRELUDE_ENUMS\b[^;]*\(\s*\"{re.escape(symbol)}\"", re.S),
+        )
+        for source in high_risk_sources:
+            text = source.read_text(encoding="utf-8")
+            if any(pattern.search(text) for pattern in patterns):
+                errors.append(f"forbidden prelude symbol {symbol}: registered by {source}")
+    return errors
+
+
 def check_fastpaths(root: Path) -> list[str]:
     manifest = load_manifest(root)
     errors: list[str] = []
@@ -200,7 +246,7 @@ def check_dynamic(root: Path, require_clean: bool = False) -> tuple[list[str], d
     return errors, report
 
 
-CHECKS = {"manifest", "semantic", "fastpath", "dynamic", "all"}
+CHECKS = {"manifest", "semantic", "error-model", "fastpath", "dynamic", "all"}
 
 
 def main() -> int:
@@ -217,6 +263,8 @@ def main() -> int:
         errors.extend(check_manifest(root))
     if args.check in {"semantic", "all"}:
         errors.extend(check_semantic_owners(root))
+    if args.check in {"error-model", "all"}:
+        errors.extend(check_error_model_policy(root))
     if args.check in {"fastpath", "all"}:
         errors.extend(check_fastpaths(root))
     if args.check in {"dynamic", "all"}:

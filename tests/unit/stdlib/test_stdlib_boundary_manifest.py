@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_stdlib_boundary import (  # noqa: E402
     check_dynamic,
+    check_error_model_policy,
     check_fastpaths,
     check_manifest,
     check_semantic_owners,
@@ -29,6 +30,9 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
     def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))
         self.assertEqual([], check_fastpaths(ROOT))
+
+    def test_superseded_global_result_cannot_reenter_prelude(self) -> None:
+        self.assertEqual([], check_error_model_policy(ROOT))
 
     def test_dynamic_surface_is_fully_classified(self) -> None:
         errors, report = check_dynamic(ROOT)
