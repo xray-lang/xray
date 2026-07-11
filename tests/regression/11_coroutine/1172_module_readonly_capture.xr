@@ -1,0 +1,13 @@
+// Module-readonly storage is published before a root task may read it.
+// The child reads the published module graph directly without a local alias.
+import { PREFIX } from "./modules/module_readonly_capture"
+
+fn spawn() -> Task<string> {
+    fn child() -> string {
+        return PREFIX + "!"
+    }
+
+    return go child()
+}
+
+print((await spawn()) ?? "failed")
