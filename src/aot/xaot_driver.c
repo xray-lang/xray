@@ -1665,7 +1665,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     if (!xaot_bundle_set_global_evidence(&aot_bundle, &global_evidence,
                                          global_evidence.key.profile)) {
-        fprintf(stderr, "Error: failed to attach global evidence plan\n");
+        fprintf(stderr, "Error: failed to attach global evidence plan: %s\n",
+                aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {

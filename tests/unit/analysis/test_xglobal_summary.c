@@ -582,7 +582,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=19 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=20 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -876,15 +876,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=19 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=19 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=19 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=19 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=20 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=20 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=20 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=20 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -11793,6 +11793,26 @@ TEST(storage_and_capture_plans_close_owner_actions) {
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
     XgGlobalEvidence ev;
+    XgModuleSummary module_summary = {
+        .module_id = 1, .name_id = 1, .canonical_hash = 1, .source_hash = 1};
+    XgDeclSummary module_const_decl = {
+        .module_id = 1,
+        .decl_id = 1,
+        .kind = XG_DECL_GLOBAL,
+        .storage_owner = XR_STORAGE_MODULE,
+        .storage_mutability = XR_STORAGE_READONLY,
+        .address_identity = XR_ADDRESS_MODULE_STABLE,
+        .materialization_kind = XR_MATERIALIZE_MODULE_READONLY,
+    };
+    XgDeclSummary shared_state_decl = {
+        .module_id = 1,
+        .decl_id = 2,
+        .kind = XG_DECL_GLOBAL,
+        .storage_owner = XR_STORAGE_SHARED_SYSTEM,
+        .storage_mutability = XR_STORAGE_INTERIOR_MUTABLE,
+        .address_identity = XR_ADDRESS_SHARED_STABLE,
+        .materialization_kind = XR_MATERIALIZE_SHARED_SYSTEM,
+    };
     XgBodySummary entry = {
         .func_id = 1, .module_id = 1, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x194};
     XiFunc init_func;
@@ -11801,12 +11821,18 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     XiModule module;
     XiModule *modules[1];
     uint8_t slot_consts[2] = {1, 0};
+    const char *slot_names[2] = {"module_const", "shared_state"};
     XiConstLiteral constants[2];
     XiConstLiteral shared[2];
     XaotBundle bundle;
     char verify_error[256];
 
     xg_global_evidence_init(&ev, key);
+    module_const_decl.name_id = xg_name_id("module_const");
+    shared_state_decl.name_id = xg_name_id("shared_state");
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&ev, &module_summary));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &module_const_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &shared_state_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
     memset(&init_func, 0, sizeof(init_func));
     memset(&child, 0, sizeof(child));
@@ -11827,6 +11853,7 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     init_func.xg_body_func_id = entry.func_id;
     init_func.nshared = 2;
     init_func.slot_owned_consts = slot_consts;
+    init_func.slot_owned_names = slot_names;
     init_func.children = children;
     init_func.nchildren = 1;
     constants[0].kind = XI_CONST_LITERAL_INT;
@@ -11855,7 +11882,7 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_EQ_UINT(module_const->owner, XR_STORAGE_MODULE);
     ASSERT_EQ_UINT(module_const->mutability, XR_STORAGE_READONLY);
     ASSERT_EQ_UINT(module_const->address_identity, XR_ADDRESS_MODULE_STABLE);
-    ASSERT_EQ_UINT(module_const->materialization_kind, XAOT_MATERIALIZE_MODULE_READONLY);
+    ASSERT_EQ_UINT(module_const->materialization_kind, XR_MATERIALIZE_MODULE_READONLY);
     ASSERT_EQ_UINT(shared_state->owner, XR_STORAGE_SHARED_SYSTEM);
     ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SHARED_STABLE);
     ASSERT_EQ_UINT(module_capture->action, XAOT_CAPTURE_MODULE_READONLY);
@@ -11863,6 +11890,55 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_producer_records_storage_provenance) {
+    setup_parser_session();
+    const char *source = "const frozen = 1\n"
+                         "var module_state = 2\n"
+                         "shared shared_state = 3\n";
+    AstNode *ast = xr_parse(g_session, source);
+    XrModuleSpec spec;
+    XrModuleGraph graph;
+    int topo_order[1] = {0};
+    XgGlobalEvidence ev;
+    const XgDeclSummary *frozen = NULL;
+    const XgDeclSummary *module_state = NULL;
+    const XgDeclSummary *shared_state = NULL;
+    ASSERT_NOT_NULL(ast);
+    memset(&spec, 0, sizeof(spec));
+    spec.canonical = "storage";
+    spec.ast = ast;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    for (uint32_t i = 0; i < ev.ndecls; i++) {
+        if (ev.decls[i].name_id == xg_name_id("frozen"))
+            frozen = &ev.decls[i];
+        else if (ev.decls[i].name_id == xg_name_id("module_state"))
+            module_state = &ev.decls[i];
+        else if (ev.decls[i].name_id == xg_name_id("shared_state"))
+            shared_state = &ev.decls[i];
+    }
+    ASSERT_NOT_NULL(frozen);
+    ASSERT_NOT_NULL(module_state);
+    ASSERT_NOT_NULL(shared_state);
+    ASSERT_EQ_UINT(frozen->storage_owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(frozen->storage_mutability, XR_STORAGE_READONLY);
+    ASSERT_EQ_UINT(frozen->materialization_kind, XR_MATERIALIZE_MODULE_READONLY);
+    ASSERT_EQ_UINT(module_state->storage_owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(module_state->storage_mutability, XR_STORAGE_MUTABLE);
+    ASSERT_EQ_UINT(module_state->materialization_kind, XR_MATERIALIZE_MODULE_RUNTIME);
+    ASSERT_EQ_UINT(shared_state->storage_owner, XR_STORAGE_SHARED_SYSTEM);
+    ASSERT_EQ_UINT(shared_state->storage_mutability, XR_STORAGE_INTERIOR_MUTABLE);
+    ASSERT_EQ_UINT(shared_state->materialization_kind, XR_MATERIALIZE_SHARED_SYSTEM);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
 }
 
 TEST_MAIN_BEGIN()
@@ -11978,4 +12054,5 @@ RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
 RUN_TEST(storage_and_capture_plans_close_owner_actions);
+RUN_TEST(global_evidence_producer_records_storage_provenance);
 TEST_MAIN_END()

@@ -6260,6 +6260,10 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     decl.name_id = hash_name32(fn->name);
     decl.signature_key = hash_function_signature(fn);
     decl.source_span_id = (uint32_t) node->line;
+    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
     if (native_attr)
         decl.flags |= XG_DECL_NATIVE;
     if (extern_attr)
@@ -6339,6 +6343,10 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     decl.kind = (uint8_t) kind;
     decl.name_id = hash_name32(cls->name);
     decl.source_span_id = (uint32_t) node->line;
+    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
     if (cls->is_native)
         decl.flags |= XG_DECL_NATIVE;
     if (cls->explicit_final)
@@ -6524,6 +6532,10 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     decl.name_id = hash_name32(e->name);
     decl.signature_key = (uint32_t) e->member_count;
     decl.source_span_id = (uint32_t) node->line;
+    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
@@ -6598,6 +6610,72 @@ static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     }
 }
 
+static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const AstNode *stmt) {
+    XgDeclSummary decl;
+    const char *name = NULL;
+    if (!stmt)
+        return true;
+    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
+        return add_module_storage_decl(p, module_id, stmt->as.export_stmt.declaration);
+    if (stmt->type == AST_IMPORT_STMT) {
+        if (stmt->as.import_stmt.member_count == 0) {
+            name = stmt->as.import_stmt.alias ? stmt->as.import_stmt.alias
+                                              : stmt->as.import_stmt.module_name;
+        } else {
+            for (int i = 0; i < stmt->as.import_stmt.member_count; i++) {
+                const ImportMember *member = &stmt->as.import_stmt.members[i];
+                XgDeclSummary import_decl;
+                memset(&import_decl, 0, sizeof(import_decl));
+                import_decl.module_id = module_id;
+                import_decl.source_node_id =
+                    producer_source_node_id(module_id, stmt) + (uint32_t) i;
+                import_decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
+                import_decl.kind = XG_DECL_GLOBAL;
+                import_decl.name_id = hash_name32(member->alias ? member->alias : member->name);
+                import_decl.source_span_id = (uint32_t) stmt->line;
+                import_decl.storage_owner = XR_STORAGE_MODULE;
+                import_decl.storage_mutability = XR_STORAGE_READONLY;
+                import_decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+                import_decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+                if (!xg_global_evidence_add_decl(p->evidence, &import_decl))
+                    return false;
+            }
+            return true;
+        }
+    } else if (stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL ||
+               stmt->type == AST_SHARED_DECL) {
+        name = stmt->as.var_decl.name;
+    } else {
+        return true;
+    }
+    memset(&decl, 0, sizeof(decl));
+    decl.module_id = module_id;
+    decl.source_node_id = producer_source_node_id(module_id, stmt);
+    decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
+    decl.kind = XG_DECL_GLOBAL;
+    decl.name_id = hash_name32(name);
+    decl.type_key =
+        stmt->type == AST_IMPORT_STMT ? 0 : hash_tref32(stmt->as.var_decl.type_annotation);
+    decl.source_span_id = (uint32_t) stmt->line;
+    if (stmt->type == AST_SHARED_DECL) {
+        decl.storage_owner = XR_STORAGE_SHARED_SYSTEM;
+        decl.storage_mutability = XR_STORAGE_INTERIOR_MUTABLE;
+        decl.address_identity = XR_ADDRESS_SHARED_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_SHARED_SYSTEM;
+    } else {
+        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_mutability =
+            stmt->type == AST_CONST_DECL ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE;
+        if (stmt->type == AST_IMPORT_STMT)
+            decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = (stmt->type == AST_CONST_DECL || stmt->type == AST_IMPORT_STMT)
+                                        ? XR_MATERIALIZE_MODULE_READONLY
+                                        : XR_MATERIALIZE_MODULE_RUNTIME;
+    }
+    return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
+}
+
 static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstNode *stmt,
                                  bool *handled) {
     if (handled)
@@ -6639,6 +6717,8 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
         if (!stmt)
             continue;
         bool handled = false;
+        if (!add_module_storage_decl(p, module_id, stmt))
+            return false;
         if (!add_module_decl_stmt(p, module_id, stmt, &handled))
             return false;
         if (!handled && module_stmt_has_runtime_body(stmt))

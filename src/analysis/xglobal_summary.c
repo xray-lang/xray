@@ -142,7 +142,12 @@ static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     hash = hash_u32(hash, row->type_key);
     hash = hash_u32(hash, row->signature_key);
     hash = hash_u32(hash, row->source_span_id);
-    return hash_u32(hash, row->derive_flags);
+    hash = hash_u32(hash, row->derive_flags);
+    hash = hash_u32(hash, row->storage_flags);
+    hash = hash_u8(hash, row->storage_owner);
+    hash = hash_u8(hash, row->storage_mutability);
+    hash = hash_u8(hash, row->address_identity);
+    return hash_u8(hash, row->materialization_kind);
 }
 
 static uint64_t hash_class_summary(uint64_t hash, const XgClassSummary *row) {
@@ -3267,9 +3272,11 @@ static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *e
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
                 "decl id=%u module=%u node=%u kind=%u flags=0x%x name=%u type=%u sig=%u span=%u "
-                "derive=0x%x\n",
+                "derive=0x%x storage_flags=0x%x owner=%u mutability=%u address=%u materialize=%u\n",
                 d->decl_id, d->module_id, d->source_node_id, (unsigned) d->kind, d->flags,
-                d->name_id, d->type_key, d->signature_key, d->source_span_id, d->derive_flags);
+                d->name_id, d->type_key, d->signature_key, d->source_span_id, d->derive_flags,
+                d->storage_flags, (unsigned) d->storage_owner, (unsigned) d->storage_mutability,
+                (unsigned) d->address_identity, (unsigned) d->materialization_kind);
     }
 }
 
@@ -3812,6 +3819,10 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
     for (uint32_t i = 0; i < decl_count; i++) {
         XgDeclSummary row;
         uint32_t kind = 0;
+        uint32_t storage_owner = 0;
+        uint32_t storage_mutability = 0;
+        uint32_t address_identity = 0;
+        uint32_t materialization_kind = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -3819,12 +3830,22 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
         if (sscanf(line,
                    "decl id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " kind=%" SCNu32
                    " flags=0x%" SCNx32 " name=%" SCNu32 " type=%" SCNu32 " sig=%" SCNu32
-                   " span=%" SCNu32 " derive=0x%" SCNx32 " %c",
+                   " span=%" SCNu32 " derive=0x%" SCNx32 " storage_flags=0x%" SCNx32
+                   " owner=%" SCNu32 " mutability=%" SCNu32 " address=%" SCNu32
+                   " materialize=%" SCNu32 " %c",
                    &row.decl_id, &row.module_id, &row.source_node_id, &kind, &row.flags,
                    &row.name_id, &row.type_key, &row.signature_key, &row.source_span_id,
-                   &row.derive_flags, &trailing) != 10)
+                   &row.derive_flags, &row.storage_flags, &storage_owner, &storage_mutability,
+                   &address_identity, &materialization_kind, &trailing) != 15)
+            return false;
+        if (kind > UINT8_MAX || storage_owner > UINT8_MAX || storage_mutability > UINT8_MAX ||
+            address_identity > UINT8_MAX || materialization_kind > UINT8_MAX)
             return false;
         row.kind = (uint8_t) kind;
+        row.storage_owner = (uint8_t) storage_owner;
+        row.storage_mutability = (uint8_t) storage_mutability;
+        row.address_identity = (uint8_t) address_identity;
+        row.materialization_kind = (uint8_t) materialization_kind;
         if (!xg_global_evidence_add_decl(evidence, &row))
             return false;
     }
@@ -5948,10 +5969,13 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
                 "decl %u id=%u module=%u node=%u kind=%s flags=0x%x name=%u type=%u sig=%u "
-                "span=%u derive=0x%x\n",
+                "span=%u derive=0x%x storage_flags=0x%x owner=%u mutability=%u address=%u "
+                "materialize=%u\n",
                 i, d->decl_id, d->module_id, d->source_node_id, xg_decl_kind_name(d->kind),
                 d->flags, d->name_id, d->type_key, d->signature_key, d->source_span_id,
-                d->derive_flags);
+                d->derive_flags, d->storage_flags, (unsigned) d->storage_owner,
+                (unsigned) d->storage_mutability, (unsigned) d->address_identity,
+                (unsigned) d->materialization_kind);
     }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *c = &evidence->classes[i];
