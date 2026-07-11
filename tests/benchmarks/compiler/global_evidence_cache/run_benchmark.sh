@@ -6,7 +6,8 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 XRAY="${1:-${XRAY_BIN:-$PROJECT_DIR/build/xray}}"
-CASES="${XRAY_GLOBAL_EVIDENCE_BENCH_CASES:-class,generic,closure,static,capability}"
+PACKAGE_PAYLOAD_FIXTURE="${XRAY_PACKAGE_PAYLOAD_FIXTURE:-$PROJECT_DIR/build/xray_package_payload_fixture}"
+CASES="${XRAY_GLOBAL_EVIDENCE_BENCH_CASES:-class,generic,closure,static,capability,package}"
 REPEAT="${XRAY_GLOBAL_EVIDENCE_BENCH_REPEAT:-1}"
 KEEP="${XRAY_GLOBAL_EVIDENCE_BENCH_KEEP:-0}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_global_evidence_cache_bench.XXXXXX")" || {
@@ -52,6 +53,14 @@ now_ms() {
 elapsed_ms() {
     local start="$1" end="$2"
     echo $((end - start))
+}
+
+realpath_portable() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+    else
+        (cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
+    fi
 }
 
 write_class_case() {
@@ -264,6 +273,36 @@ print(await b)
 XR_EOF
 }
 
+write_package_entry_case() {
+    local file="$1" variant="$2" extra="$3"
+    local decl_extra=""
+    local body_expr="$extra"
+    if [ "$variant" = "decl" ]; then
+        decl_extra="
+fn added_decl(x: int) -> int {
+    return x + 1
+}
+"
+    fi
+    if [ "$variant" != "base" ]; then
+        body_expr="tag()"
+    fi
+    cat >"$file" <<XR_EOF
+import "codex/pkg" as pkg
+
+fn tag() -> int {
+    return $extra
+}
+
+fn value() -> int {
+    return 7 + $body_expr
+}
+
+$decl_extra
+print(value())
+XR_EOF
+}
+
 write_case() {
     local case_name="$1" file="$2" variant="$3" extra="$4"
     case "$case_name" in
@@ -272,6 +311,7 @@ write_case() {
         closure) write_closure_case "$file" "$variant" "$extra" ;;
         static) write_static_case "$file" "$variant" "$extra" ;;
         capability) write_capability_case "$file" "$variant" "$extra" ;;
+        package) write_package_entry_case "$file" "$variant" "$extra" ;;
         *)
             echo "FAIL: unknown case '$case_name'" >&2
             return 1
@@ -307,6 +347,28 @@ expect_summary() {
     return 1
 }
 
+expect_log_contains() {
+    local log="$1" pattern="$2" case_name="$3" phase="$4" desc="$5"
+    if grep -q "$pattern" "$log"; then
+        return 0
+    fi
+    echo "FAIL: $case_name/$phase expected $desc" >&2
+    grep -E 'evidence cache' "$log" >&2 || true
+    FAIL=$((FAIL + 1))
+    return 1
+}
+
+expect_log_not_contains() {
+    local log="$1" pattern="$2" case_name="$3" phase="$4" desc="$5"
+    if ! grep -q "$pattern" "$log"; then
+        return 0
+    fi
+    echo "FAIL: $case_name/$phase unexpected $desc" >&2
+    grep -E 'evidence cache' "$log" >&2 || true
+    FAIL=$((FAIL + 1))
+    return 1
+}
+
 run_phase() {
     local case_name="$1" phase="$2" file="$3" out="$4" cache="$5" expected="$6"
     shift 6
@@ -327,8 +389,91 @@ run_phase() {
     fi
 }
 
+prepare_package_payload_case() {
+    local dir="$1" cache="$2"
+    local home="$dir/home"
+    local pkg_dir="$home/.xray/packages/codex/pkg/1.0.0/src"
+    local pkg_src="$pkg_dir/main.xr"
+    local real_pkg_src
+    if [ ! -x "$PACKAGE_PAYLOAD_FIXTURE" ]; then
+        echo "FAIL: package payload fixture not executable: $PACKAGE_PAYLOAD_FIXTURE" >&2
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    mkdir -p "$pkg_dir"
+    cat >"$pkg_src" <<'XR_EOF'
+fn package_value() -> int {
+    return 5
+}
+XR_EOF
+    real_pkg_src="$(realpath_portable "$pkg_src")"
+    "$PACKAGE_PAYLOAD_FIXTURE" "$cache/aot/native" "codex/pkg" "$real_pkg_src" >/dev/null
+}
+
+expect_package_phase() {
+    local log="$1" phase="$2" request_hits="$3" request_misses="$4" materialized="$5"
+    expect_log_contains "$log" "evidence cache imported packages: discovered=1" package "$phase" \
+        "package payload discovery"
+    expect_log_contains "$log" \
+        "evidence cache preproducer summary: request_hits=$request_hits request_misses=$request_misses materialized=$materialized" \
+        package "$phase" "package preproducer hit-rate summary"
+}
+
+run_package_case() {
+    local iter="$1"
+    local case_name="package"
+    local dir="$WORK/$case_name-$iter"
+    local src="$dir/app.xr"
+    local cache="$dir/.cache"
+    local home="$dir/home"
+    mkdir -p "$dir"
+
+    prepare_package_payload_case "$dir" "$cache" || return 1
+
+    write_case "$case_name" "$src" base 0 || {
+        FAIL=$((FAIL + 1))
+        return 1
+    }
+    HOME="$home" run_phase "$case_name" cold "$src" "$dir/cold" "$cache" "hits=0 misses=4"
+    expect_package_phase "$dir/cold.log" cold 0 4 0
+    expect_log_contains "$dir/cold.log" "evidence cache producer skip: imported_package_summary" \
+        "$case_name" cold "package row import"
+    expect_log_not_contains "$dir/cold.log" "evidence cache producer skip: global_evidence_summary" \
+        "$case_name" cold "global producer skip"
+
+    HOME="$home" run_phase "$case_name" package_import_warm "$src" "$dir/warm" "$cache" \
+        "hits=4 misses=0"
+    expect_package_phase "$dir/warm.log" package_import_warm 4 0 4
+    expect_log_contains "$dir/warm.log" "evidence cache producer skip: pre_mono_generic_summary" \
+        "$case_name" package_import_warm "pre-mono producer skip"
+    expect_log_contains "$dir/warm.log" "evidence cache producer skip: global_evidence_summary" \
+        "$case_name" package_import_warm "global producer skip"
+    expect_log_not_contains "$dir/warm.log" "evidence cache producer skip: imported_package_summary" \
+        "$case_name" package_import_warm "package row re-import"
+
+    HOME="$home" run_phase "$case_name" package_import_dump "$src" "$dir/dump" "$cache" \
+        "hits=4 misses=0" --dump-global-evidence
+    expect_package_phase "$dir/dump.log" package_import_dump 4 0 4
+    expect_log_contains "$dir/dump.log" "evidence cache producer skip: global_evidence_summary" \
+        "$case_name" package_import_dump "dump warm global producer skip"
+
+    write_case "$case_name" "$src" body 1 || {
+        FAIL=$((FAIL + 1))
+        return 1
+    }
+    HOME="$home" run_phase "$case_name" package_consumer_body_change "$src" "$dir/body" "$cache" \
+        "hits=2 misses=2"
+    expect_package_phase "$dir/body.log" package_consumer_body_change 0 4 0
+    expect_log_contains "$dir/body.log" "evidence cache producer skip: imported_package_summary" \
+        "$case_name" package_consumer_body_change "package row import after consumer body change"
+}
+
 run_one_case() {
     local case_name="$1" iter="$2"
+    if [ "$case_name" = "package" ]; then
+        run_package_case "$iter"
+        return
+    fi
     local dir="$WORK/$case_name-$iter"
     local src="$dir/main.xr"
     local cache="$dir/.cache"
