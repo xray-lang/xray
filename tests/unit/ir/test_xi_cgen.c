@@ -633,6 +633,25 @@ static bool contains_between(const char *start, const char *end, const char *nee
     return count_between(start, end, needle) > 0;
 }
 
+static size_t count_op_in_func(const XiFunc *func, XiOp op) {
+    size_t count = 0;
+    if (!func)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->op == op)
+                count++;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++)
+        count += count_op_in_func(func->children[ci], op);
+    return count;
+}
+
 static const char *next_static_after(const char *fn) {
     assert(fn != NULL);
     const char *next = strstr(fn + 1, "\nstatic ");
@@ -1769,6 +1788,33 @@ TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
            "direct aggregate reduce callbacks should not require boxed adapters");
 
     xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(lower_parallel_call_plan_resolves_selective_aliases) {
+    const char *src = "import { forEach as each, map as parMap, reduce as fold, "
+                      "Options as ParOptions } from parallel\n"
+                      "shared total = Atomic(0)\n"
+                      "each(0..4, (i) -> {\n"
+                      "    total.fetchAdd(i, Ordering.Relaxed)\n"
+                      "}, ParOptions(2))\n"
+                      "var xs = parMap(0..4, (i) -> i + 1, ParOptions(2))\n"
+                      "var sum = fold(0..4, 0, (i) -> i + 1, (a, b) -> a + b, "
+                      "ParOptions(2))\n"
+                      "print(total.load(Ordering.Relaxed))\n"
+                      "print(xs[3])\n"
+                      "print(sum)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "selective alias parallel call-plan source should lower to IR");
+
+    TEST_REQUIRE(count_op_in_func(ir, XI_PAR_FOR) == 1,
+                 "resolved forEach alias should lower to XI_PAR_FOR");
+    TEST_REQUIRE(count_op_in_func(ir, XI_PAR_MAP) == 1,
+                 "resolved map alias should lower to XI_PAR_MAP");
+    TEST_REQUIRE(count_op_in_func(ir, XI_PAR_REDUCE) == 1,
+                 "resolved reduce alias should lower to XI_PAR_REDUCE");
+
     xi_func_free(ir);
 }
 
@@ -7792,6 +7838,7 @@ int main(void) {
     run_cgen_parallel_map_return_uses_runtime_executor();
     run_cgen_parallel_reduce_uses_runtime_executor();
     run_cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime();
+    run_lower_parallel_call_plan_resolves_selective_aliases();
     run_cgen_parallel_for_each_allows_atomic_i64_direct_body();
     run_cgen_parallel_for_each_rejects_throwing_body();
     run_cgen_parallel_for_body_closure_stack_allocates();
