@@ -1944,6 +1944,54 @@ else
     sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_TOP_VAR_AGG_REASSIGN_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_aggregate_reassign.xr"
+FREESTANDING_TOP_VAR_AGG_REASSIGN_OBJ="$WORK/freestanding_top_var_aggregate_reassign.o"
+FREESTANDING_TOP_VAR_AGG_REASSIGN_LOG="$WORK/freestanding_top_var_aggregate_reassign.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_VAR_AGG_REASSIGN_OBJ" \
+        "$FREESTANDING_TOP_VAR_AGG_REASSIGN_SRC" >"$FREESTANDING_TOP_VAR_AGG_REASSIGN_LOG" 2>&1; then
+    FREESTANDING_TOP_VAR_AGG_REASSIGN_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_VAR_AGG_REASSIGN_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_reassign_" \
+            "freestanding-profile/top-var-aggregate-reassign: materializes mutable struct as static data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" \
+            "struct { int64_t value; int64_t limit; } _st" \
+            "freestanding-profile/top-var-aggregate-reassign: initializes local replacement struct"
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" \
+            "memcpy(&_xctstruct_freestanding_top_var_aggregate_reassign_" \
+            "freestanding-profile/top-var-aggregate-reassign: copies whole value into static data"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" "xrt_shared[0] =" \
+            "freestanding-profile/top-var-aggregate-reassign: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" "xrt_arc_alloc" \
+            "freestanding-profile/top-var-aggregate-reassign: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" "xr_aggregate_ref" \
+            "freestanding-profile/top-var-aggregate-reassign: avoids runtime aggregate refs"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" "#include \"xrt.h\"" \
+            "freestanding-profile/top-var-aggregate-reassign: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/top-var-aggregate-reassign: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_REASSIGN_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_VAR_AGG_REASSIGN_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_VAR_AGG_REASSIGN_OBJ")"
+    FREESTANDING_TOP_VAR_AGG_REASSIGN_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_VAR_AGG_REASSIGN_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_TOP_VAR_AGG_REASSIGN_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-var-aggregate-reassign: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/top-var-aggregate-reassign: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_VAR_AGG_REASSIGN_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/top-var-aggregate-reassign: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_REASSIGN_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_VAR_AGG_ATTRS_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_aggregate_attrs.xr"
 FREESTANDING_TOP_VAR_AGG_ATTRS_OBJ="$WORK/freestanding_top_var_aggregate_attrs.o"
 FREESTANDING_TOP_VAR_AGG_ATTRS_LOG="$WORK/freestanding_top_var_aggregate_attrs.log"
@@ -3155,14 +3203,6 @@ expect_freestanding_reject \
     "freestanding-profile: rejects top-level var declarations" \
     "freestanding profile rejects top-level var declaration" \
     "only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, typed nullable scalar/string/null defaults, or recursively scalar struct/union consteval initializers are supported as static mutable module storage in the current freestanding slice"
-
-expect_freestanding_reject \
-    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_aggregate_reject.xr" \
-    "$WORK/freestanding_top_var_aggregate_reject" \
-    "$WORK/freestanding_top_var_aggregate_reject.log" \
-    "freestanding-profile: rejects aggregate top-level var whole-value assignment" \
-    "freestanding profile rejects whole-value assignment to static aggregate top-level var" \
-    "mutate fields directly in the current slice"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_weak_reject.xr" \

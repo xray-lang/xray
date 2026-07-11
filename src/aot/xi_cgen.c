@@ -5635,16 +5635,20 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         if (!cg_phi_has_storage(phi))
             return false;
         if (cg_value_traces_to_inlined_struct(f, v) ||
+            cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
             cg_value_is_elided_heap_struct_alias(ctx, f, v))
             return false;
         return true;
     }
-    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v))
+    if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return false;
-    if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
-                                                   cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+    if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+        (cg_value_traces_to_inlined_struct(f, v) ||
+         cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
+         cg_value_is_elided_heap_struct_alias(ctx, f, v)))
         return false;
     if (cg_value_traces_to_inlined_struct(f, v) ||
+        cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
         cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
         cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
         cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
@@ -6498,7 +6502,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
-    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v)) {
+    if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v)) {
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         XR_DCHECK(sl != NULL, "inlined XI_AGG_NEW: missing layout");
         fprintf(out, "    struct { ");
@@ -6564,12 +6568,15 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_const_ref(ctx, f, v))
         return;
-    if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
-                                                   cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+    if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+        (cg_value_traces_to_inlined_struct(f, v) ||
+         cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
+         cg_value_is_elided_heap_struct_alias(ctx, f, v)))
         return;
 
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
         (cg_value_traces_to_inlined_struct(f, v->args[0]) ||
+         cg_value_traces_to_static_struct_whole_store(ctx, f, v->args[0]) ||
          cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
          cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
          cg_value_is_elided_fixed_array_ref(f, v->args[0]) ||
@@ -7095,10 +7102,12 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
         return true;
-    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v))
+    if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return true;
-    if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
-                                                   cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+    if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+        (cg_value_traces_to_inlined_struct(f, v) ||
+         cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
+         cg_value_is_elided_heap_struct_alias(ctx, f, v)))
         return true;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
         cg_class_descriptor_value_is_elided(ctx, f, v) ||

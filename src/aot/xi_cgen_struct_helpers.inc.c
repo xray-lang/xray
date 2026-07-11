@@ -1896,6 +1896,101 @@ static bool cg_struct_can_inline(const XiFunc *f, const XiValue *target) {
     return origin == target && cg_struct_uses_safe_depth(f, target, origin, 0);
 }
 
+static bool cg_static_struct_whole_store_target(XiCgenCtx *ctx, const XiValue *store,
+                                                const XrAggregateLayout *origin_layout,
+                                                int64_t *out_slot) {
+    if (out_slot)
+        *out_slot = -1;
+    if (!ctx || !ctx->freestanding_profile || !ctx->module || !store ||
+        store->op != XI_SET_SHARED || store->nargs < 1 || store->aux_int < 0 ||
+        store->aux_int >= ctx->module->nslots || !origin_layout)
+        return false;
+    int64_t slot = store->aux_int;
+    const XrAggregateLayout *slot_layout = NULL;
+    if (!cg_freestanding_static_struct_literal_in_module(ctx, ctx->module, slot, &slot_layout,
+                                                         NULL))
+        return false;
+    const XiConstLiteral *lit = cg_module_static_data_literal(ctx->module, slot);
+    if (!lit || !lit->data_mutable || !cg_struct_layout_same_shape(origin_layout, slot_layout))
+        return false;
+    if (out_slot)
+        *out_slot = slot;
+    return true;
+}
+
+static bool cg_static_struct_whole_store_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
+                                                   const XiValue *target, const XiValue *origin,
+                                                   int depth, bool *saw_store) {
+    if (!ctx || !f || !target || !origin || depth > 8)
+        return false;
+    const XrAggregateLayout *origin_layout = (const XrAggregateLayout *) origin->aux;
+    if (!origin_layout)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target)
+                    continue;
+                if ((v->op == XI_AGG_GET || v->op == XI_AGG_SET) && a == 0)
+                    continue;
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
+                if (cg_is_identity_copy_or_move(v) && a == 0) {
+                    if (cg_trace_struct_new(v) != origin)
+                        return false;
+                    if (!cg_static_struct_whole_store_safe_uses(ctx, f, v, origin, depth + 1,
+                                                                saw_store))
+                        return false;
+                    continue;
+                }
+                if (v->op == XI_SET_SHARED && a == 0 &&
+                    cg_static_struct_whole_store_target(ctx, v, origin_layout, NULL)) {
+                    if (saw_store)
+                        *saw_store = true;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_struct_can_inline_static_whole_store(XiCgenCtx *ctx, const XiFunc *f,
+                                                    const XiValue *target) {
+    const XiValue *origin = cg_trace_struct_new(target);
+    if (!origin || origin != target || origin->op != XI_AGG_NEW || !origin->aux)
+        return false;
+    bool saw_store = false;
+    return cg_static_struct_whole_store_safe_uses(ctx, f, target, origin, 0, &saw_store) &&
+           saw_store;
+}
+
+static bool cg_value_traces_to_static_struct_whole_store(XiCgenCtx *ctx, const XiFunc *f,
+                                                         const XiValue *v) {
+    const XiValue *origin = cg_trace_struct_new(v);
+    return origin && cg_struct_can_inline_static_whole_store(ctx, f, origin);
+}
+
+static bool cg_struct_inline_local_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *origin) {
+    return origin && (cg_struct_can_inline(f, origin) ||
+                      cg_struct_can_inline_static_whole_store(ctx, f, origin));
+}
+
 static bool cg_value_traces_to_inlined_struct(const XiFunc *f, const XiValue *v) {
     const XiValue *origin = cg_trace_struct_new(v);
     return origin && cg_struct_can_inline(f, origin);
@@ -2235,7 +2330,7 @@ static void emit_struct_heap_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFun
                                           const XrAggregateLayout *sl, int64_t idx,
                                           const XiValue *object, const char *prefix) {
     const XiValue *origin = cg_trace_struct_new(object);
-    if (origin && cg_struct_can_inline(f, origin) &&
+    if (origin && cg_struct_inline_local_storage(ctx, f, origin) &&
         cg_struct_layout_same_shape((const XrAggregateLayout *) origin->aux, sl)) {
         emit_struct_field_ref(out, sl, origin, idx);
         return;
@@ -2278,7 +2373,7 @@ static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return;
     }
     const XiValue *origin = cg_trace_struct_new(object);
-    if (origin && cg_struct_can_inline(f, origin) &&
+    if (origin && cg_struct_inline_local_storage(ctx, f, origin) &&
         cg_struct_layout_same_shape((const XrAggregateLayout *) origin->aux, sl)) {
         emit_struct_field_ref(out, sl, origin, idx);
         return;

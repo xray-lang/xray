@@ -7271,13 +7271,15 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     XrType *var_type = xa_analyzer_get_type(ctx->analyzer, sym);
     if (xa_freestanding_profile_enabled(ctx->analyzer) && sym->scope &&
         sym->scope->kind == XA_SCOPE_GLOBAL && xa_type_has_fixed_layout_data_object(var_type)) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "freestanding profile rejects whole-value assignment to static aggregate top-level "
-            "var; mutate fields directly in the current slice",
-            &loc);
-        return;
+        if (!assign->value || assign->value->type != AST_STRUCT_LITERAL) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                "freestanding profile only supports struct-literal whole-value assignment to "
+                "static aggregate top-level var",
+                &loc);
+            return;
+        }
     }
     xa_check_active_span_borrow_owner_mutation(ctx, node, sym, "reassigning the owner");
 
