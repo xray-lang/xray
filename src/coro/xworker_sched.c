@@ -1308,6 +1308,67 @@ static inline void worker_reset_spinning(XrWorker *worker, XrRuntime *runtime) {
     }
 }
 
+bool xr_runtime_help_join_once(XrRuntime *runtime) {
+    XrWorker *worker = xr_current_worker();
+    if (!runtime || !worker || worker->p.runtime != runtime || !worker->m ||
+        !atomic_load(&runtime->running)) {
+        return false;
+    }
+
+    XrCoroutine *previous_coro =
+        atomic_load_explicit(&worker->m->current_coro, memory_order_relaxed);
+    int previous_state = atomic_load_explicit(&worker->m->state, memory_order_relaxed);
+
+    XrCoroutine *coro = xr_worker_pop(worker);
+    if (!coro) {
+        int poll_skip = 0;
+        XrCoroutine *io_fast = NULL;
+        if (!worker_housekeeping(worker, runtime, &poll_skip, &io_fast))
+            goto restore_no_work;
+        coro = io_fast ? io_fast : xr_worker_pop(worker);
+    }
+
+    if (!coro && atomic_load(&runtime->running)) {
+        int64_t min_steal_delay = 0;
+        bool exit_flag = false;
+        coro = xr_worker_try_steal_once(worker, runtime, &runtime->running, &min_steal_delay,
+                                        &exit_flag);
+        if (exit_flag)
+            goto restore_no_work;
+    }
+
+    if (!coro)
+        goto restore_no_work;
+
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+        goto restore_helped;
+
+    if (xr_coro_is_thread_locked(coro) && coro->ext->locked_worker != worker->p.id) {
+        int locked_worker = coro->ext->locked_worker;
+        if (locked_worker >= 0 && locked_worker < runtime->worker_count)
+            xr_worker_inbox_enqueue(runtime, locked_worker, coro);
+        goto restore_helped;
+    }
+
+    worker_reset_spinning(worker, runtime);
+    atomic_store(&worker->m->state, M_RUNNING);
+    worker_exec_with_cont_stealing(worker, coro);
+
+restore_helped:
+    if (atomic_load(&runtime->running)) {
+        atomic_store_explicit(&worker->m->current_coro, previous_coro, memory_order_relaxed);
+        atomic_store_explicit(&worker->m->state, previous_state, memory_order_relaxed);
+    }
+    return true;
+
+restore_no_work:
+    if (atomic_load(&runtime->running)) {
+        atomic_store_explicit(&worker->m->current_coro, previous_coro, memory_order_relaxed);
+        atomic_store_explicit(&worker->m->state, previous_state, memory_order_relaxed);
+    }
+    return false;
+}
+
 // ========== Worker Main Loop ==========
 
 // Worker main loop (GMP model)

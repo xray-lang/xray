@@ -77,6 +77,31 @@ static void aot_par_for_range_sum_body(struct xrt_closure *closure, int64_t begi
         atomic_fetch_add_explicit(&aot_par_for_sum, i, memory_order_relaxed);
 }
 
+static void aot_par_nested_inner_body(struct xrt_closure *closure, int64_t begin, int64_t end,
+                                      int64_t worker_id) {
+    (void) closure;
+    if (worker_id < 0 || worker_id >= 8)
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+    for (int64_t i = begin; i < end; i++)
+        atomic_fetch_add_explicit(&aot_par_for_sum, i, memory_order_relaxed);
+}
+
+static void aot_par_nested_outer_body(struct xrt_closure *closure, int64_t begin, int64_t end,
+                                      int64_t worker_id) {
+    if (worker_id < 0 || worker_id >= 8)
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+    XrAotContext *ctx = (XrAotContext *) closure;
+    if (!ctx) {
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+        return;
+    }
+    for (int64_t i = begin; i < end; i++) {
+        (void) i;
+        if (!xr_parallel_for_range_i64(ctx, 0, 32, 3, aot_par_nested_inner_body, NULL))
+            atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+    }
+}
+
 static bool aot_par_reduce_range_sum_body(struct xrt_closure *closure, int64_t begin, int64_t end,
                                           int64_t worker_id, int64_t *out) {
     (void) closure;
@@ -1268,6 +1293,27 @@ TEST(parallel_for_dispatch_is_runtime_scoped) {
     xr_aot_runtime_delete(runtime_b);
 }
 
+TEST(parallel_for_nested_worker_wait_helps_join) {
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_PARALLEL;
+    cfg.scheduler_workers = 3;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
+    atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+
+    ASSERT_TRUE(xr_parallel_for_range_i64(&ctx, 0, 3, 3, aot_par_nested_outer_body,
+                                          (struct xrt_closure *) &ctx));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 1488);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(parallel_reduce_i64_runs_range_reducer) {
     XrAotRuntime *runtime = aot_test_parallel_runtime_new();
     ASSERT_NOT_NULL(runtime);
@@ -1368,6 +1414,7 @@ RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 RUN_TEST(parallel_for_range_i64_runs_static_lanes);
 RUN_TEST(parallel_for_auto_workers_uses_scheduler_worker_count);
 RUN_TEST(parallel_for_dispatch_is_runtime_scoped);
+RUN_TEST(parallel_for_nested_worker_wait_helps_join);
 RUN_TEST(parallel_reduce_i64_runs_range_reducer);
 RUN_TEST(parallel_reduce_agg_runs_range_reducer);
 

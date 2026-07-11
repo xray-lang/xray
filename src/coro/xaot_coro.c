@@ -300,9 +300,20 @@ static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
     xr_runtime_spawn_batch(scheduler, coros, background_lanes);
     xr_parallel_scheduler_run_lane(batch, background_lanes);
 
+    XrWorker *current = xr_current_worker();
+    bool can_help_join = current && current->p.runtime == scheduler;
     xr_mutex_lock(&batch->mutex);
-    while (batch->remaining_lanes > 0)
-        xr_cond_wait(&batch->done, &batch->mutex);
+    while (batch->remaining_lanes > 0) {
+        if (!can_help_join) {
+            xr_cond_wait(&batch->done, &batch->mutex);
+            continue;
+        }
+        xr_mutex_unlock(&batch->mutex);
+        bool helped = xr_runtime_help_join_once(scheduler);
+        xr_mutex_lock(&batch->mutex);
+        if (!helped && batch->remaining_lanes > 0)
+            xr_cond_wait_for_ns(&batch->done, &batch->mutex, 1000000ULL);
+    }
     xr_mutex_unlock(&batch->mutex);
 
     xr_cond_destroy(&batch->done);
