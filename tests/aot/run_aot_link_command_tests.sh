@@ -3462,13 +3462,65 @@ else
     sed 's/^/      /' "$FREESTANDING_ENUM_NAME_LOG" | sed -n '1,120p'
 fi
 
-expect_freestanding_reject \
-    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_tostring_reject.xr" \
-    "$WORK/freestanding_enum_tostring_reject" \
-    "$WORK/freestanding_enum_tostring_reject.log" \
-    "freestanding-profile/enum: rejects enum.toString" \
-    "freestanding profile rejects enum.toString" \
-    "use ordinal or match in freestanding code"
+FREESTANDING_ENUM_TOSTRING_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_tostring_static.xr"
+FREESTANDING_ENUM_TOSTRING_OBJ="$WORK/freestanding_enum_tostring_static.o"
+FREESTANDING_ENUM_TOSTRING_LOG="$WORK/freestanding_enum_tostring_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ENUM_TOSTRING_OBJ" \
+        "$FREESTANDING_ENUM_TOSTRING_SRC" >"$FREESTANDING_ENUM_TOSTRING_LOG" 2>&1; then
+    FREESTANDING_ENUM_TOSTRING_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_ENUM_TOSTRING_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ENUM_TOSTRING_C" ]; then
+        expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
+            "static const xrt_str_t _xenum_name_FsStatus_" \
+            "freestanding-profile/enum-tostring: materializes enum strings statically"
+        expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
+            "static const xrt_str_t _xenum_name_Endian_" \
+            "freestanding-profile/enum-tostring: materializes prelude enum strings statically"
+        expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
+            "(void *) &_xenum_name_FsStatus_" \
+            "freestanding-profile/enum-tostring: returns borrowed static string pointer"
+        expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
+            "(void *) &_xenum_name_Endian_" \
+            "freestanding-profile/enum-tostring: returns borrowed prelude static string pointer"
+        expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" "xr_str_value_from_ptr" \
+            "freestanding-profile/enum-tostring: boxes borrowed string pointer only at print boundary"
+        expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" "xrt_println" \
+            "freestanding-profile/enum-tostring: print path stays on freestanding print helper"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "xrt_method_" \
+            "freestanding-profile/enum-tostring: avoids hosted method dispatch"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "xrt_enum_box_name" \
+            "freestanding-profile/enum-tostring: avoids hosted enum name helper"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "xrt_enum_box_new" \
+            "freestanding-profile/enum-tostring: avoids enum boxing"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "XR_TAG_ENUM" \
+            "freestanding-profile/enum-tostring: keeps hot enum value unboxed"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "xrt_map_new" \
+            "freestanding-profile/enum-tostring: avoids enum namespace map allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "xrt_getprop_name" \
+            "freestanding-profile/enum-tostring: avoids dynamic property lookup"
+        expect_log_not_contains "$FREESTANDING_ENUM_TOSTRING_C" "#include \"xrt.h\"" \
+            "freestanding-profile/enum-tostring: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/enum-tostring: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ENUM_TOSTRING_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ENUM_TOSTRING_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_ENUM_TOSTRING_OBJ")"
+    FREESTANDING_ENUM_TOSTRING_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_ENUM_TOSTRING_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(xr_hook_write|xr_hook_panic|memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_ENUM_TOSTRING_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/enum-tostring: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/enum-tostring: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_ENUM_TOSTRING_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/enum-tostring: object build failed"
+    sed 's/^/      /' "$FREESTANDING_ENUM_TOSTRING_LOG" | sed -n '1,120p'
+fi
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_payload_untyped_catch_reject.xr" \
