@@ -1168,16 +1168,21 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
         char provider_abi[64];
         char provider_caps[64];
         char provider_hooks[64];
+        char provider_target_hash[96];
         snprintf(provider_abi, sizeof(provider_abi), "XRAY_PROVIDER_ABI=%u", provider->abi_version);
         snprintf(provider_caps, sizeof(provider_caps), "XRAY_PROVIDER_REQUIRED_CAPS=0x%x",
                  entry_plan ? entry_plan->required_capability_bits : 0);
         snprintf(provider_hooks, sizeof(provider_hooks), "XRAY_PROVIDER_REQUIRED_HOOKS=0x%x",
                  entry_plan ? entry_plan->provider_hook_bits : 0);
+        snprintf(provider_target_hash, sizeof(provider_target_hash),
+                 "XRAY_PROVIDER_TARGET_METADATA_HASH=0x%llxULL",
+                 (unsigned long long) provider->target_metadata_hash);
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE,
                                            "XRAY_TARGET_RUNTIME_PROVIDER=1") ||
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_abi) ||
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_caps) ||
-            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_hooks))
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_hooks) ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_target_hash))
             goto done;
     } else if (!add_runtime_cap_manifest_entries(features, manifest)) {
         goto done;

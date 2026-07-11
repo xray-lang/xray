@@ -498,6 +498,8 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
     ASSERT_TRUE(result.link_manifest.n_runtime_caps == 0);
     ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_TARGET_RUNTIME_PROVIDER=1"));
     ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_PROVIDER_ABI=1"));
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest,
+                                    "XRAY_PROVIDER_TARGET_METADATA_HASH=0x197195ULL"));
     xaot_build_result_free(&result);
 
     xaot_target_free(&target);

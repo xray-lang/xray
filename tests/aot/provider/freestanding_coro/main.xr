@@ -1,0 +1,5 @@
+fn worker() -> int {
+    return 1
+}
+
+await go worker()
