@@ -214,6 +214,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     XgGlobalEvidence materialized = {0};
     XgEvidenceCachePayloadInfo info;
     XgEvidenceCacheRequestKey expected_request;
+    XgEvidenceCacheRequestKey expected_request_from_key;
     XgEvidenceCacheKey expected;
     XgEvidenceCacheKey materialized_key;
     char *payload;
@@ -230,8 +231,11 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_NOT_NULL(payload);
     ASSERT(xg_evidence_cache_payload_parse(payload, &info));
     expected_request = xg_global_evidence_cache_request_key(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    expected_request_from_key =
+        xg_evidence_cache_request_key_from_build_key(&ev.key, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT(xg_evidence_cache_request_key_matches(&info.request_key, &expected_request));
+    ASSERT(xg_evidence_cache_request_key_matches(&expected_request_from_key, &expected_request));
     ASSERT(xg_evidence_cache_key_matches(&info.key, &expected));
     ASSERT_EQ_UINT(info.phase, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT_EQ_UINT(info.request_hash, xg_evidence_cache_request_key_hash(&expected_request));

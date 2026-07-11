@@ -18,6 +18,8 @@
 
 struct XrModuleGraph;
 
+XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const struct XrModuleGraph *graph,
+                                            uint32_t profile);
 XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *evidence,
                                                         const struct XrModuleGraph *graph,
                                                         uint32_t profile);
