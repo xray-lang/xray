@@ -87,7 +87,9 @@ static bool xaot_evidence_cache_phase_dir(const char *cache_dir, uint32_t phase,
 
 static bool xaot_payload_materializes_for_preproducer(const char *payload,
                                                       const XgEvidenceCacheRequestKey *request,
-                                                      bool *out_materialized) {
+                                                      bool *out_materialized,
+                                                      XgGlobalEvidence *out_global_evidence,
+                                                      bool *out_global_evidence_initialized) {
     XgGlobalEvidence materialized;
     XgEvidenceCachePayloadInfo info;
     XgEvidenceCacheKey materialized_key;
@@ -106,6 +108,14 @@ static bool xaot_payload_materializes_for_preproducer(const char *payload,
         materialized_key = xg_global_evidence_cache_key(&materialized, request->phase);
         ok = xg_evidence_cache_key_matches(&materialized_key, &info.key);
     }
+    if (ok && request->phase == XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE && out_global_evidence &&
+        out_global_evidence_initialized) {
+        if (*out_global_evidence_initialized)
+            xg_global_evidence_free(out_global_evidence);
+        *out_global_evidence = materialized;
+        *out_global_evidence_initialized = true;
+        memset(&materialized, 0, sizeof(materialized));
+    }
     xg_global_evidence_free(&materialized);
     if (ok && out_materialized)
         *out_materialized = true;
@@ -114,7 +124,9 @@ static bool xaot_payload_materializes_for_preproducer(const char *payload,
 
 static bool xaot_probe_preproducer_payload(const char *cache_dir,
                                            const XgEvidenceCacheRequestKey *request,
-                                           bool *out_materialized) {
+                                           bool *out_materialized,
+                                           XgGlobalEvidence *out_global_evidence,
+                                           bool *out_global_evidence_initialized) {
     char phase_dir[PATH_MAX];
     XrDirIter *it;
     XrDirEntry entry;
@@ -141,7 +153,9 @@ static bool xaot_probe_preproducer_payload(const char *cache_dir,
         if (!payload)
             continue;
         (void) size;
-        if (xaot_payload_materializes_for_preproducer(payload, request, out_materialized)) {
+        if (xaot_payload_materializes_for_preproducer(payload, request, out_materialized,
+                                                      out_global_evidence,
+                                                      out_global_evidence_initialized)) {
             hit = true;
             xr_free(payload);
             break;
@@ -154,7 +168,9 @@ static bool xaot_probe_preproducer_payload(const char *cache_dir,
 
 static void xaot_probe_preproducer_evidence_cache(const char *cache_dir,
                                                   const XgBuildKey *build_key, bool verbose,
-                                                  bool force_rebuild) {
+                                                  bool force_rebuild,
+                                                  XgGlobalEvidence *out_global_evidence,
+                                                  bool *out_global_evidence_initialized) {
     uint32_t request_hits = 0;
     uint32_t request_misses = 0;
     uint32_t materialized = 0;
@@ -167,7 +183,9 @@ static void xaot_probe_preproducer_evidence_cache(const char *cache_dir,
         bool is_materialized = false;
         bool hit = false;
         if (!force_rebuild)
-            hit = xaot_probe_preproducer_payload(cache_dir, &request, &is_materialized);
+            hit = xaot_probe_preproducer_payload(cache_dir, &request, &is_materialized,
+                                                 out_global_evidence,
+                                                 out_global_evidence_initialized);
         if (hit) {
             request_hits++;
             if (is_materialized)
@@ -834,7 +852,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     memset(result, 0, sizeof(*result));
     XgGlobalEvidence pre_mono_generic_evidence;
     bool pre_mono_generic_evidence_initialized = false;
+    XgGlobalEvidence cached_global_evidence;
+    bool cached_global_evidence_initialized = false;
     memset(&pre_mono_generic_evidence, 0, sizeof(pre_mono_generic_evidence));
+    memset(&cached_global_evidence, 0, sizeof(cached_global_evidence));
 
     printf("[xi-native] Building: %s\n", input_path);
 
@@ -878,7 +899,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         XgBuildKey preproducer_key;
         if (xg_build_key_from_module_graph(&preproducer_key, graph, xg_profile))
             xaot_probe_preproducer_evidence_cache(evidence_cache_dir, &preproducer_key,
-                                                  evidence_cache_verbose, evidence_cache_rebuild);
+                                                  evidence_cache_verbose, evidence_cache_rebuild,
+                                                  &cached_global_evidence,
+                                                  &cached_global_evidence_initialized);
     }
 
     int nmodules = graph->topo_count;
@@ -947,12 +970,17 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
 
-    if (!xg_global_evidence_build_from_module_graph(&pre_mono_generic_evidence, graph,
-                                                    xg_profile)) {
-        fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
-        goto fail_free_analyzer;
+    if (cached_global_evidence_initialized) {
+        if (evidence_cache_verbose)
+            printf("[xi-native] evidence cache producer skip: pre_mono_generic_summary\n");
+    } else {
+        if (!xg_global_evidence_build_from_module_graph(&pre_mono_generic_evidence, graph,
+                                                        xg_profile)) {
+            fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
+            goto fail_free_analyzer;
+        }
+        pre_mono_generic_evidence_initialized = true;
     }
-    pre_mono_generic_evidence_initialized = true;
 
     /* Mirror the VM compiler entry: monomorphize after the first graph-aware
      * analysis, then analyze again so cloned declarations have concrete
@@ -1033,18 +1061,27 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             xr_compiler_session_pop_arena(&canon_scope);
     }
 
-    if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph, xg_profile)) {
-        fprintf(stderr, "Error: failed to build global evidence\n");
-        goto fail_free_ir;
+    if (cached_global_evidence_initialized) {
+        global_evidence = cached_global_evidence;
+        memset(&cached_global_evidence, 0, sizeof(cached_global_evidence));
+        cached_global_evidence_initialized = false;
+        global_evidence_initialized = true;
+        if (evidence_cache_verbose)
+            printf("[xi-native] evidence cache producer skip: global_evidence_summary\n");
+    } else {
+        if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph, xg_profile)) {
+            fprintf(stderr, "Error: failed to build global evidence\n");
+            goto fail_free_ir;
+        }
+        global_evidence_initialized = true;
+        if (!xg_global_evidence_merge_generic_inst_roots(&global_evidence,
+                                                         &pre_mono_generic_evidence)) {
+            fprintf(stderr, "Error: failed to merge generic instantiation evidence\n");
+            goto fail_free_ir;
+        }
+        xg_global_evidence_free(&pre_mono_generic_evidence);
+        pre_mono_generic_evidence_initialized = false;
     }
-    global_evidence_initialized = true;
-    if (!xg_global_evidence_merge_generic_inst_roots(&global_evidence,
-                                                     &pre_mono_generic_evidence)) {
-        fprintf(stderr, "Error: failed to merge generic instantiation evidence\n");
-        goto fail_free_ir;
-    }
-    xg_global_evidence_free(&pre_mono_generic_evidence);
-    pre_mono_generic_evidence_initialized = false;
     evidence_cache_manifest = xg_global_evidence_cache_manifest(&global_evidence);
     evidence_cache_manifest_valid =
         evidence_cache_manifest.phase_mask == ((1u << XG_EVIDENCE_CACHE_PHASE_COUNT) - 1u);
@@ -1363,6 +1400,10 @@ fail_free_ir:
         shared_analyzer = NULL;
     }
 fail_free_analyzer:
+    if (cached_global_evidence_initialized) {
+        xg_global_evidence_free(&cached_global_evidence);
+        cached_global_evidence_initialized = false;
+    }
     if (pre_mono_generic_evidence_initialized) {
         xg_global_evidence_free(&pre_mono_generic_evidence);
         pre_mono_generic_evidence_initialized = false;
