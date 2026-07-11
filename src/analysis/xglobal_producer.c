@@ -4126,6 +4126,9 @@ static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *b
     return shape ? shape->json_shape_id : XG_NO_ID;
 }
 
+static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                  const ObjectLiteralNode **out_literal);
+
 static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                      const ObjectLiteralNode **out_literal) {
     XgLocalType *local;
@@ -4164,7 +4167,13 @@ static XgJsonShapeId body_lookup_static_json_ternary_shape(XgBodyCollect *bc, co
     if (!bc || !value || value->type != AST_TERNARY)
         return XG_NO_ID;
     then_literal = body_static_object_literal(value->as.ternary.true_expr);
+    if (!then_literal &&
+        body_lookup_local_json_shape(bc, value->as.ternary.true_expr, &then_literal) == XG_NO_ID)
+        return XG_NO_ID;
     else_literal = body_static_object_literal(value->as.ternary.false_expr);
+    if (!else_literal &&
+        body_lookup_local_json_shape(bc, value->as.ternary.false_expr, &else_literal) == XG_NO_ID)
+        return XG_NO_ID;
     if (!return_literal_same_shape(then_literal, else_literal) || !then_literal)
         return XG_NO_ID;
     if (out_literal)
