@@ -26,6 +26,7 @@
 #include "../runtime/value/xvalue.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_descriptor.h"
+#include "../runtime/class/xenum.h"
 #include "../runtime/class/xinstance.h"
 #include "../base/xdynarray.h"
 #include <limits.h>
@@ -248,6 +249,7 @@ static char *bc_get_string(BcReader *r) {
 #define BC_VAL_STRING 4
 #define BC_VAL_DYNAMIC_SHAPE 5
 #define BC_VAL_CLASS_DESCRIPTOR 6
+#define BC_VAL_ENUM_TYPE 7
 
 #define BC_SHAPE_JSON 1
 #define BC_SHAPE_RECORD 2
@@ -407,12 +409,44 @@ static bool bc_write_class_descriptor(BcWriter *w, XrValue val) {
     return bc_put_u32(w, desc->checksum);
 }
 
+static bool bc_write_enum_type(BcWriter *w, XrValue val) {
+    if (!XR_IS_ENUM_TYPE(val))
+        return false;
+
+    XrEnumType *enum_type = XR_TO_ENUM_TYPE(val);
+    if (!enum_type || !enum_type->name || enum_type->member_count > UINT16_MAX)
+        return false;
+
+    if (!bc_put_u8(w, BC_VAL_ENUM_TYPE))
+        return false;
+    if (!bc_put_optional_string(w, enum_type->name))
+        return false;
+    if (!bc_put_u32(w, enum_type->member_count))
+        return false;
+    if (!bc_put_u32(w, enum_type->derive_flags))
+        return false;
+
+    for (uint32_t i = 0; i < enum_type->member_count; i++) {
+        const char *name = xr_enum_type_member_name(enum_type, i);
+        if (!bc_put_optional_string(w, name))
+            return false;
+        int payload_count = xr_enum_type_payload_count(enum_type, i);
+        if (payload_count < 0 || payload_count > UINT16_MAX)
+            return false;
+        if (!bc_put_u16(w, (uint16_t) payload_count))
+            return false;
+    }
+    return true;
+}
+
 static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
                            bool as_class_descriptor) {
     if (as_class_descriptor)
         return bc_write_class_descriptor(w, val);
     if (as_dynamic_shape)
         return bc_write_dynamic_shape(w, val);
+    if (XR_IS_ENUM_TYPE(val))
+        return bc_write_enum_type(w, val);
 
     if (XR_IS_NULL(val)) {
         return bc_put_u8(w, BC_VAL_NULL);
@@ -614,6 +648,69 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
     return val;
 }
 
+static XrValue bc_read_enum_type(BcReader *r) {
+    char *enum_name = bc_read_string_or_empty(r);
+    uint32_t member_count = bc_get_u32(r);
+    uint32_t derive_flags = bc_get_u32(r);
+    if (r->error != XR_BC_OK) {
+        xr_free(enum_name);
+        return xr_null();
+    }
+    if (!enum_name || enum_name[0] == '\0' || member_count == 0 || member_count > UINT16_MAX) {
+        xr_free(enum_name);
+        r->error = XR_BC_ERR_CORRUPT;
+        return xr_null();
+    }
+
+    char **member_names = xr_calloc(member_count, sizeof(char *));
+    int *payload_counts = xr_calloc(member_count, sizeof(int));
+    if (!member_names || !payload_counts) {
+        xr_free(enum_name);
+        xr_free(member_names);
+        xr_free(payload_counts);
+        r->error = XR_BC_ERR_ALLOC;
+        return xr_null();
+    }
+
+    bool has_payloads = false;
+    for (uint32_t i = 0; i < member_count; i++) {
+        member_names[i] = bc_read_string_or_empty(r);
+        uint16_t payload_count = bc_get_u16(r);
+        if (r->error != XR_BC_OK)
+            break;
+        if (!member_names[i] || member_names[i][0] == '\0') {
+            r->error = XR_BC_ERR_CORRUPT;
+            break;
+        }
+        payload_counts[i] = (int) payload_count;
+        if (payload_count > 0)
+            has_payloads = true;
+    }
+
+    XrEnumType *enum_type = NULL;
+    if (r->error == XR_BC_OK) {
+        enum_type = xr_enum_type_new(r->X, enum_name, member_names, (int) member_count);
+        if (!enum_type) {
+            r->error = XR_BC_ERR_ALLOC;
+        } else {
+            enum_type->derive_flags = derive_flags;
+            if (has_payloads &&
+                !xr_enum_type_set_adt_payloads(enum_type, payload_counts, (int) member_count)) {
+                r->error = XR_BC_ERR_CORRUPT;
+                enum_type = NULL;
+            }
+        }
+    }
+
+    for (uint32_t i = 0; i < member_count; i++)
+        xr_free(member_names[i]);
+    xr_free(member_names);
+    xr_free(payload_counts);
+    xr_free(enum_name);
+
+    return (r->error == XR_BC_OK && enum_type) ? XR_FROM_PTR(enum_type) : xr_null();
+}
+
 static XrValue bc_read_dynamic_shape(BcReader *r) {
     uint8_t kind = bc_get_u8(r);
     uint8_t sealed_raw = bc_get_u8(r);
@@ -701,6 +798,8 @@ static XrValue bc_read_value(BcReader *r) {
             return bc_read_dynamic_shape(r);
         case BC_VAL_CLASS_DESCRIPTOR:
             return bc_read_class_descriptor(r);
+        case BC_VAL_ENUM_TYPE:
+            return bc_read_enum_type(r);
         default:
             r->error = XR_BC_ERR_CORRUPT;
             return xr_null();

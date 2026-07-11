@@ -120,6 +120,7 @@ add_xray_unit_test(test_ic vm/test_ic.c)
 # concurrent IC test inherits the dependency through xray_core.
 add_xray_unit_test(test_ic_concurrent vm/test_ic_concurrent.c)
 add_xray_unit_test(test_vm_exception vm/test_vm_exception.c)
+add_xray_unit_test(test_vm_parallel_isolate vm/test_vm_parallel_isolate.c)
 
 # ============================================================================
 # symbol/ — Symbol table
