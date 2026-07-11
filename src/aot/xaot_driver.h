@@ -142,6 +142,8 @@ typedef struct XaotBuildOptions {
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;
+    const char *const *imported_summary_payloads;
+    uint32_t imported_summary_payload_count;
 } XaotBuildOptions;
 
 /* Full AOT pipeline: Source → AST → Xi IR → C.
