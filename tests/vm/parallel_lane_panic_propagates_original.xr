@@ -1,0 +1,23 @@
+import parallel
+
+var plan = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+
+try {
+    plan.forEach(0..20000, (state, i) -> {
+        if (i == 10000) {
+            var zero = i - 10000
+            print(10 / zero)
+        }
+    })
+    print("miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.includes("division by zero"))
+}
+
+shared touched = Atomic<int>(0)
+plan.forEach(0..4, (state, i) -> {
+    touched.add(1, Ordering.Relaxed)
+})
+
+print(touched.load(Ordering.Relaxed) == 4)
