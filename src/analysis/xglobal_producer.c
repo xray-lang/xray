@@ -32,6 +32,7 @@ typedef struct XgClassNameRow {
     XgModuleId module_id;
     const char *name;
     const char *super_name;
+    const AstNode *class_node;
     XgClassId class_id;
     uint32_t summary_index;
 } XgClassNameRow;
@@ -1192,13 +1193,14 @@ static void producer_free_bodies(XgProducer *p) {
 }
 
 static bool producer_register_class(XgProducer *p, XgModuleId module_id, const char *name,
-                                    const char *super_name, XgClassId class_id,
-                                    uint32_t summary_index) {
+                                    const char *super_name, const AstNode *class_node,
+                                    XgClassId class_id, uint32_t summary_index) {
     if (!producer_reserve_classes(p, p->nclasses + 1))
         return false;
     p->classes[p->nclasses].module_id = module_id;
     p->classes[p->nclasses].name = name;
     p->classes[p->nclasses].super_name = super_name;
+    p->classes[p->nclasses].class_node = class_node;
     p->classes[p->nclasses].class_id = class_id;
     p->classes[p->nclasses].summary_index = summary_index;
     p->nclasses++;
@@ -3456,10 +3458,44 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
     return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
 }
 
+static const ObjectLiteralNode *producer_find_class_field_json_initializer(const XgProducer *p,
+                                                                           XgClassId class_id,
+                                                                           uint32_t field_name_id) {
+    const XgClassNameRow *row;
+    const ClassDeclNode *cls;
+    if (!p || class_id == XG_NO_ID || field_name_id == 0)
+        return NULL;
+    row = producer_lookup_class_row_by_id(p, class_id);
+    if (!row || !row->class_node)
+        return NULL;
+    if (row->class_node->type == AST_CLASS_DECL)
+        cls = &row->class_node->as.class_decl;
+    else if (row->class_node->type == AST_STRUCT_DECL)
+        cls = &row->class_node->as.struct_decl;
+    else if (row->class_node->type == AST_UNION_DECL)
+        cls = &row->class_node->as.union_decl;
+    else
+        return NULL;
+    for (int i = 0; i < cls->field_count; i++) {
+        const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
+        const FieldDeclNode *field;
+        if (!field_node || field_node->type != AST_FIELD_DECL)
+            continue;
+        field = &field_node->as.field_decl;
+        if (field->is_static || hash_name32(field->name) != field_name_id ||
+            !body_type_ref_is_json(field->field_type))
+            continue;
+        return body_static_object_literal(field->initializer);
+    }
+    return NULL;
+}
+
 static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
     const AstNode *receiver = body_json_receiver_unwrap(expr);
     XgClassId receiver_class;
     const XgClassFieldSummary *field;
+    XgJsonShapeId shape_id;
+    const ObjectLiteralNode *initializer;
     if (!bc || !receiver || receiver->type != AST_MEMBER_ACCESS || !receiver->as.member_access.name)
         return XG_NO_ID;
     receiver_class = body_resolve_expr_class(bc, receiver->as.member_access.object);
@@ -3467,7 +3503,15 @@ static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const
                                                hash_name32(receiver->as.member_access.name));
     if (!field || field->type_key == 0)
         return XG_NO_ID;
-    return body_lookup_static_json_shape_for_type_key(bc, field->type_key);
+    shape_id = body_lookup_static_json_shape_for_type_key(bc, field->type_key);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    initializer = producer_find_class_field_json_initializer(bc->producer, field->owner_class_id,
+                                                             field->name_id);
+    if (!initializer)
+        return XG_NO_ID;
+    return body_add_json_shape_for_literal(bc, initializer, (uint32_t) receiver->line,
+                                           field->type_key);
 }
 
 static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(XgGlobalEvidence *evidence,
@@ -7024,7 +7068,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         return false;
     if (!add_monomorphized_class_instantiation(p, module_id, node, cls, class_id))
         return false;
-    return producer_register_class(p, module_id, cls->name, cls->super_name, class_id,
+    return producer_register_class(p, module_id, cls->name, cls->super_name, node, class_id,
                                    p->evidence->nclasses - 1);
 }
 
