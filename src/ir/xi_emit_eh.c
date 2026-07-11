@@ -874,20 +874,6 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    ParLaneRegs r;
-    memset(&r, 0, sizeof(r));
-    r.start = start;
-    r.workers = workers;
-    if (!par_lane_regs_alloc(ctx, &r, 6))
-        return;
-    XiEmitReg map_idx = (XiEmitReg) ctx->next_reg++;
-    XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
-    XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
-    XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg += 3;
-    if (ctx->next_reg > ctx->max_reg)
-        ctx->max_reg = ctx->next_reg;
-
     uint8_t elem_tid = xr_type_to_tid(data->element_type);
     if (elem_tid == 0 && data->into_result && v->args[4] && v->args[4]->type &&
         XR_TYPE_IS_ARRAY(v->args[4]->type) && v->args[4]->type->container.element_type)
@@ -896,6 +882,30 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         elem_tid = xr_type_to_tid(v->type->container.element_type);
     uint8_t array_c = (uint8_t) (elem_tid << 2);
     XrArrayElemType elem_type = xr_tid_to_elem_type(elem_tid);
+    bool try_vm_parallel = elem_type != XR_ELEM_ANY;
+
+    ParLaneRegs r;
+    memset(&r, 0, sizeof(r));
+    r.start = start;
+    r.workers = workers;
+    if (!par_lane_regs_alloc(ctx, &r, try_vm_parallel ? 14 : 6))
+        return;
+    XiEmitReg par_handled = 0;
+    XiEmitReg par_true = 0;
+    XiEmitReg par_base = 0;
+    if (try_vm_parallel) {
+        par_handled = (XiEmitReg) ctx->next_reg++;
+        par_true = (XiEmitReg) ctx->next_reg++;
+        par_base = (XiEmitReg) ctx->next_reg;
+        ctx->next_reg += 6;
+    }
+    XiEmitReg map_idx = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += 3;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, r.end_excl, end, 0));
     if (data->inclusive_end)
@@ -910,6 +920,21 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, target_array, r.count, fill_value));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.one, 1));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, 256));
+
+    int par_handled_jmp_pc = -1;
+    if (try_vm_parallel) {
+        uint8_t par_flags = data->inclusive_end ? 0x01 : 0;
+        emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, par_handled, 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, par_true, 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, par_base, start, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 1), end, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 2), workers, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 3), closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 4), target_array, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 5), 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_PAR_MAP, par_handled, par_base, par_flags));
+        par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
+    }
 
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.start, r.end_excl, false);
 
@@ -942,6 +967,8 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
 
     int exit_pc = current_pc(ctx);
+    if (par_handled_jmp_pc >= 0)
+        patch_jump_to(ctx, par_handled_jmp_pc, exit_pc);
     patch_jump_to(ctx, empty_jmp_pc, exit_pc);
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
     if (data->into_result)
