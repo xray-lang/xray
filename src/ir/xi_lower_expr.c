@@ -3958,9 +3958,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         uint8_t method_key_access_op = 0;
         uint32_t method_key_access_ordinal = UINT32_MAX;
-        if (ma->object && ma->object->type == AST_VARIABLE &&
-            lower_map_set_method_key_access_op(xi_lower_node_type(l, ma->object), ma->name,
-                                               call->arg_count, &method_key_access_op)) {
+        struct XrType *method_receiver_type = ma->object ? xi_lower_node_type(l, ma->object) : NULL;
+        if (lower_map_set_method_key_access_op(method_receiver_type, ma->name, call->arg_count,
+                                               &method_key_access_op)) {
             method_key_access_ordinal =
                 xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, method_key_access_op);
         }
