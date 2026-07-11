@@ -1,0 +1,10 @@
+fn makeJsonReturnLocalPlan() -> Json {
+    return { name: "ada", age: 1 }
+}
+
+fn jsonReturnLocalPlan() -> string {
+    var j: Json = makeJsonReturnLocalPlan()
+    return j.age
+}
+
+print(jsonReturnLocalPlan())
