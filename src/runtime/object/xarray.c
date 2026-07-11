@@ -268,7 +268,8 @@ XrArray *xr_array_with_capacity(struct XrCoroutine *coro, int capacity) {
 
 static XrArray *xr_array_with_capacity_alloc(XrAllocationContext *alloc, struct XrCoroutine *coro,
                                              int capacity, XrArrayElemType elem_type) {
-    XR_DCHECK(alloc != NULL || coro != NULL, "array_with_capacity: NULL allocation context");
+    XR_DCHECK(alloc != NULL || coro != NULL || xr_alloc_context_current() != NULL,
+              "array_with_capacity: no allocation context");
     XR_DCHECK(capacity >= 0, "array_with_capacity: negative capacity");
     XR_DCHECK(elem_type < XR_ELEM_COUNT, "array_with_capacity: invalid elem_type");
     XrArray *arr = alloc
@@ -324,7 +325,6 @@ XrArray *xr_array_with_capacity_in(XrAllocationContext *alloc, int capacity,
 
 XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
                                       XrArrayElemType elem_type) {
-    XR_DCHECK(coro != NULL, "array_with_capacity: NULL coro");
     return xr_array_with_capacity_alloc(NULL, coro, capacity, elem_type);
 }
 
@@ -380,7 +380,6 @@ XrArray *xr_array_new_shared_core(XrRuntimeCore *core, int capacity) {
 }
 
 XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int count) {
-    XR_DCHECK(coro != NULL, "array_from_values: NULL coro");
     XR_DCHECK(count >= 0, "array_from_values: negative count");
     XR_DCHECK(count == 0 || elements != NULL, "array_from_values: NULL elements with count > 0");
     XrArray *arr = xr_array_with_capacity(coro, count);

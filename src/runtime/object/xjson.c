@@ -16,6 +16,7 @@
 #include "../../base/xchecks.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../../base/xmalloc.h"
 #include "../class/xinstance.h"
 #include "../coro/xcoroutine.h"
@@ -37,14 +38,12 @@ static inline XrClass *json_root_class(XrVMRuntime *X) {
 /* ========== Creation API ========== */
 
 XrJson *xr_json_new(struct XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "json_new: NULL coro");
-    XrVMRuntime *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
     XrClass *cls = json_root_class(X);
     return xr_json_new_with_class(coro, cls);
 }
 
 XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
-    XR_DCHECK(coro != NULL, "json_new_with_class: NULL coro");
     XR_DCHECK(cls != NULL, "json_new_with_class: NULL class");
     XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_new_with_class: not dynamic-layout");
 

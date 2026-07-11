@@ -16,6 +16,7 @@
 #include "../../base/xmalloc.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../xisolate_api.h"
 #include "../class/xclass.h"
 #include "../class/xclass_system.h"
@@ -25,8 +26,8 @@
 /* ========== Creation and Destruction ========== */
 
 XrStringBuilder *xr_stringbuilder_new(struct XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "stringbuilder_new: NULL coro");
-    XrVMRuntime *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
+    XR_DCHECK(X != NULL, "stringbuilder_new: no execution owner");
     XrClass *cls = xr_isolate_get_core_classes(X)->stringBuilderClass;
     XR_DCHECK(cls != NULL, "stringbuilder_new: NULL stringBuilderClass");
 

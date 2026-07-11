@@ -20,6 +20,7 @@ struct XrCoroHeap;
 struct XrCoroutine;
 struct XrRuntimeCore;
 struct XrSystemHeap;
+struct XrVMRuntime;
 
 typedef struct XrAllocationContext {
     struct XrRuntimeCore *core;
@@ -47,6 +48,13 @@ XR_FUNC void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size,
 XR_FUNC void xr_exec_context_init(XrExecutionContext *ctx, struct XrRuntimeCore *core,
                                   XrAllocationContext *alloc);
 XR_FUNC bool xr_exec_context_has_task(const XrExecutionContext *ctx);
+/* Direct logical roots install an execution context for the duration of VM
+ * dispatch.  A physical coroutine is optional; allocation identity is not. */
+XR_FUNC XrExecutionContext *xr_exec_context_current(void);
+XR_FUNC XrExecutionContext *xr_exec_context_enter(XrExecutionContext *ctx);
+XR_FUNC void xr_exec_context_restore(XrExecutionContext *previous);
+XR_FUNC XrAllocationContext *xr_alloc_context_current(void);
+XR_FUNC struct XrVMRuntime *xr_exec_context_vm_owner(void);
 XR_FUNC const char *xr_storage_owner_name(XrStorageOwner owner);
 
 #endif /* XR_EXEC_CONTEXT_H */

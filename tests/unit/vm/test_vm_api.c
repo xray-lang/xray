@@ -51,6 +51,23 @@ TEST(vm_current_ctx_returns_elided_root_ctx) {
     xray_vm_delete(iso);
 }
 
+TEST(vm_elided_root_allocates_without_task_identity) {
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+    ASSERT_NULL(xr_current_coro(iso));
+
+    const char *src = "var xs = [1, 2, 3]\n"
+                      "var ys = xs.map(fn(x) { return x * 2 })\n"
+                      "var text = \"root\".toUpperCase()\n";
+    ASSERT_EQ_INT(xray_vm_dostring(iso, src), 0);
+    ASSERT_NULL(iso->main_coro);
+    ASSERT_NULL(xr_current_coro(iso));
+
+    xray_vm_delete(iso);
+}
+
 /* ========== xr_vm_prepare_entry contract ========== */
 
 TEST(vm_prepare_entry_within_capacity_is_noop) {
@@ -278,6 +295,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xr_vm_current_ctx contract");
 RUN_TEST(vm_current_ctx_returns_elided_root_ctx);
+RUN_TEST(vm_elided_root_allocates_without_task_identity);
 
 RUN_TEST_SUITE("xr_vm_prepare_entry contract");
 RUN_TEST(vm_prepare_entry_within_capacity_is_noop);
