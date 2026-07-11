@@ -1,0 +1,36 @@
+class Bag {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    scores() -> Map<int, int> {
+        var scores: Map<int, int> = #{}
+        scores.set(1, this.value)
+        scores[2] = this.value
+        return scores
+    }
+
+    seen() -> Set<int> {
+        var seen: Set<int> = #[]
+        seen.add(this.value)
+        return seen
+    }
+}
+
+fn mapSetMethodChainReceiverPlan(value: int) -> int {
+    var bag = Bag(value)
+    var one = bag.scores().get(1) ?? 0
+    var two = bag.scores()[2]
+    var hasOne = bag.scores().has(1)
+    var sawOne = bag.seen().has(1)
+    if (hasOne) {
+        if (sawOne) {
+            return one + two
+        }
+    }
+    return 0
+}
+
+print(mapSetMethodChainReceiverPlan(7))

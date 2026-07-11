@@ -2421,18 +2421,28 @@ static const XgPendingBody *producer_find_function_body(const XgProducer *p, XgF
     return NULL;
 }
 
+static const XgPendingBody *producer_find_method_body(const XgProducer *p, XgMethodId method_id);
+
 static const XrTypeRef *body_call_return_type_ref(XgBodyCollect *bc, const CallExprNode *call) {
     const AstNode *callee;
-    XgFuncNameRow *target;
     const XgPendingBody *body;
     if (!bc || !call || !call->callee)
         return NULL;
     callee = call->callee;
-    if (callee->type != AST_VARIABLE || !callee->as.variable.name)
-        return NULL;
-    target = producer_lookup_func_row(bc->producer, callee->as.variable.name);
-    body = producer_find_function_body(bc->producer, target ? target->func_id : XG_NO_ID);
-    return body && body->function ? body->function->return_type : NULL;
+    if (callee->type == AST_VARIABLE && callee->as.variable.name) {
+        XgFuncNameRow *target = producer_lookup_func_row(bc->producer, callee->as.variable.name);
+        body = producer_find_function_body(bc->producer, target ? target->func_id : XG_NO_ID);
+        return body && body->function ? body->function->return_type : NULL;
+    }
+    if (callee->type == AST_MEMBER_ACCESS && callee->as.member_access.name) {
+        const MemberAccessNode *member = &callee->as.member_access;
+        XgClassId receiver_class = body_resolve_expr_class(bc, member->object);
+        XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
+            bc->producer, receiver_class, hash_name32(member->name), false);
+        body = producer_find_method_body(bc->producer, method ? method->method_id : XG_NO_ID);
+        return body && body->method ? body->method->return_type : NULL;
+    }
+    return NULL;
 }
 
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
