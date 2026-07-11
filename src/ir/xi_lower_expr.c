@@ -3579,6 +3579,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     if (is_self_call)
         v->aux_int = 1;
 
+    xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
     xi_lower_insert_err_check(l, node);
     return v;
 }
@@ -4008,7 +4009,7 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
     if (xi_lower_method_may_suspend(recv->type, method, want_args))
         v->flags |= XI_FLAG_MAY_SUSPEND;
     v->line = (uint32_t) node->line;
-    xi_lower_bind_method_callsite_id(l, v, xi_lower_source_node_id(l, node));
+    xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
     xi_lower_insert_err_check(l, node);
     return v;
 }
@@ -4683,7 +4684,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;
-        xi_lower_bind_method_callsite_id(l, v, xi_lower_source_node_id(l, node));
+        xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
 
@@ -4747,7 +4748,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
         mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         mcall->line = (uint32_t) node->line;
-        xi_lower_bind_method_callsite_id(l, mcall, xi_lower_source_node_id(l, node));
+        xi_lower_bind_callsite_id(l, mcall, xi_lower_source_node_id(l, node));
         XiBlock *call_exit = l->cur_block;
         xi_block_set_jump(call_exit, merge);
 
@@ -5684,7 +5685,7 @@ static XiValue *lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, Xi
     v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     v->line = (uint32_t) (node ? node->line : 0);
-    xi_lower_bind_method_callsite_id(l, v, node ? xi_lower_source_node_id(l, node) : 0);
+    xi_lower_bind_callsite_id(l, v, node ? xi_lower_source_node_id(l, node) : 0);
     xi_lower_insert_err_check(l, node);
     return v;
 }
@@ -7293,7 +7294,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
         1;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
-    xi_lower_bind_method_callsite_id(l, call, xi_lower_source_node_id(l, node));
+    xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
     return call;
 }
 

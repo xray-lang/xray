@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+regex=options-plan [0-9]+ .*action=default_elided
+regex=options-plan [0-9]+ .*action=default_fill_table
+c_regex=/\* options-plan callsite=[0-9]+ action=default_elided supplied=3 defaults=0 \*/
+c_regex=/\* options-plan callsite=[0-9]+ action=default_fill_table supplied=1 defaults=2 \*/
+c_not_contains=xrt_options
+not_contains=action=required_check

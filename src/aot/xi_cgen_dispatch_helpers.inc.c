@@ -2385,6 +2385,89 @@ static void emit_direct_call_arg_list(XiCgenCtx *ctx, FILE *out, const XiFunc *f
 
 static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name);
 
+static const char *xicgen_options_action_name(uint8_t action) {
+    switch ((XaotOptionsAction) action) {
+        case XAOT_OPTIONS_DEFAULT_ELIDED:
+            return "default_elided";
+        case XAOT_OPTIONS_DEFAULT_FILL_TABLE:
+            return "default_fill_table";
+        case XAOT_OPTIONS_REQUIRED_CHECK:
+            return "required_check";
+        case XAOT_OPTIONS_CALLSITE_SPECIALIZED:
+            return "callsite_specialized";
+        case XAOT_OPTIONS_REJECT:
+            return "reject";
+    }
+    return "unknown";
+}
+
+static const XaotOptionsPlan *xicgen_options_plan_for_callsite(const XaotBundle *bundle,
+                                                               XgCallsiteId callsite_id) {
+    if (!bundle || callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->noptions_plans; i++) {
+        const XaotOptionsPlan *plan = &bundle->options_plans[i];
+        if (plan->callsite_id == callsite_id)
+            return plan;
+    }
+    return NULL;
+}
+
+static bool xicgen_verify_options_plan_for_call(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    const XgCallsiteSummary *callsite;
+    const XaotOptionsPlan *plan;
+
+    if (!v || v->xg_callsite_id == XG_NO_ID)
+        return true;
+    callsite = xg_global_evidence_find_callsite(ev, (XgCallsiteId) v->xg_callsite_id);
+    plan = xicgen_options_plan_for_callsite(bundle, (XgCallsiteId) v->xg_callsite_id);
+    if (!plan) {
+        if (!callsite || (callsite->flags & XG_CALL_USES_DEFAULT_ARGS) == 0)
+            return true;
+        fprintf(stderr, "[xi_cgen] ERROR: missing verified options plan for direct callsite %u\n",
+                callsite->callsite_id);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    if (!callsite)
+        callsite = xg_global_evidence_find_callsite(ev, plan->callsite_id);
+    if (!callsite) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: options plan %u has no evidence callsite for direct call v%u\n",
+                plan->options_id, v->id);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    if (plan->action != XAOT_OPTIONS_DEFAULT_ELIDED &&
+        plan->action != XAOT_OPTIONS_DEFAULT_FILL_TABLE &&
+        plan->action != XAOT_OPTIONS_CALLSITE_SPECIALIZED) {
+        fprintf(stderr, "[xi_cgen] ERROR: options plan action %s cannot lower direct callsite %u\n",
+                xicgen_options_action_name(plan->action), callsite->callsite_id);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    if ((uint16_t) (v->nargs - 1) != (uint16_t) (plan->supplied_count + plan->default_count)) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: options plan arity mismatch for direct callsite %u "
+                "(xi=%u supplied=%u defaults=%u)\n",
+                callsite->callsite_id, (unsigned) (v->nargs - 1), (unsigned) plan->supplied_count,
+                (unsigned) plan->default_count);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+
+    fprintf(out, "/* options-plan callsite=%u action=%s supplied=%u defaults=%u */ ",
+            callsite->callsite_id, xicgen_options_action_name(plan->action),
+            (unsigned) plan->supplied_count, (unsigned) plan->default_count);
+    return true;
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -2529,6 +2612,9 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         fprintf(out, "); _inst; })");
         return;
     }
+
+    if (target && !xicgen_verify_options_plan_for_call(ctx, out, v))
+        return;
 
     /* FFI: direct C-ABI call to an @extern function. Emit `c_sym(args)` with no
      * hidden _cl closure and arguments converted to their native C reps (the
