@@ -1020,7 +1020,28 @@ def check_docs(root: Path, inventory: dict[str, Any]) -> list[str]:
     errors.extend(check_def_stdlib_source(root, inventory))
     errors.extend(check_stdlib_builtin_dump_residue(inventory))
     errors.extend(check_language_spec_stdlib_residue(root))
+    errors.extend(check_boundary_module_inventory(root, inventory))
     return errors
+
+
+def check_boundary_module_inventory(root: Path, inventory: dict[str, Any]) -> list[str]:
+    """Keep API inventory and task-196 module ownership on one module set."""
+    scripts_dir = str((root / "scripts").resolve())
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    from stdlib_manifest import load_manifest
+
+    manifest = load_manifest(root)
+    inventoried = {
+        entry.get("doc_module") or entry.get("namespace")
+        for entry in inventory.get("items", [])
+        if entry.get("category") == "stdlib-module"
+    }
+    return [
+        f"stdlib boundary module `{module['name']}` has no source-derived API inventory entries"
+        for module in manifest.modules
+        if module.get("public", True) and module["name"] not in inventoried
+    ]
 
 
 def check_def_stdlib_source(root: Path, inventory: dict[str, Any]) -> list[str]:
