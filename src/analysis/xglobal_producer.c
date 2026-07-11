@@ -4421,6 +4421,10 @@ static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *ex
             return body_expr_is_json_without_shape(bc, expr->as.unary.operand);
         case AST_CALL_EXPR:
             return body_type_ref_is_json(body_call_return_type_ref(bc, &expr->as.call_expr));
+        case AST_INDEX_GET:
+            row = body_lookup_local_sequence(bc, expr->as.index_get.array);
+            return row && row->sequence_elem_json_shape_id == XG_NO_ID &&
+                   row->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0);
         default:
             break;
     }
@@ -5787,6 +5791,77 @@ static void body_bind_sequence_json_shape_local(XgBodyCollect *bc, const char *n
     row->sequence_elem_json_shape_literal = literal;
 }
 
+static void body_clear_sequence_json_shape(XgLocalType *row) {
+    if (!row)
+        return;
+    row->sequence_elem_json_shape_id = XG_NO_ID;
+    row->sequence_elem_json_shape_literal = NULL;
+}
+
+static bool body_sequence_local_elem_is_json(const XgLocalType *row) {
+    return row && row->sequence_kind != 0 &&
+           row->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0);
+}
+
+static bool body_json_shape_id_same_shape(XgBodyCollect *bc, XgJsonShapeId left_id,
+                                          XgJsonShapeId right_id) {
+    const XgJsonShapeSummary *left;
+    const XgJsonShapeSummary *right;
+    if (!bc || left_id == XG_NO_ID || right_id == XG_NO_ID)
+        return false;
+    if (left_id == right_id)
+        return true;
+    left = xg_global_evidence_find_json_shape(bc->evidence, left_id);
+    right = xg_global_evidence_find_json_shape(bc->evidence, right_id);
+    return left && right && left->shape_kind == right->shape_kind &&
+           left->field_count == right->field_count && left->shape_hash == right->shape_hash;
+}
+
+static void body_update_sequence_json_shape_from_value(XgBodyCollect *bc, XgLocalType *row,
+                                                       const AstNode *value) {
+    const ObjectLiteralNode *literal = NULL;
+    const XgJsonShapeSummary *current_shape;
+    XgJsonShapeId shape_id;
+    if (!bc || !body_sequence_local_elem_is_json(row))
+        return;
+    shape_id = body_lookup_json_shape(bc, value, &literal);
+    if (shape_id == XG_NO_ID)
+        literal = body_static_object_literal(value);
+    if (row->sequence_elem_json_shape_id != XG_NO_ID && literal) {
+        uint16_t literal_field_count =
+            (uint16_t) (literal->count < UINT16_MAX ? literal->count : UINT16_MAX);
+        current_shape =
+            xg_global_evidence_find_json_shape(bc->evidence, row->sequence_elem_json_shape_id);
+        if (!current_shape || current_shape->field_count != literal_field_count ||
+            current_shape->shape_hash != body_json_shape_hash(literal)) {
+            body_clear_sequence_json_shape(row);
+            return;
+        }
+        if (!row->sequence_elem_json_shape_literal)
+            row->sequence_elem_json_shape_literal = literal;
+        return;
+    }
+    if (shape_id == XG_NO_ID && literal)
+        shape_id = body_add_json_shape_for_literal(
+            bc, literal, value && value->line > 0 ? (uint32_t) value->line : 0,
+            hash_named_type_key32("Json", NULL, 0));
+    if (shape_id == XG_NO_ID) {
+        body_clear_sequence_json_shape(row);
+        return;
+    }
+    if (row->sequence_elem_json_shape_id != XG_NO_ID) {
+        if (!body_json_shape_id_same_shape(bc, row->sequence_elem_json_shape_id, shape_id)) {
+            body_clear_sequence_json_shape(row);
+            return;
+        }
+        if (!row->sequence_elem_json_shape_literal)
+            row->sequence_elem_json_shape_literal = literal;
+        return;
+    }
+    row->sequence_elem_json_shape_id = shape_id;
+    row->sequence_elem_json_shape_literal = literal;
+}
+
 static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
     XgLocalType *row;
     if (!bc || !name)
@@ -6317,6 +6392,7 @@ static void body_add_sequence_access_row(XgBodyCollect *bc, const AstNode *node,
 static void body_add_sequence_index_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const AstNode *receiver;
     const AstNode *index;
+    const AstNode *value = NULL;
     XgLocalType *local;
     if (!bc || !node)
         return;
@@ -6326,12 +6402,15 @@ static void body_add_sequence_index_access(XgBodyCollect *bc, const AstNode *nod
     } else if (node->type == AST_INDEX_SET) {
         receiver = node->as.index_set.array;
         index = node->as.index_set.index;
+        value = node->as.index_set.value;
     } else {
         return;
     }
     local = body_lookup_local_sequence(bc, receiver);
     if (!local)
         return;
+    if (mutating)
+        body_update_sequence_json_shape_from_value(bc, local, value);
     body_add_sequence_access_row(bc, node, local,
                                  mutating ? XG_SEQ_ACCESS_INDEX_SET : XG_SEQ_ACCESS_INDEX_GET,
                                  index, NULL, mutating);
@@ -6457,6 +6536,7 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
     if (local) {
         if (strcmp(member->name, "push") == 0 && call->arg_count == 1) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_PUSH, arg0, true);
+            body_update_sequence_json_shape_from_value(bc, local, arg0);
             return;
         }
         if ((strcmp(member->name, "append") == 0 || strcmp(member->name, "extend") == 0) &&
@@ -6465,6 +6545,8 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
                                  strcmp(member->name, "extend") == 0 ? XG_CAPACITY_EXTEND
                                                                      : XG_CAPACITY_APPEND,
                                  arg0, true);
+            if (body_sequence_local_elem_is_json(local))
+                body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "reserve") == 0 && call->arg_count == 1) {
@@ -6473,6 +6555,7 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
         }
         if (strcmp(member->name, "clear") == 0 && call->arg_count == 0) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_CLEAR, NULL, false);
+            body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "toString") == 0 && call->arg_count == 0) {
@@ -6487,14 +6570,19 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
         if (strcmp(member->name, "appendFrom") == 0 && call->arg_count >= 1) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_APPEND, arg0, true);
             body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, NULL, false);
+            if (body_sequence_local_elem_is_json(local))
+                body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "copyFrom") == 0 && call->arg_count >= 1) {
             body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, NULL, true);
+            if (body_sequence_local_elem_is_json(local))
+                body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "fill") == 0 && call->arg_count >= 1) {
             body_add_bulk_op(bc, node, XG_BULK_FILL, local, arg0, NULL, false);
+            body_update_sequence_json_shape_from_value(bc, local, arg0);
             return;
         }
     }
