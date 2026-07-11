@@ -1,0 +1,13 @@
+import parallel
+
+fn worker() -> int {
+    return 1
+}
+
+parallel.forEach(0..4, (i) -> {
+    const f = fn(x: int) -> int {
+        var value = await go worker()
+        return value + x
+    }
+    print(f(i))
+}, parallel.Options(2))
