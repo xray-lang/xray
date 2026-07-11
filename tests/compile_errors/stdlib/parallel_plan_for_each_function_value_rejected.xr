@@ -1,0 +1,9 @@
+import { Options, Plan } from parallel
+
+var plan = Plan<int>(Options(2), (lane) -> lane)
+
+fn body(state: int, item: int) {
+    print(state + item)
+}
+
+plan.forEach(0..4, body)

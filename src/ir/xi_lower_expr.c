@@ -6142,6 +6142,12 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
     return par;
 }
 
+static void parallel_plan_intrinsic_error(XiLower *l, AstNode *node, const char *message) {
+    if (l)
+        l->had_error = true;
+    fprintf(stderr, "error: %s at line %d\n", message, node ? node->line : -1);
+}
+
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                    XiValue *plan, const char *method) {
     if (!l || !node || !call || !plan || !method)
@@ -6149,21 +6155,15 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
 
     if (strcmp(method, "forEach") == 0) {
         if (call->arg_count != 2) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.forEach must lower to XI_PAR_FOR; expected "
-                    "(Range, inline lambda) at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(
+                l, node, "parallel.Plan.forEach expected (Range, inline (state, item) lambda)");
             return NULL;
         }
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
         if (!range || range->type != AST_RANGE ||
             !parallel_call_is_plain_lambda(call->arguments[1], 2)) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.forEach must lower to XI_PAR_FOR; expected a "
-                    "Range literal and inline (state, item) lambda at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(
+                l, node, "parallel.Plan.forEach expected a Range and inline (state, item) lambda");
             return NULL;
         }
         return parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
@@ -6171,21 +6171,15 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
 
     if (strcmp(method, "map") == 0) {
         if (call->arg_count != 2) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.map must lower to XI_PAR_MAP; expected "
-                    "(Range, inline lambda) at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(
+                l, node, "parallel.Plan.map expected (Range, inline (state, item) lambda)");
             return NULL;
         }
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
         if (!range || range->type != AST_RANGE ||
             !parallel_call_is_plain_lambda(call->arguments[1], 2)) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.map must lower to XI_PAR_MAP; expected a Range "
-                    "literal and inline (state, item) lambda at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(
+                l, node, "parallel.Plan.map expected a Range and inline (state, item) lambda");
             return NULL;
         }
         return parallel_plan_call_make_map(l, node, plan, range, call->arguments[1], NULL);
@@ -6193,21 +6187,18 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
 
     if (strcmp(method, "mapInto") == 0) {
         if (call->arg_count != 3) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.mapInto must lower to XI_PAR_MAP; expected "
-                    "(Range, output, inline lambda) at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(
+                l, node,
+                "parallel.Plan.mapInto expected (Range, output, inline (state, item) lambda)");
             return NULL;
         }
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
         if (!range || range->type != AST_RANGE ||
             !parallel_call_is_plain_lambda(call->arguments[2], 2)) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.mapInto must lower to XI_PAR_MAP; expected a "
-                    "Range literal, output array, and inline (state, item) lambda at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(
+                l, node,
+                "parallel.Plan.mapInto expected a Range, output array, and inline (state, item) "
+                "lambda");
             return NULL;
         }
         XiValue *into = xi_lower_expr(l, call->arguments[1]);
@@ -6218,23 +6209,18 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
 
     if (strcmp(method, "reduce") == 0) {
         if (call->arg_count != 4) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.reduce must lower to XI_PAR_REDUCE; expected "
-                    "(Range, initial, inline body, inline combine) at line %d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(l, node,
+                                          "parallel.Plan.reduce expected (Range, initial, inline "
+                                          "(state, item) body, inline combine lambda)");
             return NULL;
         }
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
         if (!range || range->type != AST_RANGE ||
             !parallel_call_is_plain_lambda(call->arguments[2], 2) ||
             !parallel_call_is_plain_lambda(call->arguments[3], 2)) {
-            fprintf(stderr,
-                    "[LOWER] error: parallel.Plan.reduce must lower to XI_PAR_REDUCE; expected a "
-                    "Range literal, inline (state, item) body, and inline combine lambda at line "
-                    "%d\n",
-                    node ? node->line : -1);
-            l->had_error = true;
+            parallel_plan_intrinsic_error(l, node,
+                                          "parallel.Plan.reduce expected a Range, inline (state, "
+                                          "item) body, and inline combine lambda");
             return NULL;
         }
         return parallel_plan_call_make_reduce(l, node, plan, range, call->arguments[1],
