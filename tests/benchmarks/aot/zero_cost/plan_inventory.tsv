@@ -55,7 +55,7 @@ record_return_receiver_shape|covered|recordReturnReceiverPlan|tests/aot/filetest
 record_return_local_shape|covered|recordReturnLocalPlan|tests/aot/filetests/cgen|Record locals initialized from static return type shapes keep direct-field evidence and generated C helpers.
 record_indirect_return_receiver_shape|covered|recordIndirectReturnReceiverPlan|tests/aot/filetests/cgen|Record indirect function-call return receivers through static return type shapes keep direct-field evidence and generated C helpers.
 record_spread_merge_plan|covered|record-merge-plan .*action=copy_with_overwrite|tests/aot/filetests|Record spread merge consumes an explicit copy/overwrite merge plan from shape evidence.
-options_default_args_plan|covered|options-plan .*action=default_fill_table|tests/aot/filetests/link|Caller-side default argument filling produces verified options bag plans from real callsites.
+options_default_args_plan|covered|options-plan .*action=default_fill_table|tests/aot/filetests/cgen|Caller-side default argument filling consumes verified options bag plans in direct-call CGen.
 map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/filetests/cgen|Map/Set static key access consumes prehashed lookup plans.
 map_set_field_receiver_key_access|covered|source=static action=runtime_hash|tests/aot/filetests/cgen|Map/Set class field receivers produce key-access plans and keep generated C on typed helpers instead of runtime method dispatch.
 map_set_param_receiver_key_access|covered|mapSetParamReceiverPlan|tests/aot/filetests/cgen|Map/Set typed parameter receivers produce static key-access plans and keep generated C on typed helpers instead of runtime method dispatch.

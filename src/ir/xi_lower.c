@@ -692,11 +692,12 @@ XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_sp
     return UINT32_MAX;
 }
 
-XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, uint32_t source_node_id) {
+XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t source_node_id) {
     const XgGlobalEvidence *ev;
     const XgCallsiteSummary *match = NULL;
     if (!l || !call || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
-        source_node_id == 0 || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        source_node_id == 0 ||
+        (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
         call->nargs == 0)
         return;
     ev = l->global_evidence;
@@ -705,15 +706,23 @@ XR_FUNC void xi_lower_bind_method_callsite_id(XiLower *l, XiValue *call, uint32_
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
             row->source_node_id != source_node_id)
             continue;
-        if (row->kind != XG_CALL_METHOD && row->kind != XG_CALL_INTERFACE)
-            continue;
+        if (call->op == XI_CALL) {
+            if (row->kind != XG_CALL_DIRECT_FUNC && row->kind != XG_CALL_NATIVE &&
+                row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLOSURE)
+                continue;
+        } else {
+            if (row->kind != XG_CALL_METHOD && row->kind != XG_CALL_INTERFACE)
+                continue;
+        }
         if (match)
             return;
         match = row;
     }
     if (match) {
         call->xg_callsite_id = match->callsite_id;
-        call->xg_method_id = match->method_id;
+        if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT ||
+            match->kind == XG_CALL_NATIVE || match->kind == XG_CALL_EXTERN)
+            call->xg_method_id = match->method_id;
     }
 }
 
