@@ -1,0 +1,2 @@
+import http
+http.requestText("GET", "/", { "Accept": "text/plain" }, "", "example.com")

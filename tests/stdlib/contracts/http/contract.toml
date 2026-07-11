@@ -1,11 +1,12 @@
 schema = 1
 module = "http"
-contract_revision = 2
+contract_revision = 3
 legacy_commit = "c4ead56205b25b7bde418cf2b8c782e592916a61"
 legacy_public_surface = ["requestText", "responseText", "parseRequestHead", "parseResponseHead"]
 intentional_semantic_changes = [
   "HTTP control-plane helpers are owned by stdlib/http/http.xr",
   "Headers replaces Json plus parallel headerPairs/trailerPairs fields",
+  "requestText and responseText accept only Headers rather than Json objects",
 ]
 known_legacy_bugs = ["legacy helper behavior is not authoritative for conflicting framing headers"]
 equivalence = ["value", "error", "effect", "complexity"]
@@ -26,3 +27,8 @@ new_behavior = "conflicting framing is rejected by the typed HTTP contract"
 id = "json-header-object"
 classification = "removed"
 new_behavior = "Headers preserves insertion order, duplicates, original casing, and case-insensitive lookup"
+
+[[legacy_behavior]]
+id = "formatter-json-header-parameter"
+classification = "removed"
+new_behavior = "requestText and responseText require validated Headers values"

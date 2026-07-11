@@ -791,11 +791,18 @@ fn _serverStatusResponse(status: int, body: string, keepAlive: bool = false) -> 
     return "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\nConnection: close\r\n\r\nInternal Server Error"
 }
 
-fn _serverHeadersFrom(value: unknown) -> Json {
-    if (value == null) { return null }
+fn _serverHeadersFrom(value: unknown) -> Headers? {
+    var headers = Headers()
+    if (value == null) { return headers }
     var encoded = Json.encode(value)
-    if (typename(encoded) == "Json") { return encoded }
-    return null
+    if (typename(encoded) != "Json") { return null }
+    var object = encoded as Json
+    for (key in object) {
+        var name = string(key)
+        var rawValue = Json.get(object, name, null)
+        if (rawValue != null) { headers.add(name, string(rawValue)) }
+    }
+    return headers
 }
 
 fn _serverArrayResponse(value: unknown, keepAlive: bool) -> string {
@@ -803,12 +810,18 @@ fn _serverArrayResponse(value: unknown, keepAlive: bool) -> string {
     var status = 200
     var contentType = "text/plain; charset=utf-8"
     var body = ""
-    var headers: Json = null
+    var headers = Headers()
 
     if (arr.length >= 1 && typename(arr[0]) == "int") { status = int(arr[0]) }
     if (arr.length >= 2 && typename(arr[1]) == "string") { contentType = string(arr[1]) }
     if (arr.length >= 3 && arr[2] != null) { body = string(arr[2]) }
-    if (arr.length >= 4) { headers = _serverHeadersFrom(arr[3]) }
+    if (arr.length >= 4) {
+        var parsedHeaders = _serverHeadersFrom(arr[3])
+        if (parsedHeaders == null) {
+            return _serverStatusResponse(500, "Internal Server Error", false)
+        }
+        headers = parsedHeaders!
+    }
 
     var text = responseText(status, body, contentType, headers, keepAlive)
     if (text != null) { return text! }
@@ -1591,31 +1604,27 @@ fn _requestBody(options: Json) -> string {
     return string(raw)
 }
 
-fn _requestHeaders(options: Json) -> Json {
+fn _requestHeaders(options: Json) -> Headers {
+    var headers = Headers()
     var raw = Json.get(options, "headers", null)
-    if (raw == null) { return null }
-    return raw
+    if (raw == null) { return headers }
+    var object = raw as Json
+    for (key in object) {
+        var name = string(key)
+        var rawValue = Json.get(object, name, null)
+        if (rawValue != null) { headers.add(name, string(rawValue)) }
+    }
+    return headers
 }
 
-fn _headersHave(headers: Json, name: string) -> bool {
-    if (headers == null) { return false }
-    for (key in headers) {
-        if (_headerKeyEquals(string(key), name)) { return true }
+fn _requestWireHeaders(headers: Headers) -> Headers {
+    var out = Headers()
+    var pairs = headers.entries()
+    for (var i = 0; i < pairs.length; i++) {
+        out.add(pairs[i].0, pairs[i].1)
     }
-    return false
-}
-
-fn _requestWireHeaders(headers: Json) -> Json {
-    if (_headersHave(headers, "Accept-Encoding")) { return headers }
-    var out: Json = {}
-    if (headers != null) {
-        for (key in headers) {
-            var name = string(key)
-            out[name] = Json.get(headers, name, null)
-        }
-    }
-    out["Accept-Encoding"] = "identity"
-    return Json.encode(out)
+    if (!out.has("Accept-Encoding")) { out.add("Accept-Encoding", "identity") }
+    return out
 }
 
 fn _headersLocation(headers: Headers) -> string? {
@@ -1647,7 +1656,7 @@ fn _readHttpResponse(conn: NetConn, method: string) -> ResponseMessage? {
     return null
 }
 
-fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Json, body: string,
+fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Headers, body: string,
                   timeoutMs: int, stripSensitive: bool) -> HttpResponse {
     var conn = url.isHttps ? net.dialTLS(url.host, url.port, timeoutMs) :
                              net.dial(url.host, url.port, timeoutMs)
@@ -2195,7 +2204,7 @@ fn redirectDecision(
 fn requestText(
     method: string,
     path: string,
-    headers: Json = null,
+    headers: Headers? = null,
     body: string = "",
     host: string = "",
     stripSensitive: bool = false
@@ -2213,12 +2222,10 @@ fn requestText(
     var custom: Array<(string, string)> = []
 
     if (headers != null) {
-        for (key in headers) {
-            var name = string(key)
-            var rawValue = Json.get(headers, name, null)
-            if (rawValue == null) { continue }
-            var value = string(rawValue)
-            if (!_headerNameValid(name) || !_headerValueValid(value)) { return null }
+        var pairs = headers!.entries()
+        for (var i = 0; i < pairs.length; i++) {
+            var name = pairs[i].0
+            var value = pairs[i].1
             if (stripSensitive && _sensitiveHeader(name)) { continue }
 
             if (_headerKeyEquals(name, "Host")) { hasHost = true }
@@ -2338,7 +2345,7 @@ fn responseText(
     status: int,
     body: string = "",
     contentType: string = "text/plain; charset=utf-8",
-    headers: Json = null,
+    headers: Headers? = null,
     keepAlive: bool = true
 ) -> string? {
     var ct = contentType
@@ -2347,14 +2354,11 @@ fn responseText(
 
     var custom: Array<(string, string)> = []
     if (headers != null) {
-        for (key in headers) {
-            var name = string(key)
-            var rawValue = Json.get(headers, name, null)
-            if (rawValue == null) { continue }
-            var value = string(rawValue)
-            if (!_headerNameValid(name) ||
-                !_headerValueValid(value) ||
-                _reservedResponseHeader(name)) {
+        var pairs = headers!.entries()
+        for (var i = 0; i < pairs.length; i++) {
+            var name = pairs[i].0
+            var value = pairs[i].1
+            if (_reservedResponseHeader(name)) {
                 return null
             }
             custom.push((name, value))
