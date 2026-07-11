@@ -637,6 +637,56 @@ static const char *xa_parallel_channel_blocking_call_feature(XaInferContext *ctx
     return receiver_type && receiver_type->kind == XR_KIND_CHANNEL ? feature : NULL;
 }
 
+static const char *xa_parallel_stdlib_sleep_feature(const char *module_name,
+                                                    const char *member_name) {
+    if (!module_name || !member_name || strcmp(member_name, "sleep") != 0)
+        return NULL;
+    if (strcmp(module_name, "time") == 0)
+        return "time.sleep()";
+    if (strcmp(module_name, "os") == 0)
+        return "os.sleep()";
+    return NULL;
+}
+
+static const char *xa_parallel_imported_sleep_feature(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym || !sym->is_imported)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->module_name)
+        return NULL;
+    const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
+    return xa_parallel_stdlib_sleep_feature(links->module_name, member_name);
+}
+
+static const char *xa_parallel_module_member_sleep_feature(XaInferContext *ctx, AstNode *callee) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *module_name =
+        links && links->module_name ? links->module_name : ma->object->as.variable.name;
+    return xa_parallel_stdlib_sleep_feature(module_name, ma->name);
+}
+
+static const char *xa_parallel_stdlib_suspend_call_feature(XaInferContext *ctx,
+                                                           CallExprNode *call) {
+    if (!call || !call->callee)
+        return NULL;
+    const char *feature = xa_parallel_module_member_sleep_feature(ctx, call->callee);
+    if (feature)
+        return feature;
+    if (call->callee->type == AST_VARIABLE) {
+        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        return xa_parallel_imported_sleep_feature(ctx, sym);
+    }
+    return NULL;
+}
+
 static bool xa_parallel_for_in_iterates_channel(XaInferContext *ctx, AstNode *node) {
     if (!node || node->type != AST_FOR_IN_STMT)
         return false;
@@ -680,6 +730,13 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         if (is_suspend)
             *is_suspend = true;
         return "Coro.yield()";
+    }
+
+    const char *stdlib_suspend_feature = xa_parallel_stdlib_suspend_call_feature(ctx, call);
+    if (stdlib_suspend_feature) {
+        if (is_suspend)
+            *is_suspend = true;
+        return stdlib_suspend_feature;
     }
 
     const char *channel_feature = xa_parallel_channel_blocking_call_feature(ctx, call);

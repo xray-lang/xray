@@ -1,0 +1,6 @@
+import parallel
+import time
+
+parallel.forEach(0..4, (i) -> {
+    time.sleep(0)
+}, parallel.Options(2))
