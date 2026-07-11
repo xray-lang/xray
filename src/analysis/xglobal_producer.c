@@ -4338,9 +4338,8 @@ static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *
             return ctor_scan_node_list_for_json_field_assignment(scan, node->as.return_stmt.values,
                                                                  node->as.return_stmt.value_count);
         case AST_CALL_EXPR:
-            return ctor_scan_node_for_json_field_assignment(scan, node->as.call_expr.callee) &&
-                   ctor_scan_node_list_for_json_field_assignment(scan, node->as.call_expr.arguments,
-                                                                 node->as.call_expr.arg_count);
+            scan->failed = true;
+            return false;
         case AST_MEMBER_ACCESS:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.member_access.object);
         case AST_INDEX_GET:

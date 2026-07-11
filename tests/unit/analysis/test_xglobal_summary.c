@@ -12545,6 +12545,52 @@ TEST(
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_clears_json_field_shape_after_constructor_unknown_call) {
+    setup_parser_session();
+    const char *source = "class Holder {\n"
+                         "    payload: Json = { name: \"ada\", age: 7 }\n"
+                         "    constructor() {\n"
+                         "        this.reset()\n"
+                         "    }\n"
+                         "    reset() {\n"
+                         "        this.payload = { name: \"bob\" }\n"
+                         "    }\n"
+                         "    readPayloadAge() -> Json {\n"
+                         "        return this.payload.age\n"
+                         "    }\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
+    ASSERT_NOT_NULL(reader);
+    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_propagates_json_shape_through_constructor_field_assignment) {
     setup_parser_session();
     const char *source = "class Holder {\n"
@@ -14729,6 +14775,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_field_initialize
 RUN_TEST(global_evidence_producer_keeps_json_field_initializer_shape_through_constructor_branch);
 RUN_TEST(
     global_evidence_producer_clears_json_field_initializer_shape_after_mismatched_constructor_branch);
+RUN_TEST(global_evidence_producer_clears_json_field_shape_after_constructor_unknown_call);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_constructor_field_assignment);
 RUN_TEST(
     global_evidence_producer_propagates_json_shape_through_constructor_branch_field_assignment);
