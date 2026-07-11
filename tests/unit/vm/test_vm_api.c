@@ -27,13 +27,14 @@
 
 /* ========== xr_vm_current_ctx contract ========== */
 
-TEST(vm_current_ctx_returns_main_coro_ctx) {
+TEST(vm_current_ctx_returns_elided_root_ctx) {
     XrVMConfig params;
     xray_vm_config_init(&params);
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
-    /* On a fresh isolate the main coroutine owns the canonical vm_ctx. */
+    /* A fresh isolate has a stable logical root context without a physical
+     * coroutine. Scheduler-backed execution may materialize one later. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     ASSERT_NOT_NULL(ctx);
     ASSERT_NOT_NULL(ctx->stack);
@@ -44,9 +45,8 @@ TEST(vm_current_ctx_returns_main_coro_ctx) {
     ASSERT_LE(ctx->stack_top, ctx->stack + ctx->stack_capacity);
     ASSERT_GE(ctx->frame_count, 0);
 
-    /* current_coro is non-NULL on the main path; this guarantees
-     * prepare_entry can grow the backing storage on demand. */
-    ASSERT_NOT_NULL(ctx->current_coro);
+    ASSERT_NULL(ctx->current_coro);
+    ASSERT_NULL(iso->main_coro);
 
     xray_vm_delete(iso);
 }
@@ -73,7 +73,7 @@ TEST(vm_prepare_entry_within_capacity_is_noop) {
     xray_vm_delete(iso);
 }
 
-TEST(vm_prepare_entry_grows_for_large_window) {
+TEST(vm_prepare_entry_rejects_elided_root_overflow) {
     XrVMConfig params;
     xray_vm_config_init(&params);
     XrVMRuntime *iso = xray_vm_new_full(&params);
@@ -86,12 +86,8 @@ TEST(vm_prepare_entry_grows_for_large_window) {
      * a grow path. */
     int huge = prev_cap + 4096;
     bool ok = xr_vm_prepare_entry(ctx, huge);
-    ASSERT_TRUE(ok);
-    /* Capacity must have grown — exact amount is xr_coro_grow_stack policy
-     * (stack_capacity + extra_slots), so we only assert strict growth. */
-    ASSERT_GT(ctx->stack_capacity, prev_cap);
-
-    /* Pointers must remain consistent post-grow. */
+    ASSERT_FALSE(ok);
+    ASSERT_EQ_INT(ctx->stack_capacity, prev_cap);
     ASSERT_NOT_NULL(ctx->stack);
     ASSERT_GE(ctx->stack_top, ctx->stack);
     ASSERT_LE(ctx->stack_top, ctx->stack + ctx->stack_capacity);
@@ -281,11 +277,11 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xr_vm_current_ctx contract");
-RUN_TEST(vm_current_ctx_returns_main_coro_ctx);
+RUN_TEST(vm_current_ctx_returns_elided_root_ctx);
 
 RUN_TEST_SUITE("xr_vm_prepare_entry contract");
 RUN_TEST(vm_prepare_entry_within_capacity_is_noop);
-RUN_TEST(vm_prepare_entry_grows_for_large_window);
+RUN_TEST(vm_prepare_entry_rejects_elided_root_overflow);
 RUN_TEST(vm_prepare_entry_zero_extra_succeeds);
 
 RUN_TEST_SUITE("Public entry NULL safety");
