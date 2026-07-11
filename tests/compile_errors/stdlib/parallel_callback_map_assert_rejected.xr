@@ -1,0 +1,8 @@
+import parallel
+
+var values = parallel.map(0..4, (i) -> {
+    assert(false)
+    return i
+}, parallel.Options(2))
+
+print(values.length)

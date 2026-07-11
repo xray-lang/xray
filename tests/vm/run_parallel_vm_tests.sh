@@ -93,6 +93,12 @@ expect_output_workers \
     $'1\n1' \
     4
 
+expect_output_workers \
+    "parallel_callback_nested_function_effect_not_lane" \
+    "$PROJECT_DIR/tests/vm/parallel_callback_nested_function_effect_not_lane.xr" \
+    "6" \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

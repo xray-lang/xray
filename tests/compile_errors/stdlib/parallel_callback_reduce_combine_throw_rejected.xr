@@ -1,0 +1,18 @@
+import parallel
+
+enum ParallelErr {
+    Boom
+}
+
+var total = parallel.reduce(
+    0..4,
+    0,
+    (i) -> i,
+    (a, b) -> {
+        throw ParallelErr.Boom
+        return a + b
+    },
+    parallel.Options(2)
+)
+
+print(total)
