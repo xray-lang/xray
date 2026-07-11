@@ -6235,7 +6235,10 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     for (uint32_t i = 0; i < ev.nmethods; i++) {
         const AstNode *class_node = ast->as.program.statements[i];
         const AstNode *method_node = class_node->as.class_decl.methods[0];
-        ASSERT_EQ_UINT(ev.methods[i].source_node_id, method_node->node_id);
+        ASSERT_EQ_UINT(ev.methods[i].source_node_id,
+                       xg_stable_source_node_id(1, (uint32_t) method_node->type,
+                                                (uint32_t) method_node->line,
+                                                (uint32_t) method_node->column));
         ASSERT_TRUE(ev.methods[i].source_node_id != 0);
         for (uint32_t j = 0; j < ev.nbodies; j++) {
             if (ev.bodies[j].owner_method_id == ev.methods[i].method_id)
@@ -6289,7 +6292,7 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_uses_ast_node_identity) {
+TEST(global_evidence_producer_uses_stable_source_identity) {
     setup_parser_session();
     const char *source = "fn callee(x: int) -> int { return x + 1 }\n"
                          "fn caller() -> int { return callee(1) + callee(2) }\n";
@@ -6332,10 +6335,16 @@ TEST(global_evidence_producer_uses_ast_node_identity) {
     ASSERT_NOT_NULL(caller_body);
     ASSERT_NOT_NULL(callee_decl);
     ASSERT_NOT_NULL(caller_decl);
-    ASSERT_EQ_UINT(callee_decl->source_node_id, callee_node->node_id);
-    ASSERT_EQ_UINT(callee_body->source_node_id, callee_node->node_id);
-    ASSERT_EQ_UINT(caller_decl->source_node_id, caller_node->node_id);
-    ASSERT_EQ_UINT(caller_body->source_node_id, caller_node->node_id);
+    ASSERT_EQ_UINT(callee_decl->source_node_id,
+                   xg_stable_source_node_id(1, (uint32_t) callee_node->type,
+                                            (uint32_t) callee_node->line,
+                                            (uint32_t) callee_node->column));
+    ASSERT_EQ_UINT(callee_body->source_node_id, callee_decl->source_node_id);
+    ASSERT_EQ_UINT(caller_decl->source_node_id,
+                   xg_stable_source_node_id(1, (uint32_t) caller_node->type,
+                                            (uint32_t) caller_node->line,
+                                            (uint32_t) caller_node->column));
+    ASSERT_EQ_UINT(caller_body->source_node_id, caller_decl->source_node_id);
     ASSERT_TRUE(callee_body->source_node_id != 0);
     ASSERT_TRUE(caller_body->source_node_id != 0);
 
@@ -6354,6 +6363,64 @@ TEST(global_evidence_producer_uses_ast_node_identity) {
 
     xg_global_evidence_free(&rebuilt);
     xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_source_identity_survives_body_only_change) {
+    setup_parser_session();
+    const char *source_a = "fn id(x: int) -> int { return x }\n"
+                           "fn main() -> int { return id(7) }\n";
+    const char *source_b = "fn id(x: int) -> int { return x + 1 }\n"
+                           "fn main() -> int { return id(7) }\n";
+    AstNode *ast_a = xr_parse(g_session, source_a);
+    AstNode *ast_b = xr_parse(g_session, source_b);
+    ASSERT_NOT_NULL(ast_a);
+    ASSERT_NOT_NULL(ast_b);
+
+    XrModuleSpec spec_a;
+    memset(&spec_a, 0, sizeof(spec_a));
+    spec_a.ast = ast_a;
+    XrModuleSpec spec_b;
+    memset(&spec_b, 0, sizeof(spec_b));
+    spec_b.ast = ast_b;
+    int topo_order[1] = {0};
+    XrModuleGraph graph_a;
+    memset(&graph_a, 0, sizeof(graph_a));
+    graph_a.specs = &spec_a;
+    graph_a.spec_count = 1;
+    graph_a.topo_order = topo_order;
+    graph_a.topo_count = 1;
+    graph_a.entry_index = 0;
+    XrModuleGraph graph_b;
+    memset(&graph_b, 0, sizeof(graph_b));
+    graph_b.specs = &spec_b;
+    graph_b.spec_count = 1;
+    graph_b.topo_order = topo_order;
+    graph_b.topo_count = 1;
+    graph_b.entry_index = 0;
+
+    XgGlobalEvidence ev_a;
+    XgGlobalEvidence ev_b;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev_a, &graph_a, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev_b, &graph_b, XG_BUILD_NATIVE_RELEASE));
+
+    const XgBodySummary *id_body_a = evidence_find_body_by_name(&ev_a, "id");
+    const XgBodySummary *id_body_b = evidence_find_body_by_name(&ev_b, "id");
+    const XgBodySummary *main_body_a = evidence_find_body_by_name(&ev_a, "main");
+    const XgBodySummary *main_body_b = evidence_find_body_by_name(&ev_b, "main");
+    ASSERT_NOT_NULL(id_body_a);
+    ASSERT_NOT_NULL(id_body_b);
+    ASSERT_NOT_NULL(main_body_a);
+    ASSERT_NOT_NULL(main_body_b);
+    ASSERT_EQ_UINT(id_body_a->source_node_id, id_body_b->source_node_id);
+    ASSERT_EQ_UINT(main_body_a->source_node_id, main_body_b->source_node_id);
+    ASSERT_NE(id_body_a->body_hash, id_body_b->body_hash);
+    ASSERT_EQ_UINT(ev_a.callsites[0].source_node_id, ev_b.callsites[0].source_node_id);
+
+    xg_global_evidence_free(&ev_b);
+    xg_global_evidence_free(&ev_a);
     teardown_parser_session();
 }
 
@@ -11491,7 +11558,8 @@ RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_direct_function_callsite_targets);
-RUN_TEST(global_evidence_producer_uses_ast_node_identity);
+RUN_TEST(global_evidence_producer_uses_stable_source_identity);
+RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);

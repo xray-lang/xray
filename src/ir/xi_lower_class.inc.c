@@ -338,7 +338,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(l, m, true, cd, NULL, cd->methods[i]->node_id);
+        XiFunc *mf = xi_lower_method_as_func(l, m, true, cd, NULL,
+                                             xi_lower_source_node_id(l, cd->methods[i]));
         if (!mf)
             continue;
         xi_lower_func_add_child(l->func, mf);
@@ -369,7 +370,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || !m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(l, m, false, cd, NULL, cd->methods[i]->node_id);
+        XiFunc *mf = xi_lower_method_as_func(l, m, false, cd, NULL,
+                                             xi_lower_source_node_id(l, cd->methods[i]));
         if (!mf)
             continue;
         xi_lower_func_add_child(l->func, mf);
@@ -424,7 +426,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor)
             continue;
-        XiFunc *cf = xi_lower_method_as_func(l, m, false, cd, NULL, cd->methods[i]->node_id);
+        XiFunc *cf = xi_lower_method_as_func(l, m, false, cd, NULL,
+                                             xi_lower_source_node_id(l, cd->methods[i]));
         if (cf) {
             xi_lower_func_add_child(l->func, cf);
             clinit_idx = (int) (l->func->nchildren - 1);

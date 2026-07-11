@@ -206,7 +206,8 @@ expect_evidence_sidecars() {
         payload_count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
         payload_file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
         if [ "$manifest_count" = "1" ] && [ "$payload_count" = "1" ] &&
-           grep -q '^xg-cache-payload v1 ' "$payload_file"; then
+           grep -q '^xg-cache-payload v2 ' "$payload_file" &&
+           grep -q '^xg-cache-request v1 ' "$payload_file"; then
             record_pass "$name: $phase manifest+payload sidecars"
         else
             record_fail "$name: expected $phase manifest+payload sidecars"

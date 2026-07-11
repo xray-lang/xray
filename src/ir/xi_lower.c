@@ -269,11 +269,6 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
     if (!parent)
         return -1;
 
-    /* Program-level shared variables are handled via XI_GET_SHARED
-     * in lower_variable/lower_assignment, not via upvalue capture. */
-    if (parent->is_program)
-        return -1;
-
     /* Dedup: if this variable is already captured, return existing index */
     for (uint16_t ci = 0; ci < l->func->ncaptures; ci++) {
         if (l->func->captures[ci].name && strcmp(l->func->captures[ci].name, name) == 0) {
@@ -286,6 +281,12 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
     /* Check if the variable exists as a local in the immediate parent */
     int var_id = xi_lower_var_find(parent, symbol_id, name);
     if (var_id >= 0) {
+        /* Program-level shared variables are handled via XI_GET_SHARED in
+         * lower_variable/lower_assignment. Program-local synthetic temporaries
+         * still need ordinary closure capture. */
+        if (parent->is_program && parent->shared_map && parent->shared_map[var_id] >= 0)
+            return -1;
+
         /* Read the current SSA value from the parent's scope.  The value's
          * register will be resolved at emit time via reg_of(). */
         XiValue *parent_val = xi_lower_braun_read(parent, var_id, parent->cur_block);
@@ -604,6 +605,26 @@ XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
 
 static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module_id) {
     return l && l->xg_module_id != 0 && module_id == l->xg_module_id;
+}
+
+XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const AstNode *node) {
+    const AstNode *loc;
+    uint32_t line;
+    uint32_t column;
+    if (!l || !node)
+        return 0;
+    loc = node;
+    if (node->type == AST_CALL_EXPR && node->as.call_expr.callee)
+        loc = node->as.call_expr.callee;
+    line = loc && loc->line > 0 ? (uint32_t) loc->line : (uint32_t) node->line;
+    if (line == 0 && loc && loc->end_line > 0)
+        line = (uint32_t) loc->end_line;
+    column = loc && loc->column > 0 ? (uint32_t) loc->column : (uint32_t) node->column;
+    if (column == 0 && loc && loc->end_column > 0)
+        column = (uint32_t) loc->end_column;
+    if (column == 0)
+        column = 1;
+    return xg_stable_source_node_id(l->xg_module_id, (uint32_t) node->type, line, column);
 }
 
 static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t source_node_id) {
@@ -1144,7 +1165,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
-    xi_lower_bind_function_body_id(&l, func_node->node_id);
+    xi_lower_bind_function_body_id(&l, xi_lower_source_node_id(&l, func_node));
 
     /* FFI: @extern("C") functions are bodyless foreign declarations. Record
      * the C symbol + optional dylib; the body below stays empty and a trivial

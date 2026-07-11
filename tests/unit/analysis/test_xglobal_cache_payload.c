@@ -213,11 +213,13 @@ TEST(cache_payload_parse_exposes_validated_body) {
     XgGlobalEvidence ev = {0};
     XgGlobalEvidence materialized = {0};
     XgEvidenceCachePayloadInfo info;
+    XgEvidenceCacheRequestKey expected_request;
     XgEvidenceCacheKey expected;
     XgEvidenceCacheKey materialized_key;
     char *payload;
 
     ev.key.module_id = 7;
+    ev.key.source_hash = UINT64_C(0x10101010);
     ev.key.profile = XG_BUILD_NATIVE_RELEASE;
     ev.key.compiler_semver_hash = UINT64_C(0x1111);
     ev.key.profile_hash = UINT64_C(0x2222);
@@ -227,17 +229,24 @@ TEST(cache_payload_parse_exposes_validated_body) {
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT_NOT_NULL(payload);
     ASSERT(xg_evidence_cache_payload_parse(payload, &info));
+    expected_request = xg_global_evidence_cache_request_key(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT(xg_evidence_cache_request_key_matches(&info.request_key, &expected_request));
     ASSERT(xg_evidence_cache_key_matches(&info.key, &expected));
     ASSERT_EQ_UINT(info.phase, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT_EQ_UINT(info.request_hash, xg_evidence_cache_request_key_hash(&expected_request));
     ASSERT_EQ_UINT(info.key_hash, xg_evidence_cache_key_hash(&expected));
     ASSERT_EQ_UINT(info.body_len, info.payload_bytes);
+    ASSERT_NOT_NULL(strstr(payload, "xg-cache-payload v2"));
+    ASSERT_NOT_NULL(strstr(payload, "xg-cache-request v1"));
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
     ASSERT_NOT_NULL(strstr(info.body, "body id=11"));
     ASSERT_NOT_NULL(strstr(info.body, "interface-object-use id=4 interface=41"));
+    ASSERT(xg_evidence_cache_payload_request_matches(payload, &expected_request));
     ASSERT(xg_evidence_cache_payload_matches(payload, &expected));
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_EQ_UINT(materialized.key.source_hash, ev.key.source_hash);
     materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
     ASSERT_EQ_UINT(materialized.nbodies, 1);
@@ -357,13 +366,36 @@ TEST(cache_payload_parse_rejects_body_drift) {
 TEST(cache_payload_matches_rejects_wrong_phase_key) {
     XgGlobalEvidence ev = {0};
     XgEvidenceCacheKey wrong_phase;
+    XgEvidenceCacheRequestKey wrong_request;
     char *payload;
 
     add_sample_body_summary(&ev);
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT_NOT_NULL(payload);
     wrong_phase = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_DECLARATIONS);
+    wrong_request = xg_global_evidence_cache_request_key(&ev, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT(!xg_evidence_cache_payload_request_matches(payload, &wrong_request));
     ASSERT(!xg_evidence_cache_payload_matches(payload, &wrong_phase));
+
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(cache_payload_parse_rejects_request_drift) {
+    XgGlobalEvidence ev = {0};
+    XgEvidenceCachePayloadInfo info;
+    char *payload;
+    char *needle;
+
+    ev.key.source_hash = UINT64_C(0x7777);
+    add_sample_body_summary(&ev);
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT_NOT_NULL(payload);
+
+    needle = strstr(payload, " source=0000000000007777");
+    ASSERT_NOT_NULL(needle);
+    needle[23] = '8';
+    ASSERT(!xg_evidence_cache_payload_parse(payload, &info));
 
     xr_free(payload);
     xg_global_evidence_free(&ev);
@@ -391,6 +423,7 @@ RUN_TEST(cache_payload_materializes_declaration_summary);
 RUN_TEST(cache_payload_materializes_semantic_graph_summary);
 RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
+RUN_TEST(cache_payload_parse_rejects_request_drift);
 RUN_TEST(cache_payload_materialize_rejects_global_count_only_payload);
 
 TEST_MAIN_END()

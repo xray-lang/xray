@@ -2002,16 +2002,20 @@ TEST(defer_args_lower_before_defer) {
         }
     }
     assert(defer && "should have DEFER op");
-    assert(defer->nargs == 3 && "defer should keep callee plus two args");
-    for (uint16_t a = 1; a < defer->nargs; a++) {
+    assert(defer->nargs == 1 && "defer should store the deferred closure only");
+    XiValue *closure = defer->args[0];
+    assert(closure && closure->op == XI_CLOSURE_NEW &&
+           "defer call args should be snapshotted into the deferred closure");
+    assert(closure->nargs == 2 && "deferred closure should capture both eager arguments");
+    for (uint16_t a = 0; a < closure->nargs; a++) {
         int found_before_defer = 0;
         for (uint32_t i = 0; i < defer_index; i++) {
-            if (blk->values[i] == defer->args[a]) {
+            if (blk->values[i] == closure->args[a]) {
                 found_before_defer = 1;
                 break;
             }
         }
-        assert(found_before_defer && "defer argument must be lowered before XI_DEFER");
+        assert(found_before_defer && "defer argument capture must be lowered before XI_DEFER");
     }
     xi_func_free(f);
 }

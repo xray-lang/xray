@@ -31,7 +31,7 @@ map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/
 map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
 backend_contract_dispatch|covered|XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE|tests/unit/aot|Backend contract accepts verified itable plans only with complete target cases and ABI evidence.
 evidence_cache_manifest|covered|xg-cache-manifest v1|tests/aot/filetests/link|Global evidence cache manifest is dumped through the official evidence entry.
-evidence_cache_payload_sidecar|covered|xg-cache-payload v1|tests/aot/run_aot_incremental_cache.sh|Evidence cache writes phase payload sidecars and requires payload validation for hits.
+evidence_cache_payload_sidecar|covered|xg-cache-payload v2|tests/aot/run_aot_incremental_cache.sh|Evidence cache writes phase payload sidecars and requires payload validation for hits.
 runtime_hot_loop_benchmarks|covered|run_benchmark.sh|tests/benchmarks/aot/zero_cost|AOT zero-cost runtime hot-loop benchmarks are executable.
 value_level_sroa|covered|allocation-plan .*action=stack|tests/aot/filetests/cgen|Value-level noescape stack allocation is emitted as a verified allocation plan.
 generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
@@ -59,4 +59,6 @@ sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evi
 sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/Bytes encoding evidence lowers into verified encoding plans.
 sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tests/aot/filetests/link|Bytes-to-string encoding evidence fixes the validate-once action in plan output.
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, and body summary payloads materialize back into validated summary rows.
+summary_payload_request_key|covered|xg-cache-request v1|tests/unit/analysis|Payload v2 separates producer-precomputable request identity from content-key row validation.
+stable_source_identity|covered|global_evidence_source_identity_survives_body_only_change|tests/unit/analysis|Evidence source_node_id is derived from stable source anchors instead of parser allocation order.
 cross_package_summary_reuse|gap|payload_v2|src/analysis|Producer-precomputable request keys and complete immutable package evidence reuse are not implemented yet.

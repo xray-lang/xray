@@ -590,6 +590,17 @@ typedef enum XgEvidenceCachePhase {
     XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
 } XgEvidenceCachePhase;
 
+typedef struct XgEvidenceCacheRequestKey {
+    uint32_t schema_version;
+    uint32_t phase;
+    XgModuleId module_id;
+    uint32_t profile;
+    uint64_t source_hash;
+    uint64_t compiler_semver_hash;
+    uint64_t profile_hash;
+    uint64_t imported_summary_hash;
+} XgEvidenceCacheRequestKey;
+
 typedef struct XgEvidenceCacheKey {
     uint32_t schema_version;
     uint32_t phase;
@@ -611,10 +622,12 @@ typedef struct XgEvidenceCacheManifest {
 } XgEvidenceCacheManifest;
 
 typedef struct XgEvidenceCachePayloadInfo {
+    XgEvidenceCacheRequestKey request_key;
     XgEvidenceCacheKey key;
     const char *body; /* points into the parsed payload text */
     size_t body_len;
     size_t payload_bytes;
+    uint64_t request_hash;
     uint64_t key_hash;
     uint64_t payload_hash;
     uint32_t phase;
@@ -1213,6 +1226,8 @@ typedef struct XgGlobalEvidence {
 } XgGlobalEvidence;
 
 XR_FUNC uint32_t xg_name_id(const char *name);
+XR_FUNC uint32_t xg_stable_source_node_id(XgModuleId module_id, uint32_t ast_kind, uint32_t line,
+                                          uint32_t column);
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind);
 XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_width);
 XR_FUNC const char *xg_build_profile_name(uint32_t profile);
@@ -1445,6 +1460,15 @@ XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
 XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *evidence,
                                                         uint32_t phase);
+XR_FUNC XgEvidenceCacheRequestKey
+xg_global_evidence_cache_request_key(const XgGlobalEvidence *evidence, uint32_t phase);
+XR_FUNC uint64_t xg_evidence_cache_request_key_hash(const XgEvidenceCacheRequestKey *key);
+XR_FUNC bool xg_evidence_cache_request_key_matches(const XgEvidenceCacheRequestKey *cached,
+                                                   const XgEvidenceCacheRequestKey *expected);
+XR_FUNC bool xg_evidence_cache_request_key_format(const XgEvidenceCacheRequestKey *key, char *buf,
+                                                  size_t buf_len);
+XR_FUNC bool xg_evidence_cache_request_key_parse(const char *text,
+                                                 XgEvidenceCacheRequestKey *out_key);
 XR_FUNC uint64_t xg_evidence_cache_key_hash(const XgEvidenceCacheKey *key);
 XR_FUNC bool xg_evidence_cache_key_matches(const XgEvidenceCacheKey *cached,
                                            const XgEvidenceCacheKey *expected);
@@ -1465,6 +1489,8 @@ XR_FUNC bool xg_evidence_cache_payload_parse(const char *text,
                                              XgEvidenceCachePayloadInfo *out_info);
 XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
                                                const XgEvidenceCacheKey *expected);
+XR_FUNC bool xg_evidence_cache_payload_request_matches(const char *text,
+                                                       const XgEvidenceCacheRequestKey *expected);
 XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
                                                    XgGlobalEvidence *out_evidence);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);
