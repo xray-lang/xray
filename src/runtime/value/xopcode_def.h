@@ -373,6 +373,8 @@
       "R[A] = VM internal parallel.forEach over R[B..B+4], C=flags")                               \
     _(PAR_MAP, FMT_ABC, KOP_ABC_BIN_LIT,                                                           \
       "R[A] = VM internal parallel map over R[B..B+5], C=flags")                                   \
+    _(PAR_REDUCE, FMT_ABC, KOP_ABC_BIN_LIT,                                                        \
+      "R[A] = VM internal parallel reduce over R[B..B+7], C=flags")                                \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H
