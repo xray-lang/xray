@@ -1320,6 +1320,44 @@ TEST(parallel_for_auto_workers_uses_scheduler_worker_count) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(parallel_for_requested_workers_scales_lanes) {
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_PARALLEL;
+    cfg.scheduler_workers = 8;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_NOT_NULL(xr_aot_runtime_scheduler(runtime));
+    ASSERT_EQ_INT(xr_aot_runtime_scheduler(runtime)->worker_count, 8);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
+    const int requested_workers[] = {1, 2, 4, 8};
+    for (int case_idx = 0; case_idx < 4; case_idx++) {
+        int workers = requested_workers[case_idx];
+        int64_t count = (int64_t) workers * 8;
+        atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+        aot_par_for_reset_lane_records();
+
+        ASSERT_TRUE(
+            xr_parallel_for_range_i64(&ctx, 0, count, workers, aot_par_for_record_lane_body, NULL));
+        ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+        for (int lane = 0; lane < workers; lane++) {
+            ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_begin[lane], memory_order_relaxed),
+                          lane * 8);
+            ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_end[lane], memory_order_relaxed),
+                          (lane + 1) * 8);
+            ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[lane], memory_order_relaxed),
+                          1);
+        }
+        for (int lane = workers; lane < 8; lane++)
+            ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[lane], memory_order_relaxed),
+                          0);
+    }
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(parallel_for_deterministic_scheduler_uses_single_lane) {
     char *old_det = aot_test_dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
     char *old_workers = aot_test_dup_env_value(getenv("XRAY_WORKERS"));
@@ -1590,6 +1628,7 @@ RUN_TEST(runtime_deferred_array_submit_cache_tracks_content_version);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 RUN_TEST(parallel_for_range_i64_runs_static_lanes);
 RUN_TEST(parallel_for_auto_workers_uses_scheduler_worker_count);
+RUN_TEST(parallel_for_requested_workers_scales_lanes);
 RUN_TEST(parallel_for_deterministic_scheduler_uses_single_lane);
 RUN_TEST(parallel_for_small_range_uses_single_lane);
 RUN_TEST(parallel_for_dispatch_is_runtime_scoped);
