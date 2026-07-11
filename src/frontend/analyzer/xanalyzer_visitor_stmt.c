@@ -63,6 +63,19 @@ static bool xa_type_supports_const_static_data_object(const XrType *type) {
 static bool xa_type_supports_mutable_static_data_object(const XrType *type) {
     if (!type)
         return false;
+    if (!type->is_nullable) {
+        switch (type->kind) {
+            case XR_KIND_INT:
+                return type->native_width == XR_NATIVE_I64;
+            case XR_KIND_FLOAT:
+                return type->native_width != XR_NATIVE_F32;
+            case XR_KIND_BOOL:
+            case XR_KIND_CHAR:
+                return true;
+            default:
+                break;
+        }
+    }
     switch (type->kind) {
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:
@@ -99,7 +112,7 @@ static void xa_validate_static_data_attrs(XaInferContext *ctx, AstNode *node, Va
         (node->type != AST_CONST_DECL && node->type != AST_VAR_DECL)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
                                    "@section/@weak/@used can only annotate a module-level const "
-                                   "data declaration or aggregate var static object",
+                                   "data declaration or mutable var static object",
                                    &loc);
         return;
     }
@@ -126,7 +139,7 @@ static void xa_validate_static_data_attrs(XaInferContext *ctx, AstNode *node, Va
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
             "@weak mutable static data is not supported; use @section/@used on a module-level "
-            "aggregate var static object",
+            "mutable static data object",
             &loc);
         return;
     }
@@ -134,15 +147,16 @@ static void xa_validate_static_data_attrs(XaInferContext *ctx, AstNode *node, Va
         !xa_freestanding_top_var_static_initializer_allowed(ctx, var, var_type)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
                                    "@section/@used mutable static data requires a compile-time "
-                                   "aggregate initializer",
+                                   "static initializer",
                                    &loc);
         return;
     }
     if (!xa_type_supports_mutable_static_data_object(var_type)) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "@section/@used mutable static data currently requires a "
-                                   "struct or union aggregate static object",
-                                   &loc);
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "@section/@used mutable static data currently requires a scalar, "
+            "struct, or union static object",
+            &loc);
     }
 }
 

@@ -1,0 +1,9 @@
+@section("__DATA,.xr_count")
+@used
+var COUNTER = 1
+
+@c_export("xray_top_var_scalar_attrs")
+fn xrayTopVarScalarAttrs() -> int {
+    COUNTER = COUNTER + 1
+    return COUNTER
+}
