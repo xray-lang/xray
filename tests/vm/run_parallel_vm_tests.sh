@@ -55,6 +55,12 @@ expect_output_workers \
     $'true\ntrue\ntrue' \
     4
 
+expect_output_workers \
+    "parallel_shadowing_no_intrinsic" \
+    "$PROJECT_DIR/tests/vm/parallel_shadowing_no_intrinsic.xr" \
+    "3" \
+    1
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1
