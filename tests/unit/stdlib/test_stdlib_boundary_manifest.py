@@ -19,6 +19,7 @@ from check_stdlib_boundary import (  # noqa: E402
     check_semantic_owners,
 )
 from stdlib_manifest import load_manifest, registry_modules  # noqa: E402
+from report_stdlib_self_hosting import build_report  # noqa: E402
 
 
 class StdlibBoundaryManifestTest(unittest.TestCase):
@@ -38,6 +39,16 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         errors, report = check_dynamic(ROOT)
         self.assertEqual([], errors)
         self.assertGreater(report["migration_debt_count"], 0)
+
+    def test_consistency_is_not_reported_as_completion(self) -> None:
+        errors, report = build_report(ROOT)
+        self.assertEqual([], errors)
+        self.assertTrue(report["status"]["consistent"])
+        self.assertFalse(report["status"]["complete"])
+        kinds = {item["kind"] for item in report["status"]["completion_blockers"]}
+        self.assertIn("dynamic_migration_debt", kinds)
+        self.assertIn("missing_correctness_contracts", kinds)
+        self.assertIn("missing_active_benchmarks", kinds)
 
 
 if __name__ == "__main__":

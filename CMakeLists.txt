@@ -1459,16 +1459,26 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME stdlib_self_hosting_report
+        NAME stdlib_self_hosting_consistency
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --check
     )
-    set_tests_properties(stdlib_self_hosting_report PROPERTIES
+    set_tests_properties(stdlib_self_hosting_consistency PROPERTIES
         LABELS "stdlib;boundary;report"
         PROCESSORS 1
         TIMEOUT 30
+    )
+
+    add_custom_target(stdlib-self-hosting-complete
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --require-complete
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Checking final task-196 stdlib self-hosting completion criteria"
     )
 
     add_test(

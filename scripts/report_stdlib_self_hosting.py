@@ -74,8 +74,40 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         for module in manifest.modules
         if module.get("public_native") or module.get("private_native_sources")
     ]
+    contract_names = {str(contract["module"]) for contract in contracts}
+    governed_suites = {str(value) for value in perf.get("governed_suites", [])}
+    benchmark_suites = {
+        str(item.get("suite", "")) for item in perf.get("benchmark", []) if item.get("suite")
+    }
+    expected_contracts = {
+        suite.removeprefix("stdlib/") for suite in governed_suites if suite.startswith("stdlib/")
+    }
+    missing_contracts = sorted(expected_contracts - contract_names)
+    missing_benchmarks = sorted(governed_suites - benchmark_suites)
+    completion_blockers: list[dict[str, Any]] = []
+    if dynamic_report.get("migration_debt_count", 0):
+        completion_blockers.append(
+            {
+                "kind": "dynamic_migration_debt",
+                "count": dynamic_report["migration_debt_count"],
+            }
+        )
+    if missing_contracts:
+        completion_blockers.append(
+            {"kind": "missing_correctness_contracts", "modules": missing_contracts}
+        )
+    if missing_benchmarks:
+        completion_blockers.append(
+            {"kind": "missing_active_benchmarks", "suites": missing_benchmarks}
+        )
+
     report = {
         "schema": 1,
+        "status": {
+            "consistent": not errors,
+            "complete": not errors and not completion_blockers,
+            "completion_blockers": completion_blockers,
+        },
         "public_symbols_by_semantic_owner": {
             owner: {"count": len(set(symbols)), "symbols": sorted(set(symbols))}
             for owner, symbols in sorted(owners.items())
@@ -119,6 +151,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## Governance status",
             "",
+            f"- Source consistency: {report['status']['consistent']}",
+            f"- Self-hosting complete: {report['status']['complete']}",
             f"- Native boundary modules: {len(report['remaining_native_boundaries'])}",
             f"- Dynamic migration debts: {report['dynamic_surface']['migration_debt_count']}",
             f"- Approved VM fastpaths: {len(report['vm_fastpaths'])}",
@@ -137,6 +171,7 @@ def main() -> int:
     parser.add_argument("--json", type=Path)
     parser.add_argument("--markdown", type=Path)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args()
     root = Path(args.root).resolve()
     errors, report = build_report(root)
@@ -151,10 +186,18 @@ def main() -> int:
     if args.markdown:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
         args.markdown.write_text(render_markdown(report), encoding="utf-8")
-    if not args.json and not args.markdown and not args.check:
+    if not args.json and not args.markdown and not args.check and not args.require_complete:
         print(encoded, end="")
     if args.check:
-        print("OK: stdlib self-hosting report is source-derived and complete")
+        print("OK: stdlib self-hosting report is source-derived and consistent")
+    if args.require_complete:
+        blockers = report["status"]["completion_blockers"]
+        if blockers:
+            print("stdlib self-hosting completion gate failed:", file=sys.stderr)
+            for blocker in blockers:
+                print(f"  {blocker['kind']}: {json.dumps(blocker, sort_keys=True)}", file=sys.stderr)
+            return 1
+        print("OK: stdlib self-hosting completion gate passed")
     return 0
 
 
