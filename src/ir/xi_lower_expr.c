@@ -5077,6 +5077,7 @@ static XiFunc *parallel_call_lower_lambda_func(
     child_l.func->native_callback_kind = callback_kind;
     child_l.func->parent_func = parent->func;
     child_l.func->analyzer = parent->analyzer;
+    xi_lower_bind_function_body_id(&child_l, xi_lower_source_node_id(&child_l, lambda_node));
     child_l.func->nparams = abi_param_count;
     child_l.func->min_params = abi_param_count;
     child_l.func->entry_type = 0;
