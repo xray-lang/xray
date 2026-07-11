@@ -9341,22 +9341,26 @@ static bool xicgen_par_reduce_value_has_struct_accumulator(XiCgenCtx *ctx, const
         v->aux_kind != XI_AUX_KIND_PAR_REDUCE || !v->aux)
         return false;
     const XiParallelReduceData *data = (const XiParallelReduceData *) v->aux;
-    if (data && data->plan_state)
-        return false;
     const XiFunc *body = data ? data->body_func : NULL;
     const XiFunc *combine = data ? data->combine_func : NULL;
     const char *ctype = xicgen_par_reduce_struct_agg_c_type(ctx, v);
-    uint16_t expected_body_params = data && data->range_body ? 3 : 2;
+    uint16_t expected_body_params =
+        data && data->plan_state ? 3 : (data && data->range_body ? 3 : 2);
     if (!ctype || !body || !combine || body->nparams != expected_body_params ||
         combine->nparams != 2)
         return false;
     if (!cg_func_return_abi_is_struct_aggregate(ctx, body) ||
         !cg_func_return_abi_is_struct_aggregate(ctx, combine))
         return false;
-    if (cg_func_param_abi_rep(ctx, body, 0) != XR_REP_I64 ||
-        cg_func_param_abi_rep(ctx, body, 1) != XR_REP_I64 ||
-        (data->range_body && cg_func_param_abi_rep(ctx, body, 2) != XR_REP_I64))
+    if (data && data->plan_state) {
+        if (cg_func_param_abi_rep(ctx, body, 1) != XR_REP_I64 ||
+            cg_func_param_abi_rep(ctx, body, 2) != XR_REP_I64)
+            return false;
+    } else if (cg_func_param_abi_rep(ctx, body, 0) != XR_REP_I64 ||
+               cg_func_param_abi_rep(ctx, body, 1) != XR_REP_I64 ||
+               (data->range_body && cg_func_param_abi_rep(ctx, body, 2) != XR_REP_I64)) {
         return false;
+    }
     return strcmp(cg_func_return_abi_c_type(ctx, body), ctype) == 0 &&
            strcmp(cg_func_return_abi_c_type(ctx, combine), ctype) == 0 &&
            strcmp(cg_func_param_abi_c_type(ctx, combine, 0), ctype) == 0 &&
@@ -9498,8 +9502,15 @@ static void xicgen_emit_par_reduce_range_wrapper(XiCgenCtx *ctx, FILE *out, cons
     if (agg_ctype) {
         fprintf(out, "static bool ");
         xicgen_emit_par_reduce_range_wrapper_name(ctx, out, owner, v, prefix);
-        fprintf(out, "(xrt_closure_t *_cl, int64_t _xr_begin, int64_t _xr_end, int64_t _xr_worker, "
-                     "void *_xr_out_void) {\n");
+        if (data->plan_state) {
+            fprintf(out, "(xrt_closure_t *_cl, XrValue _xr_states, int64_t _xr_begin, "
+                         "int64_t _xr_end, int64_t _xr_worker, void *_xr_out_void) {\n");
+            fprintf(out, "    XrValue _xr_state = xrt_index_get(_xr_states, "
+                         "XR_FROM_INT(_xr_worker));\n");
+        } else {
+            fprintf(out, "(xrt_closure_t *_cl, int64_t _xr_begin, int64_t _xr_end, "
+                         "int64_t _xr_worker, void *_xr_out_void) {\n");
+        }
         fprintf(out, "    %s *_xr_out = (%s *)_xr_out_void;\n", agg_ctype, agg_ctype);
         fprintf(out, "    %s _xr_acc = ", agg_ctype);
         if (data->range_body) {
@@ -9511,8 +9522,12 @@ static void xicgen_emit_par_reduce_range_wrapper(XiCgenCtx *ctx, FILE *out, cons
             fprintf(out, "    bool _xr_has = false;\n");
             fprintf(out, "    for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++) {\n");
             fprintf(out, "        %s _xr_item = ", agg_ctype);
-            xicgen_emit_par_reduce_body_call_value(ctx, out, owner, body, NULL, prefix, "_xr_i",
-                                                   "_xr_worker", "_cl");
+            if (data->plan_state)
+                xicgen_emit_par_reduce_plan_state_body_call_value(
+                    ctx, out, owner, body, NULL, prefix, "_xr_state", "_xr_i", "_xr_worker", "_cl");
+            else
+                xicgen_emit_par_reduce_body_call_value(ctx, out, owner, body, NULL, prefix, "_xr_i",
+                                                       "_xr_worker", "_cl");
             fprintf(out, ";\n");
             fprintf(out, "        if (_xr_has) {\n");
             fprintf(out, "            _xr_acc = ");
@@ -10140,14 +10155,27 @@ static void xicgen_par_reduce_emit_serial_agg_int64max(XiCgenCtx *ctx, FILE *out
                                                        const XiFunc *combine, const char *prefix,
                                                        const char *closure_name,
                                                        const char *agg_ctype) {
+    const XiParallelReduceData *data = (const XiParallelReduceData *) (v ? v->aux : NULL);
     fprintf(out, "            if (_xr_pr_start_%u <= _xr_pr_end_%u) {\n", v->id, v->id);
+    if (data && data->plan_state) {
+        fprintf(out,
+                "                XrValue _xr_pr_state_%u = xrt_index_get(_xr_pr_states_%u, "
+                "XR_FROM_INT(0));\n",
+                v->id, v->id);
+    }
     fprintf(out, "                for (int64_t _xr_pr_i_%u = _xr_pr_start_%u; ; _xr_pr_i_%u++) {\n",
             v->id, v->id, v->id);
     fprintf(out, "                    %s _xr_pr_item_%u = ", agg_ctype, v->id);
     char iter_name[64];
+    char state_name[64];
     snprintf(iter_name, sizeof(iter_name), "_xr_pr_i_%u", v->id);
-    xicgen_emit_par_reduce_body_call_value(ctx, out, f, body, v->args[4], prefix, iter_name, "0",
-                                           closure_name);
+    snprintf(state_name, sizeof(state_name), "_xr_pr_state_%u", v->id);
+    if (data && data->plan_state)
+        xicgen_emit_par_reduce_plan_state_body_call_value(ctx, out, f, body, v->args[4], prefix,
+                                                          state_name, iter_name, "0", closure_name);
+    else
+        xicgen_emit_par_reduce_body_call_value(ctx, out, f, body, v->args[4], prefix, iter_name,
+                                               "0", closure_name);
     fprintf(out, ";\n");
     fprintf(out, "                    _xr_pr_out_%u = ", v->id);
     char out_name[64];
@@ -10259,36 +10287,70 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "        } else {\n");
             fprintf(out, "            int64_t _xr_pr_end_excl_%u = _xr_pr_end_%u + 1;\n", v->id,
                     v->id);
-            fprintf(out,
-                    "            if (!xr_parallel_reduce_agg(%s, _xr_pr_start_%u, "
-                    "_xr_pr_end_excl_%u, _xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
-                    "(XrParallelReduceRangeAggFn)",
-                    aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
-            xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
-            fprintf(out, ", (XrParallelReduceCombineAggFn)");
-            xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
-            fprintf(out, ", ");
-            if (scoped_closure)
-                fprintf(out, "%s", scoped_closure_name);
-            else
-                emit_call_hidden_closure(out, f, body, v->args[4]);
-            fprintf(out, ", &_xr_pr_out_%u)) abort();\n", v->id);
+            if (data->plan_state) {
+                fprintf(out,
+                        "            if (!xr_parallel_reduce_state_agg(%s, _xr_pr_start_%u, "
+                        "_xr_pr_end_excl_%u, _xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
+                        "(XrParallelReduceRangeStateAggFn)",
+                        aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
+                xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", (XrParallelReduceCombineAggFn)");
+                xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", ");
+                if (scoped_closure)
+                    fprintf(out, "%s", scoped_closure_name);
+                else
+                    emit_call_hidden_closure(out, f, body, v->args[4]);
+                fprintf(out, ", _xr_pr_states_%u, &_xr_pr_out_%u)) abort();\n", v->id, v->id);
+            } else {
+                fprintf(out,
+                        "            if (!xr_parallel_reduce_agg(%s, _xr_pr_start_%u, "
+                        "_xr_pr_end_excl_%u, _xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
+                        "(XrParallelReduceRangeAggFn)",
+                        aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
+                xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", (XrParallelReduceCombineAggFn)");
+                xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", ");
+                if (scoped_closure)
+                    fprintf(out, "%s", scoped_closure_name);
+                else
+                    emit_call_hidden_closure(out, f, body, v->args[4]);
+                fprintf(out, ", &_xr_pr_out_%u)) abort();\n", v->id);
+            }
             fprintf(out, "        }\n");
         } else {
-            fprintf(out,
-                    "        if (!xr_parallel_reduce_agg(%s, _xr_pr_start_%u, _xr_pr_end_%u, "
-                    "_xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
-                    "(XrParallelReduceRangeAggFn)",
-                    aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
-            xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
-            fprintf(out, ", (XrParallelReduceCombineAggFn)");
-            xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
-            fprintf(out, ", ");
-            if (scoped_closure)
-                fprintf(out, "%s", scoped_closure_name);
-            else
-                emit_call_hidden_closure(out, f, body, v->args[4]);
-            fprintf(out, ", &_xr_pr_out_%u)) abort();\n", v->id);
+            if (data->plan_state) {
+                fprintf(out,
+                        "        if (!xr_parallel_reduce_state_agg(%s, _xr_pr_start_%u, "
+                        "_xr_pr_end_%u, _xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
+                        "(XrParallelReduceRangeStateAggFn)",
+                        aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
+                xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", (XrParallelReduceCombineAggFn)");
+                xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", ");
+                if (scoped_closure)
+                    fprintf(out, "%s", scoped_closure_name);
+                else
+                    emit_call_hidden_closure(out, f, body, v->args[4]);
+                fprintf(out, ", _xr_pr_states_%u, &_xr_pr_out_%u)) abort();\n", v->id, v->id);
+            } else {
+                fprintf(out,
+                        "        if (!xr_parallel_reduce_agg(%s, _xr_pr_start_%u, _xr_pr_end_%u, "
+                        "_xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
+                        "(XrParallelReduceRangeAggFn)",
+                        aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
+                xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", (XrParallelReduceCombineAggFn)");
+                xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
+                fprintf(out, ", ");
+                if (scoped_closure)
+                    fprintf(out, "%s", scoped_closure_name);
+                else
+                    emit_call_hidden_closure(out, f, body, v->args[4]);
+                fprintf(out, ", &_xr_pr_out_%u)) abort();\n", v->id);
+            }
         }
     } else if (data->inclusive_end) {
         fprintf(out, "        if (_xr_pr_end_%u == INT64_MAX) {\n", v->id);

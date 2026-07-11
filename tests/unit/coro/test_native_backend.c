@@ -28,6 +28,7 @@
 #include "runtime/mem/xobj_destroy_ops.h"
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
+#include "runtime/xshared.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -179,6 +180,34 @@ static bool aot_par_reduce_agg_sum_body(struct xrt_closure *closure, int64_t beg
     return true;
 }
 
+static bool aot_par_reduce_state_agg_sum_body(struct xrt_closure *closure, XrValue states,
+                                              int64_t begin, int64_t end, int64_t worker_id,
+                                              void *out) {
+    (void) closure;
+    if (!out || !XR_IS_ARRAY(states))
+        return false;
+    XrArray *state_array = XR_TO_ARRAY(states);
+    if (!state_array || worker_id < 0 || worker_id >= state_array->length)
+        return false;
+    XrValue state_value = xr_array_get_element(state_array, (int32_t) worker_id);
+    if (!XR_IS_INT(state_value))
+        return false;
+    if (worker_id >= 8)
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+    if (worker_id < 63)
+        atomic_fetch_or_explicit(&aot_par_for_seen_mask, (int64_t) 1 << worker_id,
+                                 memory_order_relaxed);
+    int64_t state = XR_TO_INT(state_value);
+    AotParAggPartial *partial = (AotParAggPartial *) out;
+    partial->sum = 0;
+    partial->count = 0;
+    for (int64_t i = begin; i < end; i++) {
+        partial->sum += state + i;
+        partial->count++;
+    }
+    return true;
+}
+
 static void aot_par_reduce_agg_add(struct xrt_closure *closure, void *acc, const void *value) {
     (void) closure;
     AotParAggPartial *dst = (AotParAggPartial *) acc;
@@ -200,6 +229,18 @@ static bool aot_par_reduce_failing_body(struct xrt_closure *closure, int64_t beg
 static bool aot_par_reduce_agg_failing_body(struct xrt_closure *closure, int64_t begin, int64_t end,
                                             int64_t worker_id, void *out) {
     (void) closure;
+    (void) begin;
+    (void) end;
+    (void) worker_id;
+    (void) out;
+    return false;
+}
+
+static bool aot_par_reduce_state_agg_failing_body(struct xrt_closure *closure, XrValue states,
+                                                  int64_t begin, int64_t end, int64_t worker_id,
+                                                  void *out) {
+    (void) closure;
+    (void) states;
     (void) begin;
     (void) end;
     (void) worker_id;
@@ -1467,6 +1508,60 @@ TEST(parallel_reduce_agg_runs_range_reducer) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(parallel_reduce_state_agg_runs_range_reducer) {
+    XrAotRuntime *runtime = aot_test_parallel_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+    XrRuntimeCore *core = xr_aot_runtime_core(runtime);
+    ASSERT_NOT_NULL(core);
+
+    XrArray *states = xr_array_new_shared_core(core, 8);
+    ASSERT_NOT_NULL(states);
+    states->length = 8;
+    for (int32_t i = 0; i < states->length; i++)
+        xr_array_set_element(states, i, xr_int(100));
+    XrValue states_value = xr_value_from_array(states);
+
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
+
+    AotParAggPartial initial = {
+        .sum = 10,
+        .count = 1,
+    };
+    AotParAggPartial result = {
+        .sum = -1,
+        .count = -1,
+    };
+    ASSERT_TRUE(xr_parallel_reduce_state_agg(&ctx, 0, 1000, 8, sizeof(AotParAggPartial), &initial,
+                                             aot_par_reduce_state_agg_sum_body,
+                                             aot_par_reduce_agg_add, NULL, states_value, &result));
+    ASSERT_EQ_INT(result.sum, 599510);
+    ASSERT_EQ_INT(result.count, 1001);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_TRUE(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed) != 0);
+
+    result.sum = -1;
+    result.count = -1;
+    ASSERT_TRUE(xr_parallel_reduce_state_agg(&ctx, 7, 7, 8, sizeof(AotParAggPartial), &initial,
+                                             aot_par_reduce_state_agg_sum_body,
+                                             aot_par_reduce_agg_add, NULL, states_value, &result));
+    ASSERT_EQ_INT(result.sum, 10);
+    ASSERT_EQ_INT(result.count, 1);
+
+    result.sum = 77;
+    result.count = 88;
+    ASSERT_FALSE(xr_parallel_reduce_state_agg(&ctx, 0, 16, 4, sizeof(AotParAggPartial), &initial,
+                                              aot_par_reduce_state_agg_failing_body,
+                                              aot_par_reduce_agg_add, NULL, states_value, &result));
+    ASSERT_EQ_INT(result.sum, 77);
+    ASSERT_EQ_INT(result.count, 88);
+
+    if (xr_shared_decref(&states->hdr) == 0)
+        xr_shared_destroy_core(core, &states->hdr);
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
@@ -1501,5 +1596,6 @@ RUN_TEST(parallel_for_dispatch_is_runtime_scoped);
 RUN_TEST(parallel_for_nested_worker_wait_helps_join);
 RUN_TEST(parallel_reduce_i64_runs_range_reducer);
 RUN_TEST(parallel_reduce_agg_runs_range_reducer);
+RUN_TEST(parallel_reduce_state_agg_runs_range_reducer);
 
 TEST_MAIN_END()

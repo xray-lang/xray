@@ -148,6 +148,9 @@ typedef int64_t (*XrParallelReduceCombineI64Fn)(struct xrt_closure *closure, int
                                                 int64_t value);
 typedef bool (*XrParallelReduceRangeAggFn)(struct xrt_closure *closure, int64_t begin, int64_t end,
                                            int64_t worker_id, void *out);
+typedef bool (*XrParallelReduceRangeStateAggFn)(struct xrt_closure *closure, XrValue states,
+                                                int64_t begin, int64_t end, int64_t worker_id,
+                                                void *out);
 typedef void (*XrParallelReduceCombineAggFn)(struct xrt_closure *closure, void *acc,
                                              const void *value);
 
@@ -298,6 +301,11 @@ XR_FUNC bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int6
                                     XrParallelReduceRangeAggFn body,
                                     XrParallelReduceCombineAggFn combine,
                                     struct xrt_closure *closure, void *out);
+XR_FUNC bool xr_parallel_reduce_state_agg(const XrAotContext *ctx, int64_t start, int64_t end,
+                                          int64_t workers, size_t value_size, const void *initial,
+                                          XrParallelReduceRangeStateAggFn body,
+                                          XrParallelReduceCombineAggFn combine,
+                                          struct xrt_closure *closure, XrValue states, void *out);
 
 // Construct a coroutine-backed iterator over a generator function. The producer
 // coroutine is created from desc+frame but NOT scheduled; it is pull-driven by

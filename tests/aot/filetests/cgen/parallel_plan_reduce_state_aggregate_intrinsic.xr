@@ -1,0 +1,18 @@
+import { Plan, Options } from parallel
+
+struct Totals {
+    bytes: int
+    checksum: int
+}
+
+var plan = Plan<int>(Options(2), (lane) -> lane + 10)
+
+var totals = plan.reduce(
+    0..4,
+    Totals{bytes: 0, checksum: 0},
+    (state, i) -> Totals{bytes: state + i, checksum: 1},
+    (a, b) -> Totals{bytes: a.bytes + b.bytes, checksum: a.checksum + b.checksum}
+)
+
+print(totals.bytes)
+print(totals.checksum)
