@@ -29,6 +29,7 @@
 #include "../../base/xconstants.h"
 #include "../../base/xfileio.h"
 #include "../../base/xhashmap.h"
+#include <inttypes.h>
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
@@ -1641,6 +1642,78 @@ static const char *xa_parallel_call_member_name(XaInferContext *ctx, CallExprNod
             return name;
     }
     return NULL;
+}
+
+static AstNode *xa_call_unwrap_grouping(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    return node;
+}
+
+static bool xa_parallel_options_callee_is_parallel(XaInferContext *ctx, AstNode *callee) {
+    callee = xa_call_unwrap_grouping(callee);
+    if (!ctx || !callee)
+        return false;
+    if (callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &callee->as.member_access;
+        return ma->name && strcmp(ma->name, "Options") == 0 &&
+               xa_call_object_is_module(ctx, ma->object, "parallel");
+    }
+    if (callee->type == AST_VARIABLE && callee->as.variable.name) {
+        XaSymbol *sym = xa_lookup_visible_symbol(ctx, callee->as.variable.name);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+        const char *member = links && links->import_member_name
+                                 ? links->import_member_name
+                                 : (sym ? sym->name : callee->as.variable.name);
+        return sym && sym->is_imported && links && links->module_name &&
+               strcmp(links->module_name, "parallel") == 0 && member &&
+               strcmp(member, "Options") == 0;
+    }
+    return false;
+}
+
+static bool xa_parallel_options_workers_const(XaInferContext *ctx, AstNode *options_arg,
+                                              int64_t *out_workers) {
+    options_arg = xa_call_unwrap_grouping(options_arg);
+    if (!ctx || !options_arg || options_arg->type != AST_CALL_EXPR || !out_workers)
+        return false;
+    CallExprNode *ctor = &options_arg->as.call_expr;
+    if (!xa_parallel_options_callee_is_parallel(ctx, ctor->callee) || ctor->arg_count != 1 ||
+        !ctor->arguments || !ctor->arguments[0])
+        return false;
+    const char *err = NULL;
+    return xa_eval_const_int_expr(ctx->analyzer, ctor->arguments[0], out_workers, &err);
+}
+
+static int xa_parallel_options_arg_index(const char *member, int arg_count) {
+    if (!member)
+        return -1;
+    if ((strcmp(member, "forEach") == 0 || strcmp(member, "map") == 0) && arg_count >= 3)
+        return 2;
+    if (strcmp(member, "mapInto") == 0 && arg_count >= 4)
+        return 3;
+    if (strcmp(member, "reduce") == 0 && arg_count >= 5)
+        return 4;
+    return -1;
+}
+
+static void xa_check_parallel_options_workers_const(XaInferContext *ctx, AstNode *node,
+                                                    CallExprNode *call, const char *member) {
+    int options_index = call ? xa_parallel_options_arg_index(member, call->arg_count) : -1;
+    if (!ctx || !call || options_index < 0 || options_index >= call->arg_count)
+        return;
+    int64_t workers = 0;
+    if (!xa_parallel_options_workers_const(ctx, call->arguments[options_index], &workers) ||
+        workers >= 0)
+        return;
+    AstNode *loc_node = call->arguments[options_index];
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = loc_node ? loc_node->line : node->line,
+                      .column = loc_node ? loc_node->column : node->column};
+    char msg[128];
+    snprintf(msg, sizeof(msg), "parallel.Options.workers must be >= 0, got %" PRId64, workers);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
 }
 
 static const char *xa_parallel_callback_label_for_arg(const char *member, int arg_index) {
@@ -3339,6 +3412,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     XrType *saved_acc_type = ctx->callback_accumulator_type;
     XrType *saved_arr_type = ctx->callback_array_type;
     const char *parallel_call_member = xa_parallel_call_member_name(ctx, call, fn_links, fn_sym);
+    xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
 
     // Set callback context if this is a container method with callbacks
     if (container_elem_type && method_name) {

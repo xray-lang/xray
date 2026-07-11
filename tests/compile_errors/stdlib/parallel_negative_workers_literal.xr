@@ -1,0 +1,5 @@
+import parallel
+
+parallel.forEach(0..4, (i) -> {
+    print(i)
+}, parallel.Options(-1))
