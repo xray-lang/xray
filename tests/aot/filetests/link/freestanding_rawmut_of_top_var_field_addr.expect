@@ -1,0 +1,14 @@
+args=--profile freestanding
+c_contains=xray_rawmut_top_var_field_addr
+c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_field_addr_
+c_contains=.limit =
+c_contains=&_xctstruct_freestanding_rawmut_of_top_var_field_addr_
+c_contains=(intptr_t)(INT64_C(8))
+c_not_contains=const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_field_addr_
+c_not_contains=xrt_shared[0] =
+c_not_contains=xrt_mem_address_of
+c_not_contains=xrt_arc_alloc
+c_not_contains=xr_aggregate_ref
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core

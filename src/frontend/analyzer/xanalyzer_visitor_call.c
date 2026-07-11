@@ -176,18 +176,60 @@ static XaSymbol *xa_raw_pointer_of_arg_symbol(XaInferContext *ctx, AstNode *arg)
     return arg->as.variable.name ? xa_lookup_visible_symbol(ctx, arg->as.variable.name) : NULL;
 }
 
+static bool xa_rawmut_type_is_mutable_static_object(XrType *type) {
+    return type && (xa_type_has_fixed_layout_data_object(type) ||
+                    (!type->is_nullable &&
+                     ((type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_I64) ||
+                      (type->kind == XR_KIND_FLOAT && type->native_width != XR_NATIVE_F32) ||
+                      type->kind == XR_KIND_BOOL || type->kind == XR_KIND_CHAR)));
+}
+
+static bool xa_rawmut_symbol_is_local_mutable_static_object(XaSymbol *sym, XrType *sym_type) {
+    return sym && sym->kind == XA_SYM_VARIABLE && !sym->is_const && sym->scope &&
+           sym->scope->kind == XA_SCOPE_GLOBAL && !sym->is_shared && !sym->is_imported &&
+           xa_rawmut_type_is_mutable_static_object(sym_type);
+}
+
+static bool xa_rawmut_of_static_field_arg(XaInferContext *ctx, AstNode *arg) {
+    if (!ctx || !ctx->analyzer || !arg || arg->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &arg->as.member_access;
+    if (!ma->object || ma->object->type != AST_VARIABLE || !ma->name)
+        return false;
+
+    XaSymbol *base = xa_raw_pointer_of_arg_symbol(ctx, ma->object);
+    XrType *base_type = base ? xa_analyzer_get_type(ctx->analyzer, base) : NULL;
+    if (!xa_rawmut_symbol_is_local_mutable_static_object(base, base_type) ||
+        !xa_type_has_fixed_layout_data_object(base_type))
+        return false;
+
+    uint32_t offset = 0;
+    if (!xr_type_has_static_field_offset(base_type, ma->name, &offset))
+        return false;
+    (void) offset;
+
+    XrType *field_type = xa_analyzer_get_node_type(ctx->analyzer, arg);
+    if (!field_type)
+        field_type = xa_visit_infer_expr(ctx, arg);
+    return xr_type_has_static_layout(field_type, NULL, NULL);
+}
+
 static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *node,
                                                CallExprNode *call, XrType *ptr_type) {
     if (!ctx || !ctx->analyzer || !node || !call || !ptr_type ||
         !xa_freestanding_profile_enabled(ctx->analyzer))
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-    if (call->arg_count != 1 || !call->arguments || !call->arguments[0] ||
-        call->arguments[0]->type != AST_VARIABLE) {
+    bool valid_arg_shape =
+        call->arg_count == 1 && call->arguments && call->arguments[0] &&
+        (call->arguments[0]->type == AST_VARIABLE ||
+         (ptr_type->ptr_is_mut && call->arguments[0]->type == AST_MEMBER_ACCESS));
+    if (!valid_arg_shape) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            ptr_type->ptr_is_mut ? "RawMut.of requires exactly one top-level mutable static name"
-                                 : "RawPtr.of requires exactly one top-level const name",
+            ptr_type->ptr_is_mut
+                ? "RawMut.of requires exactly one top-level mutable static name or field"
+                : "RawPtr.of requires exactly one top-level const name",
             &loc);
         return;
     }
@@ -196,16 +238,17 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
     XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
     if (ptr_type->ptr_is_mut) {
         XrType *sym_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
-        bool mutable_static_object =
-            sym_type &&
-            (xa_type_has_fixed_layout_data_object(sym_type) ||
-             (!sym_type->is_nullable &&
-              ((sym_type->kind == XR_KIND_INT && sym_type->native_width == XR_NATIVE_I64) ||
-               (sym_type->kind == XR_KIND_FLOAT && sym_type->native_width != XR_NATIVE_F32) ||
-               sym_type->kind == XR_KIND_BOOL || sym_type->kind == XR_KIND_CHAR)));
-        if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->scope ||
-            sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared || sym->is_imported ||
-            !mutable_static_object) {
+        if (arg->type == AST_MEMBER_ACCESS) {
+            if (!xa_rawmut_of_static_field_arg(ctx, arg)) {
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                    "RawMut.of can only take a field of a top-level mutable aggregate static "
+                    "object with static field layout",
+                    &aloc);
+            }
+            return;
+        }
+        if (!xa_rawmut_symbol_is_local_mutable_static_object(sym, sym_type)) {
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                 "RawMut.of can only take the name of a top-level mutable scalar or aggregate "
