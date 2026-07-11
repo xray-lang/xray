@@ -1,0 +1,13 @@
+fn makeJsonBranchReturnPlan(flag: bool) -> Json {
+    if (flag) {
+        return { name: "ada", age: 1 }
+    } else {
+        return { name: "bob", age: 2 }
+    }
+}
+
+fn jsonBranchReturnReceiverPlan(flag: bool) -> int {
+    return makeJsonBranchReturnPlan(flag).age
+}
+
+print(jsonBranchReturnReceiverPlan(true))

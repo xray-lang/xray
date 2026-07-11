@@ -3374,6 +3374,8 @@ typedef struct XgReturnObjectLiteralScan {
     XgReturnObjectLiteralLocal locals[64];
     uint32_t nlocals;
     const ObjectLiteralNode *literal;
+    uint64_t literal_shape_hash;
+    int literal_field_count;
     bool seen;
     bool failed;
 } XgReturnObjectLiteralScan;
@@ -3412,13 +3414,18 @@ static bool return_literal_push_local(XgReturnObjectLiteralScan *scan, const cha
 
 static bool return_literal_record(XgReturnObjectLiteralScan *scan,
                                   const ObjectLiteralNode *literal) {
+    uint64_t shape_hash;
     if (!scan || !literal)
         return false;
-    if (scan->seen && scan->literal != literal) {
+    shape_hash = body_json_shape_hash(literal);
+    if (scan->seen &&
+        (scan->literal_field_count != literal->count || scan->literal_shape_hash != shape_hash)) {
         scan->failed = true;
         return false;
     }
     scan->literal = literal;
+    scan->literal_shape_hash = shape_hash;
+    scan->literal_field_count = literal->count;
     scan->seen = true;
     return true;
 }
@@ -3458,6 +3465,28 @@ static bool return_literal_scan_tracked_local_read(XgReturnObjectLiteralScan *sc
         return false;
     }
     return true;
+}
+
+static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const IfStmtNode *stmt) {
+    XgReturnObjectLiteralScan then_scan;
+    XgReturnObjectLiteralScan else_scan;
+    uint32_t base_locals;
+    if (!scan || !stmt || !stmt->then_branch || !stmt->else_branch)
+        return false;
+    if (!return_literal_scan_node(scan, stmt->condition))
+        return false;
+    base_locals = scan->nlocals;
+    then_scan = *scan;
+    else_scan = *scan;
+    if (!return_literal_scan_node(&then_scan, stmt->then_branch) || then_scan.failed)
+        return false;
+    if (!return_literal_scan_node(&else_scan, stmt->else_branch) || else_scan.failed)
+        return false;
+    if (!then_scan.seen || !else_scan.seen)
+        return false;
+    scan->nlocals = base_locals;
+    return return_literal_record(scan, then_scan.literal) &&
+           return_literal_record(scan, else_scan.literal);
 }
 
 static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstNode *node) {
@@ -3567,6 +3596,7 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
             }
             return true;
         case AST_IF_STMT:
+            return return_literal_scan_if_stmt(scan, &node->as.if_stmt);
         case AST_WHILE_STMT:
         case AST_FOR_STMT:
         case AST_FOR_IN_STMT:
