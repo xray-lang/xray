@@ -692,7 +692,6 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         return;
     XrAotRuntime *expected = runtime;
     atomic_compare_exchange_strong(&g_aot_runtime_current, &expected, NULL);
-    xr_parallel_runtime_shutdown(runtime);
     if (runtime->scheduler) {
         xr_scheduler_runtime_delete(runtime->scheduler);
         runtime->scheduler = NULL;

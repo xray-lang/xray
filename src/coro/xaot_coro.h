@@ -284,7 +284,6 @@ XR_FUNC bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int6
                                     XrParallelReduceRangeAggFn body,
                                     XrParallelReduceCombineAggFn combine,
                                     struct xrt_closure *closure, void *out);
-XR_FUNC void xr_parallel_runtime_shutdown(XrAotRuntime *runtime);
 
 // Construct a coroutine-backed iterator over a generator function. The producer
 // coroutine is created from desc+frame but NOT scheduled; it is pull-driven by
