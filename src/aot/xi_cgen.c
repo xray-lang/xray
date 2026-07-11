@@ -2310,6 +2310,8 @@ static bool cg_freestanding_static_scalar_var_slot_is_materialized(XiCgenCtx *ct
         return false;
     if (module != ctx->module || cg_module_slot_is_import(module, slot))
         return false;
+    if (cg_const_literal_has_data_attrs(lit))
+        return true;
     return cg_func_tree_takes_static_addr_slot(module->init, slot);
 }
 
@@ -2576,8 +2578,10 @@ static bool cg_emit_freestanding_static_scalar_const_defs(XiCgenCtx *ctx, FILE *
                 case XI_CONST_LITERAL_INT:
                 case XI_CONST_LITERAL_BOOL:
                 case XI_CONST_LITERAL_CHAR:
-                    fprintf(out, "static int64_t ");
+                    cg_emit_static_const_storage(out, lit);
+                    fprintf(out, "int64_t ");
                     cg_emit_static_scalar_const_name(ctx, out, module, slot);
+                    emit_aot_const_data_attrs(out, lit);
                     fprintf(out, " = ");
                     cg_emit_static_scalar_i64(out, lit->kind == XI_CONST_LITERAL_BOOL
                                                        ? (lit->bool_value ? 1 : 0)
@@ -2586,8 +2590,10 @@ static bool cg_emit_freestanding_static_scalar_const_defs(XiCgenCtx *ctx, FILE *
                     emitted = true;
                     break;
                 case XI_CONST_LITERAL_FLOAT:
-                    fprintf(out, "static double ");
+                    cg_emit_static_const_storage(out, lit);
+                    fprintf(out, "double ");
                     cg_emit_static_scalar_const_name(ctx, out, module, slot);
+                    emit_aot_const_data_attrs(out, lit);
                     fprintf(out, " = ");
                     emit_c_float_literal(out, lit->float_value);
                     fprintf(out, ";\n");

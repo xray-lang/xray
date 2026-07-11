@@ -2060,6 +2060,70 @@ else
     sed 's/^/      /' "$FREESTANDING_TOP_VAR_AGG_ATTRS_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_TOP_VAR_SCALAR_ATTRS_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_scalar_attrs.xr"
+FREESTANDING_TOP_VAR_SCALAR_ATTRS_OBJ="$WORK/freestanding_top_var_scalar_attrs.o"
+FREESTANDING_TOP_VAR_SCALAR_ATTRS_LOG="$WORK/freestanding_top_var_scalar_attrs.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_OBJ" \
+        "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SRC" >"$FREESTANDING_TOP_VAR_SCALAR_ATTRS_LOG" 2>&1; then
+    FREESTANDING_TOP_VAR_SCALAR_ATTRS_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" \
+            "static int64_t _xctscalar_freestanding_top_var_scalar_attrs_" \
+            "freestanding-profile/top-var-scalar-attrs: materializes mutable scalar as static data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xr_count\") XRT_ATTR_USED" \
+            "freestanding-profile/top-var-scalar-attrs: emits section/used attrs on mutable scalar data"
+        expect_log_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" \
+            "_xctscalar_freestanding_top_var_scalar_attrs_0 =" \
+            "freestanding-profile/top-var-scalar-attrs: writes scalar directly"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "xrt_shared[0]" \
+            "freestanding-profile/top-var-scalar-attrs: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "xrt_mem_address_of" \
+            "freestanding-profile/top-var-scalar-attrs: avoids hosted address helper"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "#include \"xrt.h\"" \
+            "freestanding-profile/top-var-scalar-attrs: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/top-var-scalar-attrs: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_VAR_SCALAR_ATTRS_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_OBJ")"
+    FREESTANDING_TOP_VAR_SCALAR_ATTRS_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-var-scalar-attrs: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/top-var-scalar-attrs: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_UNEXPECTED" | sed 's/^/      /'
+    fi
+    FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS="$WORK/freestanding_top_var_scalar_attrs.sections"
+    if otool -l "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_OBJ" >"$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS" 2>/dev/null; then
+        if grep -Fq "sectname .xr_count" "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS"; then
+            record_pass "freestanding-profile/top-var-scalar-attrs: object contains mutable scalar section"
+        else
+            record_fail "freestanding-profile/top-var-scalar-attrs: object missing mutable scalar section"
+            sed 's/^/      /' "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS" | sed -n '1,120p'
+        fi
+    elif objdump -h "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_OBJ" >"$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS" 2>/dev/null; then
+        if grep -Fq ".xr_count" "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS"; then
+            record_pass "freestanding-profile/top-var-scalar-attrs: object contains mutable scalar section"
+        else
+            record_fail "freestanding-profile/top-var-scalar-attrs: object missing mutable scalar section"
+            sed 's/^/      /' "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_SECTIONS" | sed -n '1,120p'
+        fi
+    else
+        record_fail "freestanding-profile/top-var-scalar-attrs: section dump failed"
+    fi
+else
+    record_fail "freestanding-profile/top-var-scalar-attrs: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_RAWMUT_TOP_VAR_AGG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_top_var_aggregate_addr.xr"
 FREESTANDING_RAWMUT_TOP_VAR_AGG_OBJ="$WORK/freestanding_rawmut_of_top_var_aggregate_addr.o"
 FREESTANDING_RAWMUT_TOP_VAR_AGG_LOG="$WORK/freestanding_rawmut_of_top_var_aggregate_addr.log"
@@ -3264,7 +3328,7 @@ expect_freestanding_reject \
     "$WORK/freestanding_top_var_weak_reject.log" \
     "freestanding-profile: rejects weak mutable aggregate top-level var" \
     "@weak mutable static data is not supported" \
-    "aggregate var static object"
+    "mutable static data object"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \
