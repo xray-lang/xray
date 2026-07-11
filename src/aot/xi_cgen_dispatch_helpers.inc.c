@@ -10032,6 +10032,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     bool scoped_closure = xicgen_par_reduce_uses_stack_body_closure(v, v->args[4], body);
     char scoped_closure_name[64];
     scoped_closure_name[0] = '\0';
+    const char *aot_ctx_expr = xicgen_aot_context_expr(ctx, f);
 
     fprintf(out, "({\n");
     fprintf(out, "        int64_t _xr_pr_start_%u = ", v->id);
@@ -10066,10 +10067,10 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "            int64_t _xr_pr_end_excl_%u = _xr_pr_end_%u + 1;\n", v->id,
                     v->id);
             fprintf(out,
-                    "            if (!xr_aot_parallel_reduce_agg(_xr_pr_start_%u, "
+                    "            if (!xr_aot_parallel_reduce_agg(%s, _xr_pr_start_%u, "
                     "_xr_pr_end_excl_%u, _xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
                     "(XrAotParReduceRangeAggFn)",
-                    v->id, v->id, v->id, agg_ctype, v->id);
+                    aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
             xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
             fprintf(out, ", (XrAotParReduceCombineAggFn)");
             xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
@@ -10082,10 +10083,10 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "        }\n");
         } else {
             fprintf(out,
-                    "        if (!xr_aot_parallel_reduce_agg(_xr_pr_start_%u, _xr_pr_end_%u, "
+                    "        if (!xr_aot_parallel_reduce_agg(%s, _xr_pr_start_%u, _xr_pr_end_%u, "
                     "_xr_pr_workers_%u, sizeof(%s), &_xr_pr_out_%u, "
                     "(XrAotParReduceRangeAggFn)",
-                    v->id, v->id, v->id, agg_ctype, v->id);
+                    aot_ctx_expr, v->id, v->id, v->id, agg_ctype, v->id);
             xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
             fprintf(out, ", (XrAotParReduceCombineAggFn)");
             xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
@@ -10103,10 +10104,10 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "        } else {\n");
         fprintf(out, "            int64_t _xr_pr_end_excl_%u = _xr_pr_end_%u + 1;\n", v->id, v->id);
         fprintf(out,
-                "            if (!xr_aot_parallel_reduce_i64(_xr_pr_start_%u, "
+                "            if (!xr_aot_parallel_reduce_i64(%s, _xr_pr_start_%u, "
                 "_xr_pr_end_excl_%u, _xr_pr_workers_%u, _xr_pr_out_%u, "
                 "(XrAotParReduceRangeI64Fn)",
-                v->id, v->id, v->id, v->id);
+                aot_ctx_expr, v->id, v->id, v->id, v->id);
         xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", (XrAotParReduceCombineI64Fn)");
         xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
@@ -10119,9 +10120,9 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "        }\n");
     } else {
         fprintf(out,
-                "        if (!xr_aot_parallel_reduce_i64(_xr_pr_start_%u, _xr_pr_end_%u, "
+                "        if (!xr_aot_parallel_reduce_i64(%s, _xr_pr_start_%u, _xr_pr_end_%u, "
                 "_xr_pr_workers_%u, _xr_pr_out_%u, (XrAotParReduceRangeI64Fn)",
-                v->id, v->id, v->id, v->id);
+                aot_ctx_expr, v->id, v->id, v->id, v->id);
         xicgen_emit_par_reduce_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", (XrAotParReduceCombineI64Fn)");
         xicgen_emit_par_reduce_combine_wrapper_name(ctx, out, f, v, prefix);
@@ -10176,6 +10177,7 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
     const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     const XiFunc *body = data->body_func;
+    const char *aot_ctx_expr = xicgen_aot_context_expr(ctx, f);
     if (data->direct_lane_writes) {
         uint16_t expected_params = body ? body->nparams : 0;
         bool range_body = expected_params == 3;
@@ -10317,9 +10319,9 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "                }\n");
         }
         fprintf(out,
-                "            } else if (!xr_aot_parallel_for_range_i64(_xr_pm_start_%u, "
+                "            } else if (!xr_aot_parallel_for_range_i64(%s, _xr_pm_start_%u, "
                 "_xr_pm_end_excl_%u, _xr_pm_workers_%u, (XrAotParForRangeI64Fn)",
-                v->id, v->id, v->id);
+                aot_ctx_expr, v->id, v->id, v->id);
         xicgen_emit_par_map_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
         if (scoped_closure)
@@ -10459,9 +10461,9 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     fprintf(out, "                    if (%s == _xr_pm_end_%u) break;\n", iter_name, v->id);
     fprintf(out, "                }\n");
     fprintf(out,
-            "            } else if (!xr_aot_parallel_for_range_i64(_xr_pm_start_%u, "
+            "            } else if (!xr_aot_parallel_for_range_i64(%s, _xr_pm_start_%u, "
             "_xr_pm_end_excl_%u, _xr_pm_workers_%u, (XrAotParForRangeI64Fn)",
-            v->id, v->id, v->id);
+            aot_ctx_expr, v->id, v->id, v->id);
     xicgen_emit_par_map_range_wrapper_name(ctx, out, f, v, prefix);
     fprintf(out, ", _xr_pm_closure_%u)) abort();\n", v->id);
     fprintf(out, "        }\n");
@@ -10545,6 +10547,7 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
     char iter_name[64];
     snprintf(iter_name, sizeof(iter_name), "_xr_par_i_%u", v->id);
+    const char *aot_ctx_expr = xicgen_aot_context_expr(ctx, f);
 
     fprintf(out, "    {\n");
     fprintf(out, "        int64_t _xr_par_start_%u = ", v->id);
@@ -10582,9 +10585,9 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, "            int64_t _xr_par_end_excl_%u = _xr_par_end_%u + 1;\n", v->id,
                 v->id);
         fprintf(out,
-                "            if (!xr_aot_parallel_for_range_i64(_xr_par_start_%u, "
+                "            if (!xr_aot_parallel_for_range_i64(%s, _xr_par_start_%u, "
                 "_xr_par_end_excl_%u, _xr_par_workers_%u, (XrAotParForRangeI64Fn)",
-                v->id, v->id, v->id);
+                aot_ctx_expr, v->id, v->id, v->id);
         xicgen_emit_par_for_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
         if (scoped_closure)
@@ -10595,9 +10598,9 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, "        }\n");
     } else {
         fprintf(out,
-                "        if (!xr_aot_parallel_for_range_i64(_xr_par_start_%u, _xr_par_end_%u, "
+                "        if (!xr_aot_parallel_for_range_i64(%s, _xr_par_start_%u, _xr_par_end_%u, "
                 "_xr_par_workers_%u, (XrAotParForRangeI64Fn)",
-                v->id, v->id, v->id);
+                aot_ctx_expr, v->id, v->id, v->id);
         xicgen_emit_par_for_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
         if (scoped_closure)
