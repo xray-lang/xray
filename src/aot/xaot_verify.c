@@ -28,7 +28,7 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
 }
 
 static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
-    XaotEntryPlan expected;
+    XrEntryPlan expected;
     if (!bundle || !bundle->has_entry_plan)
         return set_error(errbuf, errbuf_len, "AOT bundle has no mandatory entry plan");
     /* Library and plan-isolation bundles intentionally have no executable
@@ -40,9 +40,9 @@ static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t err
             bundle->entry_plan.reachable_effect_bits != 0 ||
             bundle->entry_plan.required_capability_bits != 0 ||
             bundle->entry_plan.runtime_component_bits != 0 ||
-            bundle->entry_plan.root_representation != XAOT_ROOT_ELIDED ||
-            bundle->entry_plan.scheduler_mode != XAOT_SCHED_NONE ||
-            bundle->entry_plan.unproven_reason != XAOT_ENTRY_PROVEN)
+            bundle->entry_plan.root_representation != XR_ROOT_ELIDED ||
+            bundle->entry_plan.scheduler_mode != XR_SCHED_NONE ||
+            bundle->entry_plan.unproven_reason != XR_ENTRY_PROVEN)
             return set_error(errbuf, errbuf_len, "AOT rootless entry plan is stale");
         return true;
     }
@@ -61,7 +61,7 @@ static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t err
         expected.scheduler_mode != bundle->entry_plan.scheduler_mode ||
         expected.unproven_reason != bundle->entry_plan.unproven_reason)
         return set_error(errbuf, errbuf_len, "AOT entry plan is stale");
-    if (expected.unproven_reason != XAOT_ENTRY_PROVEN)
+    if (expected.unproven_reason != XR_ENTRY_PROVEN)
         return set_error(errbuf, errbuf_len, "AOT entry plan is unproven");
     return true;
 }

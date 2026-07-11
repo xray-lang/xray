@@ -175,7 +175,7 @@ static bool cg_entry_uses_resumable_frame(XiCgenCtx *ctx) {
         ctx->error = true;
         return false;
     }
-    return bundle->entry_plan.root_representation == XAOT_ROOT_RESUMABLE_FRAME;
+    return bundle->entry_plan.root_representation == XR_ROOT_RESUMABLE_FRAME;
 }
 
 static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
@@ -184,7 +184,7 @@ static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
         ctx->error = true;
         return false;
     }
-    return bundle->entry_plan.root_representation == XAOT_ROOT_DESCRIPTOR;
+    return bundle->entry_plan.root_representation == XR_ROOT_DESCRIPTOR;
 }
 
 /* Runtime include block shared by every generated translation unit.  The

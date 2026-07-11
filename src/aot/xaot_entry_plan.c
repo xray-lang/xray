@@ -61,7 +61,7 @@ static void enqueue_target(const XgGlobalEvidence *evidence, XgFuncId func_id, u
 }
 
 bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *evidence,
-                            uint32_t profile, XaotEntryPlan *out) {
+                            uint32_t profile, XrEntryPlan *out) {
     uint8_t *seen;
     uint32_t *queue;
     uint32_t head = 0;
@@ -79,7 +79,7 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
          * physical root is therefore proven elided. */
         out->provided_capability_bits =
             profile == XG_BUILD_FREESTANDING ? xaot_freestanding_core_capabilities() : UINT32_MAX;
-        out->evidence = XAOT_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XAOT_ENTRY_EV_TARGET_PROVIDER;
+        out->evidence = XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XR_ENTRY_EV_TARGET_PROVIDER;
         return true;
     }
     seen = (uint8_t *) xr_calloc(evidence->nbodies ? evidence->nbodies : 1, sizeof(uint8_t));
@@ -107,27 +107,27 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     xr_free(queue);
 
     out->runtime_component_bits = out->required_capability_bits;
-    if ((out->reachable_effect_bits & XG_BODY_MAY_SUSPEND) != 0)
-        out->root_representation = XAOT_ROOT_RESUMABLE_FRAME;
-    else if ((out->reachable_effect_bits & (XG_BODY_MAY_SPAWN | XG_BODY_OBSERVES_TASK_ID)) != 0)
-        out->root_representation = XAOT_ROOT_DESCRIPTOR;
+    if ((out->reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
+        out->root_representation = XR_ROOT_RESUMABLE_FRAME;
+    else if ((out->reachable_effect_bits & (XR_EFFECT_MAY_SPAWN | XR_EFFECT_OBSERVES_TASK_ID)) != 0)
+        out->root_representation = XR_ROOT_DESCRIPTOR;
     else
-        out->root_representation = XAOT_ROOT_ELIDED;
+        out->root_representation = XR_ROOT_ELIDED;
 
     if ((out->required_capability_bits & (XG_CAP_SYS_THREAD | XG_CAP_PARALLEL)) != 0)
-        out->scheduler_mode = XAOT_SCHED_MULTI;
+        out->scheduler_mode = XR_SCHED_MULTI;
     else if ((out->required_capability_bits &
               (XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_CHANNEL | XG_CAP_SCOPE)) != 0)
-        out->scheduler_mode = XAOT_SCHED_SINGLE;
+        out->scheduler_mode = XR_SCHED_SINGLE;
     else
-        out->scheduler_mode = XAOT_SCHED_NONE;
+        out->scheduler_mode = XR_SCHED_NONE;
 
     if (profile != XG_BUILD_FREESTANDING) {
         provided = UINT32_MAX;
         out->provider_hook_bits = UINT32_MAX;
     } else if (bundle->target_provider.abi_version != 0) {
         if (bundle->target_provider.abi_version != XAOT_PROVIDER_ABI_VERSION) {
-            out->unproven_reason = XAOT_ENTRY_PROVIDER_ABI;
+            out->unproven_reason = XR_ENTRY_PROVIDER_ABI;
             return true;
         }
         provided = bundle->target_provider.provided_capability_bits;
@@ -136,48 +136,48 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
         provided = xaot_freestanding_core_capabilities();
     }
     out->provided_capability_bits = provided;
-    out->evidence = XAOT_ENTRY_EV_GLOBAL_BODY | XAOT_ENTRY_EV_CLOSED_WORLD_REACHABILITY |
-                    XAOT_ENTRY_EV_ROOT_EFFECT | XAOT_ENTRY_EV_TARGET_PROVIDER;
+    out->evidence = XR_ENTRY_EV_GLOBAL_BODY | XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY |
+                    XR_ENTRY_EV_ROOT_EFFECT | XR_ENTRY_EV_TARGET_PROVIDER;
     if ((out->required_capability_bits & ~provided) != 0)
-        out->unproven_reason = XAOT_ENTRY_MISSING_CAPABILITY;
+        out->unproven_reason = XR_ENTRY_MISSING_CAPABILITY;
     return true;
 }
 
 const char *xaot_root_representation_name(uint8_t value) {
-    switch ((XaotRootRepresentation) value) {
-        case XAOT_ROOT_ELIDED:
+    switch ((XrRootRepresentation) value) {
+        case XR_ROOT_ELIDED:
             return "elided";
-        case XAOT_ROOT_DESCRIPTOR:
+        case XR_ROOT_DESCRIPTOR:
             return "descriptor";
-        case XAOT_ROOT_RESUMABLE_FRAME:
+        case XR_ROOT_RESUMABLE_FRAME:
             return "resumable_frame";
     }
     return "invalid";
 }
 
 const char *xaot_scheduler_mode_name(uint8_t value) {
-    switch ((XaotSchedulerMode) value) {
-        case XAOT_SCHED_NONE:
+    switch ((XrSchedulerMode) value) {
+        case XR_SCHED_NONE:
             return "none";
-        case XAOT_SCHED_SINGLE:
+        case XR_SCHED_SINGLE:
             return "single";
-        case XAOT_SCHED_MULTI:
+        case XR_SCHED_MULTI:
             return "multi";
     }
     return "invalid";
 }
 
 const char *xaot_entry_unproven_reason_name(uint8_t value) {
-    switch ((XaotEntryUnprovenReason) value) {
-        case XAOT_ENTRY_PROVEN:
+    switch ((XrEntryUnprovenReason) value) {
+        case XR_ENTRY_PROVEN:
             return "none";
-        case XAOT_ENTRY_NO_ROOT_BODY:
+        case XR_ENTRY_NO_ROOT_BODY:
             return "no_root_body";
-        case XAOT_ENTRY_PROVIDER_ABI:
+        case XR_ENTRY_PROVIDER_ABI:
             return "provider_abi";
-        case XAOT_ENTRY_MISSING_CAPABILITY:
+        case XR_ENTRY_MISSING_CAPABILITY:
             return "missing_capability";
-        case XAOT_ENTRY_MODULE_INIT_SUSPENDS:
+        case XR_ENTRY_MODULE_INIT_SUSPENDS:
             return "module_init_suspends";
     }
     return "invalid";

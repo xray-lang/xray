@@ -266,13 +266,14 @@ XrArray *xr_array_with_capacity(struct XrCoroutine *coro, int capacity) {
     return xr_array_with_capacity_typed(coro, capacity, XR_ELEM_ANY);
 }
 
-XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
-                                      XrArrayElemType elem_type) {
-    XR_DCHECK(coro != NULL, "array_with_capacity: NULL coro");
+static XrArray *xr_array_with_capacity_alloc(XrAllocationContext *alloc, struct XrCoroutine *coro,
+                                             int capacity, XrArrayElemType elem_type) {
+    XR_DCHECK(alloc != NULL || coro != NULL, "array_with_capacity: NULL allocation context");
     XR_DCHECK(capacity >= 0, "array_with_capacity: negative capacity");
     XR_DCHECK(elem_type < XR_ELEM_COUNT, "array_with_capacity: invalid elem_type");
-    // Allocate on coroutine heap
-    XrArray *arr = (XrArray *) xr_alloc(coro, sizeof(XrArray), XR_TARRAY);
+    XrArray *arr = alloc
+                       ? (XrArray *) xr_alloc_context_new_object(alloc, sizeof(XrArray), XR_TARRAY)
+                       : (XrArray *) xr_alloc(coro, sizeof(XrArray), XR_TARRAY);
 
     if (!arr) {
         return NULL;
@@ -299,7 +300,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     // Allocate data as GC blob on Region heap (no free needed, GC reclaims)
     if (capacity > 0) {
         size_t data_bytes = (size_t) esz * capacity;
-        XrCoroHeap *heap = xr_coro_get_heap(coro);
+        XrCoroHeap *heap = alloc ? alloc->local_heap : xr_coro_get_heap(coro);
         if (heap) {
             arr->data = xr_coro_alloc_blob(heap, data_bytes);
             if (arr->data) {
@@ -314,6 +315,17 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     }
 
     return arr;
+}
+
+XrArray *xr_array_with_capacity_in(XrAllocationContext *alloc, int capacity,
+                                   XrArrayElemType elem_type) {
+    return xr_array_with_capacity_alloc(alloc, NULL, capacity, elem_type);
+}
+
+XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
+                                      XrArrayElemType elem_type) {
+    XR_DCHECK(coro != NULL, "array_with_capacity: NULL coro");
+    return xr_array_with_capacity_alloc(NULL, coro, capacity, elem_type);
 }
 
 // Initialize array in-place (for shared arrays on system heap)

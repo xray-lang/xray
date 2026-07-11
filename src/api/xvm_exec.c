@@ -28,51 +28,6 @@
 
 XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
 
-typedef enum XrVMEntryMode {
-    XR_VM_ENTRY_ELIDED = 0,
-    XR_VM_ENTRY_DESCRIPTOR,
-    XR_VM_ENTRY_RESUMABLE,
-} XrVMEntryMode;
-
-static XrVMEntryMode xr_vm_proto_entry_mode(const XrProto *proto) {
-    XrVMEntryMode mode = XR_VM_ENTRY_ELIDED;
-    int count = proto ? DYNARRAY_COUNT(&proto->code) : 0;
-    for (int i = 0; i < count; i++) {
-        XrInstruction instruction = DYNARRAY_GET(&proto->code, i, XrInstruction);
-        switch (GET_OPCODE(instruction)) {
-            case OP_GO:
-            case OP_THREAD_SPAWN:
-            case OP_PAR_FOR:
-            case OP_PAR_MAP:
-            case OP_CHAN_NEW:
-            case OP_CHAN_NEW_CAP:
-            case OP_CHAN_NEW_NAMED:
-            case OP_TIME_AFTER:
-            case OP_SCOPE_ENTER:
-                mode = XR_VM_ENTRY_DESCRIPTOR;
-                break;
-            case OP_AWAIT:
-            case OP_AWAIT_TIMEOUT:
-            case OP_AWAIT_ALL:
-            case OP_AWAIT_ALL_INTO:
-            case OP_AWAIT_ANY:
-            case OP_YIELD:
-            case OP_CHAN_SEND:
-            case OP_CHAN_RECV:
-            case OP_CHAN_SEND_TIMEOUT:
-            case OP_CHAN_RECV_TIMEOUT:
-            case OP_SCOPE_EXIT:
-            case OP_SLEEP:
-            case OP_SELECT_BLOCK:
-            case OP_GEN_YIELD:
-                return XR_VM_ENTRY_RESUMABLE;
-            default:
-                break;
-        }
-    }
-    return mode;
-}
-
 static bool xr_vm_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProto *proto,
                                                     int offset) {
     if (!proto)
@@ -122,14 +77,29 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     if (!xr_vm_bind_proto_shared_slots(isolate, proto))
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
-    XrVMEntryMode entry_mode = xr_vm_proto_entry_mode(proto);
-    if (!runtime || entry_mode == XR_VM_ENTRY_ELIDED) {
+    if (!xr_vm_entry_plan_validate(proto)) {
+        xr_log_warning("vm", "bytecode has no verified entry plan");
+        return -1;
+    }
+    const XrEntryPlan *entry_plan = &proto->entry_plan;
+    if (entry_plan->root_representation == XR_ROOT_ELIDED) {
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
         if (result == XR_VM_OK && !XR_IS_NULL(isolate->vm.pending_error)) {
             return -1;
         }
         return (result == XR_VM_OK) ? 0 : -1;
+    }
+
+    XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
+    if (!runtime) {
+        int workers =
+            entry_plan->scheduler_mode == XR_SCHED_MULTI ? isolate->params.scheduler_workers : 1;
+        xray_vm_multicore_init(isolate, workers);
+        runtime = (XrRuntime *) isolate->vm.scheduler;
+        if (!runtime) {
+            xr_log_warning("vm", "entry plan requires an unavailable scheduler");
+            return -1;
+        }
     }
 
     XrCoroutine *main_coro = isolate->main_coro;

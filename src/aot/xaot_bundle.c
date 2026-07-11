@@ -3810,7 +3810,7 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         return false;
     }
     bundle->has_entry_plan = true;
-    if (bundle->entry_plan.unproven_reason != XAOT_ENTRY_PROVEN) {
+    if (bundle->entry_plan.unproven_reason != XR_ENTRY_PROVEN) {
         bundle->error_msg = "entry runtime requirements are not provided by the target";
         return false;
     }
@@ -6976,7 +6976,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     fprintf(out, "xaot-plan v0\n");
     fprintf(out, "modules %u entry %u\n", bundle->nmodules, bundle->entry_module);
     if (bundle->has_entry_plan) {
-        const XaotEntryPlan *ep = &bundle->entry_plan;
+        const XrEntryPlan *ep = &bundle->entry_plan;
         fprintf(out,
                 "entry-plan func=%u reachable=%u effects=0x%x required=0x%x provided=0x%x "
                 "runtime=0x%x root=%s scheduler=%s hooks=0x%x evidence=0x%x reason=%s\n",

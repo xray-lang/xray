@@ -1542,7 +1542,7 @@ typedef struct XaotBundle {
     uint32_t nmodules;
     uint32_t entry_module;
     XaotTargetCapabilityProvider target_provider;
-    XaotEntryPlan entry_plan;
+    XrEntryPlan entry_plan;
     bool has_entry_plan;
     XaotStoragePlan *storage_plans;
     uint32_t nstorage_plans;

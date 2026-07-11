@@ -78,7 +78,7 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     if (bundle && bundle->has_entry_plan &&
-        bundle->entry_plan.root_representation == XAOT_ROOT_DESCRIPTOR &&
+        bundle->entry_plan.root_representation == XR_ROOT_DESCRIPTOR &&
         bundle->entry_module < bundle->nmodules && bundle->modules[bundle->entry_module] &&
         bundle->modules[bundle->entry_module]->init == f)
         return false;

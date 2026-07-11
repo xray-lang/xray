@@ -543,6 +543,21 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!bc_put_u8(w, proto->is_coro_safe ? 1 : 0))
         return false;
 
+    // 3a. Canonical reachable-runtime entry contract. Child protos carry an
+    // empty plan; the module root carries the verified plan consumed by VM.
+    if (!bc_put_u32(w, proto->entry_plan.entry_func_id) ||
+        !bc_put_u32(w, proto->entry_plan.reachable_body_count) ||
+        !bc_put_u32(w, proto->entry_plan.reachable_effect_bits) ||
+        !bc_put_u32(w, proto->entry_plan.required_capability_bits) ||
+        !bc_put_u32(w, proto->entry_plan.provided_capability_bits) ||
+        !bc_put_u32(w, proto->entry_plan.runtime_component_bits) ||
+        !bc_put_u32(w, proto->entry_plan.provider_hook_bits) ||
+        !bc_put_u32(w, proto->entry_plan.evidence) ||
+        !bc_put_u8(w, proto->entry_plan.root_representation) ||
+        !bc_put_u8(w, proto->entry_plan.scheduler_mode) ||
+        !bc_put_u8(w, proto->entry_plan.unproven_reason))
+        return false;
+
     // 3b. FFI @extern signature (self-contained; the Xi IR is not serialized,
     // so the embedded-bytecode VM resolves the C symbol from here). The flag
     // doubles as "a signature follows" so a malformed extern proto without a
@@ -708,6 +723,21 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     if (r->error != XR_BC_OK)
         goto fail;
 
+    // 3a. Canonical reachable-runtime entry contract
+    proto->entry_plan.entry_func_id = bc_get_u32(r);
+    proto->entry_plan.reachable_body_count = bc_get_u32(r);
+    proto->entry_plan.reachable_effect_bits = bc_get_u32(r);
+    proto->entry_plan.required_capability_bits = bc_get_u32(r);
+    proto->entry_plan.provided_capability_bits = bc_get_u32(r);
+    proto->entry_plan.runtime_component_bits = bc_get_u32(r);
+    proto->entry_plan.provider_hook_bits = bc_get_u32(r);
+    proto->entry_plan.evidence = bc_get_u32(r);
+    proto->entry_plan.root_representation = bc_get_u8(r);
+    proto->entry_plan.scheduler_mode = bc_get_u8(r);
+    proto->entry_plan.unproven_reason = bc_get_u8(r);
+    if (r->error != XR_BC_OK)
+        goto fail;
+
     // 3b. FFI @extern signature
     {
         uint8_t has_ffi = bc_get_u8(r);
@@ -866,6 +896,8 @@ fail:
 uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size) {
     if (!X || !proto || !out_size)
         return NULL;
+    if (!xr_vm_entry_plan_validate(proto) && !xr_vm_entry_plan_derive(proto))
+        return NULL;
 
     BcWriter w;
     bc_writer_init(&w, X, flags);
@@ -992,6 +1024,11 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
     }
     if (proto)
         proto->shared_count = (int) shared_count;
+    if (proto && !xr_vm_entry_plan_validate(proto)) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+        r.error = XR_BC_ERR_CORRUPT;
+    }
 
     xr_free(id_map);
     if (error)
