@@ -423,7 +423,7 @@ run_package_case() {
     local iter="$1"
     local case_name="package"
     local dir="$WORK/$case_name-$iter"
-    local src="$dir/app.xr"
+    local src="$dir/main.xr"
     local cache="$dir/.cache"
     local home="$dir/home"
     mkdir -p "$dir"
