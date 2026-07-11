@@ -406,7 +406,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     bool entry_has_descriptor = cg_entry_uses_root_descriptor(ctx);
     CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_modules(modules, n);
     uint32_t runtime_caps = cg_runtime_caps_from_entry_plan(ctx);
-    bool entry_needs_runtime = cg_runtime_caps_need_runtime(runtime_caps);
+    bool entry_needs_runtime =
+        entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
 
     if (entry_needs_runtime)
@@ -535,7 +536,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         bool entry_is_coro = cg_entry_uses_resumable_frame(ctx);
         bool entry_has_descriptor = cg_entry_uses_root_descriptor(ctx);
         uint32_t runtime_caps = cg_runtime_caps_from_entry_plan(ctx);
-        bool entry_needs_runtime = cg_runtime_caps_need_runtime(runtime_caps);
+        bool entry_needs_runtime =
+            entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
         if (entry_needs_runtime)
             emit_xrt_runtime_core_configure_fn(body, runtime_caps);
 

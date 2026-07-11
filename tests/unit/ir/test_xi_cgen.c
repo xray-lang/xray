@@ -84,6 +84,56 @@ typedef struct TestAotEvidenceIds {
     uint32_t next_source_node_id;
 } TestAotEvidenceIds;
 
+static uint32_t test_aot_effect_bits(const XiFunc *func) {
+    uint32_t effects = 0;
+    if (!func)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            if ((value->flags & XI_FLAG_MAY_SUSPEND) != 0)
+                effects |= XG_BODY_MAY_SUSPEND;
+            if ((value->flags & XI_FLAG_MAY_THROW) != 0)
+                effects |= XG_BODY_MAY_THROW;
+            if ((value->flags & XI_FLAG_WRITES_MEM) != 0)
+                effects |= XG_BODY_MAY_MUTATE;
+            if ((value->flags & XI_FLAG_READS_MEM) != 0)
+                effects |= XG_BODY_MAY_READ_MEM;
+            if (value->op == XI_GO || value->op == XI_THREAD_SPAWN)
+                effects |= XG_BODY_MAY_SPAWN;
+        }
+    }
+    return effects;
+}
+
+static uint32_t test_aot_capability_bits(const XiFunc *func) {
+    uint32_t capabilities = 0;
+    if (!func)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            if ((value->flags & XI_FLAG_MAY_SUSPEND) != 0)
+                capabilities |= XG_CAP_COROUTINE;
+            if (value->op == XI_GO)
+                capabilities |= XG_CAP_COROUTINE | XG_CAP_TASK;
+            if (value->op == XI_THREAD_SPAWN)
+                capabilities |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_SYS_THREAD;
+        }
+    }
+    return capabilities;
+}
+
 static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgModuleId module_id,
                                            TestAotEvidenceIds *ids) {
     if (!func)
@@ -112,6 +162,8 @@ static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgMo
         .signature_key = signature_key,
         .source_span_id = source_node_id,
         .kind = XG_BODY_FUNCTION,
+        .effect_bits = test_aot_effect_bits(func),
+        .capability_bits = test_aot_capability_bits(func),
         .body_hash = ((uint64_t) module_id << 32) | func_id,
     };
 
@@ -157,11 +209,38 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
             .module_id = module_id,
             .name_id = xg_name_id("<module-init>"),
             .kind = XG_BODY_MODULE_INIT,
+            .effect_bits = test_aot_effect_bits(module->init),
+            .capability_bits = test_aot_capability_bits(module->init),
             .body_hash = ((uint64_t) module_id << 32) | func_id,
         };
         module->init->xg_body_func_id = func_id;
         TEST_REQUIRE(xg_global_evidence_add_body(&plan->evidence, &body) != NULL,
                      "AOT module-init body evidence allocation failed");
+        for (uint32_t slot = 0; slot < module->nslots; slot++) {
+            const char *name =
+                module->init->slot_owned_names ? module->init->slot_owned_names[slot] : NULL;
+            if (!name)
+                continue;
+            bool is_const =
+                module->init->slot_owned_consts && module->init->slot_owned_consts[slot] != 0;
+            uint32_t source_node_id = ids.next_source_node_id++;
+            XgDeclSummary storage = {
+                .module_id = module_id,
+                .decl_id = ids.next_decl_id++,
+                .kind = XG_DECL_GLOBAL,
+                .name_id = xg_name_id(name),
+                .source_node_id = source_node_id,
+                .source_span_id = source_node_id,
+                .signature_key = source_node_id,
+                .storage_owner = XR_STORAGE_MODULE,
+                .storage_mutability = is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE,
+                .address_identity = XR_ADDRESS_MODULE_STABLE,
+                .materialization_kind =
+                    is_const ? XR_MATERIALIZE_MODULE_READONLY : XR_MATERIALIZE_MODULE_RUNTIME,
+            };
+            TEST_REQUIRE(xg_global_evidence_add_decl(&plan->evidence, &storage) != NULL,
+                         "AOT storage declaration evidence allocation failed");
+        }
         for (uint16_t ci = 0; ci < module->init->nchildren; ci++)
             test_aot_add_function_evidence(plan, module->init->children[ci], module_id, &ids);
     }
@@ -522,10 +601,9 @@ TEST(cgen_initializes_file_dir_builtins_from_entry_source) {
 }
 
 TEST(cgen_runtime_file_dir_stays_runtime_owned) {
-    const char *src = "import time\n"
-                      "print(__file__)\n"
+    const char *src = "print(__file__)\n"
                       "print(__dir__)\n"
-                      "time.sleep(0)\n";
+                      "Coro.yield()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");

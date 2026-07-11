@@ -8860,13 +8860,13 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     bool want_mutable = v && v->type && XR_TYPE_IS_POINTER(v->type) && v->type->ptr_is_mut;
     const XiConstLiteral *lit = xicgen_static_addr_resolve_literal(ctx, f, v ? v->aux_int : -1,
                                                                    want_mutable, &module, &slot);
-    const XaotStoragePlan *storage =
-        xaot_storage_plan_find(cg_ctx_aot_bundle(ctx), module, (uint32_t) slot);
-    if (!storage ||
-        (storage->address_identity != XR_ADDRESS_MODULE_STABLE &&
-         storage->address_identity != XR_ADDRESS_SHARED_STABLE) ||
-        (want_mutable && storage->mutability == XR_STORAGE_READONLY) ||
-        (!want_mutable && storage->owner != XR_STORAGE_MODULE)) {
+    const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
+    if (!address ||
+        (address->provenance.address_identity != XR_ADDRESS_MODULE_STABLE &&
+         address->provenance.address_identity != XR_ADDRESS_SHARED_STABLE) ||
+        address->provenance.escape != XR_POINTER_ESCAPE_STABLE ||
+        (want_mutable && address->provenance.mutability == XR_STORAGE_READONLY) ||
+        (!want_mutable && address->provenance.owner != XR_STORAGE_MODULE)) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: %s requires verified stable %s storage provenance for '%s.%s'\n",
                 want_mutable ? "RawMut.of" : "RawPtr.of", want_mutable ? "mutable" : "readonly",
@@ -8889,6 +8889,14 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     if (!v || v->nargs < 1) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
+    if (!address || address->provenance.origin != XR_POINTER_ORIGIN_OWNER_BORROW ||
+        address->provenance.escape != XR_POINTER_ESCAPE_CALL_BOUND) {
+        fprintf(stderr, "[xi_cgen] ERROR: owner pointer borrow has no verified address plan\n");
+        ctx->error = true;
         emit_codegen_abort_expr(out);
         return;
     }
