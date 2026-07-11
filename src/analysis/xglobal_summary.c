@@ -5124,17 +5124,6 @@ static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
            package->nhash_eqs;
 }
 
-static bool module_id_existed_before_import(const XgGlobalEvidence *target, XgModuleId module_id,
-                                            uint32_t original_module_count) {
-    if (!target)
-        return false;
-    for (uint32_t i = 0; i < target->nmodules && i < original_module_count; i++) {
-        if (target->modules[i].module_id == module_id)
-            return true;
-    }
-    return false;
-}
-
 static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModuleId module_id) {
     if (!target || module_id == XG_NO_ID)
         return false;
@@ -5168,15 +5157,16 @@ static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModul
 }
 
 static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence *target,
-                                                         const XgGlobalEvidence *package,
-                                                         const XgModuleImportMap *maps,
-                                                         uint32_t original_module_count) {
-    if (!target || !package || !maps || package_non_module_row_count(package) == 0)
+                                                         const XgGlobalEvidence *package) {
+    if (!target || !package || package_non_module_row_count(package) == 0)
         return false;
     for (uint32_t i = 0; i < package->nmodules; i++) {
-        if (module_id_existed_before_import(target, maps[i].to, original_module_count) &&
-            target_has_module_owned_rows(target, maps[i].to))
-            return true;
+        const XgModuleSummary *source = &package->modules[i];
+        for (uint32_t j = 0; j < target->nmodules; j++) {
+            if (module_identity_matches(&target->modules[j], source) &&
+                target_has_module_owned_rows(target, target->modules[j].module_id))
+                return true;
+        }
     }
     return false;
 }
@@ -5189,7 +5179,6 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     XgPackageImportOffsets offsets;
     XgModuleImportMap *module_maps = NULL;
     XgEvidencePackageImportReport report;
-    uint32_t original_module_count;
     bool ok = false;
     if (out_report)
         memset(out_report, 0, sizeof(*out_report));
@@ -5201,17 +5190,15 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     if (!xg_evidence_cache_payload_materialize(payload, &package))
         return false;
     report.package_hash = xg_global_evidence_hash(&package);
-    if (!validate_package_module_identities(&package) || !reserve_import_capacity(target, &package))
+    if (!validate_package_module_identities(&package) ||
+        package_import_would_duplicate_existing_rows(target, &package) ||
+        !reserve_import_capacity(target, &package))
         goto done;
     module_maps = (XgModuleImportMap *) xr_calloc(package.nmodules, sizeof(*module_maps));
     if (!module_maps)
         goto done;
     collect_import_offsets(target, &offsets);
-    original_module_count = target->nmodules;
     if (!build_module_import_map(target, &package, module_maps, &report.modules_added))
-        goto done;
-    if (package_import_would_duplicate_existing_rows(target, &package, module_maps,
-                                                     original_module_count))
         goto done;
     report.modules_remapped = package.nmodules;
 
