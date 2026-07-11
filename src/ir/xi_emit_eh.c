@@ -624,10 +624,10 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
 }
 
-/* xi.par.collect VM fallback: execute stable lanes sequentially and collect
+/* xi.par.map VM fallback: execute stable lanes sequentially and collect
  * body results into a deterministic Array<T>. */
 /* Shared register set for the sequential VM lane loops emitted by
- * xi.par.collect / xi.par.reduce. AOT runs real workers; the VM keeps the
+ * xi.par.map / xi.par.reduce. AOT runs real workers; the VM keeps the
  * same lane split semantics so lane ids and per-lane chunk bounds match. */
 typedef struct {
     XiEmitReg start, end_excl, count, workers;
@@ -727,9 +727,9 @@ static bool par_lane_regs_alloc(EmitCtx *ctx, ParLaneRegs *r, int extra) {
 /* Direct-lane-write collect: the body writes result lanes itself, so each
  * lane array is resized up front and the closure receives (iter[, limit],
  * lane) with no per-item collect store. */
-static void emit_par_collect_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, XiEmitReg start,
-                                          XiEmitReg end, XiEmitReg workers, XiEmitReg closure) {
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, XiEmitReg start,
+                                      XiEmitReg end, XiEmitReg workers, XiEmitReg closure) {
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     if (data->lane_count < 1 || data->lane_count > 16 ||
         v->nargs < (uint16_t) (4u + data->lane_count)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -822,14 +822,14 @@ static void emit_par_collect_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg ds
     }
 }
 
-XR_FUNC void xi_emit_par_collect(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (!ctx || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_COLLECT || !v->aux) {
+XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!ctx || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux) {
         if (ctx)
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
 
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     if (!data->body_func || (data->into_result && v->nargs < 5)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -840,7 +840,7 @@ XR_FUNC void xi_emit_par_collect(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
     XiEmitReg closure = reg_of(ctx, v->args[3]);
     if (data->direct_lane_writes) {
-        emit_par_collect_direct_lanes(ctx, v, dst, start, end, workers, closure);
+        emit_par_map_direct_lanes(ctx, v, dst, start, end, workers, closure);
         return;
     }
 

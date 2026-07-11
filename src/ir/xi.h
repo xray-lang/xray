@@ -123,7 +123,7 @@ typedef enum {
     XI_AUX_KIND_ADT_FIELD = 1,
     XI_AUX_KIND_PAR_FOR = 2,
     XI_AUX_KIND_PAR_REDUCE = 3,
-    XI_AUX_KIND_PAR_COLLECT = 4,
+    XI_AUX_KIND_PAR_MAP = 4,
     XI_AUX_KIND_THREAD_SPAWN = 5,
 } XiAuxKind;
 
@@ -204,7 +204,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_GET_BUILTIN   name string (char*)  global index
  *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
  *  XI_PAR_FOR       XiParallelForData*   —
- *  XI_PAR_COLLECT   XiParallelCollectData* —
+ *  XI_PAR_MAP   XiParallelMapData* —
  *  XI_PAR_REDUCE    XiParallelReduceData* —
  *
  *  Consumers: xi_emit.c (VM bytecode), xi_cgen.c (AOT).
@@ -396,7 +396,7 @@ typedef enum {
      * epoch broadcast, worker-local context, native result buffer and
      * consuming join/reduce strategies. */
     XI_PAR_FOR,
-    XI_PAR_COLLECT,
+    XI_PAR_MAP,
     XI_PAR_REDUCE,
     XI_TASK_GROUP_NEW,
     XI_TASK_GROUP_SPAWN_RANGE,
@@ -980,7 +980,7 @@ typedef struct XiParallelForData {
     bool range_body;
 } XiParallelForData;
 
-typedef struct XiParallelCollectData {
+typedef struct XiParallelMapData {
     struct XiFunc *body_func;
     struct XrType *element_type;
     const char *item_name;
@@ -994,7 +994,7 @@ typedef struct XiParallelCollectData {
     bool direct_lane_writes;
     bool inclusive_end;
     bool into_result;
-} XiParallelCollectData;
+} XiParallelMapData;
 
 typedef struct XiParallelReduceData {
     struct XiFunc *body_func;
@@ -1019,7 +1019,7 @@ typedef enum XiNativeCallbackKind {
     XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE = 3,
     XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_BODY = 4,
     XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE = 5,
-    XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY = 6,
+    XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY = 6,
     XI_NATIVE_CALLBACK_PAR_RANGE_I64 = 7,
 } XiNativeCallbackKind;
 

@@ -169,11 +169,11 @@ static bool use_is_consuming(const XiValue *user, uint16_t arg_idx) {
     return xi_own_value_arg_is_consuming(user, arg_idx);
 }
 
-static bool par_collect_arg_transfers_return_result(const XiValue *user, uint16_t arg_idx) {
-    if (!user || user->op != XI_PAR_COLLECT || user->aux_kind != XI_AUX_KIND_PAR_COLLECT ||
-        !user->aux || arg_idx != 4)
+static bool par_map_arg_transfers_return_result(const XiValue *user, uint16_t arg_idx) {
+    if (!user || user->op != XI_PAR_MAP || user->aux_kind != XI_AUX_KIND_PAR_MAP || !user->aux ||
+        arg_idx != 4)
         return false;
-    const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) user->aux;
     return data && data->direct_lane_writes && !data->into_result && data->lane_count == 1;
 }
 
@@ -206,7 +206,7 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
         return false;
     if (channel_send_method_payload_arg(user, arg_idx))
         return xi_chan_send_transfer_mode(user) == XR_TRANSFER_MOVE;
-    if (par_collect_arg_transfers_return_result(user, arg_idx))
+    if (par_map_arg_transfers_return_result(user, arg_idx))
         return true;
     return xi_own_use_is_consuming(user->op, arg_idx);
 }

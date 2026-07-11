@@ -9072,19 +9072,16 @@ static void xicgen_emit_par_for_range_wrappers(XiCgenCtx *ctx, FILE *out, const 
     }
 }
 
-static void xicgen_emit_par_collect_range_wrapper_name(XiCgenCtx *ctx, FILE *out,
-                                                       const XiFunc *owner,
-                                                       const XiValue *par_collect,
-                                                       const char *prefix) {
+static void xicgen_emit_par_map_range_wrapper_name(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
+                                                   const XiValue *par_map, const char *prefix) {
     emit_fname(ctx, out, prefix, owner);
-    fprintf(out, "_par_collect_range_%u", par_collect ? par_collect->id : 0);
+    fprintf(out, "_par_map_range_%u", par_map ? par_map->id : 0);
 }
 
-static bool xicgen_par_collect_value_is_range_wrappable(const XiValue *v) {
-    if (!v || v->op != XI_PAR_COLLECT || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_COLLECT ||
-        !v->aux)
+static bool xicgen_par_map_value_is_range_wrappable(const XiValue *v) {
+    if (!v || v->op != XI_PAR_MAP || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux)
         return false;
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     const XiFunc *body = data ? data->body_func : NULL;
     return body && (body->nparams == 2 || (data->direct_lane_writes && body->nparams == 3));
 }
@@ -9095,11 +9092,11 @@ static void xicgen_emit_par_reduce_body_call_value(XiCgenCtx *ctx, FILE *out, co
                                                    const char *worker_name,
                                                    const char *closure_name);
 
-static void xicgen_emit_par_collect_body_call_as_rep(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
-                                                     const XiFunc *body, const XiValue *closure,
-                                                     const char *prefix, const char *iter_name,
-                                                     const char *worker_name,
-                                                     const char *closure_name, XrRep target_rep) {
+static void xicgen_emit_par_map_body_call_as_rep(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
+                                                 const XiFunc *body, const XiValue *closure,
+                                                 const char *prefix, const char *iter_name,
+                                                 const char *worker_name, const char *closure_name,
+                                                 XrRep target_rep) {
     XrRep body_rep = cg_func_return_abi_rep(ctx, body);
     const char *suffix =
         emit_conversion_prefix(out, body ? body->return_type : NULL, body_rep, target_rep);
@@ -9108,33 +9105,31 @@ static void xicgen_emit_par_collect_body_call_as_rep(XiCgenCtx *ctx, FILE *out, 
     emit_conversion_suffix(out, suffix);
 }
 
-static bool xicgen_par_collect_body_has_native_result(XiCgenCtx *ctx, const XiValue *v,
-                                                      const CgArrayElemInfo *info) {
-    if (!ctx || !v || v->op != XI_PAR_COLLECT || v->aux_kind != XI_AUX_KIND_PAR_COLLECT ||
-        !v->aux || !info || info->rep == XR_REP_TAGGED)
+static bool xicgen_par_map_body_has_native_result(XiCgenCtx *ctx, const XiValue *v,
+                                                  const CgArrayElemInfo *info) {
+    if (!ctx || !v || v->op != XI_PAR_MAP || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux ||
+        !info || info->rep == XR_REP_TAGGED)
         return false;
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     const XiFunc *body = data ? data->body_func : NULL;
     return data && data->element_type && body &&
-           body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY &&
+           body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY &&
            cg_func_return_abi_rep(ctx, body) == info->rep &&
            cg_func_param_abi_rep(ctx, body, 0) == XR_REP_I64 &&
            cg_func_param_abi_rep(ctx, body, 1) == XR_REP_I64;
 }
 
-static bool xicgen_par_collect_array_elem_info(XiCgenCtx *ctx, const XiValue *v,
-                                               CgArrayElemInfo *out) {
-    if (!ctx || !v || !out || v->op != XI_PAR_COLLECT || v->aux_kind != XI_AUX_KIND_PAR_COLLECT ||
-        !v->aux)
+static bool xicgen_par_map_array_elem_info(XiCgenCtx *ctx, const XiValue *v, CgArrayElemInfo *out) {
+    if (!ctx || !v || !out || v->op != XI_PAR_MAP || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux)
         return false;
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     if (data->into_result && v->nargs >= 5 &&
         cg_array_elem_info_from_type_ctx(ctx, v->args[4] ? v->args[4]->type : NULL, out))
         return true;
     return cg_array_elem_info_from_type_ctx(ctx, v->type, out);
 }
 
-static void xicgen_emit_par_collect_zero_value(FILE *out, const CgArrayElemInfo *info) {
+static void xicgen_emit_par_map_zero_value(FILE *out, const CgArrayElemInfo *info) {
     const char *elem = (info && info->elem_name) ? info->elem_name : "XR_ELEM_ANY";
     if (strcmp(elem, "XR_ELEM_CHAR") == 0)
         fprintf(out, "XR_FROM_CHAR(0)");
@@ -9148,18 +9143,18 @@ static void xicgen_emit_par_collect_zero_value(FILE *out, const CgArrayElemInfo 
         fprintf(out, "XR_FROM_INT(0)");
 }
 
-static void xicgen_emit_par_collect_range_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
-                                                  const XiValue *v, const char *prefix) {
-    if (!xicgen_par_collect_value_is_range_wrappable(v))
+static void xicgen_emit_par_map_range_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
+                                              const XiValue *v, const char *prefix) {
+    if (!xicgen_par_map_value_is_range_wrappable(v))
         return;
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     const XiFunc *body = data->body_func;
     CgArrayElemInfo info;
-    bool have_info = xicgen_par_collect_array_elem_info(ctx, v, &info);
-    bool native_result = have_info && xicgen_par_collect_body_has_native_result(ctx, v, &info);
+    bool have_info = xicgen_par_map_array_elem_info(ctx, v, &info);
+    bool native_result = have_info && xicgen_par_map_body_has_native_result(ctx, v, &info);
 
     fprintf(out, "static void ");
-    xicgen_emit_par_collect_range_wrapper_name(ctx, out, owner, v, prefix);
+    xicgen_emit_par_map_range_wrapper_name(ctx, out, owner, v, prefix);
     fprintf(out,
             "(xrt_closure_t *_cl, int64_t _xr_begin, int64_t _xr_end, int64_t _xr_worker) {\n");
     if (data->direct_lane_writes && body && body->nparams == 3) {
@@ -9183,13 +9178,13 @@ static void xicgen_emit_par_collect_range_wrapper(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, "        int64_t _xr_idx = _xr_i - _xr_start;\n");
         if (native_result) {
             fprintf(out, "        ((%s*)_xr_out->data)[_xr_idx] = (%s)", info.ctype, info.ctype);
-            xicgen_emit_par_collect_body_call_as_rep(ctx, out, owner, body, NULL, prefix, "_xr_i",
-                                                     "_xr_worker", "_cl", info.rep);
+            xicgen_emit_par_map_body_call_as_rep(ctx, out, owner, body, NULL, prefix, "_xr_i",
+                                                 "_xr_worker", "_cl", info.rep);
             fprintf(out, ";\n");
         } else {
             fprintf(out, "        XrValue _xr_item = ");
-            xicgen_emit_par_collect_body_call_as_rep(ctx, out, owner, body, NULL, prefix, "_xr_i",
-                                                     "_xr_worker", "_cl", XR_REP_TAGGED);
+            xicgen_emit_par_map_body_call_as_rep(ctx, out, owner, body, NULL, prefix, "_xr_i",
+                                                 "_xr_worker", "_cl", XR_REP_TAGGED);
             fprintf(out, ";\n");
             fprintf(out, "        xrt_array_write_preallocated(_xr_out, _xr_idx, _xr_item);\n");
         }
@@ -9198,8 +9193,8 @@ static void xicgen_emit_par_collect_range_wrapper(XiCgenCtx *ctx, FILE *out, con
     fprintf(out, "}\n\n");
 }
 
-static void xicgen_emit_par_collect_range_wrappers(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
-                                                   const char *prefix) {
+static void xicgen_emit_par_map_range_wrappers(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
+                                               const char *prefix) {
     if (!ctx || !out || !owner)
         return;
     for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
@@ -9208,8 +9203,8 @@ static void xicgen_emit_par_collect_range_wrappers(XiCgenCtx *ctx, FILE *out, co
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values ? blk->values[vi] : NULL;
-            if (xicgen_par_collect_value_is_range_wrappable(v))
-                xicgen_emit_par_collect_range_wrapper(ctx, out, owner, v, prefix);
+            if (xicgen_par_map_value_is_range_wrappable(v))
+                xicgen_emit_par_map_range_wrapper(ctx, out, owner, v, prefix);
         }
     }
 }
@@ -9498,12 +9493,11 @@ static bool xicgen_par_for_uses_stack_callback_closure(const XiValue *par_for,
            closure->aux == body;
 }
 
-static bool xicgen_par_collect_uses_stack_body_closure(const XiValue *par_collect,
-                                                       const XiValue *closure, const XiFunc *body) {
-    if (!par_collect || !closure || !body || par_collect->op != XI_PAR_COLLECT ||
-        par_collect->nargs < 4)
+static bool xicgen_par_map_uses_stack_body_closure(const XiValue *par_map, const XiValue *closure,
+                                                   const XiFunc *body) {
+    if (!par_map || !closure || !body || par_map->op != XI_PAR_MAP || par_map->nargs < 4)
         return false;
-    if (par_collect->args[3] != closure)
+    if (par_map->args[3] != closure)
         return false;
     return closure->op == XI_STACK_ALLOC && closure->aux_int == XI_CLOSURE_NEW &&
            closure->aux == body;
@@ -9552,7 +9546,7 @@ static bool xicgen_par_for_stack_closure_value_is_elided(XiCgenCtx *ctx, const X
                 if (user->args[ai] != target)
                     continue;
                 if (!((ai == 3 && xicgen_par_for_uses_stack_callback_closure(user, target, body)) ||
-                      (ai == 3 && xicgen_par_collect_uses_stack_body_closure(user, target, body)) ||
+                      (ai == 3 && xicgen_par_map_uses_stack_body_closure(user, target, body)) ||
                       (ai == 4 && xicgen_par_reduce_uses_stack_body_closure(user, target, body)) ||
                       (ai == 5 &&
                        xicgen_par_reduce_uses_stack_combine_closure(user, target, body))))
@@ -9593,36 +9587,35 @@ static void xicgen_emit_par_for_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "}\n");
 }
 
-static void xicgen_emit_par_collect_scoped_closure(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                   const XiValue *par_collect, const XiFunc *body,
-                                                   const XiValue *closure, const char *prefix,
-                                                   const char *result_value_name,
-                                                   const char *start_name) {
-    const XiParallelCollectData *data =
-        (const XiParallelCollectData *) (par_collect ? par_collect->aux : NULL);
+static void xicgen_emit_par_map_scoped_closure(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *par_map, const XiFunc *body,
+                                               const XiValue *closure, const char *prefix,
+                                               const char *result_value_name,
+                                               const char *start_name) {
+    const XiParallelMapData *data = (const XiParallelMapData *) (par_map ? par_map->aux : NULL);
     uint16_t ncap = body ? body->ncaptures : 0;
     uint16_t total = (uint16_t) (ncap + 2u);
     fprintf(out,
             "        union { XrObjHeader hdr; long double align; unsigned char "
             "bytes[sizeof(XrObjHeader) + sizeof(xrt_closure_t) + %u * sizeof(XrValue)]; } "
             "_xr_pc_closure_storage_%u;\n",
-            total, par_collect->id);
+            total, par_map->id);
     fprintf(out,
             "        memset(&_xr_pc_closure_storage_%u, 0, sizeof(_xr_pc_closure_storage_%u));\n",
-            par_collect->id, par_collect->id);
+            par_map->id, par_map->id);
     fprintf(out,
             "        XrObjHeader *_xr_pc_closure_hdr_%u = (XrObjHeader "
             "*)_xr_pc_closure_storage_%u.bytes;\n",
-            par_collect->id, par_collect->id);
-    fprintf(out, "        _xr_pc_closure_hdr_%u->extra = XR_OBJ_STORAGE_STACK;\n", par_collect->id);
+            par_map->id, par_map->id);
+    fprintf(out, "        _xr_pc_closure_hdr_%u->extra = XR_OBJ_STORAGE_STACK;\n", par_map->id);
     fprintf(out,
             "        xrt_closure_t *_xr_pc_closure_%u = (xrt_closure_t *)((char "
             "*)_xr_pc_closure_hdr_%u + sizeof(XrObjHeader));\n",
-            par_collect->id, par_collect->id);
-    fprintf(out, "        xrt_closure_init(_xr_pc_closure_%u, (void*)", par_collect->id);
+            par_map->id, par_map->id);
+    fprintf(out, "        xrt_closure_init(_xr_pc_closure_%u, (void*)", par_map->id);
     emit_closure_entry_pointer(ctx, out, prefix, body);
     fprintf(out, ", %u);\n", total);
-    fprintf(out, "        { xrt_closure_t *_c = _xr_pc_closure_%u; ", par_collect->id);
+    fprintf(out, "        { xrt_closure_t *_c = _xr_pc_closure_%u; ", par_map->id);
     emit_closure_upval_initializers(ctx, out, f, closure, false);
     fprintf(out, "_c->upvals[%u] = %s; _c->upvals[%u] = XR_FROM_INT(%s); }\n",
             data ? (unsigned) data->result_capture_index : (unsigned) ncap,
@@ -9896,8 +9889,8 @@ static const char *xicgen_rep_label(XrRep rep) {
     return "rep";
 }
 
-static bool xicgen_par_collect_validate_scalar_func(XiCgenCtx *ctx, const XiFunc *func,
-                                                    const CgArrayElemInfo *info) {
+static bool xicgen_par_map_validate_scalar_func(XiCgenCtx *ctx, const XiFunc *func,
+                                                const CgArrayElemInfo *info) {
     if (!ctx || !func || !info || info->rep == XR_REP_TAGGED || func->nparams != 2)
         return false;
     if (cg_func_return_abi_rep(ctx, func) == info->rep &&
@@ -10152,37 +10145,35 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     fprintf(out, "    })");
 }
 
-static void xicgen_par_collect_emit_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                          const XiValue *v, const XiFunc *body, const char *prefix,
-                                          const char *iter_name, const char *worker_name,
-                                          const char *closure_name, const char *out_ptr_name,
-                                          const char *idx_name, bool native_result,
-                                          const CgArrayElemInfo *info) {
+static void xicgen_par_map_emit_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const XiFunc *body, const char *prefix, const char *iter_name,
+                                      const char *worker_name, const char *closure_name,
+                                      const char *out_ptr_name, const char *idx_name,
+                                      bool native_result, const CgArrayElemInfo *info) {
     if (native_result && info) {
         fprintf(out, "            ((%s*)%s->data)[%s] = (%s)", info->ctype, out_ptr_name, idx_name,
                 info->ctype);
-        xicgen_emit_par_collect_body_call_as_rep(ctx, out, f, body, v->args[3], prefix, iter_name,
-                                                 worker_name, closure_name, info->rep);
+        xicgen_emit_par_map_body_call_as_rep(ctx, out, f, body, v->args[3], prefix, iter_name,
+                                             worker_name, closure_name, info->rep);
         fprintf(out, ";\n");
         return;
     }
     fprintf(out, "            XrValue _xr_pc_item_%u = ", v->id);
-    xicgen_emit_par_collect_body_call_as_rep(ctx, out, f, body, v->args[3], prefix, iter_name,
-                                             worker_name, closure_name, XR_REP_TAGGED);
+    xicgen_emit_par_map_body_call_as_rep(ctx, out, f, body, v->args[3], prefix, iter_name,
+                                         worker_name, closure_name, XR_REP_TAGGED);
     fprintf(out, ";\n");
     fprintf(out, "            xrt_array_write_preallocated(%s, %s, _xr_pc_item_%u);\n",
             out_ptr_name, idx_name, v->id);
 }
 
-static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                               const char *prefix) {
-    if (!ctx || !out || !f || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_COLLECT ||
-        !v->aux) {
+static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                           const char *prefix) {
+    if (!ctx || !out || !f || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux) {
         xicgen_par_reduce_emit_abort_expr(ctx, out);
         return;
     }
 
-    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
     const XiFunc *body = data->body_func;
     if (data->direct_lane_writes) {
         uint16_t expected_params = body ? body->nparams : 0;
@@ -10273,12 +10264,12 @@ static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                         "        xrt_array_resize_value(_xr_pc_result_%u_%u, "
                         "XR_FROM_INT(_xr_pc_count_%u), ",
                         v->id, (unsigned) i, v->id);
-                xicgen_emit_par_collect_zero_value(out, have_lane_info ? &lane_info : NULL);
+                xicgen_emit_par_map_zero_value(out, have_lane_info ? &lane_info : NULL);
                 fprintf(out, ");\n");
             }
         }
 
-        bool scoped_closure = xicgen_par_collect_uses_stack_body_closure(v, v->args[3], body);
+        bool scoped_closure = xicgen_par_map_uses_stack_body_closure(v, v->args[3], body);
         char closure_name[64];
         closure_name[0] = '\0';
         if (scoped_closure) {
@@ -10328,7 +10319,7 @@ static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                 "            } else if (!xr_aot_parallel_for_range_i64(_xr_pc_start_%u, "
                 "_xr_pc_end_excl_%u, _xr_pc_workers_%u, (XrAotParForRangeI64Fn)",
                 v->id, v->id, v->id);
-        xicgen_emit_par_collect_range_wrapper_name(ctx, out, f, v, prefix);
+        xicgen_emit_par_map_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
         if (scoped_closure)
             fprintf(out, "%s", closure_name);
@@ -10350,13 +10341,13 @@ static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
     CgArrayElemInfo info;
     bool into_result = data->into_result && v->nargs >= 5;
-    bool have_info = xicgen_par_collect_array_elem_info(ctx, v, &info);
+    bool have_info = xicgen_par_map_array_elem_info(ctx, v, &info);
     bool typed_full_overwrite =
         have_info && info.elem_name && strcmp(info.elem_name, "XR_ELEM_ANY") != 0;
-    bool native_result = have_info && xicgen_par_collect_body_has_native_result(ctx, v, &info);
+    bool native_result = have_info && xicgen_par_map_body_has_native_result(ctx, v, &info);
     if (!body || body->nparams != 2 ||
-        (body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY &&
-         !xicgen_par_collect_validate_scalar_func(ctx, body, have_info ? &info : NULL)) ||
+        (body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY &&
+         !xicgen_par_map_validate_scalar_func(ctx, body, have_info ? &info : NULL)) ||
         !xicgen_par_reduce_validate_nothrow_body(ctx, body, "collect body")) {
         xicgen_par_reduce_emit_abort_expr(ctx, out);
         return;
@@ -10409,7 +10400,7 @@ static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                 out,
                 "        xrt_array_resize_value(_xr_pc_result_%u, XR_FROM_INT(_xr_pc_count_%u), ",
                 v->id, v->id);
-            xicgen_emit_par_collect_zero_value(out, have_info ? &info : NULL);
+            xicgen_emit_par_map_zero_value(out, have_info ? &info : NULL);
             fprintf(out, ");\n");
         }
     } else if (storage_rep == XR_REP_PTR) {
@@ -10445,8 +10436,8 @@ static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     char start_name[64];
     snprintf(result_value_name, sizeof(result_value_name), "_xr_pc_result_%u", v->id);
     snprintf(start_name, sizeof(start_name), "_xr_pc_start_%u", v->id);
-    xicgen_emit_par_collect_scoped_closure(ctx, out, f, v, body, v->args[3], prefix,
-                                           result_value_name, start_name);
+    xicgen_emit_par_map_scoped_closure(ctx, out, f, v, body, v->args[3], prefix, result_value_name,
+                                       start_name);
 
     char out_ptr_name[64];
     char iter_name[64];
@@ -10462,15 +10453,15 @@ static void xicgen_par_collect(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     fprintf(out, "                for (int64_t %s = _xr_pc_start_%u; ; %s++) {\n", iter_name, v->id,
             iter_name);
     fprintf(out, "            int64_t %s = %s - _xr_pc_start_%u;\n", idx_name, iter_name, v->id);
-    xicgen_par_collect_emit_store(ctx, out, f, v, body, prefix, iter_name, "0", closure_name,
-                                  out_ptr_name, idx_name, native_result, have_info ? &info : NULL);
+    xicgen_par_map_emit_store(ctx, out, f, v, body, prefix, iter_name, "0", closure_name,
+                              out_ptr_name, idx_name, native_result, have_info ? &info : NULL);
     fprintf(out, "                    if (%s == _xr_pc_end_%u) break;\n", iter_name, v->id);
     fprintf(out, "                }\n");
     fprintf(out,
             "            } else if (!xr_aot_parallel_for_range_i64(_xr_pc_start_%u, "
             "_xr_pc_end_excl_%u, _xr_pc_workers_%u, (XrAotParForRangeI64Fn)",
             v->id, v->id, v->id);
-    xicgen_emit_par_collect_range_wrapper_name(ctx, out, f, v, prefix);
+    xicgen_emit_par_map_range_wrapper_name(ctx, out, f, v, prefix);
     fprintf(out, ", _xr_pc_closure_%u)) abort();\n", v->id);
     fprintf(out, "        }\n");
     fprintf(out, "        ");
@@ -10621,8 +10612,8 @@ static bool xi_to_c_emit_generated(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         case XI_PAR_FOR:
             xicgen_par_for(ctx, out, f, v, prefix);
             return true;
-        case XI_PAR_COLLECT:
-            xicgen_par_collect(ctx, out, f, v, prefix);
+        case XI_PAR_MAP:
+            xicgen_par_map(ctx, out, f, v, prefix);
             return true;
         case XI_PAR_REDUCE:
             xicgen_par_reduce(ctx, out, f, v, prefix);

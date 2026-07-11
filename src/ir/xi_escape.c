@@ -236,8 +236,8 @@ static bool loop_alloc_closure_use_is_scoped_par_for_callback(const XiValue *use
         const XiParallelForData *data = (const XiParallelForData *) user->aux;
         return data && target->aux && data->body_func == (const XiFunc *) target->aux;
     }
-    if (user->op == XI_PAR_COLLECT && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_COLLECT) {
-        const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+    if (user->op == XI_PAR_MAP && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_MAP) {
+        const XiParallelMapData *data = (const XiParallelMapData *) user->aux;
         return data && target->aux && data->body_func == (const XiFunc *) target->aux;
     }
     if (user->op == XI_PAR_REDUCE && (arg_idx == 4 || arg_idx == 5) &&

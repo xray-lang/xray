@@ -840,7 +840,7 @@ static bool xaot_func_contains_parallel_op(const XiFunc *func) {
             const XiValue *v = blk->values ? blk->values[vi] : NULL;
             if (!v)
                 continue;
-            if (v->op == XI_PAR_FOR || v->op == XI_PAR_COLLECT || v->op == XI_PAR_REDUCE)
+            if (v->op == XI_PAR_FOR || v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE)
                 return true;
         }
     }
