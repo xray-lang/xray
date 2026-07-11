@@ -9741,6 +9741,21 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (cg_array_builtin_err_check_after_trusted_nothrow(ctx, body, value))
                 continue;
+            if (value->op == XI_PAR_FOR && value->aux_kind == XI_AUX_KIND_PAR_FOR && value->aux) {
+                const XiParallelForData *data = (const XiParallelForData *) value->aux;
+                const XiFunc *nested_body = data ? data->body_func : NULL;
+                if (!nested_body || cg_func_needs_aot_coro_ctx(ctx, nested_body))
+                    return value;
+                if (xicgen_par_for_stack_contains(stack, depth, nested_body))
+                    continue;
+                if (depth >= XICGEN_PAR_FOR_BODY_DEPTH_MAX)
+                    return value;
+                const XiValue *unsupported = xicgen_find_par_for_unsupported_body_value_depth(
+                    ctx, nested_body, stack, depth);
+                if (unsupported)
+                    return unsupported;
+                continue;
+            }
             if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
                 value->op == XI_CALL_METHOD_DIRECT) {
                 const XiValue *unsupported =

@@ -1,0 +1,11 @@
+import parallel
+
+shared seen: Atomic<int> = Atomic<int>(0)
+
+parallel.forEach(0..4, (i) -> {
+    parallel.forEach(0..4, (j) -> {
+        seen.add(1, Ordering.Relaxed)
+    }, parallel.Options(2))
+}, parallel.Options(2))
+
+print(seen.load(Ordering.Relaxed))
