@@ -6450,6 +6450,8 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
             0);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
                                interface_id, type_key, false);
+        body_bind_record_bridge_shapes_for_type_key(
+            bc, method->parameters ? method->parameters[i] : NULL, type_key);
         body_bind_map_shape_local_for_type_ref(
             bc, method->parameters ? method->parameters[i] : NULL,
             method->param_types ? method->param_types[i] : NULL, 0);
@@ -6481,6 +6483,7 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             param && param->line > 0 ? (uint32_t) param->line : 0);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key, false);
+        body_bind_record_bridge_shapes_for_type_key(bc, param ? param->name : NULL, type_key);
         body_bind_map_shape_local_for_type_ref(
             bc, param ? param->name : NULL, param ? param->type : NULL,
             param && param->line > 0 ? (uint32_t) param->line : 0);
