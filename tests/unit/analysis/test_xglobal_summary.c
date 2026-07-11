@@ -11311,6 +11311,94 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) {
+    setup_parser_session();
+    const char *source = "fn readCaptured(value: int) -> int {\n"
+                         "    var scores: Map<int, int> = #{}\n"
+                         "    scores.set(1, value)\n"
+                         "    var seen: Set<int> = #[]\n"
+                         "    seen.add(1)\n"
+                         "    const read = fn() -> int {\n"
+                         "        var one = scores.get(1) ?? 0\n"
+                         "        if (seen.has(1)) {\n"
+                         "            return one + scores[1]\n"
+                         "        }\n"
+                         "        return one\n"
+                         "    }\n"
+                         "    return read()\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *outer = evidence_find_body_by_name(&ev, "readCaptured");
+    const XgBodySummary *closure = evidence_find_body_by_name(&ev, "<anonymous>");
+    ASSERT_NOT_NULL(outer);
+    ASSERT_NOT_NULL(closure);
+    ASSERT_TRUE(outer->func_id != closure->func_id);
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 5);
+
+    uint32_t outer_accesses = 0;
+    uint32_t closure_accesses = 0;
+    uint32_t closure_gets = 0;
+    uint32_t closure_has = 0;
+    uint32_t closure_index_gets = 0;
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XgKeyAccessSummary *row = &ev.key_accesses[i];
+        if (row->owner_func_id == outer->func_id) {
+            outer_accesses++;
+            continue;
+        }
+        if (row->owner_func_id != closure->func_id)
+            continue;
+        closure_accesses++;
+        ASSERT_TRUE(row->receiver_shape_id != XG_NO_ID);
+        ASSERT_TRUE((row->flags & XG_KEY_ACCESS_CONST_KEY) != 0);
+        ASSERT_TRUE(row->key_prehash != 0);
+        if (row->op == XG_KEY_ACCESS_GET)
+            closure_gets++;
+        else if (row->op == XG_KEY_ACCESS_HAS)
+            closure_has++;
+        else if (row->op == XG_KEY_ACCESS_INDEX_GET)
+            closure_index_gets++;
+    }
+    ASSERT_EQ_UINT(outer_accesses, 2);
+    ASSERT_EQ_UINT(closure_accesses, 3);
+    ASSERT_EQ_UINT(closure_gets, 1);
+    ASSERT_EQ_UINT(closure_has, 1);
+    ASSERT_EQ_UINT(closure_index_gets, 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XgKeyAccessSummary *row = &ev.key_accesses[i];
+        const XaotKeyAccessPlan *plan = xaot_bundle_find_key_access_plan(&bundle, row->access_id);
+        ASSERT_NOT_NULL(plan);
+        if (row->owner_func_id == closure->func_id)
+            ASSERT_EQ_UINT(plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+    }
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
     const char *source = "fn useTable() -> int {\n"
@@ -11809,6 +11897,7 @@ RUN_TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map);
 RUN_TEST(global_evidence_producer_propagates_map_shape_through_local_alias);
 RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);
+RUN_TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
