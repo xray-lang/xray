@@ -16,12 +16,9 @@ from stdlib_manifest import (
     def_public_symbols,
     dynamic_public_items,
     load_manifest,
+    load_toml,
     registry_modules,
 )
-
-
-def _rel(root: Path, path: Path) -> str:
-    return str(path.resolve().relative_to(root.resolve()))
 
 
 def check_manifest(root: Path) -> list[str]:
@@ -89,7 +86,8 @@ def check_semantic_owners(root: Path) -> list[str]:
             elif not re.search(r"(?m)^export\s*\{", source.read_text(encoding="utf-8")):
                 errors.append(f"module {name}: xray_semantic source has no export block")
         declared = set(module.get("public_native", ()))
-        actual = def_symbols.get(name, set())
+        manual = set(module.get("manual_public_native", ()))
+        actual = def_symbols.get(name, set()) | manual
         if declared != actual:
             missing = sorted(actual - declared)
             stale = sorted(declared - actual)
@@ -97,6 +95,14 @@ def check_semantic_owners(root: Path) -> list[str]:
                 errors.append(f"module {name}: public_native misses .def symbols: {', '.join(missing)}")
             if stale:
                 errors.append(f"module {name}: public_native has stale symbols: {', '.join(stale)}")
+        if manual:
+            loader_text = (root / str(module["loader"])).read_text(encoding="utf-8")
+            for symbol in sorted(manual):
+                leaf = symbol.rsplit(".", 1)[-1]
+                if f'"{leaf}"' not in loader_text:
+                    errors.append(
+                        f"module {name}: manual public native {symbol!r} is not registered by loader"
+                    )
         private_sources = module.get("private_native_sources", ())
         if private_sources and not module.get("private_native_reason"):
             errors.append(f"module {name}: private native sources require private_native_reason")
@@ -113,7 +119,16 @@ def check_fastpaths(root: Path) -> list[str]:
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
     if not option_name or not re.search(rf"option\(\s*{re.escape(option_name)}\b", cmake):
         errors.append("governance.vm_fastpath_option must name a real CMake option")
-    required = {"symbol", "reference", "native", "reason", "benchmark", "review_date"}
+    required = {
+        "symbol", "reference", "native", "reason", "benchmark", "diff_case", "review_date"
+    }
+    benchmark_data = load_toml(root / "tests/benchmarks/stdlib/manifest.toml")
+    benchmark_ids = {entry.get("id") for entry in benchmark_data.get("benchmark", ())}
+    aot_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (root / "src/aot").rglob("*")
+        if path.is_file() and path.suffix in {".c", ".h"}
+    )
     seen: set[str] = set()
     for entry in manifest.vm_fastpaths:
         symbol = str(entry.get("symbol", ""))
@@ -128,6 +143,14 @@ def check_fastpaths(root: Path) -> list[str]:
             errors.append(f"vm_fastpath {symbol}: reference source does not exist: {reference_path}")
         if entry.get("disable_build_option") != option_name:
             errors.append(f"vm_fastpath {symbol}: must use global disable option {option_name}")
+        if entry.get("benchmark") not in benchmark_ids:
+            errors.append(f"vm_fastpath {symbol}: benchmark id is absent from stdlib perf manifest")
+        diff_case = root / str(entry.get("diff_case", ""))
+        if not diff_case.is_file():
+            errors.append(f"vm_fastpath {symbol}: diff_case does not exist: {entry.get('diff_case')}")
+        native = str(entry.get("native", ""))
+        if native and re.search(rf"\b{re.escape(native)}\b", aot_text):
+            errors.append(f"vm_fastpath {symbol}: AOT sources reference VM-only symbol {native}")
     return errors
 
 
