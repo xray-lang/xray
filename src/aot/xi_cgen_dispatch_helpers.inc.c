@@ -1281,6 +1281,7 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         } else if (ref && ref->module_path && !ref->member_name &&
                    (strcmp(ref->module_path, "time") == 0 ||
                     strcmp(ref->module_path, "math") == 0 || strcmp(ref->module_path, "log") == 0 ||
+                    strcmp(ref->module_path, "parallel") == 0 ||
                     cg_module_has_aot_direct_calls(ref->module_path))) {
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
@@ -9861,7 +9862,7 @@ static bool xicgen_par_reduce_validate_i64_func(XiCgenCtx *ctx, const XiFunc *fu
         ok = cg_func_param_abi_rep(ctx, func, i) == XR_REP_I64;
     if (ok)
         return true;
-    fprintf(stderr, "[xi_cgen] ERROR: parallel reduce AOT %s must use int64(%s) ABI: '%s'\n",
+    fprintf(stderr, "[xi_cgen] ERROR: parallel.reduce AOT %s must use int64(%s) ABI: '%s'\n",
             role ? role : "callback", param_count == 3 ? "int64, int64, int64" : "int64, int64",
             func->name ? func->name : "?");
     return false;
@@ -9897,10 +9898,9 @@ static bool xicgen_par_map_validate_scalar_func(XiCgenCtx *ctx, const XiFunc *fu
         cg_func_param_abi_rep(ctx, func, 0) == XR_REP_I64 &&
         cg_func_param_abi_rep(ctx, func, 1) == XR_REP_I64)
         return true;
-    fprintf(
-        stderr,
-        "[xi_cgen] ERROR: parallel collect AOT scalar body must use %s(int64, int64) ABI: '%s'\n",
-        xicgen_rep_label(info->rep), func->name ? func->name : "?");
+    fprintf(stderr,
+            "[xi_cgen] ERROR: parallel.map AOT scalar body must use %s(int64, int64) ABI: '%s'\n",
+            xicgen_rep_label(info->rep), func->name ? func->name : "?");
     return false;
 }
 
@@ -9909,7 +9909,7 @@ static bool xicgen_par_reduce_validate_nothrow_body(XiCgenCtx *ctx, const XiFunc
     if (!ctx || !func)
         return false;
     if (cg_func_needs_aot_coro_ctx(ctx, func)) {
-        fprintf(stderr, "[xi_cgen] ERROR: parallel reduce AOT %s cannot be suspendable yet: '%s'\n",
+        fprintf(stderr, "[xi_cgen] ERROR: parallel.reduce AOT %s cannot be suspendable yet: '%s'\n",
                 role ? role : "callback", func->name ? func->name : "?");
         return false;
     }
@@ -9923,7 +9923,7 @@ static bool xicgen_par_reduce_validate_nothrow_body(XiCgenCtx *ctx, const XiFunc
              unsupported->aux)
         detail = (const char *) unsupported->aux;
     fprintf(stderr,
-            "[xi_cgen] ERROR: parallel reduce AOT %s cannot throw or suspend yet: '%s' "
+            "[xi_cgen] ERROR: parallel.reduce AOT %s cannot throw or suspend yet: '%s' "
             "contains %s%s%s%s at v%u line %u\n",
             role ? role : "callback", func->name ? func->name : "?",
             xi_op_name((XiOp) unsupported->op), detail ? " '" : "", detail ? detail : "",
@@ -9997,13 +9997,14 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     bool struct_accumulator = xicgen_par_reduce_value_has_struct_accumulator(ctx, v);
     const char *agg_ctype = struct_accumulator ? xicgen_par_reduce_struct_agg_c_type(ctx, v) : NULL;
     if (data->range_body && data->inclusive_end) {
-        fprintf(stderr, "[xi_cgen] ERROR: parallel range reduce AOT requires an exclusive range\n");
+        fprintf(stderr,
+                "[xi_cgen] ERROR: parallel.reduce range-body AOT requires an exclusive range\n");
         xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
         return;
     }
     if (!i64_accumulator && !struct_accumulator) {
         fprintf(stderr,
-                "[xi_cgen] ERROR: parallel reduce AOT supports only native int or native struct "
+                "[xi_cgen] ERROR: parallel.reduce AOT supports only native int or native struct "
                 "accumulators; accumulator type '%s' is not native-reducible yet\n",
                 xicgen_type_label_noalloc(data->accumulator_type));
         xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
@@ -10022,7 +10023,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if (combine->ncaptures != 0) {
         fprintf(stderr,
-                "[xi_cgen] ERROR: parallel reduce AOT combine cannot capture values yet: '%s'\n",
+                "[xi_cgen] ERROR: parallel.reduce AOT combine cannot capture values yet: '%s'\n",
                 combine->name ? combine->name : "?");
         xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
         return;
@@ -10183,12 +10184,12 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             cg_func_param_abi_rep(ctx, body, 0) != XR_REP_I64 ||
             cg_func_param_abi_rep(ctx, body, 1) != XR_REP_I64 ||
             (range_body && cg_func_param_abi_rep(ctx, body, 2) != XR_REP_I64) ||
-            !xicgen_par_reduce_validate_nothrow_body(ctx, body, "collect lane body")) {
+            !xicgen_par_reduce_validate_nothrow_body(ctx, body, "map lane body")) {
             xicgen_par_reduce_emit_abort_expr(ctx, out);
             return;
         }
         if (range_body && data->inclusive_end) {
-            fprintf(stderr, "[xi_cgen] ERROR: parallel collect local initializer AOT requires an "
+            fprintf(stderr, "[xi_cgen] ERROR: parallel.map direct-lane initializer AOT requires an "
                             "exclusive range\n");
             xicgen_par_reduce_emit_abort_expr(ctx, out);
             return;
@@ -10223,14 +10224,14 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         uint16_t lane_count = data->lane_count;
         if (lane_count < 1 || lane_count > 16 || v->nargs < (uint16_t) (4u + lane_count)) {
-            fprintf(stderr, "[xi_cgen] ERROR: parallel collect lane metadata mismatch\n");
+            fprintf(stderr, "[xi_cgen] ERROR: parallel.map lane metadata mismatch\n");
             xicgen_par_reduce_emit_abort_expr(ctx, out);
             fprintf(out, ";\n    })");
             return;
         }
         if (!data->into_result && lane_count != 1) {
             fprintf(stderr,
-                    "[xi_cgen] ERROR: returning parallel collect direct lanes require one lane\n");
+                    "[xi_cgen] ERROR: returning parallel.map direct lanes require one lane\n");
             xicgen_par_reduce_emit_abort_expr(ctx, out);
             fprintf(out, ";\n    })");
             return;
@@ -10489,7 +10490,8 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (data->range_body && data->inclusive_end && data->end_name) {
         ctx->error = true;
         fprintf(stderr,
-                "[xi_cgen] ERROR: parallel range AOT currently requires an exclusive range: "
+                "[xi_cgen] ERROR: parallel.forEach range-body AOT currently requires an exclusive "
+                "range: "
                 "'%s'\n",
                 body && body->name ? body->name : "?");
         fprintf(out, "    abort();\n");
@@ -10516,7 +10518,8 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
     if (cg_func_needs_aot_coro_ctx(ctx, body)) {
         ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: parallel for AOT body cannot be suspendable yet: '%s'\n",
+        fprintf(stderr,
+                "[xi_cgen] ERROR: parallel.forEach AOT body cannot be suspendable yet: '%s'\n",
                 body->name ? body->name : "?");
         fprintf(out, "    abort();\n");
         return;
@@ -10531,7 +10534,7 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                  unsupported->aux)
             detail = (const char *) unsupported->aux;
         fprintf(stderr,
-                "[xi_cgen] ERROR: parallel for AOT body cannot throw or suspend yet: '%s' "
+                "[xi_cgen] ERROR: parallel.forEach AOT body cannot throw or suspend yet: '%s' "
                 "contains %s%s%s%s at v%u line %u\n",
                 body->name ? body->name : "?", xi_op_name((XiOp) unsupported->op),
                 detail ? " '" : "", detail ? detail : "", detail ? "'" : "", unsupported->id,

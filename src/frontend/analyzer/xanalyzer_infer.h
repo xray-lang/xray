@@ -100,7 +100,7 @@ typedef struct XaInferContext {
     XaLoopScope *loop_scope;
     int loop_depth;
 
-    // Active while inferring a `parallel for` body. Captures from outside this
+    // Active while inferring a `parallel.forEach` body. Captures from outside this
     // scope are restricted so the future AOT lowering never inherits a data race.
     bool in_parallel_for_body;
     XaScope *parallel_for_scope;

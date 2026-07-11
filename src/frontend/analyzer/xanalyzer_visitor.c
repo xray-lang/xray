@@ -445,26 +445,29 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
     XrType *sym_type = xa_analyzer_get_type(ctx->analyzer, sym);
 
     if (is_write) {
-        snprintf(msg, sizeof(msg),
-                 "parallel for body cannot assign to captured variable '%s'; use Atomic<T>, "
-                 "worker-local context, or parallel reduce",
-                 name);
+        snprintf(
+            msg, sizeof(msg),
+            "parallel.forEach callback cannot assign to captured variable '%s'; use Atomic<T>, "
+            "worker-local context, or parallel.reduce",
+            name);
     } else if (sym->is_shared) {
         return;
     } else if (xa_type_is_concurrency_handle(sym_type)) {
         return;
     } else if (sym->kind == XA_SYM_PARAMETER) {
-        snprintf(msg, sizeof(msg),
-                 "parallel for body cannot capture parameter '%s'; pass immutable data through "
-                 "shared or future TaskGroup context",
-                 name);
+        snprintf(
+            msg, sizeof(msg),
+            "parallel.forEach callback cannot capture parameter '%s'; pass immutable data through "
+            "shared or future TaskGroup context",
+            name);
     } else if (sym->is_const) {
         return;
     } else {
-        snprintf(msg, sizeof(msg),
-                 "parallel for body cannot capture mutable variable '%s'; copy it to a const, "
-                 "use Atomic<T>, or pass worker-local context",
-                 name);
+        snprintf(
+            msg, sizeof(msg),
+            "parallel.forEach callback cannot capture mutable variable '%s'; copy it to a const, "
+            "use Atomic<T>, or pass worker-local context",
+            name);
     }
 
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
