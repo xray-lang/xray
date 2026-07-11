@@ -1,0 +1,1 @@
+parallel.map callback cannot throw or suspend; assert is not allowed in a parallel callback
