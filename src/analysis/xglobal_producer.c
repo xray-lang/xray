@@ -4287,6 +4287,57 @@ static bool ctor_scan_record_json_field_assignment(XgJsonCtorFieldAssignScan *sc
     return true;
 }
 
+static bool ctor_scan_json_field_assignment_literal(XgJsonCtorFieldAssignScan *scan,
+                                                    const AstNode *value,
+                                                    const ObjectLiteralNode **out_literal) {
+    const ObjectLiteralNode *then_literal = NULL;
+    const ObjectLiteralNode *else_literal = NULL;
+    const ObjectLiteralNode *literal;
+    if (!scan || !out_literal)
+        return false;
+    *out_literal = NULL;
+    if (!value)
+        return false;
+    switch (value->type) {
+        case AST_GROUPING:
+            return ctor_scan_json_field_assignment_literal(scan, value->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return ctor_scan_json_field_assignment_literal(scan, value->as.move_expr.expr,
+                                                           out_literal);
+        case AST_UNSAFE_EXPR:
+            return ctor_scan_json_field_assignment_literal(scan, value->as.unsafe_expr.operand,
+                                                           out_literal);
+        case AST_FORCE_UNWRAP:
+            return ctor_scan_json_field_assignment_literal(scan, value->as.unary.operand,
+                                                           out_literal);
+        case AST_TERNARY:
+            if (!ctor_scan_node_for_json_field_assignment(scan, value->as.ternary.condition) ||
+                scan->failed)
+                return false;
+            if (!ctor_scan_json_field_assignment_literal(scan, value->as.ternary.true_expr,
+                                                         &then_literal) ||
+                !then_literal)
+                return false;
+            if (!ctor_scan_json_field_assignment_literal(scan, value->as.ternary.false_expr,
+                                                         &else_literal) ||
+                !else_literal)
+                return false;
+            if (!return_literal_same_shape(then_literal, else_literal)) {
+                scan->failed = true;
+                return false;
+            }
+            *out_literal = then_literal;
+            return true;
+        default:
+            break;
+    }
+    literal = body_static_object_literal(value);
+    if (!literal)
+        return false;
+    *out_literal = literal;
+    return true;
+}
+
 static bool ctor_scan_member_set_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
                                                        const AstNode *node) {
     const ObjectLiteralNode *literal;
@@ -4298,8 +4349,8 @@ static bool ctor_scan_member_set_json_field_assignment(XgJsonCtorFieldAssignScan
         return ctor_scan_node_for_json_field_assignment(scan, node->as.member_set.object) &&
                ctor_scan_node_for_json_field_assignment(scan, node->as.member_set.value);
     }
-    literal = body_static_object_literal(node->as.member_set.value);
-    if (!literal) {
+    if (!ctor_scan_json_field_assignment_literal(scan, node->as.member_set.value, &literal) ||
+        !literal) {
         scan->failed = true;
         return false;
     }
@@ -4397,6 +4448,10 @@ static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *
             return ctor_scan_node_for_json_field_assignment(scan, node->as.unsafe_expr.operand);
         case AST_FORCE_UNWRAP:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.unary.operand);
+        case AST_TERNARY:
+            return ctor_scan_node_for_json_field_assignment(scan, node->as.ternary.condition) &&
+                   ctor_scan_node_for_json_field_assignment(scan, node->as.ternary.true_expr) &&
+                   ctor_scan_node_for_json_field_assignment(scan, node->as.ternary.false_expr);
         case AST_IF_STMT:
             return ctor_scan_if_json_field_assignment(scan, &node->as.if_stmt);
         case AST_WHILE_STMT:

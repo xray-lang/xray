@@ -1,0 +1,17 @@
+class TernaryFieldHolder {
+    payload: Json
+
+    constructor(flag: bool) {
+        this.payload = flag ? { name: "ada", age: 7 } : { name: "bob", age: 8 }
+    }
+
+    jsonConstructorTernaryFieldReceiverPlan() -> int {
+        return this.payload.age
+    }
+}
+
+fn mainValue() -> int {
+    return TernaryFieldHolder(true).jsonConstructorTernaryFieldReceiverPlan()
+}
+
+print(mainValue())
