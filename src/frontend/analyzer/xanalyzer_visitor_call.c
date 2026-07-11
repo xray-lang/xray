@@ -31,6 +31,11 @@
 #include "../../base/xhashmap.h"
 #include <inttypes.h>
 
+static bool xa_path_is_parallel_stdlib_module(const char *file);
+static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info);
+static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
+                                                       const char *callback_label);
+
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
         return false;
@@ -77,6 +82,12 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
     int class_tp_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
     const char **param_names = NULL;
     const char *param_names_buf[8] = {0};
+    bool is_parallel_plan_ctor =
+        class_name && strcmp(class_name, "Plan") == 0 &&
+        ((class_links && class_links->module_name &&
+          strcmp(class_links->module_name, "parallel") == 0) ||
+         (class_links && xa_path_is_parallel_stdlib_module(class_links->file_path)) ||
+         xa_class_info_is_parallel_plan(ctx, class_info));
     if (class_tp_count > 0 && type_args && type_arg_count == class_tp_count) {
         param_names = (class_tp_count <= 8)
                           ? param_names_buf
@@ -100,7 +111,10 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         XrType *saved_expected = ctx->expected_type;
         if (resolved && !XR_TYPE_IS_UNKNOWN(resolved))
             ctx->expected_type = resolved;
-        XrType *arg_type = xa_visit_infer_expr(ctx, arg);
+        const char *parallel_callback_label =
+            is_parallel_plan_ctor && i == 1 ? "parallel.Plan init callback" : NULL;
+        XrType *arg_type =
+            xa_visit_call_arg_with_parallel_context(ctx, arg, parallel_callback_label);
         ctx->expected_type = saved_expected;
         if (!resolved || XR_TYPE_IS_UNKNOWN(resolved) || !arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
             continue;

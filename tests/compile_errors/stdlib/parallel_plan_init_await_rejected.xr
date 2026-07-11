@@ -1,0 +1,10 @@
+import { Options, Plan } from parallel
+
+fn worker() -> int {
+    return 1
+}
+
+var plan = Plan<int>(Options(2), (lane) -> {
+    var value = await go worker()
+    return lane + value
+})
