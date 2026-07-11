@@ -1,0 +1,8 @@
+import parallel
+import math
+
+var values = parallel.map(0..4, (i) -> {
+    return math.abs(0 - i)
+}, parallel.Options(2))
+
+print(values[3])

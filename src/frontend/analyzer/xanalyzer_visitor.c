@@ -647,6 +647,38 @@ static const char *xa_parallel_stdlib_yieldable_feature(const char *module_name,
     return feature_buf;
 }
 
+static bool xa_parallel_builtin_module_func_exists(const char *module_name,
+                                                   const char *member_name) {
+    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
+    if (!mod || !member_name)
+        return false;
+    for (int i = 0; i < mod->function_count; i++) {
+        const XaBuiltinMember *member = &mod->functions[i];
+        if (member->is_method && member->name && strcmp(member->name, member_name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_parallel_module_has_effect_summary(const char *module_name) {
+    return xa_freestanding_stdlib_module_known(module_name) ||
+           (module_name &&
+            (strcmp(module_name, "Coro") == 0 || strcmp(module_name, "CoroPool") == 0));
+}
+
+static const char *xa_parallel_unknown_module_func_feature(const char *module_name,
+                                                           const char *member_name,
+                                                           char *feature_buf,
+                                                           size_t feature_buf_size) {
+    if (!module_name || !member_name || !feature_buf || feature_buf_size == 0 ||
+        xa_parallel_module_has_effect_summary(module_name) ||
+        !xa_parallel_builtin_module_func_exists(module_name, member_name))
+        return NULL;
+    snprintf(feature_buf, feature_buf_size, "call to unknown-effect function '%s.%s'", module_name,
+             member_name);
+    return feature_buf;
+}
+
 static const char *xa_parallel_imported_yieldable_feature(XaInferContext *ctx, XaSymbol *sym,
                                                           char *feature_buf,
                                                           size_t feature_buf_size) {
@@ -658,6 +690,19 @@ static const char *xa_parallel_imported_yieldable_feature(XaInferContext *ctx, X
     const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
     return xa_parallel_stdlib_yieldable_feature(links->module_name, member_name, feature_buf,
                                                 feature_buf_size);
+}
+
+static const char *xa_parallel_imported_unknown_effect_feature(XaInferContext *ctx, XaSymbol *sym,
+                                                               char *feature_buf,
+                                                               size_t feature_buf_size) {
+    if (!ctx || !ctx->analyzer || !sym || !sym->is_imported)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->module_name)
+        return NULL;
+    const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
+    return xa_parallel_unknown_module_func_feature(links->module_name, member_name, feature_buf,
+                                                   feature_buf_size);
 }
 
 static const char *xa_parallel_module_member_yieldable_feature(XaInferContext *ctx, AstNode *callee,
@@ -678,6 +723,25 @@ static const char *xa_parallel_module_member_yieldable_feature(XaInferContext *c
                                                 feature_buf_size);
 }
 
+static const char *xa_parallel_module_member_unknown_effect_feature(XaInferContext *ctx,
+                                                                    AstNode *callee,
+                                                                    char *feature_buf,
+                                                                    size_t feature_buf_size) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *module_name =
+        links && links->module_name ? links->module_name : ma->object->as.variable.name;
+    return xa_parallel_unknown_module_func_feature(module_name, ma->name, feature_buf,
+                                                   feature_buf_size);
+}
+
 static const char *xa_parallel_stdlib_suspend_call_feature(XaParallelCallbackEffectScan *scan,
                                                            CallExprNode *call) {
     if (!scan || !call || !call->callee)
@@ -691,6 +755,23 @@ static const char *xa_parallel_stdlib_suspend_call_feature(XaParallelCallbackEff
         XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
         return xa_parallel_imported_yieldable_feature(ctx, sym, scan->feature_buf,
                                                       sizeof(scan->feature_buf));
+    }
+    return NULL;
+}
+
+static const char *xa_parallel_unknown_effect_call_feature(XaParallelCallbackEffectScan *scan,
+                                                           CallExprNode *call) {
+    if (!scan || !call || !call->callee)
+        return NULL;
+    XaInferContext *ctx = scan->ctx;
+    const char *feature = xa_parallel_module_member_unknown_effect_feature(
+        ctx, call->callee, scan->feature_buf, sizeof(scan->feature_buf));
+    if (feature)
+        return feature;
+    if (call->callee->type == AST_VARIABLE) {
+        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        return xa_parallel_imported_unknown_effect_feature(ctx, sym, scan->feature_buf,
+                                                           sizeof(scan->feature_buf));
     }
     return NULL;
 }
@@ -752,6 +833,13 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         if (is_suspend)
             *is_suspend = true;
         return channel_feature;
+    }
+
+    const char *unknown_effect_feature = xa_parallel_unknown_effect_call_feature(scan, call);
+    if (unknown_effect_feature) {
+        if (is_suspend)
+            *is_suspend = true;
+        return unknown_effect_feature;
     }
 
     if (call->callee->type == AST_VARIABLE &&

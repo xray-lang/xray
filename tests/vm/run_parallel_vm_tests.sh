@@ -111,6 +111,12 @@ expect_output_workers \
     "4" \
     2
 
+expect_output_workers \
+    "parallel_callback_stdlib_normal_call_safe" \
+    "$PROJECT_DIR/tests/vm/parallel_callback_stdlib_normal_call_safe.xr" \
+    "3" \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1
