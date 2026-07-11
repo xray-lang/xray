@@ -5,6 +5,7 @@ class_vtable_dispatch|covered|class_vtable_dispatch|tests/aot/filetests/cgen|Cla
 class_field_layout|covered|class-field-plan|tests/aot/filetests/link|Class field declarations produce target-aware layout and field plans with verifier-backed physical ABI facts.
 class_field_backend_consumption|covered|p0->base\.f0|tests/aot/filetests/cgen|Native class field load/store paths consume class-field plans and emit direct struct field access.
 class_field_drop_plan|covered|drop=ref_release|tests/aot/filetests/link|Native class ref-field retain/release and destructors consume verified class-field drop plans.
+class_field_container_ref_copyback|covered|xrt_release\(xr_mkptr\(p0->f0, XR_TAG_MAP\)\);|tests/aot/filetests/link|Map/Set native class fields consume verified plans across constructor stores, cached method copy-back, direct typed calls, and destructors.
 generic_instantiation|covered|generic-instantiation|tests/aot/filetests/cgen|Generic roots and class clone anchors have plan dump coverage.
 closure_deobjectization|covered|repr=direct_symbol|tests/aot/filetests/cgen|Non-capturing closure direct-symbol representation is covered.
 closure_noescape_stack|covered|repr=stack|tests/aot/filetests/cgen|Capturing noescape closure stack representation is covered.
