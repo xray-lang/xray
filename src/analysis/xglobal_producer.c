@@ -3503,6 +3503,63 @@ static bool return_literal_scan_tracked_local_read(XgReturnObjectLiteralScan *sc
     return true;
 }
 
+static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
+                                                const AstNode *value,
+                                                const ObjectLiteralNode **out_literal) {
+    const ObjectLiteralNode *literal;
+    const ObjectLiteralNode *then_literal;
+    const ObjectLiteralNode *else_literal;
+    int local_index;
+    if (!scan || !out_literal)
+        return false;
+    *out_literal = NULL;
+    if (!value)
+        return false;
+    switch (value->type) {
+        case AST_GROUPING:
+            return return_literal_resolve_return_value(scan, value->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return return_literal_resolve_return_value(scan, value->as.move_expr.expr, out_literal);
+        case AST_UNSAFE_EXPR:
+            return return_literal_resolve_return_value(scan, value->as.unsafe_expr.operand,
+                                                       out_literal);
+        case AST_FORCE_UNWRAP:
+            return return_literal_resolve_return_value(scan, value->as.unary.operand, out_literal);
+        case AST_TERNARY:
+            if (!return_literal_scan_node(scan, value->as.ternary.condition) || scan->failed)
+                return false;
+            if (!return_literal_resolve_return_value(scan, value->as.ternary.true_expr,
+                                                     &then_literal) ||
+                !then_literal)
+                return false;
+            if (!return_literal_resolve_return_value(scan, value->as.ternary.false_expr,
+                                                     &else_literal) ||
+                !else_literal)
+                return false;
+            if (!return_literal_same_shape(then_literal, else_literal)) {
+                scan->failed = true;
+                return false;
+            }
+            *out_literal = then_literal;
+            return true;
+        default:
+            break;
+    }
+    literal = body_static_object_literal(value);
+    if (literal) {
+        *out_literal = literal;
+        return true;
+    }
+    if (value->type != AST_VARIABLE || !value->as.variable.name)
+        return false;
+    local_index =
+        return_literal_local_index(scan, value->as.variable.name, value->as.variable.symbol_id);
+    if (local_index < 0 || !scan->locals[local_index].literal)
+        return false;
+    *out_literal = scan->locals[local_index].literal;
+    return true;
+}
+
 static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const IfStmtNode *stmt) {
     XgReturnObjectLiteralScan then_scan;
     XgReturnObjectLiteralScan else_scan;
@@ -3576,22 +3633,13 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
             return return_literal_scan_assignment(scan, node->as.dec.name, node->as.dec.symbol_id,
                                                   NULL);
         case AST_RETURN_STMT: {
-            const AstNode *value;
             const ObjectLiteralNode *literal;
-            int local_index;
             if (node->as.return_stmt.value_count != 1 || !node->as.return_stmt.values)
                 return false;
-            value = node->as.return_stmt.values[0];
-            literal = body_static_object_literal(value);
-            if (literal)
-                return return_literal_record(scan, literal);
-            if (!value || value->type != AST_VARIABLE || !value->as.variable.name)
+            if (!return_literal_resolve_return_value(scan, node->as.return_stmt.values[0],
+                                                     &literal))
                 return false;
-            local_index = return_literal_local_index(scan, value->as.variable.name,
-                                                     value->as.variable.symbol_id);
-            if (local_index < 0)
-                return false;
-            return return_literal_record(scan, scan->locals[local_index].literal);
+            return return_literal_record(scan, literal);
         }
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
@@ -3627,6 +3675,10 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
                                                  node->as.array_literal.count) &&
                    return_literal_scan_node(scan, node->as.array_literal.repeat_value) &&
                    return_literal_scan_node(scan, node->as.array_literal.repeat_count);
+        case AST_TERNARY:
+            return return_literal_scan_node(scan, node->as.ternary.condition) &&
+                   return_literal_scan_node(scan, node->as.ternary.true_expr) &&
+                   return_literal_scan_node(scan, node->as.ternary.false_expr);
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < node->as.object_literal.count; i++) {
                 if (node->as.object_literal.computed && node->as.object_literal.computed[i] &&
