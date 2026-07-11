@@ -188,6 +188,20 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     uint32_t i;
     if (!bundle)
         return;
+    memset(&bundle->entry_plan, 0, sizeof(bundle->entry_plan));
+    bundle->has_entry_plan = false;
+    xr_free(bundle->storage_plans);
+    bundle->storage_plans = NULL;
+    bundle->nstorage_plans = 0;
+    bundle->storage_plan_cap = 0;
+    xr_free(bundle->capture_plans);
+    bundle->capture_plans = NULL;
+    bundle->ncapture_plans = 0;
+    bundle->capture_plan_cap = 0;
+    xr_free(bundle->module_init_plans);
+    bundle->module_init_plans = NULL;
+    bundle->nmodule_init_plans = 0;
+    bundle->module_init_plan_cap = 0;
     xr_free(bundle->class_hierarchy_plans);
     bundle->class_hierarchy_plans = NULL;
     bundle->nclass_hierarchy_plans = 0;
@@ -3786,6 +3800,20 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
                                                       const XgGlobalEvidence *evidence) {
     if (!bundle || !evidence)
         return false;
+    if (!xaot_entry_plan_derive(bundle, evidence, bundle->global_evidence_plan.profile,
+                                &bundle->entry_plan)) {
+        bundle->error_msg = "failed to derive AOT entry plan";
+        return false;
+    }
+    bundle->has_entry_plan = true;
+    if (bundle->entry_plan.unproven_reason != XAOT_ENTRY_PROVEN) {
+        bundle->error_msg = "entry runtime requirements are not provided by the target";
+        return false;
+    }
+    if (!xaot_storage_capture_plans_build(bundle)) {
+        bundle->error_msg = "failed to derive AOT storage/capture plans";
+        return false;
+    }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *summary = &evidence->classes[i];
         if (!xg_class_summary_is_runtime_class(summary))
@@ -4000,6 +4028,15 @@ XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
         bundle->global_evidence_plan.evidence)
         return false;
     bundle->target_data_layout = *target_layout;
+    return true;
+}
+
+XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
+                                                 const XaotTargetCapabilityProvider *provider) {
+    if (!bundle || !provider || bundle->global_evidence_plan.evidence ||
+        provider->abi_version != XAOT_PROVIDER_ABI_VERSION)
+        return false;
+    bundle->target_provider = *provider;
     return true;
 }
 
@@ -6934,6 +6971,39 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     fprintf(out, "xaot-plan v0\n");
     fprintf(out, "modules %u entry %u\n", bundle->nmodules, bundle->entry_module);
+    if (bundle->has_entry_plan) {
+        const XaotEntryPlan *ep = &bundle->entry_plan;
+        fprintf(out,
+                "entry-plan func=%u reachable=%u effects=0x%x required=0x%x provided=0x%x "
+                "runtime=0x%x root=%s scheduler=%s hooks=0x%x evidence=0x%x reason=%s\n",
+                ep->entry_func_id, ep->reachable_body_count, ep->reachable_effect_bits,
+                ep->required_capability_bits, ep->provided_capability_bits,
+                ep->runtime_component_bits, xaot_root_representation_name(ep->root_representation),
+                xaot_scheduler_mode_name(ep->scheduler_mode), ep->provider_hook_bits, ep->evidence,
+                xaot_entry_unproven_reason_name(ep->unproven_reason));
+    }
+    for (uint32_t si = 0; si < bundle->nstorage_plans; si++) {
+        const XaotStoragePlan *sp = &bundle->storage_plans[si];
+        fprintf(out,
+                "storage-plan %u module=%u slot=%u owner=%s mutability=%u address=%u "
+                "materialization=%s flags=0x%x\n",
+                si, sp->module_index, sp->slot, xr_storage_owner_name((XrStorageOwner) sp->owner),
+                sp->mutability, sp->address_identity,
+                xaot_materialization_kind_name(sp->materialization_kind), sp->flags);
+    }
+    for (uint32_t mi = 0; mi < bundle->nmodule_init_plans; mi++) {
+        const XaotModuleInitPlan *mp = &bundle->module_init_plans[mi];
+        fprintf(out, "module-init-plan %u func=%u owner=%s may_suspend=%u evidence=0x%x\n", mi,
+                mp->body_func_id, xr_storage_owner_name((XrStorageOwner) mp->allocation_owner),
+                mp->may_suspend ? 1u : 0u, mp->evidence);
+    }
+    for (uint32_t ci = 0; ci < bundle->ncapture_plans; ci++) {
+        const XaotCapturePlan *cp = &bundle->capture_plans[ci];
+        fprintf(out, "capture-plan %u func=%s capture=%u owner=%s action=%s evidence=0x%x\n", ci,
+                cp->func && cp->func->name ? cp->func->name : "?", cp->capture_index,
+                xr_storage_owner_name((XrStorageOwner) cp->source_owner),
+                xaot_capture_action_name(cp->action), cp->evidence);
+    }
     fprintf(out, "target-data-layout pointer=%u/%u isize=%u/%u usize=%u/%u xr_value=%u/%u\n",
             bundle->target_data_layout.pointer.size, bundle->target_data_layout.pointer.align,
             bundle->target_data_layout.isize.size, bundle->target_data_layout.isize.align,

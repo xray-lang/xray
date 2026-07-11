@@ -5954,7 +5954,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.yield_stmt.value);
             break;
         case AST_GO_EXPR:
-            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC;
+            /* Spawn requires a task/scheduler, but does not suspend the
+             * current body.  Keeping this distinct is what permits a
+             * descriptor-only root instead of a resumable main frame. */
+            bc->effect_bits |= XG_BODY_MAY_SPAWN | XG_BODY_MAY_ALLOC;
             bc->escape_bits |= XG_BODY_ESCAPE_CORO;
             bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL | XG_CAP_OBJECTS;
             if (node->as.go_expr.spawn_kind == XR_SPAWN_THREAD)
