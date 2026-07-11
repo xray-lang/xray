@@ -1,0 +1,9 @@
+import parallel
+
+enum ParallelErr {
+    Boom
+}
+
+parallel.forEach(0..4, (i) -> {
+    throw ParallelErr.Boom
+}, parallel.Options(2))

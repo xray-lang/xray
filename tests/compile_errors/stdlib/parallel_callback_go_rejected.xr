@@ -1,0 +1,10 @@
+import parallel
+
+fn worker() -> int {
+    return 1
+}
+
+parallel.forEach(0..4, (i) -> {
+    var task = go worker()
+    print(task)
+}, parallel.Options(2))
