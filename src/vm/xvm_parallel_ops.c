@@ -124,6 +124,11 @@ static XrArrayElemType vm_par_scalar_elem_type(XrValue value) {
     return XR_ELEM_ANY;
 }
 
+static void vm_par_force_single_lane_fallback(XrValue *workers_slot) {
+    if (workers_slot)
+        *workers_slot = xr_int(1);
+}
+
 static bool vm_par_value_fits_elem_type(XrValue value, XrArrayElemType elem_type) {
     switch (elem_type) {
         case XR_ELEM_I64:
@@ -578,19 +583,25 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
     XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
     int lane_count =
         xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
-    if (lane_count <= 1)
+    if (lane_count <= 1) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
 
     XrClosure *closure = (XrClosure *) XR_TO_PTR(*closure_slot);
-    if (!vm_par_closure_safe_to_share(closure))
+    if (!vm_par_closure_safe_to_share(closure)) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
     XrArray *states = NULL;
     if (plan_state) {
         if (!states_slot || !XR_IS_ARRAY(*states_slot))
             return XR_DISP_NEXT;
         states = XR_TO_ARRAY(*states_slot);
-        if (!states || states->length < lane_count)
+        if (!states || states->length < lane_count) {
+            vm_par_force_single_lane_fallback(workers_slot);
             return XR_DISP_NEXT;
+        }
     }
 
     XrVmParBatch *batch =
@@ -645,7 +656,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
     }
 
     XrArray *output = XR_TO_ARRAY(*output_slot);
-    if (!output || output->elem_type == XR_ELEM_ANY)
+    if (!output)
         return XR_DISP_NEXT;
 
     int64_t start = XR_TO_INT(*start_slot);
@@ -660,25 +671,35 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
         *handled_slot = xr_bool(true);
         return XR_DISP_NEXT;
     }
+    if (output->elem_type == XR_ELEM_ANY) {
+        vm_par_force_single_lane_fallback(workers_slot);
+        return XR_DISP_NEXT;
+    }
     if (item_count > output->length || item_count > INT32_MAX)
         return XR_DISP_NEXT;
 
     XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
     int lane_count =
         xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
-    if (lane_count <= 1)
+    if (lane_count <= 1) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
 
     XrClosure *closure = (XrClosure *) XR_TO_PTR(*closure_slot);
-    if (!vm_par_closure_safe_to_share(closure))
+    if (!vm_par_closure_safe_to_share(closure)) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
     XrArray *states = NULL;
     if (plan_state) {
         if (!states_slot || !XR_IS_ARRAY(*states_slot))
             return XR_DISP_NEXT;
         states = XR_TO_ARRAY(*states_slot);
-        if (!states || states->length < lane_count)
+        if (!states || states->length < lane_count) {
+            vm_par_force_single_lane_fallback(workers_slot);
             return XR_DISP_NEXT;
+        }
     }
 
     XrVmParBatch *batch = vm_par_batch_new(isolate, runtime, closure, NULL, output, states, start,
@@ -752,25 +773,33 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
     int lane_count =
         xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
-    if (lane_count <= 1)
+    if (lane_count <= 1) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
 
     XrClosure *body = (XrClosure *) XR_TO_PTR(*body_slot);
     XrClosure *combine = (XrClosure *) XR_TO_PTR(*combine_slot);
-    if (!vm_par_closure_safe_to_share(body) || !vm_par_closure_safe_to_share(combine))
+    if (!vm_par_closure_safe_to_share(body) || !vm_par_closure_safe_to_share(combine)) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
     XrArray *states = NULL;
     if (plan_state) {
         if (!states_slot || !XR_IS_ARRAY(*states_slot))
             return XR_DISP_NEXT;
         states = XR_TO_ARRAY(*states_slot);
-        if (!states || states->length < lane_count)
+        if (!states || states->length < lane_count) {
+            vm_par_force_single_lane_fallback(workers_slot);
             return XR_DISP_NEXT;
+        }
     }
 
     XrCoroutine *current = vm_get_coro(vm_ctx);
-    if (!current)
+    if (!current) {
+        vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
+    }
     XrArray *partials =
         elem_type == XR_ELEM_ANY
             ? xr_array_new_shared_core(xr_isolate_get_runtime_core(isolate), lane_count)
