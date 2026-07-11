@@ -11333,6 +11333,13 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
                          "fn readReturnedRecordLocal() -> int {\n"
                          "    var user = makeUser()\n"
                          "    return user.age\n"
+                         "}\n"
+                         "fn makeUserIndirect() -> User {\n"
+                         "    var user: User = { name: \"ada\", age: 7 }\n"
+                         "    return user\n"
+                         "}\n"
+                         "fn readReturnedRecordIndirect() -> int {\n"
+                         "    return makeUserIndirect().age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -11354,13 +11361,16 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *direct = evidence_find_body_by_name(&ev, "readReturnedRecord");
     const XgBodySummary *local = evidence_find_body_by_name(&ev, "readReturnedRecordLocal");
+    const XgBodySummary *indirect = evidence_find_body_by_name(&ev, "readReturnedRecordIndirect");
     ASSERT_NOT_NULL(direct);
     ASSERT_NOT_NULL(local);
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 2);
+    ASSERT_NOT_NULL(indirect);
+    ASSERT_EQ_UINT(ev.nrecord_shapes, 2);
+    ASSERT_EQ_UINT(ev.nrecord_fields, 4);
+    ASSERT_EQ_UINT(ev.nrecord_accesses, 3);
     bool saw_direct = false;
     bool saw_local = false;
+    bool saw_indirect = false;
     for (uint32_t i = 0; i < ev.nrecord_accesses; i++) {
         const XgRecordAccessSummary *access = &ev.record_accesses[i];
         ASSERT_EQ_UINT(access->receiver_shape_id, ev.record_shapes[0].record_shape_id);
@@ -11371,14 +11381,17 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
             saw_direct = true;
         if (access->owner_func_id == local->func_id)
             saw_local = true;
+        if (access->owner_func_id == indirect->func_id)
+            saw_indirect = true;
     }
     ASSERT_TRUE(saw_direct);
     ASSERT_TRUE(saw_local);
+    ASSERT_TRUE(saw_indirect);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 2);
+    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 3);
     for (uint32_t i = 0; i < bundle.nrecord_access_plans; i++) {
         ASSERT_EQ_UINT(bundle.record_access_plans[i].action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
         ASSERT_EQ_UINT(bundle.record_access_plans[i].field_ordinal, 1);
