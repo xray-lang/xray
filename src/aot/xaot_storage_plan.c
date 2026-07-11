@@ -96,21 +96,13 @@ static XaotCapturePlan derive_capture(const XiFunc *func, uint16_t index) {
     plan.capture_index = index;
     plan.evidence = XAOT_CAPTURE_EV_CLOSED_CAPTURE | XAOT_CAPTURE_EV_STORAGE_OWNER |
                     XAOT_CAPTURE_EV_TYPE_SHAPE | XAOT_CAPTURE_EV_MUTABILITY;
+    plan.action = (uint8_t) xi_capture_cross_execution_action(capture);
     if (capture->capture_kind == XI_CAPTURE_SHARED || capture->is_shared) {
         plan.source_owner = XR_STORAGE_SHARED_SYSTEM;
-        plan.action = XAOT_CAPTURE_SHARED_REF;
     } else if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE) {
         plan.source_owner = XR_STORAGE_MODULE;
-        plan.action = capture->is_mutable ? XAOT_CAPTURE_REJECT : XAOT_CAPTURE_MODULE_READONLY;
     } else {
         plan.source_owner = XR_STORAGE_EXEC_LOCAL;
-        if (capture->needs_cell || capture->is_mutable || capture->is_reassigned ||
-            capture->capture_kind == XI_CAPTURE_BY_IMM_REF)
-            plan.action = XAOT_CAPTURE_REJECT;
-        else if (xi_own_type_is_rc(capture->type))
-            plan.action = XAOT_CAPTURE_DEEP_COPY;
-        else
-            plan.action = XAOT_CAPTURE_INLINE_VALUE;
     }
     return plan;
 }

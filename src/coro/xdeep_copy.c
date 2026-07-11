@@ -570,8 +570,15 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
 XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrClosure *closure = (XrClosure *) obj;
-    if (!closure || !ctx->dst_fixed_heap)
+    if (!closure || !closure->proto || !ctx->dst_fixed_heap ||
+        PROTO_UPVAL_COUNT(closure->proto) != closure->upval_count)
         return XR_NULL_VAL;
+    for (uint16_t i = 0; i < closure->upval_count; i++) {
+        uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
+        if (action == XR_CAPTURE_REJECT || action == XR_CAPTURE_MOVE ||
+            (action == XR_CAPTURE_INLINE_VALUE && XR_IS_PTR(closure->upvals[i])))
+            return XR_NULL_VAL;
+    }
     XrValue cached = xr_copy_context_lookup(ctx, closure);
     if (!XR_IS_NULL(cached))
         return cached;
@@ -592,9 +599,17 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     xr_copy_context_record(ctx, closure, result);
     ctx->objects_copied++;
 
-    // Deep copy flat upvals (cells and values)
+    // Materialize flat upvals exactly as verified by the capture plan.
     for (int i = 0; i < closure->upval_count; i++) {
-        new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, closure->upvals[i]);
+        XrValue upval = closure->upvals[i];
+        uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
+        if (action == XR_CAPTURE_DEEP_COPY) {
+            new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
+        } else {
+            new_closure->upvals[i] = upval;
+            if (XR_IS_PTR(upval))
+                xr_rc_retain(XR_VALUE_GCPTR(upval));
+        }
     }
     return result;
 }

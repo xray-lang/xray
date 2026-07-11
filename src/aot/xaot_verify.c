@@ -6402,6 +6402,37 @@ static bool verify_func_allocation_plans_recursive(const XaotBundle *bundle, con
     return true;
 }
 
+static const XiFunc *verify_spawn_capture_target(const XiValue *callee) {
+    while (callee && (callee->op == XI_BOX || callee->op == XI_COPY || callee->op == XI_MOVE) &&
+           callee->nargs > 0)
+        callee = callee->args[0];
+    if (callee && callee->op == XI_CLOSURE_NEW && callee->aux)
+        return (const XiFunc *) callee->aux;
+    if (callee && callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW && callee->aux)
+        return (const XiFunc *) callee->aux;
+    return NULL;
+}
+
+static bool verify_spawn_capture_materialization(const XaotBundle *bundle, const XiValue *site,
+                                                 char *errbuf, size_t errbuf_len) {
+    const XiFunc *target;
+    if (!site || (site->op != XI_GO && site->op != XI_THREAD_SPAWN) || site->nargs == 0)
+        return true;
+    target = verify_spawn_capture_target(site->args[0]);
+    if (!target)
+        return true;
+    for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
+        const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
+        if (!plan)
+            return set_error(errbuf, errbuf_len,
+                             "AOT cross-execution capture has no materialization plan");
+        if (plan->action == XR_CAPTURE_REJECT || plan->action == XR_CAPTURE_MOVE)
+            return set_error(errbuf, errbuf_len,
+                             "AOT cross-execution capture materialization is rejected");
+    }
+    return true;
+}
+
 static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
                                                  uint32_t *out_count, char *errbuf,
                                                  size_t errbuf_len) {
@@ -6421,6 +6452,8 @@ static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const
             if (!site)
                 continue;
             if (site->op == XI_GO || site->op == XI_THREAD_SPAWN) {
+                if (!verify_spawn_capture_materialization(bundle, site, errbuf, errbuf_len))
+                    return false;
                 for (uint16_t ai = 1; ai < site->nargs; ai++) {
                     XaotTransferPlan derived;
                     uint16_t transfer_index = (uint16_t) (ai - 1);

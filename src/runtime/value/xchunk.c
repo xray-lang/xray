@@ -251,7 +251,8 @@ int xr_vm_proto_add_proto(XrProto *proto, XrProto *child) {
 // Add upvalue info
 // Returns upvalue index
 int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode, uint8_t is_const,
-                            uint8_t slot_type, uint8_t source, struct XrType *type_info) {
+                            uint8_t slot_type, uint8_t source, uint8_t capture_action,
+                            struct XrType *type_info) {
     XR_DCHECK(proto != NULL, "proto_add_upvalue: NULL proto");
     // No dedup here: dedup is done at compiler level in scope_add_upvalue.
     // proto->upvalues must stay in 1-to-1 correspondence with XrCompiler->upvalues[].
@@ -262,6 +263,7 @@ int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode
                         .is_const = is_const,
                         .slot_type = slot_type,
                         .source = source,
+                        .capture_action = capture_action,
                         .type_info = type_info};
     return DYNARRAY_ADD(&proto->upvalues, new_uv, UpvalInfo);
 }

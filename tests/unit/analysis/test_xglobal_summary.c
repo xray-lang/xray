@@ -11885,8 +11885,8 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_EQ_UINT(module_const->materialization_kind, XR_MATERIALIZE_MODULE_READONLY);
     ASSERT_EQ_UINT(shared_state->owner, XR_STORAGE_SHARED_SYSTEM);
     ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SHARED_STABLE);
-    ASSERT_EQ_UINT(module_capture->action, XAOT_CAPTURE_MODULE_READONLY);
-    ASSERT_EQ_UINT(shared_capture->action, XAOT_CAPTURE_SHARED_REF);
+    ASSERT_EQ_UINT(module_capture->action, XR_CAPTURE_MODULE_READONLY);
+    ASSERT_EQ_UINT(shared_capture->action, XR_CAPTURE_SHARED_REF);
     ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);

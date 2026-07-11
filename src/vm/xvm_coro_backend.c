@@ -546,19 +546,15 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrC
  * `go topLevelFn(args)` and `go closureOverSharedConst()` shapes.
  */
 static bool vm_closure_needs_private_copy(const XrClosure *closure) {
-    if (!closure)
+    if (!closure || !closure->proto)
         return false;
+    if (PROTO_UPVAL_COUNT(closure->proto) != closure->upval_count)
+        return true;
     for (uint16_t i = 0; i < closure->upval_count; i++) {
-        XrValue uv = closure->upvals[i];
-        if (!XR_IS_PTR(uv))
-            continue;
-        XrObjHeader *h = XR_VALUE_GCPTR(uv);
-        if (!h)
-            continue;
-        int32_t rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
-        if (rc < 0)
-            continue;  // shared / managed / immortal: safe to share by pointer
-        return true;   // thread-local private capture: child needs its own copy
+        uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
+        if (action == XR_CAPTURE_DEEP_COPY || action == XR_CAPTURE_REJECT ||
+            action == XR_CAPTURE_MOVE)
+            return true;
     }
     return false;
 }
