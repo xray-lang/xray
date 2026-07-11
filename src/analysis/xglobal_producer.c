@@ -6410,23 +6410,8 @@ static bool add_module_summary(XgGlobalEvidence *evidence, XgModuleId module_id,
     return xg_global_evidence_add_module(evidence, &row) != NULL;
 }
 
-static uint64_t import_hash_for_graph(const XrModuleGraph *graph) {
-    uint64_t h = XR_FNV64_OFFSET_BASIS;
-    if (!graph)
-        return h;
-    for (int i = 0; i < graph->spec_count; i++) {
-        const XrModuleSpec *spec = &graph->specs[i];
-        if (spec->canonical)
-            h = fold_bytes(h, spec->canonical, strlen(spec->canonical));
-        h = fold_u64(h, (uint64_t) spec->dep_count);
-        for (int d = 0; d < spec->dep_count; d++)
-            h = fold_u64(h, (uint64_t) spec->dep_indices[d]);
-    }
-    return h;
-}
-
 XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleGraph *graph,
-                                            uint32_t profile) {
+                                            uint32_t profile, uint64_t imported_summary_hash) {
     XgBuildKey key;
     if (!out_key || !graph)
         return false;
@@ -6434,7 +6419,7 @@ XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleG
     key.source_hash = source_hash_for_graph(graph);
     key.compiler_semver_hash = UINT64_C(0x0000017200000001);
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
-    key.imported_summary_hash = import_hash_for_graph(graph);
+    key.imported_summary_hash = imported_summary_hash;
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);
     key.profile = profile;
     *out_key = key;
@@ -6443,12 +6428,13 @@ XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleG
 
 XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *evidence,
                                                         const XrModuleGraph *graph,
-                                                        uint32_t profile) {
+                                                        uint32_t profile,
+                                                        uint64_t imported_summary_hash) {
     XgBuildKey key;
     XgProducer producer;
     if (!evidence || !graph)
         return false;
-    if (!xg_build_key_from_module_graph(&key, graph, profile))
+    if (!xg_build_key_from_module_graph(&key, graph, profile, imported_summary_hash))
         return false;
 
     xg_global_evidence_init(evidence, key);
