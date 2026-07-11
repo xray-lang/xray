@@ -154,6 +154,11 @@ static uint64_t fold_u64(uint64_t h, uint64_t value) {
     return fold_bytes(h, &value, sizeof(value));
 }
 
+static uint32_t hash_folded32(uint64_t h) {
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
 static uint32_t hash_name32(const char *name) {
     return xg_name_id(name);
 }
@@ -176,6 +181,34 @@ static uint32_t producer_source_node_id(XgModuleId module_id, const AstNode *nod
     if (column == 0)
         column = 1;
     return xg_stable_source_node_id(module_id, (uint32_t) node->type, line, column);
+}
+
+static bool body_callsite_source_seen(const XgBodyCollect *bc, uint32_t source_node_id) {
+    if (!bc || !bc->evidence || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < bc->evidence->ncallsites; i++) {
+        const XgCallsiteSummary *call = &bc->evidence->callsites[i];
+        if (call->owner_func_id == bc->owner_func_id && call->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t producer_unique_callsite_source_node_id(const XgBodyCollect *bc,
+                                                        uint32_t source_node_id) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!bc || !bc->evidence || source_node_id == 0)
+        return source_node_id;
+    while (body_callsite_source_seen(bc, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, bc->owner_func_id);
+        h = fold_u64(h, bc->callsite_count);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
 }
 
 static bool producer_stdlib_module_known(const char *name) {
@@ -257,11 +290,6 @@ static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
 
 static uint32_t hash_tref32(const XrTypeRef *t) {
     uint64_t h = hash_tref(XR_FNV64_OFFSET_BASIS, t);
-    uint32_t folded = (uint32_t) (h ^ (h >> 32));
-    return folded ? folded : 1;
-}
-
-static uint32_t hash_folded32(uint64_t h) {
     uint32_t folded = (uint32_t) (h ^ (h >> 32));
     return folded ? folded : 1;
 }
@@ -4832,7 +4860,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
-    row.source_node_id = producer_source_node_id(bc->module_id, call);
+    row.source_node_id =
+        producer_unique_callsite_source_node_id(bc, producer_source_node_id(bc->module_id, call));
     row.source_span_id = (uint32_t) call->line;
     row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_CLOSURE;
@@ -4962,7 +4991,8 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
-    row.source_node_id = producer_source_node_id(bc->module_id, call);
+    row.source_node_id =
+        producer_unique_callsite_source_node_id(bc, producer_source_node_id(bc->module_id, call));
     row.source_span_id = (uint32_t) call->line;
     row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_METHOD;
