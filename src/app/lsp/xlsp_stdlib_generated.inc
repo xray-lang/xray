@@ -35,7 +35,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
-    {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): Json", "", NULL, 0},
+    {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"topicMatches", XLSP_SYM_FUNCTION, "fn(pattern: string, topic: string): bool", "", NULL, 0},
@@ -44,8 +44,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"CHANNEL_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
+    {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 22
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 24
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {

@@ -1,0 +1,1 @@
+{"case":"protocol-address-and-topic","probe":"tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"cluster address grammar plus declared topic wildcard contract"}

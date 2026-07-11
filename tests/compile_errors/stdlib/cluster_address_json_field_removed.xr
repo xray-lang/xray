@@ -1,0 +1,4 @@
+import cluster
+
+var address = cluster.parseAddress("127.0.0.1:9000")
+print(address["host"])

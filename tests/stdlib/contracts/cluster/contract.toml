@@ -1,0 +1,28 @@
+schema = 1
+module = "cluster"
+contract_revision = 1
+legacy_commit = "40b1e8608921ef21b92d287e59ef1e14564cce72"
+legacy_public_surface = ["parseAddress", "validNodeName", "validChannelName", "validTopicName", "validTopicPattern", "topicMatches"]
+intentional_semantic_changes = [
+  "parseAddress returns NodeAddress instead of Json",
+  "invalid addresses throw typed AddressError variants instead of returning null",
+]
+known_legacy_bugs = ["unbracketed IPv6 addresses were accepted ambiguously by last-colon splitting"]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/cluster/diff_cases.txt"
+benchmark_suite = "stdlib/cluster"
+
+[[legacy_behavior]]
+id = "host-port-address"
+classification = "required"
+new_behavior = "IPv4, hostname, and bracketed IPv6 addresses preserve host and validated port"
+
+[[legacy_behavior]]
+id = "null-invalid-address"
+classification = "removed"
+new_behavior = "typed AddressError distinguishes missing port, invalid host, and invalid port"
+
+[[legacy_behavior]]
+id = "unbracketed-ipv6-last-colon"
+classification = "bug"
+new_behavior = "IPv6 host text must use brackets when followed by a port"
