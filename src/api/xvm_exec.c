@@ -86,8 +86,9 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
         XrExecutionContext *previous =
             xr_exec_context_enter(xr_runtime_core_root_exec(isolate->core_rt));
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
+        XrVMContext *ctx = xr_vm_current_ctx(isolate);
         xr_exec_context_restore(previous);
-        if (result == XR_VM_OK && !XR_IS_NULL(isolate->vm.pending_error)) {
+        if (result == XR_VM_OK && ctx && !XR_IS_NULL(ctx->pending_error)) {
             return -1;
         }
         return (result == XR_VM_OK) ? 0 : -1;
