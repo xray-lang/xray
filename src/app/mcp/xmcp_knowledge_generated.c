@@ -3231,6 +3231,46 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     {
+        .name = "QueryParams",
+        .signature = "QueryParams",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.add",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.encode",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.entries",
+        .signature = "(): Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.get",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.getAll",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.set",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
         .name = "URL",
         .signature = "URL",
         .summary = "",
@@ -3291,11 +3331,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "",
     },
     {
-        .name = "buildQuery",
-        .signature = "(obj: Json): string",
-        .summary = "",
-    },
-    {
         .name = "decode",
         .signature = "(s: string): string",
         .summary = "",
@@ -3332,7 +3367,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     },
     {
         .name = "parseQuery",
-        .signature = "(qs: string): Json",
+        .signature = "(qs: string): QueryParams",
         .summary = "",
     },
     {
@@ -6232,6 +6267,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `QueryParams` | `QueryParams` |  |\n"
+            "| `QueryParams.add` | `(name: string, value: string): ()` |  |\n"
+            "| `QueryParams.constructor` | `(): ()` |  |\n"
+            "| `QueryParams.encode` | `(): string` |  |\n"
+            "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n"
+            "| `QueryParams.get` | `(name: string): string?` |  |\n"
+            "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n"
+            "| `QueryParams.set` | `(name: string, value: string): ()` |  |\n"
             "| `URL` | `URL` |  |\n"
             "| `URL.hash` | `: string` |  |\n"
             "| `URL.host` | `: string` |  |\n"
@@ -6244,7 +6287,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `URL.protocol` | `: string` |  |\n"
             "| `URL.search` | `: string` |  |\n"
             "| `URL.username` | `: string` |  |\n"
-            "| `url.buildQuery` | `(obj: Json): string` |  |\n"
             "| `url.decode` | `(s: string): string` |  |\n"
             "| `url.decodeForm` | `(s: string): string` |  |\n"
             "| `url.encode` | `(s: string): string` |  |\n"
@@ -6252,7 +6294,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `url.format` | `(obj: URL): string` |  |\n"
             "| `url.join` | `(...parts: string): string` |  |\n"
             "| `url.parse` | `(url: string): URL` |  |\n"
-            "| `url.parseQuery` | `(qs: string): Json` |  |\n"
+            "| `url.parseQuery` | `(qs: string): QueryParams` |  |\n"
             "| `url.resolve` | `(base: string, relative: string): string` |  |\n"
             "",
         .symbols = _symbols_url,

@@ -1,0 +1,2 @@
+{"case":"query-order-duplicates-and-errors","probe":"tests/diff/cases/semantics/stdlib/url_core_direct.xr","equivalence":["value","error","complexity"],"oracle":"WHATWG application/x-www-form-urlencoded parser and serializer behavior"}
+{"case":"url-resolution-and-formatting","probe":"tests/aot/filetests/link/core_url.xr","equivalence":["value","effect"],"oracle":"RFC 3986 reference resolution vectors"}

@@ -4817,7 +4817,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 | `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
-| `url` | URL parsing and construction | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
+| `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
 > DNS lookups go through `net.lookup(host)`; there is no standalone `dns` module.
 

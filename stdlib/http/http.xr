@@ -4,7 +4,7 @@
 // Public HTTP/1.x request/response formatting, client, routing, and server
 // dispatch live here.
 
-import { encode, decodeForm, parse as parseUrl, parseQuery, resolve as resolveUrl } from url
+import { QueryParams, encode, decodeForm, parse as parseUrl, parseQuery, resolve as resolveUrl } from url
 import crypto
 import io
 import net
@@ -755,20 +755,29 @@ fn _serverTargetPath(target: string) -> string {
     return target
 }
 
-fn _serverTargetQuery(target: string) -> Json {
+fn _serverTargetQuery(target: string) -> QueryParams {
     var q = target.indexOf("?")
-    if (q < 0) {
-        var empty: Json = {}
-        return empty
+    if (q < 0) { return QueryParams() as QueryParams }
+    return parseQuery(target.slice(q + 1)) as QueryParams
+}
+
+// The legacy Json server-request envelope cannot represent duplicate query
+// names. Keep the lossy conversion explicit at that dynamic boundary; the
+// canonical URL parser and all new typed HTTP surfaces consume QueryParams.
+fn _serverQueryJson(params: QueryParams) -> Json {
+    var out: Json = {}
+    var pairs = params.entries()
+    for (var i = 0; i < pairs.length; i++) {
+        out[pairs[i].0] = pairs[i].1
     }
-    return parseQuery(target.slice(q + 1))
+    return out
 }
 
 fn _serverRequestJson(msg: RequestMessage, params: Json) -> Json {
     var req: Json = {}
     req["method"] = msg.head.method
     req["path"] = _serverTargetPath(msg.head.target)
-    req["query"] = _serverTargetQuery(msg.head.target)
+    req["query"] = _serverQueryJson(_serverTargetQuery(msg.head.target))
     req["headers"] = msg.head.headers
     req["body"] = msg.body
     req["contentLength"] = msg.head.contentLength
