@@ -13,6 +13,7 @@
 #include "base/xmalloc.h"
 #include "coro/xchannel.h"
 #include "coro/xaot_coro.h"
+#include "coro/xaot_runtime_internal.h"
 #include "coro/xblock.h"
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
@@ -1150,6 +1151,8 @@ TEST(parallel_for_range_i64_runs_static_lanes) {
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed), 1);
 
+    ASSERT_NULL(runtime->parallel_pool);
+
     xr_aot_runtime_delete(runtime);
 }
 
@@ -1178,10 +1181,12 @@ TEST(parallel_for_auto_workers_uses_scheduler_worker_count) {
     for (int i = 2; i < 8; i++)
         ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[i], memory_order_relaxed), 0);
 
+    ASSERT_NULL(runtime->parallel_pool);
+
     xr_aot_runtime_delete(runtime);
 }
 
-TEST(parallel_pool_is_owned_per_runtime) {
+TEST(parallel_for_dispatch_is_runtime_scoped) {
     XrAotRuntime *runtime_a = aot_test_parallel_runtime_new();
     ASSERT_NOT_NULL(runtime_a);
     XrAotRuntime *runtime_b = aot_test_parallel_runtime_new();
@@ -1218,6 +1223,8 @@ TEST(parallel_pool_is_owned_per_runtime) {
     ASSERT_EQ_INT(atomic_load_explicit(&call_b.entered, memory_order_relaxed), 1);
     ASSERT_EQ_INT(shared.entered_dispatches, 2);
     ASSERT_EQ_INT(shared.failed_waits, 0);
+    ASSERT_NULL(runtime_a->parallel_pool);
+    ASSERT_NULL(runtime_b->parallel_pool);
 
     xr_cond_destroy(&shared.cond);
     xr_mutex_destroy(&shared.mutex);
@@ -1281,7 +1288,7 @@ RUN_TEST(runtime_deferred_array_submit_cache_tracks_content_version);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 RUN_TEST(parallel_for_range_i64_runs_static_lanes);
 RUN_TEST(parallel_for_auto_workers_uses_scheduler_worker_count);
-RUN_TEST(parallel_pool_is_owned_per_runtime);
+RUN_TEST(parallel_for_dispatch_is_runtime_scoped);
 RUN_TEST(parallel_reduce_i64_runs_range_reducer);
 
 TEST_MAIN_END()
