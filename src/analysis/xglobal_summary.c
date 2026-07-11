@@ -4749,12 +4749,13 @@ static bool remap_index_start(uint32_t start, uint32_t base_count, uint32_t *out
     return add_u32_checked(start, base_count, out);
 }
 
-static bool module_identity_complete(const XgModuleSummary *module) {
+XR_FUNC bool xg_module_summary_identity_complete(const XgModuleSummary *module) {
     return module && module->module_id != XG_NO_ID && module->name_id != 0 &&
            module->canonical_hash != 0 && module->source_hash != 0 && module->kind != 0;
 }
 
-static bool module_identity_matches(const XgModuleSummary *a, const XgModuleSummary *b) {
+XR_FUNC bool xg_module_summary_identity_matches(const XgModuleSummary *a,
+                                                const XgModuleSummary *b) {
     return a && b && a->name_id == b->name_id && a->canonical_hash == b->canonical_hash &&
            a->source_hash == b->source_hash && a->kind == b->kind;
 }
@@ -4764,11 +4765,12 @@ static bool validate_package_module_identities(const XgGlobalEvidence *package) 
         return false;
     for (uint32_t i = 0; i < package->nmodules; i++) {
         const XgModuleSummary *module = &package->modules[i];
-        if (!module_identity_complete(module))
+        if (!xg_module_summary_identity_complete(module))
             return false;
         for (uint32_t j = i + 1; j < package->nmodules; j++) {
             const XgModuleSummary *other = &package->modules[j];
-            if (module->module_id == other->module_id || module_identity_matches(module, other))
+            if (module->module_id == other->module_id ||
+                xg_module_summary_identity_matches(module, other))
                 return false;
         }
     }
@@ -5087,7 +5089,7 @@ static bool build_module_import_map(XgGlobalEvidence *target, const XgGlobalEvid
         XgModuleSummary imported = *source;
         bool found = false;
         for (uint32_t j = 0; j < target->nmodules; j++) {
-            if (module_identity_matches(&target->modules[j], source)) {
+            if (xg_module_summary_identity_matches(&target->modules[j], source)) {
                 maps[i].from = source->module_id;
                 maps[i].to = target->modules[j].module_id;
                 found = true;
@@ -5163,7 +5165,7 @@ static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence 
     for (uint32_t i = 0; i < package->nmodules; i++) {
         const XgModuleSummary *source = &package->modules[i];
         for (uint32_t j = 0; j < target->nmodules; j++) {
-            if (module_identity_matches(&target->modules[j], source) &&
+            if (xg_module_summary_identity_matches(&target->modules[j], source) &&
                 target_has_module_owned_rows(target, target->modules[j].module_id))
                 return true;
         }
@@ -5230,7 +5232,7 @@ static bool imported_package_modules_are_new(const XgGlobalEvidence *package,
         return false;
     for (uint32_t i = 0; i < package->nmodules; i++) {
         for (uint32_t j = 0; j < seen_count; j++) {
-            if (module_identity_matches(&package->modules[i], &seen_modules[j]))
+            if (xg_module_summary_identity_matches(&package->modules[i], &seen_modules[j]))
                 return false;
         }
     }

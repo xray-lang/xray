@@ -65,6 +65,7 @@ summary_request_import_hash_explicit|covered|global_evidence_build_key_uses_expl
 summary_import_hash_payload_set|covered|ASSERT_EQ_UINT\(ordered_hash, reversed_hash\)|tests/unit/analysis|Imported summary hash treats validated package payloads as an order-independent set.
 summary_import_hash_duplicate_module_reject|covered|!xg_imported_summary_hash_from_package_payloads|tests/unit/analysis|Imported summary hash rejects duplicate module identity across package payloads.
 summary_import_hash_driver_input|covered|test_driver_consumes_imported_summary_payload_set|tests/unit/aot|AOT driver accepts validated package payload sets and writes their imported summary hash into the build key.
+summary_import_hash_driver_auto_discovery|covered|test_driver_auto_discovers_package_summary_payloads|tests/unit/aot|AOT driver discovers current single-package global payloads from the evidence cache and feeds their imported summary hash into the build key.
 stable_source_identity|covered|global_evidence_source_identity_survives_body_only_change|tests/unit/analysis|Evidence source_node_id is derived from stable source anchors instead of parser allocation order.
 summary_payload_module_identity|covered|materialized\.nmodules|tests/unit/analysis|Evidence payload carries module identity rows needed for package id remap.
 summary_payload_preproducer_probe|covered|evidence cache preproducer summary|tests/aot/run_aot_incremental_cache.sh|AOT computes request keys before the producer and validates all four materializable payload phases by request.

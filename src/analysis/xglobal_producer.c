@@ -6352,33 +6352,42 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
 
 static uint64_t module_source_hash(const XrModuleSpec *spec);
 
+static uint64_t fold_graph_module_source(uint64_t h, uint64_t module_id, const XrModuleSpec *spec) {
+    size_t len = 0;
+    char *source = NULL;
+    const char *embedded = NULL;
+    h = fold_u64(h, module_id);
+    if (!spec)
+        return h;
+    if (spec->source_path)
+        h = fold_bytes(h, spec->source_path, strlen(spec->source_path));
+    if (spec->embedded_source && spec->canonical)
+        embedded = xr_get_embedded_stdlib(spec->canonical);
+    if (embedded) {
+        h = fold_bytes(h, embedded, strlen(embedded));
+    } else {
+        source = spec->source_path ? xr_file_read_all(spec->source_path, "rb", &len) : NULL;
+        if (source) {
+            h = fold_bytes(h, source, len);
+            xr_free(source);
+        }
+    }
+    return h;
+}
+
 static uint64_t source_hash_for_graph(const XrModuleGraph *graph) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!graph)
         return h;
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int idx = graph->topo_order[ti];
-        const XrModuleSpec *spec = &graph->specs[idx];
-        size_t len = 0;
-        char *source = NULL;
-        const char *embedded = NULL;
-        uint64_t module_id = (uint64_t) (ti + 1);
-        h = fold_u64(h, module_id);
-        if (spec->source_path)
-            h = fold_bytes(h, spec->source_path, strlen(spec->source_path));
-        if (spec->embedded_source && spec->canonical)
-            embedded = xr_get_embedded_stdlib(spec->canonical);
-        if (embedded) {
-            h = fold_bytes(h, embedded, strlen(embedded));
-        } else {
-            source = spec->source_path ? xr_file_read_all(spec->source_path, "rb", &len) : NULL;
-            if (source) {
-                h = fold_bytes(h, source, len);
-                xr_free(source);
-            }
-        }
+        h = fold_graph_module_source(h, (uint64_t) (ti + 1), &graph->specs[idx]);
     }
     return h;
+}
+
+static uint64_t source_hash_for_standalone_module(const XrModuleSpec *spec) {
+    return fold_graph_module_source(XR_FNV64_OFFSET_BASIS, 1, spec);
 }
 
 static uint64_t module_source_hash(const XrModuleSpec *spec) {
@@ -6393,21 +6402,45 @@ static uint64_t module_source_hash(const XrModuleSpec *spec) {
     return h ? h : 1;
 }
 
+XR_FUNC bool xg_module_summary_from_module_spec(XgModuleSummary *out_summary, XgModuleId module_id,
+                                                const XrModuleSpec *spec) {
+    const char *name;
+    if (!out_summary || !spec || module_id == XG_NO_ID)
+        return false;
+    memset(out_summary, 0, sizeof(*out_summary));
+    name = spec->canonical ? spec->canonical : spec->source_path;
+    out_summary->module_id = module_id;
+    out_summary->name_id = hash_name32(name ? name : "<memory-module>");
+    out_summary->canonical_hash = hash_text64(spec->canonical);
+    out_summary->source_hash = module_source_hash(spec);
+    out_summary->kind = (uint8_t) spec->kind;
+    out_summary->flags = spec->embedded_source ? XG_MODULE_EMBEDDED_SOURCE : 0;
+    return true;
+}
+
 static bool add_module_summary(XgGlobalEvidence *evidence, XgModuleId module_id,
                                const XrModuleSpec *spec) {
     XgModuleSummary row;
-    const char *name;
-    if (!evidence || !spec || module_id == XG_NO_ID)
+    if (!evidence || !xg_module_summary_from_module_spec(&row, module_id, spec))
         return false;
-    memset(&row, 0, sizeof(row));
-    name = spec->canonical ? spec->canonical : spec->source_path;
-    row.module_id = module_id;
-    row.name_id = hash_name32(name ? name : "<memory-module>");
-    row.canonical_hash = hash_text64(spec->canonical);
-    row.source_hash = module_source_hash(spec);
-    row.kind = (uint8_t) spec->kind;
-    row.flags = spec->embedded_source ? XG_MODULE_EMBEDDED_SOURCE : 0;
     return xg_global_evidence_add_module(evidence, &row) != NULL;
+}
+
+XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key, const XrModuleSpec *spec,
+                                                      uint32_t profile,
+                                                      uint64_t imported_summary_hash) {
+    XgBuildKey key;
+    if (!out_key || !spec)
+        return false;
+    memset(&key, 0, sizeof(key));
+    key.source_hash = source_hash_for_standalone_module(spec);
+    key.compiler_semver_hash = UINT64_C(0x0000017200000001);
+    key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
+    key.imported_summary_hash = imported_summary_hash;
+    key.module_id = 1;
+    key.profile = profile;
+    *out_key = key;
+    return true;
 }
 
 XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleGraph *graph,
