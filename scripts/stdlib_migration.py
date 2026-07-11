@@ -17,6 +17,7 @@ from stdlib_manifest import load_manifest, load_toml
 
 REQUIRED_EQUIVALENCE = {"value", "error", "effect", "complexity"}
 LEGACY_CLASSIFICATIONS = {"required", "bug", "accidental", "removed"}
+LEGACY_ORACLE_MODES = {"classification_only", "executable"}
 CONTRACT_ROOT = Path("tests/stdlib/contracts")
 
 
@@ -62,6 +63,17 @@ def validate_contract(root: Path, module: str) -> tuple[list[str], dict[str, Any
         stderr=subprocess.DEVNULL,
     ).returncode:
         errors.append(f"{path}: legacy_commit is not available in this repository: {legacy}")
+    legacy_oracle = str(contract.get("legacy_oracle", ""))
+    if legacy_oracle not in LEGACY_ORACLE_MODES:
+        errors.append(
+            f"{path}: legacy_oracle must be one of {', '.join(sorted(LEGACY_ORACLE_MODES))}"
+        )
+    if legacy_oracle == "executable":
+        legacy_manifest = contract.get("legacy_cases_manifest")
+        if not legacy_manifest or not (root / str(legacy_manifest)).is_file():
+            errors.append(
+                f"{path}: executable legacy oracle requires legacy_cases_manifest"
+            )
     equivalence = set(contract.get("equivalence", ()))
     if equivalence != REQUIRED_EQUIVALENCE:
         errors.append(
@@ -174,10 +186,15 @@ def main() -> int:
             print(str(exc), file=sys.stderr)
             return 1
         for module in modules:
-            print(f"== stdlib migration diff: {module} ==")
+            mode = contracts[module]["legacy_oracle"]
+            print(f"== stdlib backend convergence: {module} (legacy_oracle={mode}) ==")
             if run_diff(root, contracts[module], xray):
                 return 1
-    print(f"OK: {len(modules)} stdlib migration contract(s) verified")
+    executable = sum(1 for contract in contracts.values() if contract["legacy_oracle"] == "executable")
+    print(
+        f"OK: {len(modules)} stdlib contract(s) are consistent; "
+        f"{executable} have executable legacy oracles"
+    )
     return 0
 
 
