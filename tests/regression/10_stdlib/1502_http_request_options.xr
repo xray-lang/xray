@@ -29,6 +29,22 @@ fn capture_request_line(lst: NetListener, lines: Channel<string>) {
     net.close(lst)
 }
 
+fn capture_request_raw(lst: NetListener, requests: Channel<string>) {
+    var conn = net.accept(lst)
+    if (conn == null) {
+        requests.send("")
+        net.close(lst)
+        return
+    }
+
+    var raw = net.read(conn!, 4096) ?? ""
+    requests.send(raw)
+
+    net.write(conn!, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+    net.close(conn!)
+    net.close(lst)
+}
+
 fn serve_raw_response(lst: NetListener, response: string) {
     var conn = net.accept(lst)
     if (conn == null) {
@@ -105,6 +121,24 @@ fn test_request_preserves_custom_method_token() {
     var line = recv_line(lines)
     assert(resp.ok)
     assert_eq(line, "PROPFIND /custom HTTP/1.1")
+}
+
+@test
+fn test_request_defaults_identity_accept_encoding() {
+    var maybeLst = net.listen(0, 1)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    shared requests: Channel<string> = Channel(1)
+    go capture_request_raw(lst, requests)
+
+    var resp = http.request({
+        url: "http://127.0.0.1:" + string(lst.port()) + "/encoding"
+    })
+
+    var raw = recv_line(requests)
+    assert(resp.ok)
+    assert(raw.includes("\r\nAccept-Encoding: identity\r\n"))
+    assert(!raw.includes("Accept-Encoding: gzip, deflate"))
 }
 
 @test
