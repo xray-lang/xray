@@ -1,0 +1,13 @@
+import parallel
+
+class Options {
+    workers: int
+
+    constructor(workers: int) {
+        this.workers = workers
+    }
+}
+
+parallel.forEach(0..4, (i) -> {
+    print(i)
+}, Options(2))

@@ -4964,9 +4964,10 @@ static bool parallel_call_options_ctor_is_parallel(XiLower *l, AstNode *callee) 
     callee = parallel_call_unwrap_grouping(callee);
     if (!callee)
         return false;
-    if (callee->type == AST_VARIABLE && callee->as.variable.name &&
-        strcmp(callee->as.variable.name, "Options") == 0)
-        return true;
+    if (callee->type == AST_VARIABLE) {
+        const char *member = lower_call_callee_imported_member(l, callee, "parallel");
+        return member && strcmp(member, "Options") == 0;
+    }
     if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &callee->as.member_access;
         return ma->name && strcmp(ma->name, "Options") == 0 &&
