@@ -41,6 +41,25 @@ expect_output_workers() {
     fi
 }
 
+expect_output_workers_env() {
+    local name="$1"
+    local src="$2"
+    local expected="$3"
+    local workers="$4"
+    shift 4
+    local out="$WORK/$name.out"
+    local err="$WORK/$name.err"
+
+    if env "$@" "$XRAY" run --workers "$workers" "$src" >"$out" 2>"$err" &&
+        [ "$(cat "$out")" = "$expected" ] && [ ! -s "$err" ]; then
+        record_pass "$name output"
+    else
+        record_fail "$name output"
+        sed 's/^/      stdout: /' "$out" | sed -n '1,40p'
+        sed 's/^/      stderr: /' "$err" | sed -n '1,40p'
+    fi
+}
+
 printf '=== VM parallel Tests ===\n'
 printf 'Binary: %s\n\n' "$XRAY"
 
@@ -60,6 +79,19 @@ expect_output_workers \
     "$PROJECT_DIR/tests/vm/parallel_shadowing_no_intrinsic.xr" \
     "3" \
     1
+
+expect_output_workers_env \
+    "parallel_vm_deterministic_single_lane" \
+    "$PROJECT_DIR/tests/vm/parallel_vm_deterministic_single_lane.xr" \
+    $'true\n1' \
+    4 \
+    XRAY_CORO_DETERMINISTIC=1
+
+expect_output_workers \
+    "parallel_vm_small_range_single_lane" \
+    "$PROJECT_DIR/tests/vm/parallel_vm_small_range_single_lane.xr" \
+    $'1\n1' \
+    4
 
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
