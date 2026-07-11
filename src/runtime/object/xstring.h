@@ -203,6 +203,8 @@ XR_FUNC XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Intege
                                       xr_Integer end);
 XR_FUNC XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start,
                                   xr_Integer end);
+XR_FUNC XrString *xr_string_slice_bytes(XrVMRuntime *iso, XrString *str, xr_Integer start,
+                                        xr_Integer end);
 XR_FUNC xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr);
 XR_FUNC xr_Integer xr_string_index_of_from(XrVMRuntime *iso, XrString *str, XrString *substr,
                                            xr_Integer start);

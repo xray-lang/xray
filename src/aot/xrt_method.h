@@ -548,6 +548,12 @@ static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
     return sv;
 }
 
+static inline bool xrt_str_byte_boundary(const char *s, int64_t slen, int64_t offset) {
+    if (!s || offset < 0 || offset > slen)
+        return false;
+    return offset == 0 || offset == slen || (((unsigned char) s[offset] & 0xC0u) != 0x80u);
+}
+
 typedef struct XrtStringSplitCtx {
     XrValue array;
 } XrtStringSplitCtx;
@@ -709,6 +715,10 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     /* Static string constructors do not depend on the runtime class value. */
     if (sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY)
         return xrt_str_method_1("", 0, XR_NULL_VAL, sym, arg0);
+    if (sym == XRT_SYM_FROM_RUNE && XR_IS_RUNE(arg0))
+        return xrt_rune_to_string(XR_TO_RUNE(arg0));
+    if (sym == XRT_SYM_JOIN && XR_IS_ARRAY(arg0))
+        return xrt_method_1(arg0, XRT_SYM_JOIN, xrt_str_alloc(0));
     if (recv.tag == XR_TAG_ITERATOR && sym == XRT_SYM_NTH && arg0.tag == XR_TAG_I64) {
         xrt_iterator_t *it = (xrt_iterator_t *) recv.ptr;
         if (arg0.i < 0)
@@ -921,6 +931,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
+    if (sym == XRT_SYM_JOIN && XR_IS_ARRAY(arg0) && XR_IS_STR(arg1))
+        return xrt_method_1(arg0, XRT_SYM_JOIN, arg1);
     if (XR_IS_STR(recv) && sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0) && arg1.tag == XR_TAG_I64) {
         return XR_FROM_INT((int64_t) xr_string_core_index_of_from(
             xr_str_data(recv), (size_t) xr_str_len(recv), xr_str_data(arg0),
@@ -936,6 +948,23 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "string.slice rune range out of bounds");
         XrStringCoreSlice slice = xr_string_core_range_slice(s, slen, start, end);
         return xrt_str_from_core_slice(slice);
+    }
+    if (XR_IS_STR(recv) && sym == XRT_SYM_SLICE_BYTES) {
+        const char *s = xr_str_data(recv);
+        int64_t slen = xr_str_len(recv);
+        int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
+        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : slen;
+        if (start < 0 || end < start || end > slen || !xrt_str_byte_boundary(s, slen, start) ||
+            !xrt_str_byte_boundary(s, slen, end)) {
+            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                            "string.sliceBytes byte range out of bounds or not on UTF-8 scalar "
+                            "boundaries");
+        }
+        XrValue out = xrt_str_alloc((size_t) (end - start));
+        if (end > start)
+            memcpy(xr_str_buf(out), s + start, (size_t) (end - start));
+        xr_str_buf(out)[end - start] = 0;
+        return out;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
