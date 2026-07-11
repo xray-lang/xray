@@ -7,10 +7,13 @@
 import { encode, decodeForm, parse as parseUrl, resolve as resolveUrl } from url
 import crypto
 import io
+import net
 import time
 
 const COOKIE_MAX_INPUT_LEN = 8192
 const COOKIE_SECONDS_PER_DAY = 86400
+const HTTP_DEFAULT_TIMEOUT_MS = 30000
+const HTTP_MAX_RESPONSE_BYTES = 104857600
 
 fn _floorDiv(a: int, b: int) -> int {
     var q = a / b
@@ -1030,6 +1033,305 @@ fn _sameOrigin(a: string, b: string) -> bool {
            _originPort(a) == _originPort(b)
 }
 
+class _HttpRequestUrl {
+    scheme: string
+    host: string
+    port: int
+    path: string
+    isHttps: bool
+
+    constructor(scheme: string, host: string, port: int, path: string, isHttps: bool) {
+        this.scheme = scheme
+        this.host = host
+        this.port = port
+        this.path = path
+        this.isHttps = isHttps
+    }
+}
+
+class HttpResponse {
+    status: int
+    statusText: string
+    headers: Json
+    body: string
+    error: string?
+    ok: bool
+
+    constructor(status: int, statusText: string, headers: Json, body: string, error: string?) {
+        this.status = status
+        this.statusText = statusText
+        this.headers = headers
+        this.body = body
+        this.error = error
+        this.ok = error == null && status >= 200 && status < 300
+    }
+}
+
+fn _httpResponse(status: int, statusText: string, headers: Json, body: string,
+                 error: string?) -> HttpResponse {
+    return HttpResponse(status, statusText, headers, body, error)
+}
+
+fn _httpError(error: string) -> HttpResponse {
+    var headers: Json = {}
+    return HttpResponse(0, "", headers, "", error)
+}
+
+fn _firstAuthorityEnd(raw: string, start: int) -> int {
+    var i = start
+    while (i < raw.length) {
+        var ch = raw.charAt(i)
+        if (ch == "/" || ch == "?" || ch == "#") { return i }
+        i = i + 1
+    }
+    return raw.length
+}
+
+fn _findCharBefore(raw: string, needle: string, start: int, end: int) -> int {
+    var i = start
+    while (i < end) {
+        if (raw.charAt(i) == needle) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+fn _parsePortStrict(raw: string) -> int? {
+    if (raw.length == 0 || raw.length > 5) { return null }
+    var port = 0
+    for (var i = 0; i < raw.length; i++) {
+        var c = raw.charAt(i).ord()!
+        if (c < 48 || c > 57) { return null }
+        port = port * 10 + (c - 48)
+    }
+    if (port <= 0 || port > 65535) { return null }
+    return port
+}
+
+fn _httpPathFrom(raw: string, pos: int) -> string {
+    var path = "/"
+    if (pos < raw.length) {
+        path = raw.slice(pos)
+        var hash = path.indexOf("#")
+        if (hash >= 0) { path = path.slice(0, hash) }
+        if (path.length == 0) {
+            path = "/"
+        } else if (path.charAt(0) == "?") {
+            path = "/" + path
+        }
+    }
+    return path
+}
+
+fn _parseHttpRequestUrl(rawUrl: string) -> _HttpRequestUrl? {
+    var raw = rawUrl.trim()
+    if (raw.length == 0) { return null }
+
+    var scheme = "http"
+    var isHttps = false
+    var port = 80
+    var pos = 0
+    var schemeEnd = raw.indexOf("://")
+    if (schemeEnd >= 0) {
+        scheme = raw.slice(0, schemeEnd).toLowerCase()
+        if (scheme != "http" && scheme != "https") { return null }
+        isHttps = scheme == "https"
+        port = isHttps ? 443 : 80
+        pos = schemeEnd + 3
+    }
+
+    var authorityEnd = _firstAuthorityEnd(raw, pos)
+    if (_findCharBefore(raw, "@", pos, authorityEnd) >= 0) { return null }
+
+    var host = ""
+    var rawPort = ""
+    if (pos < authorityEnd && raw.charAt(pos) == "[") {
+        var close = _findCharBefore(raw, "]", pos + 1, authorityEnd)
+        if (close < 0) { return null }
+        host = raw.slice(pos + 1, close)
+        pos = close + 1
+        if (pos < authorityEnd) {
+            if (raw.charAt(pos) != ":") { return null }
+            rawPort = raw.slice(pos + 1, authorityEnd)
+        }
+    } else {
+        var colon = _findCharBefore(raw, ":", pos, authorityEnd)
+        if (colon >= 0) {
+            host = raw.slice(pos, colon)
+            rawPort = raw.slice(colon + 1, authorityEnd)
+        } else {
+            host = raw.slice(pos, authorityEnd)
+        }
+        if (host.indexOf(":") >= 0) { return null }
+    }
+
+    if (host.length == 0) { return null }
+    if (_hasCtlOr(host, " /\r\n")) { return null }
+
+    if (rawPort.length > 0) {
+        var parsedPort = _parsePortStrict(rawPort)
+        if (parsedPort == null) { return null }
+        port = parsedPort!
+    }
+
+    return _HttpRequestUrl(scheme, host, port, _httpPathFrom(raw, authorityEnd), isHttps)
+}
+
+fn _httpRequestHostHeader(url: _HttpRequestUrl) -> string {
+    var host = url.host
+    if (host.indexOf(":") >= 0 && !host.startsWith("[")) {
+        host = "[" + host + "]"
+    }
+    var defaultPort = (!url.isHttps && url.port == 80) || (url.isHttps && url.port == 443)
+    if (!defaultPort) { host = host + ":" + string(url.port) }
+    return host
+}
+
+fn _httpRequestUrlText(url: _HttpRequestUrl) -> string {
+    return url.scheme + "://" + _httpRequestHostHeader(url) + url.path
+}
+
+fn _requestTimeout(options: Json) -> int {
+    var raw = Json.get(options, "timeout", null)
+    if (raw == null || typename(raw) != "int") { return HTTP_DEFAULT_TIMEOUT_MS }
+    var t = int(raw)
+    if (t <= 0) { return HTTP_DEFAULT_TIMEOUT_MS }
+    return t
+}
+
+fn _requestMaxRedirects(options: Json) -> int {
+    var raw = Json.get(options, "maxRedirects", null)
+    if (raw == null || typename(raw) != "int") { return 5 }
+    var n = int(raw)
+    if (n < 0) { return 0 }
+    return n
+}
+
+fn _requestFollowRedirects(options: Json) -> bool {
+    var raw = Json.get(options, "followRedirects", null)
+    if (raw == null || typename(raw) != "bool") { return true }
+    return bool(raw)
+}
+
+fn _requestBody(options: Json) -> string {
+    var raw = Json.get(options, "body", null)
+    if (raw == null) { return "" }
+    return string(raw)
+}
+
+fn _requestHeaders(options: Json) -> Json {
+    var raw = Json.get(options, "headers", null)
+    if (raw == null) { return null }
+    return raw
+}
+
+fn _headersLocation(headers: Json) -> string? {
+    if (headers == null) { return null }
+    for (key in headers) {
+        var name = string(key)
+        if (_headerKeyEquals(name, "Location")) {
+            var value = Json.get(headers, name, null)
+            if (value == null) { return null }
+            return string(value)
+        }
+    }
+    return null
+}
+
+fn _readHttpResponse(conn: NetConn, method: string) -> ResponseMessage? {
+    var raw = ""
+    var closeDelimited = false
+    while (raw.byteLength <= HTTP_MAX_RESPONSE_BYTES) {
+        var chunk = net.read(conn, 8192)
+        if (chunk == null) {
+            break
+        }
+        raw = raw + chunk!
+
+        var head = parseResponseHead(raw)
+        if (head == null) { continue }
+        var noBody = !_responseAllowsBody(head!.status) || method == "HEAD"
+        closeDelimited = !noBody && !head!.chunked && head!.contentLength < 0 && !head!.keepAlive
+        if (closeDelimited) { continue }
+
+        var parsed = parseResponseText(raw)
+        if (parsed != null) { return parsed! }
+    }
+    if (closeDelimited) {
+        return parseResponseText(raw)
+    }
+    return null
+}
+
+fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Json, body: string,
+                  timeoutMs: int, stripSensitive: bool) -> HttpResponse {
+    var conn = url.isHttps ? net.dialTLS(url.host, url.port, timeoutMs) :
+                             net.dial(url.host, url.port, timeoutMs)
+    if (conn == null) { return _httpError("Connection failed") }
+
+    var deadline = time.monotonic() + timeoutMs
+    net.setDeadline(conn!, deadline)
+
+    var request = requestText(method, url.path, headers, body, _httpRequestHostHeader(url),
+                              stripSensitive)
+    if (request == null) {
+        net.close(conn!)
+        return _httpError("Protocol parse error")
+    }
+
+    if (net.write(conn!, request!) != request!.byteLength) {
+        net.close(conn!)
+        return _httpError("Write failed")
+    }
+
+    var msg = _readHttpResponse(conn!, method)
+    net.close(conn!)
+    if (msg == null) { return _httpError("Protocol parse error") }
+    return _httpResponse(msg!.head.status, msg!.head.reason, msg!.head.headers, msg!.body, null)
+}
+
+fn request(options: Json) -> HttpResponse {
+    var rawUrl = Json.get(options, "url", null)
+    if (rawUrl == null) { return _httpError("URL parse error") }
+    var current = _parseHttpRequestUrl(string(rawUrl))
+    if (current == null) { return _httpError("URL parse error") }
+
+    var rawMethod = Json.get(options, "method", "GET")
+    var method = _requestMethod(string(rawMethod))
+    if (method == null) { return _httpError("Protocol parse error") }
+
+    var headers = _requestHeaders(options)
+    var body = _requestBody(options)
+    var timeoutMs = _requestTimeout(options)
+    var followRedirects = _requestFollowRedirects(options)
+    var maxRedirects = _requestMaxRedirects(options)
+    var redirects = 0
+    var stripSensitive = false
+
+    while (true) {
+        var response = _singleRequest(current!, method!, headers, body, timeoutMs, stripSensitive)
+        if (!followRedirects || !isRedirectStatus(response.status) || redirects >= maxRedirects) {
+            return response
+        }
+
+        var location = _headersLocation(response.headers)
+        if (location == null) { return response }
+        var next = redirectDecision(response.status, _httpRequestUrlText(current!), location!,
+                                    method!, stripSensitive)
+        if (next == null) { return response }
+
+        var nextUrl = _parseHttpRequestUrl(next!.url)
+        if (nextUrl == null) { return _httpError("URL parse error") }
+
+        current = nextUrl
+        method = next!.method
+        stripSensitive = next!.stripSensitiveHeaders
+        if (next!.dropBody) { body = "" }
+        redirects = redirects + 1
+    }
+    return _httpError("URL parse error")
+}
+
 // ResponseHead - Parsed HTTP/1.x response status line and headers.
 class ResponseHead {
     version: string
@@ -1690,6 +1992,7 @@ export {
     cookieJar,
     Router,
     RouteMatch,
+    HttpResponse,
     ResponseHead,
     RedirectDecision,
     ChunkedBody,
@@ -1700,6 +2003,7 @@ export {
     urlEncode,
     urlDecode,
     responseText,
+    request,
     requestText,
     parseResponseHead,
     parseRequestHead,

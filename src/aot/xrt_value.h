@@ -148,27 +148,29 @@ typedef struct XrValue {
 #define XR_TAG_NOTFOUND 7 /* sentinel: map lookup miss */
 
 /* AOT extensions — object type encoded in tag (no object header available) */
-#define XR_TAG_STR 14         /* static / literal string (const char*) */
-#define XR_TAG_ARRAY 15       /* AOT array */
-#define XR_TAG_MAP 16         /* AOT map */
-#define XR_TAG_STRBUF 17      /* AOT string builder */
-#define XR_TAG_CLOSURE 18     /* AOT closure */
-#define XR_TAG_STR_ARC 19     /* bump-allocated string */
-#define XR_TAG_CELL 20        /* AOT mutable closure cell */
-#define XR_TAG_TUPLE 21       /* AOT tuple */
-#define XR_TAG_SET 22         /* AOT set */
-#define XR_TAG_RANGE 23       /* AOT range */
-#define XR_TAG_ENUM 24        /* AOT bridged enum key */
-#define XR_TAG_ITERATOR 25    /* AOT map/set iterator (for-in over the iterator protocol) */
-#define XR_TAG_REGEX 26       /* AOT compiled regex handle */
-#define XR_TAG_SYS_MUTEX 28   /* AOT sys.Mutex OS-domain handle */
-#define XR_TAG_SYS_RWLOCK 29  /* AOT sys.RwLock OS-domain handle */
-#define XR_TAG_SYS_CONDVAR 30 /* AOT sys.Condvar OS-domain handle */
-#define XR_TAG_SYS_BARRIER 31 /* AOT sys.Barrier OS-domain handle */
-#define XR_TAG_SYS_ONCE 32    /* AOT sys.Once OS-domain handle */
-#define XR_TAG_THREAD 33      /* AOT Thread<T> OS-thread handle */
-#define XR_TAG_BUFFER 34      /* AOT mem.Buffer managed byte allocation */
-#define XR_TAG_BIGINT 35      /* AOT static BigInt literal view */
+#define XR_TAG_STR 14          /* static / literal string (const char*) */
+#define XR_TAG_ARRAY 15        /* AOT array */
+#define XR_TAG_MAP 16          /* AOT map */
+#define XR_TAG_STRBUF 17       /* AOT string builder */
+#define XR_TAG_CLOSURE 18      /* AOT closure */
+#define XR_TAG_STR_ARC 19      /* bump-allocated string */
+#define XR_TAG_CELL 20         /* AOT mutable closure cell */
+#define XR_TAG_TUPLE 21        /* AOT tuple */
+#define XR_TAG_SET 22          /* AOT set */
+#define XR_TAG_RANGE 23        /* AOT range */
+#define XR_TAG_ENUM 24         /* AOT bridged enum key */
+#define XR_TAG_ITERATOR 25     /* AOT map/set iterator (for-in over the iterator protocol) */
+#define XR_TAG_REGEX 26        /* AOT compiled regex handle */
+#define XR_TAG_SYS_MUTEX 28    /* AOT sys.Mutex OS-domain handle */
+#define XR_TAG_SYS_RWLOCK 29   /* AOT sys.RwLock OS-domain handle */
+#define XR_TAG_SYS_CONDVAR 30  /* AOT sys.Condvar OS-domain handle */
+#define XR_TAG_SYS_BARRIER 31  /* AOT sys.Barrier OS-domain handle */
+#define XR_TAG_SYS_ONCE 32     /* AOT sys.Once OS-domain handle */
+#define XR_TAG_THREAD 33       /* AOT Thread<T> OS-thread handle */
+#define XR_TAG_BUFFER 34       /* AOT mem.Buffer managed byte allocation */
+#define XR_TAG_BIGINT 35       /* AOT static BigInt literal view */
+#define XR_TAG_NET_CONN 36     /* AOT net.NetConn TCP handle */
+#define XR_TAG_NET_LISTENER 37 /* AOT net.NetListener TCP handle */
 
 typedef struct XrAotEnumBox {
     uint64_t gc_words[2];

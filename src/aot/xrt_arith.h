@@ -462,6 +462,8 @@ static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_json, "Json");
     XRT_STR_LIT_DEF(xs_record, "Record");
     XRT_STR_LIT_DEF(xs_bigint, "BigInt");
+    XRT_STR_LIT_DEF(xs_net_conn, "NetConn");
+    XRT_STR_LIT_DEF(xs_net_listener, "NetListener");
     XRT_STR_LIT_DEF(xs_object, "object");
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
@@ -503,6 +505,10 @@ static inline XrValue xrt_typename(XrValue v) {
         }
         case XR_TAG_BIGINT:
             return xr_str_lit(&xs_bigint);
+        case XR_TAG_NET_CONN:
+            return xr_str_lit(&xs_net_conn);
+        case XR_TAG_NET_LISTENER:
+            return xr_str_lit(&xs_net_listener);
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
                 const xrt_json_t *obj = (const xrt_json_t *) v.ptr;

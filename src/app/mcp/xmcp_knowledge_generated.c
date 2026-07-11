@@ -885,37 +885,42 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpResponse",
         .signature = "HttpResponse",
-        .summary = "Native handle type",
+        .summary = "",
     },
     {
         .name = "HttpResponse.body",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.constructor",
+        .signature = "(status: int, statusText: string, headers: Json, body: string, error: string?): ()",
+        .summary = "",
     },
     {
         .name = "HttpResponse.error",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string?",
+        .summary = "",
     },
     {
         .name = "HttpResponse.headers",
-        .signature = "const Json",
-        .summary = "Handle field",
+        .signature = ": Json",
+        .summary = "",
     },
     {
         .name = "HttpResponse.ok",
-        .signature = "const bool",
-        .summary = "Handle field",
+        .signature = ": bool",
+        .summary = "",
     },
     {
         .name = "HttpResponse.status",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "HttpResponse.statusText",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "MultipartBody",
@@ -1290,7 +1295,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "request",
         .signature = "(options: Json): HttpResponse",
-        .summary = "Generic HTTP request",
+        .summary = "",
     },
     {
         .name = "requestText",
@@ -5414,13 +5419,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpRequest.params` | `const Json` | Handle field |\n"
             "| `http.HttpRequest.path` | `const string` | Handle field |\n"
             "| `http.HttpRequest.query` | `const Json` | Handle field |\n"
-            "| `http.HttpResponse` | `HttpResponse` | Native handle type |\n"
-            "| `http.HttpResponse.body` | `const string` | Handle field |\n"
-            "| `http.HttpResponse.error` | `const string` | Handle field |\n"
-            "| `http.HttpResponse.headers` | `const Json` | Handle field |\n"
-            "| `http.HttpResponse.ok` | `const bool` | Handle field |\n"
-            "| `http.HttpResponse.status` | `const int` | Handle field |\n"
-            "| `http.HttpResponse.statusText` | `const string` | Handle field |\n"
+            "| `HttpResponse` | `HttpResponse` |  |\n"
+            "| `HttpResponse.body` | `: string` |  |\n"
+            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Json, body: string, error: string?): ()` |  |\n"
+            "| `HttpResponse.error` | `: string?` |  |\n"
+            "| `HttpResponse.headers` | `: Json` |  |\n"
+            "| `HttpResponse.ok` | `: bool` |  |\n"
+            "| `HttpResponse.status` | `: int` |  |\n"
+            "| `HttpResponse.statusText` | `: string` |  |\n"
             "| `MultipartBody` | `MultipartBody` |  |\n"
             "| `MultipartBody.body` | `: string` |  |\n"
             "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
@@ -5495,7 +5501,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
-            "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
+            "| `http.request` | `(options: Json): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"

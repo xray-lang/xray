@@ -12,6 +12,7 @@
  *     L0  xr_hash_core.h - content hash primitives (shared with xi_cgen)
  *     L0  xrt_value.h   - tags, boxing/unboxing, source-level aliases, XrtContext
  *     L1  xrt_arc.h     - bump allocator, str_alloc/str_concat
+ *     L1  xrt_net.h     - hosted TCP handle helpers
  *     L1  xrt_range.h   - lazy Range value
  *     L2  xrt_coll.h    - Array, Map, Json, StringBuilder, Closure, index ops
  *     L2  xrt_compress.h - freestanding checksum helpers
@@ -36,6 +37,7 @@
 
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
+#include "xrt_net.h"        // L1: hosted TCP handle helpers
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
 #include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print
