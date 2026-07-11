@@ -25,6 +25,7 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xinstance.h"
 #include "../base/xdynarray.h"
 #include <limits.h>
@@ -246,6 +247,7 @@ static char *bc_get_string(BcReader *r) {
 #define BC_VAL_FLOAT 3
 #define BC_VAL_STRING 4
 #define BC_VAL_DYNAMIC_SHAPE 5
+#define BC_VAL_CLASS_DESCRIPTOR 6
 
 #define BC_SHAPE_JSON 1
 #define BC_SHAPE_RECORD 2
@@ -283,7 +285,132 @@ static bool bc_write_dynamic_shape(BcWriter *w, XrValue val) {
     return true;
 }
 
-static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape) {
+static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
+                           bool as_class_descriptor);
+static XrValue bc_read_value(BcReader *r);
+
+static bool bc_put_optional_string(BcWriter *w, const char *str) {
+    return bc_put_string(w, str ? str : "");
+}
+
+static bool bc_write_field_descriptor(BcWriter *w, const XrFieldDescriptorEntry *field) {
+    if (!field)
+        return false;
+    if (!bc_put_optional_string(w, field->name))
+        return false;
+    if (!bc_put_optional_string(w, field->type_name))
+        return false;
+    if (!bc_write_value(w, field->default_value, false, false))
+        return false;
+    return bc_put_u16(w, field->flags);
+}
+
+static bool bc_write_method_descriptor(BcWriter *w, const XrMethodDescriptorEntry *method) {
+    if (!method)
+        return false;
+    if (!bc_put_optional_string(w, method->name))
+        return false;
+    if (!bc_put_u32(w, method->closure_index))
+        return false;
+    if (!bc_put_optional_string(w, method->return_type_name))
+        return false;
+    if (!bc_put_u8(w, method->param_count))
+        return false;
+    for (uint8_t i = 0; i < method->param_count; i++) {
+        const char *param_type = method->param_type_names ? method->param_type_names[i] : NULL;
+        if (!bc_put_optional_string(w, param_type))
+            return false;
+    }
+    if (!bc_put_u16(w, method->flags))
+        return false;
+    if (!bc_put_u8(w, method->op_type))
+        return false;
+    return bc_put_u8(w, method->is_operator ? 1 : 0);
+}
+
+static bool bc_write_class_descriptor(BcWriter *w, XrValue val) {
+    if (!XR_IS_PTR(val) || !XR_TO_PTR(val))
+        return false;
+
+    const XrClassDescriptor *desc = (const XrClassDescriptor *) XR_TO_PTR(val);
+    if (desc->struct_layout) {
+        // Struct/native body layouts are not portable bytecode metadata yet.
+        return false;
+    }
+
+    if (!bc_put_u8(w, BC_VAL_CLASS_DESCRIPTOR))
+        return false;
+    if (!bc_put_optional_string(w, desc->class_name))
+        return false;
+    if (!bc_put_optional_string(w, desc->super_name))
+        return false;
+    if (!bc_put_optional_string(w, desc->generic_origin_name))
+        return false;
+    if (!bc_put_optional_string(w, desc->display_name))
+        return false;
+    if (desc->mono_type_arg_count < 0 || desc->mono_type_arg_count > UINT16_MAX)
+        return false;
+    if (!bc_put_u32(w, (uint32_t) desc->mono_type_arg_count))
+        return false;
+    for (int i = 0; i < desc->mono_type_arg_count; i++) {
+        const char *name = desc->mono_type_arg_names ? desc->mono_type_arg_names[i] : NULL;
+        if (!bc_put_optional_string(w, name))
+            return false;
+    }
+    if (!bc_put_u32(w, (uint32_t) desc->super_global_index))
+        return false;
+    if (!bc_put_u32(w, desc->flags))
+        return false;
+    if (!bc_put_u8(w, desc->is_monomorphized ? 1 : 0))
+        return false;
+
+    if (!bc_put_u32(w, desc->instance_field_count))
+        return false;
+    for (uint32_t i = 0; i < desc->instance_field_count; i++) {
+        if (!bc_write_field_descriptor(w, &desc->instance_fields[i]))
+            return false;
+    }
+
+    if (!bc_put_u32(w, desc->static_field_count))
+        return false;
+    for (uint32_t i = 0; i < desc->static_field_count; i++) {
+        if (!bc_write_field_descriptor(w, &desc->static_fields[i]))
+            return false;
+    }
+
+    if (!bc_put_u32(w, desc->instance_method_count))
+        return false;
+    for (uint32_t i = 0; i < desc->instance_method_count; i++) {
+        if (!bc_write_method_descriptor(w, &desc->instance_methods[i]))
+            return false;
+    }
+
+    if (!bc_put_u32(w, desc->static_method_count))
+        return false;
+    for (uint32_t i = 0; i < desc->static_method_count; i++) {
+        if (!bc_write_method_descriptor(w, &desc->static_methods[i]))
+            return false;
+    }
+
+    if (!bc_put_u8(w, desc->interface_count))
+        return false;
+    for (uint8_t i = 0; i < desc->interface_count; i++) {
+        const char *name = desc->interfaces ? desc->interfaces[i].interface_name : NULL;
+        if (!bc_put_optional_string(w, name))
+            return false;
+    }
+
+    if (!bc_put_u32(w, (uint32_t) desc->clinit_proto_index))
+        return false;
+    if (!bc_put_u32(w, desc->descriptor_version))
+        return false;
+    return bc_put_u32(w, desc->checksum);
+}
+
+static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
+                           bool as_class_descriptor) {
+    if (as_class_descriptor)
+        return bc_write_class_descriptor(w, val);
     if (as_dynamic_shape)
         return bc_write_dynamic_shape(w, val);
 
@@ -309,6 +436,182 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape) {
     }
     // Other types not supported yet
     return bc_put_u8(w, BC_VAL_NULL);
+}
+
+static char *bc_read_string_or_empty(BcReader *r) {
+    char *str = bc_get_string(r);
+    if (r->error != XR_BC_OK)
+        return NULL;
+    if (str)
+        return str;
+    str = xr_strdup("");
+    if (!str)
+        r->error = XR_BC_ERR_ALLOC;
+    return str;
+}
+
+static char *bc_read_optional_string(BcReader *r) {
+    char *str = bc_get_string(r);
+    if (r->error != XR_BC_OK)
+        return NULL;
+    return str;
+}
+
+static bool bc_read_field_descriptor(BcReader *r, XrFieldDescriptorEntry *field) {
+    if (!field)
+        return false;
+    field->name = bc_read_string_or_empty(r);
+    field->type_name = bc_read_optional_string(r);
+    field->default_value = bc_read_value(r);
+    field->flags = bc_get_u16(r);
+    return r->error == XR_BC_OK;
+}
+
+static bool bc_read_method_descriptor(BcReader *r, XrMethodDescriptorEntry *method) {
+    if (!method)
+        return false;
+    method->name = bc_read_string_or_empty(r);
+    method->closure_index = bc_get_u32(r);
+    method->return_type_name = bc_read_optional_string(r);
+    method->param_count = bc_get_u8(r);
+    if (r->error != XR_BC_OK)
+        return false;
+    if (method->param_count > 0) {
+        const char **params = xr_calloc(method->param_count, sizeof(char *));
+        if (!params) {
+            r->error = XR_BC_ERR_ALLOC;
+            return false;
+        }
+        for (uint8_t i = 0; i < method->param_count; i++) {
+            params[i] = bc_read_optional_string(r);
+            if (r->error != XR_BC_OK)
+                return false;
+        }
+        method->param_type_names = params;
+    }
+    method->flags = bc_get_u16(r);
+    method->op_type = bc_get_u8(r);
+    method->is_operator = bc_get_u8(r) != 0;
+    return r->error == XR_BC_OK;
+}
+
+static XrValue bc_read_class_descriptor(BcReader *r) {
+    XrClassDescriptor *desc = xr_calloc(1, sizeof(XrClassDescriptor));
+    if (!desc) {
+        r->error = XR_BC_ERR_ALLOC;
+        return xr_null();
+    }
+
+    desc->class_name = bc_read_string_or_empty(r);
+    desc->super_name = bc_read_optional_string(r);
+    desc->generic_origin_name = bc_read_optional_string(r);
+    desc->display_name = bc_read_optional_string(r);
+    uint32_t mono_count = bc_get_u32(r);
+    if (r->error != XR_BC_OK)
+        return xr_null();
+    if (mono_count > UINT16_MAX) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return xr_null();
+    }
+    desc->mono_type_arg_count = (int) mono_count;
+    if (mono_count > 0) {
+        const char **names = xr_calloc(mono_count, sizeof(char *));
+        if (!names) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        for (uint32_t i = 0; i < mono_count; i++) {
+            names[i] = bc_read_optional_string(r);
+            if (r->error != XR_BC_OK)
+                return xr_null();
+        }
+        desc->mono_type_arg_names = names;
+    }
+    desc->super_global_index = (int32_t) bc_get_u32(r);
+    desc->flags = bc_get_u32(r);
+    desc->is_monomorphized = bc_get_u8(r) != 0;
+
+    desc->instance_field_count = bc_get_u32(r);
+    if (desc->instance_field_count > 0) {
+        desc->instance_fields =
+            xr_calloc(desc->instance_field_count, sizeof(XrFieldDescriptorEntry));
+        if (!desc->instance_fields) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        for (uint32_t i = 0; i < desc->instance_field_count; i++) {
+            if (!bc_read_field_descriptor(r, &desc->instance_fields[i]))
+                return xr_null();
+        }
+    }
+
+    desc->static_field_count = bc_get_u32(r);
+    if (desc->static_field_count > 0) {
+        desc->static_fields = xr_calloc(desc->static_field_count, sizeof(XrFieldDescriptorEntry));
+        if (!desc->static_fields) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        for (uint32_t i = 0; i < desc->static_field_count; i++) {
+            if (!bc_read_field_descriptor(r, &desc->static_fields[i]))
+                return xr_null();
+        }
+    }
+
+    desc->instance_method_count = bc_get_u32(r);
+    if (desc->instance_method_count > 0) {
+        desc->instance_methods =
+            xr_calloc(desc->instance_method_count, sizeof(XrMethodDescriptorEntry));
+        if (!desc->instance_methods) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        for (uint32_t i = 0; i < desc->instance_method_count; i++) {
+            if (!bc_read_method_descriptor(r, &desc->instance_methods[i]))
+                return xr_null();
+        }
+    }
+
+    desc->static_method_count = bc_get_u32(r);
+    if (desc->static_method_count > 0) {
+        desc->static_methods =
+            xr_calloc(desc->static_method_count, sizeof(XrMethodDescriptorEntry));
+        if (!desc->static_methods) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        for (uint32_t i = 0; i < desc->static_method_count; i++) {
+            if (!bc_read_method_descriptor(r, &desc->static_methods[i]))
+                return xr_null();
+        }
+    }
+
+    desc->interface_count = bc_get_u8(r);
+    if (desc->interface_count > 0) {
+        desc->interfaces = xr_calloc(desc->interface_count, sizeof(XrInterfaceDescriptorEntry));
+        if (!desc->interfaces) {
+            r->error = XR_BC_ERR_ALLOC;
+            return xr_null();
+        }
+        for (uint8_t i = 0; i < desc->interface_count; i++) {
+            desc->interfaces[i].interface_name = bc_read_optional_string(r);
+            desc->interfaces[i].interface_ptr = NULL;
+            if (r->error != XR_BC_OK)
+                return xr_null();
+        }
+    }
+
+    desc->clinit_proto_index = (int32_t) bc_get_u32(r);
+    desc->descriptor_version = bc_get_u32(r);
+    desc->checksum = bc_get_u32(r);
+    if (r->error != XR_BC_OK)
+        return xr_null();
+
+    XrValue val = {0};
+    val.tag = XR_TAG_PTR;
+    val.ptr = desc;
+    val.heap_type = 0;
+    return val;
 }
 
 static XrValue bc_read_dynamic_shape(BcReader *r) {
@@ -396,6 +699,8 @@ static XrValue bc_read_value(BcReader *r) {
         }
         case BC_VAL_DYNAMIC_SHAPE:
             return bc_read_dynamic_shape(r);
+        case BC_VAL_CLASS_DESCRIPTOR:
+            return bc_read_class_descriptor(r);
         default:
             r->error = XR_BC_ERR_CORRUPT;
             return xr_null();
@@ -511,6 +816,26 @@ static bool *bc_collect_dynamic_shape_constants(XrProto *proto, uint32_t const_c
     return shape_consts;
 }
 
+static bool *bc_collect_class_descriptor_constants(XrProto *proto, uint32_t const_count) {
+    if (const_count == 0)
+        return NULL;
+
+    bool *class_consts = xr_calloc(const_count, sizeof(bool));
+    if (!class_consts)
+        return NULL;
+
+    uint32_t code_count = (uint32_t) PROTO_CODE_COUNT(proto);
+    for (uint32_t i = 0; i < code_count; i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) != OP_CLASS_CREATE_FROM_DESCRIPTOR)
+            continue;
+        int kidx = GETARG_Bx(inst);
+        if (kidx >= 0 && (uint32_t) kidx < const_count)
+            class_consts[kidx] = true;
+    }
+    return class_consts;
+}
+
 static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!proto)
         return false;
@@ -595,16 +920,22 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!bc_put_u32(w, const_count))
         return false;
     bool *shape_consts = bc_collect_dynamic_shape_constants(proto, const_count);
-    if (const_count > 0 && !shape_consts)
+    bool *class_consts = bc_collect_class_descriptor_constants(proto, const_count);
+    if (const_count > 0 && (!shape_consts || !class_consts)) {
+        xr_free(shape_consts);
+        xr_free(class_consts);
         return false;
+    }
     for (uint32_t i = 0; i < const_count; i++) {
         XrValue val = PROTO_CONSTANT(proto, i);
-        if (!bc_write_value(w, val, shape_consts[i])) {
+        if (!bc_write_value(w, val, shape_consts[i], class_consts[i])) {
             xr_free(shape_consts);
+            xr_free(class_consts);
             return false;
         }
     }
     xr_free(shape_consts);
+    xr_free(class_consts);
 
     // 6. Line info (optional)
     if (w->flags & XR_BC_STRIP_DEBUG) {

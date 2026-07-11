@@ -3,9 +3,11 @@ set -euo pipefail
 
 RUNNER="${1:-}"
 ARCHIVE="${2:-}"
+BYTECODE="${3:-}"
+EXPECTED="${4:-}"
 
-if [ -z "$RUNNER" ] || [ -z "$ARCHIVE" ]; then
-    echo "usage: $0 <bytecode-embed-runner> <libxray_vm_runtime.a>" >&2
+if [ -z "$RUNNER" ] || [ -z "$ARCHIVE" ] || [ -z "$BYTECODE" ] || [ -z "$EXPECTED" ]; then
+    echo "usage: $0 <bytecode-embed-runner> <libxray_vm_runtime.a> <bytecode.xrc> <expected-line>" >&2
     exit 2
 fi
 
@@ -16,6 +18,11 @@ fi
 
 if [ ! -f "$ARCHIVE" ]; then
     echo "archive not found: $ARCHIVE" >&2
+    exit 2
+fi
+
+if [ ! -f "$BYTECODE" ]; then
+    echo "bytecode not found: $BYTECODE" >&2
     exit 2
 fi
 
@@ -49,8 +56,9 @@ check_no_symbols() {
 printf '=== Bytecode Embed Symbol Gate ===\n'
 printf 'Runner:  %s\n' "$RUNNER"
 printf 'Archive: %s\n\n' "$ARCHIVE"
+printf 'Bytecode: %s\n\n' "$BYTECODE"
 
-if "$RUNNER" >/tmp/xray_bytecode_embed_runner.out.$$ 2>/tmp/xray_bytecode_embed_runner.err.$$; then
+if "$RUNNER" "$BYTECODE" "$EXPECTED" >/tmp/xray_bytecode_embed_runner.out.$$ 2>/tmp/xray_bytecode_embed_runner.err.$$; then
     record_pass "bytecode embed runner executes"
 else
     rc=$?
