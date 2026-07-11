@@ -12,6 +12,7 @@
 | `scripts/repro_win11_coro_burn.sh` | Win11 协程 4 用例 burn-in（1115/1109/1127/1128） | `[N]`；env: `XRAY_BIN` | 全过=0；任一失败=1；参数错=2 | N × 4 × ~5s |
 | `scripts/check_temp_workarounds.sh` | `DEFENSIVE-TEMP[NNN]` 标签 ↔ `tests/known_temp_workarounds.md` 双向对账 | 无 | 任一不一致=非0 | < 10s |
 | `scripts/check_stdlib_surface_uniqueness.py` | 151 R3：不同 public stdlib surface 不得绑定同一 VM/AOT helper | `--root <repo>`；可选 `--list-known` | 新重复=1；仅命中已登记债务=0 | < 1s |
+| `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 
 ## 详细说明
 
@@ -34,6 +35,10 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 ### `check_stdlib_surface_uniqueness.py`
 
 扫描 `stdlib/defs/*.def` 的 public module functions 与 native class methods，按 VM/AOT helper 分组。不同 public symbol 复用同一 helper 会失败；同一 symbol 的 overload 合法，`visibility: "internal"` helper 不进入用户表面检查。当前仅允许脚本内精确登记的历史债务，避免 147/151 后续落地时重新出现平行 API。
+
+### `check_parallel_surface_convergence.py`
+
+扫描 active `.xr` 用户源码、前端/IR 源码和 `tests/aot/coro` 迁移桶。除保留的 compile-error 负例外，旧 `parallel for/range/reduce/collect` 语法、旧 parallel `local/final` grammar、`TK_PARALLEL`、`AST_PARALLEL_*`、`XI_PAR_COLLECT` 等旧表面一律失败。该脚本接入 CTest 的 `parallel_surface_convergence`。
 
 ## 与 nightly.yml 的关系
 
@@ -58,3 +63,4 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 | 2026-05-17 | 初稿；与 4 个新脚本同批；明确 `<mode>` → `[rounds]` 的务实落地决定 | Cascade + xingleixu |
 | 2026-06-16 | 移除 JIT 相关脚本（repro_jit_force_burn / run_fuzz_30min / check_codegen_* / jit_fuzz / run_jit_*）；memory stress 去 jit-force/no-jit 模式 | — |
 | 2026-07-08 | 增加 stdlib public surface uniqueness 检查，接 151 R3 单一规范表面门禁 | Codex |
+| 2026-07-12 | 增加 parallel surface convergence 检查，接 193 旧专用语法删除门禁 | Codex |
