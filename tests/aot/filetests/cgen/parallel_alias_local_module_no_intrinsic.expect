@@ -1,0 +1,4 @@
+c_contains=module import: ./_parallel_shadow_lib
+c_regex=_parallel_shadow_lib_[0-9a-f]+_forEach_exp\(NULL,
+c_not_contains=xr_parallel_for_range_i64(
+c_not_contains=modinit_par_for_range
