@@ -1,0 +1,15 @@
+class FakeParallel {
+    forEach(range: Range, body: (int) -> ()) {
+        body(1)
+        body(2)
+    }
+}
+
+var parallel = FakeParallel()
+var sum = 0
+
+parallel.forEach(0..4, (i) -> {
+    sum = sum + i
+})
+
+print(sum)
