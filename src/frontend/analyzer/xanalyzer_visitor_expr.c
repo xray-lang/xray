@@ -3914,26 +3914,6 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
             check_closure_capture(ctx, node->as.for_in_stmt.collection, line);
             check_closure_capture(ctx, node->as.for_in_stmt.body, line);
             break;
-        case AST_PARALLEL_FOR_STMT:
-            check_closure_capture(ctx, node->as.parallel_for_stmt.range, line);
-            check_closure_capture(ctx, node->as.parallel_for_stmt.worker_count, line);
-            check_closure_capture(ctx, node->as.parallel_for_stmt.final_body, line);
-            check_closure_capture(ctx, node->as.parallel_for_stmt.body, line);
-            break;
-        case AST_PARALLEL_REDUCE_EXPR:
-            check_closure_capture(ctx, node->as.parallel_reduce_expr.range, line);
-            check_closure_capture(ctx, node->as.parallel_reduce_expr.worker_count, line);
-            check_closure_capture(ctx, node->as.parallel_reduce_expr.initial, line);
-            check_closure_capture(ctx, node->as.parallel_reduce_expr.combine, line);
-            check_closure_capture(ctx, node->as.parallel_reduce_expr.body, line);
-            break;
-        case AST_PARALLEL_COLLECT_EXPR:
-            check_closure_capture(ctx, node->as.parallel_collect_expr.range, line);
-            check_closure_capture(ctx, node->as.parallel_collect_expr.worker_count, line);
-            check_closure_capture(ctx, node->as.parallel_collect_expr.into, line);
-            check_closure_capture(ctx, node->as.parallel_collect_expr.final_body, line);
-            check_closure_capture(ctx, node->as.parallel_collect_expr.body, line);
-            break;
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
                 check_closure_capture(ctx, node->as.return_stmt.values[i], line);

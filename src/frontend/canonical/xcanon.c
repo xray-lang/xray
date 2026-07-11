@@ -598,27 +598,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.for_in_stmt.body);
             break;
 
-        case AST_PARALLEL_FOR_STMT:
-            canon_node(ctx, node->as.parallel_for_stmt.range);
-            canon_node(ctx, node->as.parallel_for_stmt.worker_count);
-            canon_node(ctx, node->as.parallel_for_stmt.final_body);
-            canon_node(ctx, node->as.parallel_for_stmt.body);
-            break;
-        case AST_PARALLEL_REDUCE_EXPR:
-            canon_node(ctx, node->as.parallel_reduce_expr.range);
-            canon_node(ctx, node->as.parallel_reduce_expr.worker_count);
-            canon_node(ctx, node->as.parallel_reduce_expr.initial);
-            canon_node(ctx, node->as.parallel_reduce_expr.combine);
-            canon_node(ctx, node->as.parallel_reduce_expr.body);
-            break;
-        case AST_PARALLEL_COLLECT_EXPR:
-            canon_node(ctx, node->as.parallel_collect_expr.range);
-            canon_node(ctx, node->as.parallel_collect_expr.worker_count);
-            canon_node(ctx, node->as.parallel_collect_expr.into);
-            canon_node(ctx, node->as.parallel_collect_expr.final_body);
-            canon_node(ctx, node->as.parallel_collect_expr.body);
-            break;
-
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
             canon_node(ctx, node->as.function_decl.body);
@@ -874,9 +853,9 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
         case AST_UNION_DECL: {
-            ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
-                                : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
-                                                                  : &node->as.union_decl;
+            ClassDeclNode *cls = (node->type == AST_CLASS_DECL)    ? &node->as.class_decl
+                                 : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                   : &node->as.union_decl;
             for (int i = 0; i < cls->field_count; i++)
                 canon_node(ctx, cls->fields[i]);
             for (int i = 0; i < cls->method_count; i++)
