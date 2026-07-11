@@ -119,6 +119,17 @@ static size_t bounded_cstr_len(const char *s, size_t max_len) {
     return len;
 }
 
+static uint64_t hash_module_summary(uint64_t hash, const XgModuleSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u64(hash, row->canonical_hash);
+    hash = hash_u64(hash, row->source_hash);
+    hash = hash_u8(hash, row->kind);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -1318,6 +1329,7 @@ XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key)
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     if (!evidence)
         return;
+    xr_free(evidence->modules);
     xr_free(evidence->decls);
     xr_free(evidence->classes);
     xr_free(evidence->class_fields);
@@ -1354,6 +1366,11 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->key_accesses);
     xr_free(evidence->hash_eqs);
     memset(evidence, 0, sizeof(*evidence));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_modules(XgGlobalEvidence *evidence, uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->modules, &evidence->module_cap, capacity,
+                                     sizeof(XgModuleSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_decls(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1565,6 +1582,17 @@ XR_FUNC bool xg_global_evidence_reserve_key_accesses(XgGlobalEvidence *evidence,
 XR_FUNC bool xg_global_evidence_reserve_hash_eqs(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->hash_eqs, &evidence->hash_eq_cap,
                                      capacity, sizeof(XgHashEqSummary));
+}
+
+XR_FUNC XgModuleSummary *xg_global_evidence_add_module(XgGlobalEvidence *evidence,
+                                                       const XgModuleSummary *summary) {
+    XgModuleSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_modules(evidence, evidence->nmodules + 1))
+        return NULL;
+    row = &evidence->modules[evidence->nmodules++];
+    *row = *summary;
+    return row;
 }
 
 XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
@@ -2609,6 +2637,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     if (!evidence)
         return hash;
     hash = hash_build_key(hash, &evidence->key);
+    hash = hash_mix(hash, &evidence->nmodules, sizeof(evidence->nmodules));
     hash = hash_mix(hash, &evidence->ndecls, sizeof(evidence->ndecls));
     hash = hash_mix(hash, &evidence->nclasses, sizeof(evidence->nclasses));
     hash = hash_mix(hash, &evidence->nclass_fields, sizeof(evidence->nclass_fields));
@@ -2645,6 +2674,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->nmap_entries, sizeof(evidence->nmap_entries));
     hash = hash_mix(hash, &evidence->nkey_accesses, sizeof(evidence->nkey_accesses));
     hash = hash_mix(hash, &evidence->nhash_eqs, sizeof(evidence->nhash_eqs));
+    for (uint32_t i = 0; i < evidence->nmodules; i++)
+        hash = hash_module_summary(hash, &evidence->modules[i]);
     for (uint32_t i = 0; i < evidence->ndecls; i++)
         hash = hash_decl_summary(hash, &evidence->decls[i]);
     for (uint32_t i = 0; i < evidence->nclasses; i++)
@@ -2739,11 +2770,15 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
     hash = hash_evidence_cache_key_common(hash, evidence, phase);
     switch ((XgEvidenceCachePhase) phase) {
         case XG_EVIDENCE_CACHE_DECLARATIONS:
+            hash = hash_u32(hash, evidence->nmodules);
             hash = hash_u32(hash, evidence->ndecls);
+            for (uint32_t i = 0; i < evidence->nmodules; i++)
+                hash = hash_module_summary(hash, &evidence->modules[i]);
             for (uint32_t i = 0; i < evidence->ndecls; i++)
                 hash = hash_decl_summary(hash, &evidence->decls[i]);
             break;
         case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
+            hash = hash_u32(hash, evidence->nmodules);
             hash = hash_u32(hash, evidence->ndecls);
             hash = hash_u32(hash, evidence->nclasses);
             hash = hash_u32(hash, evidence->nclass_fields);
@@ -2754,6 +2789,8 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
             hash = hash_u32(hash, evidence->nderives);
             hash = hash_u32(hash, evidence->nderived_fields);
             hash = hash_u32(hash, evidence->nderived_methods);
+            for (uint32_t i = 0; i < evidence->nmodules; i++)
+                hash = hash_module_summary(hash, &evidence->modules[i]);
             for (uint32_t i = 0; i < evidence->ndecls; i++)
                 hash = hash_decl_summary(hash, &evidence->decls[i]);
             for (uint32_t i = 0; i < evidence->nclasses; i++)
@@ -3130,10 +3167,25 @@ static uint64_t cache_payload_hash_bytes(const char *text, size_t len) {
     return hash == 0 ? 1 : hash;
 }
 
-static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *evidence) {
-    fprintf(out, "payload-count decls=%u\n", evidence ? evidence->ndecls : 0);
+static void dump_cache_payload_module_rows(FILE *out, const XgGlobalEvidence *evidence) {
     if (!evidence)
         return;
+    for (uint32_t i = 0; i < evidence->nmodules; i++) {
+        const XgModuleSummary *m = &evidence->modules[i];
+        fprintf(out,
+                "module id=%u name=%u canonical=%016" PRIx64 " source=%016" PRIx64
+                " kind=%u flags=0x%x\n",
+                m->module_id, m->name_id, m->canonical_hash, m->source_hash, (unsigned) m->kind,
+                m->flags);
+    }
+}
+
+static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *evidence) {
+    fprintf(out, "payload-count modules=%u decls=%u\n", evidence ? evidence->nmodules : 0,
+            evidence ? evidence->ndecls : 0);
+    if (!evidence)
+        return;
+    dump_cache_payload_module_rows(out, evidence);
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
@@ -3146,11 +3198,12 @@ static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *e
 
 static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-count decls=%u classes=%u class_fields=%u methods=%u impls=%u extends=%u "
-            "interface_methods=%u derives=%u derived_fields=%u derived_methods=%u\n",
-            evidence ? evidence->ndecls : 0, evidence ? evidence->nclasses : 0,
-            evidence ? evidence->nclass_fields : 0, evidence ? evidence->nmethods : 0,
-            evidence ? evidence->ninterface_impls : 0, evidence ? evidence->ninterface_extends : 0,
+            "payload-count modules=%u decls=%u classes=%u class_fields=%u methods=%u impls=%u "
+            "extends=%u interface_methods=%u derives=%u derived_fields=%u derived_methods=%u\n",
+            evidence ? evidence->nmodules : 0, evidence ? evidence->ndecls : 0,
+            evidence ? evidence->nclasses : 0, evidence ? evidence->nclass_fields : 0,
+            evidence ? evidence->nmethods : 0, evidence ? evidence->ninterface_impls : 0,
+            evidence ? evidence->ninterface_extends : 0,
             evidence ? evidence->ninterface_methods : 0, evidence ? evidence->nderives : 0,
             evidence ? evidence->nderived_fields : 0, evidence ? evidence->nderived_methods : 0);
     if (!evidence)
@@ -3647,17 +3700,39 @@ XR_FUNC bool xg_evidence_cache_payload_request_matches(const char *text,
 }
 
 static bool materialize_payload_declarations(const char **cursor, XgGlobalEvidence *evidence,
-                                             uint32_t *out_count) {
+                                             uint32_t *out_module_count, uint32_t *out_decl_count) {
     char line[1024];
-    uint32_t count = 0;
+    uint32_t module_count = 0;
+    uint32_t decl_count = 0;
     char trailing = '\0';
     if (!cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
-    if (sscanf(line, "payload-count decls=%" SCNu32 " %c", &count, &trailing) != 1)
+    if (sscanf(line, "payload-count modules=%" SCNu32 " decls=%" SCNu32 " %c", &module_count,
+               &decl_count, &trailing) != 2)
         return false;
-    if (!xg_global_evidence_reserve_decls(evidence, count))
+    if (!xg_global_evidence_reserve_modules(evidence, module_count) ||
+        !xg_global_evidence_reserve_decls(evidence, decl_count))
         return false;
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < module_count; i++) {
+        XgModuleSummary row;
+        uint32_t kind = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "module id=%" SCNu32 " name=%" SCNu32 " canonical=%" SCNx64 " source=%" SCNx64
+                   " kind=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.module_id, &row.name_id, &row.canonical_hash, &row.source_hash, &kind,
+                   &row.flags, &trailing) != 6)
+            return false;
+        if (kind > UINT8_MAX)
+            return false;
+        row.kind = (uint8_t) kind;
+        if (!xg_global_evidence_add_module(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < decl_count; i++) {
         XgDeclSummary row;
         uint32_t kind = 0;
         trailing = '\0';
@@ -3676,13 +3751,16 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
         if (!xg_global_evidence_add_decl(evidence, &row))
             return false;
     }
-    if (out_count)
-        *out_count = count;
+    if (out_module_count)
+        *out_module_count = module_count;
+    if (out_decl_count)
+        *out_decl_count = decl_count;
     return true;
 }
 
 static bool materialize_payload_semantic_cursor(const char **cursor, XgGlobalEvidence *evidence) {
     char line[1024];
+    uint32_t module_count = 0;
     uint32_t decl_count = 0;
     uint32_t class_count = 0;
     uint32_t class_field_count = 0;
@@ -3693,21 +3771,23 @@ static bool materialize_payload_semantic_cursor(const char **cursor, XgGlobalEvi
     uint32_t derive_count = 0;
     uint32_t derived_field_count = 0;
     uint32_t derived_method_count = 0;
+    uint32_t parsed_module_count = 0;
     uint32_t parsed_decl_count = 0;
     char trailing = '\0';
     if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-count decls=%" SCNu32 " classes=%" SCNu32 " class_fields=%" SCNu32
-               " methods=%" SCNu32 " impls=%" SCNu32 " extends=%" SCNu32
+               "payload-count modules=%" SCNu32 " decls=%" SCNu32 " classes=%" SCNu32
+               " class_fields=%" SCNu32 " methods=%" SCNu32 " impls=%" SCNu32 " extends=%" SCNu32
                " interface_methods=%" SCNu32 " derives=%" SCNu32 " derived_fields=%" SCNu32
                " derived_methods=%" SCNu32 " %c",
-               &decl_count, &class_count, &class_field_count, &method_count, &impl_count,
-               &extends_count, &interface_method_count, &derive_count, &derived_field_count,
-               &derived_method_count, &trailing) != 10)
+               &module_count, &decl_count, &class_count, &class_field_count, &method_count,
+               &impl_count, &extends_count, &interface_method_count, &derive_count,
+               &derived_field_count, &derived_method_count, &trailing) != 11)
         return false;
-    if (!materialize_payload_declarations(cursor, evidence, &parsed_decl_count) ||
-        parsed_decl_count != decl_count)
+    if (!materialize_payload_declarations(cursor, evidence, &parsed_module_count,
+                                          &parsed_decl_count) ||
+        parsed_module_count != module_count || parsed_decl_count != decl_count)
         return false;
     if (!xg_global_evidence_reserve_classes(evidence, class_count) ||
         !xg_global_evidence_reserve_class_fields(evidence, class_field_count) ||
@@ -4561,7 +4641,8 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
     switch ((XgEvidenceCachePhase) info.phase) {
         case XG_EVIDENCE_CACHE_DECLARATIONS: {
             const char *cursor = info.body;
-            ok = materialize_payload_declarations(&cursor, &evidence, NULL) && *cursor == '\0';
+            ok =
+                materialize_payload_declarations(&cursor, &evidence, NULL, NULL) && *cursor == '\0';
             break;
         }
         case XG_EVIDENCE_CACHE_SEMANTIC_GRAPH:
@@ -4669,8 +4750,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     dump_cache_key(out, evidence, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     dump_cache_manifest(out, evidence);
     fprintf(out,
-            "counts decls=%u classes=%u class_fields=%u methods=%u interface_impls=%u "
-            "interface_extends=%u "
+            "counts modules=%u decls=%u classes=%u class_fields=%u methods=%u "
+            "interface_impls=%u interface_extends=%u "
             "interface_methods=%u interface_object_uses=%u bodies=%u callsites=%u link_deps=%u "
             "generic_insts=%u "
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
@@ -4680,19 +4761,27 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "record_fields=%u record_accesses=%u record_merges=%u options=%u map_shapes=%u "
             "map_entries=%u key_accesses=%u "
             "hash_eqs=%u\n",
-            evidence->ndecls, evidence->nclasses, evidence->nclass_fields, evidence->nmethods,
-            evidence->ninterface_impls, evidence->ninterface_extends, evidence->ninterface_methods,
-            evidence->ninterface_object_uses, evidence->nbodies, evidence->ncallsites,
-            evidence->nlink_deps, evidence->ngeneric_insts, evidence->ngeneric_body_uses,
-            evidence->ngeneric_storages, evidence->ngeneric_code_sizes,
-            evidence->nsequence_accesses, evidence->ncapacity_ops, evidence->nbulk_ops,
-            evidence->nencoding_ops, evidence->nderives, evidence->nderived_fields,
-            evidence->nderived_methods, evidence->njson_shapes, evidence->njson_fields,
-            evidence->njson_accesses, evidence->njson_codecs, evidence->nrecord_shapes,
-            evidence->nrecord_fields, evidence->nrecord_accesses, evidence->nrecord_merges,
-            evidence->noptions_bags, evidence->nmap_shapes, evidence->nmap_entries,
-            evidence->nkey_accesses, evidence->nhash_eqs);
+            evidence->nmodules, evidence->ndecls, evidence->nclasses, evidence->nclass_fields,
+            evidence->nmethods, evidence->ninterface_impls, evidence->ninterface_extends,
+            evidence->ninterface_methods, evidence->ninterface_object_uses, evidence->nbodies,
+            evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts,
+            evidence->ngeneric_body_uses, evidence->ngeneric_storages,
+            evidence->ngeneric_code_sizes, evidence->nsequence_accesses, evidence->ncapacity_ops,
+            evidence->nbulk_ops, evidence->nencoding_ops, evidence->nderives,
+            evidence->nderived_fields, evidence->nderived_methods, evidence->njson_shapes,
+            evidence->njson_fields, evidence->njson_accesses, evidence->njson_codecs,
+            evidence->nrecord_shapes, evidence->nrecord_fields, evidence->nrecord_accesses,
+            evidence->nrecord_merges, evidence->noptions_bags, evidence->nmap_shapes,
+            evidence->nmap_entries, evidence->nkey_accesses, evidence->nhash_eqs);
 
+    for (uint32_t i = 0; i < evidence->nmodules; i++) {
+        const XgModuleSummary *m = &evidence->modules[i];
+        fprintf(out,
+                "module %u id=%u name=%u canonical=%016" PRIx64 " source=%016" PRIx64
+                " kind=%u flags=0x%x\n",
+                i, m->module_id, m->name_id, m->canonical_hash, m->source_hash, (unsigned) m->kind,
+                m->flags);
+    }
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
