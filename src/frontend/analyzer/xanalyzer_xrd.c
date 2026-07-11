@@ -274,6 +274,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         methods[midx].is_static = false;
                         methods[midx].is_internal = false;
                         methods[midx].is_lowered_only = false;
+                        methods[midx].is_yieldable = false;
                         h->method_count++;
                     }
                 }
@@ -314,6 +315,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].is_static = false;
                 xrd->functions[idx].is_internal = false;
                 xrd->functions[idx].is_lowered_only = false;
+                xrd->functions[idx].is_yieldable = false;
                 xrd->module.function_count++;
             }
 

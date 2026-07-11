@@ -234,6 +234,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_static = is_static;
         members[count].is_internal = false;
         members[count].is_lowered_only = next_member_lowered_only;
+        members[count].is_yieldable = false;
         next_member_lowered_only = false;
         count++;
 

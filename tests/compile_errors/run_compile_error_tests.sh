@@ -38,7 +38,11 @@ for dir in "$SCRIPT_DIR"/*/; do
 
         # Run xray and capture output; strip ANSI color escape codes so
         # .expected substring matching is robust regardless of terminal.
-        raw_output=$("$XRAY" "$file" 2>&1)
+        typepath="$dir"
+        if [ -n "${XRAY_TYPEPATH:-}" ]; then
+            typepath="$dir:$XRAY_TYPEPATH"
+        fi
+        raw_output=$(XRAY_TYPEPATH="$typepath" "$XRAY" "$file" 2>&1)
         exit_code=$?
         output=$(printf '%s' "$raw_output" | sed -E $'s/\x1B\\[[0-9;]*[a-zA-Z]//g')
 

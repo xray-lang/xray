@@ -1,0 +1,7 @@
+import parallel
+import parallel_unknown_effect_native
+
+parallel.forEach(0..4, (i) -> {
+    var value = parallel_unknown_effect_native.nativeOp(i)
+    print(value)
+}, parallel.Options(2))
