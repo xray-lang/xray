@@ -105,6 +105,47 @@ static char *make_package_payload_for_source(const char *canonical, const char *
     return payload;
 }
 
+static char *make_package_payload_for_ordered_sources(const char *const *canonicals,
+                                                      const char *const *source_paths,
+                                                      uint32_t count) {
+    XrModuleSpec *specs = NULL;
+    const XrModuleSpec **ordered_specs = NULL;
+    XgBuildKey key;
+    XgGlobalEvidence package = {0};
+    char *payload = NULL;
+    if (!canonicals || !source_paths || count == 0)
+        return NULL;
+    specs = (XrModuleSpec *) xr_calloc(count, sizeof(*specs));
+    ordered_specs = (const XrModuleSpec **) xr_calloc(count, sizeof(*ordered_specs));
+    if (!specs || !ordered_specs)
+        goto done;
+    for (uint32_t i = 0; i < count; i++) {
+        if (!canonicals[i] || !source_paths[i])
+            goto done;
+        specs[i].canonical = (char *) canonicals[i];
+        specs[i].source_path = (char *) source_paths[i];
+        specs[i].kind = XR_MOD_PACKAGE;
+        ordered_specs[i] = &specs[i];
+    }
+    if (!xg_build_key_from_ordered_module_specs(&key, ordered_specs, count, XG_BUILD_NATIVE_RELEASE,
+                                                0))
+        goto done;
+    xg_global_evidence_init(&package, key);
+    for (uint32_t i = 0; i < count; i++) {
+        XgModuleSummary module;
+        if (!xg_module_summary_from_module_spec(&module, i + 1, &specs[i]) ||
+            !xg_global_evidence_add_module(&package, &module))
+            goto done;
+    }
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+
+done:
+    xg_global_evidence_free(&package);
+    xr_free(ordered_specs);
+    xr_free(specs);
+    return payload;
+}
+
 static bool write_global_payload_to_cache(const char *cache_dir, const char *payload) {
     XgEvidenceCachePayloadInfo info;
     char phase_dir[PATH_MAX];
@@ -123,31 +164,43 @@ static bool write_global_payload_to_cache(const char *cache_dir, const char *pay
     return write_file_text(payload_path, payload);
 }
 
-static char *install_package_payload(const char *home_dir, const char *cache_dir,
-                                     const char *canonical, const char *source_text) {
+static bool write_package_source(const char *home_dir, const char *canonical,
+                                 const char *source_text, char *out_real_path,
+                                 size_t out_real_path_size) {
     const char *slash;
     size_t owner_len;
     char pkg_dir[PATH_MAX];
     char pkg_source[PATH_MAX];
     char real_pkg_source[PATH_MAX];
-    char *payload;
     int n;
-    if (!home_dir || !cache_dir || !canonical || !source_text)
-        return NULL;
+    if (!home_dir || !canonical || !source_text || !out_real_path || out_real_path_size == 0)
+        return false;
     slash = strchr(canonical, '/');
     if (!slash || slash == canonical || !slash[1])
-        return NULL;
+        return false;
     owner_len = (size_t) (slash - canonical);
     if (owner_len > 120 || strlen(slash + 1) > 120)
-        return NULL;
+        return false;
     n = snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%.*s/%s/1.0.0/src", home_dir,
                  (int) owner_len, canonical, slash + 1);
     if (n < 0 || (size_t) n >= sizeof(pkg_dir) || !mkdir_p(pkg_dir))
-        return NULL;
+        return false;
     n = snprintf(pkg_source, sizeof(pkg_source), "%s/main.xr", pkg_dir);
     if (n < 0 || (size_t) n >= sizeof(pkg_source) || !write_file_text(pkg_source, source_text))
-        return NULL;
+        return false;
     if (!realpath(pkg_source, real_pkg_source))
+        return false;
+    n = snprintf(out_real_path, out_real_path_size, "%s", real_pkg_source);
+    return n >= 0 && (size_t) n < out_real_path_size;
+}
+
+static char *install_package_payload(const char *home_dir, const char *cache_dir,
+                                     const char *canonical, const char *source_text) {
+    char real_pkg_source[PATH_MAX];
+    char *payload;
+    if (!home_dir || !cache_dir ||
+        !write_package_source(home_dir, canonical, source_text, real_pkg_source,
+                              sizeof(real_pkg_source)))
         return NULL;
     payload = make_package_payload_for_source(canonical, real_pkg_source);
     if (!payload)
@@ -369,11 +422,81 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     passed++;
 }
 
+static void test_driver_auto_discovers_package_dependency_summary_payload(void) {
+    char root[PATH_MAX];
+    char home_dir[PATH_MAX];
+    char entry_source[PATH_MAX];
+    char cache_dir[PATH_MAX];
+    char pkg_a_source[PATH_MAX];
+    char pkg_b_source[PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    char *payload_ab = NULL;
+    char *payload_b = NULL;
+    const char *ordered_canonicals[2] = {"codex/pkgb", "codex/pkga"};
+    const char *ordered_sources[2];
+    const char *payloads[1];
+    uint64_t imported_hash = 0;
+    char *old_home;
+
+    memset(&result, 0, sizeof(result));
+    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-graph-%ld", (long) getpid());
+    snprintf(home_dir, sizeof(home_dir), "%s/home", root);
+    snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
+    ASSERT_TRUE(write_package_source(home_dir, "codex/pkgb",
+                                     "fn package_b() -> int {\n"
+                                     "    return 23\n"
+                                     "}\n",
+                                     pkg_b_source, sizeof(pkg_b_source)));
+    ASSERT_TRUE(write_package_source(home_dir, "codex/pkga",
+                                     "import \"codex/pkgb\" as b\n"
+                                     "fn package_a() -> int {\n"
+                                     "    return 19\n"
+                                     "}\n",
+                                     pkg_a_source, sizeof(pkg_a_source)));
+    ordered_sources[0] = pkg_b_source;
+    ordered_sources[1] = pkg_a_source;
+    payload_ab = make_package_payload_for_ordered_sources(ordered_canonicals, ordered_sources, 2);
+    payload_b = make_package_payload_for_source("codex/pkgb", pkg_b_source);
+    ASSERT_TRUE(payload_ab != NULL);
+    ASSERT_TRUE(payload_b != NULL);
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_ab));
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_b));
+    ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
+                                              "fn value() -> int {\n"
+                                              "    return 29\n"
+                                              "}\n"));
+    payloads[0] = payload_ab;
+    ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
+    old_home = dup_env_value("HOME");
+    setenv("HOME", home_dir, 1);
+
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.emit_global_evidence_dump = true;
+    options.evidence_cache_dir = cache_dir;
+
+    ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    restore_env_value("HOME", old_home);
+    xr_free(payload_ab);
+    xr_free(payload_b);
+    unlink(entry_source);
+    passed++;
+}
+
 int main(void) {
     test_driver_consumes_imported_summary_payload_set();
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();
+    test_driver_auto_discovers_package_dependency_summary_payload();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }
