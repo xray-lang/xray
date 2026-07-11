@@ -1493,6 +1493,7 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
     member_name[name_len] = '\0';
 
     AstNode *node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
+    node->column = parser->previous.column;
     return node;
 }
 

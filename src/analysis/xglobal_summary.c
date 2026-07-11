@@ -98,6 +98,18 @@ static uint64_t hash_u64(uint64_t hash, uint64_t value) {
     return hash_mix(hash, &value, sizeof(value));
 }
 
+XR_FUNC uint32_t xg_stable_source_node_id(XgModuleId module_id, uint32_t ast_kind, uint32_t line,
+                                          uint32_t column) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    if (module_id == XG_NO_ID || ast_kind == 0 || line == 0 || column == 0)
+        return 0;
+    hash = hash_u32(hash, module_id);
+    hash = hash_u32(hash, ast_kind);
+    hash = hash_u32(hash, line);
+    hash = hash_u32(hash, column);
+    return type_key_folded32(hash);
+}
+
 static size_t bounded_cstr_len(const char *s, size_t max_len) {
     size_t len = 0;
     if (!s)
@@ -2807,6 +2819,87 @@ XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *
     return key;
 }
 
+XR_FUNC XgEvidenceCacheRequestKey
+xg_global_evidence_cache_request_key(const XgGlobalEvidence *evidence, uint32_t phase) {
+    XgEvidenceCacheRequestKey key;
+    memset(&key, 0, sizeof(key));
+    key.schema_version = XG_GLOBAL_EVIDENCE_SCHEMA_VERSION;
+    key.phase = phase;
+    if (!evidence)
+        return key;
+    key.module_id = evidence->key.module_id;
+    key.profile = evidence->key.profile;
+    key.source_hash = evidence->key.source_hash;
+    key.compiler_semver_hash = evidence->key.compiler_semver_hash;
+    key.profile_hash = evidence->key.profile_hash;
+    key.imported_summary_hash = evidence->key.imported_summary_hash;
+    return key;
+}
+
+XR_FUNC uint64_t xg_evidence_cache_request_key_hash(const XgEvidenceCacheRequestKey *key) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    if (!key)
+        return hash;
+    hash = hash_u32(hash, key->schema_version);
+    hash = hash_u32(hash, key->phase);
+    hash = hash_u32(hash, key->module_id);
+    hash = hash_u32(hash, key->profile);
+    hash = hash_u64(hash, key->source_hash);
+    hash = hash_u64(hash, key->compiler_semver_hash);
+    hash = hash_u64(hash, key->profile_hash);
+    hash = hash_u64(hash, key->imported_summary_hash);
+    return hash == 0 ? 1 : hash;
+}
+
+XR_FUNC bool xg_evidence_cache_request_key_matches(const XgEvidenceCacheRequestKey *cached,
+                                                   const XgEvidenceCacheRequestKey *expected) {
+    return cached && expected && cached->schema_version == expected->schema_version &&
+           cached->phase == expected->phase && cached->module_id == expected->module_id &&
+           cached->profile == expected->profile && cached->source_hash == expected->source_hash &&
+           cached->compiler_semver_hash == expected->compiler_semver_hash &&
+           cached->profile_hash == expected->profile_hash &&
+           cached->imported_summary_hash == expected->imported_summary_hash;
+}
+
+XR_FUNC bool xg_evidence_cache_request_key_format(const XgEvidenceCacheRequestKey *key, char *buf,
+                                                  size_t buf_len) {
+    int written;
+    if (!key || !buf || buf_len == 0)
+        return false;
+    written = snprintf(buf, buf_len,
+                       "xg-cache-request v1 schema=%u phase=%u module=%u profile=%u "
+                       "source=%016" PRIx64 " compiler=%016" PRIx64 " profile_hash=%016" PRIx64
+                       " imports=%016" PRIx64 " request=%016" PRIx64,
+                       key->schema_version, key->phase, key->module_id, key->profile,
+                       key->source_hash, key->compiler_semver_hash, key->profile_hash,
+                       key->imported_summary_hash, xg_evidence_cache_request_key_hash(key));
+    return written > 0 && (size_t) written < buf_len;
+}
+
+XR_FUNC bool xg_evidence_cache_request_key_parse(const char *text,
+                                                 XgEvidenceCacheRequestKey *out_key) {
+    XgEvidenceCacheRequestKey key;
+    uint64_t recorded_hash = 0;
+    char trailing = '\0';
+    int matched;
+    if (!text || !out_key)
+        return false;
+    memset(&key, 0, sizeof(key));
+    matched = sscanf(text,
+                     "xg-cache-request v1 schema=%" SCNu32 " phase=%" SCNu32 " module=%" SCNu32
+                     " profile=%" SCNu32 " source=%" SCNx64 " compiler=%" SCNx64
+                     " profile_hash=%" SCNx64 " imports=%" SCNx64 " request=%" SCNx64 " %c",
+                     &key.schema_version, &key.phase, &key.module_id, &key.profile,
+                     &key.source_hash, &key.compiler_semver_hash, &key.profile_hash,
+                     &key.imported_summary_hash, &recorded_hash, &trailing);
+    if (matched != 9)
+        return false;
+    if (recorded_hash != xg_evidence_cache_request_key_hash(&key))
+        return false;
+    *out_key = key;
+    return true;
+}
+
 XR_FUNC uint64_t xg_evidence_cache_key_hash(const XgEvidenceCacheKey *key) {
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
     if (!key)
@@ -3250,7 +3343,9 @@ static void dump_cache_payload_body_for_phase(FILE *out, const XgGlobalEvidence 
 
 XR_FUNC char *xg_global_evidence_cache_payload_dump(const XgGlobalEvidence *evidence,
                                                     uint32_t phase) {
+    XgEvidenceCacheRequestKey request_key;
     XgEvidenceCacheKey key;
+    char request_line[320];
     char key_line[256];
     char *body = NULL;
     size_t body_sz = 0;
@@ -3261,7 +3356,10 @@ XR_FUNC char *xg_global_evidence_cache_payload_dump(const XgGlobalEvidence *evid
     uint64_t body_hash;
     if (!evidence || !evidence_cache_phase_index(phase, NULL))
         return NULL;
+    request_key = xg_global_evidence_cache_request_key(evidence, phase);
     key = xg_global_evidence_cache_key(evidence, phase);
+    if (!xg_evidence_cache_request_key_format(&request_key, request_line, sizeof(request_line)))
+        return NULL;
     if (!xg_evidence_cache_key_format(&key, key_line, sizeof(key_line)))
         return NULL;
     body_out = xr_open_memstream(&body, &body_sz);
@@ -3279,8 +3377,11 @@ XR_FUNC char *xg_global_evidence_cache_payload_dump(const XgGlobalEvidence *evid
         return NULL;
     }
     fprintf(out,
-            "xg-cache-payload v1 phase=%u key=%016" PRIx64 " payload=%016" PRIx64 " bytes=%zu\n",
-            phase, xg_evidence_cache_key_hash(&key), body_hash, strlen(body));
+            "xg-cache-payload v2 phase=%u request=%016" PRIx64 " key=%016" PRIx64
+            " payload=%016" PRIx64 " bytes=%zu\n",
+            phase, xg_evidence_cache_request_key_hash(&request_key),
+            xg_evidence_cache_key_hash(&key), body_hash, strlen(body));
+    fprintf(out, "%s\n", request_line);
     fprintf(out, "%s\n", key_line);
     fputs(body, out);
     xr_free(body);
@@ -3303,18 +3404,31 @@ XR_FUNC bool xg_evidence_cache_payload_parse(const char *text,
     if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "xg-cache-payload v1 phase=%" SCNu32 " key=%" SCNx64 " payload=%" SCNx64
-               " bytes=%zu %c",
-               &info.phase, &info.key_hash, &info.payload_hash, &info.payload_bytes,
-               &trailing) != 4)
+               "xg-cache-payload v2 phase=%" SCNu32 " request=%" SCNx64 " key=%" SCNx64
+               " payload=%" SCNx64 " bytes=%zu %c",
+               &info.phase, &info.request_hash, &info.key_hash, &info.payload_hash,
+               &info.payload_bytes, &trailing) != 5)
         return false;
     if (!evidence_cache_phase_index(info.phase, NULL))
+        return false;
+    if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
+        return false;
+    if (!xg_evidence_cache_request_key_parse(line, &info.request_key))
+        return false;
+    if (info.request_key.phase != info.phase ||
+        info.request_hash != xg_evidence_cache_request_key_hash(&info.request_key))
         return false;
     if (!evidence_cache_next_line(&cursor, line, sizeof(line)))
         return false;
     if (!xg_evidence_cache_key_parse(line, &info.key))
         return false;
     if (info.key.phase != info.phase || info.key_hash != xg_evidence_cache_key_hash(&info.key))
+        return false;
+    if (info.key.module_id != info.request_key.module_id ||
+        info.key.profile != info.request_key.profile ||
+        info.key.compiler_semver_hash != info.request_key.compiler_semver_hash ||
+        info.key.profile_hash != info.request_key.profile_hash ||
+        info.key.imported_summary_hash != info.request_key.imported_summary_hash)
         return false;
     info.body = cursor;
     info.body_len = strlen(cursor);
@@ -3334,6 +3448,17 @@ XR_FUNC bool xg_evidence_cache_payload_matches(const char *text,
     if (info.phase != expected->phase || info.key_hash != xg_evidence_cache_key_hash(expected))
         return false;
     return xg_evidence_cache_key_matches(&info.key, expected);
+}
+
+XR_FUNC bool xg_evidence_cache_payload_request_matches(const char *text,
+                                                       const XgEvidenceCacheRequestKey *expected) {
+    XgEvidenceCachePayloadInfo info;
+    if (!expected || !xg_evidence_cache_payload_parse(text, &info))
+        return false;
+    if (info.phase != expected->phase ||
+        info.request_hash != xg_evidence_cache_request_key_hash(expected))
+        return false;
+    return xg_evidence_cache_request_key_matches(&info.request_key, expected);
 }
 
 static bool materialize_payload_declarations(const char **cursor, XgGlobalEvidence *evidence,
@@ -3736,6 +3861,7 @@ XR_FUNC bool xg_evidence_cache_payload_materialize(const char *text,
     memset(&key, 0, sizeof(key));
     key.module_id = info.key.module_id;
     key.profile = info.key.profile;
+    key.source_hash = info.request_key.source_hash;
     key.compiler_semver_hash = info.key.compiler_semver_hash;
     key.profile_hash = info.key.profile_hash;
     key.imported_summary_hash = info.key.imported_summary_hash;

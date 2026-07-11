@@ -158,6 +158,26 @@ static uint32_t hash_name32(const char *name) {
     return xg_name_id(name);
 }
 
+static uint32_t producer_source_node_id(XgModuleId module_id, const AstNode *node) {
+    const AstNode *loc;
+    uint32_t line;
+    uint32_t column;
+    if (!node)
+        return 0;
+    loc = node;
+    if (node->type == AST_CALL_EXPR && node->as.call_expr.callee)
+        loc = node->as.call_expr.callee;
+    line = loc && loc->line > 0 ? (uint32_t) loc->line : (uint32_t) node->line;
+    if (line == 0 && loc && loc->end_line > 0)
+        line = (uint32_t) loc->end_line;
+    column = loc && loc->column > 0 ? (uint32_t) loc->column : (uint32_t) node->column;
+    if (column == 0 && loc && loc->end_column > 0)
+        column = (uint32_t) loc->end_column;
+    if (column == 0)
+        column = 1;
+    return xg_stable_source_node_id(module_id, (uint32_t) node->type, line, column);
+}
+
 static bool producer_stdlib_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
 }
@@ -4812,7 +4832,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
-    row.source_node_id = call->node_id;
+    row.source_node_id = producer_source_node_id(bc->module_id, call);
     row.source_span_id = (uint32_t) call->line;
     row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_CLOSURE;
@@ -4942,7 +4962,7 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
-    row.source_node_id = call->node_id;
+    row.source_node_id = producer_source_node_id(bc->module_id, call);
     row.source_span_id = (uint32_t) call->line;
     row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_METHOD;
@@ -5893,7 +5913,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = node->node_id;
+    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = decl_id;
     decl.kind = XG_DECL_FUNC;
     decl.name_id = hash_name32(fn->name);
@@ -5919,7 +5939,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     if (!producer_register_func(p, fn->name, func_id, decl_id, decl.flags))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
-                                 hash_name32(fn->name), decl.signature_key, node->node_id,
+                                 hash_name32(fn->name), decl.signature_key, decl.source_node_id,
                                  (uint32_t) node->line, XG_BODY_FUNCTION, fn->body, NULL, fn);
 }
 
@@ -5973,7 +5993,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = node->node_id;
+    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = decl_id;
     decl.kind = (uint8_t) kind;
     decl.name_id = hash_name32(cls->name);
@@ -5999,7 +6019,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&method, 0, sizeof(method));
         method.method_id = (XgMethodId) (p->evidence->nmethods + 1);
         method.owner_class_id = class_id;
-        method.source_node_id = method_node->node_id;
+        method.source_node_id = producer_source_node_id(module_id, method_node);
         method.name_id = hash_name32(m->name);
         method.signature_key = hash_method_signature(m);
         if (m->is_static)
@@ -6013,7 +6033,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         method_count++;
         if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
                                    method.method_id, hash_name32(m->name), method.signature_key,
-                                   method_node->node_id, (uint32_t) method_node->line,
+                                   method.source_node_id, (uint32_t) method_node->line,
                                    XG_BODY_METHOD, m->body, m, NULL))
             return false;
     }
@@ -6027,7 +6047,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&summary, 0, sizeof(summary));
         summary.field_id = (XgFieldId) (p->evidence->nclass_fields + 1);
         summary.module_id = module_id;
-        summary.source_node_id = field_node->node_id;
+        summary.source_node_id = producer_source_node_id(module_id, field_node);
         summary.owner_class_id = class_id;
         summary.name_id = hash_name32(field->name);
         summary.type_key = hash_tref32(field->field_type);
@@ -6110,7 +6130,7 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     XgInterfaceId interface_id = (XgInterfaceId) hash_name32(iface->name);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = node->node_id;
+    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_INTERFACE;
     decl.name_id = interface_id;
@@ -6157,7 +6177,7 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = node->node_id;
+    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_ENUM;
     decl.name_id = hash_name32(e->name);
