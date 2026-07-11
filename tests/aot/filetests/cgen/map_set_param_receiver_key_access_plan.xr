@@ -1,0 +1,23 @@
+fn mapSetParamReceiverPlan(scores: Map<int, int>, seen: Set<int>, value: int) -> int {
+    scores.set(1, value)
+    scores[2] = value
+    seen.add(1)
+    var hasOne = scores.has(1)
+    var sawOne = seen.has(1)
+    var one = scores.get(1) ?? 0
+    var two = scores[2]
+    scores.delete(1)
+    seen.delete(1)
+    scores.clear()
+    seen.clear()
+    if (hasOne) {
+        if (sawOne) {
+            return one + two
+        }
+    }
+    return 0
+}
+
+var scores: Map<int, int> = #{}
+var seen: Set<int> = #[]
+print(mapSetParamReceiverPlan(scores, seen, 7))
