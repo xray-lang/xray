@@ -31,6 +31,7 @@ map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/
 map_set_field_receiver_key_access|covered|source=static action=runtime_hash|tests/aot/filetests/cgen|Map/Set class field receivers produce key-access plans and keep generated C on typed helpers instead of runtime method dispatch.
 map_set_param_receiver_key_access|covered|mapSetParamReceiverPlan|tests/aot/filetests/cgen|Map/Set typed parameter receivers produce static key-access plans and keep generated C on typed helpers instead of runtime method dispatch.
 map_set_typed_local_receiver_key_access|covered|mapSetTypedLocalReceiverPlan|tests/aot/filetests/cgen|Map/Set explicitly typed locals initialized from nonliteral returns produce static key-access plans and typed generated C helpers.
+map_set_return_receiver_key_access|covered|mapSetReturnReceiverPlan|tests/aot/filetests/cgen|Map/Set direct function-call return receivers produce static key-access plans and typed generated C helpers.
 map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
 backend_contract_dispatch|covered|XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE|tests/unit/aot|Backend contract accepts verified itable plans only with complete target cases and ABI evidence.
 evidence_cache_manifest|covered|xg-cache-manifest v1|tests/aot/filetests/link|Global evidence cache manifest is dumped through the official evidence entry.
