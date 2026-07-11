@@ -1,626 +1,602 @@
-// csv - pure-Xray CSV parser and writer.
+// csv - typed pure-Xray CSV parser and writer.
 //
-// CSV is an L4 algorithm module: parsing, dynamic typing, header mapping, and
-// stringification live here. File IO stays at the `io` boundary via
-// parseFile/writeFile.
+// CSV's wire domain is textual rows. Application-specific conversion belongs
+// in an explicit schema/decode layer, never in the tokenizer.
 
-import io
+enum CsvDelimiter {
+    Exact(string),
+    Auto
+}
+
+enum CsvHeader {
+    None,
+    FirstRow,
+    Explicit(Array<string>)
+}
+
+enum CsvErrorKind {
+    UnterminatedQuote,
+    InvalidEscape,
+    FieldCountMismatch
+}
+
+class CsvDiagnostic {
+    kind: CsvErrorKind
+    byteOffset: int
+    line: int
+    record: int
+    column: int
+    message: string
+
+    constructor(kind: CsvErrorKind, byteOffset: int, line: int, record: int, column: int,
+                message: string) {
+        this.kind = kind
+        this.byteOffset = byteOffset
+        this.line = line
+        this.record = record
+        this.column = column
+        this.message = message
+    }
+}
+
+enum CsvError {
+    InvalidOption(string),
+    InputLimitExceeded(int),
+    FieldLimitExceeded(int),
+    ColumnLimitExceeded(int),
+    UnterminatedQuote(int, int, int, int, string),
+    InvalidEscape(int, int, int, int, string),
+    FieldCountMismatch(int, int, int, int, string)
+}
+
+type CsvParseOptions = {
+    delimiter: CsvDelimiter,
+    quoteChar: string,
+    escapeChar: string,
+    header: CsvHeader,
+    trimFields: bool,
+    skipEmptyLines: bool,
+    commentPrefix: string,
+    skipRecords: int,
+    maxRecords: int,
+    maxInputBytes: int,
+    maxFieldBytes: int,
+    maxColumns: int
+}
+
+type CsvWriteOptions = {
+    delimiter: string,
+    quoteChar: string,
+    escapeChar: string,
+    linebreak: string
+}
+
+fn defaultParseOptions() -> CsvParseOptions {
+    var options: CsvParseOptions = {
+        delimiter: CsvDelimiter.Exact(","),
+        quoteChar: "\"",
+        escapeChar: "\"",
+        header: CsvHeader.None,
+        trimFields: false,
+        skipEmptyLines: true,
+        commentPrefix: "",
+        skipRecords: 0,
+        maxRecords: 0,
+        maxInputBytes: 16 * 1024 * 1024,
+        maxFieldBytes: 1024 * 1024,
+        maxColumns: 16384
+    }
+    return options
+}
+
+fn defaultWriteOptions() -> CsvWriteOptions {
+    var options: CsvWriteOptions = {
+        delimiter: ",",
+        quoteChar: "\"",
+        escapeChar: "\"",
+        linebreak: "\n"
+    }
+    return options
+}
+
+fn _parseOptions(options: CsvParseOptions?) -> CsvParseOptions {
+    if (options == null) { return defaultParseOptions() }
+    return options!
+}
+
+fn _writeOptions(options: CsvWriteOptions?) -> CsvWriteOptions {
+    if (options == null) { return defaultWriteOptions() }
+    return options!
+}
+
+class CsvDocument {
+    headers: Array<string>
+    rows: Array<Array<string>>
+
+    constructor() {
+        this.headers = []
+        this.rows = []
+    }
+}
+
+class CsvParseReport {
+    document: CsvDocument
+    diagnostics: Array<CsvDiagnostic>
+    delimiter: string
+    linebreak: string
+    truncated: bool
+
+    constructor(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: string,
+                linebreak: string, truncated: bool) {
+        this.document = document
+        this.diagnostics = diagnostics
+        this.delimiter = delimiter
+        this.linebreak = linebreak
+        this.truncated = truncated
+    }
+}
 
 const STATE_FIELD_START = 0
 const STATE_UNQUOTED = 1
 const STATE_QUOTED = 2
 const STATE_QUOTE_END = 3
 
-class CsvConfig {
-    delimiter: string
-    quoteChar: string
-    escapeChar: string
-    header: bool
-    columns: Json
-    hasColumns: bool
-    dynamicTyping: bool
-    trimFields: bool
-    skipEmptyLines: bool
-    comments: string
-    skipRows: int
-    maxRows: int
-    relaxQuotes: bool
-    relaxColumns: bool
-    linebreak: string
-    nullStrings: Json
-    hasNullStrings: bool
-
-    constructor() {
-        this.delimiter = ","
-        this.quoteChar = "\""
-        this.escapeChar = "\""
-        this.header = false
-        this.columns = []
-        this.hasColumns = false
-        this.dynamicTyping = false
-        this.trimFields = false
-        this.skipEmptyLines = true
-        this.comments = ""
-        this.skipRows = 0
-        this.maxRows = 0
-        this.relaxQuotes = false
-        this.relaxColumns = false
-        this.linebreak = "\n"
-        this.nullStrings = []
-        this.hasNullStrings = false
-    }
-}
-
-class CsvResult {
-    data: Json
-    errors: Json
-    rows: int
-    columns: int
+class _CsvState {
+    document: CsvDocument
+    diagnostics: Array<CsvDiagnostic>
     delimiter: string
     linebreak: string
     truncated: bool
-    aborted: bool
-    currentRow: Json
-    currentRowNum: int
-    currentColNum: int
+    currentRow: Array<string>
+    currentRecord: int
+    currentColumn: int
+    physicalLine: int
+    byteOffset: int
     expectedColumns: int
+    firstFieldQuoted: bool
 
     constructor(delimiter: string) {
-        this.data = []
-        this.errors = []
-        this.rows = 0
-        this.columns = 0
+        this.document = CsvDocument()
+        this.diagnostics = []
         this.delimiter = delimiter
-        this.linebreak = "\n"
+        this.linebreak = ""
         this.truncated = false
-        this.aborted = false
         this.currentRow = []
-        this.currentRowNum = 0
-        this.currentColNum = 0
+        this.currentRecord = 0
+        this.currentColumn = 0
+        this.physicalLine = 1
+        this.byteOffset = 0
         this.expectedColumns = -1
+        this.firstFieldQuoted = false
     }
 }
 
-fn _jsonString(options: Json, key: string, fallback: string) -> string {
-    var v = Json.get(options, key, fallback)
-    if (typename(v) == "string") { return v }
-    return fallback
+fn _validateCharacter(name: string, value: string) {
+    if (value.length != 1) {
+        throw CsvError.InvalidOption(name + " must contain exactly one character")
+    }
 }
 
-fn _jsonChar(options: Json, key: string, fallback: string) -> string {
-    var s = _jsonString(options, key, fallback)
-    if (s.length == 0) { return fallback }
-    return s.charAt(0)
+fn _validateParseOptions(options: CsvParseOptions) {
+    _validateCharacter("quoteChar", options.quoteChar)
+    _validateCharacter("escapeChar", options.escapeChar)
+    if (options.skipRecords < 0 || options.maxRecords < 0 || options.maxInputBytes < 0 ||
+        options.maxFieldBytes < 0 || options.maxColumns < 0) {
+        throw CsvError.InvalidOption("CSV limits and record counts must be non-negative")
+    }
 }
 
-fn _jsonBool(options: Json, key: string, fallback: bool) -> bool {
-    var v = Json.get(options, key, fallback)
-    if (typename(v) == "bool") { return v }
-    return fallback
-}
-
-fn _jsonInt(options: Json, key: string, fallback: int) -> int {
-    var v = Json.get(options, key, fallback)
-    if (typename(v) == "int") { return v }
-    return fallback
-}
-
-fn _config(optionsValue: unknown) -> CsvConfig {
-    var options = Json.encode(optionsValue)
-    if (typename(options) != "Json") {
-        var emptyOptions: Json = {}
-        options = emptyOptions
+fn _validateWriteOptions(options: CsvWriteOptions) {
+    _validateCharacter("delimiter", options.delimiter)
+    _validateCharacter("quoteChar", options.quoteChar)
+    _validateCharacter("escapeChar", options.escapeChar)
+    if (options.delimiter == options.quoteChar) {
+        throw CsvError.InvalidOption("delimiter and quoteChar must differ")
     }
-
-    var cfg = CsvConfig()
-    cfg.delimiter = _jsonChar(options, "delimiter", ",")
-    cfg.quoteChar = _jsonChar(options, "quoteChar", "\"")
-    cfg.escapeChar = _jsonChar(options, "escapeChar", "\"")
-    cfg.header = _jsonBool(options, "header", false)
-    cfg.dynamicTyping = _jsonBool(options, "dynamicTyping", false)
-    cfg.trimFields = _jsonBool(options, "trimFields", false)
-    cfg.skipEmptyLines = _jsonBool(options, "skipEmptyLines", true)
-    cfg.comments = _jsonString(options, "comments", "")
-    cfg.skipRows = _jsonInt(options, "skipRows", 0)
-    cfg.maxRows = _jsonInt(options, "maxRows", 0)
-    cfg.relaxQuotes = _jsonBool(options, "relaxQuotes", false)
-    cfg.relaxColumns = _jsonBool(options, "relaxColumns", false)
-    cfg.linebreak = _jsonString(options, "linebreak", "\n")
-    if (cfg.linebreak.length == 0) { cfg.linebreak = "\n" }
-
-    var cols = Json.get(options, "columns", null)
-    if (typename(cols) == "Array") {
-        cfg.columns = cols
-        cfg.hasColumns = true
+    if (options.linebreak.length == 0) {
+        throw CsvError.InvalidOption("linebreak must not be empty")
     }
-
-    if (Json.has(options, "nullStrings")) {
-        var ns = Json.get(options, "nullStrings", [])
-        if (typename(ns) == "Array") {
-            cfg.nullStrings = ns
-            cfg.hasNullStrings = true
-        }
-    }
-
-    return cfg
-}
-
-fn _addError(result: CsvResult, typ: string, message: string) {
-    result.errors.push({
-        type: typ,
-        line: -1,
-        row: result.currentRowNum,
-        column: result.currentColNum,
-        message: message
-    })
-    result.aborted = true
-}
-
-fn _isDigitCode(c: int) -> bool {
-    return c >= 48 && c <= 57
-}
-
-fn _numberKind(s: string) -> int {
-    if (s.length == 0) { return 0 }
-    var i = 0
-    if (s.charAt(i) == "+" || s.charAt(i) == "-") {
-        i = i + 1
-        if (i >= s.length) { return 0 }
-    }
-
-    var wholeDigits = 0
-    while (i < s.length && _isDigitCode(s.charAt(i).ord()!)) {
-        wholeDigits = wholeDigits + 1
-        i = i + 1
-    }
-
-    var isFloat = false
-    var fracDigits = 0
-    if (i < s.length && s.charAt(i) == ".") {
-        isFloat = true
-        i = i + 1
-        while (i < s.length && _isDigitCode(s.charAt(i).ord()!)) {
-            fracDigits = fracDigits + 1
-            i = i + 1
-        }
-        if (wholeDigits == 0 && fracDigits == 0) { return 0 }
-    }
-
-    if (wholeDigits == 0 && fracDigits == 0) { return 0 }
-
-    if (i < s.length && (s.charAt(i) == "e" || s.charAt(i) == "E")) {
-        isFloat = true
-        i = i + 1
-        if (i < s.length && (s.charAt(i) == "+" || s.charAt(i) == "-")) {
-            i = i + 1
-        }
-        var expDigits = 0
-        while (i < s.length && _isDigitCode(s.charAt(i).ord()!)) {
-            expDigits = expDigits + 1
-            i = i + 1
-        }
-        if (expDigits == 0) { return 0 }
-    }
-
-    if (i != s.length) { return 0 }
-    if (isFloat) { return 2 }
-    return 1
-}
-
-fn _matchesConfiguredNull(field: string, cfg: CsvConfig) -> bool {
-    if (cfg.hasNullStrings) {
-        for (v in cfg.nullStrings) {
-            if (typename(v) == "string" && field == string(v)) { return true }
-        }
-        return false
-    }
-    var lower = field.toLowerCase()
-    return field.length == 0 || lower == "null"
-}
-
-fn _convertValue(field: string, cfg: CsvConfig) -> Json {
-    if (!cfg.dynamicTyping) { return field }
-
-    if (_matchesConfiguredNull(field, cfg)) { return null }
-
-    var lower = field.toLowerCase()
-    if (lower == "true") { return true }
-    if (lower == "false") { return false }
-
-    var kind = _numberKind(field)
-    if (kind == 1) {
-        var i = field.toInt()
-        if (i != null) { return i! }
-    } else if (kind == 2) {
-        var f = field.toFloat()
-        if (f != null) { return f! }
-    }
-    return field
-}
-
-fn _finishField(result: CsvResult, cfg: CsvConfig, fieldBuilder: StringBuilder) {
-    var field = fieldBuilder.toString()
-    if (cfg.trimFields) { field = field.trim() }
-    result.currentRow.push(_convertValue(field, cfg))
-    result.currentColNum = result.currentColNum + 1
-    fieldBuilder.clear()
-}
-
-fn _startsWith(s: string, prefix: string) -> bool {
-    if (prefix.length == 0) { return false }
-    if (s.length < prefix.length) { return false }
-    return s.slice(0, prefix.length) == prefix
-}
-
-fn _isSkippedEmptyRow(row: Json) -> bool {
-    if (row.length == 0) { return true }
-    if (row.length != 1) { return false }
-    var first = row[0]
-    return typename(first) == "string" && string(first).length == 0
-}
-
-fn _finishRow(result: CsvResult, cfg: CsvConfig, header: Json, mapRows: bool) -> bool {
-    var colCount = result.currentRow.length
-
-    if (cfg.skipEmptyLines && _isSkippedEmptyRow(result.currentRow)) {
-        result.currentRow = []
-        result.currentColNum = 0
-        return false
-    }
-
-    if (cfg.comments.length > 0 && colCount > 0) {
-        var first = result.currentRow[0]
-        if (typename(first) == "string" && _startsWith(string(first), cfg.comments)) {
-            result.currentRow = []
-            result.currentColNum = 0
-            return false
-        }
-    }
-
-    if (result.currentRowNum < cfg.skipRows) {
-        result.currentRow = []
-        result.currentColNum = 0
-        result.currentRowNum = result.currentRowNum + 1
-        return false
-    }
-
-    if (result.expectedColumns < 0) {
-        result.expectedColumns = colCount
-        result.columns = colCount
-    } else if (colCount != result.expectedColumns && !cfg.relaxColumns) {
-        _addError(result, "FieldMismatch",
-                  "Expected " + string(result.expectedColumns) + " fields, got " + string(colCount))
-    }
-
-    if (mapRows) {
-        var obj: Json = {}
-        var n = colCount
-        if (header.length < n) { n = header.length }
-        for (var i = 0; i < n; i++) {
-            obj[string(header[i])] = result.currentRow[i]
-        }
-        result.data.push(obj)
-    } else {
-        result.data.push(result.currentRow)
-    }
-
-    result.rows = result.rows + 1
-    result.currentRow = []
-    result.currentColNum = 0
-    result.currentRowNum = result.currentRowNum + 1
-
-    if (cfg.maxRows > 0 && result.rows >= cfg.maxRows) {
-        result.truncated = true
-        return true
-    }
-    return false
-}
-
-fn _consumeHeader(result: CsvResult) -> Json {
-    var header = result.currentRow
-    result.currentRow = []
-    result.currentColNum = 0
-    result.currentRowNum = result.currentRowNum + 1
-    result.expectedColumns = header.length
-    result.columns = header.length
-    return header
 }
 
 fn _isNewline(c: string) -> bool {
     return c == "\n" || c == "\r"
 }
 
-fn _skipCRLF(data: string, pos: int, result: CsvResult) -> int {
-    if (pos + 1 < data.length && data.charAt(pos) == "\r" && data.charAt(pos + 1) == "\n") {
-        result.linebreak = "\r\n"
-        return pos + 1
-    }
-    return pos
-}
-
-fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
-    var result = CsvResult(cfg.delimiter)
-    var header: Json = cfg.columns
-    var hasHeader = cfg.hasColumns
-    var mapRows = cfg.header || cfg.hasColumns
-    var field = StringBuilder()
-    var state = STATE_FIELD_START
-
-    var pos = 0
-    if (data.length > 0 && data.charAt(0) == "\u{FEFF}") { pos = 1 }
-
-    while (pos < data.length) {
-        var c = data.charAt(pos)
-
-        if (state == STATE_FIELD_START) {
-            if (c == cfg.quoteChar) {
-                state = STATE_QUOTED
-            } else if (c == cfg.delimiter) {
-                _finishField(result, cfg, field)
-            } else if (_isNewline(c)) {
-                _finishField(result, cfg, field)
-                if (cfg.header && !hasHeader && result.currentRowNum == 0) {
-                    header = _consumeHeader(result)
-                    hasHeader = true
-                } else if (_finishRow(result, cfg, header, mapRows)) {
-                    break
-                }
-                pos = _skipCRLF(data, pos, result)
-            } else {
-                field.append(c)
-                state = STATE_UNQUOTED
-            }
-        } else if (state == STATE_UNQUOTED) {
-            if (c == cfg.delimiter) {
-                _finishField(result, cfg, field)
-                state = STATE_FIELD_START
-            } else if (_isNewline(c)) {
-                _finishField(result, cfg, field)
-                if (cfg.header && !hasHeader && result.currentRowNum == 0) {
-                    header = _consumeHeader(result)
-                    hasHeader = true
-                } else if (_finishRow(result, cfg, header, mapRows)) {
-                    break
-                }
-                pos = _skipCRLF(data, pos, result)
-                state = STATE_FIELD_START
-            } else {
-                field.append(c)
-            }
-        } else if (state == STATE_QUOTED) {
-            if (c == cfg.escapeChar && pos + 1 < data.length &&
-                data.charAt(pos + 1) == cfg.quoteChar) {
-                field.append(cfg.quoteChar)
-                pos = pos + 1
-            } else if (c == cfg.quoteChar) {
-                state = STATE_QUOTE_END
-            } else {
-                field.append(c)
-            }
-        } else if (state == STATE_QUOTE_END) {
-            if (c == cfg.delimiter) {
-                _finishField(result, cfg, field)
-                state = STATE_FIELD_START
-            } else if (_isNewline(c)) {
-                _finishField(result, cfg, field)
-                if (cfg.header && !hasHeader && result.currentRowNum == 0) {
-                    header = _consumeHeader(result)
-                    hasHeader = true
-                } else if (_finishRow(result, cfg, header, mapRows)) {
-                    break
-                }
-                pos = _skipCRLF(data, pos, result)
-                state = STATE_FIELD_START
-            } else if (c == cfg.quoteChar) {
-                if (cfg.relaxQuotes) {
-                    field.append(c)
-                    state = STATE_QUOTED
-                } else {
-                    _addError(result, "InvalidEscape", "Unexpected quote after closing quote")
-                }
-            } else {
-                if (!cfg.relaxQuotes) {
-                    _addError(result, "InvalidEscape", "Unexpected character after closing quote")
-                } else {
-                    field.append(c)
-                    state = STATE_UNQUOTED
-                }
-            }
-        }
-
-        pos = pos + 1
-    }
-
-    if (state == STATE_QUOTED) {
-        _addError(result, "UnterminatedQuote", "Unterminated quote")
-        return result
-    }
-
-    if (field.length > 0 || result.currentColNum > 0 || result.currentRow.length > 0) {
-        _finishField(result, cfg, field)
-    }
-
-    if (result.currentRow.length > 0) {
-        if (cfg.header && !hasHeader && result.currentRowNum == 0) {
-            header = _consumeHeader(result)
-            hasHeader = true
-        } else {
-            _finishRow(result, cfg, header, mapRows)
-        }
-    }
-
-    return result
-}
-
-fn _detectDelimiter(data: string) -> string {
+fn _detectDelimiter(data: string, quoteChar: string, escapeChar: string) -> string {
     var candidates: Array<string> = [",", "\t", ";", "|"]
     var counts: Array<int> = [0, 0, 0, 0]
-    var inQuote = false
+    var quoted = false
     var limit = data.length
     if (limit > 4096) { limit = 4096 }
 
-    for (var i = 0; i < limit; i++) {
+    var i = 0
+    while (i < limit) {
         var c = data.charAt(i)
-        if (c == "\"") {
-            inQuote = !inQuote
+        if (quoted && c == escapeChar && i + 1 < limit && data.charAt(i + 1) == quoteChar) {
+            i = i + 2
             continue
         }
-        if (inQuote || _isNewline(c)) { continue }
-        for (var j = 0; j < candidates.length; j++) {
-            if (c == candidates[j]) { counts[j] = counts[j] + 1 }
+        if (c == quoteChar) {
+            quoted = !quoted
+        } else if (!quoted && !_isNewline(c)) {
+            for (var j = 0; j < candidates.length; j++) {
+                if (c == candidates[j]) { counts[j] = counts[j] + 1 }
+            }
         }
+        i = i + 1
     }
 
     var best = ","
     var bestCount = 0
     for (var j = 0; j < candidates.length; j++) {
         if (counts[j] > bestCount) {
-            bestCount = counts[j]
             best = candidates[j]
+            bestCount = counts[j]
         }
     }
     return best
 }
 
-// parse - Parse CSV text into row arrays, or Json objects when header/columns is enabled.
-fn parse(data: string, options: unknown = null) -> Array<Json> {
-    var cfg = _config(options)
-    return _parseImpl(data, cfg).data as Array<Json>
+fn _resolveDelimiter(data: string, options: CsvParseOptions) -> string {
+    var delimiter = match (options.delimiter) {
+        CsvDelimiter.Exact(value) -> value,
+        CsvDelimiter.Auto         -> _detectDelimiter(data, options.quoteChar, options.escapeChar)
+    }
+    _validateCharacter("delimiter", delimiter)
+    if (delimiter == options.quoteChar) {
+        throw CsvError.InvalidOption("delimiter and quoteChar must differ")
+    }
+    return delimiter
 }
 
-// parseDetailed - Parse CSV text and return data, errors, and parser metadata.
-fn parseDetailed(data: string, options: unknown = null) -> Json {
-    var cfg = _config(options)
-    var result = _parseImpl(data, cfg)
-    return {
-        data: result.data,
-        errors: result.errors,
-        meta: {
-            rows: result.rows,
-            columns: result.columns,
-            delimiter: result.delimiter,
-            linebreak: result.linebreak,
-            truncated: result.truncated,
-            aborted: result.aborted
-        }
+fn _explicitHeaders(header: CsvHeader) -> Array<string> {
+    var empty: Array<string> = []
+    return match (header) {
+        CsvHeader.Explicit(values) -> values,
+        _                          -> empty
     }
 }
 
-// parseTsv - Parse tab-separated text.
-fn parseTsv(data: string, options: unknown = null) -> Array<Json> {
-    var cfg = _config(options)
-    cfg.delimiter = "\t"
-    return _parseImpl(data, cfg).data as Array<Json>
+fn _addDiagnostic(state: _CsvState, kind: CsvErrorKind, message: string) {
+    state.diagnostics.push(CsvDiagnostic(
+        kind,
+        state.byteOffset,
+        state.physicalLine,
+        state.currentRecord,
+        state.currentColumn,
+        message
+    ))
 }
 
-// parseAuto - Detect a common delimiter and parse the text.
-fn parseAuto(data: string, options: unknown = null) -> Array<Json> {
-    var cfg = _config(options)
-    cfg.delimiter = _detectDelimiter(data)
-    return _parseImpl(data, cfg).data as Array<Json>
+fn _addRecordDiagnostic(state: _CsvState, kind: CsvErrorKind, record: int, message: string) {
+    state.diagnostics.push(CsvDiagnostic(
+        kind,
+        state.byteOffset,
+        state.physicalLine,
+        record,
+        state.currentColumn,
+        message
+    ))
 }
 
-fn _needsQuoting(s: string, cfg: CsvConfig) -> bool {
-    if (s.length == 0) { return false }
-    if (s.charAt(0) == " " || s.charAt(0) == "\t" ||
-        s.charAt(s.length - 1) == " " || s.charAt(s.length - 1) == "\t") {
+fn _appendField(field: StringBuilder, value: string, options: CsvParseOptions) {
+    field.append(value)
+    if (options.maxFieldBytes > 0 && field.length > options.maxFieldBytes) {
+        throw CsvError.FieldLimitExceeded(options.maxFieldBytes)
+    }
+}
+
+fn _finishField(state: _CsvState, options: CsvParseOptions, field: StringBuilder) {
+    if (options.maxColumns > 0 && state.currentColumn + 1 > options.maxColumns) {
+        throw CsvError.ColumnLimitExceeded(options.maxColumns)
+    }
+    var value = field.toString()
+    if (options.trimFields) { value = value.trim() }
+    state.currentRow.push(value)
+    state.currentColumn = state.currentColumn + 1
+    field.clear()
+}
+
+fn _observeLinebreak(state: _CsvState, value: string) {
+    if (state.linebreak.length == 0) {
+        state.linebreak = value
+    } else if (state.linebreak != value) {
+        state.linebreak = "mixed"
+    }
+    state.physicalLine = state.physicalLine + 1
+}
+
+fn _newlineWidth(data: string, pos: int) -> int {
+    if (data.charAt(pos) == "\r" && pos + 1 < data.length && data.charAt(pos + 1) == "\n") {
+        return 2
+    }
+    return 1
+}
+
+fn _newlineText(data: string, pos: int, width: int) -> string {
+    if (width == 2) { return "\r\n" }
+    return data.charAt(pos)
+}
+
+fn _startsWith(s: string, prefix: string) -> bool {
+    return prefix.length > 0 && s.length >= prefix.length && s.slice(0, prefix.length) == prefix
+}
+
+fn _clearRow(state: _CsvState) {
+    state.currentRow = []
+    state.currentColumn = 0
+    state.firstFieldQuoted = false
+}
+
+fn _isEmptyRow(row: Array<string>) -> bool {
+    return row.length == 0 || (row.length == 1 && row[0].length == 0)
+}
+
+fn _consumeRow(state: _CsvState, options: CsvParseOptions) -> bool {
+    var row = state.currentRow
+    var record = state.currentRecord
+    state.currentRecord = state.currentRecord + 1
+
+    if (options.skipEmptyLines && _isEmptyRow(row)) {
+        _clearRow(state)
+        return false
+    }
+
+    if (!state.firstFieldQuoted && row.length > 0 &&
+        _startsWith(row[0], options.commentPrefix)) {
+        _clearRow(state)
+        return false
+    }
+
+    if (record < options.skipRecords) {
+        _clearRow(state)
+        return false
+    }
+
+    var headerConsumed = match (options.header) {
+        CsvHeader.FirstRow -> state.document.headers.length == 0,
+        _                  -> false
+    }
+    if (headerConsumed) {
+        state.document.headers = row
+        state.expectedColumns = row.length
+        _clearRow(state)
+        return false
+    }
+
+    if (state.expectedColumns < 0) {
+        state.expectedColumns = row.length
+    } else if (row.length != state.expectedColumns) {
+        _addRecordDiagnostic(
+            state,
+            CsvErrorKind.FieldCountMismatch,
+            record,
+            "Expected " + string(state.expectedColumns) + " fields, got " + string(row.length)
+        )
+    }
+
+    state.document.rows.push(row)
+    _clearRow(state)
+    if (options.maxRecords > 0 && state.document.rows.length >= options.maxRecords) {
+        state.truncated = true
         return true
     }
-    for (var i = 0; i < s.length; i++) {
-        var c = s.charAt(i)
-        if (c == cfg.delimiter || c == cfg.quoteChar || c == cfg.escapeChar || _isNewline(c)) {
+    return false
+}
+
+fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
+    _validateParseOptions(options)
+    if (options.maxInputBytes > 0 && data.byteLength > options.maxInputBytes) {
+        throw CsvError.InputLimitExceeded(options.maxInputBytes)
+    }
+
+    var delimiter = _resolveDelimiter(data, options)
+    var state = _CsvState(delimiter)
+    var explicitHeaders = _explicitHeaders(options.header)
+    for (name in explicitHeaders) { state.document.headers.push(name) }
+    if (state.document.headers.length > 0) {
+        state.expectedColumns = state.document.headers.length
+    }
+
+    var field = StringBuilder()
+    var parserState = STATE_FIELD_START
+    var pos = 0
+    if (data.length > 0 && data.charAt(0) == "\u{FEFF}") { pos = 1 }
+
+    while (pos < data.length) {
+        state.byteOffset = pos
+        var c = data.charAt(pos)
+
+        if (parserState == STATE_FIELD_START) {
+            if (c == options.quoteChar) {
+                if (state.currentColumn == 0) { state.firstFieldQuoted = true }
+                parserState = STATE_QUOTED
+            } else if (c == delimiter) {
+                _finishField(state, options, field)
+            } else if (_isNewline(c)) {
+                _finishField(state, options, field)
+                var width = _newlineWidth(data, pos)
+                _observeLinebreak(state, _newlineText(data, pos, width))
+                if (_consumeRow(state, options)) { break }
+                pos = pos + width - 1
+            } else {
+                _appendField(field, c, options)
+                parserState = STATE_UNQUOTED
+            }
+        } else if (parserState == STATE_UNQUOTED) {
+            if (c == delimiter) {
+                _finishField(state, options, field)
+                parserState = STATE_FIELD_START
+            } else if (_isNewline(c)) {
+                _finishField(state, options, field)
+                var width = _newlineWidth(data, pos)
+                _observeLinebreak(state, _newlineText(data, pos, width))
+                if (_consumeRow(state, options)) { break }
+                pos = pos + width - 1
+                parserState = STATE_FIELD_START
+            } else {
+                _appendField(field, c, options)
+            }
+        } else if (parserState == STATE_QUOTED) {
+            if (c == options.escapeChar && pos + 1 < data.length &&
+                data.charAt(pos + 1) == options.quoteChar) {
+                _appendField(field, options.quoteChar, options)
+                pos = pos + 1
+            } else if (c == options.quoteChar) {
+                parserState = STATE_QUOTE_END
+            } else if (_isNewline(c)) {
+                var width = _newlineWidth(data, pos)
+                var newline = _newlineText(data, pos, width)
+                _appendField(field, newline, options)
+                _observeLinebreak(state, newline)
+                pos = pos + width - 1
+            } else {
+                _appendField(field, c, options)
+            }
+        } else {
+            if (c == delimiter) {
+                _finishField(state, options, field)
+                parserState = STATE_FIELD_START
+            } else if (_isNewline(c)) {
+                _finishField(state, options, field)
+                var width = _newlineWidth(data, pos)
+                _observeLinebreak(state, _newlineText(data, pos, width))
+                if (_consumeRow(state, options)) { break }
+                pos = pos + width - 1
+                parserState = STATE_FIELD_START
+            } else {
+                _addDiagnostic(state, CsvErrorKind.InvalidEscape,
+                               "Unexpected character after closing quote")
+                _appendField(field, c, options)
+                parserState = STATE_UNQUOTED
+            }
+        }
+        pos = pos + 1
+    }
+
+    state.byteOffset = data.length
+    if (parserState == STATE_QUOTED) {
+        _addDiagnostic(state, CsvErrorKind.UnterminatedQuote, "Unterminated quoted field")
+    }
+    if (field.length > 0 || state.currentColumn > 0 || state.currentRow.length > 0 ||
+        parserState == STATE_QUOTED || parserState == STATE_QUOTE_END) {
+        _finishField(state, options, field)
+    }
+    if (state.currentRow.length > 0 && !state.truncated) {
+        _consumeRow(state, options)
+    }
+    if (state.linebreak.length == 0) { state.linebreak = "" }
+
+    return CsvParseReport(state.document, state.diagnostics, delimiter, state.linebreak,
+                          state.truncated)
+}
+
+// parseReport explicitly opts into recovery and returns any partial document
+// together with typed diagnostics.
+fn parseReport(data: string, options: CsvParseOptions? = null) -> CsvParseReport {
+    return _parseImpl(data, _parseOptions(options))
+}
+
+fn _throwDiagnostic(diagnostic: CsvDiagnostic) {
+    if (diagnostic.kind == CsvErrorKind.UnterminatedQuote) {
+        throw CsvError.UnterminatedQuote(
+            diagnostic.byteOffset, diagnostic.line, diagnostic.record, diagnostic.column,
+            diagnostic.message
+        )
+    }
+    if (diagnostic.kind == CsvErrorKind.InvalidEscape) {
+        throw CsvError.InvalidEscape(
+            diagnostic.byteOffset, diagnostic.line, diagnostic.record, diagnostic.column,
+            diagnostic.message
+        )
+    }
+    throw CsvError.FieldCountMismatch(
+        diagnostic.byteOffset, diagnostic.line, diagnostic.record, diagnostic.column,
+        diagnostic.message
+    )
+}
+
+// parse is strict: the first recoverable syntax diagnostic enters the enum
+// value error channel.
+fn parse(data: string, options: CsvParseOptions? = null) -> CsvDocument {
+    var report = _parseImpl(data, _parseOptions(options))
+    if (report.diagnostics.length > 0) {
+        _throwDiagnostic(report.diagnostics[0])
+    }
+    return report.document
+}
+
+fn _needsQuoting(value: string, options: CsvWriteOptions) -> bool {
+    if (value.length == 0) { return false }
+    if (value.charAt(0) == " " || value.charAt(0) == "\t" ||
+        value.charAt(value.length - 1) == " " || value.charAt(value.length - 1) == "\t") {
+        return true
+    }
+    for (var i = 0; i < value.length; i++) {
+        var c = value.charAt(i)
+        if (c == options.delimiter || c == options.quoteChar || c == options.escapeChar ||
+            _isNewline(c)) {
             return true
         }
     }
     return false
 }
 
-fn _writeField(out: StringBuilder, value: string, cfg: CsvConfig) {
-    if (!_needsQuoting(value, cfg)) {
+fn _writeField(out: StringBuilder, value: string, options: CsvWriteOptions) {
+    if (!_needsQuoting(value, options)) {
         out.append(value)
         return
     }
-    out.append(cfg.quoteChar)
-    var prefixMode = cfg.escapeChar != cfg.quoteChar
+    out.append(options.quoteChar)
+    var prefixMode = options.escapeChar != options.quoteChar
     for (var i = 0; i < value.length; i++) {
         var c = value.charAt(i)
-        if (c == cfg.quoteChar || (prefixMode && c == cfg.escapeChar)) {
-            if (prefixMode) {
-                out.append(cfg.escapeChar)
-                out.append(c)
-            } else {
-                out.append(cfg.quoteChar)
-                out.append(cfg.quoteChar)
-            }
+        if (c == options.quoteChar || (prefixMode && c == options.escapeChar)) {
+            out.append(options.escapeChar)
+            out.append(c)
         } else {
             out.append(c)
         }
     }
-    out.append(cfg.quoteChar)
+    out.append(options.quoteChar)
 }
 
-fn _fieldText(value: Json) -> string {
-    var kind = typename(value)
-    if (value == null) { return "" }
-    if (kind == "string") { return string(value) }
-    if (kind == "int" || kind == "float" || kind == "bool") { return string(value) }
-    return Json.stringify(value)
-}
-
-fn _writeRow(out: StringBuilder, rowValue: unknown, cfg: CsvConfig) {
-    var row = Json.encode(rowValue)
-    if (typename(row) != "Array") { return }
+fn _writeRow(out: StringBuilder, row: Array<string>, options: CsvWriteOptions) {
     for (var i = 0; i < row.length; i++) {
-        if (i > 0) { out.append(cfg.delimiter) }
-        _writeField(out, _fieldText(row[i]), cfg)
+        if (i > 0) { out.append(options.delimiter) }
+        _writeField(out, row[i], options)
     }
-    out.append(cfg.linebreak)
+    out.append(options.linebreak)
 }
 
-// stringify - Convert row arrays or Json object rows to CSV text.
-fn stringify(data: unknown, options: unknown = null) -> string {
-    var rows = Json.encode(data)
-    if (typename(rows) != "Array") { return "" }
-    var cfg = _config(options)
+// stringify accepts only CsvDocument and never guesses how arbitrary values
+// should be coerced.
+fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string {
+    var resolved = _writeOptions(options)
+    _validateWriteOptions(resolved)
     var out = StringBuilder()
-
-    var headers: Array<string> = []
-    var isObjectRows = false
-    if (rows.length > 0 && typename(rows[0]) == "Json") {
-        isObjectRows = true
-        headers = rows[0].keys()
-        if (cfg.header) { _writeRow(out, headers, cfg) }
+    if (document.headers.length > 0) {
+        _writeRow(out, document.headers, resolved)
     }
-
-    for (var i = 0; i < rows.length; i++) {
-        var row = rows[i]
-        if (isObjectRows && typename(row) == "Json") {
-            var values: Json = []
-            for (key in headers) {
-                values.push(Json.get(row, key, null))
-            }
-            _writeRow(out, values, cfg)
-        } else if (typename(row) == "Array") {
-            _writeRow(out, row, cfg)
-        }
+    for (row in document.rows) {
+        _writeRow(out, row, resolved)
     }
-
     return out.toString()
 }
 
-// parseFile - Read a file through io and parse its CSV text.
-fn parseFile(path: string, options: unknown = null) -> Array<Json> {
-    var content = io.readFile(path)
-    if (content == null) {
-        var empty: Array<Json> = []
-        return empty
-    }
-    return parse(content!, options)
+export {
+    CsvDelimiter,
+    CsvHeader,
+    CsvErrorKind,
+    CsvDiagnostic,
+    CsvError,
+    CsvParseOptions,
+    CsvWriteOptions,
+    defaultParseOptions,
+    defaultWriteOptions,
+    CsvDocument,
+    CsvParseReport,
+    parseReport,
+    parse,
+    stringify
 }
-
-// writeFile - Stringify data and write it through io.
-fn writeFile(path: string, data: unknown, options: unknown = null) -> bool {
-    return io.writeFile(path, stringify(data, options))
-}
-
-export { parse, parseDetailed, parseTsv, parseAuto, stringify, parseFile, writeFile }

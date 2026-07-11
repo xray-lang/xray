@@ -74,3 +74,16 @@ quick_iterations = 2
 metrics = ["wall_ns"]
 compare = ["vm", "aot"]
 vm_budget_ratio = 50.0
+
+[[benchmark]]
+id = "csv.parse.contract"
+module = "csv"
+suite = "stdlib/csv"
+kind = "parser"
+source = "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 50.0

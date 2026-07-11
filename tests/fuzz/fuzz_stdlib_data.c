@@ -8,7 +8,7 @@
  * fuzz_stdlib_data.c - Fuzzing harness for pure-Xray data parsers
  *
  * The first input byte selects the stdlib parser:
- *   0: csv.parseDetailed
+ *   0: csv.parseReport
  *   1: toml.parseStrict
  *   2: xml.parseDetailed
  *   3: yaml.parseAll
@@ -133,8 +133,9 @@ static const char *target_prefix(uint8_t selector) {
 static const char *target_suffix(uint8_t selector) {
     switch (selector % 4) {
         case 0:
-            return "\nvar result = csv.parseDetailed(data, { relaxQuotes: true, "
-                   "relaxColumns: true, maxRows: 2048 })\n";
+            return "\nvar options = csv.defaultParseOptions()\n"
+                   "options.maxRecords = 2048\n"
+                   "var result = csv.parseReport(data, options)\n";
         case 1:
             return "\nvar result = toml.parseStrict(data)\n";
         case 2:

@@ -47,7 +47,7 @@
 
 | 首字节 | 目标 |
 |--------|------|
-| `0` | `csv.parseDetailed` |
+| `0` | `csv.parseReport` |
 | `1` | `toml.parseStrict` |
 | `2` | `xml.parseDetailed` |
 | `3` | `yaml.parseAll` |

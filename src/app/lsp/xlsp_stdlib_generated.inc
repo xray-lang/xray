@@ -81,15 +81,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
 
 // csv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Parse CSV text into row arrays, or Json objects when header/columns is enabled.", NULL, 0},
-    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "Parse CSV text and return data, errors, and parser metadata.", NULL, 0},
-    {"parseTsv", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Parse tab-separated text.", NULL, 0},
-    {"parseAuto", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Detect a common delimiter and parse the text.", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(data: unknown, options?: unknown): string", "Convert row arrays or Json object rows to CSV text.", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: unknown): Array<Json>", "Read a file through io and parse its CSV text.", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, data: unknown, options?: unknown): bool", "Stringify data and write it through io.", NULL, 0},
+    {"defaultParseOptions", XLSP_SYM_FUNCTION, "fn(): CsvParseOptions", "", NULL, 0},
+    {"defaultWriteOptions", XLSP_SYM_FUNCTION, "fn(): CsvWriteOptions", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?): CsvParseReport", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?): CsvDocument", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(document: CsvDocument, options?: CsvWriteOptions?): string", "", NULL, 0},
+    {"CsvDelimiter", XLSP_SYM_CLASS, "type CsvDelimiter", "Enum type", NULL, 0},
+    {"CsvHeader", XLSP_SYM_CLASS, "type CsvHeader", "Enum type", NULL, 0},
+    {"CsvErrorKind", XLSP_SYM_CLASS, "type CsvErrorKind", "Enum type", NULL, 0},
+    {"CsvDiagnostic", XLSP_SYM_CLASS, "type CsvDiagnostic", "Class type", NULL, 0},
+    {"CsvError", XLSP_SYM_CLASS, "type CsvError", "Enum type", NULL, 0},
+    {"CsvDocument", XLSP_SYM_CLASS, "type CsvDocument", "Class type", NULL, 0},
+    {"CsvParseReport", XLSP_SYM_CLASS, "type CsvParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 12
 
 // datetime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
