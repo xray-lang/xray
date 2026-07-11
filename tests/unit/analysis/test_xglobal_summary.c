@@ -10997,6 +10997,74 @@ TEST(global_evidence_producer_propagates_record_shape_through_closure_capture) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) {
+    setup_parser_session();
+    const char *source = "type User = { name: string, age: int }\n"
+                         "fn makeUser() -> User {\n"
+                         "    return { name: \"ada\", age: 7 }\n"
+                         "}\n"
+                         "fn readReturnedRecord() -> int {\n"
+                         "    return makeUser().age\n"
+                         "}\n"
+                         "fn readReturnedRecordLocal() -> int {\n"
+                         "    var user = makeUser()\n"
+                         "    return user.age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *direct = evidence_find_body_by_name(&ev, "readReturnedRecord");
+    const XgBodySummary *local = evidence_find_body_by_name(&ev, "readReturnedRecordLocal");
+    ASSERT_NOT_NULL(direct);
+    ASSERT_NOT_NULL(local);
+    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
+    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
+    ASSERT_EQ_UINT(ev.nrecord_accesses, 2);
+    bool saw_direct = false;
+    bool saw_local = false;
+    for (uint32_t i = 0; i < ev.nrecord_accesses; i++) {
+        const XgRecordAccessSummary *access = &ev.record_accesses[i];
+        ASSERT_EQ_UINT(access->receiver_shape_id, ev.record_shapes[0].record_shape_id);
+        ASSERT_EQ_UINT(access->access_kind, XG_RECORD_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(access->field_ordinal, 1);
+        ASSERT_TRUE((access->flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == direct->func_id)
+            saw_direct = true;
+        if (access->owner_func_id == local->func_id)
+            saw_local = true;
+    }
+    ASSERT_TRUE(saw_direct);
+    ASSERT_TRUE(saw_local);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.nrecord_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.record_access_plans[i].action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+        ASSERT_EQ_UINT(bundle.record_access_plans[i].field_ordinal, 1);
+    }
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_record_shape_access) {
     setup_parser_session();
     const char *source = "fn readX() -> int {\n"
@@ -12103,6 +12171,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_direct_return_re
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_return_initialized_local);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_closure_capture);
 RUN_TEST(global_evidence_producer_propagates_record_shape_through_closure_capture);
+RUN_TEST(global_evidence_producer_propagates_record_shape_through_return_receivers);
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
