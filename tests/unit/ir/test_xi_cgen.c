@@ -948,7 +948,8 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
                           "}\n"
                           "export fn public(x: int) -> int {\n"
                           "    return helper(x) + 1\n"
-                          "}\n";
+                          "}\n"
+                          "public(0)\n";
     const char *app_src = "print(0)\n";
 
     XiFunc *lib_ir = compile_to_ir(lib_src);
