@@ -47,6 +47,7 @@
 #include "xcoro_pool.h"
 #include "xcoro_snapshot.h"
 #include "xevent_count.h"
+#include "xparallel_executor.h"
 #include "xsemaphore.h"
 #include "xtask.h"
 #include "xworker.h"
@@ -67,7 +68,7 @@ typedef struct XrAotEnumBoxCompat {
 } XrAotEnumBoxCompat;
 
 enum {
-    XR_PARALLEL_MAX_WORKERS = XR_MAX_WORKERS,
+    XR_PARALLEL_MAX_WORKERS = XR_PARALLEL_EXECUTOR_MAX_LANES,
 };
 
 typedef enum XrParallelJobKind {
@@ -108,27 +109,6 @@ typedef struct XrParallelForSchedulerLaneFrame {
     int64_t worker_id;
 } XrParallelSchedulerLaneFrame;
 
-static bool xr_parallel_for_lane_bounds(int64_t start, int64_t end, int64_t participants,
-                                        int64_t worker_id, int64_t *out_begin, int64_t *out_end) {
-    if (!out_begin || !out_end || participants <= 0 || worker_id < 0 || worker_id >= participants ||
-        end <= start)
-        return false;
-
-    uint64_t count_u = (uint64_t) end - (uint64_t) start;
-    int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
-    int64_t base = count / participants;
-    int64_t rem = count % participants;
-    int64_t lane_count = base + (worker_id < rem ? 1 : 0);
-    if (lane_count <= 0)
-        return false;
-
-    int64_t extra_before = worker_id < rem ? worker_id : rem;
-    int64_t begin = start + worker_id * base + extra_before;
-    *out_begin = begin;
-    *out_end = begin + lane_count;
-    return true;
-}
-
 static void xr_parallel_for_run_lane(XrParallelRangeI64Fn body, struct xrt_closure *closure,
                                      int64_t start, int64_t end, int64_t participants,
                                      int64_t worker_id) {
@@ -136,7 +116,7 @@ static void xr_parallel_for_run_lane(XrParallelRangeI64Fn body, struct xrt_closu
         return;
     int64_t begin = 0;
     int64_t limit = 0;
-    if (xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit))
+    if (xr_parallel_lane_bounds(start, end, (int) participants, (int) worker_id, &begin, &limit))
         body(closure, begin, limit, worker_id);
 }
 
@@ -148,7 +128,7 @@ static void xr_parallel_for_state_run_lane(XrParallelRangeStateI64Fn body,
         return;
     int64_t begin = 0;
     int64_t limit = 0;
-    if (xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit))
+    if (xr_parallel_lane_bounds(start, end, (int) participants, (int) worker_id, &begin, &limit))
         body(closure, states, begin, limit, worker_id);
 }
 
@@ -171,8 +151,8 @@ static void xr_parallel_reduce_i64_run_lane(XrParallelSchedulerBatch *batch, int
 
     int64_t begin = 0;
     int64_t limit = 0;
-    if (!xr_parallel_for_lane_bounds(batch->start, batch->end, batch->participants, worker_id,
-                                     &begin, &limit)) {
+    if (!xr_parallel_lane_bounds(batch->start, batch->end, (int) batch->participants,
+                                 (int) worker_id, &begin, &limit)) {
         batch->reduce_valid[worker_id] = false;
         return;
     }
@@ -198,8 +178,8 @@ static void xr_parallel_reduce_state_i64_run_lane(XrParallelSchedulerBatch *batc
 
     int64_t begin = 0;
     int64_t limit = 0;
-    if (!xr_parallel_for_lane_bounds(batch->start, batch->end, batch->participants, worker_id,
-                                     &begin, &limit)) {
+    if (!xr_parallel_lane_bounds(batch->start, batch->end, (int) batch->participants,
+                                 (int) worker_id, &begin, &limit)) {
         batch->reduce_valid[worker_id] = false;
         return;
     }
@@ -229,8 +209,8 @@ static void xr_parallel_reduce_agg_run_lane(XrParallelSchedulerBatch *batch, int
 
     int64_t begin = 0;
     int64_t limit = 0;
-    if (!xr_parallel_for_lane_bounds(batch->start, batch->end, batch->participants, worker_id,
-                                     &begin, &limit)) {
+    if (!xr_parallel_lane_bounds(batch->start, batch->end, (int) batch->participants,
+                                 (int) worker_id, &begin, &limit)) {
         batch->reduce_valid[worker_id] = false;
         return;
     }
@@ -258,8 +238,8 @@ static void xr_parallel_reduce_state_agg_run_lane(XrParallelSchedulerBatch *batc
 
     int64_t begin = 0;
     int64_t limit = 0;
-    if (!xr_parallel_for_lane_bounds(batch->start, batch->end, batch->participants, worker_id,
-                                     &begin, &limit)) {
+    if (!xr_parallel_lane_bounds(batch->start, batch->end, (int) batch->participants,
+                                 (int) worker_id, &begin, &limit)) {
         batch->reduce_valid[worker_id] = false;
         return;
     }
@@ -341,14 +321,9 @@ static void xr_parallel_for_state_run_range_sequential(int64_t start, int64_t en
     body(closure, states, start, end, 0);
 }
 
-static int64_t xr_parallel_scheduler_worker_cap(const XrAotContext *ctx) {
+static XrRuntime *xr_parallel_scheduler_from_context(const XrAotContext *ctx) {
     XrAotRuntime *aot_runtime = ctx && ctx->runtime ? ctx->runtime : xr_aot_runtime_current();
-    XrRuntime *scheduler = aot_runtime ? xr_aot_runtime_scheduler(aot_runtime) : NULL;
-    if (!scheduler || scheduler->worker_count <= 0)
-        return 0;
-    if (scheduler->worker_count > XR_PARALLEL_MAX_WORKERS)
-        return XR_PARALLEL_MAX_WORKERS;
-    return scheduler->worker_count;
+    return aot_runtime ? xr_aot_runtime_scheduler(aot_runtime) : NULL;
 }
 
 static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
@@ -359,10 +334,9 @@ static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
     XrRuntime *scheduler = aot_runtime ? xr_aot_runtime_scheduler(aot_runtime) : NULL;
     if (!aot_runtime || !scheduler || scheduler->worker_count <= 1)
         return false;
-    if (batch->participants > scheduler->worker_count)
-        batch->participants = scheduler->worker_count;
-    if (batch->participants > XR_PARALLEL_MAX_WORKERS)
-        batch->participants = XR_PARALLEL_MAX_WORKERS;
+    int runtime_cap = xr_parallel_runtime_worker_cap(scheduler, XR_PARALLEL_MAX_WORKERS);
+    if (batch->participants > runtime_cap)
+        batch->participants = runtime_cap;
     if (batch->participants <= 1)
         return false;
 
@@ -438,8 +412,7 @@ static int64_t xr_parallel_resolve_workers(const XrAotContext *ctx, int64_t requ
         return requested;
     if (xr_aot_env_flag_enabled("XRAY_CORO_DETERMINISTIC"))
         return 1;
-    XrAotRuntime *aot_runtime = ctx && ctx->runtime ? ctx->runtime : xr_aot_runtime_current();
-    XrRuntime *scheduler = aot_runtime ? xr_aot_runtime_scheduler(aot_runtime) : NULL;
+    XrRuntime *scheduler = xr_parallel_scheduler_from_context(ctx);
     if (scheduler) {
         if (xr_runtime_deterministic_mode(scheduler))
             return 1;
@@ -455,6 +428,14 @@ static int64_t xr_parallel_resolve_workers(const XrAotContext *ctx, int64_t requ
     if (cpus > XR_PARALLEL_MAX_WORKERS)
         return XR_PARALLEL_MAX_WORKERS;
     return (int64_t) cpus;
+}
+
+static int xr_parallel_resolve_participants(const XrAotContext *ctx, int64_t item_count,
+                                            int64_t workers) {
+    XrRuntime *scheduler = xr_parallel_scheduler_from_context(ctx);
+    if (!scheduler)
+        return -1;
+    return xr_parallel_resolve_lane_count(scheduler, item_count, workers, XR_PARALLEL_MAX_WORKERS);
 }
 
 bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end, int64_t workers,
@@ -474,16 +455,10 @@ bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t e
         return true;
     }
 
-    int64_t participants = workers;
-    if (participants > count)
-        participants = count;
-    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
-    if (scheduler_cap > 0 && participants > scheduler_cap)
-        participants = scheduler_cap;
-    if (participants > XR_PARALLEL_MAX_WORKERS)
-        participants = XR_PARALLEL_MAX_WORKERS;
-    int background_workers = (int) participants - 1;
-    if (background_workers <= 0) {
+    int participants = xr_parallel_resolve_participants(ctx, count, workers);
+    if (participants < 0)
+        return false;
+    if (participants <= 1) {
         xr_parallel_for_run_range_sequential(start, end, body, closure);
         return true;
     }
@@ -520,16 +495,10 @@ bool xr_parallel_for_range_state_i64(const XrAotContext *ctx, int64_t start, int
         return true;
     }
 
-    int64_t participants = workers;
-    if (participants > count)
-        participants = count;
-    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
-    if (scheduler_cap > 0 && participants > scheduler_cap)
-        participants = scheduler_cap;
-    if (participants > XR_PARALLEL_MAX_WORKERS)
-        participants = XR_PARALLEL_MAX_WORKERS;
-    int background_workers = (int) participants - 1;
-    if (background_workers <= 0) {
+    int participants = xr_parallel_resolve_participants(ctx, count, workers);
+    if (participants < 0)
+        return false;
+    if (participants <= 1) {
         xr_parallel_for_state_run_range_sequential(start, end, body, closure, states);
         return true;
     }
@@ -644,16 +613,10 @@ bool xr_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end,
         return xr_parallel_reduce_i64_run_range_sequential(start, end, initial, body, combine,
                                                            closure, out);
 
-    int64_t participants = workers;
-    if (participants > count)
-        participants = count;
-    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
-    if (scheduler_cap > 0 && participants > scheduler_cap)
-        participants = scheduler_cap;
-    if (participants > XR_PARALLEL_MAX_WORKERS)
-        participants = XR_PARALLEL_MAX_WORKERS;
-    int background_workers = (int) participants - 1;
-    if (background_workers <= 0)
+    int participants = xr_parallel_resolve_participants(ctx, count, workers);
+    if (participants < 0)
+        return false;
+    if (participants <= 1)
         return xr_parallel_reduce_i64_run_range_sequential(start, end, initial, body, combine,
                                                            closure, out);
 
@@ -701,16 +664,10 @@ bool xr_parallel_reduce_state_i64(const XrAotContext *ctx, int64_t start, int64_
         return xr_parallel_reduce_state_i64_run_range_sequential(start, end, initial, body, combine,
                                                                  closure, states, out);
 
-    int64_t participants = workers;
-    if (participants > count)
-        participants = count;
-    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
-    if (scheduler_cap > 0 && participants > scheduler_cap)
-        participants = scheduler_cap;
-    if (participants > XR_PARALLEL_MAX_WORKERS)
-        participants = XR_PARALLEL_MAX_WORKERS;
-    int background_workers = (int) participants - 1;
-    if (background_workers <= 0)
+    int participants = xr_parallel_resolve_participants(ctx, count, workers);
+    if (participants < 0)
+        return false;
+    if (participants <= 1)
         return xr_parallel_reduce_state_i64_run_range_sequential(start, end, initial, body, combine,
                                                                  closure, states, out);
 
@@ -758,16 +715,10 @@ bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
         return xr_parallel_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
                                                            combine, closure, out);
 
-    int64_t participants = workers;
-    if (participants > count)
-        participants = count;
-    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
-    if (scheduler_cap > 0 && participants > scheduler_cap)
-        participants = scheduler_cap;
-    if (participants > XR_PARALLEL_MAX_WORKERS)
-        participants = XR_PARALLEL_MAX_WORKERS;
-    int background_workers = (int) participants - 1;
-    if (background_workers <= 0)
+    int participants = xr_parallel_resolve_participants(ctx, count, workers);
+    if (participants < 0)
+        return false;
+    if (participants <= 1)
         return xr_parallel_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
                                                            combine, closure, out);
 
@@ -823,16 +774,10 @@ bool xr_parallel_reduce_state_agg(const XrAotContext *ctx, int64_t start, int64_
         return xr_parallel_reduce_state_agg_run_range_sequential(
             start, end, value_size, initial, body, combine, closure, states, out);
 
-    int64_t participants = workers;
-    if (participants > count)
-        participants = count;
-    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
-    if (scheduler_cap > 0 && participants > scheduler_cap)
-        participants = scheduler_cap;
-    if (participants > XR_PARALLEL_MAX_WORKERS)
-        participants = XR_PARALLEL_MAX_WORKERS;
-    int background_workers = (int) participants - 1;
-    if (background_workers <= 0)
+    int participants = xr_parallel_resolve_participants(ctx, count, workers);
+    if (participants < 0)
+        return false;
+    if (participants <= 1)
         return xr_parallel_reduce_state_agg_run_range_sequential(
             start, end, value_size, initial, body, combine, closure, states, out);
 

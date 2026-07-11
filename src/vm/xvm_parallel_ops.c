@@ -24,6 +24,7 @@
 #include "../base/xmalloc.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xcountdown_latch.h"
+#include "../coro/xparallel_executor.h"
 #include "../coro/xworker.h"
 #include "../coro/xyieldable.h"
 #include "../runtime/closure/xclosure.h"
@@ -36,7 +37,7 @@
 #include "../runtime/xshared.h"
 
 enum {
-    XR_VM_PAR_MAX_LANES = 256,
+    XR_VM_PAR_MAX_LANES = XR_PARALLEL_EXECUTOR_MAX_LANES,
     XR_VM_PAR_FLAG_INCLUSIVE_END = 1 << 0,
     XR_VM_PAR_FLAG_RANGE_BODY = 1 << 1,
     XR_VM_PAR_FLAG_PLAN_STATE = 1 << 2,
@@ -136,25 +137,6 @@ static bool vm_par_value_fits_elem_type(XrValue value, XrArrayElemType elem_type
         default:
             return false;
     }
-}
-
-static int vm_par_resolve_lanes(XrRuntime *runtime, int64_t item_count, int64_t requested_workers) {
-    if (!runtime || item_count <= 1 || requested_workers == 1)
-        return 0;
-    if (xr_runtime_deterministic_mode(runtime))
-        return 0;
-    int runtime_workers = runtime->worker_count;
-    if (runtime_workers <= 1)
-        return 0;
-
-    int64_t lanes = requested_workers == 0 ? (int64_t) runtime_workers : requested_workers;
-    if (lanes > item_count)
-        lanes = item_count;
-    if (lanes > runtime_workers)
-        lanes = runtime_workers;
-    if (lanes > XR_VM_PAR_MAX_LANES)
-        lanes = XR_VM_PAR_MAX_LANES;
-    return lanes > 1 ? (int) lanes : 0;
 }
 
 static void vm_par_latch_release(XrVmParBatch *batch) {
@@ -428,21 +410,23 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
         return NULL;
     }
 
-    int64_t base = item_count / lane_count;
-    int64_t rem = item_count % lane_count;
-    int64_t cursor = start;
     for (int lane = 0; lane < lane_count; lane++) {
-        int64_t lane_items = base + (lane < rem ? 1 : 0);
+        int64_t lane_begin = 0;
+        int64_t lane_end = 0;
+        if (!xr_parallel_lane_bounds(start, end_excl, lane_count, lane, &lane_begin, &lane_end)) {
+            vm_par_batch_cancel_unspawned(batch);
+            vm_par_batch_free(batch);
+            return NULL;
+        }
         XrVmParLane *slot = &batch->lanes[lane];
         slot->batch = batch;
         slot->lane_id = lane;
-        slot->iter = cursor;
-        slot->limit = cursor + lane_items;
+        slot->iter = lane_begin;
+        slot->limit = lane_end;
         slot->partial = xr_null();
         slot->pending_value = xr_null();
         slot->partial_init = false;
         slot->phase = XR_VM_PAR_LANE_BODY;
-        cursor += lane_items;
 
         XrValue args[2] = {vm_par_batch_to_value(batch), xr_int(lane)};
         batch->coros[lane] = xr_coro_create_vm_cfunc(
@@ -592,7 +576,8 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
     }
 
     XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
-    int lane_count = vm_par_resolve_lanes(runtime, item_count, workers);
+    int lane_count =
+        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
     if (lane_count <= 1)
         return XR_DISP_NEXT;
 
@@ -679,7 +664,8 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
         return XR_DISP_NEXT;
 
     XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
-    int lane_count = vm_par_resolve_lanes(runtime, item_count, workers);
+    int lane_count =
+        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
     if (lane_count <= 1)
         return XR_DISP_NEXT;
 
@@ -764,7 +750,8 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     }
 
     XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
-    int lane_count = vm_par_resolve_lanes(runtime, item_count, workers);
+    int lane_count =
+        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
     if (lane_count <= 1)
         return XR_DISP_NEXT;
 

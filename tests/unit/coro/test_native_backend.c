@@ -17,6 +17,7 @@
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
 #include "coro/xdeep_copy.h"
+#include "coro/xparallel_executor.h"
 #include "coro/xresult_group.h"
 #include "coro/xtask.h"
 #include "coro/xworker.h"
@@ -1358,6 +1359,39 @@ TEST(parallel_for_requested_workers_scales_lanes) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(parallel_executor_shape_helper_matches_runtime_lane_split) {
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_PARALLEL;
+    cfg.scheduler_workers = 8;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    ASSERT_NOT_NULL(scheduler);
+
+    ASSERT_EQ_INT(xr_parallel_runtime_worker_cap(scheduler, 4), 4);
+    ASSERT_EQ_INT(xr_parallel_resolve_lane_count(scheduler, 64, 0, 8), 8);
+    ASSERT_EQ_INT(xr_parallel_resolve_lane_count(scheduler, 64, 4, 8), 4);
+    ASSERT_EQ_INT(xr_parallel_resolve_lane_count(scheduler, 3, 8, 8), 3);
+    ASSERT_EQ_INT(xr_parallel_resolve_lane_count(scheduler, 1, 8, 8), 0);
+
+    int64_t begin = -1;
+    int64_t end = -1;
+    ASSERT_TRUE(xr_parallel_lane_bounds(0, 10, 3, 0, &begin, &end));
+    ASSERT_EQ_INT(begin, 0);
+    ASSERT_EQ_INT(end, 4);
+    ASSERT_TRUE(xr_parallel_lane_bounds(0, 10, 3, 1, &begin, &end));
+    ASSERT_EQ_INT(begin, 4);
+    ASSERT_EQ_INT(end, 7);
+    ASSERT_TRUE(xr_parallel_lane_bounds(0, 10, 3, 2, &begin, &end));
+    ASSERT_EQ_INT(begin, 7);
+    ASSERT_EQ_INT(end, 10);
+    ASSERT_FALSE(xr_parallel_lane_bounds(0, 10, 3, 3, &begin, &end));
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(parallel_for_deterministic_scheduler_uses_single_lane) {
     char *old_det = aot_test_dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
     char *old_workers = aot_test_dup_env_value(getenv("XRAY_WORKERS"));
@@ -1629,6 +1663,7 @@ RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 RUN_TEST(parallel_for_range_i64_runs_static_lanes);
 RUN_TEST(parallel_for_auto_workers_uses_scheduler_worker_count);
 RUN_TEST(parallel_for_requested_workers_scales_lanes);
+RUN_TEST(parallel_executor_shape_helper_matches_runtime_lane_split);
 RUN_TEST(parallel_for_deterministic_scheduler_uses_single_lane);
 RUN_TEST(parallel_for_small_range_uses_single_lane);
 RUN_TEST(parallel_for_dispatch_is_runtime_scoped);
