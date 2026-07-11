@@ -1,0 +1,8 @@
+import parallel
+import "../../fixtures/thread_spawn_suspendable_lib" as lib
+
+var values = parallel.map(0..4, (i) -> {
+    return lib.importedSuspends()
+}, parallel.Options(2))
+
+print(values.length)
