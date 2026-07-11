@@ -1,0 +1,4 @@
+c_contains=xrt_array_t *_arr =
+c_contains=->length = 0
+c_not_contains=XrValue _arr =
+c_not_contains=xrt_array_resize_value(

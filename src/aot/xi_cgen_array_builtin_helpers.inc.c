@@ -132,9 +132,23 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     }
     if (strcmp(name, "array_resize") == 0) {
         if (cg_array_builtin_resize_zero_is_trusted(ctx, f, v)) {
+            CgArrayElemInfo info;
+            XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
+            if (v->nargs >= 2 && (xicgen_value_c_storage_rep(ctx, f, v->args[0]) == XR_REP_PTR ||
+                                  cg_array_value_storage_info(ctx, f, v->args[0], &info,
+                                                              CG_ARRAY_STORAGE_MUTABLE))) {
+                const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_PTR, target_rep);
+                fprintf(out, "({ xrt_array_t *_arr = ");
+                emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
+                fprintf(out, "; _arr->length = 0; _arr; })");
+                emit_conversion_suffix(out, suffix);
+                return true;
+            }
+            const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
             fprintf(out, "({ XrValue _arr = ");
             emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "; ((xrt_array_t*)_arr.ptr)->length = 0; _arr; })");
+            emit_conversion_suffix(out, suffix);
             return true;
         }
         fprintf(out, "xrt_array_resize_value(");

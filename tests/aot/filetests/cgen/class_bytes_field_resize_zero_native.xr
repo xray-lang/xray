@@ -1,0 +1,17 @@
+class ScratchBytes {
+    out: Bytes
+
+    constructor() {
+        this.out = Bytes.withCapacity(4)
+    }
+
+    resetThenWrite() -> int {
+        this.out.resize(0)
+        this.out.push(7)
+        this.out.push(9)
+        return this.out.length + this.out[0] + this.out[1]
+    }
+}
+
+var scratch = ScratchBytes()
+print(scratch.resetThenWrite())
