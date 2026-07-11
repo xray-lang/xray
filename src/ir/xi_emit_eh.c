@@ -494,23 +494,31 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
+    bool plan_state = data->plan_state;
+    if (plan_state && v->nargs < 5) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
 
     XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
     XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
     XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
     XiEmitReg closure = reg_of(ctx, v->args[3]);
+    XiEmitReg states = 0;
+    if (plan_state)
+        states = reg_of(ctx, v->args[4]);
     (void) workers;
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    if (ctx->next_reg + (data->range_body ? 24 : 23) > MAX_REGS) {
+    if (ctx->next_reg + (data->range_body ? 26 : (plan_state ? 26 : 23)) > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
     XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg += 5;
+    ctx->next_reg += plan_state ? 6 : 5;
     XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
     XiEmitReg count = (XiEmitReg) ctx->next_reg++;
     XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
@@ -524,8 +532,11 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg offset = (XiEmitReg) ctx->next_reg++;
     XiEmitReg iter = (XiEmitReg) ctx->next_reg++;
     XiEmitReg limit = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg state_value = 0;
+    if (plan_state)
+        state_value = (XiEmitReg) ctx->next_reg++;
     XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg += data->range_body ? 4 : 3;
+    ctx->next_reg += plan_state ? 4 : (data->range_body ? 4 : 3);
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
 
@@ -534,13 +545,20 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         par_flags |= 0x01;
     if (data->range_body)
         par_flags |= 0x02;
+    if (plan_state)
+        par_flags |= 0x04;
     emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, par_handled, 0, 0));
     emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, par_true, 0, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, par_base, start, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 1), end, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 2), workers, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 3), closure, 0));
-    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 4), 0, 0));
+    if (plan_state) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 4), states, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 5), 0, 0));
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 4), 0, 0));
+    }
     emit_inst(ctx, CREATE_ABC(OP_PAR_FOR, par_handled, par_base, par_flags));
     int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
 
@@ -614,7 +632,24 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ADD, iter, start, offset));
     emit_inst(ctx, CREATE_ABC(OP_ADD, limit, iter, lane_count));
 
-    if (data->range_body) {
+    if (plan_state) {
+        int loop_pc = current_pc(ctx);
+        int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, iter, limit, false);
+
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_GET, state_value, states, lane));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), state_value, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), iter, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), lane, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
+
+        int back_jmp_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, loop_pc - (back_jmp_pc + 1)));
+
+        int inner_exit_pc = current_pc(ctx);
+        patch_jump_to(ctx, inner_exit_jmp_pc, inner_exit_pc);
+    } else if (data->range_body) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), limit, 0));

@@ -73,6 +73,7 @@ enum {
 typedef enum XrParallelJobKind {
     XR_PARALLEL_JOB_NONE = 0,
     XR_PARALLEL_JOB_FOR_RANGE,
+    XR_PARALLEL_JOB_FOR_RANGE_STATE,
     XR_PARALLEL_JOB_REDUCE_I64,
     XR_PARALLEL_JOB_REDUCE_AGG,
 } XrParallelJobKind;
@@ -86,6 +87,7 @@ typedef struct XrParallelSchedulerBatch {
     int64_t end;
     int64_t participants;
     XrParallelRangeI64Fn for_body;
+    XrParallelRangeStateI64Fn for_state_body;
     XrParallelReduceRangeI64Fn reduce_body;
     XrParallelReduceRangeAggFn reduce_agg_body;
     int64_t reduce_partials[XR_PARALLEL_MAX_WORKERS];
@@ -94,6 +96,7 @@ typedef struct XrParallelSchedulerBatch {
     bool reduce_valid[XR_PARALLEL_MAX_WORKERS];
     _Atomic bool reduce_failed;
     struct xrt_closure *closure;
+    XrValue states;
 } XrParallelSchedulerBatch;
 
 typedef struct XrParallelForSchedulerLaneFrame {
@@ -131,6 +134,18 @@ static void xr_parallel_for_run_lane(XrParallelRangeI64Fn body, struct xrt_closu
     int64_t limit = 0;
     if (xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit))
         body(closure, begin, limit, worker_id);
+}
+
+static void xr_parallel_for_state_run_lane(XrParallelRangeStateI64Fn body,
+                                           struct xrt_closure *closure, XrValue states,
+                                           int64_t start, int64_t end, int64_t participants,
+                                           int64_t worker_id) {
+    if (!body)
+        return;
+    int64_t begin = 0;
+    int64_t limit = 0;
+    if (xr_parallel_for_lane_bounds(start, end, participants, worker_id, &begin, &limit))
+        body(closure, states, begin, limit, worker_id);
 }
 
 static void xr_parallel_scheduler_batch_complete(XrParallelSchedulerBatch *batch) {
@@ -204,6 +219,11 @@ static void xr_parallel_scheduler_run_lane(XrParallelSchedulerBatch *batch, int6
             xr_parallel_for_run_lane(batch->for_body, batch->closure, batch->start, batch->end,
                                      batch->participants, worker_id);
             break;
+        case XR_PARALLEL_JOB_FOR_RANGE_STATE:
+            xr_parallel_for_state_run_lane(batch->for_state_body, batch->closure, batch->states,
+                                           batch->start, batch->end, batch->participants,
+                                           worker_id);
+            break;
         case XR_PARALLEL_JOB_REDUCE_I64:
             xr_parallel_reduce_i64_run_lane(batch, worker_id);
             break;
@@ -244,6 +264,13 @@ static void xr_parallel_for_run_range_sequential(int64_t start, int64_t end,
                                                  XrParallelRangeI64Fn body,
                                                  struct xrt_closure *closure) {
     body(closure, start, end, 0);
+}
+
+static void xr_parallel_for_state_run_range_sequential(int64_t start, int64_t end,
+                                                       XrParallelRangeStateI64Fn body,
+                                                       struct xrt_closure *closure,
+                                                       XrValue states) {
+    body(closure, states, start, end, 0);
 }
 
 static int64_t xr_parallel_scheduler_worker_cap(const XrAotContext *ctx) {
@@ -401,6 +428,53 @@ bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t e
     batch.participants = participants;
     batch.for_body = body;
     batch.closure = closure;
+    if (xr_parallel_run_scheduler_batch(ctx, &batch))
+        return true;
+
+    return false;
+}
+
+bool xr_parallel_for_range_state_i64(const XrAotContext *ctx, int64_t start, int64_t end,
+                                     int64_t workers, XrParallelRangeStateI64Fn body,
+                                     struct xrt_closure *closure, XrValue states) {
+    if (!body)
+        return false;
+    if (end <= start)
+        return true;
+
+    workers = xr_parallel_resolve_workers(ctx, workers);
+    if (workers < 0)
+        return false;
+    uint64_t count_u = (uint64_t) end - (uint64_t) start;
+    int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
+    if (count <= 1 || workers <= 1) {
+        xr_parallel_for_state_run_range_sequential(start, end, body, closure, states);
+        return true;
+    }
+
+    int64_t participants = workers;
+    if (participants > count)
+        participants = count;
+    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
+    if (scheduler_cap > 0 && participants > scheduler_cap)
+        participants = scheduler_cap;
+    if (participants > XR_PARALLEL_MAX_WORKERS)
+        participants = XR_PARALLEL_MAX_WORKERS;
+    int background_workers = (int) participants - 1;
+    if (background_workers <= 0) {
+        xr_parallel_for_state_run_range_sequential(start, end, body, closure, states);
+        return true;
+    }
+
+    XrParallelSchedulerBatch batch;
+    memset(&batch, 0, sizeof(batch));
+    batch.job_kind = XR_PARALLEL_JOB_FOR_RANGE_STATE;
+    batch.start = start;
+    batch.end = end;
+    batch.participants = participants;
+    batch.for_state_body = body;
+    batch.closure = closure;
+    batch.states = states;
     if (xr_parallel_run_scheduler_batch(ctx, &batch))
         return true;
 
