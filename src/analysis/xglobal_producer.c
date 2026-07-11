@@ -2673,6 +2673,29 @@ static const XrTypeRef *body_call_return_type_ref(XgBodyCollect *bc, const CallE
     return body_pending_return_type_ref(body_find_call_body(bc, call));
 }
 
+static const XrTypeRef *body_expr_type_ref(XgBodyCollect *bc, const AstNode *expr) {
+    if (!bc || !expr)
+        return NULL;
+    switch (expr->type) {
+        case AST_AS_EXPR:
+            return expr->as.as_expr.type;
+        case AST_GROUPING:
+            return body_expr_type_ref(bc, expr->as.grouping);
+        case AST_COMPTIME_EXPR:
+            return body_expr_type_ref(bc, expr->as.comptime_expr.expr);
+        case AST_MOVE_EXPR:
+            return body_expr_type_ref(bc, expr->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return body_expr_type_ref(bc, expr->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return body_expr_type_ref(bc, expr->as.unary.operand);
+        case AST_CALL_EXPR:
+            return body_call_return_type_ref(bc, &expr->as.call_expr);
+        default:
+            return NULL;
+    }
+}
+
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
     if (!bc || !expr)
         return 0;
@@ -7280,6 +7303,15 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                                 &sequence_elem_type_key);
             sequence_elem_type_ref =
                 body_type_ref_sequence_elem_type_ref(node->as.var_decl.type_annotation);
+            if (sequence_kind == 0 && node->as.var_decl.initializer) {
+                const XrTypeRef *inferred_sequence_type_ref =
+                    body_expr_type_ref(bc, node->as.var_decl.initializer);
+                if (body_type_ref_sequence_parts(inferred_sequence_type_ref, &sequence_kind,
+                                                 &sequence_elem_type_key)) {
+                    sequence_elem_type_ref =
+                        body_type_ref_sequence_elem_type_ref(inferred_sequence_type_ref);
+                }
+            }
             if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref))
                 sequence_json_literal =
                     body_static_json_array_element_literal(node->as.var_decl.initializer);
@@ -7360,11 +7392,18 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (source_sequence_local && !sequence_json_literal)
                 body_bind_sequence_local_from_source(bc, node->as.var_decl.name,
                                                      source_sequence_local);
-            if (sequence_json_literal) {
+            if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref) &&
+                !sequence_json_literal) {
+                sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                    bc, node->as.var_decl.initializer, &sequence_json_literal);
+            }
+            if (sequence_json_shape_id == XG_NO_ID && sequence_json_literal) {
                 sequence_json_shape_id = body_add_json_shape_for_literal(
                     bc, sequence_json_literal, (uint32_t) node->line,
                     sequence_elem_type_key ? sequence_elem_type_key
                                            : hash_named_type_key32("Json", NULL, 0));
+            }
+            if (sequence_json_shape_id != XG_NO_ID) {
                 body_bind_sequence_json_shape_local(bc, node->as.var_decl.name,
                                                     sequence_json_shape_id, sequence_json_literal);
             }
@@ -7387,9 +7426,28 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_lookup_local_map_shape(bc, node->as.assignment.value);
             XgLocalType *source_sequence_local =
                 body_lookup_local_sequence(bc, node->as.assignment.value);
+            uint8_t target_sequence_kind = target_row ? target_row->sequence_kind : 0;
+            uint32_t target_sequence_elem_type_key =
+                target_row ? target_row->sequence_elem_type_key : 0;
+            const XrTypeRef *source_sequence_type_ref =
+                body_expr_type_ref(bc, node->as.assignment.value);
+            uint8_t source_sequence_kind = 0;
+            uint32_t source_sequence_elem_type_key = 0;
+            const XrTypeRef *source_sequence_elem_type_ref = NULL;
+            const ObjectLiteralNode *source_sequence_json_literal = NULL;
+            XgJsonShapeId source_sequence_json_shape_id = XG_NO_ID;
             XgClassId class_id;
             XgInterfaceId interface_id;
             uint32_t type_key;
+            if (body_type_ref_sequence_parts(source_sequence_type_ref, &source_sequence_kind,
+                                             &source_sequence_elem_type_key)) {
+                source_sequence_elem_type_ref =
+                    body_type_ref_sequence_elem_type_ref(source_sequence_type_ref);
+                if (body_type_ref_is_json(source_sequence_elem_type_ref)) {
+                    source_sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                        bc, node->as.assignment.value, &source_sequence_json_literal);
+                }
+            }
             walk_body_for_calls(bc, node->as.assignment.value);
             class_id = body_resolve_expr_class(bc, node->as.assignment.value);
             interface_id = body_resolve_expr_interface(bc, node->as.assignment.value);
@@ -7434,6 +7492,17 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (source_sequence_local)
                 body_bind_sequence_local_from_source(bc, node->as.assignment.name,
                                                      source_sequence_local);
+            else if (source_sequence_kind != 0)
+                body_bind_sequence_local(bc, node->as.assignment.name, source_sequence_kind,
+                                         source_sequence_elem_type_key,
+                                         source_sequence_elem_type_ref);
+            else if (target_sequence_kind != 0)
+                body_bind_sequence_local(bc, node->as.assignment.name, target_sequence_kind,
+                                         target_sequence_elem_type_key, NULL);
+            if (source_sequence_json_shape_id != XG_NO_ID)
+                body_bind_sequence_json_shape_local(bc, node->as.assignment.name,
+                                                    source_sequence_json_shape_id,
+                                                    source_sequence_json_literal);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }

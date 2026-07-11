@@ -12779,6 +12779,79 @@ TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers)
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_json_array_method_return_shape_through_locals) {
+    setup_parser_session();
+    const char *source = "class JsonArrayLocalFactory {\n"
+                         "    makeUsers() -> Array<Json> {\n"
+                         "        return [{ name: \"ada\", age: 7 }, { name: \"bob\", age: 8 }]\n"
+                         "    }\n"
+                         "}\n"
+                         "fn readInferredArrayMethodLocalAge() -> int {\n"
+                         "    var f = JsonArrayLocalFactory()\n"
+                         "    var users = f.makeUsers()\n"
+                         "    return users[0].age\n"
+                         "}\n"
+                         "fn readAssignedArrayMethodLocalAge() -> int {\n"
+                         "    var f = JsonArrayLocalFactory()\n"
+                         "    var users: Array<Json> = []\n"
+                         "    users = f.makeUsers()\n"
+                         "    return users[0].age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *inferred_reader =
+        evidence_find_body_by_name(&ev, "readInferredArrayMethodLocalAge");
+    const XgBodySummary *assigned_reader =
+        evidence_find_body_by_name(&ev, "readAssignedArrayMethodLocalAge");
+    ASSERT_NOT_NULL(inferred_reader);
+    ASSERT_NOT_NULL(assigned_reader);
+    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+    bool saw_inferred = false;
+    bool saw_assigned = false;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+        ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
+        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(access->field_ordinal, 1);
+        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == inferred_reader->func_id)
+            saw_inferred = true;
+        if (access->owner_func_id == assigned_reader->func_id)
+            saw_assigned = true;
+    }
+    ASSERT_TRUE(saw_inferred);
+    ASSERT_TRUE(saw_assigned);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.njson_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.json_access_plans[i].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(bundle.json_access_plans[i].field_ordinal, 1);
+    }
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set) {
     setup_parser_session();
     const char *source = "fn readAfterMismatchedSet() -> int {\n"
@@ -14300,6 +14373,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_push_conta
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_alias_container);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_return_container);
 RUN_TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers);
+RUN_TEST(global_evidence_producer_propagates_json_array_method_return_shape_through_locals);
 RUN_TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set);
 RUN_TEST(
     global_evidence_producer_propagates_json_bridge_shape_through_field_and_container_receivers);
