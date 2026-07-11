@@ -29,6 +29,7 @@ typedef struct XaBuiltinMember {
     bool is_static;         // true = static member
     bool is_internal;       // true = visible only to stdlib implementation modules
     bool is_lowered_only;   // true = compiler/VM lowering surface, not an XrClass method
+    bool is_yieldable;      // true = VM binding may suspend/resume the current coroutine
 } XaBuiltinMember;
 
 // Built-in type info
@@ -117,6 +118,9 @@ XR_FUNC const char *xa_builtin_get_module_func_signature(const char *module_name
 
 // Get module function doc
 XR_FUNC const char *xa_builtin_get_module_func_doc(const char *module_name, const char *func_name);
+
+// Check if a module function is registered as yieldable in stdlib metadata.
+XR_FUNC bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name);
 
 // Get module handle type info
 XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,

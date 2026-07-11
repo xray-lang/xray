@@ -1,0 +1,7 @@
+import parallel
+import io
+
+parallel.forEach(0..4, (i) -> {
+    var text = io.readFile("missing.txt")
+    print(text)
+}, parallel.Options(2))

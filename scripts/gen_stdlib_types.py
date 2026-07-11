@@ -516,6 +516,7 @@ def load_def_module_methods():
             'signature': entry.signature,
             'doc': entry.doc,
             'is_internal': entry.is_internal,
+            'vm_binding': entry.vm_binding,
         })
     return modules
 
@@ -774,7 +775,7 @@ def generate_header(type_results, module_results):
                 is_method = "true" if '(' in m['signature'] else "false"
                 lines.append(
                     f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
-                    f'"{c_string(m["doc"])}", {is_method}, false, false, false}},')
+                    f'"{c_string(m["doc"])}", {is_method}, false, false, false, false}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -826,16 +827,18 @@ def generate_header(type_results, module_results):
                 lines.append(f"static const XaBuiltinMember g_gen_{mod_name}_functions[] = {{")
                 for m in method_entries:
                     is_method = "true" if '(' in m['signature'] else "false"
+                    is_yieldable = "true" if m.get("vm_binding") == "yieldable" else "false"
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
-                        f'{"true" if m.get("is_internal") else "false"}, false}},')
+                        f'{"true" if m.get("is_internal") else "false"}, false, '
+                        f'{is_yieldable}}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:
                         lines.append(
                             f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
-                            f'"{c_string(c["doc"])}", false, false, false, false}},')
+                            f'"{c_string(c["doc"])}", false, false, false, false, false}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
                 lines.append("")
