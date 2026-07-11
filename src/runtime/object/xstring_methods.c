@@ -18,6 +18,7 @@
 #include "xstring_methods.h"
 #include "xstring.h"
 #include "xarray.h"
+#include "xarray_vm.h"
 #include "xiterator.h"
 #include "xpanic_info.h"
 #include "../value/xvalue.h"
@@ -51,6 +52,27 @@ static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) 
     }
     XrString *result = xr_string_slice(iso, str, start, end);
     return result ? xr_string_value(result) : xr_null();
+}
+
+static XrValue m_slice_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrString *str = str_self(self);
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
+                                         "string.sliceBytes expects start and end byte offsets");
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
+    xr_Integer start = XR_TO_INT(args[0]);
+    xr_Integer end = XR_TO_INT(args[1]);
+    XrString *result = xr_string_slice_bytes(iso, str, start, end);
+    if (!result) {
+        XrValue exc = xr_panic_info_newf(
+            iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+            "string.sliceBytes byte range out of bounds or not on UTF-8 scalar boundaries");
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
+    return xr_string_value(result);
 }
 
 /* === Search === */
@@ -275,6 +297,30 @@ static XrValue m_from_utf8_lossy(XrVMRuntime *iso, XrValue self, XrValue *args, 
     return result ? xr_string_value(result) : xr_null();
 }
 
+static XrValue m_from_rune(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    if (argc != 1 || !XR_IS_RUNE(args[0]))
+        return xr_null();
+    XrString *result = xr_string_from_codepoint(iso, XR_TO_RUNE(args[0]));
+    return result ? xr_string_value(result) : xr_null();
+}
+
+static XrValue m_join_static(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    if (argc < 1 || !XR_IS_ARRAY(args[0]))
+        return xr_null();
+    XrString *separator = NULL;
+    if (argc >= 2) {
+        if (!XR_IS_STRING(args[1]))
+            return xr_null();
+        separator = XR_TO_STRING(args[1]);
+    } else {
+        separator = xr_string_intern(iso, "", 0, 0);
+    }
+    XrString *result = xr_array_join(iso, XR_TO_ARRAY(args[0]), separator);
+    return result ? xr_string_value(result) : xr_null();
+}
+
 /* === Iteration === */
 
 /* Rune iterator: yields each Unicode scalar as a rune value. */
@@ -306,6 +352,7 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod string_methods[] = {
         /* Indexing / extraction */
         {"slice", m_slice, 0},
+        {"sliceBytes", m_slice_bytes, 2},
         /* Search */
         {"indexOf", m_index_of, 0},
         {"lastIndexOf", m_last_index_of, 1},
@@ -331,6 +378,8 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod string_statics[] = {
         {"fromUtf8", m_from_utf8, 1},
         {"fromUtf8Lossy", m_from_utf8_lossy, 1},
+        {"fromRune", m_from_rune, 1},
+        {"join", m_join_static, 1},
         {NULL, NULL, 0},
     };
     static const XrNativeTypeInfo string_info = {

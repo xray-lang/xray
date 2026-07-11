@@ -446,6 +446,23 @@ XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_
     return xr_string_substring_by_char(iso, str, (size_t) start, (size_t) end);
 }
 
+static bool string_byte_boundary(XrString *str, xr_Integer offset) {
+    if (!str || offset < 0 || (uint64_t) offset > (uint64_t) str->length)
+        return false;
+    return offset == 0 || (uint32_t) offset == str->length ||
+           (((unsigned char) str->data[offset] & 0xC0u) != 0x80u);
+}
+
+XrString *xr_string_slice_bytes(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
+    if (!iso || !str)
+        return NULL;
+    if (start < 0 || end < start || (uint64_t) end > (uint64_t) str->length)
+        return NULL;
+    if (!string_byte_boundary(str, start) || !string_byte_boundary(str, end))
+        return NULL;
+    return xr_string_new(iso, str->data + start, (size_t) (end - start));
+}
+
 // indexOf - find substring position
 // Tiered optimization: single char (memchr), short pattern (<=8), long pattern (Horspool)
 xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr) {

@@ -167,15 +167,17 @@ static const char xr_native_def_string[] =
     "dispatch\n// (src/aot/xrt_method.h + xi_method_sym.def) compile to native code, while\n// "
     "VM-only methods fail AOT codegen with an explicit \"unsupported AOT method\"\n// error (never "
     "a silent null).\n\n@native\nclass string {\n    static fromUtf8(bytes: Slice<byte>) -> "
-    "string?\n    static fromUtf8Lossy(bytes: Slice<byte>) -> string\n    contains(search: string) "
-    "-> bool\n    indexOf(search: string, start?: int) -> int\n    lastIndexOf(search: string) -> "
-    "int\n    slice(start: int, end?: int) -> string\n    toString() -> string\n    "
-    "split(separator: string, limit?: int) -> Array<string>\n    replace(search: string, "
-    "replacement: string) -> string\n    replaceAll(search: string, replacement: string) -> "
-    "string\n    repeat(count: int) -> string\n    startsWith(search: string) -> bool\n    "
-    "endsWith(search: string) -> bool\n    // Owned UTF-8 byte bridge.\n    copyBytes() -> "
-    "Array<byte>\n    // Borrowed UTF-8 bytes; readonly because strings are immutable.\n    // "
-    "@lowered\n    bytes() -> Slice<byte>\n    runes() -> Iterator<rune>\n}\n";
+    "string?\n    static fromUtf8Lossy(bytes: Slice<byte>) -> string\n    static fromRune(value: "
+    "rune) -> string\n    static join(parts: Array<string>, separator?: string) -> string\n    "
+    "contains(search: string) -> bool\n    indexOf(search: string, start?: int) -> int\n    "
+    "lastIndexOf(search: string) -> int\n    slice(start: int, end?: int) -> string\n    "
+    "sliceBytes(start: int, end: int) -> string\n    toString() -> string\n    split(separator: "
+    "string, limit?: int) -> Array<string>\n    replace(search: string, replacement: string) -> "
+    "string\n    replaceAll(search: string, replacement: string) -> string\n    repeat(count: int) "
+    "-> string\n    startsWith(search: string) -> bool\n    endsWith(search: string) -> bool\n    "
+    "// Owned UTF-8 byte bridge.\n    copyBytes() -> Array<byte>\n    // Borrowed UTF-8 bytes; "
+    "readonly because strings are immutable.\n    // @lowered\n    bytes() -> Slice<byte>\n    "
+    "runes() -> Iterator<rune>\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
