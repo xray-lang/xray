@@ -1,0 +1,5 @@
+fn worker() {
+    print(42)
+}
+
+go worker()

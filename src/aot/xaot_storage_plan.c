@@ -209,6 +209,25 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
     return true;
 }
 
+const XaotStoragePlan *xaot_storage_plan_find(const XaotBundle *bundle, const XiModule *module,
+                                              uint32_t slot) {
+    uint32_t module_index;
+    if (!bundle || !module || slot >= module->nslots)
+        return NULL;
+    for (module_index = 0; module_index < bundle->nmodules; module_index++) {
+        if (bundle->modules[module_index] == module)
+            break;
+    }
+    if (module_index == bundle->nmodules)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nstorage_plans; i++) {
+        const XaotStoragePlan *plan = &bundle->storage_plans[i];
+        if (plan->module_index == module_index && plan->slot == slot)
+            return plan;
+    }
+    return NULL;
+}
+
 const char *xaot_materialization_kind_name(uint8_t value) {
     static const char *names[] = {"inline",         "exec_local",    "module_readonly",
                                   "module_runtime", "shared_system", "reject"};

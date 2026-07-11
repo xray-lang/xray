@@ -2432,7 +2432,7 @@ static XrAotSpawnResult aot_spawn_common(const XrAotContext *ctx, const XrAotCor
         return result;
     }
 
-    if (scope && parent) {
+    if (scope) {
         if (!xr_coro_set_parent_scope(child, scope)) {
             if (!defer_batch)
                 (void) xr_coro_set_pending_spawn(parent, NULL);

@@ -5942,9 +5942,13 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         uint32_t transfer_count;
         uint32_t expected_evidence = 0;
         const XaotCapabilityPlan *plan;
-        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
-            if ((ev->bodies[bi].capability_bits & cap) != 0)
-                body_count++;
+        if (bundle->entry_plan.entry_func_id != XG_NO_ID) {
+            body_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
+        } else {
+            for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+                if ((ev->bodies[bi].capability_bits & cap) != 0)
+                    body_count++;
+            }
         }
         transfer_count = verify_capability_transfer_count(bundle, cap);
         plan = xaot_bundle_find_capability_plan(bundle, cap);
