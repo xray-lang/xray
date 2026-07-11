@@ -296,6 +296,28 @@ static void xr_aot_par_for_run_range_sequential(int64_t start, int64_t end,
     body(closure, start, end, 0);
 }
 
+static bool xr_aot_env_flag_enabled(const char *name) {
+    const char *v = getenv(name);
+    return v && (strcmp(v, "1") == 0 || strcmp(v, "true") == 0 || strcmp(v, "TRUE") == 0 ||
+                 strcmp(v, "yes") == 0 || strcmp(v, "on") == 0);
+}
+
+static int64_t xr_aot_parallel_resolve_workers(int64_t requested) {
+    if (requested != 0)
+        return requested;
+    if (xr_aot_env_flag_enabled("XRAY_CORO_DETERMINISTIC"))
+        return 1;
+    const char *env = getenv("XRAY_WORKERS");
+    if (env && atoi(env) > 0)
+        return atoi(env);
+    unsigned int cpus = xr_os_cpu_count();
+    if (cpus == 0)
+        return 1;
+    if (cpus > XR_AOT_PAR_FOR_MAX_WORKERS)
+        return XR_AOT_PAR_FOR_MAX_WORKERS;
+    return (int64_t) cpus;
+}
+
 bool xr_aot_parallel_for_range_i64(int64_t start, int64_t end, int64_t workers,
                                    XrAotParForRangeI64Fn body, struct xrt_closure *closure) {
     if (!body)
@@ -303,6 +325,7 @@ bool xr_aot_parallel_for_range_i64(int64_t start, int64_t end, int64_t workers,
     if (end <= start)
         return true;
 
+    workers = xr_aot_parallel_resolve_workers(workers);
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1) {
@@ -429,6 +452,7 @@ bool xr_aot_parallel_reduce_i64(int64_t start, int64_t end, int64_t workers, int
         return true;
     }
 
+    workers = xr_aot_parallel_resolve_workers(workers);
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1)
@@ -513,6 +537,7 @@ bool xr_aot_parallel_reduce_agg(int64_t start, int64_t end, int64_t workers, siz
         return true;
     }
 
+    workers = xr_aot_parallel_resolve_workers(workers);
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1)

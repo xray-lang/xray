@@ -533,14 +533,14 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, start, end_excl, false);
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, workers, 0));
-    int participants_gt_one_jmp = emit_jump_if_cmp(ctx, OP_LT, one, participants, false);
-    int participants_one_done_jmp = current_pc(ctx);
+    int participants_auto_jmp = emit_jump_if_cmp(ctx, OP_LT, participants, one, true);
+    int participants_auto_done_jmp = current_pc(ctx);
     emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
-    int participants_set_one_pc = current_pc(ctx);
-    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, one, 0));
-    int participants_one_done_pc = current_pc(ctx);
-    patch_jump_to(ctx, participants_gt_one_jmp, participants_set_one_pc);
-    patch_jump_to(ctx, participants_one_done_jmp, participants_one_done_pc);
+    int participants_set_auto_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, max_participants, 0));
+    int participants_auto_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, participants_auto_jmp, participants_set_auto_pc);
+    patch_jump_to(ctx, participants_auto_done_jmp, participants_auto_done_pc);
 
     int count_lt_participants_jmp = emit_jump_if_cmp(ctx, OP_LT, count, participants, true);
     int count_clamp_done_jmp = current_pc(ctx);
@@ -635,17 +635,21 @@ typedef struct {
     XiEmitReg lane, base, rem, lane_count, extra_before, offset, iter, limit;
 } ParLaneRegs;
 
-/* Clamp participants to [1, min(count, 256)] and derive base/rem. */
+/* Clamp participants to [1, min(count, 256)] and derive base/rem.
+ * workers == 0 is the stdlib "auto" request. The current VM emitter still
+ * executes lanes sequentially, but it keeps the same lane-splitting semantics
+ * as hosted parallel execution by treating auto as the max lane request before
+ * count/max clamping. */
 static void emit_par_participants_clamp(EmitCtx *ctx, const ParLaneRegs *r) {
     emit_inst(ctx, CREATE_ABC(OP_MOVE, r->participants, r->workers, 0));
-    int participants_gt_one_jmp = emit_jump_if_cmp(ctx, OP_LT, r->one, r->participants, false);
-    int participants_one_done_jmp = current_pc(ctx);
+    int participants_auto_jmp = emit_jump_if_cmp(ctx, OP_LT, r->participants, r->one, true);
+    int participants_auto_done_jmp = current_pc(ctx);
     emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
-    int participants_set_one_pc = current_pc(ctx);
-    emit_inst(ctx, CREATE_ABC(OP_MOVE, r->participants, r->one, 0));
-    int participants_one_done_pc = current_pc(ctx);
-    patch_jump_to(ctx, participants_gt_one_jmp, participants_set_one_pc);
-    patch_jump_to(ctx, participants_one_done_jmp, participants_one_done_pc);
+    int participants_set_auto_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, r->participants, r->max_participants, 0));
+    int participants_auto_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, participants_auto_jmp, participants_set_auto_pc);
+    patch_jump_to(ctx, participants_auto_done_jmp, participants_auto_done_pc);
 
     int count_lt_participants_jmp = emit_jump_if_cmp(ctx, OP_LT, r->count, r->participants, true);
     int count_clamp_done_jmp = current_pc(ctx);
