@@ -138,7 +138,7 @@ static void aot_mark_running(XrCoroutine *coro) {
 static bool aot_caps_need_scheduler(uint32_t caps) {
     return (caps & (XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL |
                     XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_COUNTDOWN_LATCH |
-                    XR_AOT_CAP_SEMAPHORE | XR_AOT_CAP_EVENT_COUNT)) != 0;
+                    XR_AOT_CAP_SEMAPHORE | XR_AOT_CAP_EVENT_COUNT | XR_AOT_CAP_PARALLEL)) != 0;
 }
 
 static void *aot_host_backend_context(void *ctx) {

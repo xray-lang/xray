@@ -67,7 +67,7 @@ typedef struct XrAotEnumBoxCompat {
 } XrAotEnumBoxCompat;
 
 enum {
-    XR_PARALLEL_MAX_WORKERS = 256,
+    XR_PARALLEL_MAX_WORKERS = XR_MAX_WORKERS,
 };
 
 typedef enum XrParallelJobKind {
@@ -347,13 +347,21 @@ static bool xr_aot_env_flag_enabled(const char *name) {
                  strcmp(v, "yes") == 0 || strcmp(v, "on") == 0);
 }
 
-static int64_t xr_parallel_resolve_workers(int64_t requested) {
+static int64_t xr_parallel_resolve_workers(const XrAotContext *ctx, int64_t requested) {
     if (requested < 0)
         return -1;
     if (requested != 0)
         return requested;
     if (xr_aot_env_flag_enabled("XRAY_CORO_DETERMINISTIC"))
         return 1;
+    XrAotRuntime *aot_runtime = ctx && ctx->runtime ? ctx->runtime : xr_aot_runtime_current();
+    XrRuntime *scheduler = aot_runtime ? xr_aot_runtime_scheduler(aot_runtime) : NULL;
+    if (scheduler) {
+        if (xr_runtime_deterministic_mode(scheduler))
+            return 1;
+        if (scheduler->worker_count > 0)
+            return scheduler->worker_count;
+    }
     const char *env = getenv("XRAY_WORKERS");
     if (env && atoi(env) > 0)
         return atoi(env);
@@ -372,7 +380,7 @@ bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t e
     if (end <= start)
         return true;
 
-    workers = xr_parallel_resolve_workers(workers);
+    workers = xr_parallel_resolve_workers(ctx, workers);
     if (workers < 0)
         return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
@@ -503,7 +511,7 @@ bool xr_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end,
         return true;
     }
 
-    workers = xr_parallel_resolve_workers(workers);
+    workers = xr_parallel_resolve_workers(ctx, workers);
     if (workers < 0)
         return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
@@ -592,7 +600,7 @@ bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
         return true;
     }
 
-    workers = xr_parallel_resolve_workers(workers);
+    workers = xr_parallel_resolve_workers(ctx, workers);
     if (workers < 0)
         return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
