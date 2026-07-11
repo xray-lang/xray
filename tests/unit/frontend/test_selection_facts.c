@@ -15,6 +15,7 @@
 #include "../../../src/frontend/parser/xast_nodes.h"
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xa_parallel_call_plan.h"
 #include "../../../src/frontend/analyzer/xa_selection.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
@@ -142,6 +143,116 @@ static AstNode *find_enum_access(AstNode *node) {
                     return r;
             }
             break;
+        default:
+            break;
+    }
+    return NULL;
+}
+
+/* Find a CALL_EXPR whose callee is a bare variable with the requested name. */
+static AstNode *find_call_with_variable_callee(AstNode *node, const char *name) {
+    if (!node || !name)
+        return NULL;
+
+    if (node->type == AST_CALL_EXPR) {
+        AstNode *callee = node->as.call_expr.callee;
+        if (callee && callee->type == AST_VARIABLE && callee->as.variable.name &&
+            strcmp(callee->as.variable.name, name) == 0)
+            return node;
+    }
+
+    switch (node->type) {
+        case AST_PROGRAM:
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.program.count; i++) {
+                AstNode *r = find_call_with_variable_callee(node->as.program.statements[i], name);
+                if (r)
+                    return r;
+            }
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+            return find_call_with_variable_callee(node->as.var_decl.initializer, name);
+        case AST_EXPR_STMT:
+            return find_call_with_variable_callee(node->as.expr_stmt, name);
+        case AST_PRINT_STMT:
+            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
+                AstNode *r = find_call_with_variable_callee(node->as.print_stmt.exprs[i], name);
+                if (r)
+                    return r;
+            }
+            break;
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            return find_call_with_variable_callee(node->as.function_decl.body, name);
+        case AST_RETURN_STMT:
+            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
+                AstNode *r = find_call_with_variable_callee(node->as.return_stmt.values[i], name);
+                if (r)
+                    return r;
+            }
+            break;
+        case AST_CALL_EXPR: {
+            AstNode *r = find_call_with_variable_callee(node->as.call_expr.callee, name);
+            if (r)
+                return r;
+            for (int i = 0; i < node->as.call_expr.arg_count; i++) {
+                r = find_call_with_variable_callee(node->as.call_expr.arguments[i], name);
+                if (r)
+                    return r;
+            }
+            break;
+        }
+        case AST_MEMBER_ACCESS:
+            return find_call_with_variable_callee(node->as.member_access.object, name);
+        case AST_INDEX_GET: {
+            AstNode *r = find_call_with_variable_callee(node->as.index_get.array, name);
+            return r ? r : find_call_with_variable_callee(node->as.index_get.index, name);
+        }
+        case AST_RANGE: {
+            AstNode *r = find_call_with_variable_callee(node->as.range.start, name);
+            return r ? r : find_call_with_variable_callee(node->as.range.end, name);
+        }
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR: {
+            AstNode *r = find_call_with_variable_callee(node->as.binary.left, name);
+            return r ? r : find_call_with_variable_callee(node->as.binary.right, name);
+        }
+        case AST_GROUPING:
+            return find_call_with_variable_callee(node->as.grouping, name);
+        case AST_ASSIGNMENT:
+            return find_call_with_variable_callee(node->as.assignment.value, name);
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++) {
+                AstNode *r =
+                    find_call_with_variable_callee(node->as.array_literal.elements[i], name);
+                if (r)
+                    return r;
+            }
+            if (node->as.array_literal.repeat_value) {
+                AstNode *r =
+                    find_call_with_variable_callee(node->as.array_literal.repeat_value, name);
+                if (r)
+                    return r;
+            }
+            return find_call_with_variable_callee(node->as.array_literal.repeat_count, name);
         default:
             break;
     }
@@ -358,6 +469,55 @@ TEST(builtin_method_has_selection) {
     return ok;
 }
 
+TEST(parallel_selective_alias_call_plan_recorded) {
+    AnalysisResult r = analyze("import { forEach as each, map as parMap, reduce as fold, "
+                               "Options as ParOptions } from parallel\n"
+                               "each(0..4, (i) -> {\n"
+                               "    print(i)\n"
+                               "}, ParOptions(2))\n"
+                               "var xs = parMap(0..4, (i) -> i + 1, ParOptions(2))\n"
+                               "var sum = fold(0..4, 0, (i) -> i + 1, "
+                               "(a, b) -> a + b, ParOptions(2))\n"
+                               "print(xs[3], sum)\n");
+    if (!r.program)
+        return false;
+
+    struct {
+        const char *local_name;
+        XaParallelCallKind expected;
+    } cases[] = {
+        {"each", XA_PAR_CALL_FOR_EACH},
+        {"parMap", XA_PAR_CALL_MAP},
+        {"fold", XA_PAR_CALL_REDUCE},
+    };
+
+    bool ok = true;
+    for (int i = 0; i < (int) (sizeof(cases) / sizeof(cases[0])); i++) {
+        AstNode *call = find_call_with_variable_callee(r.program, cases[i].local_name);
+        if (!call) {
+            fprintf(stderr, "    no call found for alias '%s'\n", cases[i].local_name);
+            ok = false;
+            continue;
+        }
+        const XaParallelCallPlan *plan = xa_analyzer_get_parallel_call_plan(r.analyzer, call);
+        if (!plan) {
+            fprintf(stderr, "    no parallel call plan recorded for alias '%s'\n",
+                    cases[i].local_name);
+            ok = false;
+            continue;
+        }
+        printf("    alias %s -> kind=%d plan_method=%d\n", cases[i].local_name, plan->kind,
+               plan->is_plan_method ? 1 : 0);
+        if (plan->kind != cases[i].expected || plan->is_plan_method) {
+            fprintf(stderr, "    unexpected call plan for alias '%s'\n", cases[i].local_name);
+            ok = false;
+        }
+    }
+
+    cleanup(&r);
+    return ok;
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -370,6 +530,7 @@ int main(void) {
     run_enum_member_has_selection();
     run_selection_table_has_entries_after_analysis();
     run_builtin_method_has_selection();
+    run_parallel_selective_alias_call_plan_recorded();
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 

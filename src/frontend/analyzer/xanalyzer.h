@@ -24,6 +24,7 @@
 
 #include "../../runtime/value/xtype.h"
 #include "xanalyzer_symbol.h"
+#include "xa_parallel_call_plan.h"
 #include "../../runtime/value/xtype_pool.h"
 #include "../../runtime/xerror.h"
 #include <stdbool.h>
@@ -132,6 +133,11 @@ struct XaAnalyzer {
     // Consumed by lowerer/backend instead of re-discovering member info.
     void *selection_table;  // XaSelectionTable* (forward declared)
 
+    // AST call -> resolved stdlib parallel intrinsic identity. Populated
+    // during Pass 2 for module calls, selective imports, and Plan<S> methods.
+    // Consumed by lowerer/backend before falling back to textual rediscovery.
+    void *parallel_call_plan_table;  // XaParallelCallPlanTable* (forward declared)
+
     // Type inference quality metric: how many expressions resolved to unknown
     int unknown_type_count;
 
@@ -209,6 +215,8 @@ XR_FUNC struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer
 struct XaSelection;
 XR_FUNC const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer,
                                                             const struct AstNode *node);
+XR_FUNC const XaParallelCallPlan *xa_analyzer_get_parallel_call_plan(XaAnalyzer *analyzer,
+                                                                     const struct AstNode *node);
 
 // API: Cross-file incremental analysis
 XR_FUNC const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count);
