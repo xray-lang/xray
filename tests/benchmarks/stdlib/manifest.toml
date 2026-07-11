@@ -61,3 +61,16 @@ quick_iterations = 2
 metrics = ["wall_ns"]
 compare = ["vm", "aot"]
 vm_budget_ratio = 50.0
+
+[[benchmark]]
+id = "cluster.protocol.contract"
+module = "cluster"
+suite = "stdlib/cluster"
+kind = "protocol_helper"
+source = "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 50.0

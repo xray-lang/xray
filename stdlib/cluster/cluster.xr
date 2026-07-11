@@ -11,6 +11,22 @@ const NODE_NAME_MAX = 63
 const CHANNEL_NAME_MAX = 127
 const TOPIC_PATTERN_MAX = 127
 
+enum AddressError {
+    MissingPort(string),
+    InvalidHost(string),
+    InvalidPort(string)
+}
+
+class NodeAddress {
+    host: string
+    port: int
+
+    constructor(host: string, port: int) {
+        this.host = host
+        this.port = port
+    }
+}
+
 fn _asciiPrintable(s: string) -> bool {
     for (var i = 0; i < s.length; i++) {
         var c = s.charAt(i).ord()!
@@ -50,13 +66,18 @@ fn _stripIpv6Brackets(host: string) -> string {
     return host
 }
 
-fn parseAddress(addr: string) -> Json {
+fn parseAddress(addr: string) -> NodeAddress {
     var colon = addr.lastIndexOf(":")
-    if (colon <= 0 || colon + 1 >= addr.length) { return null }
-    var host = _stripIpv6Brackets(addr.slice(0, colon))
-    var port = _parsePort(addr.slice(colon + 1))
-    if (host.length == 0 || port <= 0) { return null }
-    return { host: host, port: port }
+    if (colon <= 0 || colon + 1 >= addr.length) { throw AddressError.MissingPort(addr) }
+    var rawHost = addr.slice(0, colon)
+    var host = _stripIpv6Brackets(rawHost)
+    if (host.length == 0 || (rawHost.indexOf(":") >= 0 && !rawHost.startsWith("["))) {
+        throw AddressError.InvalidHost(rawHost)
+    }
+    var rawPort = addr.slice(colon + 1)
+    var port = _parsePort(rawPort)
+    if (port <= 0) { throw AddressError.InvalidPort(rawPort) }
+    return NodeAddress(host, port)
 }
 
 fn _hasEmptyTopicSegment(s: string) -> bool {
@@ -111,6 +132,8 @@ export {
     NODE_NAME_MAX,
     CHANNEL_NAME_MAX,
     TOPIC_PATTERN_MAX,
+    AddressError,
+    NodeAddress,
     validNodeName,
     validChannelName,
     parseAddress,

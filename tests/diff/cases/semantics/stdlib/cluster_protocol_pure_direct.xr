@@ -1,6 +1,7 @@
 // Pure-Xray cluster protocol helper surface.
 import cluster
 import {
+    AddressError,
     HANDSHAKE_VERSION,
     TOPIC_DEFAULT_HOP_LIMIT,
     validNodeName,
@@ -20,16 +21,30 @@ print(validNodeName("bad\nname"))
 print(validChannelName("events.main"))
 
 var addr = parseAddress("127.0.0.1:9000")
-print(addr["host"])
-print(addr["port"])
+print(addr.host)
+print(addr.port)
 
 var v6 = parseAddress("[::1]:9001")
-print(v6["host"])
-print(v6["port"])
+print(v6.host)
+print(v6.port)
 
-print(parseAddress("missing-port") == null)
-print(parseAddress("host:0") == null)
-print(parseAddress("host:not-a-port") == null)
+fn addressError(text: string) -> string {
+    try {
+        parseAddress(text)
+    } catch (e: AddressError) {
+        return match (e) {
+            AddressError.MissingPort(value) -> "missing:" + value,
+            AddressError.InvalidHost(value) -> "host:" + value,
+            AddressError.InvalidPort(value) -> "port:" + value
+        }
+    }
+    return "none"
+}
+
+print(addressError("missing-port"))
+print(addressError("host:0"))
+print(addressError("host:not-a-port"))
+print(addressError("::1:9000"))
 
 print(validTopicName("events.user.login"))
 print(validTopicName("events.*"))

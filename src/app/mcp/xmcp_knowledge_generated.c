@@ -165,6 +165,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "NodeAddress",
+        .signature = "NodeAddress",
+        .summary = "",
+    },
+    {
+        .name = "NodeAddress.constructor",
+        .signature = "(host: string, port: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "NodeAddress.host",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "NodeAddress.port",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
         .name = "TOPIC_DEFAULT_HOP_LIMIT",
         .signature = ": int",
         .summary = "",
@@ -206,7 +226,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "parseAddress",
-        .signature = "(addr: string): Json",
+        .signature = "(addr: string): NodeAddress",
         .summary = "",
     },
     {
@@ -5244,6 +5264,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
+            "| `NodeAddress` | `NodeAddress` |  |\n"
+            "| `NodeAddress.constructor` | `(host: string, port: int): ()` |  |\n"
+            "| `NodeAddress.host` | `: string` |  |\n"
+            "| `NodeAddress.port` | `: int` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
@@ -5252,7 +5276,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
-            "| `cluster.parseAddress` | `(addr: string): Json` |  |\n"
+            "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
             "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
             "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
