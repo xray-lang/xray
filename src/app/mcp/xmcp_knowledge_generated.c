@@ -2490,6 +2490,74 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
+    {
+        .name = "Options",
+        .signature = "Options",
+        .summary = "",
+    },
+    {
+        .name = "Options.constructor",
+        .signature = "(workers: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "Options.workers",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "Plan",
+        .signature = "Plan",
+        .summary = "",
+    },
+    {
+        .name = "Plan.close",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Plan.constructor",
+        .signature = "(options: Options, state: S): ()",
+        .summary = "",
+    },
+    {
+        .name = "Plan.create",
+        .signature = "(options: Options, init: (int): S) -> Plan<S>",
+        .summary = "",
+    },
+    {
+        .name = "Plan.forEach",
+        .signature = "(range: Range, body: (S, int): ())",
+        .summary = "",
+    },
+    {
+        .name = "Plan.map",
+        .signature = "(range: Range, body: (S, int): T) -> Array<T>",
+        .summary = "",
+    },
+    {
+        .name = "Plan.mapInto",
+        .signature = "(range: Range, output: Array<T>, body: (S, int): T) -> Array<T>",
+        .summary = "",
+    },
+    {
+        .name = "Plan.options",
+        .signature = ": Options",
+        .summary = "",
+    },
+    {
+        .name = "Plan.reduce",
+        .signature = "(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A",
+        .summary = "",
+    },
+    {
+        .name = "forEach",
+        .signature = "(range: Range, body: (int): (), options: Options = Options())",
+        .summary = "",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "PathInfo",
@@ -5864,6 +5932,37 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_os) / sizeof(_symbols_os[0])),
     },
     {
+        .module = "parallel",
+        .summary = "Structured CPU batch parallelism",
+        .body =
+            "# parallel module\n"
+            "\n"
+            "Structured CPU batch parallelism with typed `Options`, reusable `Plan<S>`, and `parallel.forEach`, `map`, `mapInto`, and `reduce` operations. The source-derived surface includes `Options.constructor`, `Options.workers`, `Plan.constructor`, `Plan.options`, `Plan.create`, `Plan.forEach`, `Plan.map`, `Plan.mapInto`, `Plan.reduce`, and `Plan.close`. The `.xr` module is the canonical semantic reference; hosted VM and native AOT may lower eligible operations to verified batch intrinsics without changing the public contract.\n"
+            "\n"
+            "Usage: `import parallel` then call `parallel.function()`.\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `Options` | `Options` |  |\n"
+            "| `Options.constructor` | `(workers: int = 0): ()` |  |\n"
+            "| `Options.workers` | `: int` |  |\n"
+            "| `Plan` | `Plan` |  |\n"
+            "| `Plan.close` | `(): ()` |  |\n"
+            "| `Plan.constructor` | `(options: Options, state: S): ()` |  |\n"
+            "| `Plan.create` | `(options: Options, init: (int): S) -> Plan<S>` |  |\n"
+            "| `Plan.forEach` | `(range: Range, body: (S, int): ())` |  |\n"
+            "| `Plan.map` | `(range: Range, body: (S, int): T) -> Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: Array<T>, body: (S, int): T) -> Array<T>` |  |\n"
+            "| `Plan.options` | `: Options` |  |\n"
+            "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: (int): (), options: Options = Options())` |  |\n"
+            "",
+        .symbols = _symbols_parallel,
+        .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
+    },
+    {
         .module = "path",
         .summary = "File path manipulation",
         .body =
@@ -6290,7 +6389,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 28;
+XR_DATADEF const int xmcp_generated_stdlib_count = 29;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
