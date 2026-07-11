@@ -1,0 +1,18 @@
+fn makeJsonBranchAssignedReturnPlan(flag: bool) -> Json {
+    var user: Json = { name: "seed", age: 0 }
+    var scratch: Json = { spare: 0 }
+    if (flag) {
+        user = { name: "ada", age: 1 }
+        scratch = { left: 1 }
+    } else {
+        user = { name: "bob", age: 2 }
+        scratch = { right: 2 }
+    }
+    return user
+}
+
+fn jsonBranchAssignedReturnReceiverPlan(flag: bool) -> int {
+    return makeJsonBranchAssignedReturnPlan(flag).age
+}
+
+print(jsonBranchAssignedReturnReceiverPlan(true))

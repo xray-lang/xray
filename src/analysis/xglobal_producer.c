@@ -3373,6 +3373,7 @@ typedef struct XgReturnObjectLiteralLocal {
 typedef struct XgReturnObjectLiteralScan {
     XgReturnObjectLiteralLocal locals[64];
     uint32_t nlocals;
+    uint32_t return_count;
     const ObjectLiteralNode *literal;
     uint64_t literal_shape_hash;
     int literal_field_count;
@@ -3427,6 +3428,31 @@ static bool return_literal_record(XgReturnObjectLiteralScan *scan,
     scan->literal_shape_hash = shape_hash;
     scan->literal_field_count = literal->count;
     scan->seen = true;
+    scan->return_count++;
+    return true;
+}
+
+static bool return_literal_same_shape(const ObjectLiteralNode *left,
+                                      const ObjectLiteralNode *right) {
+    if (!left || !right)
+        return left == right;
+    return left->count == right->count && body_json_shape_hash(left) == body_json_shape_hash(right);
+}
+
+static bool return_literal_merge_branch_locals(XgReturnObjectLiteralScan *scan,
+                                               const XgReturnObjectLiteralScan *then_scan,
+                                               const XgReturnObjectLiteralScan *else_scan,
+                                               uint32_t base_locals) {
+    if (!scan || !then_scan || !else_scan)
+        return false;
+    for (uint32_t i = 0; i < base_locals; i++) {
+        const ObjectLiteralNode *then_literal = then_scan->locals[i].literal;
+        const ObjectLiteralNode *else_literal = else_scan->locals[i].literal;
+        scan->locals[i].literal = return_literal_same_shape(then_literal, else_literal)
+                                      ? (then_literal ? then_literal : else_literal)
+                                      : NULL;
+    }
+    scan->nlocals = base_locals;
     return true;
 }
 
@@ -3445,11 +3471,21 @@ static bool return_literal_scan_node_list(XgReturnObjectLiteralScan *scan, AstNo
 
 static bool return_literal_scan_assignment(XgReturnObjectLiteralScan *scan, const char *name,
                                            uint32_t symbol_id, const AstNode *value) {
+    int local_index;
+    const ObjectLiteralNode *literal;
     if (!scan)
         return false;
-    if (return_literal_local_index(scan, name, symbol_id) >= 0) {
-        scan->failed = true;
-        return false;
+    local_index = return_literal_local_index(scan, name, symbol_id);
+    if (local_index >= 0) {
+        literal = body_static_object_literal(value);
+        if (literal) {
+            scan->locals[local_index].literal = literal;
+            return true;
+        }
+        if (!return_literal_scan_node(scan, value))
+            return false;
+        scan->locals[local_index].literal = NULL;
+        return true;
     }
     return return_literal_scan_node(scan, value);
 }
@@ -3471,18 +3507,26 @@ static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const I
     XgReturnObjectLiteralScan then_scan;
     XgReturnObjectLiteralScan else_scan;
     uint32_t base_locals;
+    uint32_t base_returns;
+    bool then_returned;
+    bool else_returned;
     if (!scan || !stmt || !stmt->then_branch || !stmt->else_branch)
         return false;
     if (!return_literal_scan_node(scan, stmt->condition))
         return false;
     base_locals = scan->nlocals;
+    base_returns = scan->return_count;
     then_scan = *scan;
     else_scan = *scan;
     if (!return_literal_scan_node(&then_scan, stmt->then_branch) || then_scan.failed)
         return false;
     if (!return_literal_scan_node(&else_scan, stmt->else_branch) || else_scan.failed)
         return false;
-    if (!then_scan.seen || !else_scan.seen)
+    then_returned = then_scan.return_count > base_returns;
+    else_returned = else_scan.return_count > base_returns;
+    if (!then_returned && !else_returned)
+        return return_literal_merge_branch_locals(scan, &then_scan, &else_scan, base_locals);
+    if (!then_returned || !else_returned)
         return false;
     scan->nlocals = base_locals;
     return return_literal_record(scan, then_scan.literal) &&
