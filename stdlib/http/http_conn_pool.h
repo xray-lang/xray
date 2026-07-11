@@ -15,7 +15,7 @@
 #ifndef XR_STDLIB_HTTP_CONN_POOL_H
 #define XR_STDLIB_HTTP_CONN_POOL_H
 
-#include "../net/tls.h"
+#include "../net/io.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include "../../src/os/os_thread.h"
@@ -40,8 +40,7 @@ typedef enum {
 /* ========== Pooled Connection ========== */
 
 typedef struct XrHttpPooledConn {
-    int fd;
-    XrTlsConn *tls_conn;  // TLS connection (NULL for plain TCP)
+    XrIOConn *io;
     XrHttpConnState state;
     uint64_t last_used_ms;  // Monotonic timestamp (milliseconds)
     struct XrHttpPooledConn *next;
@@ -81,25 +80,23 @@ XrHttpPooledConn *http_conn_pool_get(struct XrVMRuntime *X, XrHttpConnPool *pool
                                      uint16_t port, bool is_https);
 
 // Return connection to pool (closes if keep_alive=false).
-void http_conn_pool_put(struct XrVMRuntime *X, XrHttpConnPool *pool, XrHttpPooledConn *conn,
-                        const char *host, uint16_t port, bool is_https, bool keep_alive);
+void http_conn_pool_put(XrHttpConnPool *pool, XrHttpPooledConn *conn, const char *host,
+                        uint16_t port, bool is_https, bool keep_alive);
 
-void http_conn_pool_close(struct XrVMRuntime *X, XrHttpConnPool *pool, XrHttpPooledConn *conn);
+void http_conn_pool_close(XrHttpPooledConn *conn);
 
 /* Evict idle connections older than pool->idle_timeout_ms.
  * Designed to be called from a timer wheel callback. */
-int http_conn_pool_evict_idle(struct XrVMRuntime *X, XrHttpConnPool *pool);
+int http_conn_pool_evict_idle(XrHttpConnPool *pool);
 
 /* ========== Per-Isolate Pool Creation ========== */
 
 // Create a new HTTP connection pool (per-isolate)
 XrHttpConnPool *http_conn_pool_new(void);
 
-// Connection read/write helpers. X is required to drive coroutine
-// suspension on EAGAIN; passing NULL falls back to a non-blocking
-// recv/send (used by CLI / tests outside any runtime).
-int http_pooled_conn_read(struct XrVMRuntime *X, XrHttpPooledConn *conn, void *buf, size_t len);
-int http_pooled_conn_write(struct XrVMRuntime *X, XrHttpPooledConn *conn, const void *buf,
-                           size_t len);
+// Connection read/write helpers. The owning isolate is captured inside
+// conn->io at creation time, so callers only pass the pooled connection.
+int http_pooled_conn_read(XrHttpPooledConn *conn, void *buf, size_t len);
+int http_pooled_conn_write(XrHttpPooledConn *conn, const void *buf, size_t len);
 
 #endif  // XR_STDLIB_HTTP_CONN_POOL_H

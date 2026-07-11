@@ -66,22 +66,11 @@ static XrNetpoll *netpoll_for(struct XrVMRuntime *X) {
     return &((XrRuntime *) X->vm.scheduler)->netpoll;
 }
 
-/* ========== Connection API ========== */
-
-XrIOConn *xr_io_connect(struct XrVMRuntime *X, const char *host, int port, int timeout_ms) {
-    XR_DCHECK(X != NULL, "io_connect: NULL isolate");
-    XrNetpoll *np = netpoll_for(X);
-    if (!np)
-        return NULL;
-
-    // DNS resolution (dual-stack)
-    XrSockAddr addr;
-    if (!xr_dns_resolve(X, host, &addr, XR_AF_UNSPEC))
-        return NULL;
-
+static bool connect_one_addr(struct XrVMRuntime *X, XrNetpoll *np, XrSockAddr addr, int port,
+                             int timeout_ms, int *out_fd, XrPollDesc **out_pd) {
     int fd = socket(addr.family, SOCK_STREAM, 0);
     if (fd < 0)
-        return NULL;
+        return false;
 
     xr_io_set_nonblocking(fd);
     set_tcp_nodelay(fd);
@@ -99,15 +88,18 @@ XrIOConn *xr_io_connect(struct XrVMRuntime *X, const char *host, int port, int t
     }
 
     int ret = connect(fd, sa, sa_len);
-    if (ret < 0 && xr_get_socket_error() != XR_EINPROGRESS) {
-        xr_closesocket(fd);
-        return NULL;
+    if (ret < 0) {
+        int err = xr_get_socket_error();
+        if (err != XR_EINPROGRESS && err != XR_EWOULDBLOCK) {
+            xr_closesocket(fd);
+            return false;
+        }
     }
 
     XrPollDesc *pd = xr_netpoll_open(np, fd);
     if (!pd) {
         xr_closesocket(fd);
-        return NULL;
+        return false;
     }
 
     if (ret < 0) {
@@ -120,16 +112,45 @@ XrIOConn *xr_io_connect(struct XrVMRuntime *X, const char *host, int port, int t
         if (wait_ret != XR_POLL_OK) {
             xr_netpoll_close(np, pd);
             xr_closesocket(fd);
-            return NULL;
+            return false;
         }
 
         int error = xr_socket_get_error(fd);
         if (error != 0) {
             xr_netpoll_close(np, pd);
             xr_closesocket(fd);
-            return NULL;
+            return false;
         }
     }
+
+    *out_fd = fd;
+    *out_pd = pd;
+    return true;
+}
+
+/* ========== Connection API ========== */
+
+XrIOConn *xr_io_connect(struct XrVMRuntime *X, const char *host, int port, int timeout_ms) {
+    XR_DCHECK(X != NULL, "io_connect: NULL isolate");
+    if (!host)
+        return NULL;
+    XrNetpoll *np = netpoll_for(X);
+    if (!np)
+        return NULL;
+
+    XrSockAddr addrs[XR_DNS_MAX_ADDRS];
+    int n = xr_dns_resolve_all(X, host, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
+    if (n <= 0)
+        return NULL;
+
+    int fd = -1;
+    XrPollDesc *pd = NULL;
+    for (int i = 0; i < n; i++) {
+        if (connect_one_addr(X, np, addrs[i], port, timeout_ms, &fd, &pd))
+            break;
+    }
+    if (fd < 0)
+        return NULL;
 
     XrIOConn *conn = (XrIOConn *) xr_calloc(1, sizeof(XrIOConn));
     if (!conn) {
