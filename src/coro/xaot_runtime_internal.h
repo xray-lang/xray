@@ -19,7 +19,6 @@ struct XrAotRuntime {
     uint32_t caps;
     struct XrRuntimeCore *core;
     struct XrRuntime *scheduler;
-    void *parallel_pool;
     XrValue builtins[XR_USER_GLOBALS_START];
 };
 
