@@ -366,7 +366,6 @@ typedef struct XrRemoteCoroMonitor XrRemoteCoroMonitor;
 /* ========== Cluster State ========== */
 
 #define XR_CLUSTER_CHANNEL_BUCKETS 64
-#define XR_CLUSTER_SERVICE_BUCKETS 16
 #define XR_TOPIC_PATTERN_MAX 127
 
 struct XrTopicTrieNode;  // forward decl — definition in cluster_topic.c

@@ -1002,8 +1002,10 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
     // Heap-allocated receive buffer (avoid 64KB on coroutine stack)
     uint8_t *recv_buf = (uint8_t *) xr_malloc(65536);
-    if (!recv_buf)
+    if (!recv_buf) {
+        atomic_store(&node->reader_running, false);
         return;
+    }
     uint8_t frame_type;
     uint32_t payload_len;
 
@@ -1221,6 +1223,7 @@ void cluster_process_node(XrCluster *c, XrClusterNode *node) {
     cluster_subscriber_remove_all_for_node(c, node);
     cluster_monitor_fire(c, node->name);
     cluster_node_remove(c, node);
+    atomic_store(&node->reader_running, false);
     cluster_node_free(node);
 }
 
