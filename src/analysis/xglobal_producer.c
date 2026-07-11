@@ -3471,6 +3471,9 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
 static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
                                                 const AstNode *value,
                                                 const ObjectLiteralNode **out_literal);
+static bool return_literal_resolve_match_value(XgReturnObjectLiteralScan *scan,
+                                               const AstNode *value,
+                                               const ObjectLiteralNode **out_literal);
 
 static bool return_literal_scan_node_list(XgReturnObjectLiteralScan *scan, AstNode *const *nodes,
                                           int count) {
@@ -3569,6 +3572,8 @@ static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
             }
             *out_literal = then_literal;
             return true;
+        case AST_MATCH_EXPR:
+            return return_literal_resolve_match_value(scan, value, out_literal);
         default:
             break;
     }
@@ -3584,6 +3589,59 @@ static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
     if (local_index < 0 || !scan->locals[local_index].literal)
         return false;
     *out_literal = scan->locals[local_index].literal;
+    return true;
+}
+
+static bool return_literal_resolve_match_value(XgReturnObjectLiteralScan *scan,
+                                               const AstNode *value,
+                                               const ObjectLiteralNode **out_literal) {
+    uint32_t base_locals;
+    XgReturnObjectLiteralScan base_scan;
+    XgReturnObjectLiteralScan merged_scan;
+    bool have_merged_scan = false;
+    const ObjectLiteralNode *match_literal = NULL;
+    if (!scan || !value || value->type != AST_MATCH_EXPR || !out_literal)
+        return false;
+    *out_literal = NULL;
+    if (!return_literal_scan_node(scan, value->as.match_expr.expr) || scan->failed)
+        return false;
+    if (value->as.match_expr.arm_count <= 0 || !value->as.match_expr.arms)
+        return false;
+    base_locals = scan->nlocals;
+    base_scan = *scan;
+    for (int i = 0; i < value->as.match_expr.arm_count; i++) {
+        AstNode *arm_node = value->as.match_expr.arms[i];
+        if (!arm_node || arm_node->type != AST_MATCH_ARM)
+            return false;
+        MatchArmNode *arm = &arm_node->as.match_arm;
+        XgReturnObjectLiteralScan arm_scan = base_scan;
+        const ObjectLiteralNode *arm_literal = NULL;
+        if (arm->guard && (!return_literal_scan_node(&arm_scan, arm->guard) || arm_scan.failed))
+            return false;
+        if (!return_literal_resolve_return_value(&arm_scan, arm->body, &arm_literal) ||
+            !arm_literal)
+            return false;
+        if (match_literal && !return_literal_same_shape(match_literal, arm_literal)) {
+            scan->failed = true;
+            return false;
+        }
+        if (!match_literal)
+            match_literal = arm_literal;
+        if (!have_merged_scan) {
+            merged_scan = arm_scan;
+            have_merged_scan = true;
+        } else {
+            XgReturnObjectLiteralScan tmp_scan = base_scan;
+            if (!return_literal_merge_branch_locals(&tmp_scan, &merged_scan, &arm_scan,
+                                                    base_locals))
+                return false;
+            merged_scan = tmp_scan;
+        }
+    }
+    if (!have_merged_scan || !match_literal)
+        return false;
+    *scan = merged_scan;
+    *out_literal = match_literal;
     return true;
 }
 

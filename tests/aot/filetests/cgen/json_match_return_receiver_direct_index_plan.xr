@@ -1,0 +1,13 @@
+fn makeJsonMatchReturnPlan(kind: int) -> Json {
+    return match (kind) {
+        0 -> ({ name: "ada", age: 1 }),
+        1 -> ({ name: "bob", age: 2 }),
+        _ -> ({ name: "eve", age: 3 })
+    }
+}
+
+fn jsonMatchReturnReceiverPlan(kind: int) -> int {
+    return makeJsonMatchReturnPlan(kind).age
+}
+
+print(jsonMatchReturnReceiverPlan(1))
