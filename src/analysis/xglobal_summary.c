@@ -5171,11 +5171,83 @@ static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence 
     return false;
 }
 
+typedef struct XgImportedPackageHashEntry {
+    uint64_t request_hash;
+    uint64_t key_hash;
+    uint64_t payload_hash;
+    uint64_t content_hash;
+    uint64_t package_hash;
+    uint64_t module_hash;
+    uint32_t nmodules;
+} XgImportedPackageHashEntry;
+
+static uint64_t imported_package_module_hash(const XgGlobalEvidence *package) {
+    uint64_t hash = hash_u32(XR_FNV64_OFFSET_BASIS, package ? package->nmodules : 0);
+    if (!package)
+        return hash;
+    for (uint32_t i = 0; i < package->nmodules; i++)
+        hash = hash_module_summary(hash, &package->modules[i]);
+    return hash ? hash : 1;
+}
+
+static int imported_package_hash_entry_compare(const XgImportedPackageHashEntry *a,
+                                               const XgImportedPackageHashEntry *b) {
+#define CMP_FIELD(FIELD)                                                                           \
+    do {                                                                                           \
+        if ((a)->FIELD < (b)->FIELD)                                                               \
+            return -1;                                                                             \
+        if ((a)->FIELD > (b)->FIELD)                                                               \
+            return 1;                                                                              \
+    } while (0)
+    CMP_FIELD(module_hash);
+    CMP_FIELD(request_hash);
+    CMP_FIELD(key_hash);
+    CMP_FIELD(payload_hash);
+    CMP_FIELD(content_hash);
+    CMP_FIELD(package_hash);
+    CMP_FIELD(nmodules);
+#undef CMP_FIELD
+    return 0;
+}
+
+static void sort_imported_package_hash_entries(XgImportedPackageHashEntry *entries,
+                                               uint32_t count) {
+    for (uint32_t i = 1; i < count; i++) {
+        XgImportedPackageHashEntry item = entries[i];
+        uint32_t j = i;
+        while (j > 0 && imported_package_hash_entry_compare(&item, &entries[j - 1]) < 0) {
+            entries[j] = entries[j - 1];
+            j--;
+        }
+        entries[j] = item;
+    }
+}
+
+static bool imported_package_modules_are_new(const XgGlobalEvidence *package,
+                                             const XgModuleSummary *seen_modules,
+                                             uint32_t seen_count) {
+    if (!package)
+        return false;
+    for (uint32_t i = 0; i < package->nmodules; i++) {
+        for (uint32_t j = 0; j < seen_count; j++) {
+            if (module_identity_matches(&package->modules[i], &seen_modules[j]))
+                return false;
+        }
+    }
+    return true;
+}
+
 XR_FUNC bool xg_imported_summary_hash_from_package_payloads(uint64_t seed,
                                                             const char *const *payloads,
                                                             uint32_t payload_count,
                                                             uint64_t *out_hash) {
+    XgImportedPackageHashEntry *entries = NULL;
+    XgModuleSummary *seen_modules = NULL;
+    uint32_t entries_cap = 0;
+    uint32_t seen_count = 0;
+    uint32_t seen_cap = 0;
     uint64_t hash = hash_u32(seed, payload_count);
+    bool ok = false;
     if (!out_hash || (payload_count > 0 && !payloads))
         return false;
     for (uint32_t i = 0; i < payload_count; i++) {
@@ -5184,27 +5256,53 @@ XR_FUNC bool xg_imported_summary_hash_from_package_payloads(uint64_t seed,
         uint64_t package_hash;
         if (!payloads[i] || !xg_evidence_cache_payload_parse(payloads[i], &info) ||
             info.phase != XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE)
-            return false;
+            goto done;
         memset(&package, 0, sizeof(package));
-        if (!xg_evidence_cache_payload_materialize(payloads[i], &package))
-            return false;
+        if (!xg_evidence_cache_payload_materialize(payloads[i], &package)) {
+            xg_global_evidence_free(&package);
+            goto done;
+        }
         if (!validate_package_module_identities(&package)) {
             xg_global_evidence_free(&package);
-            return false;
+            goto done;
         }
+        if (!imported_package_modules_are_new(&package, seen_modules, seen_count) ||
+            !reserve_array((void **) &seen_modules, &seen_cap, seen_count + package.nmodules,
+                           sizeof(*seen_modules)) ||
+            !reserve_array((void **) &entries, &entries_cap, i + 1, sizeof(*entries))) {
+            xg_global_evidence_free(&package);
+            goto done;
+        }
+        memcpy(&seen_modules[seen_count], package.modules,
+               (size_t) package.nmodules * sizeof(*seen_modules));
+        seen_count += package.nmodules;
         package_hash = xg_global_evidence_hash(&package);
-        hash = hash_u64(hash, info.request_hash);
-        hash = hash_u64(hash, info.key_hash);
-        hash = hash_u64(hash, info.payload_hash);
-        hash = hash_u64(hash, info.key.content_hash);
-        hash = hash_u64(hash, package_hash);
-        hash = hash_u32(hash, package.nmodules);
-        for (uint32_t m = 0; m < package.nmodules; m++)
-            hash = hash_module_summary(hash, &package.modules[m]);
+        entries[i].request_hash = info.request_hash;
+        entries[i].key_hash = info.key_hash;
+        entries[i].payload_hash = info.payload_hash;
+        entries[i].content_hash = info.key.content_hash;
+        entries[i].package_hash = package_hash;
+        entries[i].module_hash = imported_package_module_hash(&package);
+        entries[i].nmodules = package.nmodules;
         xg_global_evidence_free(&package);
     }
+    sort_imported_package_hash_entries(entries, payload_count);
+    for (uint32_t i = 0; i < payload_count; i++) {
+        hash = hash_u64(hash, entries[i].module_hash);
+        hash = hash_u64(hash, entries[i].request_hash);
+        hash = hash_u64(hash, entries[i].key_hash);
+        hash = hash_u64(hash, entries[i].payload_hash);
+        hash = hash_u64(hash, entries[i].content_hash);
+        hash = hash_u64(hash, entries[i].package_hash);
+        hash = hash_u32(hash, entries[i].nmodules);
+    }
     *out_hash = hash ? hash : 1;
-    return true;
+    ok = true;
+
+done:
+    xr_free(seen_modules);
+    xr_free(entries);
+    return ok;
 }
 
 XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,

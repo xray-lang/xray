@@ -998,15 +998,20 @@ TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module) {
 
 TEST(imported_summary_hash_folds_valid_package_payloads) {
     XgGlobalEvidence package = {0};
+    XgGlobalEvidence second = {0};
     XgGlobalEvidence changed = {0};
     XgGlobalEvidence missing_module = {0};
     char *payload = NULL;
+    char *second_payload = NULL;
     char *changed_payload = NULL;
     char *body_payload = NULL;
     char *missing_module_payload = NULL;
     const char *payloads[1];
+    const char *two_payloads[2];
     uint64_t hash = 0;
     uint64_t hash_again = 0;
+    uint64_t ordered_hash = 0;
+    uint64_t reversed_hash = 0;
     uint64_t changed_hash = 0;
 
     package.key.module_id = 7;
@@ -1025,6 +1030,31 @@ TEST(imported_summary_hash_folds_valid_package_payloads) {
         xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), payloads, 1, &hash_again));
     ASSERT_EQ_UINT(hash, hash_again);
     ASSERT_NE(hash, UINT64_C(0xabc));
+
+    second.key = package.key;
+    add_sample_semantic_summary(&second);
+    add_sample_body_summary(&second);
+    add_sample_global_extra_summary(&second);
+    second.modules[0].name_id = xg_name_id("sample2");
+    second.modules[0].canonical_hash = UINT64_C(0xabc8);
+    second.modules[0].source_hash = UINT64_C(0xdef8);
+    second_payload =
+        xg_global_evidence_cache_payload_dump(&second, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(second_payload);
+    two_payloads[0] = payload;
+    two_payloads[1] = second_payload;
+    ASSERT(xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), two_payloads, 2,
+                                                          &ordered_hash));
+    two_payloads[0] = second_payload;
+    two_payloads[1] = payload;
+    ASSERT(xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), two_payloads, 2,
+                                                          &reversed_hash));
+    ASSERT_EQ_UINT(ordered_hash, reversed_hash);
+
+    two_payloads[0] = payload;
+    two_payloads[1] = payload;
+    ASSERT(!xg_imported_summary_hash_from_package_payloads(UINT64_C(0xabc), two_payloads, 2,
+                                                           &reversed_hash));
 
     changed.key = package.key;
     add_sample_semantic_summary(&changed);
@@ -1052,10 +1082,12 @@ TEST(imported_summary_hash_folds_valid_package_payloads) {
                                                            &changed_hash));
 
     xr_free(payload);
+    xr_free(second_payload);
     xr_free(changed_payload);
     xr_free(body_payload);
     xr_free(missing_module_payload);
     xg_global_evidence_free(&package);
+    xg_global_evidence_free(&second);
     xg_global_evidence_free(&changed);
     xg_global_evidence_free(&missing_module);
 }
