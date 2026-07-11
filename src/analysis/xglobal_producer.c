@@ -32,6 +32,7 @@ typedef struct XgClassNameRow {
     XgModuleId module_id;
     const char *name;
     const char *super_name;
+    const AstNode *class_node;
     XgClassId class_id;
     uint32_t summary_index;
 } XgClassNameRow;
@@ -262,6 +263,120 @@ static uint32_t producer_unique_body_source_node_id(const XgProducer *p, XgModul
         h = fold_u64(h, name_id);
         h = fold_u64(h, signature_key);
         h = fold_u64(h, p->nbodies);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
+static bool producer_decl_source_seen(const XgProducer *p, XgModuleId module_id,
+                                      uint32_t source_node_id) {
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->ndecls; i++) {
+        const XgDeclSummary *decl = &p->evidence->decls[i];
+        if (decl->module_id == module_id && decl->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t producer_unique_decl_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                                    uint32_t source_node_id, uint32_t kind,
+                                                    uint32_t name_id, uint32_t signature_key) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return source_node_id;
+    while (producer_decl_source_seen(p, module_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, kind);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, signature_key);
+        h = fold_u64(h, p->evidence->ndecls);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
+static XgModuleId producer_class_module_id(const XgProducer *p, XgClassId class_id) {
+    if (!p || !p->evidence || class_id == XG_NO_ID)
+        return XG_NO_ID;
+    for (uint32_t i = 0; i < p->evidence->nclasses; i++) {
+        const XgClassSummary *cls = &p->evidence->classes[i];
+        if (cls->class_id == class_id)
+            return cls->module_id;
+    }
+    return XG_NO_ID;
+}
+
+static bool producer_method_source_seen(const XgProducer *p, XgModuleId module_id,
+                                        XgClassId current_class_id, uint32_t source_node_id) {
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->nmethods; i++) {
+        const XgMethodSummary *method = &p->evidence->methods[i];
+        XgModuleId owner_module = method->owner_class_id == current_class_id
+                                      ? module_id
+                                      : producer_class_module_id(p, method->owner_class_id);
+        if (owner_module == module_id && method->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t producer_unique_method_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                                      XgClassId owner_class_id,
+                                                      uint32_t source_node_id, uint32_t name_id,
+                                                      uint32_t signature_key) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return source_node_id;
+    while (producer_method_source_seen(p, module_id, owner_class_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, owner_class_id);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, signature_key);
+        h = fold_u64(h, p->evidence->nmethods);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
+static bool producer_class_field_source_seen(const XgProducer *p, XgModuleId module_id,
+                                             uint32_t source_node_id) {
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->evidence->nclass_fields; i++) {
+        const XgClassFieldSummary *field = &p->evidence->class_fields[i];
+        if (field->module_id == module_id && field->source_node_id == source_node_id)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t
+producer_unique_class_field_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                           uint32_t source_node_id, XgClassId owner_class_id,
+                                           uint32_t name_id, uint32_t decl_ordinal) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || !p->evidence || module_id == XG_NO_ID || source_node_id == 0)
+        return source_node_id;
+    while (producer_class_field_source_seen(p, module_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, owner_class_id);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, decl_ordinal);
         h = fold_u64(h, salt++);
         candidate = hash_folded32(h);
     }
@@ -1078,13 +1193,14 @@ static void producer_free_bodies(XgProducer *p) {
 }
 
 static bool producer_register_class(XgProducer *p, XgModuleId module_id, const char *name,
-                                    const char *super_name, XgClassId class_id,
-                                    uint32_t summary_index) {
+                                    const char *super_name, const AstNode *class_node,
+                                    XgClassId class_id, uint32_t summary_index) {
     if (!producer_reserve_classes(p, p->nclasses + 1))
         return false;
     p->classes[p->nclasses].module_id = module_id;
     p->classes[p->nclasses].name = name;
     p->classes[p->nclasses].super_name = super_name;
+    p->classes[p->nclasses].class_node = class_node;
     p->classes[p->nclasses].class_id = class_id;
     p->classes[p->nclasses].summary_index = summary_index;
     p->nclasses++;
@@ -3131,6 +3247,9 @@ body_find_record_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_
 }
 
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr);
+static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode *expr);
+static const XgClassFieldSummary *
+body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32_t field_name_id);
 
 static void body_add_json_fields_for_literal(XgBodyCollect *bc, XgJsonShapeId shape_id,
                                              const ObjectLiteralNode *obj) {
@@ -3212,16 +3331,16 @@ static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
     return row.json_shape_id;
 }
 
-static bool body_find_unique_return_json_literal(const AstNode *node,
-                                                 const ObjectLiteralNode **out_literal,
-                                                 bool *out_seen) {
+static bool body_find_unique_return_object_literal(const AstNode *node,
+                                                   const ObjectLiteralNode **out_literal,
+                                                   bool *out_seen) {
     if (!node || !out_literal || !out_seen)
         return true;
     switch (node->type) {
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++) {
-                if (!body_find_unique_return_json_literal(node->as.block.statements[i], out_literal,
-                                                          out_seen))
+                if (!body_find_unique_return_object_literal(node->as.block.statements[i],
+                                                            out_literal, out_seen))
                     return false;
             }
             return true;
@@ -3252,7 +3371,7 @@ body_unique_function_json_return_literal(const XgPendingBody *body) {
     bool seen = false;
     if (!body || !body->function || !body_type_ref_is_json(body->function->return_type))
         return NULL;
-    if (!body_find_unique_return_json_literal(body->body, &literal, &seen))
+    if (!body_find_unique_return_object_literal(body->body, &literal, &seen))
         return NULL;
     return seen ? literal : NULL;
 }
@@ -3297,6 +3416,102 @@ static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const
     if (out_literal)
         *out_literal = literal;
     return body_add_json_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
+}
+
+static const AstNode *body_json_receiver_unwrap(const AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_MOVE_EXPR:
+                expr = expr->as.move_expr.expr;
+                break;
+            case AST_UNSAFE_EXPR:
+                expr = expr->as.unsafe_expr.operand;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return expr;
+        }
+    }
+    return NULL;
+}
+
+static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *bc,
+                                                                uint32_t type_key) {
+    const XgJsonShapeSummary *shape =
+        body_find_json_shape_for_type_key(bc, type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+    return shape ? shape->json_shape_id : XG_NO_ID;
+}
+
+static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr) {
+    XgLocalType *local;
+    const AstNode *receiver = body_json_receiver_unwrap(expr);
+    if (!bc || !receiver || receiver->type != AST_INDEX_GET)
+        return XG_NO_ID;
+    local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
+    if (!local || local->sequence_elem_type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
+}
+
+static const ObjectLiteralNode *producer_find_class_field_json_initializer(const XgProducer *p,
+                                                                           XgClassId class_id,
+                                                                           uint32_t field_name_id) {
+    const XgClassNameRow *row;
+    const ClassDeclNode *cls;
+    if (!p || class_id == XG_NO_ID || field_name_id == 0)
+        return NULL;
+    row = producer_lookup_class_row_by_id(p, class_id);
+    if (!row || !row->class_node)
+        return NULL;
+    if (row->class_node->type == AST_CLASS_DECL)
+        cls = &row->class_node->as.class_decl;
+    else if (row->class_node->type == AST_STRUCT_DECL)
+        cls = &row->class_node->as.struct_decl;
+    else if (row->class_node->type == AST_UNION_DECL)
+        cls = &row->class_node->as.union_decl;
+    else
+        return NULL;
+    for (int i = 0; i < cls->field_count; i++) {
+        const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
+        const FieldDeclNode *field;
+        if (!field_node || field_node->type != AST_FIELD_DECL)
+            continue;
+        field = &field_node->as.field_decl;
+        if (field->is_static || hash_name32(field->name) != field_name_id ||
+            !body_type_ref_is_json(field->field_type))
+            continue;
+        return body_static_object_literal(field->initializer);
+    }
+    return NULL;
+}
+
+static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
+    const AstNode *receiver = body_json_receiver_unwrap(expr);
+    XgClassId receiver_class;
+    const XgClassFieldSummary *field;
+    XgJsonShapeId shape_id;
+    const ObjectLiteralNode *initializer;
+    if (!bc || !receiver || receiver->type != AST_MEMBER_ACCESS || !receiver->as.member_access.name)
+        return XG_NO_ID;
+    receiver_class = body_resolve_expr_class(bc, receiver->as.member_access.object);
+    field = body_find_class_field_in_hierarchy(bc, receiver_class,
+                                               hash_name32(receiver->as.member_access.name));
+    if (!field || field->type_key == 0)
+        return XG_NO_ID;
+    shape_id = body_lookup_static_json_shape_for_type_key(bc, field->type_key);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    initializer = producer_find_class_field_json_initializer(bc->producer, field->owner_class_id,
+                                                             field->name_id);
+    if (!initializer)
+        return XG_NO_ID;
+    return body_add_json_shape_for_literal(bc, initializer, (uint32_t) receiver->line,
+                                           field->type_key);
 }
 
 static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(XgGlobalEvidence *evidence,
@@ -3383,7 +3598,13 @@ static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *ex
     XgJsonShapeId shape_id = body_lookup_local_json_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
-    return body_lookup_call_json_return_shape(bc, expr, out_literal);
+    shape_id = body_lookup_call_json_return_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_sequence_json_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    return body_lookup_class_field_json_shape(bc, expr);
 }
 
 static int body_json_shape_static_field_index(XgBodyCollect *bc, XgJsonShapeId shape_id,
@@ -4032,6 +4253,66 @@ static XgRecordShapeId body_add_record_shape_for_type_alias(XgGlobalEvidence *ev
     return row.record_shape_id;
 }
 
+static const ObjectLiteralNode *
+body_unique_function_record_return_literal(const XgPendingBody *body) {
+    const ObjectLiteralNode *literal = NULL;
+    bool seen = false;
+    if (!body || !body->function || body_type_ref_is_json(body->function->return_type))
+        return NULL;
+    if (!body_find_unique_return_object_literal(body->body, &literal, &seen))
+        return NULL;
+    return seen ? literal : NULL;
+}
+
+static XgRecordShapeId body_lookup_call_record_return_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                            const ObjectLiteralNode **out_literal) {
+    const AstNode *callee;
+    XgFuncNameRow *target;
+    const XgPendingBody *body;
+    const ObjectLiteralNode *literal;
+    uint32_t type_key = 0;
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !expr)
+        return XG_NO_ID;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_lookup_call_record_return_shape(bc, expr->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return body_lookup_call_record_return_shape(bc, expr->as.move_expr.expr, out_literal);
+        case AST_UNSAFE_EXPR:
+            return body_lookup_call_record_return_shape(bc, expr->as.unsafe_expr.operand,
+                                                        out_literal);
+        case AST_FORCE_UNWRAP:
+            return body_lookup_call_record_return_shape(bc, expr->as.unary.operand, out_literal);
+        default:
+            break;
+    }
+    if (expr->type != AST_CALL_EXPR)
+        return XG_NO_ID;
+    callee = expr->as.call_expr.callee;
+    if (!callee || callee->type != AST_VARIABLE || !callee->as.variable.name)
+        return XG_NO_ID;
+    target = producer_lookup_func_row(bc->producer, callee->as.variable.name);
+    body = producer_find_function_body(bc->producer, target ? target->func_id : XG_NO_ID);
+    if (!body || !body->function)
+        return XG_NO_ID;
+    if (body->function->return_type)
+        type_key = hash_tref32(body->function->return_type);
+    if (type_key != 0) {
+        const XgRecordShapeSummary *shape =
+            body_find_record_shape_for_type_key(bc, type_key, XG_RECORD_SHAPE_STATIC);
+        if (shape)
+            return shape->record_shape_id;
+    }
+    literal = body_unique_function_record_return_literal(body);
+    if (!literal)
+        return XG_NO_ID;
+    if (out_literal && !body_record_literal_has_spread(literal))
+        *out_literal = literal;
+    return body_add_record_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
+}
+
 static void body_bind_record_shape_local(XgBodyCollect *bc, const char *name,
                                          XgRecordShapeId shape_id,
                                          const ObjectLiteralNode *literal) {
@@ -4099,6 +4380,94 @@ static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const A
     return row->record_shape_id;
 }
 
+static const AstNode *body_record_receiver_unwrap(const AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_MOVE_EXPR:
+                expr = expr->as.move_expr.expr;
+                break;
+            case AST_UNSAFE_EXPR:
+                expr = expr->as.unsafe_expr.operand;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return expr;
+        }
+    }
+    return NULL;
+}
+
+static XgRecordShapeId body_lookup_static_record_shape_for_type_key(XgBodyCollect *bc,
+                                                                    uint32_t type_key) {
+    const XgRecordShapeSummary *shape =
+        body_find_record_shape_for_type_key(bc, type_key, XG_RECORD_SHAPE_STATIC);
+    return shape ? shape->record_shape_id : XG_NO_ID;
+}
+
+static XgRecordShapeId body_lookup_sequence_record_shape(XgBodyCollect *bc, const AstNode *expr) {
+    XgLocalType *local;
+    const AstNode *receiver = body_record_receiver_unwrap(expr);
+    if (!bc || !receiver || receiver->type != AST_INDEX_GET)
+        return XG_NO_ID;
+    local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
+    if (!local || local->sequence_elem_type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_record_shape_for_type_key(bc, local->sequence_elem_type_key);
+}
+
+static XgRecordShapeId body_lookup_class_field_record_shape(XgBodyCollect *bc,
+                                                            const AstNode *expr) {
+    const AstNode *receiver = body_record_receiver_unwrap(expr);
+    XgClassId receiver_class;
+    const XgClassFieldSummary *field;
+    if (!bc || !receiver || receiver->type != AST_MEMBER_ACCESS || !receiver->as.member_access.name)
+        return XG_NO_ID;
+    receiver_class = body_resolve_expr_class(bc, receiver->as.member_access.object);
+    field = body_find_class_field_in_hierarchy(bc, receiver_class,
+                                               hash_name32(receiver->as.member_access.name));
+    if (!field || field->type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_record_shape_for_type_key(bc, field->type_key);
+}
+
+static XgRecordShapeId body_lookup_record_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                const ObjectLiteralNode **out_literal) {
+    XgRecordShapeId shape_id = body_lookup_local_record_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_call_record_return_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_sequence_record_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    return body_lookup_class_field_record_shape(bc, expr);
+}
+
+static int body_record_shape_static_field_index(XgBodyCollect *bc, XgRecordShapeId shape_id,
+                                                const ObjectLiteralNode *literal,
+                                                const char *name) {
+    uint32_t name_id;
+    if (!bc || !bc->evidence || shape_id == XG_NO_ID || !name)
+        return -1;
+    if (literal)
+        return body_object_literal_static_field_index(literal, name);
+    name_id = hash_name32(name);
+    if (name_id == 0)
+        return -1;
+    for (uint32_t i = 0; i < bc->evidence->nrecord_fields; i++) {
+        const XgRecordFieldSummary *field = &bc->evidence->record_fields[i];
+        if (field->shape_id == shape_id && field->name_id == name_id)
+            return field->field_ordinal;
+    }
+    return -1;
+}
+
 static void body_add_record_member_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const ObjectLiteralNode *literal = NULL;
     XgRecordShapeId shape_id;
@@ -4109,16 +4478,16 @@ static void body_add_record_member_access(XgBodyCollect *bc, const AstNode *node
         return;
     if (node->type == AST_MEMBER_ACCESS) {
         name = node->as.member_access.name;
-        shape_id = body_lookup_local_record_shape(bc, node->as.member_access.object, &literal);
+        shape_id = body_lookup_record_shape(bc, node->as.member_access.object, &literal);
     } else if (node->type == AST_MEMBER_SET) {
         name = node->as.member_set.member;
-        shape_id = body_lookup_local_record_shape(bc, node->as.member_set.object, &literal);
+        shape_id = body_lookup_record_shape(bc, node->as.member_set.object, &literal);
     } else {
         return;
     }
     if (shape_id == XG_NO_ID || !name)
         return;
-    field_index = body_object_literal_static_field_index(literal, name);
+    field_index = body_record_shape_static_field_index(bc, shape_id, literal, name);
     if (field_index < 0)
         return;
     memset(&row, 0, sizeof(row));
@@ -5860,6 +6229,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             XgJsonShapeId source_json_shape_id = XG_NO_ID;
             const ObjectLiteralNode *source_json_literal = NULL;
             XgRecordShapeId record_shape_id = XG_NO_ID;
+            XgRecordShapeId source_record_shape_id = XG_NO_ID;
+            const ObjectLiteralNode *source_record_literal = NULL;
             XgMapShapeId map_shape_id = XG_NO_ID;
             uint8_t map_container_kind = 0;
             uint32_t map_receiver_type_key = 0;
@@ -5882,6 +6253,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.var_decl.initializer);
             source_json_shape_id =
                 body_lookup_json_shape(bc, node->as.var_decl.initializer, &source_json_literal);
+            source_record_shape_id =
+                body_lookup_record_shape(bc, node->as.var_decl.initializer, &source_record_literal);
             source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
@@ -5928,6 +6301,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_bind_record_shape_local(
                     bc, node->as.var_decl.name, record_shape_id,
                     body_record_literal_has_spread(record_literal) ? NULL : record_literal);
+            } else if (source_record_shape_id != XG_NO_ID) {
+                body_bind_record_shape_local(bc, node->as.var_decl.name, source_record_shape_id,
+                                             source_record_literal);
             }
             if (map_shape_id != XG_NO_ID) {
                 body_bind_map_shape_local(bc, node->as.var_decl.name, map_shape_id,
@@ -5956,6 +6332,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *source_json_literal = NULL;
             XgJsonShapeId source_json_shape_id =
                 body_lookup_json_shape(bc, node->as.assignment.value, &source_json_literal);
+            const ObjectLiteralNode *source_record_literal = NULL;
+            XgRecordShapeId source_record_shape_id =
+                body_lookup_record_shape(bc, node->as.assignment.value, &source_record_literal);
             XgLocalType *source_map_local =
                 body_lookup_local_map_shape(bc, node->as.assignment.value);
             XgClassId class_id;
@@ -5996,6 +6375,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_bind_json_shape_local(bc, node->as.assignment.name, source_json_shape_id,
                                            source_json_literal);
             }
+            if (source_record_shape_id != XG_NO_ID)
+                body_bind_record_shape_local(bc, node->as.assignment.name, source_record_shape_id,
+                                             source_record_literal);
             if (source_map_local)
                 body_bind_map_shape_local_from_source(bc, node->as.assignment.name,
                                                       source_map_local);
@@ -6350,6 +6732,8 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
             0);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
                                interface_id, type_key, false);
+        body_bind_record_bridge_shapes_for_type_key(
+            bc, method->parameters ? method->parameters[i] : NULL, type_key);
         body_bind_map_shape_local_for_type_ref(
             bc, method->parameters ? method->parameters[i] : NULL,
             method->param_types ? method->param_types[i] : NULL, 0);
@@ -6381,6 +6765,7 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             param && param->line > 0 ? (uint32_t) param->line : 0);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key, false);
+        body_bind_record_bridge_shapes_for_type_key(bc, param ? param->name : NULL, type_key);
         body_bind_map_shape_local_for_type_ref(
             bc, param ? param->name : NULL, param ? param->type : NULL,
             param && param->line > 0 ? (uint32_t) param->line : 0);
@@ -6468,11 +6853,13 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = decl_id;
     decl.kind = XG_DECL_FUNC;
     decl.name_id = hash_name32(fn->name);
     decl.signature_key = hash_function_signature(fn);
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (native_attr)
         decl.flags |= XG_DECL_NATIVE;
@@ -6548,10 +6935,12 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = decl_id;
     decl.kind = (uint8_t) kind;
     decl.name_id = hash_name32(cls->name);
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (cls->is_native)
         decl.flags |= XG_DECL_NATIVE;
@@ -6574,9 +6963,11 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&method, 0, sizeof(method));
         method.method_id = (XgMethodId) (p->evidence->nmethods + 1);
         method.owner_class_id = class_id;
-        method.source_node_id = producer_source_node_id(module_id, method_node);
         method.name_id = hash_name32(m->name);
         method.signature_key = hash_method_signature(m);
+        method.source_node_id = producer_unique_method_source_node_id(
+            p, module_id, class_id, producer_source_node_id(module_id, method_node), method.name_id,
+            method.signature_key);
         if (m->is_static)
             method.flags |= XG_METHOD_STATIC;
         if (m->is_constructor)
@@ -6602,11 +6993,13 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         memset(&summary, 0, sizeof(summary));
         summary.field_id = (XgFieldId) (p->evidence->nclass_fields + 1);
         summary.module_id = module_id;
-        summary.source_node_id = producer_source_node_id(module_id, field_node);
         summary.owner_class_id = class_id;
         summary.name_id = hash_name32(field->name);
         summary.type_key = hash_tref32(field->field_type);
         summary.decl_ordinal = (uint32_t) i;
+        summary.source_node_id = producer_unique_class_field_source_node_id(
+            p, module_id, producer_source_node_id(module_id, field_node), class_id, summary.name_id,
+            summary.decl_ordinal);
         summary.instance_slot = field->is_static ? UINT32_MAX : instance_field_count++;
         class_field_fill_type_facts(&summary, field->field_type);
         summary.flags = class_field_flags(field, summary.semantic_kind, summary.flags);
@@ -6675,7 +7068,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         return false;
     if (!add_monomorphized_class_instantiation(p, module_id, node, cls, class_id))
         return false;
-    return producer_register_class(p, module_id, cls->name, cls->super_name, class_id,
+    return producer_register_class(p, module_id, cls->name, cls->super_name, node, class_id,
                                    p->evidence->nclasses - 1);
 }
 
@@ -6685,11 +7078,13 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     XgInterfaceId interface_id = (XgInterfaceId) hash_name32(iface->name);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_INTERFACE;
     decl.name_id = interface_id;
     decl.signature_key = (uint32_t) iface->method_count;
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
@@ -6732,11 +7127,13 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, node);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_ENUM;
     decl.name_id = hash_name32(e->name);
     decl.signature_key = (uint32_t) e->member_count;
+    decl.source_node_id =
+        producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
+                                            decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;

@@ -1,0 +1,27 @@
+class Box<T> {
+    values: Array<T>
+
+    constructor(init: (int) -> T) {
+        var states: Array<T> = []
+        for (lane in 0..3) {
+            states.push(init(lane))
+        }
+        this.values = states
+    }
+
+    get(i: int) -> T {
+        return this.values[i]
+    }
+}
+
+var seen: Array<int> = []
+var box = Box<int>((lane) -> {
+    seen.push(lane)
+    return 100 + lane
+})
+
+print(seen.length)
+print(seen[0])
+print(seen[2])
+print(box.get(0))
+print(box.get(2))

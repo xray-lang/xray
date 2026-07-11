@@ -1612,10 +1612,10 @@ TEST(cgen_parallel_for_each_uses_runtime_executor) {
     char *code = generate_c(ir, "test");
     assert(code != NULL);
 
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+    assert(contains(code, "xr_parallel_for_range_i64(") &&
            "parallel.forEach should lower to the AOT runtime executor");
     assert(contains(code, "_xr_par_workers_") && "workers expression should be evaluated once");
-    assert(contains(code, "(XrAotParForRangeI64Fn)") &&
+    assert(contains(code, "(XrParallelRangeI64Fn)") &&
            "runtime executor should receive the native range callback");
     assert(contains(code, "_par_range_") &&
            "parallel.forEach should emit a chunk range wrapper around the item body");
@@ -1654,7 +1654,7 @@ TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
     TEST_REQUIRE(!had_error, "scalar parallel.mapInto should generate");
 
     const char *code_end = code + strlen(code);
-    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 3,
+    TEST_REQUIRE(count_between(code, code_end, "xr_parallel_for_range_i64(") == 3,
                  "scalar mapInto should use one range executor per map");
     TEST_REQUIRE(count_between(code, code_end, "((double*)") >= 1,
                  "Array<float> mapInto should store through direct double storage");
@@ -1684,7 +1684,7 @@ TEST(cgen_parallel_map_return_uses_runtime_executor) {
     TEST_REQUIRE(!had_error, "returning parallel.map should generate");
 
     const char *code_end = code + strlen(code);
-    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
+    TEST_REQUIRE(count_between(code, code_end, "xr_parallel_for_range_i64(") == 1,
                  "returning map should use one range executor");
     TEST_REQUIRE(count_between(code, code_end, "xrt_array_new_typed") >= 1,
                  "returning map should preallocate a result array before dispatch");
@@ -1713,12 +1713,12 @@ TEST(cgen_parallel_reduce_uses_runtime_executor) {
     assert(code != NULL);
     assert(!had_error && "parallel.reduce AOT program should generate");
 
-    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
+    assert(contains(code, "xr_parallel_reduce_i64(") &&
            "parallel.reduce should lower to the AOT runtime reducer");
     assert(contains(code, "_xr_pr_workers_") && "workers expression should be evaluated once");
-    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
+    assert(contains(code, "(XrParallelReduceRangeI64Fn)") &&
            "runtime reducer should receive the native range callback");
-    assert(contains(code, "(XrAotParReduceCombineI64Fn)") &&
+    assert(contains(code, "(XrParallelReduceCombineI64Fn)") &&
            "runtime reducer should receive the native combine callback");
     assert(contains(code, "_par_reduce_range_") &&
            "parallel.reduce should emit a chunk range wrapper around the item body");
@@ -1755,15 +1755,15 @@ TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
     assert(!had_error && "struct accumulator parallel.reduce should generate");
-    assert(contains(code, "xr_aot_parallel_reduce_agg(") &&
+    assert(contains(code, "xr_parallel_reduce_agg(") &&
            "struct reduce should lower to the aggregate runtime reducer");
-    assert(contains(code, "(XrAotParReduceRangeAggFn)") &&
+    assert(contains(code, "(XrParallelReduceRangeAggFn)") &&
            "aggregate reducer should receive the native range callback");
-    assert(contains(code, "(XrAotParReduceCombineAggFn)") &&
+    assert(contains(code, "(XrParallelReduceCombineAggFn)") &&
            "aggregate reducer should receive the native combine callback");
     assert(contains(code, "static XR_AINLINE xrt_struct_test_") &&
            "reduce body/combine should be inline native struct callbacks");
-    assert(!contains(code, "xr_aot_parallel_reduce_i64(") &&
+    assert(!contains(code, "xr_parallel_reduce_i64(") &&
            "struct reduce must not route through the i64 runtime reducer");
     assert(!contains(code, "_boxed") &&
            "direct aggregate reduce callbacks should not require boxed adapters");
@@ -1789,7 +1789,7 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
     assert(!had_error && "parallel.forEach AOT body should allow direct Atomic<int> RMW ops");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+    assert(contains(code, "xr_parallel_for_range_i64(") &&
            "Atomic body should still use the AOT runtime executor");
     assert(contains(code, "atomic_fetch_add_explicit(") &&
            "Atomic<int>.fetchAdd should keep the direct C11 atomic lowering");
@@ -1898,7 +1898,7 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "XI_PAR_FOR stack closure should generate");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+    assert(contains(code, "xr_parallel_for_range_i64(") &&
            "XI_PAR_FOR should still use the AOT runtime executor");
     assert(contains(code, "_xr_par_closure_storage_") &&
            "XI_PAR_FOR no-escape closure should use a scoped C closure env");
@@ -2340,7 +2340,7 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
     if (!run_end)
         run_end = code + strlen(code);
     CHECK_RAWPTR_PAR_CAPTURE(run_end != NULL, "run function body should be bounded");
-    const char *par_for = strstr(run, "xr_aot_parallel_for_range_i64(");
+    const char *par_for = strstr(run, "xr_parallel_for_range_i64(");
     CHECK_RAWPTR_PAR_CAPTURE(par_for && par_for < run_end,
                              "parallel.forEach should use the AOT runtime executor");
     const char *release = strstr(run, "xrt_release(xr_mkptr(");

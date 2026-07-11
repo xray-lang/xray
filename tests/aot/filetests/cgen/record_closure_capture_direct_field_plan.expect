@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+regex=closure [0-9]+ func=recordClosureCapturePlan value=v[0-9]+ target=<anonymous> captures=1 repr=stack
+regex=record-shape-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ type=[0-9]+ kind=literal action=sealed_record fields=[0-9]+\+2 hash=[0-9a-f]+ evidence=0x27 reason=none
+regex=record-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get action=direct_field field_name=[0-9]+ result_type=0 field=1 evidence=0x1d reason=none
+c_regex=xrt_closure_stack_new\(\(void\*\)record_closure_capture_direct_field_plan_[0-9a-f]+___anonymous__[0-9]+
+c_regex=XrValue v[0-9]+ = xrt_json_get_field\(v[0-9]+, 1\);
+c_not_contains=xrt_method_

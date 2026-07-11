@@ -385,12 +385,19 @@ XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name) {
     if (!module_name || !member_name)
         return true;
+    if (xa_freestanding_stdlib_module_known(module_name) &&
+        !xa_freestanding_stdlib_module_allowed(module_name))
+        return false;
     if (strcmp(module_name, "math") == 0)
         return xa_freestanding_math_member_allowed(member_name);
     return true;
 }
 
 XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name) {
+    if (module_name && strcmp(module_name, "parallel") == 0) {
+        return "parallel uses the hosted CPU batch executor; freestanding code must use explicit "
+               "raw loops or a platform-specific runtime";
+    }
     if (module_name && strcmp(module_name, "math") == 0) {
         return "libm-backed and system-random math helpers are not part of the freestanding "
                "no-libc subset yet";
@@ -3621,6 +3628,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                                 break;
                             }
                         }
+                    } else {
+                        xa_check_constructor_visibility(ctx, node, cl->class_info->base);
                     }
                 }
             }
