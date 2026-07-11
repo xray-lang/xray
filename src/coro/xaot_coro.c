@@ -82,9 +82,7 @@ typedef enum XrParallelJobKind {
 } XrParallelJobKind;
 
 typedef struct XrParallelSchedulerBatch {
-    xr_mutex_t mutex;
-    xr_cond_t done;
-    int remaining_lanes;
+    XrParallelJoin join;
     XrParallelJobKind job_kind;
     int64_t start;
     int64_t end;
@@ -135,11 +133,7 @@ static void xr_parallel_for_state_run_lane(XrParallelRangeStateI64Fn body,
 static void xr_parallel_scheduler_batch_complete(XrParallelSchedulerBatch *batch) {
     if (!batch)
         return;
-    xr_mutex_lock(&batch->mutex);
-    batch->remaining_lanes--;
-    if (batch->remaining_lanes <= 0)
-        xr_cond_broadcast(&batch->done);
-    xr_mutex_unlock(&batch->mutex);
+    xr_parallel_join_lane_done(&batch->join);
 }
 
 static void xr_parallel_reduce_i64_run_lane(XrParallelSchedulerBatch *batch, int64_t worker_id) {
@@ -341,9 +335,7 @@ static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
         return false;
 
     int background_lanes = (int) batch->participants - 1;
-    xr_mutex_init(&batch->mutex);
-    xr_cond_init(&batch->done);
-    batch->remaining_lanes = background_lanes;
+    xr_parallel_join_init(&batch->join, background_lanes);
     memset(batch->reduce_valid, 0, sizeof(batch->reduce_valid));
     atomic_store_explicit(&batch->reduce_failed, false, memory_order_relaxed);
 
@@ -369,24 +361,8 @@ static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
     xr_runtime_spawn_batch(scheduler, coros, background_lanes);
     xr_parallel_scheduler_run_lane(batch, background_lanes);
 
-    XrWorker *current = xr_current_worker();
-    bool can_help_join = current && current->p.runtime == scheduler;
-    xr_mutex_lock(&batch->mutex);
-    while (batch->remaining_lanes > 0) {
-        if (!can_help_join) {
-            xr_cond_wait(&batch->done, &batch->mutex);
-            continue;
-        }
-        xr_mutex_unlock(&batch->mutex);
-        bool helped = xr_runtime_help_join_once(scheduler);
-        xr_mutex_lock(&batch->mutex);
-        if (!helped && batch->remaining_lanes > 0)
-            xr_cond_wait_for_ns(&batch->done, &batch->mutex, 1000000ULL);
-    }
-    xr_mutex_unlock(&batch->mutex);
-
-    xr_cond_destroy(&batch->done);
-    xr_mutex_destroy(&batch->mutex);
+    xr_parallel_join_wait(&batch->join, scheduler);
+    xr_parallel_join_destroy(&batch->join);
     return true;
 
 fail:
@@ -394,8 +370,7 @@ fail:
         if (coros[lane])
             xr_coro_destroy(coros[lane]);
     }
-    xr_cond_destroy(&batch->done);
-    xr_mutex_destroy(&batch->mutex);
+    xr_parallel_join_destroy(&batch->join);
     return false;
 }
 

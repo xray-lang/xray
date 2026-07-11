@@ -74,3 +74,51 @@ bool xr_parallel_lane_bounds(int64_t start, int64_t end, int lane_count, int lan
     *out_end = begin + lane_items;
     return true;
 }
+
+void xr_parallel_join_init(XrParallelJoin *join, int remaining_lanes) {
+    if (!join)
+        return;
+    xr_mutex_init(&join->mutex);
+    xr_cond_init(&join->done);
+    join->remaining_lanes = remaining_lanes > 0 ? remaining_lanes : 0;
+    join->initialized = true;
+}
+
+void xr_parallel_join_lane_done(XrParallelJoin *join) {
+    if (!join || !join->initialized)
+        return;
+    xr_mutex_lock(&join->mutex);
+    join->remaining_lanes--;
+    if (join->remaining_lanes <= 0)
+        xr_cond_broadcast(&join->done);
+    xr_mutex_unlock(&join->mutex);
+}
+
+void xr_parallel_join_wait(XrParallelJoin *join, XrRuntime *runtime) {
+    if (!join || !join->initialized)
+        return;
+    XrWorker *current = xr_current_worker();
+    bool can_help_join = current && current->p.runtime == runtime;
+    xr_mutex_lock(&join->mutex);
+    while (join->remaining_lanes > 0) {
+        if (!can_help_join) {
+            xr_cond_wait(&join->done, &join->mutex);
+            continue;
+        }
+        xr_mutex_unlock(&join->mutex);
+        bool helped = xr_runtime_help_join_once(runtime);
+        xr_mutex_lock(&join->mutex);
+        if (!helped && join->remaining_lanes > 0)
+            xr_cond_wait_for_ns(&join->done, &join->mutex, 1000000ULL);
+    }
+    xr_mutex_unlock(&join->mutex);
+}
+
+void xr_parallel_join_destroy(XrParallelJoin *join) {
+    if (!join || !join->initialized)
+        return;
+    xr_cond_destroy(&join->done);
+    xr_mutex_destroy(&join->mutex);
+    join->remaining_lanes = 0;
+    join->initialized = false;
+}
