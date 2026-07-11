@@ -303,6 +303,8 @@ static bool xr_aot_env_flag_enabled(const char *name) {
 }
 
 static int64_t xr_aot_parallel_resolve_workers(int64_t requested) {
+    if (requested < 0)
+        return -1;
     if (requested != 0)
         return requested;
     if (xr_aot_env_flag_enabled("XRAY_CORO_DETERMINISTIC"))
@@ -326,6 +328,8 @@ bool xr_aot_parallel_for_range_i64(int64_t start, int64_t end, int64_t workers,
         return true;
 
     workers = xr_aot_parallel_resolve_workers(workers);
+    if (workers < 0)
+        return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1) {
@@ -453,6 +457,8 @@ bool xr_aot_parallel_reduce_i64(int64_t start, int64_t end, int64_t workers, int
     }
 
     workers = xr_aot_parallel_resolve_workers(workers);
+    if (workers < 0)
+        return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1)
@@ -538,6 +544,8 @@ bool xr_aot_parallel_reduce_agg(int64_t start, int64_t end, int64_t workers, siz
     }
 
     workers = xr_aot_parallel_resolve_workers(workers);
+    if (workers < 0)
+        return false;
     uint64_t count_u = (uint64_t) end - (uint64_t) start;
     int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
     if (count <= 1 || workers <= 1)

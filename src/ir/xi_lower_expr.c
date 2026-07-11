@@ -4938,7 +4938,7 @@ static AstNode *parallel_call_options_workers_ast(XiLower *l, AstNode *options_a
     if (ctor->arg_count != 1)
         return NULL;
     int64_t literal = 0;
-    if (!parallel_call_int_literal_value(ctor->arguments[0], &literal) || literal < 0)
+    if (!parallel_call_int_literal_value(ctor->arguments[0], &literal))
         return NULL;
     if (out_supported)
         *out_supported = true;
