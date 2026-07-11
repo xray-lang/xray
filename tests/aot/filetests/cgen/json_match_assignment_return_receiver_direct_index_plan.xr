@@ -1,0 +1,15 @@
+fn makeJsonMatchAssignedReturnPlan(kind: int) -> Json {
+    var user: Json = { name: "seed", age: 0 }
+    match (kind) {
+        0 -> (user = { name: "ada", age: 1 }),
+        1 -> (user = { name: "bob", age: 2 }),
+        _ -> (user = { name: "eve", age: 3 })
+    }
+    return user
+}
+
+fn jsonMatchAssignedReturnReceiverPlan(kind: int) -> int {
+    return makeJsonMatchAssignedReturnPlan(kind).age
+}
+
+print(jsonMatchAssignedReturnReceiverPlan(1))
