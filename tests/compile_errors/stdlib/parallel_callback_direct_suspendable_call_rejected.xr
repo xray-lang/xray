@@ -1,0 +1,14 @@
+import parallel
+
+fn worker() -> int {
+    return 1
+}
+
+fn suspends() -> int {
+    var value = await go worker()
+    return value
+}
+
+parallel.forEach(0..4, (i) -> {
+    print(suspends())
+}, parallel.Options(2))

@@ -1,0 +1,6 @@
+import parallel
+import { importedSuspends } from "../../fixtures/thread_spawn_suspendable_lib"
+
+parallel.forEach(0..4, (i) -> {
+    print(importedSuspends())
+}, parallel.Options(2))

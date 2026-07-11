@@ -485,14 +485,99 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
 typedef struct XaParallelCallbackEffectScan {
     XaInferContext *ctx;
     const char *callback_name;
+    XaSymbol *call_stack[32];
+    int call_depth;
     int nested_function_depth;
+    bool report;
+    bool found;
+    bool found_suspend;
     bool reported;
+    char feature_buf[192];
 } XaParallelCallbackEffectScan;
 
 static bool xa_parallel_assert_call_name(const char *name) {
     return name && (strcmp(name, "assert") == 0 || strcmp(name, "assert_true") == 0 ||
                     strcmp(name, "assert_false") == 0 || strcmp(name, "assert_eq") == 0 ||
                     strcmp(name, "assert_ne") == 0 || strcmp(name, "assert_throws") == 0);
+}
+
+static XaScope *xa_parallel_find_function_scope_for_symbol(XaScope *scope, XaSymbol *sym) {
+    if (!scope || !sym)
+        return NULL;
+    if (scope->function_symbol == sym)
+        return scope;
+    for (int i = 0; i < scope->child_count; i++) {
+        XaScope *found = xa_parallel_find_function_scope_for_symbol(scope->children[i], sym);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+static AstNode *xa_parallel_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym || sym->kind != XA_SYM_FUNCTION)
+        return NULL;
+    XaScope *scope = xa_parallel_find_function_scope_for_symbol(ctx->analyzer->global_scope, sym);
+    AstNode *fn_node = scope ? (AstNode *) scope->ast_node : NULL;
+    if (!fn_node)
+        return NULL;
+    if (fn_node->type == AST_FUNCTION_DECL)
+        return fn_node->as.function_decl.body;
+    if (fn_node->type == AST_FUNCTION_EXPR)
+        return fn_node->as.function_expr.body;
+    return NULL;
+}
+
+static XaSymbol *xa_parallel_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
+        return NULL;
+    uint32_t symbol_id = node->as.variable.symbol_id;
+    if (symbol_id != 0) {
+        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
+        if (sym)
+            return sym;
+    }
+    const char *name = node->as.variable.name;
+    return name ? xa_lookup_visible_symbol(ctx, name) : NULL;
+}
+
+static XaSymbol *xa_parallel_import_target_symbol(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !sym || !sym->is_imported)
+        return sym;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->module_name)
+        return sym;
+
+    bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name, is_quoted);
+    if (!exports)
+        return sym;
+    const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
+    XaSymbol *target = member_name ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    return target ? target : sym;
+}
+
+static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *callee) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+
+    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+
+    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *mod_name =
+        mod_links && mod_links->module_name ? mod_links->module_name : ma->object->as.variable.name;
+    bool is_quoted = mod_name[0] == '.' || mod_name[0] == '/';
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    if (!exports)
+        return NULL;
+    XaSymbol *member = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    return xa_parallel_import_target_symbol(ctx, member);
 }
 
 static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *call) {
@@ -505,17 +590,35 @@ static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *ca
     const char *module_name = ma->object->as.variable.name;
     if (!module_name || strcmp(module_name, "Coro") != 0)
         return false;
-    XaSymbol *sym = ctx ? xa_lookup_visible_symbol(ctx, module_name) : NULL;
+    XaSymbol *sym = ctx ? xa_parallel_symbol_from_variable_node(ctx, ma->object) : NULL;
     return sym && sym->kind == XA_SYM_MODULE && sym->is_builtin;
 }
 
-static const char *xa_parallel_callback_call_effect_feature(XaInferContext *ctx, CallExprNode *call,
-                                                            bool *is_suspend) {
+static bool xa_parallel_function_symbol_has_effect(XaInferContext *ctx, XaSymbol *sym,
+                                                   XaSymbol **call_stack, int call_depth,
+                                                   bool *out_suspend);
+static bool xa_parallel_callback_body_has_effect(XaInferContext *ctx, AstNode *body,
+                                                 XaSymbol **call_stack, int call_depth,
+                                                 bool *out_suspend);
+
+static AstNode *xa_parallel_inline_body(AstNode *expr) {
+    if (!expr)
+        return NULL;
+    if (expr->type == AST_FUNCTION_DECL)
+        return expr->as.function_decl.body;
+    if (expr->type == AST_FUNCTION_EXPR)
+        return expr->as.function_expr.body;
+    return NULL;
+}
+
+static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEffectScan *scan,
+                                                            CallExprNode *call, bool *is_suspend) {
     if (is_suspend)
         *is_suspend = false;
     if (!call || !call->callee)
         return NULL;
 
+    XaInferContext *ctx = scan ? scan->ctx : NULL;
     if (xa_parallel_call_is_coro_yield(ctx, call)) {
         if (is_suspend)
             *is_suspend = true;
@@ -525,12 +628,79 @@ static const char *xa_parallel_callback_call_effect_feature(XaInferContext *ctx,
     if (call->callee->type == AST_VARIABLE &&
         xa_parallel_assert_call_name(call->callee->as.variable.name)) {
         const char *name = call->callee->as.variable.name;
-        XaSymbol *sym = ctx ? xa_lookup_visible_symbol(ctx, name) : NULL;
+        XaSymbol *sym = ctx ? xa_parallel_symbol_from_variable_node(ctx, call->callee) : NULL;
         if (sym && sym->kind == XA_SYM_FUNCTION && sym->is_builtin)
             return name ? name : "assert";
     }
 
+    bool callee_suspend = false;
+    AstNode *inline_body = xa_parallel_inline_body(call->callee);
+    if (inline_body && xa_parallel_callback_body_has_effect(ctx, inline_body, scan->call_stack,
+                                                            scan->call_depth, &callee_suspend)) {
+        if (is_suspend)
+            *is_suspend = callee_suspend;
+        return callee_suspend ? "call to suspendable inline function"
+                              : "call to throwing inline function";
+    }
+
+    XaSymbol *callee_sym = NULL;
+    const char *callee_name = NULL;
+    if (call->callee->type == AST_VARIABLE) {
+        callee_sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        callee_name = call->callee->as.variable.name;
+    } else if (call->callee->type == AST_MEMBER_ACCESS) {
+        callee_sym = xa_parallel_module_member_symbol(ctx, call->callee);
+        MemberAccessNode *ma = &call->callee->as.member_access;
+        callee_name = ma->name;
+    }
+
+    if (callee_sym && xa_parallel_function_symbol_has_effect(ctx, callee_sym, scan->call_stack,
+                                                             scan->call_depth, &callee_suspend)) {
+        if (is_suspend)
+            *is_suspend = callee_suspend;
+        snprintf(scan->feature_buf, sizeof(scan->feature_buf), "call to %s function '%s'",
+                 callee_suspend ? "suspendable" : "throwing", callee_name ? callee_name : "?");
+        return scan->feature_buf;
+    }
+
     return NULL;
+}
+
+static bool xa_parallel_call_stack_contains(XaSymbol **call_stack, int call_depth, XaSymbol *sym) {
+    if (!call_stack || !sym)
+        return false;
+    for (int i = 0; i < call_depth; i++) {
+        if (call_stack[i] == sym)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_parallel_function_symbol_has_effect(XaInferContext *ctx, XaSymbol *sym,
+                                                   XaSymbol **call_stack, int call_depth,
+                                                   bool *out_suspend) {
+    if (out_suspend)
+        *out_suspend = false;
+    sym = xa_parallel_import_target_symbol(ctx, sym);
+    if (!ctx || !sym || sym->kind != XA_SYM_FUNCTION || sym->is_builtin)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links && links->is_extern)
+        return false;
+    if (xa_parallel_call_stack_contains(call_stack, call_depth, sym))
+        return false;
+    if (call_depth >= 32)
+        return false;
+
+    AstNode *body = xa_parallel_symbol_function_body(ctx, sym);
+    if (!body)
+        return false;
+
+    call_stack[call_depth] = sym;
+    bool result =
+        xa_parallel_callback_body_has_effect(ctx, body, call_stack, call_depth + 1, out_suspend);
+    call_stack[call_depth] = NULL;
+    return result;
 }
 
 static void xa_parallel_callback_report_effect(XaParallelCallbackEffectScan *scan, AstNode *site,
@@ -551,7 +721,7 @@ static void xa_parallel_callback_report_effect(XaParallelCallbackEffectScan *sca
 
 static void xa_parallel_callback_effect_scan_pre(AstNode *node, void *ud) {
     XaParallelCallbackEffectScan *scan = (XaParallelCallbackEffectScan *) ud;
-    if (!scan || scan->reported || !node)
+    if (!scan || scan->found || scan->reported || !node)
         return;
 
     if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
@@ -582,15 +752,19 @@ static void xa_parallel_callback_effect_scan_pre(AstNode *node, void *ud) {
             is_suspend = false;
             break;
         case AST_CALL_EXPR:
-            feature = xa_parallel_callback_call_effect_feature(scan->ctx, &node->as.call_expr,
-                                                               &is_suspend);
+            feature =
+                xa_parallel_callback_call_effect_feature(scan, &node->as.call_expr, &is_suspend);
             break;
         default:
             break;
     }
 
-    if (feature)
-        xa_parallel_callback_report_effect(scan, node, feature, is_suspend);
+    if (feature) {
+        scan->found = true;
+        scan->found_suspend = is_suspend;
+        if (scan->report)
+            xa_parallel_callback_report_effect(scan, node, feature, is_suspend);
+    }
 }
 
 static void xa_parallel_callback_effect_scan_post(AstNode *node, void *ud) {
@@ -604,13 +778,45 @@ static void xa_parallel_callback_effect_scan_post(AstNode *node, void *ud) {
     }
 }
 
+static bool xa_parallel_callback_body_has_effect(XaInferContext *ctx, AstNode *body,
+                                                 XaSymbol **call_stack, int call_depth,
+                                                 bool *out_suspend) {
+    if (out_suspend)
+        *out_suspend = false;
+    if (!ctx || !body)
+        return false;
+
+    XaParallelCallbackEffectScan scan = {
+        .ctx = ctx,
+        .callback_name = NULL,
+        .call_depth = call_depth,
+        .nested_function_depth = 0,
+        .report = false,
+        .found = false,
+        .found_suspend = false,
+        .reported = false,
+    };
+    for (int i = 0; i < call_depth && i < 32; i++)
+        scan.call_stack[i] = call_stack ? call_stack[i] : NULL;
+
+    xa_ast_walk(body, xa_parallel_callback_effect_scan_pre, xa_parallel_callback_effect_scan_post,
+                &scan);
+    if (out_suspend)
+        *out_suspend = scan.found_suspend;
+    return scan.found;
+}
+
 XR_FUNC void xa_parallel_callback_effect_check(XaInferContext *ctx, AstNode *body) {
     if (!ctx || !ctx->in_parallel_callback_body || !body)
         return;
     XaParallelCallbackEffectScan scan = {
         .ctx = ctx,
         .callback_name = ctx->parallel_callback_name,
+        .call_depth = 0,
         .nested_function_depth = 0,
+        .report = true,
+        .found = false,
+        .found_suspend = false,
         .reported = false,
     };
     xa_ast_walk(body, xa_parallel_callback_effect_scan_pre, xa_parallel_callback_effect_scan_post,

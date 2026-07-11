@@ -1,0 +1,14 @@
+import parallel
+
+enum ParallelErr {
+    Boom
+}
+
+fn fails() -> int {
+    throw ParallelErr.Boom
+    return 1
+}
+
+parallel.forEach(0..4, (i) -> {
+    print(fails())
+}, parallel.Options(2))
