@@ -62,10 +62,49 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_EQ_INT(PROTO_CODE_COUNT(roundtrip), 1);
     ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_RETURN);
     ASSERT_EQ_INT(roundtrip->maxstacksize, 1);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.entry_func_id, 1);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.root_representation, XR_ROOT_ELIDED);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_NONE);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
+TEST(bytecode_roundtrips_reachable_entry_plan) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *root = make_minimal_proto();
+    XrProto *child = make_minimal_proto();
+    ASSERT_NOT_NULL(root);
+    ASSERT_NOT_NULL(child);
+    child->code.count = 0;
+    child->lineinfo.count = 0;
+    xr_vm_proto_write(child, CREATE_ABC(OP_GO, 0, 0, 0), 1);
+    xr_vm_proto_write(child, CREATE_ABC(OP_RETURN, 0, 0, 0), 1);
+    ASSERT_EQ_INT(xr_vm_proto_add_proto(root, child), 0);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, root, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.entry_func_id, 1);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.reachable_body_count, 2);
+    ASSERT_TRUE((roundtrip->entry_plan.required_capability_bits & XR_CAP_COROUTINE) != 0);
+    ASSERT_TRUE((roundtrip->entry_plan.required_capability_bits & XR_CAP_TASK) != 0);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.root_representation, XR_ROOT_DESCRIPTOR);
+    ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_SINGLE);
+    ASSERT_TRUE(xr_vm_entry_plan_validate(roundtrip));
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(root);
     xray_vm_delete(iso);
 }
 
@@ -423,6 +462,7 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
+    RUN_TEST(bytecode_roundtrips_reachable_entry_plan);
     RUN_TEST(bytecode_roundtrips_struct_area_size);
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);

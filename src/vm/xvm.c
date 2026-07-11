@@ -98,11 +98,8 @@
 #include "xvm_profiler.h"
 
 static XrArray *vm_root_array_new(XrVMRuntime *isolate, int capacity, uint8_t elem_type) {
-    XrArray *array = (XrArray *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
-                                                     sizeof(XrArray), XR_TARRAY);
-    if (array)
-        xr_array_init_inplace(array, capacity > 0 ? capacity : 4, elem_type);
-    return array;
+    return xr_array_with_capacity_in(&isolate->core_rt->root_alloc, capacity > 0 ? capacity : 4,
+                                     (XrArrayElemType) elem_type);
 }
 
 static XrMap *vm_root_map_new(XrVMRuntime *isolate, uint32_t capacity) {

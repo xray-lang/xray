@@ -11767,8 +11767,8 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_TRUE(bundle.has_entry_plan);
     ASSERT_EQ_UINT(bundle.entry_plan.reachable_body_count, 2);
-    ASSERT_EQ_UINT(bundle.entry_plan.root_representation, XAOT_ROOT_DESCRIPTOR);
-    ASSERT_EQ_UINT(bundle.entry_plan.scheduler_mode, XAOT_SCHED_SINGLE);
+    ASSERT_EQ_UINT(bundle.entry_plan.root_representation, XR_ROOT_DESCRIPTOR);
+    ASSERT_EQ_UINT(bundle.entry_plan.scheduler_mode, XR_SCHED_SINGLE);
     ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_TASK) != 0);
     ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_TIMER) == 0);
     xaot_bundle_free(&bundle);
