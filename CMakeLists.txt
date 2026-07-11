@@ -274,6 +274,7 @@ option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
 option(ENABLE_TLS "Enable HTTPS/TLS support (requires OpenSSL)" ON)
 option(XR_USE_MIMALLOC "Use mimalloc high-performance allocator" OFF)
 option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (for debugging)" OFF)
+option(XRAY_STDLIB_VM_FASTPATHS "Enable verified VM-only stdlib fastpaths" ON)
 
 # Modular build options
 option(XR_BUILD_LSP "Build LSP language server" ON)
@@ -1405,6 +1406,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(stdlib_def_source_gate PROPERTIES
         LABELS "stdlib;metadata;generated"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    foreach(_xray_stdlib_boundary_check IN ITEMS manifest semantic fastpath dynamic)
+        add_test(
+            NAME stdlib_boundary_${_xray_stdlib_boundary_check}
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_boundary.py
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}
+                    --check ${_xray_stdlib_boundary_check}
+        )
+        set_tests_properties(stdlib_boundary_${_xray_stdlib_boundary_check} PROPERTIES
+            LABELS "stdlib;boundary;metadata"
+            PROCESSORS 1
+            TIMEOUT 30
+        )
+    endforeach()
+
+    add_test(
+        NAME test_stdlib_boundary_manifest
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_boundary_manifest.py
+    )
+    set_tests_properties(test_stdlib_boundary_manifest PROPERTIES
+        LABELS "stdlib;boundary;unit"
         PROCESSORS 1
         TIMEOUT 30
     )
