@@ -305,7 +305,7 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
 
     xr_tls_conn_set_hostname(entry->tls_conn, host);
 
-    if (xr_tls_conn_handshake_client(NULL, entry->tls_conn) != XR_TLS_OK) {
+    if (xr_tls_conn_handshake_client(X, entry->tls_conn) != XR_TLS_OK) {
         xr_tls_conn_free(entry->tls_conn);
         xr_tls_context_free(entry->tls_ctx);
         xr_closesocket(fd);
@@ -328,7 +328,7 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
     }
 
     // Create HTTP/2 connection
-    entry->conn = http2_conn_new(fd, entry->tls_conn, true);
+    entry->conn = http2_conn_new(X, fd, entry->tls_conn, true);
     if (!entry->conn) {
         if (entry->tls_conn) {
             xr_tls_conn_close(entry->tls_conn);

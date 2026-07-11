@@ -936,7 +936,7 @@ static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
     while (total < len) {
         int n;
         if (conn->tls_conn) {
-            n = xr_tls_conn_write(NULL, conn->tls_conn, p + total, len - total);
+            n = xr_tls_conn_write(conn->isolate, conn->tls_conn, p + total, len - total);
         } else {
             n = (int) write(conn->fd, p + total, len - total);
         }
@@ -1240,9 +1240,8 @@ static XrH2Stream *http2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
 
 // Receive exactly `len` bytes (or return short on EOF / error).
 //
-// H2 has no per-frame isolate context (the connection runs inside its own
-// event loop), so TLS reads cannot suspend a coroutine here — passing NULL
-// reproduces the legacy behaviour where xr_io_get_isolate() returned NULL.
+// H2 connections carry the owning isolate so TLS I/O follows the same
+// coroutine-aware wait path as HTTP/1.1 pooled connections.
 //
 // Loop until we've drained the requested length: both OpenSSL's SSL_read
 // and POSIX read() are permitted to return fewer bytes than asked for,
@@ -1258,7 +1257,7 @@ static int h2_recv(XrH2Conn *conn, void *buf, size_t len) {
     while (total < len) {
         int n;
         if (conn->tls_conn) {
-            n = xr_tls_conn_read(NULL, conn->tls_conn, p + total, len - total);
+            n = xr_tls_conn_read(conn->isolate, conn->tls_conn, p + total, len - total);
         } else {
             n = (int) read(conn->fd, p + total, len - total);
         }
@@ -1634,11 +1633,12 @@ static int http2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t
 
 /* ========== Additional API ========== */
 
-XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client) {
+XrH2Conn *http2_conn_new(XrVMRuntime *X, int fd, void *tls_conn, bool is_client) {
     XrH2Conn *conn = (XrH2Conn *) xr_calloc(1, sizeof(XrH2Conn));
     if (!conn)
         return NULL;
 
+    conn->isolate = X;
     conn->fd = fd;
     conn->tls_conn = tls_conn;
     conn->is_client = is_client;

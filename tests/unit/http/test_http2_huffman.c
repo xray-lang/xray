@@ -212,7 +212,7 @@ TEST(hpack_index_zero_rejected) {
 /* ========== HTTP/2 SETTINGS validation ========== */
 
 TEST(settings_payload_applies_valid_values) {
-    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    XrH2Conn *conn = http2_conn_new(NULL, -1, NULL, true);
     ASSERT_NOT_NULL(conn);
 
     uint8_t payload[12];
@@ -228,7 +228,7 @@ TEST(settings_payload_applies_valid_values) {
 }
 
 TEST(settings_payload_rejects_partial_setting) {
-    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    XrH2Conn *conn = http2_conn_new(NULL, -1, NULL, true);
     ASSERT_NOT_NULL(conn);
 
     uint8_t payload[5] = {0};
@@ -239,7 +239,7 @@ TEST(settings_payload_rejects_partial_setting) {
 }
 
 TEST(settings_payload_rejects_invalid_max_frame_without_mutation) {
-    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    XrH2Conn *conn = http2_conn_new(NULL, -1, NULL, true);
     ASSERT_NOT_NULL(conn);
 
     uint32_t before = conn->remote_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE];
@@ -254,7 +254,7 @@ TEST(settings_payload_rejects_invalid_max_frame_without_mutation) {
 }
 
 TEST(settings_payload_rejects_initial_window_overflow_without_mutation) {
-    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    XrH2Conn *conn = http2_conn_new(NULL, -1, NULL, true);
     ASSERT_NOT_NULL(conn);
 
     uint32_t before = conn->remote_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE];
@@ -269,7 +269,7 @@ TEST(settings_payload_rejects_initial_window_overflow_without_mutation) {
 }
 
 TEST(settings_payload_rejects_invalid_enable_push_without_mutation) {
-    XrH2Conn *conn = http2_conn_new(-1, NULL, true);
+    XrH2Conn *conn = http2_conn_new(NULL, -1, NULL, true);
     ASSERT_NOT_NULL(conn);
 
     uint32_t before = conn->remote_settings[XR_H2_SETTINGS_ENABLE_PUSH];
