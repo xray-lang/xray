@@ -30,8 +30,10 @@
 #include "../module/xmodule_resolver.h"
 #include "../module/xmodule.h"
 #include "../base/xmalloc.h"
+#include "../base/xfileio.h"
 #include "../base/xmemstream.h"
 #include "../base/xglobal_indices.h"
+#include "../os/os_dir.h"
 #include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
@@ -56,6 +58,155 @@
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
+
+static const uint32_t xaot_evidence_cache_phases[XG_EVIDENCE_CACHE_PHASE_COUNT] = {
+    XG_EVIDENCE_CACHE_DECLARATIONS,
+    XG_EVIDENCE_CACHE_SEMANTIC_GRAPH,
+    XG_EVIDENCE_CACHE_BODY_SUMMARY,
+    XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
+};
+
+static bool xaot_str_has_suffix(const char *text, const char *suffix) {
+    size_t text_len;
+    size_t suffix_len;
+    if (!text || !suffix)
+        return false;
+    text_len = strlen(text);
+    suffix_len = strlen(suffix);
+    return text_len >= suffix_len && memcmp(text + text_len - suffix_len, suffix, suffix_len) == 0;
+}
+
+static bool xaot_evidence_cache_phase_dir(const char *cache_dir, uint32_t phase, char *out,
+                                          size_t out_sz) {
+    int n;
+    if (!cache_dir || !out || out_sz == 0)
+        return false;
+    n = snprintf(out, out_sz, "%s/evidence/%s", cache_dir, xg_evidence_cache_phase_name(phase));
+    return n >= 0 && (size_t) n < out_sz;
+}
+
+static bool xaot_payload_materializes_for_preproducer(const char *payload,
+                                                      const XgEvidenceCacheRequestKey *request,
+                                                      bool *out_materialized,
+                                                      bool *out_unsupported) {
+    XgGlobalEvidence materialized;
+    XgEvidenceCachePayloadInfo info;
+    XgEvidenceCacheKey materialized_key;
+    bool ok;
+    if (out_materialized)
+        *out_materialized = false;
+    if (out_unsupported)
+        *out_unsupported = false;
+    if (!payload || !request || !xg_evidence_cache_payload_parse(payload, &info))
+        return false;
+    if (info.phase != request->phase ||
+        info.request_hash != xg_evidence_cache_request_key_hash(request) ||
+        !xg_evidence_cache_request_key_matches(&info.request_key, request))
+        return false;
+    if (request->phase == XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE) {
+        if (out_unsupported)
+            *out_unsupported = true;
+        return true;
+    }
+    memset(&materialized, 0, sizeof(materialized));
+    ok = xg_evidence_cache_payload_materialize(payload, &materialized);
+    if (ok) {
+        materialized_key = xg_global_evidence_cache_key(&materialized, request->phase);
+        ok = xg_evidence_cache_key_matches(&materialized_key, &info.key);
+    }
+    xg_global_evidence_free(&materialized);
+    if (ok && out_materialized)
+        *out_materialized = true;
+    return ok;
+}
+
+static bool xaot_probe_preproducer_payload(const char *cache_dir,
+                                           const XgEvidenceCacheRequestKey *request,
+                                           bool *out_materialized, bool *out_unsupported) {
+    char phase_dir[PATH_MAX];
+    XrDirIter *it;
+    XrDirEntry entry;
+    bool hit = false;
+    if (out_materialized)
+        *out_materialized = false;
+    if (out_unsupported)
+        *out_unsupported = false;
+    if (!cache_dir || !request ||
+        !xaot_evidence_cache_phase_dir(cache_dir, request->phase, phase_dir, sizeof(phase_dir)))
+        return false;
+    it = xr_dir_open(phase_dir);
+    if (!it)
+        return false;
+    while (xr_dir_next(it, &entry)) {
+        char payload_path[PATH_MAX];
+        char *payload;
+        size_t size = 0;
+        int n;
+        if (entry.is_dir || !xaot_str_has_suffix(entry.name, ".xgpayload"))
+            continue;
+        n = snprintf(payload_path, sizeof(payload_path), "%s/%s", phase_dir, entry.name);
+        if (n < 0 || (size_t) n >= sizeof(payload_path))
+            continue;
+        payload = xr_file_read_all(payload_path, "rb", &size);
+        if (!payload)
+            continue;
+        (void) size;
+        if (xaot_payload_materializes_for_preproducer(payload, request, out_materialized,
+                                                      out_unsupported)) {
+            hit = true;
+            xr_free(payload);
+            break;
+        }
+        xr_free(payload);
+    }
+    xr_dir_close(it);
+    return hit;
+}
+
+static void xaot_probe_preproducer_evidence_cache(const char *cache_dir,
+                                                  const XgBuildKey *build_key, bool verbose,
+                                                  bool force_rebuild) {
+    uint32_t request_hits = 0;
+    uint32_t request_misses = 0;
+    uint32_t materialized = 0;
+    uint32_t unsupported = 0;
+    if (!cache_dir || !build_key)
+        return;
+    for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
+        uint32_t phase = xaot_evidence_cache_phases[i];
+        XgEvidenceCacheRequestKey request =
+            xg_evidence_cache_request_key_from_build_key(build_key, phase);
+        bool is_materialized = false;
+        bool is_unsupported = false;
+        bool hit = false;
+        if (!force_rebuild)
+            hit = xaot_probe_preproducer_payload(cache_dir, &request, &is_materialized,
+                                                 &is_unsupported);
+        if (hit) {
+            request_hits++;
+            if (is_materialized)
+                materialized++;
+            if (is_unsupported)
+                unsupported++;
+        } else {
+            request_misses++;
+        }
+        if (verbose) {
+            printf("[xi-native] evidence cache preproducer %s: %s (request=%016llx "
+                   "materialized=%s)%s\n",
+                   xg_evidence_cache_phase_name(phase), hit ? "hit" : "miss",
+                   (unsigned long long) xg_evidence_cache_request_key_hash(&request),
+                   is_materialized ? "yes" : (is_unsupported ? "unsupported" : "no"),
+                   force_rebuild ? " rebuild" : "");
+        }
+    }
+    if (verbose) {
+        printf("[xi-native] evidence cache preproducer summary: request_hits=%u "
+               "request_misses=%u materialized=%u unsupported=%u%s\n",
+               request_hits, request_misses, materialized, unsupported,
+               force_rebuild ? " rebuild" : "");
+    }
+}
 
 #ifdef _WIN32
 #include <stdlib.h>
@@ -676,7 +827,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     bool emit_plan_dump;
     bool emit_program_main;
     bool emit_global_evidence_dump;
+    const char *evidence_cache_dir;
+    bool evidence_cache_rebuild;
+    bool evidence_cache_verbose;
     XaotBuildProfile profile;
+    uint32_t xg_profile;
     XiCgenTypeNameProfile type_name_profile;
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(options != NULL, "xaot_build: NULL options");
@@ -687,7 +842,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     emit_plan_dump = options->emit_plan_dump;
     emit_program_main = options->emit_program_main;
     emit_global_evidence_dump = options->emit_global_evidence_dump;
+    evidence_cache_dir = options->evidence_cache_dir;
+    evidence_cache_rebuild = options->evidence_cache_rebuild;
+    evidence_cache_verbose = options->evidence_cache_verbose;
     profile = options->profile;
+    xg_profile = profile == XAOT_BUILD_PROFILE_FREESTANDING ? XG_BUILD_FREESTANDING
+                                                            : XG_BUILD_NATIVE_RELEASE;
     type_name_profile = options->type_name_profile;
     memset(result, 0, sizeof(*result));
     XgGlobalEvidence pre_mono_generic_evidence;
@@ -731,6 +891,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xr_module_graph_free(graph);
         xray_vm_delete(X);
         return 1;
+    }
+    if (evidence_cache_dir && evidence_cache_dir[0]) {
+        XgBuildKey preproducer_key;
+        if (xg_build_key_from_module_graph(&preproducer_key, graph, xg_profile))
+            xaot_probe_preproducer_evidence_cache(evidence_cache_dir, &preproducer_key,
+                                                  evidence_cache_verbose, evidence_cache_rebuild);
     }
 
     int nmodules = graph->topo_count;
@@ -800,9 +966,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
 
     if (!xg_global_evidence_build_from_module_graph(&pre_mono_generic_evidence, graph,
-                                                    profile == XAOT_BUILD_PROFILE_FREESTANDING
-                                                        ? XG_BUILD_FREESTANDING
-                                                        : XG_BUILD_NATIVE_RELEASE)) {
+                                                    xg_profile)) {
         fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
         goto fail_free_analyzer;
     }
@@ -887,10 +1051,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             xr_compiler_session_pop_arena(&canon_scope);
     }
 
-    if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph,
-                                                    profile == XAOT_BUILD_PROFILE_FREESTANDING
-                                                        ? XG_BUILD_FREESTANDING
-                                                        : XG_BUILD_NATIVE_RELEASE)) {
+    if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph, xg_profile)) {
         fprintf(stderr, "Error: failed to build global evidence\n");
         goto fail_free_ir;
     }

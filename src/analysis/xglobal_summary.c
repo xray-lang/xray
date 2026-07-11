@@ -2820,20 +2820,25 @@ XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *
 }
 
 XR_FUNC XgEvidenceCacheRequestKey
-xg_global_evidence_cache_request_key(const XgGlobalEvidence *evidence, uint32_t phase) {
+xg_evidence_cache_request_key_from_build_key(const XgBuildKey *build_key, uint32_t phase) {
     XgEvidenceCacheRequestKey key;
     memset(&key, 0, sizeof(key));
     key.schema_version = XG_GLOBAL_EVIDENCE_SCHEMA_VERSION;
     key.phase = phase;
-    if (!evidence)
+    if (!build_key)
         return key;
-    key.module_id = evidence->key.module_id;
-    key.profile = evidence->key.profile;
-    key.source_hash = evidence->key.source_hash;
-    key.compiler_semver_hash = evidence->key.compiler_semver_hash;
-    key.profile_hash = evidence->key.profile_hash;
-    key.imported_summary_hash = evidence->key.imported_summary_hash;
+    key.module_id = build_key->module_id;
+    key.profile = build_key->profile;
+    key.source_hash = build_key->source_hash;
+    key.compiler_semver_hash = build_key->compiler_semver_hash;
+    key.profile_hash = build_key->profile_hash;
+    key.imported_summary_hash = build_key->imported_summary_hash;
     return key;
+}
+
+XR_FUNC XgEvidenceCacheRequestKey
+xg_global_evidence_cache_request_key(const XgGlobalEvidence *evidence, uint32_t phase) {
+    return xg_evidence_cache_request_key_from_build_key(evidence ? &evidence->key : NULL, phase);
 }
 
 XR_FUNC uint64_t xg_evidence_cache_request_key_hash(const XgEvidenceCacheRequestKey *key) {

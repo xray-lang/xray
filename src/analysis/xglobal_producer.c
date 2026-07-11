@@ -6350,12 +6350,10 @@ static uint64_t import_hash_for_graph(const XrModuleGraph *graph) {
     return h;
 }
 
-XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *evidence,
-                                                        const XrModuleGraph *graph,
-                                                        uint32_t profile) {
+XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleGraph *graph,
+                                            uint32_t profile) {
     XgBuildKey key;
-    XgProducer producer;
-    if (!evidence || !graph)
+    if (!out_key || !graph)
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
@@ -6364,6 +6362,19 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
     key.imported_summary_hash = import_hash_for_graph(graph);
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);
     key.profile = profile;
+    *out_key = key;
+    return true;
+}
+
+XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *evidence,
+                                                        const XrModuleGraph *graph,
+                                                        uint32_t profile) {
+    XgBuildKey key;
+    XgProducer producer;
+    if (!evidence || !graph)
+        return false;
+    if (!xg_build_key_from_module_graph(&key, graph, profile))
+        return false;
 
     xg_global_evidence_init(evidence, key);
     memset(&producer, 0, sizeof(producer));

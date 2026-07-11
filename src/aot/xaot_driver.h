@@ -139,6 +139,9 @@ typedef struct XaotBuildOptions {
     bool emit_plan_dump;
     bool emit_program_main;
     bool emit_global_evidence_dump;
+    const char *evidence_cache_dir;
+    bool evidence_cache_rebuild;
+    bool evidence_cache_verbose;
 } XaotBuildOptions;
 
 /* Full AOT pipeline: Source → AST → Xi IR → C.

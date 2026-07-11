@@ -2344,6 +2344,16 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
                                        : XAOT_BUILD_PROFILE_HOSTED;
+    char cache_dir[XR_PATH_MAX];
+    bool cache_dir_ready = false;
+    if (!c_only) {
+        if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir, sizeof(cache_dir)) !=
+            0) {
+            fprintf(stderr, "Error: cannot create object cache directory '%s'\n", cache_dir);
+            return 1;
+        }
+        cache_dir_ready = true;
+    }
     if (!xaot_target_init(&build_target, target && target->name ? target->name : "native-c90")) {
         fprintf(stderr, "Error: failed to initialize AOT build target\n");
         return 1;
@@ -2355,6 +2365,9 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     build_options.emit_plan_dump = dump_xaot_plan;
     build_options.emit_program_main = !shared_library;
     build_options.emit_global_evidence_dump = dump_global_evidence;
+    build_options.evidence_cache_dir = cache_dir_ready ? cache_dir : NULL;
+    build_options.evidence_cache_rebuild = rebuild;
+    build_options.evidence_cache_verbose = verbose;
     int rc = xaot_build(input, &build_options, &aot_result);
     xaot_target_free(&build_target);
     if (rc != 0)
@@ -2513,12 +2526,6 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     /* Resolve the per-module object cache, then compile each generated C unit
      * to an object (reusing cached objects on content-hash hit) and link the
      * whole set together. */
-    char cache_dir[XR_PATH_MAX];
-    if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir, sizeof(cache_dir)) != 0) {
-        fprintf(stderr, "Error: cannot create object cache directory '%s'\n", cache_dir);
-        xaot_build_result_free(&aot_result);
-        return 1;
-    }
     if (aot_result.has_evidence_cache_manifest) {
         xaot_probe_evidence_cache_manifest(cache_dir, &aot_result.evidence_cache_manifest,
                                            aot_result.evidence_cache_payloads, verbose, rebuild,

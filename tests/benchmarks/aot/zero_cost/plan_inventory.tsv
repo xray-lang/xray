@@ -61,4 +61,5 @@ sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tes
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, and body summary payloads materialize back into validated summary rows.
 summary_payload_request_key|covered|xg-cache-request v1|tests/unit/analysis|Payload v2 separates producer-precomputable request identity from content-key row validation.
 stable_source_identity|covered|global_evidence_source_identity_survives_body_only_change|tests/unit/analysis|Evidence source_node_id is derived from stable source anchors instead of parser allocation order.
-cross_package_summary_reuse|gap|payload_v2|src/analysis|Producer-precomputable request keys and complete immutable package evidence reuse are not implemented yet.
+summary_payload_preproducer_probe|covered|evidence cache preproducer summary|tests/aot/run_aot_incremental_cache.sh|AOT computes request keys before the producer and validates materializable payload phases by request.
+cross_package_summary_reuse|gap|payload_v2|src/analysis|Complete global payload materialization and immutable package evidence reuse are not implemented yet.

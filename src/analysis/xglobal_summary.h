@@ -1461,6 +1461,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
 XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *evidence,
                                                         uint32_t phase);
 XR_FUNC XgEvidenceCacheRequestKey
+xg_evidence_cache_request_key_from_build_key(const XgBuildKey *build_key, uint32_t phase);
+XR_FUNC XgEvidenceCacheRequestKey
 xg_global_evidence_cache_request_key(const XgGlobalEvidence *evidence, uint32_t phase);
 XR_FUNC uint64_t xg_evidence_cache_request_key_hash(const XgEvidenceCacheRequestKey *key);
 XR_FUNC bool xg_evidence_cache_request_key_matches(const XgEvidenceCacheRequestKey *cached,
