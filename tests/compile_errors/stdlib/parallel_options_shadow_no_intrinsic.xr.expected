@@ -1,2 +1,1 @@
-parallel.forEach must lower to XI_PAR_*
-stdlib reference body is bootstrap-only
+parallel.forEach expected (Range, inline (item) lambda[, literal parallel.Options(...)])
