@@ -806,6 +806,25 @@ static void spawn_batch_append(XrSpawnBatch *batch, XrCoroutine *coro) {
     batch->count++;
 }
 
+static int spawn_batch_target_worker_id(XrRuntime *runtime, XrWorker *current, int valid_count) {
+    if (!runtime || runtime->worker_count <= 1)
+        return current ? current->p.id : 0;
+    if (!current || current->p.runtime != runtime)
+        return -1;
+
+    /* Worker 0 is the main-thread worker.  It only runs while
+     * xr_runtime_main_thread_run owns the calling thread; runtime-owned
+     * background batches submitted from worker threads must not strand lanes
+     * in Worker 0's inbox when no main-thread loop is active.  Treat workers
+     * 1..N-1 as the always-running background set. */
+    int background_count = runtime->worker_count - 1;
+    if (current->p.id == 0)
+        return 1 + (valid_count % background_count);
+
+    int current_bg_index = current->p.id - 1;
+    return 1 + ((current_bg_index + 1 + valid_count) % background_count);
+}
+
 void xr_runtime_spawn_batch(XrRuntime *runtime, XrCoroutine **coros, int count) {
     XR_DCHECK(runtime != NULL, "runtime_spawn_batch: NULL runtime");
     if (!runtime || !coros || count <= 0)
@@ -834,7 +853,9 @@ void xr_runtime_spawn_batch(XrRuntime *runtime, XrCoroutine **coros, int count) 
         if (!coro)
             continue;
         xr_coro_flags_clear(coro, XR_CORO_FLG_DEFERRED_SUBMIT);
-        int target_id = (current->p.id + 1 + valid_count) % runtime->worker_count;
+        int target_id = spawn_batch_target_worker_id(runtime, current, valid_count);
+        if (target_id < 0 || target_id >= runtime->worker_count)
+            target_id = current->p.id;
         atomic_store_explicit(&coro->affinity_p, target_id, memory_order_relaxed);
         if (batches[target_id].count == 0)
             touched_targets[touched_count++] = target_id;

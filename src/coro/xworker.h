@@ -510,6 +510,7 @@ XR_FUNC int64_t xr_runtime_current_monotonic_ms(void);
 XR_FUNC int64_t xr_runtime_current_monotonic_ns(void);
 XR_FUNC void xr_runtime_spawn(XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_runtime_spawn_batch(XrRuntime *runtime, XrCoroutine **coros, int count);
+XR_FUNC bool xr_runtime_help_join_once(XrRuntime *runtime);
 XR_FUNC void xr_runtime_spawn_local(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime);
 XR_FUNC void xr_worker_destroy(XrWorker *worker);
