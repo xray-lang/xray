@@ -77,11 +77,19 @@ typedef enum XrAotParJobKind {
     XR_AOT_PAR_JOB_REDUCE_AGG,
 } XrAotParJobKind;
 
+typedef struct XrAotParForPool XrAotParForPool;
+
+typedef struct XrAotParWorkerArg {
+    XrAotParForPool *pool;
+    int worker_index;
+} XrAotParWorkerArg;
+
 typedef struct XrAotParForPool {
     xr_mutex_t mutex;
     xr_cond_t has_job;
     xr_cond_t done;
     xr_thread_t *threads;
+    XrAotParWorkerArg **thread_args;
     int thread_count;
     int active_workers;
     bool stop;
@@ -106,17 +114,33 @@ typedef struct XrAotParForPool {
     int remaining_workers;
 } XrAotParForPool;
 
-static XrAotParForPool xr_aot_par_for_pool = {
-    .mutex = XR_MUTEX_INITIALIZER,
-    .has_job = XR_COND_INITIALIZER,
-    .done = XR_COND_INITIALIZER,
-};
-static xr_once_t xr_aot_par_for_once = XR_ONCE_INITIALIZER;
+static xr_mutex_t xr_aot_parallel_pool_create_mutex = XR_MUTEX_INITIALIZER;
 
-static void xr_aot_par_for_shutdown(void);
+static XrAotParForPool *xr_aot_par_for_pool_new(void) {
+    XrAotParForPool *pool = (XrAotParForPool *) xr_calloc(1, sizeof(XrAotParForPool));
+    if (!pool)
+        return NULL;
+    xr_mutex_init(&pool->mutex);
+    xr_cond_init(&pool->has_job);
+    xr_cond_init(&pool->done);
+    return pool;
+}
 
-static void xr_aot_par_for_init_once(void) {
-    (void) atexit(xr_aot_par_for_shutdown);
+static XrAotParForPool *xr_aot_parallel_pool_for_context(const XrAotContext *ctx) {
+    XrAotRuntime *runtime = ctx && ctx->runtime ? ctx->runtime : xr_aot_runtime_current();
+    if (!runtime)
+        return NULL;
+    XrAotParForPool *pool = (XrAotParForPool *) runtime->parallel_pool;
+    if (pool)
+        return pool;
+    xr_mutex_lock(&xr_aot_parallel_pool_create_mutex);
+    pool = (XrAotParForPool *) runtime->parallel_pool;
+    if (!pool) {
+        pool = xr_aot_par_for_pool_new();
+        runtime->parallel_pool = pool;
+    }
+    xr_mutex_unlock(&xr_aot_parallel_pool_create_mutex);
+    return pool;
 }
 
 static bool xr_aot_par_for_lane_bounds(int64_t start, int64_t end, int64_t participants,
@@ -151,143 +175,163 @@ static void xr_aot_par_for_run_lane(XrAotParForRangeI64Fn body, struct xrt_closu
         body(closure, begin, limit, worker_id);
 }
 
-static void xr_aot_par_reduce_i64_run_lane(XrAotParReduceRangeI64Fn body,
+static void xr_aot_par_reduce_i64_run_lane(XrAotParForPool *pool, XrAotParReduceRangeI64Fn body,
                                            struct xrt_closure *closure, int64_t start, int64_t end,
                                            int64_t participants, int64_t worker_id) {
-    if (!body || worker_id < 0 || worker_id >= XR_AOT_PAR_FOR_MAX_WORKERS)
+    if (!pool || !body || worker_id < 0 || worker_id >= XR_AOT_PAR_FOR_MAX_WORKERS)
         return;
 
     int64_t begin = 0;
     int64_t limit = 0;
     if (!xr_aot_par_for_lane_bounds(start, end, participants, worker_id, &begin, &limit)) {
-        xr_aot_par_for_pool.reduce_valid[worker_id] = false;
+        pool->reduce_valid[worker_id] = false;
         return;
     }
 
     int64_t partial = 0;
     if (!body(closure, begin, limit, worker_id, &partial)) {
-        atomic_store_explicit(&xr_aot_par_for_pool.reduce_failed, true, memory_order_relaxed);
-        xr_aot_par_for_pool.reduce_valid[worker_id] = false;
+        atomic_store_explicit(&pool->reduce_failed, true, memory_order_relaxed);
+        pool->reduce_valid[worker_id] = false;
         return;
     }
-    xr_aot_par_for_pool.reduce_partials[worker_id] = partial;
-    xr_aot_par_for_pool.reduce_valid[worker_id] = true;
+    pool->reduce_partials[worker_id] = partial;
+    pool->reduce_valid[worker_id] = true;
 }
 
-static void xr_aot_par_reduce_agg_run_lane(XrAotParReduceRangeAggFn body,
+static void xr_aot_par_reduce_agg_run_lane(XrAotParForPool *pool, XrAotParReduceRangeAggFn body,
                                            struct xrt_closure *closure, int64_t start, int64_t end,
                                            int64_t participants, int64_t worker_id) {
-    if (!body || worker_id < 0 || worker_id >= XR_AOT_PAR_FOR_MAX_WORKERS ||
-        xr_aot_par_for_pool.reduce_agg_size == 0 || !xr_aot_par_for_pool.reduce_agg_partials)
+    if (!pool || !body || worker_id < 0 || worker_id >= XR_AOT_PAR_FOR_MAX_WORKERS ||
+        pool->reduce_agg_size == 0 || !pool->reduce_agg_partials)
         return;
 
-    size_t size = xr_aot_par_for_pool.reduce_agg_size;
-    unsigned char *local = xr_aot_par_for_pool.reduce_agg_partials + ((size_t) worker_id * size);
+    size_t size = pool->reduce_agg_size;
+    unsigned char *local = pool->reduce_agg_partials + ((size_t) worker_id * size);
 
     int64_t begin = 0;
     int64_t limit = 0;
     if (!xr_aot_par_for_lane_bounds(start, end, participants, worker_id, &begin, &limit)) {
-        xr_aot_par_for_pool.reduce_valid[worker_id] = false;
+        pool->reduce_valid[worker_id] = false;
         return;
     }
 
     if (!body(closure, begin, limit, worker_id, local)) {
-        atomic_store_explicit(&xr_aot_par_for_pool.reduce_failed, true, memory_order_relaxed);
-        xr_aot_par_for_pool.reduce_valid[worker_id] = false;
+        atomic_store_explicit(&pool->reduce_failed, true, memory_order_relaxed);
+        pool->reduce_valid[worker_id] = false;
         return;
     }
-    xr_aot_par_for_pool.reduce_valid[worker_id] = true;
+    pool->reduce_valid[worker_id] = true;
 }
 
-static void xr_aot_par_for_complete_participant_locked(void) {
-    xr_aot_par_for_pool.remaining_workers--;
-    if (xr_aot_par_for_pool.remaining_workers == 0) {
-        xr_aot_par_for_pool.job_active = false;
-        xr_aot_par_for_pool.job_kind = XR_AOT_PAR_JOB_NONE;
-        xr_aot_par_for_pool.for_body = NULL;
-        xr_aot_par_for_pool.reduce_body = NULL;
-        xr_aot_par_for_pool.reduce_combine = NULL;
-        xr_aot_par_for_pool.reduce_agg_body = NULL;
-        xr_aot_par_for_pool.reduce_agg_combine = NULL;
-        xr_aot_par_for_pool.reduce_agg_size = 0;
-        xr_aot_par_for_pool.closure = NULL;
-        xr_cond_broadcast(&xr_aot_par_for_pool.done);
+static void xr_aot_par_for_complete_participant_locked(XrAotParForPool *pool) {
+    if (!pool)
+        return;
+    pool->remaining_workers--;
+    if (pool->remaining_workers == 0) {
+        pool->job_active = false;
+        pool->job_kind = XR_AOT_PAR_JOB_NONE;
+        pool->for_body = NULL;
+        pool->reduce_body = NULL;
+        pool->reduce_combine = NULL;
+        pool->reduce_agg_body = NULL;
+        pool->reduce_agg_combine = NULL;
+        pool->reduce_agg_size = 0;
+        pool->closure = NULL;
+        xr_cond_broadcast(&pool->done);
     }
 }
 
 static void *xr_aot_par_for_worker_main(void *arg) {
-    int worker_index = (int) (intptr_t) arg;
+    XrAotParWorkerArg *worker_arg = (XrAotParWorkerArg *) arg;
+    XrAotParForPool *pool = worker_arg ? worker_arg->pool : NULL;
+    int worker_index = worker_arg ? worker_arg->worker_index : -1;
+    if (!pool)
+        return NULL;
     xr_thread_set_name(xr_thread_self(), "xray-aot-parfor");
     uint64_t seen_generation = 0;
 
     for (;;) {
-        xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-        while (!xr_aot_par_for_pool.stop && (!xr_aot_par_for_pool.job_active ||
-                                             xr_aot_par_for_pool.generation == seen_generation)) {
-            xr_cond_wait(&xr_aot_par_for_pool.has_job, &xr_aot_par_for_pool.mutex);
+        xr_mutex_lock(&pool->mutex);
+        while (!pool->stop && (!pool->job_active || pool->generation == seen_generation)) {
+            xr_cond_wait(&pool->has_job, &pool->mutex);
         }
-        if (xr_aot_par_for_pool.stop) {
-            xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+        if (pool->stop) {
+            xr_mutex_unlock(&pool->mutex);
             return NULL;
         }
 
-        seen_generation = xr_aot_par_for_pool.generation;
-        if (worker_index >= xr_aot_par_for_pool.active_workers) {
-            xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+        seen_generation = pool->generation;
+        if (worker_index >= pool->active_workers) {
+            xr_mutex_unlock(&pool->mutex);
             continue;
         }
-        XrAotParJobKind job_kind = xr_aot_par_for_pool.job_kind;
-        XrAotParForRangeI64Fn for_body = xr_aot_par_for_pool.for_body;
-        XrAotParReduceRangeI64Fn reduce_body = xr_aot_par_for_pool.reduce_body;
-        XrAotParReduceRangeAggFn reduce_agg_body = xr_aot_par_for_pool.reduce_agg_body;
-        struct xrt_closure *closure = xr_aot_par_for_pool.closure;
-        int64_t start = xr_aot_par_for_pool.start;
-        int64_t end = xr_aot_par_for_pool.end;
-        int64_t participants = xr_aot_par_for_pool.participants;
-        xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+        XrAotParJobKind job_kind = pool->job_kind;
+        XrAotParForRangeI64Fn for_body = pool->for_body;
+        XrAotParReduceRangeI64Fn reduce_body = pool->reduce_body;
+        XrAotParReduceRangeAggFn reduce_agg_body = pool->reduce_agg_body;
+        struct xrt_closure *closure = pool->closure;
+        int64_t start = pool->start;
+        int64_t end = pool->end;
+        int64_t participants = pool->participants;
+        xr_mutex_unlock(&pool->mutex);
 
         switch (job_kind) {
             case XR_AOT_PAR_JOB_FOR_RANGE:
                 xr_aot_par_for_run_lane(for_body, closure, start, end, participants, worker_index);
                 break;
             case XR_AOT_PAR_JOB_REDUCE_I64:
-                xr_aot_par_reduce_i64_run_lane(reduce_body, closure, start, end, participants,
+                xr_aot_par_reduce_i64_run_lane(pool, reduce_body, closure, start, end, participants,
                                                worker_index);
                 break;
             case XR_AOT_PAR_JOB_REDUCE_AGG:
-                xr_aot_par_reduce_agg_run_lane(reduce_agg_body, closure, start, end, participants,
-                                               worker_index);
+                xr_aot_par_reduce_agg_run_lane(pool, reduce_agg_body, closure, start, end,
+                                               participants, worker_index);
                 break;
             case XR_AOT_PAR_JOB_NONE:
                 break;
         }
 
-        xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-        xr_aot_par_for_complete_participant_locked();
-        xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+        xr_mutex_lock(&pool->mutex);
+        xr_aot_par_for_complete_participant_locked(pool);
+        xr_mutex_unlock(&pool->mutex);
     }
 }
 
-static int xr_aot_par_for_ensure_workers_locked(int wanted) {
-    if (wanted <= xr_aot_par_for_pool.thread_count)
-        return xr_aot_par_for_pool.thread_count;
+static int xr_aot_par_for_ensure_workers_locked(XrAotParForPool *pool, int wanted) {
+    if (!pool)
+        return 0;
+    if (wanted <= pool->thread_count)
+        return pool->thread_count;
     if (wanted > XR_AOT_PAR_FOR_MAX_WORKERS - 1)
         wanted = XR_AOT_PAR_FOR_MAX_WORKERS - 1;
 
-    xr_thread_t *threads = (xr_thread_t *) xr_realloc(xr_aot_par_for_pool.threads,
-                                                      (size_t) wanted * sizeof(xr_thread_t));
+    xr_thread_t *threads =
+        (xr_thread_t *) xr_realloc(pool->threads, (size_t) wanted * sizeof(xr_thread_t));
     if (!threads)
-        return xr_aot_par_for_pool.thread_count;
-    xr_aot_par_for_pool.threads = threads;
+        return pool->thread_count;
+    pool->threads = threads;
 
-    while (xr_aot_par_for_pool.thread_count < wanted) {
+    XrAotParWorkerArg **thread_args = (XrAotParWorkerArg **) xr_realloc(
+        pool->thread_args, (size_t) wanted * sizeof(XrAotParWorkerArg *));
+    if (!thread_args)
+        return pool->thread_count;
+    pool->thread_args = thread_args;
+
+    while (pool->thread_count < wanted) {
         xr_thread_t thread;
-        void *arg = (void *) (intptr_t) xr_aot_par_for_pool.thread_count;
-        if (!xr_thread_create_ex(&thread, xr_aot_par_for_worker_main, arg, XR_WORKER_STACK_BYTES))
+        XrAotParWorkerArg *arg = (XrAotParWorkerArg *) xr_malloc(sizeof(XrAotParWorkerArg));
+        if (!arg)
             break;
-        xr_aot_par_for_pool.threads[xr_aot_par_for_pool.thread_count++] = thread;
+        arg->pool = pool;
+        arg->worker_index = pool->thread_count;
+        if (!xr_thread_create_ex(&thread, xr_aot_par_for_worker_main, arg, XR_WORKER_STACK_BYTES)) {
+            xr_free(arg);
+            break;
+        }
+        pool->thread_args[pool->thread_count] = arg;
+        pool->threads[pool->thread_count++] = thread;
     }
-    return xr_aot_par_for_pool.thread_count;
+    return pool->thread_count;
 }
 
 static void xr_aot_par_for_run_range_sequential(int64_t start, int64_t end,
@@ -320,8 +364,9 @@ static int64_t xr_aot_parallel_resolve_workers(int64_t requested) {
     return (int64_t) cpus;
 }
 
-bool xr_aot_parallel_for_range_i64(int64_t start, int64_t end, int64_t workers,
-                                   XrAotParForRangeI64Fn body, struct xrt_closure *closure) {
+bool xr_aot_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end,
+                                   int64_t workers, XrAotParForRangeI64Fn body,
+                                   struct xrt_closure *closure) {
     if (!body)
         return false;
     if (end <= start)
@@ -348,49 +393,51 @@ bool xr_aot_parallel_for_range_i64(int64_t start, int64_t end, int64_t workers,
         return true;
     }
 
-    xr_once_call(&xr_aot_par_for_once, xr_aot_par_for_init_once);
+    XrAotParForPool *pool = xr_aot_parallel_pool_for_context(ctx);
+    if (!pool)
+        return false;
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
+    xr_mutex_lock(&pool->mutex);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
 
-    int available_workers = xr_aot_par_for_ensure_workers_locked(background_workers);
+    int available_workers = xr_aot_par_for_ensure_workers_locked(pool, background_workers);
     if (available_workers < background_workers)
         background_workers = available_workers;
     if (background_workers <= 0) {
-        xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+        xr_mutex_unlock(&pool->mutex);
         xr_aot_par_for_run_range_sequential(start, end, body, closure);
         return true;
     }
 
     int64_t actual_participants = (int64_t) background_workers + 1;
-    xr_aot_par_for_pool.start = start;
-    xr_aot_par_for_pool.end = end;
-    xr_aot_par_for_pool.participants = actual_participants;
-    xr_aot_par_for_pool.job_kind = XR_AOT_PAR_JOB_FOR_RANGE;
-    xr_aot_par_for_pool.for_body = body;
-    xr_aot_par_for_pool.reduce_body = NULL;
-    xr_aot_par_for_pool.reduce_combine = NULL;
-    xr_aot_par_for_pool.reduce_agg_body = NULL;
-    xr_aot_par_for_pool.reduce_agg_combine = NULL;
-    xr_aot_par_for_pool.reduce_agg_size = 0;
-    atomic_store_explicit(&xr_aot_par_for_pool.reduce_failed, false, memory_order_relaxed);
-    xr_aot_par_for_pool.closure = closure;
-    xr_aot_par_for_pool.active_workers = background_workers;
-    xr_aot_par_for_pool.remaining_workers = background_workers + 1;
-    xr_aot_par_for_pool.job_active = true;
-    xr_aot_par_for_pool.generation++;
-    xr_cond_broadcast(&xr_aot_par_for_pool.has_job);
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    pool->start = start;
+    pool->end = end;
+    pool->participants = actual_participants;
+    pool->job_kind = XR_AOT_PAR_JOB_FOR_RANGE;
+    pool->for_body = body;
+    pool->reduce_body = NULL;
+    pool->reduce_combine = NULL;
+    pool->reduce_agg_body = NULL;
+    pool->reduce_agg_combine = NULL;
+    pool->reduce_agg_size = 0;
+    atomic_store_explicit(&pool->reduce_failed, false, memory_order_relaxed);
+    pool->closure = closure;
+    pool->active_workers = background_workers;
+    pool->remaining_workers = background_workers + 1;
+    pool->job_active = true;
+    pool->generation++;
+    xr_cond_broadcast(&pool->has_job);
+    xr_mutex_unlock(&pool->mutex);
 
     xr_aot_par_for_run_lane(body, closure, start, end, actual_participants,
                             (int64_t) background_workers);
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    xr_aot_par_for_complete_participant_locked();
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    xr_mutex_lock(&pool->mutex);
+    xr_aot_par_for_complete_participant_locked(pool);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
+    xr_mutex_unlock(&pool->mutex);
     return true;
 }
 
@@ -431,24 +478,24 @@ static bool xr_aot_par_reduce_agg_run_range_sequential(int64_t start, int64_t en
     return ok;
 }
 
-static bool xr_aot_par_reduce_agg_ensure_partials_locked(size_t value_size) {
-    if (value_size == 0 || value_size > SIZE_MAX / XR_AOT_PAR_FOR_MAX_WORKERS)
+static bool xr_aot_par_reduce_agg_ensure_partials_locked(XrAotParForPool *pool, size_t value_size) {
+    if (!pool || value_size == 0 || value_size > SIZE_MAX / XR_AOT_PAR_FOR_MAX_WORKERS)
         return false;
     size_t required = value_size * XR_AOT_PAR_FOR_MAX_WORKERS;
-    if (required <= xr_aot_par_for_pool.reduce_agg_partials_cap)
+    if (required <= pool->reduce_agg_partials_cap)
         return true;
-    unsigned char *partials =
-        (unsigned char *) xr_realloc(xr_aot_par_for_pool.reduce_agg_partials, required);
+    unsigned char *partials = (unsigned char *) xr_realloc(pool->reduce_agg_partials, required);
     if (!partials)
         return false;
-    xr_aot_par_for_pool.reduce_agg_partials = partials;
-    xr_aot_par_for_pool.reduce_agg_partials_cap = required;
+    pool->reduce_agg_partials = partials;
+    pool->reduce_agg_partials_cap = required;
     return true;
 }
 
-bool xr_aot_parallel_reduce_i64(int64_t start, int64_t end, int64_t workers, int64_t initial,
-                                XrAotParReduceRangeI64Fn body, XrAotParReduceCombineI64Fn combine,
-                                struct xrt_closure *closure, int64_t *out) {
+bool xr_aot_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end,
+                                int64_t workers, int64_t initial, XrAotParReduceRangeI64Fn body,
+                                XrAotParReduceCombineI64Fn combine, struct xrt_closure *closure,
+                                int64_t *out) {
     if (!out || !body || !combine)
         return false;
     if (end <= start) {
@@ -475,67 +522,69 @@ bool xr_aot_parallel_reduce_i64(int64_t start, int64_t end, int64_t workers, int
         return xr_aot_par_reduce_i64_run_range_sequential(start, end, initial, body, combine,
                                                           closure, out);
 
-    xr_once_call(&xr_aot_par_for_once, xr_aot_par_for_init_once);
+    XrAotParForPool *pool = xr_aot_parallel_pool_for_context(ctx);
+    if (!pool)
+        return false;
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
+    xr_mutex_lock(&pool->mutex);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
 
-    int available_workers = xr_aot_par_for_ensure_workers_locked(background_workers);
+    int available_workers = xr_aot_par_for_ensure_workers_locked(pool, background_workers);
     if (available_workers < background_workers)
         background_workers = available_workers;
     if (background_workers <= 0) {
-        xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+        xr_mutex_unlock(&pool->mutex);
         return xr_aot_par_reduce_i64_run_range_sequential(start, end, initial, body, combine,
                                                           closure, out);
     }
 
     int64_t actual_participants = (int64_t) background_workers + 1;
-    memset(xr_aot_par_for_pool.reduce_valid, 0, sizeof(xr_aot_par_for_pool.reduce_valid));
-    atomic_store_explicit(&xr_aot_par_for_pool.reduce_failed, false, memory_order_relaxed);
-    xr_aot_par_for_pool.start = start;
-    xr_aot_par_for_pool.end = end;
-    xr_aot_par_for_pool.participants = actual_participants;
-    xr_aot_par_for_pool.job_kind = XR_AOT_PAR_JOB_REDUCE_I64;
-    xr_aot_par_for_pool.for_body = NULL;
-    xr_aot_par_for_pool.reduce_body = body;
-    xr_aot_par_for_pool.reduce_combine = combine;
-    xr_aot_par_for_pool.reduce_agg_body = NULL;
-    xr_aot_par_for_pool.reduce_agg_combine = NULL;
-    xr_aot_par_for_pool.reduce_agg_size = 0;
-    xr_aot_par_for_pool.closure = closure;
-    xr_aot_par_for_pool.active_workers = background_workers;
-    xr_aot_par_for_pool.remaining_workers = background_workers + 1;
-    xr_aot_par_for_pool.job_active = true;
-    xr_aot_par_for_pool.generation++;
-    xr_cond_broadcast(&xr_aot_par_for_pool.has_job);
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    memset(pool->reduce_valid, 0, sizeof(pool->reduce_valid));
+    atomic_store_explicit(&pool->reduce_failed, false, memory_order_relaxed);
+    pool->start = start;
+    pool->end = end;
+    pool->participants = actual_participants;
+    pool->job_kind = XR_AOT_PAR_JOB_REDUCE_I64;
+    pool->for_body = NULL;
+    pool->reduce_body = body;
+    pool->reduce_combine = combine;
+    pool->reduce_agg_body = NULL;
+    pool->reduce_agg_combine = NULL;
+    pool->reduce_agg_size = 0;
+    pool->closure = closure;
+    pool->active_workers = background_workers;
+    pool->remaining_workers = background_workers + 1;
+    pool->job_active = true;
+    pool->generation++;
+    xr_cond_broadcast(&pool->has_job);
+    xr_mutex_unlock(&pool->mutex);
 
-    xr_aot_par_reduce_i64_run_lane(body, closure, start, end, actual_participants,
+    xr_aot_par_reduce_i64_run_lane(pool, body, closure, start, end, actual_participants,
                                    (int64_t) background_workers);
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    xr_aot_par_for_complete_participant_locked();
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
+    xr_mutex_lock(&pool->mutex);
+    xr_aot_par_for_complete_participant_locked(pool);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
 
-    bool ok = !atomic_load_explicit(&xr_aot_par_for_pool.reduce_failed, memory_order_relaxed);
+    bool ok = !atomic_load_explicit(&pool->reduce_failed, memory_order_relaxed);
     if (ok) {
         int64_t acc = initial;
         for (int i = 0; i < background_workers + 1; i++) {
-            if (xr_aot_par_for_pool.reduce_valid[i])
-                acc = combine(closure, acc, xr_aot_par_for_pool.reduce_partials[i]);
+            if (pool->reduce_valid[i])
+                acc = combine(closure, acc, pool->reduce_partials[i]);
         }
         *out = acc;
     }
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    xr_mutex_unlock(&pool->mutex);
     return ok;
 }
 
-bool xr_aot_parallel_reduce_agg(int64_t start, int64_t end, int64_t workers, size_t value_size,
-                                const void *initial, XrAotParReduceRangeAggFn body,
-                                XrAotParReduceCombineAggFn combine, struct xrt_closure *closure,
-                                void *out) {
+bool xr_aot_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
+                                int64_t workers, size_t value_size, const void *initial,
+                                XrAotParReduceRangeAggFn body, XrAotParReduceCombineAggFn combine,
+                                struct xrt_closure *closure, void *out) {
     if (!out || !initial || !body || !combine || value_size == 0)
         return false;
     if (end <= start) {
@@ -562,88 +611,105 @@ bool xr_aot_parallel_reduce_agg(int64_t start, int64_t end, int64_t workers, siz
         return xr_aot_par_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
                                                           combine, closure, out);
 
-    xr_once_call(&xr_aot_par_for_once, xr_aot_par_for_init_once);
+    XrAotParForPool *pool = xr_aot_parallel_pool_for_context(ctx);
+    if (!pool)
+        return false;
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
+    xr_mutex_lock(&pool->mutex);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
 
-    int available_workers = xr_aot_par_for_ensure_workers_locked(background_workers);
+    int available_workers = xr_aot_par_for_ensure_workers_locked(pool, background_workers);
     if (available_workers < background_workers)
         background_workers = available_workers;
-    if (background_workers <= 0 || !xr_aot_par_reduce_agg_ensure_partials_locked(value_size)) {
-        xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    if (background_workers <= 0 ||
+        !xr_aot_par_reduce_agg_ensure_partials_locked(pool, value_size)) {
+        xr_mutex_unlock(&pool->mutex);
         return xr_aot_par_reduce_agg_run_range_sequential(start, end, value_size, initial, body,
                                                           combine, closure, out);
     }
 
     int64_t actual_participants = (int64_t) background_workers + 1;
-    memset(xr_aot_par_for_pool.reduce_valid, 0, sizeof(xr_aot_par_for_pool.reduce_valid));
-    atomic_store_explicit(&xr_aot_par_for_pool.reduce_failed, false, memory_order_relaxed);
-    xr_aot_par_for_pool.start = start;
-    xr_aot_par_for_pool.end = end;
-    xr_aot_par_for_pool.participants = actual_participants;
-    xr_aot_par_for_pool.job_kind = XR_AOT_PAR_JOB_REDUCE_AGG;
-    xr_aot_par_for_pool.for_body = NULL;
-    xr_aot_par_for_pool.reduce_body = NULL;
-    xr_aot_par_for_pool.reduce_combine = NULL;
-    xr_aot_par_for_pool.reduce_agg_body = body;
-    xr_aot_par_for_pool.reduce_agg_combine = combine;
-    xr_aot_par_for_pool.reduce_agg_size = value_size;
-    xr_aot_par_for_pool.closure = closure;
-    xr_aot_par_for_pool.active_workers = background_workers;
-    xr_aot_par_for_pool.remaining_workers = background_workers + 1;
-    xr_aot_par_for_pool.job_active = true;
-    xr_aot_par_for_pool.generation++;
-    xr_cond_broadcast(&xr_aot_par_for_pool.has_job);
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    memset(pool->reduce_valid, 0, sizeof(pool->reduce_valid));
+    atomic_store_explicit(&pool->reduce_failed, false, memory_order_relaxed);
+    pool->start = start;
+    pool->end = end;
+    pool->participants = actual_participants;
+    pool->job_kind = XR_AOT_PAR_JOB_REDUCE_AGG;
+    pool->for_body = NULL;
+    pool->reduce_body = NULL;
+    pool->reduce_combine = NULL;
+    pool->reduce_agg_body = body;
+    pool->reduce_agg_combine = combine;
+    pool->reduce_agg_size = value_size;
+    pool->closure = closure;
+    pool->active_workers = background_workers;
+    pool->remaining_workers = background_workers + 1;
+    pool->job_active = true;
+    pool->generation++;
+    xr_cond_broadcast(&pool->has_job);
+    xr_mutex_unlock(&pool->mutex);
 
-    xr_aot_par_reduce_agg_run_lane(body, closure, start, end, actual_participants,
+    xr_aot_par_reduce_agg_run_lane(pool, body, closure, start, end, actual_participants,
                                    (int64_t) background_workers);
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    xr_aot_par_for_complete_participant_locked();
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
+    xr_mutex_lock(&pool->mutex);
+    xr_aot_par_for_complete_participant_locked(pool);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
 
-    bool ok = !atomic_load_explicit(&xr_aot_par_for_pool.reduce_failed, memory_order_relaxed);
+    bool ok = !atomic_load_explicit(&pool->reduce_failed, memory_order_relaxed);
     if (ok) {
         memcpy(out, initial, value_size);
         for (int i = 0; i < background_workers + 1; i++) {
-            if (xr_aot_par_for_pool.reduce_valid[i]) {
+            if (pool->reduce_valid[i]) {
                 const unsigned char *partial =
-                    xr_aot_par_for_pool.reduce_agg_partials + ((size_t) i * value_size);
+                    pool->reduce_agg_partials + ((size_t) i * value_size);
                 combine(closure, out, partial);
             }
         }
     }
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    xr_mutex_unlock(&pool->mutex);
     return ok;
 }
 
-static void xr_aot_par_for_shutdown(void) {
+void xr_aot_parallel_runtime_shutdown(XrAotRuntime *runtime) {
+    if (!runtime || !runtime->parallel_pool)
+        return;
+
+    XrAotParForPool *pool = (XrAotParForPool *) runtime->parallel_pool;
+    runtime->parallel_pool = NULL;
+
     xr_thread_t *threads = NULL;
+    XrAotParWorkerArg **thread_args = NULL;
     int thread_count = 0;
 
-    xr_mutex_lock(&xr_aot_par_for_pool.mutex);
-    while (xr_aot_par_for_pool.job_active)
-        xr_cond_wait(&xr_aot_par_for_pool.done, &xr_aot_par_for_pool.mutex);
-    if (!xr_aot_par_for_pool.stop && xr_aot_par_for_pool.thread_count > 0) {
-        xr_aot_par_for_pool.stop = true;
-        xr_cond_broadcast(&xr_aot_par_for_pool.has_job);
-        threads = xr_aot_par_for_pool.threads;
-        thread_count = xr_aot_par_for_pool.thread_count;
-        xr_aot_par_for_pool.threads = NULL;
-        xr_aot_par_for_pool.thread_count = 0;
+    xr_mutex_lock(&pool->mutex);
+    while (pool->job_active)
+        xr_cond_wait(&pool->done, &pool->mutex);
+    if (!pool->stop && pool->thread_count > 0) {
+        pool->stop = true;
+        xr_cond_broadcast(&pool->has_job);
+        threads = pool->threads;
+        thread_args = pool->thread_args;
+        thread_count = pool->thread_count;
+        pool->threads = NULL;
+        pool->thread_args = NULL;
+        pool->thread_count = 0;
     }
-    xr_mutex_unlock(&xr_aot_par_for_pool.mutex);
+    xr_mutex_unlock(&pool->mutex);
 
     for (int i = 0; i < thread_count; i++)
         (void) xr_thread_join(threads[i], NULL);
+    for (int i = 0; i < thread_count; i++)
+        xr_free(thread_args ? thread_args[i] : NULL);
+    xr_free(thread_args);
     xr_free(threads);
-    xr_free(xr_aot_par_for_pool.reduce_agg_partials);
-    xr_aot_par_for_pool.reduce_agg_partials = NULL;
-    xr_aot_par_for_pool.reduce_agg_partials_cap = 0;
+    xr_free(pool->reduce_agg_partials);
+    xr_cond_destroy(&pool->has_job);
+    xr_cond_destroy(&pool->done);
+    xr_mutex_destroy(&pool->mutex);
+    xr_free(pool);
 }
 
 static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int builtin_index,

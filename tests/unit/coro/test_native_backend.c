@@ -209,6 +209,21 @@ static XrAotRuntime *aot_test_runtime_new(void) {
     return xr_aot_runtime_new(&cfg);
 }
 
+static XrAotRuntime *aot_test_parallel_runtime_new(void) {
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_PARALLEL;
+    cfg.scheduler_workers = 0;
+    return xr_aot_runtime_new(&cfg);
+}
+
+static XrAotContext aot_test_context_for_runtime(XrAotRuntime *runtime) {
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.runtime = runtime;
+    return ctx;
+}
+
 TEST(native_coroutine_uses_native_backend_without_vm_state) {
     XrVMRuntime isolate;
     memset(&isolate, 0, sizeof(isolate));
@@ -1033,9 +1048,13 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
 }
 
 TEST(aot_parallel_for_range_i64_runs_static_lanes) {
+    XrAotRuntime *runtime = aot_test_parallel_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
     atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
     aot_par_for_reset_lane_records();
-    ASSERT_TRUE(xr_aot_parallel_for_range_i64(0, 16, 4, aot_par_for_record_lane_body, NULL));
+    ASSERT_TRUE(xr_aot_parallel_for_range_i64(&ctx, 0, 16, 4, aot_par_for_record_lane_body, NULL));
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
     for (int i = 0; i < 4; i++) {
         ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_begin[i], memory_order_relaxed),
@@ -1048,7 +1067,7 @@ TEST(aot_parallel_for_range_i64_runs_static_lanes) {
     atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
     atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
     atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
-    ASSERT_TRUE(xr_aot_parallel_for_range_i64(0, 1000, 8, aot_par_for_range_sum_body, NULL));
+    ASSERT_TRUE(xr_aot_parallel_for_range_i64(&ctx, 0, 1000, 8, aot_par_for_range_sum_body, NULL));
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 499500);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
     ASSERT_TRUE(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed) != 0);
@@ -1056,32 +1075,40 @@ TEST(aot_parallel_for_range_i64_runs_static_lanes) {
     atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
     atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
     atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
-    ASSERT_TRUE(xr_aot_parallel_for_range_i64(10, 14, 1, aot_par_for_range_sum_body, NULL));
+    ASSERT_TRUE(xr_aot_parallel_for_range_i64(&ctx, 10, 14, 1, aot_par_for_range_sum_body, NULL));
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 46);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed), 1);
+
+    xr_aot_runtime_delete(runtime);
 }
 
 TEST(aot_parallel_reduce_i64_runs_range_reducer) {
+    XrAotRuntime *runtime = aot_test_parallel_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
     atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
     atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
 
     int64_t result = -1;
-    ASSERT_TRUE(xr_aot_parallel_reduce_i64(0, 1000, 8, 10, aot_par_reduce_range_sum_body,
+    ASSERT_TRUE(xr_aot_parallel_reduce_i64(&ctx, 0, 1000, 8, 10, aot_par_reduce_range_sum_body,
                                            aot_par_reduce_i64_add, NULL, &result));
     ASSERT_EQ_INT(result, 499510);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
     ASSERT_TRUE(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed) != 0);
 
     result = -1;
-    ASSERT_TRUE(xr_aot_parallel_reduce_i64(5, 5, 8, 123, aot_par_reduce_range_sum_body,
+    ASSERT_TRUE(xr_aot_parallel_reduce_i64(&ctx, 5, 5, 8, 123, aot_par_reduce_range_sum_body,
                                            aot_par_reduce_i64_add, NULL, &result));
     ASSERT_EQ_INT(result, 123);
 
     result = 77;
-    ASSERT_FALSE(xr_aot_parallel_reduce_i64(0, 16, 4, 0, aot_par_reduce_failing_body,
+    ASSERT_FALSE(xr_aot_parallel_reduce_i64(&ctx, 0, 16, 4, 0, aot_par_reduce_failing_body,
                                             aot_par_reduce_i64_add, NULL, &result));
     ASSERT_EQ_INT(result, 77);
+
+    xr_aot_runtime_delete(runtime);
 }
 
 TEST_MAIN_BEGIN()

@@ -103,6 +103,11 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
         case XI_GEN_CALL:
             plan->runtime_caps |= XR_AOT_CAP_CORO;
             break;
+        case XI_PAR_FOR:
+        case XI_PAR_MAP:
+        case XI_PAR_REDUCE:
+            plan->runtime_caps |= XR_AOT_CAP_PARALLEL;
+            break;
         case XI_SCOPE_ENTER:
         case XI_SCOPE_EXIT:
             plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TRANSFER | XR_AOT_CAP_OBJECTS;
@@ -278,6 +283,7 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
         {XR_AOT_CAP_COUNTDOWN_LATCH, "XR_AOT_CAP_COUNTDOWN_LATCH"},
         {XR_AOT_CAP_SEMAPHORE, "XR_AOT_CAP_SEMAPHORE"},
         {XR_AOT_CAP_EVENT_COUNT, "XR_AOT_CAP_EVENT_COUNT"},
+        {XR_AOT_CAP_PARALLEL, "XR_AOT_CAP_PARALLEL"},
     };
 
     if (caps == XR_AOT_CAP_NONE) {
