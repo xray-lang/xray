@@ -653,6 +653,9 @@ typedef struct XgModuleSummary {
     uint32_t flags;
 } XgModuleSummary;
 
+XR_FUNC bool xg_module_summary_identity_complete(const XgModuleSummary *module);
+XR_FUNC bool xg_module_summary_identity_matches(const XgModuleSummary *a, const XgModuleSummary *b);
+
 typedef struct XgDeclSummary {
     XgModuleId module_id;
     uint32_t source_node_id;
