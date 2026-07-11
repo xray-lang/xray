@@ -11065,6 +11065,55 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_record_shape_through_typed_param) {
+    setup_parser_session();
+    const char *source = "type User = { name: string, age: int }\n"
+                         "fn readParamRecord(user: User) -> int {\n"
+                         "    return user.age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readParamRecord");
+    ASSERT_NOT_NULL(reader);
+    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
+    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
+    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
+    ASSERT_EQ_UINT(ev.record_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.record_accesses[0].receiver_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotRecordAccessPlan *access_plan =
+        xaot_bundle_find_record_access_plan(&bundle, ev.record_accesses[0].record_access_id);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_record_shape_access) {
     setup_parser_session();
     const char *source = "fn readX() -> int {\n"
@@ -12172,6 +12221,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_return_initializ
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_closure_capture);
 RUN_TEST(global_evidence_producer_propagates_record_shape_through_closure_capture);
 RUN_TEST(global_evidence_producer_propagates_record_shape_through_return_receivers);
+RUN_TEST(global_evidence_producer_propagates_record_shape_through_typed_param);
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
