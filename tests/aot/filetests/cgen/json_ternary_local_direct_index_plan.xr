@@ -1,0 +1,6 @@
+fn jsonTernaryLocalDirectIndexPlan(flag: bool) -> int {
+    var user: Json = flag ? { name: "ada", age: 1 } : { name: "bob", age: 2 }
+    return user.age
+}
+
+print(jsonTernaryLocalDirectIndexPlan(true))

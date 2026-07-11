@@ -4154,6 +4154,25 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
     return body_lookup_call_sequence_json_shape(bc, array_expr, out_literal);
 }
 
+static XgJsonShapeId body_lookup_static_json_ternary_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                           const ObjectLiteralNode **out_literal) {
+    const AstNode *value = body_json_receiver_unwrap(expr);
+    const ObjectLiteralNode *then_literal;
+    const ObjectLiteralNode *else_literal;
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !value || value->type != AST_TERNARY)
+        return XG_NO_ID;
+    then_literal = body_static_object_literal(value->as.ternary.true_expr);
+    else_literal = body_static_object_literal(value->as.ternary.false_expr);
+    if (!return_literal_same_shape(then_literal, else_literal) || !then_literal)
+        return XG_NO_ID;
+    if (out_literal)
+        *out_literal = then_literal;
+    return body_add_json_shape_for_literal(bc, then_literal, (uint32_t) value->line,
+                                           hash_named_type_key32("Json", NULL, 0));
+}
+
 static const ClassDeclNode *producer_lookup_class_decl_node(const XgProducer *p,
                                                             XgClassId class_id) {
     const XgClassNameRow *row;
@@ -4658,6 +4677,9 @@ static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *ex
     if (shape_id != XG_NO_ID)
         return shape_id;
     shape_id = body_lookup_call_json_return_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_static_json_ternary_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
     shape_id = body_lookup_sequence_json_shape(bc, expr, out_literal);
