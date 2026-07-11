@@ -77,7 +77,7 @@ typedef struct {
 
 static const KwExpect kKnownKeywords[] = {
     /* None of the uppercase native type names are lexer keywords any
-     * more: Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+     * more: Array / BigInt / Array<byte> / Channel / DateTime / Json / Map /
      * Range / Regex / Set / StringBuilder all resolve through the
      * prelude registry as plain identifiers. */
     {"as", TK_AS},

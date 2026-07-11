@@ -3681,7 +3681,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
         xicgen_array_new(ctx, out, f, v, prefix);
-    } else if (strcmp(bn, "Bytes") == 0) {
+    } else if (strcmp(bn, "array_byte_new") == 0) {
         if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR) {
             if (!emit_bytes_new_native_local_expr(ctx, out, f, v)) {
                 if (v->nargs == 0) {
@@ -3782,19 +3782,28 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_conversion_suffix(out, conv_suffix);
     } else if (strcmp(bn, "len") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin len: need arg");
-        if (xi_value_type_is_channel(v->args[0])) {
+        const char *len_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+        if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ").length");
+        } else if (v->args[0]->type && v->args[0]->type->kind == XR_KIND_FIXED_ARRAY) {
+            fprintf(out, "INT64_C(%d)", v->args[0]->type->fixed_array.length);
+        } else if (xi_value_type_is_channel(v->args[0])) {
             fprintf(out, "XR_TO_INT(xr_aot_chan_length(ctx, ");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "))");
         } else if (xi_value_type_is_work_queue(v->args[0])) {
             fprintf(out, "XR_TO_INT(xr_aot_work_queue_length(ctx, ");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "))");
         } else {
             fprintf(out, "XR_TO_INT(xrt_len_value(");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", %d))", v->aux_int != 0 ? 1 : 0);
         }
+        emit_conversion_suffix(out, len_suffix);
     } else if (strcmp(bn, "chr") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin chr: need arg");
         fprintf(out, "xrt_chr(");

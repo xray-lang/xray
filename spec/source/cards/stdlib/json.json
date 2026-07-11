@@ -13,8 +13,8 @@
         "`Json.stringify(value, indent?)`",
         "`Json.isValid(text)` / `Json.tryParse(text)`",
         "`Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`",
-        "`Json.has(obj, key)` / `Json.get(obj, key, default?)`",
-        "`Json.size(obj)` / `Json.isEmpty(obj)`"
+        "`Json.containsKey(obj, key)` / `Json.get(obj, key, default?)`",
+        "`len(obj)` for object, array, or string variants"
       ]
     }
   ]

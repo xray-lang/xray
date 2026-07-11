@@ -234,13 +234,47 @@ AstNode *xr_parse_literal(Parser *parser) {
         case TK_LITERAL_STRING: {
             const char *src = parser->previous.start + 1;
             size_t src_len = parser->previous.length - 2;
+            for (size_t i = 0; i + 1 < src_len; i++) {
+                if (src[i] == '\\' && src[i + 1] == '0')
+                    xr_parser_error_at_previous(
+                        parser, "string literals cannot contain byte escapes; use b\"...\"");
+            }
             char *str = (char *) xr_malloc(src_len + 1);
             size_t dst_pos = xr_process_escapes(src, src_len, str);
             str[dst_pos] = '\0';
+            if (!xr_utf8_validate(str, dst_pos))
+                xr_parser_error_at_previous(parser, "string literal must be valid UTF-8");
             AstNode *node =
                 xr_ast_literal_string(parser->compiler_session, str, parser->previous.line);
             node->column = column;
             xr_free(str);
+            return node;
+        }
+
+        case TK_LITERAL_BYTE_STRING:
+        case TK_LITERAL_C_STRING: {
+            bool nul_terminated = parser->previous.type == TK_LITERAL_C_STRING;
+            const char *src = parser->previous.start + 2;
+            size_t src_len = (size_t) parser->previous.length - 3;
+            char *bytes = (char *) xr_malloc(src_len + 1);
+            size_t byte_len = xr_process_escapes(src, src_len, bytes);
+            if (nul_terminated && memchr(bytes, '\0', byte_len) != NULL)
+                xr_parser_error_at_previous(parser, "c literal cannot contain an interior NUL");
+            int count = (int) byte_len + (nul_terminated ? 1 : 0);
+            AstNode **elements =
+                count > 0 ? (AstNode **) xr_malloc(sizeof(AstNode *) * count) : NULL;
+            for (int i = 0; i < (int) byte_len; i++)
+                elements[i] = xr_ast_literal_int(parser->compiler_session, (unsigned char) bytes[i],
+                                                 parser->previous.line);
+            if (nul_terminated)
+                elements[count - 1] =
+                    xr_ast_literal_int(parser->compiler_session, 0, parser->previous.line);
+            AstNode *node = xr_ast_array_literal(parser->compiler_session, elements, count,
+                                                 parser->previous.line);
+            node->as.array_literal.is_fixed_bytes_literal = true;
+            node->column = column;
+            xr_free(elements);
+            xr_free(bytes);
             return node;
         }
 
@@ -252,7 +286,7 @@ AstNode *xr_parse_literal(Parser *parser) {
             if (err)
                 xr_parser_error_at_previous(parser, err);
             AstNode *node =
-                xr_ast_literal_char(parser->compiler_session, cp, parser->previous.line);
+                xr_ast_literal_rune(parser->compiler_session, cp, parser->previous.line);
             node->column = column;
             return node;
         }
@@ -264,6 +298,8 @@ AstNode *xr_parse_literal(Parser *parser) {
             char *str = (char *) xr_malloc(src_len + 1);
             memcpy(str, src, src_len);
             str[src_len] = '\0';
+            if (!xr_utf8_validate(str, src_len))
+                xr_parser_error_at_previous(parser, "raw string literal must be valid UTF-8");
             AstNode *node =
                 xr_ast_literal_string(parser->compiler_session, str, parser->previous.line);
             node->column = column;

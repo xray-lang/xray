@@ -2792,7 +2792,7 @@ skip_interfaces:
                 XrLocation loc = {.file = ctx->file_path, .line = field->line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "cannot store Span view in %s field '%s'; Span is a borrowed view and "
+                         "cannot store Slice view in %s field '%s'; Slice is a borrowed view and "
                          "cannot live in long-lived storage",
                          decl_label ? decl_label : "class", fd->name ? fd->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

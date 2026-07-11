@@ -378,7 +378,7 @@ XR_FUNC XrType *xr_type_new_int(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_float(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_string(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_bool(XrVMRuntime *X);
-XR_FUNC XrType *xr_type_new_char(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_rune(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_null(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_unknown(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_never(XrVMRuntime *X);

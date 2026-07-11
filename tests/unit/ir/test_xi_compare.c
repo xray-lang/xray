@@ -1312,7 +1312,7 @@ TEST(cmp_try_catch) {
 TEST(cmp_slice) {
     run_compare((CompareSpec) {
         .source = "var arr = [1, 2, 3, 4, 5]\n"
-                  "var s: Span<int> = arr[1:3]\n"
+                  "var s: Slice<int> = arr[1:3]\n"
                   "print(s)",
         .label = "array slice expression",
         .expect_xi_success = true,

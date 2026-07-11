@@ -272,9 +272,8 @@ XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *n
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[360];
     snprintf(msg, sizeof(msg),
-             "%s result requires an explicit target type; use ': ByteSpan' or ': Span<T>' for a "
-             "scoped fast view, ': ByteView' or ': View<T>' for a long-lived view, or copy(...) "
-             "for owned data",
+             "%s result requires an explicit target type; use ': Slice<T>' for a scoped borrowed "
+             "view, or copy(...) for owned data",
              kind ? kind : "view expression");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg,
                                &loc);
@@ -3022,7 +3021,7 @@ static XrType *xa_type_from_ct_value(XaInferContext *ctx, const XrCtValue *value
         case XR_CT_STRING:
             return xr_type_new_string(X);
         case XR_CT_CHAR:
-            return xr_type_new_char(X);
+            return xr_type_new_rune(X);
         case XR_CT_NULL:
             return xr_type_new_null(X);
         default:
@@ -3408,7 +3407,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_float(NULL);
             break;
         case AST_LITERAL_RUNE:
-            result = xr_type_new_char(NULL);
+            result = xr_type_new_rune(NULL);
             break;
         case AST_LITERAL_STRING:
             result = xr_type_new_string(NULL);
@@ -4501,9 +4500,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         item_type = coll_type->container.element_type;
                     }
                 } else if (XR_TYPE_IS_STRING(coll_type)) {
-                    item_type = xr_type_new_char(NULL);
+                    item_type = xr_type_new_rune(NULL);
                     if (fi->is_keyvalue) {
-                        value_type = xr_type_new_char(NULL);
+                        value_type = xr_type_new_rune(NULL);
                         item_type = xr_type_new_int(NULL);  // key is index
                     }
                 } else if (XR_TYPE_IS_JSON(coll_type)) {

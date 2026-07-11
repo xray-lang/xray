@@ -2655,7 +2655,26 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "len") == 0 && call->arg_count == 1) {
+        XrType *saved_expected = ctx->expected_type;
+        bool saved_view_context = ctx->allow_view_expr_for_copy;
+        if (xa_expr_needs_contextual_view_type(call->arguments[0])) {
+            AstNode *operand = call->arguments[0];
+            while (operand && operand->type == AST_GROUPING)
+                operand = operand->as.grouping;
+            bool is_string_bytes =
+                operand && operand->type == AST_CALL_EXPR && operand->as.call_expr.callee &&
+                operand->as.call_expr.callee->type == AST_MEMBER_ACCESS &&
+                operand->as.call_expr.callee->as.member_access.name &&
+                strcmp(operand->as.call_expr.callee->as.member_access.name, "bytes") == 0;
+            ctx->expected_type =
+                is_string_bytes ? xr_type_new_bytespan(ctx->analyzer->isolate)
+                                : xr_type_new_span(ctx->analyzer->isolate,
+                                                   xr_type_new_unknown(ctx->analyzer->isolate));
+            ctx->allow_view_expr_for_copy = true;
+        }
         XrType *operand_type = xa_visit_infer_expr(ctx, call->arguments[0]);
+        ctx->expected_type = saved_expected;
+        ctx->allow_view_expr_for_copy = saved_view_context;
         if (!xa_len_type_supported(operand_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
@@ -2666,6 +2685,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
         }
+        return xr_type_new_int(ctx->analyzer->isolate);
     }
 
     if (xa_call_is_sys_thread_spawn(call))

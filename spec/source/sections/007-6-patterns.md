@@ -100,7 +100,7 @@ match (msg) {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 
@@ -296,7 +296,7 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 

@@ -209,7 +209,7 @@ TEST(lexer_string_literals) {
     assert_token(t, TK_LITERAL_STRING, "\"\"");
 }
 
-TEST(lexer_char_literals) {
+TEST(lexer_rune_literals) {
     Token t;
 
     t = scan_single("'a'");
@@ -550,7 +550,7 @@ TEST(lexer_keyword_table_completeness) {
         {"while", TK_WHILE},
         {"yield", TK_YIELD},
         // None of the uppercase native type names are lexer keywords:
-        // Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+        // Array / BigInt / Array<byte> / Channel / DateTime / Json / Map /
         // Range / Regex / Set / StringBuilder all resolve through the
         // prelude registry as plain identifiers.
     };
@@ -676,7 +676,7 @@ static void run_all_tests(void) {
     RUN_TEST(lexer_string_escapes);
 
     RUN_TEST_SUITE("Char Literals");
-    RUN_TEST(lexer_char_literals);
+    RUN_TEST(lexer_rune_literals);
     RUN_TEST(lexer_raw_single_quote_removed);
 
     RUN_TEST_SUITE("Identifiers");

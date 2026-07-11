@@ -736,7 +736,17 @@ static Token string(Scanner *scanner) {
     return string_with_quote(scanner, '"');
 }
 
-static Token char_literal(Scanner *scanner) {
+static Token fixed_byte_string(Scanner *scanner, XrTokenType type) {
+    advance(scanner);  // opening quote after b/c prefix
+    bool has_interpolation = false;
+    if (!scan_string_body(scanner, '"', false, &has_interpolation))
+        return error_token(scanner, "Unterminated byte literal");
+    if (has_interpolation)
+        return error_token(scanner, "b/c literals do not support interpolation");
+    return make_token(scanner, type);
+}
+
+static Token rune_literal(Scanner *scanner) {
     while (!is_at_end(scanner)) {
         char c = peek(scanner);
         if (c == '\'') {
@@ -869,6 +879,11 @@ Token xr_scanner_scan(Scanner *scanner) {
     }
 
     char c = advance(scanner);
+
+    if (c == 'b' && peek(scanner) == '"')
+        return fixed_byte_string(scanner, TK_LITERAL_BYTE_STRING);
+    if (c == 'c' && peek(scanner) == '"')
+        return fixed_byte_string(scanner, TK_LITERAL_C_STRING);
 
     // Identifier or keyword (ASCII alpha, underscore, or UTF-8 lead byte)
     if (XR_IS_ALPHA(c) || c == '_' || (unsigned char) c >= 0x80) {
@@ -1008,7 +1023,7 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '"':
             return string(scanner);
         case '\'':
-            return char_literal(scanner);
+            return rune_literal(scanner);
         case '`':
             return error_token(
                 scanner, "Backtick strings are deprecated, use \"\" or '' with ${} interpolation");
@@ -1168,6 +1183,8 @@ static const char *token_names[] = {
     [TK_LITERAL_FLOAT] = "LITERAL_FLOAT",
     [TK_LITERAL_BIGINT] = "LITERAL_BIGINT",
     [TK_LITERAL_STRING] = "LITERAL_STRING",
+    [TK_LITERAL_BYTE_STRING] = "LITERAL_BYTE_STRING",
+    [TK_LITERAL_C_STRING] = "LITERAL_C_STRING",
     [TK_LITERAL_RUNE] = "LITERAL_CHAR",
     [TK_LITERAL_REGEX] = "LITERAL_REGEX",
     [TK_NAME] = "NAME",

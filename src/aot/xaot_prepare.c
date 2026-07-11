@@ -477,7 +477,7 @@ static bool array_builtin_is_fresh_storage(const XiValue *value) {
     if (!value || value->op != XI_CALL_BUILTIN || !value->aux)
         return false;
     name = (const char *) value->aux;
-    return strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0 ||
+    return strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0 ||
            strcmp(name, "array_with_capacity") == 0 || strcmp(name, "array_filled_new") == 0;
 }
 
@@ -788,7 +788,7 @@ static const XiValue *prepare_array_single_origin(const XiValue *array_value, ui
         return value;
     if (value->op == XI_CALL_BUILTIN) {
         const char *name = (const char *) value->aux;
-        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
+        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0))
             return value;
     }
     if (value->op != XI_PHI)
@@ -1416,7 +1416,7 @@ static bool prepare_array_is_native_local_alloc(const XaotBundle *bundle, const 
         return true;
     if (strcmp(name, "array_with_capacity") == 0)
         return true;
-    if (strcmp(name, "Bytes") != 0)
+    if (strcmp(name, "array_byte_new") != 0)
         return false;
     if (target->nargs == 0)
         return true;

@@ -9,10 +9,11 @@ XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out) {
         const CgStrLit *lit = ctx->strlit_list[i];
         /* Hash precomputed with the runtime's shared primitive:
          * literal strings never pay a lazy hash at runtime. */
-        fprintf(
-            out,
-            "static const xrt_str_t _xstr_%d = {INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ",
-            lit->id, lit->len, xr_hash_core_str_hash_bytes(lit->str, lit->len));
+        fprintf(out,
+                "static const xrt_str_t _xstr_%d = {INT64_C(%zu), INT64_C(%zu), 0x%08xu, "
+                "XRT_STR_LITERAL, (char *) ",
+                lit->id, lit->len, xr_utf8_strlen(lit->str, lit->len),
+                xr_hash_core_str_hash_bytes(lit->str, lit->len));
         emit_c_string_literal_bytes(out, lit->str, lit->len);
         fprintf(out, "};\n");
     }

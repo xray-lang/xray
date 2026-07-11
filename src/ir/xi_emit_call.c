@@ -739,7 +739,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWSTRINGBUILDER, dst, 0, 0));
         return;
     }
-    if (bname && strcmp(bname, "Bytes") == 0) {
+    if (bname && strcmp(bname, "array_byte_new") == 0) {
         emit_builtin_bytes_new(ctx, v, dst);
         return;
     }

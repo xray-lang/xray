@@ -23,11 +23,11 @@ order: 014
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `int(x)` | `(value) -> int` | 转为 int；`char` 转为 Unicode scalar code point；字符串解析失败抛异常 |
+| `int(x)` | `(value) -> int` | 转为 int；`rune` 转为 Unicode scalar code point；字符串解析失败抛异常 |
 | `float(x)` | `(value) -> float` | 转为 float |
-| `string(x)` | `(value) -> string` | 转为字符串；`char` 转为单 scalar 字符串 |
+| `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
-| `char(n)` | `(int) -> char` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(T) -> T` | 深拷贝，保留运行时类型 |
 
@@ -35,16 +35,16 @@ order: 014
 
 | 函数 / 表达式 | 签名 | 说明 |
 |---|---|---|
-| `typeof(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
-| `typename(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
+| `typeOf(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
+| `typeName(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
-```xray @id=builtin-typeof-is
+```xray @id=builtin-typeOf-is
 var x = 42
-print(typeof(x) == Type.int)    // true
-print(typename(x))              // "int"
+print(typeOf(x) == Type.int)    // true
+print(typeName(x))              // "int"
 print(x is int)                 // true
-// typeof(x) == "int"           // compile error: use Type.int or typename(x)
+// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
 ```
 
 ### 13.4 协程
@@ -100,11 +100,11 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `int(x)` | `(value) -> int` | convert to int; `char` converts to its Unicode scalar code point; throws if string parsing fails |
+| `int(x)` | `(value) -> int` | convert to int; `rune` converts to its Unicode scalar code point; throws if string parsing fails |
 | `float(x)` | `(value) -> float` | convert to float |
-| `string(x)` | `(value) -> string` | convert to string; `char` converts to a one-scalar string |
+| `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
-| `char(n)` | `(int) -> char` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(T) -> T` | deep copy, preserving runtime type |
 
@@ -112,16 +112,16 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function / expression | Signature | Description |
 |---|---|---|
-| `typeof(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
-| `typename(x)` | `(value) -> string` | returns the debug/logging type-name string |
+| `typeOf(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
+| `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
-```xray @id=builtin-typeof-is
+```xray @id=builtin-typeOf-is
 var x = 42
-print(typeof(x) == Type.int)    // true
-print(typename(x))              // "int"
+print(typeOf(x) == Type.int)    // true
+print(typeName(x))              // "int"
 print(x is int)                 // true
-// typeof(x) == "int"           // compile error: use Type.int or typename(x)
+// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
 ```
 
 ### 13.4 Coroutines

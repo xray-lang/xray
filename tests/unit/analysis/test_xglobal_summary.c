@@ -10251,7 +10251,7 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
 
 TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     setup_parser_session();
-    const char *source = "fn touch(xs: Array<int>, b: Bytes, s: string, span: ByteSpan, "
+    const char *source = "fn touch(xs: Array<int>, b: Array<byte>, s: string, span: Slice<byte>, "
                          "sb: StringBuilder) -> int {\n"
                          "    xs.push(1)\n"
                          "    var first = xs[0]\n"

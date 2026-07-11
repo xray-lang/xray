@@ -388,8 +388,7 @@ static uint8_t class_field_int_semantic_kind(uint8_t native_width) {
 static uint8_t class_field_named_semantic_kind(const char *name) {
     if (!name)
         return XG_CLASS_FIELD_TYPE_DYNAMIC;
-    if (strcmp(name, "Array") == 0 || strcmp(name, "Bytes") == 0 || strcmp(name, "ByteSpan") == 0 ||
-        strcmp(name, "Span") == 0 || strcmp(name, "View") == 0)
+    if (strcmp(name, "Array") == 0 || strcmp(name, "Slice") == 0)
         return XG_CLASS_FIELD_TYPE_ARRAY;
     if (strcmp(name, "Map") == 0)
         return XG_CLASS_FIELD_TYPE_MAP;
@@ -402,7 +401,7 @@ static uint8_t class_field_named_semantic_kind(const char *name) {
 
 static bool class_field_target_is_builtin_name_id(uint32_t name_id) {
     static const char *const names[] = {
-        "Array", "Bytes", "ByteSpan", "Span", "View", "Map", "Set", "string", "String",
+        "Array", "Slice", "Map", "Set", "string", "String",
     };
     if (name_id == 0)
         return false;
@@ -2702,20 +2701,6 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
         return true;
     }
     if (type->kind == XR_TREF_NAMED && type->name) {
-        if (strcmp(type->name, "Bytes") == 0) {
-            if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_BYTES;
-            if (out_elem_type_key)
-                *out_elem_type_key = body_uint8_type_key();
-            return true;
-        }
-        if (strcmp(type->name, "ByteSpan") == 0) {
-            if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_BYTE_SPAN;
-            if (out_elem_type_key)
-                *out_elem_type_key = body_uint8_type_key();
-            return true;
-        }
         if (strcmp(type->name, "StringBuilder") == 0) {
             if (out_sequence_kind)
                 *out_sequence_kind = XG_SEQ_STRING_BUILDER;
@@ -2726,17 +2711,21 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
     }
     if (type->kind == XR_TREF_GENERIC && type->name && type->children && type->nchildren > 0) {
         if (strcmp(type->name, "Array") == 0) {
+            uint32_t elem_key = hash_tref32(type->children[0]);
             if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_ARRAY;
+                *out_sequence_kind =
+                    elem_key == body_uint8_type_key() ? XG_SEQ_BYTES : XG_SEQ_ARRAY;
             if (out_elem_type_key)
-                *out_elem_type_key = hash_tref32(type->children[0]);
+                *out_elem_type_key = elem_key;
             return true;
         }
-        if (strcmp(type->name, "Span") == 0) {
+        if (strcmp(type->name, "Slice") == 0) {
+            uint32_t elem_key = hash_tref32(type->children[0]);
             if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_SPAN;
+                *out_sequence_kind =
+                    elem_key == body_uint8_type_key() ? XG_SEQ_BYTE_SPAN : XG_SEQ_SPAN;
             if (out_elem_type_key)
-                *out_elem_type_key = hash_tref32(type->children[0]);
+                *out_elem_type_key = elem_key;
             return true;
         }
     }
@@ -2747,7 +2736,7 @@ static const XrTypeRef *body_type_ref_sequence_elem_type_ref(const XrTypeRef *ty
     if (!type || type->kind != XR_TREF_GENERIC || !type->name || !type->children ||
         type->nchildren == 0)
         return NULL;
-    if (strcmp(type->name, "Array") == 0 || strcmp(type->name, "Span") == 0)
+    if (strcmp(type->name, "Array") == 0 || strcmp(type->name, "Slice") == 0)
         return type->children[0];
     return NULL;
 }
@@ -4900,13 +4889,13 @@ static uint32_t body_sequence_receiver_type_key(uint8_t sequence_kind, uint32_t 
         case XG_SEQ_ARRAY:
             return hash_named_type_key32("Array", NULL, 0) ^ elem_type_key;
         case XG_SEQ_BYTES:
-            return hash_named_type_key32("Bytes", NULL, 0);
+            return hash_named_type_key32("Array", NULL, 0) ^ body_uint8_type_key();
         case XG_SEQ_STRING:
             return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
         case XG_SEQ_SPAN:
-            return hash_named_type_key32("Span", NULL, 0) ^ elem_type_key;
+            return hash_named_type_key32("Slice", NULL, 0) ^ elem_type_key;
         case XG_SEQ_BYTE_SPAN:
-            return hash_named_type_key32("ByteSpan", NULL, 0);
+            return hash_named_type_key32("Slice", NULL, 0) ^ body_uint8_type_key();
         case XG_SEQ_STRING_BUILDER:
             return hash_named_type_key32("StringBuilder", NULL, 0);
         default:
@@ -4980,15 +4969,15 @@ static void body_add_sequence_slice_access(XgBodyCollect *bc, const AstNode *nod
                                  node->as.slice_expr.end, false);
 }
 
-static void body_add_sequence_length_access(XgBodyCollect *bc, const AstNode *node) {
-    const MemberAccessNode *member;
+static void body_add_sequence_len_call(XgBodyCollect *bc, const AstNode *node) {
     XgLocalType *local;
-    if (!bc || !node || node->type != AST_MEMBER_ACCESS)
+    if (!bc || !node || node->type != AST_CALL_EXPR)
         return;
-    member = &node->as.member_access;
-    if (!member->name || strcmp(member->name, "length") != 0)
+    const CallExprNode *call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_VARIABLE || call->arg_count != 1 ||
+        !call->callee->as.variable.name || strcmp(call->callee->as.variable.name, "len") != 0)
         return;
-    local = body_lookup_local_sequence(bc, member->object);
+    local = body_lookup_local_sequence(bc, call->arguments[0]);
     if (!local)
         return;
     body_add_sequence_access_row(bc, node, local, XG_SEQ_ACCESS_LENGTH, NULL, NULL, false);
@@ -5134,7 +5123,7 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
     if (strcmp(member->name, "copyBytes") == 0 && call->arg_count == 0 &&
         body_expr_type_key(bc, member->object) ==
             hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0)) {
-        uint32_t output_type_key = hash_named_type_key32("Bytes", NULL, 0);
+        uint32_t output_type_key = hash_named_type_key32("Array", NULL, 0) ^ body_uint8_type_key();
         body_add_encoding_op(bc, node, XG_ENCODING_STRING_TO_BYTES, member->object, output_type_key,
                              XG_ENCODING_KNOWN_UTF8 | XG_ENCODING_SCALAR_BOUNDARY);
     }
@@ -5541,6 +5530,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR:
+            body_add_sequence_len_call(bc, node);
             body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);
             body_add_sequence_method_evidence(bc, node);
@@ -5763,7 +5753,6 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             body_add_json_member_access(bc, node, false);
             body_add_record_member_access(bc, node, false);
-            body_add_sequence_length_access(bc, node);
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
         }

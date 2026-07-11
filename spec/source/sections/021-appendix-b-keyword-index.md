@@ -17,7 +17,7 @@ order: 021
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
-| `char` | §2.3.5 |
+| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -62,7 +62,7 @@ order: 021
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `uint8`..`uint64` | §2.3.1 |
+| `byte`..`uint64` | §2.3.1 |
 | `union` | §5.4 |
 | `unsafe` | §3.2 |
 | `var` | §5.1 |
@@ -84,7 +84,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
-| `char` | §2.3.5 |
+| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -129,7 +129,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `uint8`..`uint64` | §2.3.1 |
+| `byte`..`uint64` | §2.3.1 |
 | `union` | §5.4 |
 | `unsafe` | §3.2 |
 | `var` | §5.1 |

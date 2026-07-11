@@ -2656,7 +2656,7 @@ static bool cg_array_value_has_fresh_owned_origin(XiCgenCtx *ctx, const XiValue 
         return true;
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        return strcmp(name, "Bytes") == 0 || strcmp(name, "array_with_capacity") == 0 ||
+        return strcmp(name, "array_byte_new") == 0 || strcmp(name, "array_with_capacity") == 0 ||
                strcmp(name, "array_filled_new") == 0;
     }
     return false;
@@ -2704,7 +2704,7 @@ static const XiValue *cg_array_single_origin(const XiValue *array_value, uint8_t
         return v;
     if (v->op == XI_CALL_BUILTIN) {
         const char *name = (const char *) v->aux;
-        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
+        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0))
             return v;
     }
     if (v->op != XI_PHI)
@@ -2786,7 +2786,7 @@ static bool cg_array_fill_origin_starts_empty(const XiValue *origin) {
     }
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        if (strcmp(name, "Bytes") == 0) {
+        if (strcmp(name, "array_byte_new") == 0) {
             if (origin->nargs == 0)
                 return true;
             return origin->nargs == 1 && cg_array_const_int_value(origin->args[0], 0);
@@ -3364,7 +3364,7 @@ static bool cg_array_is_native_local_alloc(const XiValue *value) {
         return true;
     if (strcmp(name, "array_with_capacity") == 0)
         return true;
-    if (strcmp(name, "Bytes") != 0)
+    if (strcmp(name, "array_byte_new") != 0)
         return false;
     if (v->nargs == 0)
         return true;
@@ -3864,7 +3864,7 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
 static bool emit_bytes_new_native_local_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                              const XiValue *v) {
     if (!out || !v || v->op != XI_CALL_BUILTIN || !v->aux ||
-        strcmp((const char *) v->aux, "Bytes") != 0)
+        strcmp((const char *) v->aux, "array_byte_new") != 0)
         return false;
     CgArrayFillLoop fill;
     if (cg_array_fill_origin_starts_empty(v) &&

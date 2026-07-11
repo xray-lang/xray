@@ -215,6 +215,7 @@ typedef struct XrValue {
 
 typedef struct {
     int64_t len;
+    int64_t rune_len;
     uint32_t hash;
     uint32_t flags;
     char *data;
@@ -236,6 +237,30 @@ static inline int64_t xr_str_len(XrValue v) {
     return ((const xrt_str_t *) v.ptr)->len;
 }
 
+static inline int64_t xr_str_rune_len(XrValue v) {
+    xrt_str_t *h = (xrt_str_t *) v.ptr;
+    if (!h || !h->data || h->len <= 0)
+        return 0;
+    if (h->rune_len >= 0)
+        return h->rune_len;
+    const unsigned char *p = (const unsigned char *) h->data;
+    const unsigned char *end = p + h->len;
+    int64_t count = 0;
+    while (p < end) {
+        unsigned char b = *p;
+        int64_t width = (b < 0x80u)              ? 1
+                        : ((b & 0xE0u) == 0xC0u) ? 2
+                        : ((b & 0xF0u) == 0xE0u) ? 3
+                        : ((b & 0xF8u) == 0xF0u) ? 4
+                                                 : 1;
+        p += width <= end - p ? width : 1;
+        count++;
+    }
+    if (!(h->flags & XRT_STR_LITERAL))
+        h->rune_len = count;
+    return count;
+}
+
 static inline XrValue xr_str_lit(const xrt_str_t *hdr) {
     XrValue r = {0};
     r.tag = XR_TAG_STR;
@@ -254,7 +279,8 @@ static inline XrValue xr_str_value_from_ptr(void *ptr) {
 }
 
 #define XRT_STR_LIT_DEF(name, s)                                                                   \
-    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, 0, XRT_STR_LITERAL, (char *) (s)}
+    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, (int64_t) sizeof(s) - 1, 0,            \
+                                   XRT_STR_LITERAL, (char *) (s)}
 
 static inline XrValue xr_mkheap(void *p, uint16_t heap_type) {
     XrValue r = {0};

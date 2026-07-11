@@ -405,13 +405,13 @@ TEST(string_core_slice_bounds) {
 
 TEST(string_core_utf8_char_slice) {
     const char *s = "A你🌍";
-    ASSERT_EQ_UINT(xr_string_core_utf8_char_count(s, strlen(s)), 3);
-    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 0), "A");
-    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 1), "你");
-    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 2), "🌍");
-    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), -1), "🌍");
-    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 99), "");
-    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), -99), "");
+    ASSERT_EQ_UINT(xr_string_core_utf8_rune_count(s, strlen(s)), 3);
+    assert_slice_eq(xr_string_core_utf8_rune_slice_at(s, strlen(s), 0), "A");
+    assert_slice_eq(xr_string_core_utf8_rune_slice_at(s, strlen(s), 1), "你");
+    assert_slice_eq(xr_string_core_utf8_rune_slice_at(s, strlen(s), 2), "🌍");
+    assert_slice_eq(xr_string_core_utf8_rune_slice_at(s, strlen(s), -1), "🌍");
+    assert_slice_eq(xr_string_core_utf8_rune_slice_at(s, strlen(s), 99), "");
+    assert_slice_eq(xr_string_core_utf8_rune_slice_at(s, strlen(s), -99), "");
     assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 0), "A");
     assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 1), "你");
     assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 2), "🌍");
