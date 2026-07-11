@@ -719,6 +719,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
         // Check for static constructor: static constructor()
         if (xr_parser_check(parser, TK_CONSTRUCTOR)) {
+            if (is_private || is_protected) {
+                xr_parser_error_at_current(
+                    parser, "constructors are always public; remove the visibility modifier");
+            }
             *is_method_out = true;
             xr_parser_advance(parser);  // consume 'constructor'
             AstNode *method = xr_parse_static_constructor(parser, is_private);
@@ -756,6 +760,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     if (xr_parser_match(parser, TK_CONSTRUCTOR)) {
         // 'constructor' keyword
         is_constructor = true;
+        if (is_private || is_protected) {
+            xr_parser_error_at_previous(
+                parser, "constructors are always public; remove the visibility modifier");
+        }
         name = (char *) ast_alloc(parser->compiler_session, sizeof(XR_KEYWORD_CONSTRUCTOR));
         strcpy(name, XR_KEYWORD_CONSTRUCTOR);
         name_line = parser->previous.line;
