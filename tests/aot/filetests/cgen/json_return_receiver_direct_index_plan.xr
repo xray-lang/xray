@@ -1,0 +1,9 @@
+fn makeJsonReturnReceiverPlan() -> Json {
+    return { name: "ada", age: 1 }
+}
+
+fn jsonReturnReceiverPlan() -> string {
+    return makeJsonReturnReceiverPlan().name
+}
+
+print(jsonReturnReceiverPlan())

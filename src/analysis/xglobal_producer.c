@@ -3212,6 +3212,93 @@ static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
     return row.json_shape_id;
 }
 
+static bool body_find_unique_return_json_literal(const AstNode *node,
+                                                 const ObjectLiteralNode **out_literal,
+                                                 bool *out_seen) {
+    if (!node || !out_literal || !out_seen)
+        return true;
+    switch (node->type) {
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++) {
+                if (!body_find_unique_return_json_literal(node->as.block.statements[i], out_literal,
+                                                          out_seen))
+                    return false;
+            }
+            return true;
+        case AST_RETURN_STMT: {
+            const ObjectLiteralNode *literal;
+            if (node->as.return_stmt.value_count != 1 || !node->as.return_stmt.values)
+                return false;
+            literal = body_static_object_literal(node->as.return_stmt.values[0]);
+            if (!literal)
+                return false;
+            if (*out_seen && *out_literal != literal)
+                return false;
+            *out_literal = literal;
+            *out_seen = true;
+            return true;
+        }
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            return true;
+        default:
+            return true;
+    }
+}
+
+static const ObjectLiteralNode *
+body_unique_function_json_return_literal(const XgPendingBody *body) {
+    const ObjectLiteralNode *literal = NULL;
+    bool seen = false;
+    if (!body || !body->function || !body_type_ref_is_json(body->function->return_type))
+        return NULL;
+    if (!body_find_unique_return_json_literal(body->body, &literal, &seen))
+        return NULL;
+    return seen ? literal : NULL;
+}
+
+static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                        const ObjectLiteralNode **out_literal) {
+    const AstNode *callee;
+    XgFuncNameRow *target;
+    const XgPendingBody *body;
+    const ObjectLiteralNode *literal;
+    uint32_t type_key;
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !expr)
+        return XG_NO_ID;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_lookup_call_json_return_shape(bc, expr->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return body_lookup_call_json_return_shape(bc, expr->as.move_expr.expr, out_literal);
+        case AST_UNSAFE_EXPR:
+            return body_lookup_call_json_return_shape(bc, expr->as.unsafe_expr.operand,
+                                                      out_literal);
+        case AST_FORCE_UNWRAP:
+            return body_lookup_call_json_return_shape(bc, expr->as.unary.operand, out_literal);
+        default:
+            break;
+    }
+    if (expr->type != AST_CALL_EXPR)
+        return XG_NO_ID;
+    callee = expr->as.call_expr.callee;
+    if (!callee || callee->type != AST_VARIABLE || !callee->as.variable.name)
+        return XG_NO_ID;
+    target = producer_lookup_func_row(bc->producer, callee->as.variable.name);
+    body = producer_find_function_body(bc->producer, target ? target->func_id : XG_NO_ID);
+    literal = body_unique_function_json_return_literal(body);
+    if (!literal)
+        return XG_NO_ID;
+    type_key = body && body->function && body->function->return_type
+                   ? hash_tref32(body->function->return_type)
+                   : hash_named_type_key32("Json", NULL, 0);
+    if (out_literal)
+        *out_literal = literal;
+    return body_add_json_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
+}
+
 static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(XgGlobalEvidence *evidence,
                                                                       XgModuleId module_id,
                                                                       const TypeAliasNode *alias,
@@ -3291,6 +3378,32 @@ static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNo
     return row->json_shape_id;
 }
 
+static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *expr,
+                                            const ObjectLiteralNode **out_literal) {
+    XgJsonShapeId shape_id = body_lookup_local_json_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    return body_lookup_call_json_return_shape(bc, expr, out_literal);
+}
+
+static int body_json_shape_static_field_index(XgBodyCollect *bc, XgJsonShapeId shape_id,
+                                              const ObjectLiteralNode *literal, const char *name) {
+    uint32_t name_id;
+    if (!bc || !bc->evidence || shape_id == XG_NO_ID || !name)
+        return -1;
+    if (literal)
+        return body_object_literal_static_field_index(literal, name);
+    name_id = hash_name32(name);
+    if (name_id == 0)
+        return -1;
+    for (uint32_t i = 0; i < bc->evidence->njson_fields; i++) {
+        const XgJsonFieldSummary *field = &bc->evidence->json_fields[i];
+        if (field->shape_id == shape_id && field->name_id == name_id)
+            return field->field_ordinal;
+    }
+    return -1;
+}
+
 static bool body_local_type_is_json(const XgLocalType *row) {
     return row && row->type_key == hash_named_type_key32("Json", NULL, 0);
 }
@@ -3308,6 +3421,8 @@ static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *ex
             return body_expr_is_json_without_shape(bc, expr->as.unsafe_expr.operand);
         case AST_FORCE_UNWRAP:
             return body_expr_is_json_without_shape(bc, expr->as.unary.operand);
+        case AST_CALL_EXPR:
+            return body_type_ref_is_json(body_call_return_type_ref(bc, &expr->as.call_expr));
         default:
             break;
     }
@@ -3329,17 +3444,18 @@ static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, 
     if (node->type == AST_MEMBER_ACCESS) {
         name = node->as.member_access.name;
         receiver = node->as.member_access.object;
-        shape_id = body_lookup_local_json_shape(bc, receiver, &literal);
+        shape_id = body_lookup_json_shape(bc, receiver, &literal);
     } else if (node->type == AST_MEMBER_SET) {
         name = node->as.member_set.member;
         receiver = node->as.member_set.object;
-        shape_id = body_lookup_local_json_shape(bc, receiver, &literal);
+        shape_id = body_lookup_json_shape(bc, receiver, &literal);
     } else {
         return;
     }
     if (!name)
         return;
-    field_index = shape_id != XG_NO_ID ? body_object_literal_static_field_index(literal, name) : -1;
+    field_index =
+        shape_id != XG_NO_ID ? body_json_shape_static_field_index(bc, shape_id, literal, name) : -1;
     if (shape_id == XG_NO_ID && !body_expr_is_json_without_shape(bc, receiver))
         return;
     if (shape_id != XG_NO_ID && field_index < 0)
@@ -3382,7 +3498,7 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
         return;
     }
     static_key = body_static_string_key(key);
-    shape_id = body_lookup_local_json_shape(bc, receiver, &literal);
+    shape_id = body_lookup_json_shape(bc, receiver, &literal);
     if (shape_id == XG_NO_ID) {
         if (!static_key || !body_expr_is_json_without_shape(bc, receiver))
             return;
@@ -3391,7 +3507,7 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
             xg_global_evidence_find_json_shape(bc->evidence, shape_id);
         if (!shape)
             return;
-        field_index = body_object_literal_static_field_index(literal, static_key);
+        field_index = body_json_shape_static_field_index(bc, shape_id, literal, static_key);
         if (field_index < 0)
             return;
     }
@@ -5764,8 +5880,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->capability_bits |=
                 body_capabilities_for_type_ref(node->as.var_decl.type_annotation);
             walk_body_for_calls(bc, node->as.var_decl.initializer);
-            source_json_shape_id = body_lookup_local_json_shape(bc, node->as.var_decl.initializer,
-                                                                &source_json_literal);
+            source_json_shape_id =
+                body_lookup_json_shape(bc, node->as.var_decl.initializer, &source_json_literal);
             source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
@@ -5839,7 +5955,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 target_is_json ? body_static_object_literal(node->as.assignment.value) : NULL;
             const ObjectLiteralNode *source_json_literal = NULL;
             XgJsonShapeId source_json_shape_id =
-                body_lookup_local_json_shape(bc, node->as.assignment.value, &source_json_literal);
+                body_lookup_json_shape(bc, node->as.assignment.value, &source_json_literal);
             XgLocalType *source_map_local =
                 body_lookup_local_map_shape(bc, node->as.assignment.value);
             XgClassId class_id;

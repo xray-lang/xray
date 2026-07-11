@@ -20,6 +20,7 @@ metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive
 derived_eq_hash|covered|kind=hash|tests/aot/filetests/link|Derived Eq/Hash evidence has global evidence coverage.
 json_shape_direct_index|covered|json-access-plan .*action=direct_index|tests/aot/filetests/cgen|Json static member/key access direct-index path is covered.
 json_closure_capture_shape|covered|json_closure_capture_direct_index_plan|tests/aot/filetests/cgen|Json receivers captured by closures keep child-body shape evidence and direct-index generated C helpers.
+json_return_receiver_shape|covered|makeJsonReturnReceiverPlan|tests/aot/filetests/cgen|Json direct function-call return receivers with a unique static literal return keep receiver shape evidence and direct-index generated C helpers.
 json_dynamic_fallback|covered|json-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
 json_parse_runtime_direct_plan|covered|action=parse_runtime_direct|tests/unit/analysis|Json.parse uses an explicit verified runtime-direct parse plan instead of the old DOM bridge.
 json_decode_plan|covered|json-codec-plan .*kind=decode action=decode_validate_copy|tests/aot/filetests/cgen|Json.decode<Record> consumes a verified codec plan instead of assembling shape checks ad hoc.
