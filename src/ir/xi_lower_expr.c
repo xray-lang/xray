@@ -5119,7 +5119,7 @@ static XiValue *parallel_call_child_closure(XiLower *l, XiFunc *child, int line)
     return closure;
 }
 
-static bool parallel_call_type_can_use_scalar_collect_callback(const struct XrType *type) {
+static bool parallel_call_type_can_use_scalar_map_callback(const struct XrType *type) {
     return type && !type->is_nullable &&
            (XR_TYPE_IS_INT(type) || XR_TYPE_IS_FLOAT(type) || XR_TYPE_IS_BOOL(type) ||
             XR_TYPE_IS_CHAR(type));
@@ -5185,9 +5185,8 @@ static XiValue *parallel_call_make_for_each(XiLower *l, AstNode *node, AstNode *
     return par;
 }
 
-static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *range,
-                                           AstNode *body_node, XiValue *workers,
-                                           XiValue *into_array) {
+static XiValue *parallel_call_make_map(XiLower *l, AstNode *node, AstNode *range,
+                                       AstNode *body_node, XiValue *workers, XiValue *into_array) {
     RangeNode *rn = &range->as.range;
     XiValue *start = xi_lower_expr(l, rn->start);
     XiValue *end = xi_lower_expr(l, rn->end);
@@ -5213,7 +5212,7 @@ static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *r
         .abi_index = 0,
         .type = l->type_int,
     }};
-    XiNativeCallbackKind callback = parallel_call_type_can_use_scalar_collect_callback(elem_type)
+    XiNativeCallbackKind callback = parallel_call_type_can_use_scalar_map_callback(elem_type)
                                         ? XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY
                                         : XI_NATIVE_CALLBACK_NONE;
     XiFunc *body = parallel_call_lower_lambda_func(l, body_node, "map_body", elem_type, callback, 2,
@@ -5422,7 +5421,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         XiValue *workers = NULL;
         if (!parallel_call_extract_workers(l, call, call->arg_count == 3 ? 2 : -1, &workers))
             return NULL;
-        return parallel_call_make_collect(l, node, range, call->arguments[1], workers, NULL);
+        return parallel_call_make_map(l, node, range, call->arguments[1], workers, NULL);
     }
 
     if (strcmp(method, "mapInto") == 0) {
@@ -5438,7 +5437,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         XiValue *into = xi_lower_expr(l, call->arguments[1]);
         if (!into)
             return NULL;
-        return parallel_call_make_collect(l, node, range, call->arguments[2], workers, into);
+        return parallel_call_make_map(l, node, range, call->arguments[2], workers, into);
     }
 
     if (strcmp(method, "reduce") == 0) {

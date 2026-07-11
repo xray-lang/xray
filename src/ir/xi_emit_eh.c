@@ -728,9 +728,9 @@ static bool par_lane_regs_alloc(EmitCtx *ctx, ParLaneRegs *r, int extra) {
     return true;
 }
 
-/* Direct-lane-write collect: the body writes result lanes itself, so each
+/* Direct-lane-write map: the body writes result lanes itself, so each
  * lane array is resized up front and the closure receives (iter[, limit],
- * lane) with no per-item collect store. */
+ * lane) with no per-item map store. */
 static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, XiEmitReg start,
                                       XiEmitReg end, XiEmitReg workers, XiEmitReg closure) {
     const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
@@ -858,7 +858,7 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     r.workers = workers;
     if (!par_lane_regs_alloc(ctx, &r, 6))
         return;
-    XiEmitReg collect_idx = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg map_idx = (XiEmitReg) ctx->next_reg++;
     XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
     XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
     XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
@@ -906,8 +906,8 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.lane, 0));
     emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
-    emit_inst(ctx, CREATE_ABC(OP_SUB, collect_idx, r.iter, r.start));
-    emit_inst(ctx, CREATE_ABC(OP_INDEX_SET, target_array, collect_idx, item_result));
+    emit_inst(ctx, CREATE_ABC(OP_SUB, map_idx, r.iter, r.start));
+    emit_inst(ctx, CREATE_ABC(OP_INDEX_SET, target_array, map_idx, item_result));
     emit_inst(ctx, CREATE_ABC(OP_ADDI, r.iter, r.iter, 1));
 
     int back_jmp_pc = current_pc(ctx);

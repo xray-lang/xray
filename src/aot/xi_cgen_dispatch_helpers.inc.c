@@ -9598,24 +9598,24 @@ static void xicgen_emit_par_map_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out,
             "        union { XrObjHeader hdr; long double align; unsigned char "
             "bytes[sizeof(XrObjHeader) + sizeof(xrt_closure_t) + %u * sizeof(XrValue)]; } "
-            "_xr_pc_closure_storage_%u;\n",
+            "_xr_pm_closure_storage_%u;\n",
             total, par_map->id);
     fprintf(out,
-            "        memset(&_xr_pc_closure_storage_%u, 0, sizeof(_xr_pc_closure_storage_%u));\n",
+            "        memset(&_xr_pm_closure_storage_%u, 0, sizeof(_xr_pm_closure_storage_%u));\n",
             par_map->id, par_map->id);
     fprintf(out,
-            "        XrObjHeader *_xr_pc_closure_hdr_%u = (XrObjHeader "
-            "*)_xr_pc_closure_storage_%u.bytes;\n",
+            "        XrObjHeader *_xr_pm_closure_hdr_%u = (XrObjHeader "
+            "*)_xr_pm_closure_storage_%u.bytes;\n",
             par_map->id, par_map->id);
-    fprintf(out, "        _xr_pc_closure_hdr_%u->extra = XR_OBJ_STORAGE_STACK;\n", par_map->id);
+    fprintf(out, "        _xr_pm_closure_hdr_%u->extra = XR_OBJ_STORAGE_STACK;\n", par_map->id);
     fprintf(out,
-            "        xrt_closure_t *_xr_pc_closure_%u = (xrt_closure_t *)((char "
-            "*)_xr_pc_closure_hdr_%u + sizeof(XrObjHeader));\n",
+            "        xrt_closure_t *_xr_pm_closure_%u = (xrt_closure_t *)((char "
+            "*)_xr_pm_closure_hdr_%u + sizeof(XrObjHeader));\n",
             par_map->id, par_map->id);
-    fprintf(out, "        xrt_closure_init(_xr_pc_closure_%u, (void*)", par_map->id);
+    fprintf(out, "        xrt_closure_init(_xr_pm_closure_%u, (void*)", par_map->id);
     emit_closure_entry_pointer(ctx, out, prefix, body);
     fprintf(out, ", %u);\n", total);
-    fprintf(out, "        { xrt_closure_t *_c = _xr_pc_closure_%u; ", par_map->id);
+    fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", par_map->id);
     emit_closure_upval_initializers(ctx, out, f, closure, false);
     fprintf(out, "_c->upvals[%u] = %s; _c->upvals[%u] = XR_FROM_INT(%s); }\n",
             data ? (unsigned) data->result_capture_index : (unsigned) ncap,
@@ -10158,11 +10158,11 @@ static void xicgen_par_map_emit_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         fprintf(out, ";\n");
         return;
     }
-    fprintf(out, "            XrValue _xr_pc_item_%u = ", v->id);
+    fprintf(out, "            XrValue _xr_pm_item_%u = ", v->id);
     xicgen_emit_par_map_body_call_as_rep(ctx, out, f, body, v->args[3], prefix, iter_name,
                                          worker_name, closure_name, XR_REP_TAGGED);
     fprintf(out, ";\n");
-    fprintf(out, "            xrt_array_write_preallocated(%s, %s, _xr_pc_item_%u);\n",
+    fprintf(out, "            xrt_array_write_preallocated(%s, %s, _xr_pm_item_%u);\n",
             out_ptr_name, idx_name, v->id);
 }
 
@@ -10195,30 +10195,30 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         }
 
         fprintf(out, "({\n");
-        fprintf(out, "        int64_t _xr_pc_start_%u = ", v->id);
+        fprintf(out, "        int64_t _xr_pm_start_%u = ", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ";\n");
-        fprintf(out, "        int64_t _xr_pc_end_%u = ", v->id);
+        fprintf(out, "        int64_t _xr_pm_end_%u = ", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, ";\n");
-        fprintf(out, "        int64_t _xr_pc_workers_%u = ", v->id);
+        fprintf(out, "        int64_t _xr_pm_workers_%u = ", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
         fprintf(out, ";\n");
         if (data->inclusive_end) {
-            fprintf(out, "        bool _xr_pc_serial_max_%u = _xr_pc_end_%u == INT64_MAX;\n", v->id,
+            fprintf(out, "        bool _xr_pm_serial_max_%u = _xr_pm_end_%u == INT64_MAX;\n", v->id,
                     v->id);
             fprintf(out,
-                    "        int64_t _xr_pc_end_excl_%u = _xr_pc_serial_max_%u ? _xr_pc_end_%u : "
-                    "_xr_pc_end_%u + 1;\n",
+                    "        int64_t _xr_pm_end_excl_%u = _xr_pm_serial_max_%u ? _xr_pm_end_%u : "
+                    "_xr_pm_end_%u + 1;\n",
                     v->id, v->id, v->id, v->id);
         } else {
-            fprintf(out, "        bool _xr_pc_serial_max_%u = false;\n", v->id);
-            fprintf(out, "        int64_t _xr_pc_end_excl_%u = _xr_pc_end_%u;\n", v->id, v->id);
+            fprintf(out, "        bool _xr_pm_serial_max_%u = false;\n", v->id);
+            fprintf(out, "        int64_t _xr_pm_end_excl_%u = _xr_pm_end_%u;\n", v->id, v->id);
         }
         fprintf(out,
-                "        int64_t _xr_pc_count_%u = _xr_pc_serial_max_%u ? (_xr_pc_end_%u >= "
-                "_xr_pc_start_%u ? _xr_pc_end_%u - _xr_pc_start_%u + 1 : 0) : (_xr_pc_end_excl_%u "
-                "> _xr_pc_start_%u ? _xr_pc_end_excl_%u - _xr_pc_start_%u : 0);\n",
+                "        int64_t _xr_pm_count_%u = _xr_pm_serial_max_%u ? (_xr_pm_end_%u >= "
+                "_xr_pm_start_%u ? _xr_pm_end_%u - _xr_pm_start_%u + 1 : 0) : (_xr_pm_end_excl_%u "
+                "> _xr_pm_start_%u ? _xr_pm_end_excl_%u - _xr_pm_start_%u : 0);\n",
                 v->id, v->id, v->id, v->id, v->id, v->id, v->id, v->id, v->id, v->id);
 
         uint16_t lane_count = data->lane_count;
@@ -10241,28 +10241,28 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                                                               CG_ARRAY_STORAGE_MUTABLE);
             bool typed_full_overwrite = have_lane_info && lane_info.elem_name &&
                                         strcmp(lane_info.elem_name, "XR_ELEM_ANY") != 0;
-            fprintf(out, "        XrValue _xr_pc_result_%u_%u = ", v->id, (unsigned) i);
+            fprintf(out, "        XrValue _xr_pm_result_%u_%u = ", v->id, (unsigned) i);
             emit_value_as_rep_ctx(ctx, out, v->args[4 + i], XR_REP_TAGGED);
             fprintf(out, ";\n");
             fprintf(
                 out,
-                "        xrt_array_t *_xr_pc_out_%u_%u = (xrt_array_t*)_xr_pc_result_%u_%u.ptr;\n",
+                "        xrt_array_t *_xr_pm_out_%u_%u = (xrt_array_t*)_xr_pm_result_%u_%u.ptr;\n",
                 v->id, (unsigned) i, v->id, (unsigned) i);
             if (typed_full_overwrite) {
                 fprintf(out,
-                        "        if (_xr_pc_out_%u_%u->data_storage == XR_ARRAY_DATA_BORROWED) "
+                        "        if (_xr_pm_out_%u_%u->data_storage == XR_ARRAY_DATA_BORROWED) "
                         "abort();\n",
                         v->id, (unsigned) i);
                 fprintf(out,
-                        "        if (_xr_pc_count_%u > _xr_pc_out_%u_%u->capacity) "
-                        "xrt_array_reserve_raw(_xr_pc_out_%u_%u, _xr_pc_count_%u);\n",
+                        "        if (_xr_pm_count_%u > _xr_pm_out_%u_%u->capacity) "
+                        "xrt_array_reserve_raw(_xr_pm_out_%u_%u, _xr_pm_count_%u);\n",
                         v->id, v->id, (unsigned) i, v->id, (unsigned) i, v->id);
-                fprintf(out, "        _xr_pc_out_%u_%u->length = _xr_pc_count_%u;\n", v->id,
+                fprintf(out, "        _xr_pm_out_%u_%u->length = _xr_pm_count_%u;\n", v->id,
                         (unsigned) i, v->id);
             } else {
                 fprintf(out,
-                        "        xrt_array_resize_value(_xr_pc_result_%u_%u, "
-                        "XR_FROM_INT(_xr_pc_count_%u), ",
+                        "        xrt_array_resize_value(_xr_pm_result_%u_%u, "
+                        "XR_FROM_INT(_xr_pm_count_%u), ",
                         v->id, (unsigned) i, v->id);
                 xicgen_emit_par_map_zero_value(out, have_lane_info ? &lane_info : NULL);
                 fprintf(out, ");\n");
@@ -10273,51 +10273,51 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         char closure_name[64];
         closure_name[0] = '\0';
         if (scoped_closure) {
-            snprintf(closure_name, sizeof(closure_name), "_xr_pc_closure_%u", v->id);
+            snprintf(closure_name, sizeof(closure_name), "_xr_pm_closure_%u", v->id);
             uint16_t ncap = body ? body->ncaptures : 0;
             fprintf(out,
                     "        union { XrObjHeader hdr; long double align; unsigned char "
                     "bytes[sizeof(XrObjHeader) + sizeof(xrt_closure_t) + %u * sizeof(XrValue)]; } "
-                    "_xr_pc_closure_storage_%u;\n",
+                    "_xr_pm_closure_storage_%u;\n",
                     ncap, v->id);
             fprintf(out,
-                    "        memset(&_xr_pc_closure_storage_%u, 0, "
-                    "sizeof(_xr_pc_closure_storage_%u));\n",
+                    "        memset(&_xr_pm_closure_storage_%u, 0, "
+                    "sizeof(_xr_pm_closure_storage_%u));\n",
                     v->id, v->id);
             fprintf(out,
-                    "        XrObjHeader *_xr_pc_closure_hdr_%u = (XrObjHeader "
-                    "*)_xr_pc_closure_storage_%u.bytes;\n",
+                    "        XrObjHeader *_xr_pm_closure_hdr_%u = (XrObjHeader "
+                    "*)_xr_pm_closure_storage_%u.bytes;\n",
                     v->id, v->id);
-            fprintf(out, "        _xr_pc_closure_hdr_%u->extra = XR_OBJ_STORAGE_STACK;\n", v->id);
+            fprintf(out, "        _xr_pm_closure_hdr_%u->extra = XR_OBJ_STORAGE_STACK;\n", v->id);
             fprintf(out,
-                    "        xrt_closure_t *_xr_pc_closure_%u = (xrt_closure_t *)((char "
-                    "*)_xr_pc_closure_hdr_%u + sizeof(XrObjHeader));\n",
+                    "        xrt_closure_t *_xr_pm_closure_%u = (xrt_closure_t *)((char "
+                    "*)_xr_pm_closure_hdr_%u + sizeof(XrObjHeader));\n",
                     v->id, v->id);
-            fprintf(out, "        xrt_closure_init(_xr_pc_closure_%u, (void*)", v->id);
+            fprintf(out, "        xrt_closure_init(_xr_pm_closure_%u, (void*)", v->id);
             emit_closure_entry_pointer(ctx, out, prefix, body);
             fprintf(out, ", %u);\n", ncap);
-            fprintf(out, "        { xrt_closure_t *_c = _xr_pc_closure_%u; ", v->id);
+            fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", v->id);
             emit_closure_upval_initializers(ctx, out, f, v->args[3], false);
             fprintf(out, "}\n");
         }
 
         char iter_name[64];
-        snprintf(iter_name, sizeof(iter_name), "_xr_pc_i_%u", v->id);
-        fprintf(out, "        if (_xr_pc_count_%u > 0) {\n", v->id);
-        fprintf(out, "            if (_xr_pc_serial_max_%u) {\n", v->id);
+        snprintf(iter_name, sizeof(iter_name), "_xr_pm_i_%u", v->id);
+        fprintf(out, "        if (_xr_pm_count_%u > 0) {\n", v->id);
+        fprintf(out, "            if (_xr_pm_serial_max_%u) {\n", v->id);
         if (range_body) {
             fprintf(out, "                abort();\n");
         } else {
-            fprintf(out, "                for (int64_t %s = _xr_pc_start_%u; ; %s++) {\n",
+            fprintf(out, "                for (int64_t %s = _xr_pm_start_%u; ; %s++) {\n",
                     iter_name, v->id, iter_name);
             xicgen_emit_par_for_body_call(ctx, out, f, body, v->args[3], prefix, iter_name, "0",
                                           scoped_closure ? closure_name : NULL);
-            fprintf(out, "                    if (%s == _xr_pc_end_%u) break;\n", iter_name, v->id);
+            fprintf(out, "                    if (%s == _xr_pm_end_%u) break;\n", iter_name, v->id);
             fprintf(out, "                }\n");
         }
         fprintf(out,
-                "            } else if (!xr_aot_parallel_for_range_i64(_xr_pc_start_%u, "
-                "_xr_pc_end_excl_%u, _xr_pc_workers_%u, (XrAotParForRangeI64Fn)",
+                "            } else if (!xr_aot_parallel_for_range_i64(_xr_pm_start_%u, "
+                "_xr_pm_end_excl_%u, _xr_pm_workers_%u, (XrAotParForRangeI64Fn)",
                 v->id, v->id, v->id);
         xicgen_emit_par_map_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
@@ -10331,9 +10331,9 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         if (data->into_result)
             fprintf(out, "XR_NULL_VAL");
         else if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR)
-            fprintf(out, "_xr_pc_out_%u_0", v->id);
+            fprintf(out, "_xr_pm_out_%u_0", v->id);
         else
-            fprintf(out, "_xr_pc_result_%u_0", v->id);
+            fprintf(out, "_xr_pm_result_%u_0", v->id);
         fprintf(out, ";\n");
         fprintf(out, "    })");
         return;
@@ -10348,94 +10348,94 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (!body || body->nparams != 2 ||
         (body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY &&
          !xicgen_par_map_validate_scalar_func(ctx, body, have_info ? &info : NULL)) ||
-        !xicgen_par_reduce_validate_nothrow_body(ctx, body, "collect body")) {
+        !xicgen_par_reduce_validate_nothrow_body(ctx, body, "map body")) {
         xicgen_par_reduce_emit_abort_expr(ctx, out);
         return;
     }
 
     XrRep storage_rep = xicgen_value_c_storage_rep(ctx, f, v);
     fprintf(out, "({\n");
-    fprintf(out, "        int64_t _xr_pc_start_%u = ", v->id);
+    fprintf(out, "        int64_t _xr_pm_start_%u = ", v->id);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ";\n");
-    fprintf(out, "        int64_t _xr_pc_end_%u = ", v->id);
+    fprintf(out, "        int64_t _xr_pm_end_%u = ", v->id);
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, ";\n");
-    fprintf(out, "        int64_t _xr_pc_workers_%u = ", v->id);
+    fprintf(out, "        int64_t _xr_pm_workers_%u = ", v->id);
     emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
     fprintf(out, ";\n");
     if (data->inclusive_end) {
-        fprintf(out, "        bool _xr_pc_serial_max_%u = _xr_pc_end_%u == INT64_MAX;\n", v->id,
+        fprintf(out, "        bool _xr_pm_serial_max_%u = _xr_pm_end_%u == INT64_MAX;\n", v->id,
                 v->id);
         fprintf(out,
-                "        int64_t _xr_pc_end_excl_%u = _xr_pc_serial_max_%u ? _xr_pc_end_%u : "
-                "_xr_pc_end_%u + 1;\n",
+                "        int64_t _xr_pm_end_excl_%u = _xr_pm_serial_max_%u ? _xr_pm_end_%u : "
+                "_xr_pm_end_%u + 1;\n",
                 v->id, v->id, v->id, v->id);
     } else {
-        fprintf(out, "        bool _xr_pc_serial_max_%u = false;\n", v->id);
-        fprintf(out, "        int64_t _xr_pc_end_excl_%u = _xr_pc_end_%u;\n", v->id, v->id);
+        fprintf(out, "        bool _xr_pm_serial_max_%u = false;\n", v->id);
+        fprintf(out, "        int64_t _xr_pm_end_excl_%u = _xr_pm_end_%u;\n", v->id, v->id);
     }
     fprintf(out,
-            "        int64_t _xr_pc_count_%u = _xr_pc_serial_max_%u ? (_xr_pc_end_%u >= "
-            "_xr_pc_start_%u ? _xr_pc_end_%u - _xr_pc_start_%u + 1 : 0) : (_xr_pc_end_excl_%u > "
-            "_xr_pc_start_%u ? _xr_pc_end_excl_%u - _xr_pc_start_%u : 0);\n",
+            "        int64_t _xr_pm_count_%u = _xr_pm_serial_max_%u ? (_xr_pm_end_%u >= "
+            "_xr_pm_start_%u ? _xr_pm_end_%u - _xr_pm_start_%u + 1 : 0) : (_xr_pm_end_excl_%u > "
+            "_xr_pm_start_%u ? _xr_pm_end_excl_%u - _xr_pm_start_%u : 0);\n",
             v->id, v->id, v->id, v->id, v->id, v->id, v->id, v->id, v->id, v->id);
     if (into_result) {
-        fprintf(out, "        XrValue _xr_pc_result_%u = ", v->id);
+        fprintf(out, "        XrValue _xr_pm_result_%u = ", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[4], XR_REP_TAGGED);
         fprintf(out, ";\n");
-        fprintf(out, "        xrt_array_t *_xr_pc_out_%u = (xrt_array_t*)_xr_pc_result_%u.ptr;\n",
+        fprintf(out, "        xrt_array_t *_xr_pm_out_%u = (xrt_array_t*)_xr_pm_result_%u.ptr;\n",
                 v->id, v->id);
         if (typed_full_overwrite) {
             fprintf(out,
-                    "        if (_xr_pc_out_%u->data_storage == XR_ARRAY_DATA_BORROWED) abort();\n",
+                    "        if (_xr_pm_out_%u->data_storage == XR_ARRAY_DATA_BORROWED) abort();\n",
                     v->id);
             fprintf(out,
-                    "        if (_xr_pc_count_%u > _xr_pc_out_%u->capacity) "
-                    "xrt_array_reserve_raw(_xr_pc_out_%u, _xr_pc_count_%u);\n",
+                    "        if (_xr_pm_count_%u > _xr_pm_out_%u->capacity) "
+                    "xrt_array_reserve_raw(_xr_pm_out_%u, _xr_pm_count_%u);\n",
                     v->id, v->id, v->id, v->id);
-            fprintf(out, "        _xr_pc_out_%u->length = _xr_pc_count_%u;\n", v->id, v->id);
+            fprintf(out, "        _xr_pm_out_%u->length = _xr_pm_count_%u;\n", v->id, v->id);
         } else {
             fprintf(
                 out,
-                "        xrt_array_resize_value(_xr_pc_result_%u, XR_FROM_INT(_xr_pc_count_%u), ",
+                "        xrt_array_resize_value(_xr_pm_result_%u, XR_FROM_INT(_xr_pm_count_%u), ",
                 v->id, v->id);
             xicgen_emit_par_map_zero_value(out, have_info ? &info : NULL);
             fprintf(out, ");\n");
         }
     } else if (storage_rep == XR_REP_PTR) {
-        fprintf(out, "        xrt_array_t *_xr_pc_out_%u = ", v->id);
+        fprintf(out, "        xrt_array_t *_xr_pm_out_%u = ", v->id);
         if (typed_full_overwrite)
-            fprintf(out, "xrt_array_new_typed_uninit_ptr(_xr_pc_count_%u, %s)", v->id,
+            fprintf(out, "xrt_array_new_typed_uninit_ptr(_xr_pm_count_%u, %s)", v->id,
                     info.elem_name);
         else if (have_info)
-            fprintf(out, "xrt_array_new_typed_ptr(_xr_pc_count_%u, %s)", v->id, info.elem_name);
+            fprintf(out, "xrt_array_new_typed_ptr(_xr_pm_count_%u, %s)", v->id, info.elem_name);
         else
-            fprintf(out, "(xrt_array_t*)xrt_array_new(_xr_pc_count_%u).ptr", v->id);
+            fprintf(out, "(xrt_array_t*)xrt_array_new(_xr_pm_count_%u).ptr", v->id);
         fprintf(out, ";\n");
         if (typed_full_overwrite)
-            fprintf(out, "        _xr_pc_out_%u->length = _xr_pc_count_%u;\n", v->id, v->id);
-        fprintf(out, "        XrValue _xr_pc_result_%u = xr_mkptr(_xr_pc_out_%u, XR_TAG_ARRAY);\n",
+            fprintf(out, "        _xr_pm_out_%u->length = _xr_pm_count_%u;\n", v->id, v->id);
+        fprintf(out, "        XrValue _xr_pm_result_%u = xr_mkptr(_xr_pm_out_%u, XR_TAG_ARRAY);\n",
                 v->id, v->id);
     } else {
-        fprintf(out, "        XrValue _xr_pc_result_%u = ", v->id);
+        fprintf(out, "        XrValue _xr_pm_result_%u = ", v->id);
         if (typed_full_overwrite)
-            fprintf(out, "xrt_array_new_typed_uninit(_xr_pc_count_%u, %s)", v->id, info.elem_name);
+            fprintf(out, "xrt_array_new_typed_uninit(_xr_pm_count_%u, %s)", v->id, info.elem_name);
         else if (have_info)
-            fprintf(out, "xrt_array_new_typed(_xr_pc_count_%u, %s)", v->id, info.elem_name);
+            fprintf(out, "xrt_array_new_typed(_xr_pm_count_%u, %s)", v->id, info.elem_name);
         else
-            fprintf(out, "xrt_array_new(_xr_pc_count_%u)", v->id);
+            fprintf(out, "xrt_array_new(_xr_pm_count_%u)", v->id);
         fprintf(out, ";\n");
-        fprintf(out, "        xrt_array_t *_xr_pc_out_%u = (xrt_array_t*)_xr_pc_result_%u.ptr;\n",
+        fprintf(out, "        xrt_array_t *_xr_pm_out_%u = (xrt_array_t*)_xr_pm_result_%u.ptr;\n",
                 v->id, v->id);
         if (typed_full_overwrite)
-            fprintf(out, "        _xr_pc_out_%u->length = _xr_pc_count_%u;\n", v->id, v->id);
+            fprintf(out, "        _xr_pm_out_%u->length = _xr_pm_count_%u;\n", v->id, v->id);
     }
 
     char result_value_name[64];
     char start_name[64];
-    snprintf(result_value_name, sizeof(result_value_name), "_xr_pc_result_%u", v->id);
-    snprintf(start_name, sizeof(start_name), "_xr_pc_start_%u", v->id);
+    snprintf(result_value_name, sizeof(result_value_name), "_xr_pm_result_%u", v->id);
+    snprintf(start_name, sizeof(start_name), "_xr_pm_start_%u", v->id);
     xicgen_emit_par_map_scoped_closure(ctx, out, f, v, body, v->args[3], prefix, result_value_name,
                                        start_name);
 
@@ -10443,34 +10443,34 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     char iter_name[64];
     char idx_name[64];
     char closure_name[64];
-    snprintf(out_ptr_name, sizeof(out_ptr_name), "_xr_pc_out_%u", v->id);
-    snprintf(iter_name, sizeof(iter_name), "_xr_pc_i_%u", v->id);
-    snprintf(idx_name, sizeof(idx_name), "_xr_pc_idx_%u", v->id);
-    snprintf(closure_name, sizeof(closure_name), "_xr_pc_closure_%u", v->id);
+    snprintf(out_ptr_name, sizeof(out_ptr_name), "_xr_pm_out_%u", v->id);
+    snprintf(iter_name, sizeof(iter_name), "_xr_pm_i_%u", v->id);
+    snprintf(idx_name, sizeof(idx_name), "_xr_pm_idx_%u", v->id);
+    snprintf(closure_name, sizeof(closure_name), "_xr_pm_closure_%u", v->id);
 
-    fprintf(out, "        if (_xr_pc_count_%u > 0) {\n", v->id);
-    fprintf(out, "            if (_xr_pc_serial_max_%u) {\n", v->id);
-    fprintf(out, "                for (int64_t %s = _xr_pc_start_%u; ; %s++) {\n", iter_name, v->id,
+    fprintf(out, "        if (_xr_pm_count_%u > 0) {\n", v->id);
+    fprintf(out, "            if (_xr_pm_serial_max_%u) {\n", v->id);
+    fprintf(out, "                for (int64_t %s = _xr_pm_start_%u; ; %s++) {\n", iter_name, v->id,
             iter_name);
-    fprintf(out, "            int64_t %s = %s - _xr_pc_start_%u;\n", idx_name, iter_name, v->id);
+    fprintf(out, "            int64_t %s = %s - _xr_pm_start_%u;\n", idx_name, iter_name, v->id);
     xicgen_par_map_emit_store(ctx, out, f, v, body, prefix, iter_name, "0", closure_name,
                               out_ptr_name, idx_name, native_result, have_info ? &info : NULL);
-    fprintf(out, "                    if (%s == _xr_pc_end_%u) break;\n", iter_name, v->id);
+    fprintf(out, "                    if (%s == _xr_pm_end_%u) break;\n", iter_name, v->id);
     fprintf(out, "                }\n");
     fprintf(out,
-            "            } else if (!xr_aot_parallel_for_range_i64(_xr_pc_start_%u, "
-            "_xr_pc_end_excl_%u, _xr_pc_workers_%u, (XrAotParForRangeI64Fn)",
+            "            } else if (!xr_aot_parallel_for_range_i64(_xr_pm_start_%u, "
+            "_xr_pm_end_excl_%u, _xr_pm_workers_%u, (XrAotParForRangeI64Fn)",
             v->id, v->id, v->id);
     xicgen_emit_par_map_range_wrapper_name(ctx, out, f, v, prefix);
-    fprintf(out, ", _xr_pc_closure_%u)) abort();\n", v->id);
+    fprintf(out, ", _xr_pm_closure_%u)) abort();\n", v->id);
     fprintf(out, "        }\n");
     fprintf(out, "        ");
     if (into_result)
         fprintf(out, "XR_NULL_VAL");
     else if (storage_rep == XR_REP_PTR)
-        fprintf(out, "_xr_pc_out_%u", v->id);
+        fprintf(out, "_xr_pm_out_%u", v->id);
     else
-        fprintf(out, "_xr_pc_result_%u", v->id);
+        fprintf(out, "_xr_pm_result_%u", v->id);
     fprintf(out, ";\n");
     fprintf(out, "    })");
 }
