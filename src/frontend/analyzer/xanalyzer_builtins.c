@@ -641,37 +641,40 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 // These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
-    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false},
-    {"stats", "(): Json", "Get coroutine statistics", true, true, false, false},
+    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false, true},
+    {"stats", "(): Json", "Get coroutine statistics", true, true, false, false, false},
     {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true, false,
-     false},
-    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true, false, false},
-    {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true,
      false, false},
-    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true, false, false},
+    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true, false, false,
+     false},
+    {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true,
+     false, false, false},
+    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true, false, false,
+     false},
     {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true, false,
+     false, false},
+    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false, false,
      false},
-    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false, false},
-    {"lockThread", "(): ()", "Lock current thread", true, true, false, false},
-    {"unlockThread", "(): ()", "Unlock current thread", true, true, false, false},
-    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false, false},
+    {"lockThread", "(): ()", "Lock current thread", true, true, false, false, false},
+    {"unlockThread", "(): ()", "Unlock current thread", true, true, false, false, false},
+    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false, false, false},
     {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true, false,
-     false},
-    {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false,
+     false, false},
+    {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false, false,
      false},
     {"monitor", "(name: string): Channel", "Monitor named coroutine, returns Channel", true, true,
-     false, false},
-    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true, false, false},
-    {"self", "(): string?", "Get current coroutine name", true, true, false, false},
+     false, false, false},
+    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true, false, false, false},
+    {"self", "(): string?", "Get current coroutine name", true, true, false, false, false},
     {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true, false,
-     false},
+     false, false},
 };
 #define RT_CORO_FUNCTION_COUNT                                                                     \
     ((int) (sizeof(g_rt_coro_functions) / sizeof(g_rt_coro_functions[0])))
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
-    {"submit", "(fn: function): Json", "Submit task to pool", true, false, false, false},
-    {"close", "(): ()", "Close the pool", true, false, false, false},
+    {"submit", "(fn: function): Json", "Submit task to pool", true, false, false, false, false},
+    {"close", "(): ()", "Close the pool", true, false, false, false, false},
 };
 #define RT_COROPOOL_FUNCTION_COUNT                                                                 \
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
@@ -730,30 +733,33 @@ static bool xa_builtin_member_public(const XaBuiltinMember *member) {
     return member && !member->is_internal;
 }
 
-const char *xa_builtin_get_module_func_signature(const char *module_name, const char *func_name) {
+static const XaBuiltinMember *
+xa_builtin_find_module_function(const char *module_name, const char *func_name, bool public_only) {
     const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
     if (!mod || !func_name)
         return NULL;
     for (int i = 0; i < mod->function_count; i++) {
-        if (xa_builtin_member_public(&mod->functions[i]) &&
-            strcmp(mod->functions[i].name, func_name) == 0) {
-            return mod->functions[i].signature;
-        }
+        const XaBuiltinMember *member = &mod->functions[i];
+        if (strcmp(member->name, func_name) == 0 &&
+            (!public_only || xa_builtin_member_public(member)))
+            return member;
     }
     return NULL;
 }
 
+const char *xa_builtin_get_module_func_signature(const char *module_name, const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
+    return member ? member->signature : NULL;
+}
+
 const char *xa_builtin_get_module_func_doc(const char *module_name, const char *func_name) {
-    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
-    if (!mod || !func_name)
-        return NULL;
-    for (int i = 0; i < mod->function_count; i++) {
-        if (xa_builtin_member_public(&mod->functions[i]) &&
-            strcmp(mod->functions[i].name, func_name) == 0) {
-            return mod->functions[i].doc;
-        }
-    }
-    return NULL;
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
+    return member ? member->doc : NULL;
+}
+
+bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
+    return member && member->is_method && member->is_yieldable;
 }
 
 const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
