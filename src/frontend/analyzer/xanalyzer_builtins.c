@@ -969,7 +969,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
         type = xr_type_new_string(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_RUNE, 4) == 0) {
-        type = xr_type_new_char(NULL);
+        type = xr_type_new_rune(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
         type = xr_type_new_unit(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {

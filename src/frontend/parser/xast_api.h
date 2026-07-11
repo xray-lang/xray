@@ -25,7 +25,7 @@ XR_FUNC AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bi
 XR_FUNC AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int line);
 XR_FUNC AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, int line);
 XR_FUNC AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, int line);
-XR_FUNC AstNode *xr_ast_literal_char(XrCompilerSession *session, uint32_t value, int line);
+XR_FUNC AstNode *xr_ast_literal_rune(XrCompilerSession *session, uint32_t value, int line);
 XR_FUNC AstNode *xr_ast_literal_regex(XrCompilerSession *session, const char *pattern,
                                       const char *flags, int line);
 XR_FUNC AstNode *xr_ast_literal_null(XrCompilerSession *session, int line);

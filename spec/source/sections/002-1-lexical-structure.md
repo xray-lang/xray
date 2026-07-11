@@ -112,13 +112,13 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.6 类型名（保留）
 
-`int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `char`
+`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`float` `float32` `float64` `bool` `string` `rune`
 
 `unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
+> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
 > 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
 
 #### 1.5.7 字面量关键字
@@ -212,7 +212,7 @@ null
 
 #### 1.6.5 字符串字面量
 
-xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `char` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
+xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `rune` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
 
 ##### 普通字符串（双引号）
 
@@ -230,7 +230,7 @@ Interpolation ::= '${' Expression '}'
 
 - 字符串可跨行；行结尾包含在字符串中。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
-- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / char 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
+- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / rune 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
 ```xray
 "hello"
@@ -259,23 +259,23 @@ r"C:\path\to\file"          // 字面量包含两个反斜杠
 r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
 ```
 
-#### 1.6.6 `char` 字面量
+#### 1.6.6 `rune` 字面量
 
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
 
-- `'a'` 的类型是 `char`，表示一个 Unicode scalar value。
+- `'a'` 的类型是 `rune`，表示一个 Unicode scalar value。
 - 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
 - 字面量必须恰好包含一个 scalar；`''`、`'ab'`、`'🇨🇳'`、`'é'` 均编译失败。
 - 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
-- char 字面量不支持 `${...}` 插值。
+- rune 字面量不支持 `${...}` 插值。
 
 ```xray
-var a: char = 'a'
-var zh: char = '中'
-var smile: char = '\u{1F600}'
+var a: rune = 'a'
+var zh: rune = '中'
+var smile: rune = '\u{1F600}'
 ```
 
 ##### 反引号字符串（非法）
@@ -500,13 +500,13 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `char`
+`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`float` `float32` `float64` `bool` `string` `rune`
 
 In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
+> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
 > They may be locally shadowed by user types of the same name, but typically need no import.
 
 #### 1.5.7 Literal Keywords
@@ -600,7 +600,7 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `char` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `rune` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
 
 ##### Plain strings (double quotes)
 
@@ -618,7 +618,7 @@ Interpolation ::= '${' Expression '}'
 
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
-- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / char literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
 ```xray
 "hello"
@@ -647,23 +647,23 @@ r"C:\path\to\file"          // literal contains two backslashes
 r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
 ```
 
-#### 1.6.6 `char` Literals
+#### 1.6.6 `rune` Literals
 
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
 
-- `'a'` has type `char` and represents one Unicode scalar value.
+- `'a'` has type `rune` and represents one Unicode scalar value.
 - The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
 - A literal must contain exactly one scalar; `''`, `'ab'`, `'🇨🇳'`, and `'é'` are compile errors.
 - Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
 - Char literals do not support `${...}` interpolation.
 
 ```xray
-var a: char = 'a'
-var zh: char = '中'
-var smile: char = '\u{1F600}'
+var a: rune = 'a'
+var zh: rune = '中'
+var smile: rune = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)

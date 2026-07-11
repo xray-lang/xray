@@ -13,8 +13,8 @@ order: 025
 | **AOT** | Ahead-of-Time 编译：构建时预编译为机器码 |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
-| **Bytes** | 字节缓冲类型（见 §2.4.5） |
-| **char** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `uint32` 别名（见 §2.3.5） |
+| **Array<byte>** | 字节缓冲类型（见 §2.4.5） |
+| **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `uint32` 别名（见 §2.3.5） |
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
@@ -57,8 +57,8 @@ order: 025
 | **AOT** | Ahead-of-Time compilation: precompiles to machine code at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
-| **Bytes** | Byte buffer type (see §2.4.5) |
-| **char** | Primitive type for one Unicode scalar value; not numeric and not an alias of `uint32` (see §2.3.5) |
+| **Array<byte>** | Byte buffer type (see §2.4.5) |
+| **rune** | Primitive type for one Unicode scalar value; not numeric and not an alias of `uint32` (see §2.3.5) |
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
 | **coroutine** | User-space, suspendable/resumable execution flow |

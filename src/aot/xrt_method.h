@@ -108,19 +108,19 @@ static inline XrValue xrt_rune_to_string(uint32_t cp) {
     return out;
 }
 
-static inline int xrt_char_is_letter(uint32_t cp) {
+static inline int xrt_rune_is_letter(uint32_t cp) {
     return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
 }
 
-static inline int xrt_char_is_number(uint32_t cp) {
+static inline int xrt_rune_is_number(uint32_t cp) {
     return cp >= '0' && cp <= '9';
 }
 
-static inline int xrt_char_is_alnum(uint32_t cp) {
-    return xrt_char_is_letter(cp) || xrt_char_is_number(cp);
+static inline int xrt_rune_is_alnum(uint32_t cp) {
+    return xrt_rune_is_letter(cp) || xrt_rune_is_number(cp);
 }
 
-static inline int xrt_char_is_whitespace(uint32_t cp) {
+static inline int xrt_rune_is_whitespace(uint32_t cp) {
     return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == '\v';
 }
 
@@ -306,7 +306,7 @@ static inline XrValue xrt_json_collect(XrValue recv, uint8_t kind) {
 /* String 0-arg method dispatch. */
 static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv, int sym) {
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
-        return XR_FROM_INT(xrt_utf8_scalar_count(s, slen));
+        return XR_FROM_INT(xr_str_rune_len(recv));
     if (sym == XRT_SYM_IS_EMPTY)
         return XR_FROM_BOOL(slen == 0);
     if (sym == XRT_SYM_TOSTRING)
@@ -608,13 +608,13 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_ORD)
             return XR_FROM_INT((int64_t) cp);
         if (sym == XRT_SYM_IS_LETTER)
-            return XR_FROM_BOOL(xrt_char_is_letter(cp));
+            return XR_FROM_BOOL(xrt_rune_is_letter(cp));
         if (sym == XRT_SYM_IS_NUMBER)
-            return XR_FROM_BOOL(xrt_char_is_number(cp));
+            return XR_FROM_BOOL(xrt_rune_is_number(cp));
         if (sym == XRT_SYM_IS_ALNUM)
-            return XR_FROM_BOOL(xrt_char_is_alnum(cp));
+            return XR_FROM_BOOL(xrt_rune_is_alnum(cp));
         if (sym == XRT_SYM_IS_WHITESPACE)
-            return XR_FROM_BOOL(xrt_char_is_whitespace(cp));
+            return XR_FROM_BOOL(xrt_rune_is_whitespace(cp));
     }
     if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
@@ -679,7 +679,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return XR_FROM_BOOL(xr_string_core_ends_with(s, (size_t) slen, p, plen));
     }
     if (sym == XRT_SYM_CHARAT && arg0.tag == XR_TAG_I64) {
-        XrStringCoreSlice slice = xr_string_core_utf8_char_slice_at(s, (size_t) slen, arg0.i);
+        XrStringCoreSlice slice = xr_string_core_utf8_rune_slice_at(s, (size_t) slen, arg0.i);
         return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_CONCAT && XR_IS_STR(arg0)) {

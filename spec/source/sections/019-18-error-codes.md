@@ -123,7 +123,7 @@ order: 019
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 数组 / 字符串 / Bytes 越界 |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 数组 / 字符串 / Array<byte> 越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 
 #### 内存与栈 (E044x)
@@ -329,7 +329,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | array / string / Bytes out of bounds |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | array / string / Array<byte> out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map key not found |
 
 #### Memory and stack (E044x)

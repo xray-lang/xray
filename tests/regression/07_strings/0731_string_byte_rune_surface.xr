@@ -1,0 +1,20 @@
+var text = "A中🙂"
+assert_eq(len(text), 3)
+assert_eq(len(text.bytes()), 8)
+
+var bytes = b"A中"
+assert_eq(typeName(bytes), "[byte; 4]")
+assert_eq(len(bytes), 4)
+assert_eq(bytes[0], 65)
+
+var cstr = c"ok"
+assert_eq(len(cstr), 3)
+assert_eq(cstr[2], 0)
+
+fn sliceLen() -> int {
+    var owned: Array<byte> = [1, 2, 3]
+    var borrowed: Slice<byte> = owned[0:2]
+    return len(borrowed)
+}
+
+assert_eq(sliceLen(), 2)

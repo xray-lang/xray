@@ -148,7 +148,7 @@ XrType *xr_type_new_bool(XrVMRuntime *X) {
     (void) X;
     return &g_type_bool;
 }
-XrType *xr_type_new_char(XrVMRuntime *X) {
+XrType *xr_type_new_rune(XrVMRuntime *X) {
     (void) X;
     return &g_type_rune;
 }

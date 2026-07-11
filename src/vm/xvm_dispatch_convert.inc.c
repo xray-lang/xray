@@ -151,6 +151,7 @@ vmcase(OP_TYPENAME) {
         val = R(b);
     }
     const char *type_name = NULL;
+    char type_name_buf[64];
     // For payload variant constructors, return the parent enum name.
     if (XR_IS_ENUM_CTOR(val)) {
         XrEnumCtor *ev = (XrEnumCtor *) XR_TO_PTR(val);
@@ -166,9 +167,34 @@ vmcase(OP_TYPENAME) {
     }
     // For struct refs, extract class pointer from struct area header
     if (type_name == NULL && XR_IS_SPAN_REF(val)) {
-        type_name = "Span";
+        type_name = "Slice";
     }
-    if (type_name == NULL && val.tag == XR_TAG_AGG_REF && val.ptr) {
+    if (type_name == NULL && XR_IS_ARRAY_REF(val)) {
+        const char *elem_name = "unknown";
+        switch (XR_ARRAY_REF_ELEM_TYPE(val)) {
+            case XR_ELEM_U8:
+                elem_name = "byte";
+                break;
+            case XR_ELEM_I64:
+                elem_name = "int";
+                break;
+            case XR_ELEM_F64:
+                elem_name = "float";
+                break;
+            case XR_ELEM_BOOL:
+                elem_name = "bool";
+                break;
+            case XR_ELEM_RUNE:
+                elem_name = "rune";
+                break;
+            default:
+                break;
+        }
+        snprintf(type_name_buf, sizeof(type_name_buf), "[%s;%u]", elem_name,
+                 (unsigned) XR_ARRAY_REF_ELEM_COUNT(val));
+        type_name = type_name_buf;
+    }
+    if (type_name == NULL && val.tag == XR_TAG_AGG_REF && !XR_IS_ARRAY_REF(val) && val.ptr) {
         XrClass *cls = *(XrClass **) val.ptr;
         if (cls && cls->name)
             type_name = cls->name;

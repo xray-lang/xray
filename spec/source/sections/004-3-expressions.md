@@ -62,8 +62,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 `unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `RawPtr<T>` / `RawMut<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
@@ -81,7 +81,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
@@ -115,7 +115,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
-- `char` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
+- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
 
 #### 3.3.2 位运算
 
@@ -125,7 +125,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
 - `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
 - bool 不参与位运算（用 `&&` `||`）。
-- `char` 不参与位运算；需要码点时显式写 `int(c)`。
+- `rune` 不参与位运算；需要码点时显式写 `int(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -368,7 +368,7 @@ var obj = { users }              // shorthand
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 - 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
 
-#### Bytes `Bytes(...)`
+#### Array<byte> `Array<byte>(...)`
 
 详见 §2.4.5 与 §14.5。
 
@@ -421,12 +421,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // 返回 char
+str[i]                  // 返回 rune
 ```
 
 - `Array` 索引：`int`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
-- `string` 索引：按 Unicode scalar 下标访问，返回 `char`。
+- `string` 索引：按 Unicode scalar 下标访问，返回 `rune`。
 - 自定义类：通过 `operator[]` 重载。
 
 #### 切片
@@ -536,7 +536,7 @@ var m = Map<string, int>()
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<byte>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
@@ -555,7 +555,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
-- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / char 字面量。
+- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / rune 字面量。
 - 表达式类型必须可转为字符串（实现 `toString()` 或为基本类型）。
 
 ### 3.16 `yield` 语句
@@ -628,8 +628,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 `unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `RawPtr<T>` / `RawMut<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
@@ -647,7 +647,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
@@ -681,7 +681,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
-- `char` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
+- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -691,7 +691,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
 - `bool` does not participate in bitwise operations (use `&&` `||`).
-- `char` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
+- `rune` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
@@ -934,7 +934,7 @@ var obj = { users }              // shorthand
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 - Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
-#### Bytes `Bytes(...)`
+#### Array<byte> `Array<byte>(...)`
 
 See §2.4.5 and §14.5.
 
@@ -987,12 +987,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // returns char
+str[i]                  // returns rune
 ```
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: addresses Unicode scalar positions and returns `char`.
+- `string` indexing: addresses Unicode scalar positions and returns `rune`.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -1102,7 +1102,7 @@ var m = Map<string, int>()
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<byte>` / `StringBuilder`, etc.; also `TypeName(args)`).
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
@@ -1121,7 +1121,7 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / char literals.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / rune literals.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement

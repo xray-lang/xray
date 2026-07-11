@@ -198,7 +198,7 @@ XR_FUNC uint32_t xr_string_hash(const char *chars, size_t length);
 
 /* ========== String Methods ========== */
 
-XR_FUNC XrString *xr_string_char_at(XrVMRuntime *iso, XrString *str, xr_Integer index);
+XR_FUNC XrString *xr_string_rune_at(XrVMRuntime *iso, XrString *str, xr_Integer index);
 XR_FUNC XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start,
                                       xr_Integer end);
 XR_FUNC XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start,
@@ -238,10 +238,10 @@ XR_FUNC XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, struct Xr
 
 /* ========== Unicode / UTF-8 Support ========== */
 
-XR_FUNC size_t xr_string_char_length(XrString *str);
+XR_FUNC size_t xr_string_rune_length(XrString *str);
 
-XR_FUNC int32_t xr_string_char_code_at(XrString *str, size_t index);
-XR_FUNC XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t index);
+XR_FUNC int32_t xr_string_rune_code_at(XrString *str, size_t index);
+XR_FUNC XrString *xr_string_rune_at_unicode(XrVMRuntime *iso, XrString *str, size_t index);
 XR_FUNC XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t start,
                                               size_t end);
 XR_FUNC XrString *xr_string_from_codepoint(XrVMRuntime *iso, uint32_t codepoint);

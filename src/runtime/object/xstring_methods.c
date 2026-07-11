@@ -46,12 +46,12 @@ static XrValue m_char_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     XrString *str = str_self(self);
     xr_Integer index = XR_TO_INT(args[0]);
     if (index < 0) {
-        size_t char_len = xr_string_char_length(str);
+        size_t char_len = xr_string_rune_length(str);
         index = (xr_Integer) char_len + index;
         if (index < 0)
             return xr_null();
     }
-    XrString *result = xr_string_char_at_unicode(iso, str, (size_t) index);
+    XrString *result = xr_string_rune_at_unicode(iso, str, (size_t) index);
     return result ? xr_string_value(result) : xr_null();
 }
 
@@ -61,7 +61,7 @@ static XrValue m_codepoint_at(XrVMRuntime *iso, XrValue self, XrValue *args, int
         return xr_int(-1);
     XrString *str = str_self(self);
     size_t index = (size_t) XR_TO_INT(args[0]);
-    return xr_int(xr_string_char_code_at(str, index));
+    return xr_int(xr_string_rune_code_at(str, index));
 }
 
 static XrValue m_substring(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -438,12 +438,12 @@ static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     (void) argc;
     XrString *s = str_self(self);
     struct XrCoroutine *coro = xr_current_coro(iso);
-    size_t n = xr_string_char_length(s);
+    size_t n = xr_string_rune_length(s);
     XrArray *out = xr_array_with_capacity(coro, n > 0 ? (int) n : 1);
     if (!out)
         return xr_null();
     for (size_t i = 0; i < n; i++) {
-        int32_t cp = xr_string_char_code_at(s, i);
+        int32_t cp = xr_string_rune_code_at(s, i);
         XrTuple *pair = xr_tuple_new(coro, 2);
         if (!pair)
             return xr_null();

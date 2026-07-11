@@ -2261,15 +2261,15 @@ TEST(cgen_parallel_for_allows_atomic_i64_direct_body) {
 
 TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     const char *src = "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
+                      "    var seed = Array<byte>.withCapacity(4)\n"
                       "    unsafe {\n"
                       "        seed.push(1)\n"
                       "        seed.push(2)\n"
                       "    }\n"
                       "    shared src = seed\n"
-                      "    shared outs: Array<Bytes> = []\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
+                      "    shared outs: Array<Array<byte>> = []\n"
+                      "    outs.push(Array<byte>.withCapacity(8))\n"
+                      "    outs.push(Array<byte>.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
                       "        var out = outs.get(wid)\n"
                       "        out.resize(0)\n"
@@ -2284,14 +2284,15 @@ TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow safe Bytes append on Bytes values "
-                         "loaded from arrays");
+    assert(!had_error &&
+           "parallel for AOT body should allow safe Array<byte> append on Array<byte> values "
+           "loaded from arrays");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "safe Bytes append body should still use the AOT runtime executor");
+           "safe Array<byte> append body should still use the AOT runtime executor");
     assert(contains(code, "_src.guard != _dst") &&
            "appendFrom should expose the non-alias fast path");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
-           "borrow-only Array<Bytes>.get slot loads should not retain every item");
+           "borrow-only Array<Array<byte>>.get slot loads should not retain every item");
     assert(!contains(code, "xrt_method_1(") &&
            "appendFrom must not fall back to dynamic method dispatch");
     const char *body = strstr(code, "static XR_AINLINE void test_run_parallel_for_");
@@ -2299,49 +2300,110 @@ TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     assert(body != NULL && body_end != NULL && "parallel for body should be bounded");
     assert(count_between(body, body_end, "XR_TO_INT(v") == 0 &&
            count_between(body, body_end, "XR_FROM_INT(v") == 0 &&
-           "Array<Bytes>.get(wid) should keep the worker id as a native index");
+           "Array<Array<byte>>.get(wid) should keep the worker id as a native index");
 
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
-    const char *src = "enum FastResult<T> {\n"
-                      "    Ok(T),\n"
-                      "    Err(int)\n"
-                      "}\n"
-                      "fn writePrepared(src: in ByteSpan, out: Bytes) -> FastResult<int> {\n"
-                      "    var mark = len(out)\n"
-                      "    if (out.capacity < mark + 2) {\n"
-                      "        return FastResult.Err(-1)\n"
-                      "    }\n"
-                      "    out.appendFrom(src[0:2])\n"
-                      "    return FastResult.Ok(len(out) - mark)\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    shared outs: Array<Bytes> = []\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        var out = outs.get(0)\n"
-                      "        out.resize(0)\n"
-                      "        var result = writePrepared(src, out)\n"
-                      "        match (result) {\n"
-                      "            FastResult.Ok(written) -> {\n"
-                      "                assert(written == 2)\n"
-                      "            }\n"
-                      "            FastResult.Err(code) -> {\n"
-                      "                assert(code == 0)\n"
-                      "            }\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
+    const char *src =
+        "enum FastResult<T> {\n"
+        "    Ok(T),\n"
+        "    Err(int)\n"
+        "}\n"
+        "fn writePrepared(src: in Slice<byte>, out: Array<byte>) -> FastResult<int> {\n"
+        "    var mark = len(out)\n"
+        "    if (out.capacity < mark + 2) {\n"
+        "        return FastResult.Err(-1)\n"
+        "    }\n"
+        "    out.appendFrom(src[0:2])\n"
+        "    return FastResult.Ok(len(out) - mark)\n"
+        "}\n"
+        "fn run(n: int) {\n"
+        "    var seed = Array<byte>.withCapacity(4)\n"
+        "    unsafe {\n"
+        "        seed.push(1)\n"
+        "        seed.push(2)\n"
+        "    }\n"
+        "    shared src = seed\n"
+        "    shared outs: Array<Array<byte>> = []\n"
+        "    outs.push(Array<byte>.withCapacity(8))\n"
+        "    parallel for i in 0..n workers 2 {\n"
+        "        var out = outs.get(0)\n"
+        "        out.resize(0)\n"
+        "        var result = writePrepared(src, out)\n"
+        "        match (result) {\n"
+        "            FastResult.Ok(written) -> {\n"
+        "                assert(written == 2)\n"
+        "            }\n"
+        "            FastResult.Err(code) -> {\n"
+        "                assert(code == 0)\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "run(1)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for AOT body should allow prepared helper calls on Array<byte> "
+                         "loaded from arrays");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "prepared helper body should still use the AOT runtime executor");
+    assert(contains(code, "_src.guard != _dst") &&
+           "prepared helper should keep the inline Array<byte>+Slice<byte> append fast path");
+    assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
+           "borrow-only Array<Array<byte>>.get should survive through prepared helper calls");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
+    const char *src =
+        "enum FastResult<T> {\n"
+        "    Ok(T),\n"
+        "    Err(int)\n"
+        "}\n"
+        "fn appendRange(src: in Slice<byte>, out: Array<byte>, start: int, len: int) -> "
+        "FastResult<int> {\n"
+        "    var mark = len(out)\n"
+        "    if (start < 0 || len < 0 || start + len > len(src) || "
+        "out.capacity < mark + len) {\n"
+        "        return FastResult.Err(-1)\n"
+        "    }\n"
+        "    out.appendFrom(src[start:start + len])\n"
+        "    return FastResult.Ok(len)\n"
+        "}\n"
+        "fn run(n: int) {\n"
+        "    var seed = Array<byte>.withCapacity(4)\n"
+        "    unsafe {\n"
+        "        seed.push(1)\n"
+        "        seed.push(2)\n"
+        "    }\n"
+        "    shared src = seed\n"
+        "    shared outs: Array<Array<byte>> = []\n"
+        "    outs.push(Array<byte>.withCapacity(8))\n"
+        "    parallel for i in 0..n workers 2 {\n"
+        "        var out = outs.get(0)\n"
+        "        out.resize(0)\n"
+        "        var result = appendRange(src, out, 0, len(src))\n"
+        "        match (result) {\n"
+        "            FastResult.Ok(written) -> {\n"
+        "                assert(written == len(src))\n"
+        "            }\n"
+        "            FastResult.Err(code) -> {\n"
+        "                assert(code == 0)\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "run(1)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL);
@@ -2350,69 +2412,12 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
     assert(!had_error &&
-           "parallel for AOT body should allow prepared helper calls on Bytes loaded from arrays");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "_src.guard != _dst") &&
-           "prepared helper should keep the inline Bytes+ByteSpan append fast path");
-    assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
-           "borrow-only Array<Bytes>.get should survive through prepared helper calls");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
-    const char *src = "enum FastResult<T> {\n"
-                      "    Ok(T),\n"
-                      "    Err(int)\n"
-                      "}\n"
-                      "fn appendRange(src: in ByteSpan, out: Bytes, start: int, len: int) -> "
-                      "FastResult<int> {\n"
-                      "    var mark = len(out)\n"
-                      "    if (start < 0 || len < 0 || start + len > len(src) || "
-                      "out.capacity < mark + len) {\n"
-                      "        return FastResult.Err(-1)\n"
-                      "    }\n"
-                      "    out.appendFrom(src[start:start + len])\n"
-                      "    return FastResult.Ok(len)\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    shared outs: Array<Bytes> = []\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        var out = outs.get(0)\n"
-                      "        out.resize(0)\n"
-                      "        var result = appendRange(src, out, 0, len(src))\n"
-                      "        match (result) {\n"
-                      "            FastResult.Ok(written) -> {\n"
-                      "                assert(written == len(src))\n"
-                      "            }\n"
-                      "            FastResult.Err(code) -> {\n"
-                      "                assert(code == 0)\n"
-                      "            }\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow prepared dynamic Bytes append helper");
+           "parallel for AOT body should allow prepared dynamic Array<byte> append helper");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "dynamic prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "_src.guard != _dst") &&
-           "dynamic prepared helper should keep the inline Bytes+ByteSpan append fast path");
+    assert(
+        contains(code, "_src.guard != _dst") &&
+        "dynamic prepared helper should keep the inline Array<byte>+Slice<byte> append fast path");
     assert(!contains(code, "xrt_method_1(") &&
            "dynamic appendFrom must not fall back to method dispatch");
 
@@ -2425,7 +2430,7 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
                       "    Ok(T),\n"
                       "    Err(int)\n"
                       "}\n"
-                      "fn readU32(src: in ByteSpan, pos: int) -> FastResult<int> {\n"
+                      "fn readU32(src: in Slice<byte>, pos: int) -> FastResult<int> {\n"
                       "    if (pos < 0 || pos + 4 > len(src)) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
@@ -2433,7 +2438,7 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
                       "    return FastResult.Ok(int(value))\n"
                       "}\n"
                       "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
+                      "    var seed = Array<byte>.withCapacity(4)\n"
                       "    unsafe {\n"
                       "        seed.push(1)\n"
                       "        seed.push(2)\n"
@@ -2461,13 +2466,14 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow prepared ByteSpan typed loads");
+    assert(!had_error && "parallel for AOT body should allow prepared Slice<byte> typed loads");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared load helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_span_bytes_load_u32_le_unchecked_raw(") &&
-           "prepared LE load helper should keep the trusted static ByteSpan typed load lowering");
+    assert(
+        contains(code, "xrt_span_bytes_load_u32_le_unchecked_raw(") &&
+        "prepared LE load helper should keep the trusted static Slice<byte> typed load lowering");
     assert(!contains(code, "BYTES_LOAD_U32") &&
-           "prepared ByteSpan load must not be rejected by parallel body validation");
+           "prepared Slice<byte> load must not be rejected by parallel body validation");
 
     xr_free(code);
     xi_func_free(ir);
@@ -2478,18 +2484,18 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
                       "    Ok(T),\n"
                       "    Err(int)\n"
                       "}\n"
-                      "fn prefix(src: in ByteSpan, left: int, right: int, len: int) -> "
+                      "fn prefix(src: in Slice<byte>, left: int, right: int, len: int) -> "
                       "FastResult<int> {\n"
                       "    if (left < 0 || right < 0 || len < 0 || left + len > len(src) || "
                       "right + len > len(src)) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
-                      "    var leftSpan: ByteSpan = src[left:left + len]\n"
-                      "    var rightSpan: ByteSpan = src[right:right + len]\n"
+                      "    var leftSpan: Slice<byte> = src[left:left + len]\n"
+                      "    var rightSpan: Slice<byte> = src[right:right + len]\n"
                       "    return FastResult.Ok(leftSpan.commonPrefix(rightSpan))\n"
                       "}\n"
                       "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(8)\n"
+                      "    var seed = Array<byte>.withCapacity(8)\n"
                       "    unsafe {\n"
                       "        seed.push(1)\n"
                       "        seed.push(2)\n"
@@ -2521,11 +2527,11 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow prepared ByteSpan commonPrefix");
+    assert(!had_error && "parallel for AOT body should allow prepared Slice<byte> commonPrefix");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared commonPrefix helper body should still use the AOT runtime executor");
     assert(contains(code, "xr_array_core_bytes_common_prefix_raw(") &&
-           "prepared commonPrefix helper should keep the trusted static ByteSpan lowering");
+           "prepared commonPrefix helper should keep the trusted static Slice<byte> lowering");
     assert(!contains(code, "BYTES_SPAN_COMMON_PREFIX") &&
            "prepared commonPrefix must not be rejected by parallel body validation");
 
@@ -2661,24 +2667,24 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
 
 TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
     const char *src = "fn run() -> int {\n"
-                      "    var src = Bytes(16)\n"
+                      "    var src = Array<byte>(16)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
                       "    src[3] = 4\n"
-                      "    var view: ByteSpan = src[:]\n"
-                      "    var dst = Bytes.withCapacity(460)\n"
+                      "    var view: Slice<byte> = src[:]\n"
+                      "    var dst = Array<byte>.withCapacity(460)\n"
                       "    dst.reserve(460)\n"
                       "    dst.appendFrom(view[0:4])\n"
                       "    dst.repeatFrom(2, 2)\n"
                       "    dst.appendFrom(view[0:4])\n"
-                      "    var dstView: ByteSpan = dst[:]\n"
+                      "    var dstView: Slice<byte> = dst[:]\n"
                       "    dstView.repeatFrom(6, 2, 2)\n"
-                      "    var dstWindow: ByteSpan = dstView[8:10]\n"
-                      "    var srcWindow: ByteSpan = dstView[6:8]\n"
+                      "    var dstWindow: Slice<byte> = dstView[8:10]\n"
+                      "    var srcWindow: Slice<byte> = dstView[6:8]\n"
                       "    dstWindow.copyFrom(srcWindow)\n"
-                      "    var prefixLeft: ByteSpan = dstView[0:2]\n"
-                      "    var prefixRight: ByteSpan = dstView[4:6]\n"
+                      "    var prefixLeft: Slice<byte> = dstView[0:2]\n"
+                      "    var prefixRight: Slice<byte> = dstView[4:6]\n"
                       "    var prefix = prefixLeft.commonPrefix(prefixRight)\n"
                       "    var v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
                       "    var v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
@@ -2694,7 +2700,7 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Bytes raw memory helpers should generate");
+    assert(!had_error && "Array<byte> raw memory helpers should generate");
 
     const char *fn = strstr(code, "static int64_t test_run_");
     assert(fn != NULL && "run declaration should exist");
@@ -2706,33 +2712,34 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            "run function body should be bounded");
 
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_le_unchecked_raw(") > 0 &&
-           "ByteSpan.load<uint16>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<byte>.load<uint16>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_le_unchecked_raw(") > 0 &&
-           "ByteSpan.load<uint32>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<byte>.load<uint32>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_le_unchecked_raw(") > 0 &&
-           "ByteSpan.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<byte>.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_store_u16(") > 0 &&
-           "ByteSpan.store<uint16> must lower to the plan-driven core store helper");
+           "Slice<byte>.store<uint16> must lower to the plan-driven core store helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_nonoverlap_bytes(") > 0 &&
-           "Bytes.appendFrom must lower to the inline Bytes+ByteSpan non-overlap fast path");
+           "Array<byte>.appendFrom must lower to the inline Array<byte>+Slice<byte> non-overlap "
+           "fast path");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
-           "ByteSpan.copyFrom must lower to the direct overlap-safe copy helper");
+           "Slice<byte>.copyFrom must lower to the direct overlap-safe copy helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_span_raw(") == 0 &&
-           "Bytes.appendFrom hot path must not call the large raw helper");
+           "Array<byte>.appendFrom hot path must not call the large raw helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
-           "Bytes.repeatFrom must lower to the raw tail repeat helper");
+           "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") > 0 &&
-           "ByteSpan.repeatFrom must lower to direct repeat-copy");
+           "Slice<byte>.repeatFrom must lower to direct repeat-copy");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") == 0 &&
-           "static ByteSpan.repeatFrom hot path must not keep the generic repeat wrapper");
+           "static Slice<byte>.repeatFrom hot path must not keep the generic repeat wrapper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") == 0 &&
-           "static ByteSpan.copyFrom hot path must not keep the generic copy wrapper");
+           "static Slice<byte>.copyFrom hot path must not keep the generic copy wrapper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") > 0 &&
-           "ByteSpan.commonPrefix must lower to the trusted static core prefix helper");
+           "Slice<byte>.commonPrefix must lower to the trusted static core prefix helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_slice_range(") > 0 &&
-           "ByteSpan.commonPrefix over slices should inline slice range planning");
+           "Slice<byte>.commonPrefix over slices should inline slice range planning");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
-           "Bytes.reserve must lower to the raw AOT helper");
+           "Array<byte>.reserve must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_value(") == 0 &&
@@ -2741,39 +2748,39 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            count_between(fn_body, fn_end, "xrt_span_bytes_copy_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
-           "Bytes hot path must not call boxed value helpers");
+           "Array<byte> hot path must not call boxed value helpers");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_checked_raw(") == 0 &&
            count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_checked_raw(") == 0 &&
            count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_checked_raw(") == 0 &&
-           "static ByteSpan.load hot path must not keep dynamic span checks");
+           "static Slice<byte>.load hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") == 0 &&
-           "static ByteSpan.store hot path must not keep dynamic span checks");
+           "static Slice<byte>.store hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") == 0 &&
-           "static ByteSpan.commonPrefix hot path must not keep dynamic span checks");
+           "static Slice<byte>.commonPrefix hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") == 0 &&
-           "static ByteSpan.repeatFrom hot path must not keep dynamic span checks");
+           "static Slice<byte>.repeatFrom hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_copy_checked_raw(") == 0 &&
-           "static ByteSpan.copyFrom hot path must not keep dynamic span checks");
+           "static Slice<byte>.copyFrom hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
-           "Bytes hot path must not fall back to dynamic dispatch");
+           "Array<byte> hot path must not fall back to dynamic dispatch");
     assert(count_between(fn_body, fn_end, "xrt_map_new(3)") == 0 &&
            count_between(fn_body, fn_end, "xrt_getprop_name(") == 0 &&
            count_between(fn_body, fn_end, "_ev_Endian_LE") == 0 &&
-           "ByteSpan.load/store hot path must fold direct Endian constants");
+           "Slice<byte>.load/store hot path must fold direct Endian constants");
 
-    printf("  Generated Bytes raw helper fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Array<byte> raw helper fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
-    const char *src = "fn hot(dst: Bytes) -> int {\n"
+    const char *src = "fn hot(dst: Array<byte>) -> int {\n"
                       "    dst.reserve(8)\n"
                       "    return len(dst)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var dst = Bytes(1)\n"
+                      "    var dst = Array<byte>(1)\n"
                       "    return hot(dst)\n"
                       "}\n"
                       "print(run())\n";
@@ -2784,7 +2791,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Borrowed Bytes parameter reserve should generate");
+    assert(!had_error && "Borrowed Array<byte> parameter reserve should generate");
 
     const char *fn = strstr(code, "static int64_t test_hot_");
     assert(fn != NULL && "hot declaration should exist");
@@ -2794,23 +2801,24 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     assert(fn_end != NULL && "hot function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
-           "borrowed Bytes.reserve must still lower to the raw helper");
+           "borrowed Array<byte>.reserve must still lower to the raw helper");
     assert(count_between(fn, fn_end, "xrt_retain(") == 0 &&
            count_between(fn, fn_end, "xrt_release(") == 0 &&
-           "borrowed Bytes.reserve receiver must not force parameter ARC");
+           "borrowed Array<byte>.reserve receiver must not force parameter ARC");
 
-    printf("  Generated borrowed Bytes reserve fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated borrowed Array<byte> reserve fast path %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
-    const char *src = "fn sum(src: in ByteSpan) -> int {\n"
+    const char *src = "fn sum(src: in Slice<byte>) -> int {\n"
                       "    var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
                       "    return int(v)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var bytes = Bytes(4)\n"
+                      "    var bytes = Array<byte>(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
@@ -2825,30 +2833,31 @@ TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "direct Bytes -> in ByteSpan calls should generate");
+    assert(!had_error && "direct Array<byte> -> in Slice<byte> calls should generate");
     assert(contains(code, "xrt_byte_span_from_value(") &&
-           "direct call should convert the Bytes argument to a raw ByteSpan");
+           "direct call should convert the Array<byte> argument to a raw Slice<byte>");
     assert(contains(code, "test_sum_") && "helper should be emitted as a direct call target");
     assert(!contains(code, "cannot pass non-aggregate") &&
-           "direct call argument ABI should not reject Bytes-to-ByteSpan conversion");
+           "direct call argument ABI should not reject Array<byte>-to-Slice<byte> conversion");
 
-    printf("  Generated direct Bytes-to-ByteSpan argument conversion %zu bytes of C code\n",
-           strlen(code));
+    printf(
+        "  Generated direct Array<byte>-to-Slice<byte> argument conversion %zu bytes of C code\n",
+        strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_boxed_adapter_converts_bytespan_arg) {
-    const char *src = "fn apply(f: (ByteSpan) -> int, src: Bytes) -> int {\n"
+    const char *src = "fn apply(f: (Slice<byte>) -> int, src: Array<byte>) -> int {\n"
                       "    return f(src)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var bytes = Bytes(4)\n"
+                      "    var bytes = Array<byte>(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
-                      "    return apply(fn(src: ByteSpan) -> int {\n"
+                      "    return apply(fn(src: Slice<byte>) -> int {\n"
                       "        var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
                       "        return int(v)\n"
                       "    }, bytes)\n"
@@ -2862,24 +2871,24 @@ TEST(cgen_boxed_adapter_converts_bytespan_arg) {
     XiCgenStats stats = {0};
     char *code = generate_c_with_status_and_cgen_stats(ir, "test", &had_error, &stats);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "boxed ByteSpan adapter should generate");
-    assert(stats.boxed_adapters >= 1 && "dynamic ByteSpan callback should keep a boxed adapter");
+    assert(!had_error && "boxed Slice<byte> adapter should generate");
+    assert(stats.boxed_adapters >= 1 && "dynamic Slice<byte> callback should keep a boxed adapter");
     assert(contains(code, "xrt_byte_span_from_value(p0") &&
-           "boxed adapter should convert its boxed parameter to a raw ByteSpan");
+           "boxed adapter should convert its boxed parameter to a raw Slice<byte>");
     assert(!contains(code, "_cl, p0)") &&
-           "boxed adapter must not pass XrValue directly to a raw ByteSpan ABI slot");
+           "boxed adapter must not pass XrValue directly to a raw Slice<byte> ABI slot");
 
-    printf("  Generated boxed ByteSpan adapter conversion %zu bytes of C code\n", strlen(code));
+    printf("  Generated boxed Slice<byte> adapter conversion %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     const char *src = "fn run() -> int {\n"
-                      "    var src = Bytes(2)\n"
+                      "    var src = Array<byte>(2)\n"
                       "    src[0] = 7\n"
                       "    src[1] = 9\n"
-                      "    var out = Bytes(4)\n"
+                      "    var out = Array<byte>(4)\n"
                       "    out.resize(2)\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
@@ -2887,7 +2896,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
                       "        p[0] = 0\n"
                       "        var sp = src.ptr()\n"
                       "        p.copyFromNonOverlapping(sp, 2)\n"
-                      "        var view: ByteSpan = out\n"
+                      "        var view: Slice<byte> = out\n"
                       "        var rp = view.ptr()\n"
                       "        sum = int(rp[0]) + int(rp[1])\n"
                       "    }\n"
@@ -2901,7 +2910,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Array/Span data pointer lowering should generate");
+    assert(!had_error && "Array/Slice data pointer lowering should generate");
     assert(contains(code, "->data)") && "ptr must lower to raw array data");
     assert(!contains(code, "\"mutPtr\"") && !contains(code, "\"ptr\"") &&
            "data pointer methods must not survive as dynamic method names");
@@ -2929,7 +2938,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(count_between(fn, fn_end, "xrt_release(") == 0 &&
            "RawPtr/RawMut locals must not participate in ARC");
 
-    printf("  Generated Array/Span data pointer fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Array/Slice data pointer fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -3000,7 +3009,7 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
 }
 
 TEST(cgen_span_index_get_elides_dead_err_check) {
-    const char *src = "fn sum(src: in ByteSpan, n: int) -> int {\n"
+    const char *src = "fn sum(src: in Slice<byte>, n: int) -> int {\n"
                       "    var total = 0\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
@@ -3010,12 +3019,12 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
                       "    return total\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var bytes = Bytes(4)\n"
+                      "    var bytes = Array<byte>(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
-                      "    const view: ByteSpan = bytes[:]\n"
+                      "    const view: Slice<byte> = bytes[:]\n"
                       "    return sum(view, 4)\n"
                       "}\n"
                       "print(run())\n";
@@ -3026,7 +3035,7 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "ByteSpan index read should generate");
+    assert(!had_error && "Slice<byte> index read should generate");
 
     const char *fn = find_static_function_definition(code, "test_sum_");
     assert(fn != NULL && "sum definition should exist");
@@ -3034,25 +3043,25 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
     assert(fn_end != NULL && "sum function body should be bounded");
 
     assert(count_between(fn, fn_end, "((uint8_t*)_s.data)[_idx]") > 0 &&
-           "ByteSpan index read must stay in native span storage");
+           "Slice<byte> index read must stay in native span storage");
     assert(count_between(fn, fn_end, "xrt_index_oob(") > 0 &&
-           "safe ByteSpan index read must keep its bounds trap");
+           "safe Slice<byte> index read must keep its bounds trap");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "ByteSpan index read must not keep a dead ERR_CHECK after the noreturn bounds trap");
+           "Slice<byte> index read must not keep a dead ERR_CHECK after the noreturn bounds trap");
 
-    printf("  Generated ByteSpan index get fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Slice<byte> index get fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_span_slice_elides_dead_err_check) {
-    const char *src = "fn windowLen(src: in ByteSpan, start: int, n: int) -> int {\n"
-                      "    const part: ByteSpan = src[start:start + n]\n"
+    const char *src = "fn windowLen(src: in Slice<byte>, start: int, n: int) -> int {\n"
+                      "    const part: Slice<byte> = src[start:start + n]\n"
                       "    return len(part)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var bytes = Bytes(8)\n"
-                      "    const view: ByteSpan = bytes[:]\n"
+                      "    var bytes = Array<byte>(8)\n"
+                      "    const view: Slice<byte> = bytes[:]\n"
                       "    return windowLen(view, 2, 4)\n"
                       "}\n"
                       "print(run())\n";
@@ -3063,7 +3072,7 @@ TEST(cgen_span_slice_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "ByteSpan slice should generate");
+    assert(!had_error && "Slice<byte> slice should generate");
 
     const char *fn = strstr(code, "static int64_t test_windowLen_");
     assert(fn != NULL && "windowLen declaration should exist");
@@ -3073,27 +3082,28 @@ TEST(cgen_span_slice_elides_dead_err_check) {
     assert(fn_end != NULL && "windowLen function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_span_from_span_slice(") > 0 &&
-           "ByteSpan slice-of-slice must stay in native span storage");
+           "Slice<byte> slice-of-slice must stay in native span storage");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "ByteSpan slice-of-slice must not keep a dead ERR_CHECK");
+           "Slice<byte> slice-of-slice must not keep a dead ERR_CHECK");
 
-    printf("  Generated ByteSpan slice fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Slice<byte> slice fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
-    const char *src = "fn appendRange(out: Bytes, src: in ByteSpan, start: int, n: int) {\n"
-                      "    out.appendFrom(src[start:start + n])\n"
-                      "}\n"
-                      "fn run() -> int {\n"
-                      "    var out = Bytes()\n"
-                      "    var src = Bytes(8)\n"
-                      "    const view: ByteSpan = src[:]\n"
-                      "    appendRange(out, view, 2, 4)\n"
-                      "    return len(out)\n"
-                      "}\n"
-                      "print(run())\n";
+    const char *src =
+        "fn appendRange(out: Array<byte>, src: in Slice<byte>, start: int, n: int) {\n"
+        "    out.appendFrom(src[start:start + n])\n"
+        "}\n"
+        "fn run() -> int {\n"
+        "    var out = Array<byte>()\n"
+        "    var src = Array<byte>(8)\n"
+        "    const view: Slice<byte> = src[:]\n"
+        "    appendRange(out, view, 2, 4)\n"
+        "    return len(out)\n"
+        "}\n"
+        "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -3101,7 +3111,7 @@ TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "ByteSpan append should generate");
+    assert(!had_error && "Slice<byte> append should generate");
 
     const char *fn = strstr(code, "static void test_appendRange_");
     assert(fn != NULL && "appendRange declaration should exist");
@@ -3111,23 +3121,24 @@ TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
     assert(fn_end != NULL && "appendRange function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_span_from_span_slice(") > 0 &&
-           "appendRange must keep the ByteSpan slice in native span storage");
+           "appendRange must keep the Slice<byte> slice in native span storage");
     assert(count_between(fn, fn_end, "xrt_bytes_append_from_span_slow_raw(") > 0 &&
-           "appendRange must lower appendFrom(ByteSpan) to the byte append fast path");
+           "appendRange must lower appendFrom(Slice<byte>) to the byte append fast path");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "appendFrom(ByteSpan slice) must not keep dead ERR_CHECKs after proven native paths");
+           "appendFrom(Slice<byte> slice) must not keep dead ERR_CHECKs after proven native paths");
 
-    printf("  Generated ByteSpan append-from-slice fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Slice<byte> append-from-slice fast path %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
-    const char *src = "fn extend(out: Bytes) {\n"
+    const char *src = "fn extend(out: Array<byte>) {\n"
                       "    out.repeatFrom(2, 4)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var out = Bytes()\n"
+                      "    var out = Array<byte>()\n"
                       "    out.push(1)\n"
                       "    out.push(2)\n"
                       "    extend(out)\n"
@@ -3141,7 +3152,7 @@ TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Bytes.repeatFrom should generate");
+    assert(!had_error && "Array<byte>.repeatFrom should generate");
 
     const char *fn = strstr(code, "static void test_extend_");
     assert(fn != NULL && "extend declaration should exist");
@@ -3151,18 +3162,18 @@ TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
     assert(fn_end != NULL && "extend function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
-           "Bytes.repeatFrom must lower to the raw tail repeat helper");
+           "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "Bytes.repeatFrom native helper must not keep a dead ERR_CHECK");
+           "Array<byte>.repeatFrom native helper must not keep a dead ERR_CHECK");
 
-    printf("  Generated Bytes.repeatFrom fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Array<byte>.repeatFrom fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_rawptr_load_le_uses_pointer_helper) {
-    const char *src = "fn read(src: Bytes) -> int {\n"
-                      "    var view: ByteSpan = src\n"
+    const char *src = "fn read(src: Array<byte>) -> int {\n"
+                      "    var view: Slice<byte> = src\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
                       "        var p = view.ptr()\n"
@@ -3174,7 +3185,7 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
                       "    return sum\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var src = Bytes(8)\n"
+                      "    var src = Array<byte>(8)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
@@ -3218,7 +3229,7 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
     assert(count_between(fn, fn_end, "xrt_bytes_load_u16_le_") == 0 &&
            count_between(fn, fn_end, "xrt_bytes_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_bytes_load_u64_le_") == 0 &&
-           "RawPtr loadLE must not route back through Bytes/ByteSpan helpers");
+           "RawPtr loadLE must not route back through Array<byte>/Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "RawPtr.loadLE hot path must not keep a dead ERR_CHECK");
     assert(!contains(code, "loadLE") &&
@@ -3230,8 +3241,8 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
 }
 
 TEST(cgen_rawmut_store_le_uses_pointer_helper) {
-    const char *src = "fn write(dst: Bytes) {\n"
-                      "    var view: ByteSpan = dst[:]\n"
+    const char *src = "fn write(dst: Array<byte>) {\n"
+                      "    var view: Slice<byte> = dst[:]\n"
                       "    unsafe {\n"
                       "        var p = view.mutPtr()\n"
                       "        p.storeLE<uint16>(1, 0x1234)\n"
@@ -3240,7 +3251,7 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
                       "    }\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var dst = Bytes(16)\n"
+                      "    var dst = Array<byte>(16)\n"
                       "    write(dst)\n"
                       "    return int(dst[1]) + int(dst[4]) + int(dst[8])\n"
                       "}\n"
@@ -3272,7 +3283,7 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "RawMut.storeLE hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "xrt_span_bytes_store_") == 0 &&
-           "RawMut.storeLE must not route back through ByteSpan helpers");
+           "RawMut.storeLE must not route back through Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "RawMut.storeLE hot path must not keep a dead ERR_CHECK");
     assert(!contains(code, "storeLE") &&
@@ -3284,16 +3295,16 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
 }
 
 TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
-    const char *src = "fn readByteAt(src: in ByteSpan, pos: int) -> int {\n"
+    const char *src = "fn readByteAt(src: in Slice<byte>, pos: int) -> int {\n"
                       "    unsafe {\n"
                       "        return int(src.ptr().offset(pos)[0])\n"
                       "    }\n"
                       "}\n"
-                      "fn callWindow(bytes: Bytes) -> int {\n"
-                      "    var view: ByteSpan = bytes[1:3]\n"
+                      "fn callWindow(bytes: Array<byte>) -> int {\n"
+                      "    var view: Slice<byte> = bytes[1:3]\n"
                       "    return readByteAt(view, 1)\n"
                       "}\n"
-                      "var bytes = Bytes(4)\n"
+                      "var bytes = Array<byte>(4)\n"
                       "bytes[0] = 5\n"
                       "bytes[1] = 7\n"
                       "bytes[2] = 11\n"
@@ -3308,9 +3319,9 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "local RawPtr read chain should generate");
     assert(contains(code, "xrt_span_from_array_slice(") &&
-           "in ByteSpan call should pass a native span slice view");
+           "in Slice<byte> call should pass a native span slice view");
     assert(!contains(code, "xrt_array_stack_slice_view_release(") &&
-           "borrowed in ByteSpan stack slice must not release storage");
+           "borrowed in Slice<byte> stack slice must not release storage");
     assert(!contains(code, "xrt_slice(") &&
            "local RawPtr read chain must not force a heap slice view");
 
@@ -3321,19 +3332,19 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
 }
 
 TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
-    const char *src = "fn leakPtr(src: in ByteSpan) -> RawPtr<uint8> {\n"
+    const char *src = "fn leakPtr(src: in Slice<byte>) -> RawPtr<uint8> {\n"
                       "    unsafe {\n"
                       "        return src.ptr()\n"
                       "    }\n"
                       "}\n"
-                      "fn callWindow(bytes: Bytes) -> int {\n"
-                      "    var view: ByteSpan = bytes[1:3]\n"
+                      "fn callWindow(bytes: Array<byte>) -> int {\n"
+                      "    var view: Slice<byte> = bytes[1:3]\n"
                       "    var p = leakPtr(view)\n"
                       "    unsafe {\n"
                       "        return int(p[0])\n"
                       "    }\n"
                       "}\n"
-                      "var bytes = Bytes(4)\n"
+                      "var bytes = Array<byte>(4)\n"
                       "bytes[0] = 5\n"
                       "bytes[1] = 7\n"
                       "bytes[2] = 11\n"

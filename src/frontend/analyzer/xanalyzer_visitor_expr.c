@@ -2287,6 +2287,16 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     ArrayLiteralNode *arr = &node->as.array_literal;
+    if (arr->is_fixed_bytes_literal) {
+        XrType *byte_type = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U8);
+        XrType *saved_expected = ctx->expected_type;
+        for (int i = 0; i < arr->count; i++) {
+            ctx->expected_type = byte_type;
+            xa_visit_infer_expr(ctx, arr->elements[i]);
+        }
+        ctx->expected_type = saved_expected;
+        return xr_type_new_fixed_array(ctx->analyzer->isolate, byte_type, arr->count);
+    }
     if (arr->is_repeat) {
         int repeat_count = 0;
         const char *repeat_err = NULL;

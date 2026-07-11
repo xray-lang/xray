@@ -236,8 +236,8 @@ greet()                   // 必须显式调用
 `@extern("C")` 声明外部 C ABI 函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
 var p = unsafe { malloc(4) }
@@ -258,14 +258,14 @@ unsafe {
 
 ```xray
 @extern("C") fn bsearch(
-    key: RawPtr<uint8>,
-    base: RawPtr<uint8>,
+    key: RawPtr<byte>,
+    base: RawPtr<byte>,
     count: uintsize,
     size: uintsize,
-    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
-) -> RawPtr<uint8>
+    cmp: CFn<(RawPtr<byte>, RawPtr<byte>) -> int32>
+) -> RawPtr<byte>
 
-fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+fn zeroCmp(a: RawPtr<byte>, b: RawPtr<byte>) -> int32 {
     return 0
 }
 
@@ -647,7 +647,7 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 
@@ -1084,8 +1084,8 @@ greet()                   // must be called explicitly
 `@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
 var p = unsafe { malloc(4) }
@@ -1106,14 +1106,14 @@ Rules:
 
 ```xray
 @extern("C") fn bsearch(
-    key: RawPtr<uint8>,
-    base: RawPtr<uint8>,
+    key: RawPtr<byte>,
+    base: RawPtr<byte>,
     count: uintsize,
     size: uintsize,
-    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
-) -> RawPtr<uint8>
+    cmp: CFn<(RawPtr<byte>, RawPtr<byte>) -> int32>
+) -> RawPtr<byte>
 
-fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+fn zeroCmp(a: RawPtr<byte>, b: RawPtr<byte>) -> int32 {
     return 0
 }
 
@@ -1495,7 +1495,7 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 

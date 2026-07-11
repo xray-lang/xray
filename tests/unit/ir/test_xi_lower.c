@@ -613,12 +613,13 @@ TEST(member_access) {
                              "var n = len(arr)\n"
                              "print(n)\n");
     assert(f != NULL);
-    int found_load_field = 0;
+    int found_len = 0;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_LOAD_FIELD)
-            found_load_field = 1;
+        XiValue *v = f->entry->values[i];
+        if (v->op == XI_CALL_BUILTIN && v->aux && strcmp((const char *) v->aux, "len") == 0)
+            found_len = 1;
     }
-    assert(found_load_field && "should have LOAD_FIELD op");
+    assert(found_len && "should lower len() as a compiler-known builtin");
     xi_func_free(f);
 }
 
@@ -655,9 +656,9 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("var src = Bytes(8)\n"
-                             "var view: ByteSpan = src\n"
-                             "var dst = Bytes.withCapacity(8)\n"
+    XiFunc *f = lower_source("var src = Array<byte>(8)\n"
+                             "var view: Slice<byte> = src\n"
+                             "var dst = Array<byte>(0)\n"
                              "var h = view.load<uint16>(0, Endian.LE)\n"
                              "var a = view.load<uint32>(0, Endian.LE)\n"
                              "var b = view.load<uint64>(0, Endian.LE)\n"
@@ -668,10 +669,11 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "print(a)\n"
                              "print(b)\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16) && "load<uint16> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_STORE_U16) && "store<uint16> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16) && "load<uint16> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTES_STORE_U16) &&
+           "store<uint16> should lower to Array<byte> op");
     assert(func_tree_find_method(f, "appendFrom") &&
            "appendFrom should remain an explicit method call");
     assert(func_tree_find_method(f, "repeatFrom") &&
@@ -2162,12 +2164,12 @@ TEST(unresolved_struct_literal_does_not_lower_to_json) {
 
 TEST(struct_field_store_narrows_native_width) {
     XiFunc *f = lower_source("struct Sample {\n"
-                             "    byte: uint8\n"
+                             "    octet: byte\n"
                              "}\n"
                              "fn run() -> int {\n"
-                             "    var p = Sample{byte: 300}\n"
-                             "    p.byte = p.byte + 1\n"
-                             "    return p.byte\n"
+                             "    var p = Sample{octet: 300}\n"
+                             "    p.octet = p.octet + 1\n"
+                             "    return p.octet\n"
                              "}\n"
                              "print(run())\n");
     assert(f != NULL);

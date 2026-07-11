@@ -51,6 +51,7 @@
 #include "../coro/xaot_coro.h"
 #include "xrt_method_symbols.h"
 #include "../base/xmemstream.h"
+#include "../base/xutf8.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xconsteval.h"
@@ -2529,8 +2530,8 @@ static void cg_emit_static_string_header_initializer(FILE *out, const char *s) {
     if (!s)
         s = "";
     size_t len = strlen(s);
-    fprintf(out, "{INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ", len,
-            xr_hash_core_str_hash_bytes(s, len));
+    fprintf(out, "{INT64_C(%zu), INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ", len,
+            xr_utf8_strlen(s, len), xr_hash_core_str_hash_bytes(s, len));
     emit_c_string_literal_bytes(out, s, len);
     fprintf(out, "}");
 }
@@ -3887,7 +3888,7 @@ static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char
         const char *kind;
         const char *detail;
     } allocating_builtins[] = {
-        {"Bytes", "constructor", "Bytes"},
+        {"array_byte_new", "constructor", "array_byte_new"},
         {"StringBuilder", "constructor", "StringBuilder"},
         {"map_new", "constructor", "Map"},
         {"set_new", "constructor", "Set"},
@@ -3997,7 +3998,7 @@ static bool cg_no_alloc_type_name_allocates(const char *type) {
         type++;
     if (strncmp(type, "string", 6) == 0)
         return true;
-    if (strncmp(type, "Bytes", 5) == 0)
+    if (strncmp(type, "array_byte_new", 5) == 0)
         return true;
     if (strncmp(type, "Array<", 6) == 0)
         return true;

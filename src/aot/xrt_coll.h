@@ -4552,6 +4552,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             XrValue dstv = xrt_str_alloc((size_t) src->len);
             xrt_str_t *dst = (xrt_str_t *) dstv.ptr;
             dst->hash = src->hash;
+            dst->rune_len = src->rune_len;
             memcpy(xr_str_buf(dstv), src->data, (size_t) src->len);
             return dstv;
         }

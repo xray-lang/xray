@@ -97,7 +97,7 @@ invalid:
     return 1;  // Skip one invalid byte
 }
 
-bool xr_utf8_char_at(const char *str, size_t len, size_t index, uint32_t *out_cp, size_t *out_pos) {
+bool xr_utf8_rune_at(const char *str, size_t len, size_t index, uint32_t *out_cp, size_t *out_pos) {
     if (!str)
         return false;
 
@@ -105,7 +105,7 @@ bool xr_utf8_char_at(const char *str, size_t len, size_t index, uint32_t *out_cp
     size_t char_idx = 0;
 
     while (pos < len && char_idx < index) {
-        int size = xr_utf8_char_size((uint8_t) str[pos]);
+        int size = xr_utf8_rune_size((uint8_t) str[pos]);
         if (pos + size > len)
             break;
         pos += size;
@@ -180,7 +180,7 @@ size_t xr_utf8_strlen(const char *str, size_t len) {
     size_t pos = 0;
 
     while (pos < len) {
-        int size = xr_utf8_char_size((uint8_t) str[pos]);
+        int size = xr_utf8_rune_size((uint8_t) str[pos]);
         if (pos + size > len) {
             // Incomplete char, count as single
             count++;
@@ -201,7 +201,7 @@ size_t xr_utf8_index_to_offset(const char *str, size_t len, size_t index) {
     size_t char_idx = 0;
 
     while (pos < len && char_idx < index) {
-        int size = xr_utf8_char_size((uint8_t) str[pos]);
+        int size = xr_utf8_rune_size((uint8_t) str[pos]);
         if (pos + size > len)
             break;
         pos += size;
@@ -221,7 +221,7 @@ size_t xr_utf8_offset_to_index(const char *str, size_t len, size_t offset) {
     size_t char_idx = 0;
 
     while (pos < offset) {
-        int size = xr_utf8_char_size((uint8_t) str[pos]);
+        int size = xr_utf8_rune_size((uint8_t) str[pos]);
         if (pos + size > len)
             break;
         pos += size;
@@ -231,7 +231,7 @@ size_t xr_utf8_offset_to_index(const char *str, size_t len, size_t offset) {
     return char_idx;
 }
 
-bool xr_utf8_char_range(const char *str, size_t len, size_t start_idx, size_t end_idx,
+bool xr_utf8_rune_range(const char *str, size_t len, size_t start_idx, size_t end_idx,
                         size_t *out_start, size_t *out_end) {
     if (!str || start_idx > end_idx)
         return false;

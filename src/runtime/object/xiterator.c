@@ -125,7 +125,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
     iter->source.string = s;
     iter->scan_index = 0;
     iter->coro = coro;
-    iter->total_count = (uint32_t) xr_string_char_length(s);
+    iter->total_count = (uint32_t) xr_string_rune_length(s);
     xr_rc_retain((XrObjHeader *) s);
     iter->context = (void *) isolate;
     iter->mode = XR_ITER_MODE_PAIRS;
@@ -383,7 +383,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         if (!s || iter->scan_index >= iter->total_count)
             return xr_null();
         uint32_t idx = iter->scan_index++;
-        int32_t cp = xr_string_char_code_at(s, (size_t) idx);
+        int32_t cp = xr_string_rune_code_at(s, (size_t) idx);
         XrValue ch = cp >= 0 ? xr_rune((uint32_t) cp) : xr_null();
         if (iter->mode == XR_ITER_MODE_VALUES) {
             return ch;

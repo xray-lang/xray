@@ -589,7 +589,7 @@ vmcase(OP_ARRAY_GETC) {
     if (XR_IS_STRING(obj_val)) {
         XrString *str = XR_TO_STRING(obj_val);
         uint32_t cp = 0;
-        R(a) = (c >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) c, &cp, NULL) &&
+        R(a) = (c >= 0 && xr_utf8_rune_at(str->data, str->length, (size_t) c, &cp, NULL) &&
                 xr_unicode_is_scalar(cp))
                    ? xr_rune(cp)
                    : xr_null();
@@ -2095,7 +2095,7 @@ vmcase(OP_INDEX_GET) {
         XrString *str = XR_TO_STRING(obj_val);
         int64_t idx = XR_TO_INT(key_val);
         uint32_t cp = 0;
-        R(a) = (idx >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) idx, &cp, NULL) &&
+        R(a) = (idx >= 0 && xr_utf8_rune_at(str->data, str->length, (size_t) idx, &cp, NULL) &&
                 xr_unicode_is_scalar(cp))
                    ? xr_rune(cp)
                    : xr_null();

@@ -67,7 +67,7 @@ order: 015
 |--|--|--|
 | `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
 
-### 14.4.1 `char` 方法
+### 14.4.1 `rune` 方法
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -78,7 +78,7 @@ order: 015
 | `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
 | `isWhitespace()` | `() -> bool` | 是否为空白字符 |
 
-`char` 是独立原始类型，不继承整数方法；需要码点时显式使用 `ord()` 或 `int(c)`。
+`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `ord()` 或 `int(c)`。
 
 ### 14.5 `string` 方法
 
@@ -99,15 +99,15 @@ order: 015
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | 填充 |
 | `match(pattern)` | 正则匹配 |
-| `iterator()` | `() -> Iterator<char>` |
-| `entriesIterator()` | `() -> Iterator<(int, char)>` |
-| `entries()` | `() -> Array<(int, char)>` |
+| `iterator()` | `() -> Iterator<rune>` |
+| `entriesIterator()` | `() -> Iterator<(int, rune)>` |
+| `entries()` | `() -> Array<(int, rune)>` |
 
-字符串下标表达式 `s[i]` 返回 `char`；`charAt(i)` 保留 JavaScript 风格的字符串返回值。`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
+字符串下标表达式 `s[i]` 返回 `rune`；`charAt(i)` 保留 JavaScript 风格的字符串返回值。`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
 
-### 14.6 `Bytes`
+### 14.6 `Array<byte>`
 
-`Bytes` 是 prelude 类型，构造由 `Bytes(n)` / `Bytes(n, fill)` 等内置路径处理。字符串转换和编码类操作优先使用 `encoding` / `base64` 模块。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
+`Array<byte>` 是 prelude 类型，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。字符串转换和编码类操作优先使用 `encoding` / `base64` 模块。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
 
 ### 14.7 `Array<T>` 方法
 
@@ -179,10 +179,9 @@ order: 015
 | 静态函数 | 说明 |
 |--|--|
 | `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | Object 字段枚举 |
-| `Json.has(obj, key)` | 字段存在性 |
+| `Json.containsKey(obj, key)` | 字段存在性 |
 | `Json.get(obj, key, default?)` | 字段读取，不存在返回 default 或 null |
-| `Json.size(obj)` | 字段数量 |
-| `Json.isEmpty(obj)` | 是否为空 |
+| `len(obj)` | Object / Array / String variant 的元素数量；scalar 抛 TypeError |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验 |
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
@@ -323,7 +322,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
-### 14.4.1 `char` Methods
+### 14.4.1 `rune` Methods
 
 | Method | Signature | Description |
 |--|--|--|
@@ -334,7 +333,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
-`char` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
+`rune` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
 
 ### 14.5 `string` Methods
 
@@ -355,15 +354,15 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | padding |
 | `match(pattern)` | regex match |
-| `iterator()` | `() -> Iterator<char>` |
-| `entriesIterator()` | `() -> Iterator<(int, char)>` |
-| `entries()` | `() -> Array<(int, char)>` |
+| `iterator()` | `() -> Iterator<rune>` |
+| `entriesIterator()` | `() -> Iterator<(int, rune)>` |
+| `entries()` | `() -> Array<(int, rune)>` |
 
-The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+The string index expression `s[i]` returns `rune`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 
-### 14.6 `Bytes`
+### 14.6 `Array<byte>`
 
-`Bytes` is a prelude type; construction is handled via builtin paths such as `Bytes(n)` / `Bytes(n, fill)`. String conversion and encoding-related operations should prefer the `encoding` / `base64` modules. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
+`Array<byte>` is a prelude type; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. String conversion and encoding-related operations should prefer the `encoding` / `base64` modules. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
 
 ### 14.7 `Array<T>` Methods
 
@@ -435,10 +434,9 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | Static function | Description |
 |--|--|
 | `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | enumerate object fields |
-| `Json.has(obj, key)` | field existence |
+| `Json.containsKey(obj, key)` | field existence |
 | `Json.get(obj, key, default?)` | field read; returns `default` or `null` if absent |
-| `Json.size(obj)` | number of fields |
-| `Json.isEmpty(obj)` | emptiness predicate |
+| `len(obj)` | element count for Object / Array / String variants; scalar values throw TypeError |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
 | `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |

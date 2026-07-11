@@ -122,9 +122,9 @@ AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, in
 }
 
 // Create char literal node
-AstNode *xr_ast_literal_char(XrCompilerSession *session, uint32_t value, int line) {
+AstNode *xr_ast_literal_rune(XrCompilerSession *session, uint32_t value, int line) {
     AstNode *node = alloc_node(session, AST_LITERAL_RUNE, line);
-    node->as.literal.kind = LITERAL_KIND_CHAR;
+    node->as.literal.kind = LITERAL_KIND_RUNE;
     node->as.literal.raw_value.rune_val = value;
     return node;
 }
@@ -686,6 +686,7 @@ AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, in
     AstNode *node = alloc_node(session, AST_ARRAY_LITERAL, line);
     node->as.array_literal.count = count;
     node->as.array_literal.is_repeat = false;
+    node->as.array_literal.is_fixed_bytes_literal = false;
     node->as.array_literal.repeat_value = NULL;
     node->as.array_literal.repeat_count = NULL;
 
@@ -713,6 +714,7 @@ AstNode *xr_ast_array_repeat_literal(XrCompilerSession *session, AstNode *value,
     node->as.array_literal.repeat_value = value;
     node->as.array_literal.repeat_count = count;
     node->as.array_literal.is_repeat = true;
+    node->as.array_literal.is_fixed_bytes_literal = false;
     return node;
 }
 

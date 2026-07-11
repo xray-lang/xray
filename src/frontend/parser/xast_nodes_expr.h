@@ -93,6 +93,7 @@ typedef struct ArrayLiteralNode {
     AstNode *repeat_value;
     AstNode *repeat_count;
     bool is_repeat;
+    bool is_fixed_bytes_literal;
 } ArrayLiteralNode;
 
 // Tuple literal node — `()`, `(x,)`, `(a, b, ...)`.

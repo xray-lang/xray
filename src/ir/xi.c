@@ -457,9 +457,9 @@ XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val, struct XrType *bool_ty
     return v;
 }
 
-XiValue *xi_const_rune(XiFunc *f, XiBlock *blk, uint32_t val, struct XrType *char_type) {
-    XR_DCHECK(char_type != NULL, "xi_const_rune: type is NULL");
-    XiValue *v = xi_value_new(f, blk, XI_CONST, char_type, 0);
+XiValue *xi_const_rune(XiFunc *f, XiBlock *blk, uint32_t val, struct XrType *rune_type) {
+    XR_DCHECK(rune_type != NULL, "xi_const_rune: type is NULL");
+    XiValue *v = xi_value_new(f, blk, XI_CONST, rune_type, 0);
     if (v)
         v->aux_int = (int64_t) val;
     return v;

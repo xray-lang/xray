@@ -2212,7 +2212,7 @@ TEST(sub_min_neg_one_ok) {
     ASSERT(xi_range_is_const(r) && r.lo == INT64_MIN + 1);
 }
 
-/* ========== Range Width / Span Tests ========== */
+/* ========== Range Width / Slice Tests ========== */
 
 TEST(width_const_is_one) {
     XiRange r = xi_range_const(42);

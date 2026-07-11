@@ -254,7 +254,7 @@ static inline size_t xr_string_core_pad_write(char *out, const char *data, size_
     return plan.len;
 }
 
-static inline int xr_string_core_utf8_char_size(unsigned char first_byte) {
+static inline int xr_string_core_utf8_rune_size(unsigned char first_byte) {
     if ((first_byte & 0x80u) == 0x00u)
         return 1;
     if ((first_byte & 0xE0u) == 0xC0u)
@@ -324,14 +324,14 @@ invalid:
     return 1;
 }
 
-static inline size_t xr_string_core_utf8_char_count(const char *data, size_t len) {
+static inline size_t xr_string_core_utf8_rune_count(const char *data, size_t len) {
     if (!data || len == 0)
         return 0;
 
     size_t count = 0;
     size_t pos = 0;
     while (pos < len) {
-        int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+        int size = xr_string_core_utf8_rune_size((unsigned char) data[pos]);
         if (pos + (size_t) size > len) {
             count++;
             break;
@@ -342,7 +342,7 @@ static inline size_t xr_string_core_utf8_char_count(const char *data, size_t len
     return count;
 }
 
-static inline bool xr_string_core_utf8_char_at(const char *data, size_t len, size_t index,
+static inline bool xr_string_core_utf8_rune_at(const char *data, size_t len, size_t index,
                                                uint32_t *out_cp, size_t *out_pos) {
     if (!data)
         return false;
@@ -350,7 +350,7 @@ static inline bool xr_string_core_utf8_char_at(const char *data, size_t len, siz
     size_t pos = 0;
     size_t char_idx = 0;
     while (pos < len && char_idx < index) {
-        int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+        int size = xr_string_core_utf8_rune_size((unsigned char) data[pos]);
         if (pos + (size_t) size > len)
             break;
         pos += (size_t) size;
@@ -367,23 +367,23 @@ static inline bool xr_string_core_utf8_char_at(const char *data, size_t len, siz
     return true;
 }
 
-static inline XrStringCoreSlice xr_string_core_utf8_char_slice_at(const char *data, size_t len,
+static inline XrStringCoreSlice xr_string_core_utf8_rune_slice_at(const char *data, size_t len,
                                                                   int64_t index) {
     if (!data || len == 0)
         return xr_string_core_slice_at(data, len, len, 0);
 
     if (index < 0) {
-        int64_t char_len = xr_string_core_len_i64(xr_string_core_utf8_char_count(data, len));
+        int64_t char_len = xr_string_core_len_i64(xr_string_core_utf8_rune_count(data, len));
         index += char_len;
         if (index < 0)
             return xr_string_core_slice_at(data, len, len, 0);
     }
 
     size_t pos = 0;
-    if (!xr_string_core_utf8_char_at(data, len, (size_t) index, NULL, &pos))
+    if (!xr_string_core_utf8_rune_at(data, len, (size_t) index, NULL, &pos))
         return xr_string_core_slice_at(data, len, len, 0);
 
-    int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+    int size = xr_string_core_utf8_rune_size((unsigned char) data[pos]);
     if (pos + (size_t) size > len)
         return xr_string_core_slice_at(data, len, len, 0);
     return xr_string_core_slice_at(data, len, pos, (size_t) size);
@@ -395,10 +395,10 @@ static inline XrStringCoreSlice xr_string_core_utf8_index_slice_at(const char *d
         return xr_string_core_slice_at(data, len, len, 0);
 
     size_t pos = 0;
-    if (!xr_string_core_utf8_char_at(data, len, (size_t) index, NULL, &pos))
+    if (!xr_string_core_utf8_rune_at(data, len, (size_t) index, NULL, &pos))
         return xr_string_core_slice_at(data, len, len, 0);
 
-    int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+    int size = xr_string_core_utf8_rune_size((unsigned char) data[pos]);
     if (pos + (size_t) size > len)
         return xr_string_core_slice_at(data, len, len, 0);
     return xr_string_core_slice_at(data, len, pos, (size_t) size);
@@ -421,7 +421,7 @@ static inline bool xr_string_core_codepoint_at(const char *data, size_t len, int
                                                uint32_t *out_cp) {
     if (index < 0)
         return false;
-    return xr_string_core_utf8_char_at(data, len, (size_t) index, out_cp, NULL);
+    return xr_string_core_utf8_rune_at(data, len, (size_t) index, out_cp, NULL);
 }
 
 static inline XrStringCoreSlice xr_string_core_substring_slice(const char *data, size_t len,

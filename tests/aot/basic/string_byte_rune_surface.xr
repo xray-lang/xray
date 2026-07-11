@@ -1,0 +1,12 @@
+var text = "A中🙂"
+print(len(text))
+print(len(text.bytes()))
+
+var bytes = b"A中"
+print(typeName(bytes))
+print(len(bytes))
+print(bytes[0])
+
+var cstr = c"ok"
+print(len(cstr))
+print(cstr[2])

@@ -6664,7 +6664,7 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
     XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "cannot %s; Span is a borrowed view, keep it local or copy the owner data into an "
+             "cannot %s; Slice is a borrowed view, keep it local or copy the owner data into an "
              "Array",
              escape_context ? escape_context : "var Span view escape");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,

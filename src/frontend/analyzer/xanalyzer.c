@@ -89,7 +89,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     XrType *t_float = xr_type_new_float(NULL);
     XrType *t_string = xr_type_new_string(NULL);
     XrType *t_bool = xr_type_new_bool(NULL);
-    XrType *t_char = xr_type_new_char(NULL);
+    XrType *t_char = xr_type_new_rune(NULL);
 
     // Test framework: fn(...any) -> void
     XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);

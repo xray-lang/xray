@@ -90,13 +90,13 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-var big_buffer = Bytes(1024 * 1024)
+var big_buffer = Array<byte>(1024 * 1024)
 
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
 
-var t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
@@ -147,8 +147,8 @@ var t2 = go fn(c: Json) -> int {
 }(config)
 
 // 方法 3：move 转移所有权
-shared big = Bytes(1024)
-var t3 = go fn(b: Bytes) -> int {
+shared big = Array<byte>(1024)
+var t3 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
@@ -270,13 +270,13 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-var big_buffer = Bytes(1024 * 1024)
+var big_buffer = Array<byte>(1024 * 1024)
 
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(big_buffer)             // compile error: owned heap value cannot cross bare
 
-var t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
@@ -327,8 +327,8 @@ var t2 = go fn(c: Json) -> int {
 }(config)
 
 // Pattern 3: move ownership
-shared big = Bytes(1024)
-var t3 = go fn(b: Bytes) -> int {
+shared big = Array<byte>(1024)
+var t3 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point
