@@ -7786,28 +7786,61 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
     ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT);
     ASSERT_TRUE((abi->evidence & XAOT_INTERFACE_ABI_EV_OBJECT_USE) != 0);
 
+    uint32_t explicit_use_plans = 0;
     uint32_t storage_use_plans = 0;
+    uint32_t drawable_object_use_rows = 0;
+    for (uint32_t i = 0; i < ev.ninterface_object_uses; i++) {
+        if (ev.interface_object_uses[i].interface_id == drawable_id)
+            drawable_object_use_rows++;
+    }
     for (uint32_t i = 0; i < bundle.ninterface_use_plans; i++) {
         const XaotInterfaceUsePlan *plan = &bundle.interface_use_plans[i];
         if (plan->interface_id != drawable_id)
             continue;
         ASSERT_EQ_UINT(plan->use_site_id, XG_NO_ID);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_VALUE) != 0);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_ARRAY) != 0);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_FIELD) != 0);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_RETURN) != 0);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_CAPTURE) != 0);
-        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_PARAM) != 0);
+        if (plan->object_use_id == XG_NO_ID) {
+            ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0);
+            ASSERT_EQ_UINT(plan->flags, 0);
+            explicit_use_plans++;
+            continue;
+        }
+        const XgInterfaceObjectUseSummary *object_use = NULL;
+        for (uint32_t j = 0; j < ev.ninterface_object_uses; j++) {
+            if (ev.interface_object_uses[j].use_id == plan->object_use_id) {
+                object_use = &ev.interface_object_uses[j];
+                break;
+            }
+        }
+        ASSERT_NOT_NULL(object_use);
+        ASSERT_EQ_UINT(object_use->interface_id, plan->interface_id);
+        ASSERT_EQ_UINT(object_use->owner_func_id, plan->owner_func_id);
+        ASSERT_EQ_UINT(object_use->source_span_id, plan->source_span_id);
+        ASSERT_EQ_UINT(object_use->body_ordinal, plan->body_ordinal);
+        ASSERT_EQ_UINT(object_use->type_key, plan->type_key);
+        ASSERT_TRUE((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) == 0);
         ASSERT_TRUE((plan->flags & XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT) != 0);
         ASSERT_TRUE((plan->flags & XAOT_INTERFACE_USE_NEEDS_ITABLE) != 0);
         storage_use_plans++;
     }
-    ASSERT_EQ_UINT(storage_use_plans, 2);
+    ASSERT_EQ_UINT(explicit_use_plans, 2);
+    ASSERT_EQ_UINT(storage_use_plans, drawable_object_use_rows * 2);
 
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    for (uint32_t i = 0; i < bundle.ninterface_use_plans; i++) {
+        XaotInterfaceUsePlan *plan = &bundle.interface_use_plans[i];
+        uint32_t saved_type_key;
+        if (plan->interface_id != drawable_id || plan->object_use_id == XG_NO_ID)
+            continue;
+        saved_type_key = plan->type_key;
+        plan->type_key ^= 0x1234u;
+        memset(err, 0, sizeof(err));
+        ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+        ASSERT_NOT_NULL(strstr(err, "AOT interface-use storage identity does not re-derive"));
+        plan->type_key = saved_type_key;
+        break;
+    }
 
     char *evidence_dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(evidence_dump);
@@ -7822,7 +7855,12 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "interface-use"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "reason=implements+value+array+field+return+capture+param"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=implements flags=none"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=value+field flags=iface_object+itable object_use="));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=array+field flags=iface_object+itable object_use="));
+    ASSERT_NOT_NULL(
+        strstr(plan_dump, "reason=value+capture flags=iface_object+itable object_use="));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=value+return flags=iface_object+itable object_use="));
     ASSERT_NOT_NULL(strstr(plan_dump, "evidence=methods+implementors+object_use"));
     xr_free(plan_dump);
 
@@ -8481,7 +8519,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_TRUE(bundle.dispatch_target_cases[0].receiver_class_id !=
                 bundle.dispatch_target_cases[1].receiver_class_id);
-    ASSERT_EQ_UINT(bundle.ninterface_use_plans, 6);
+    ASSERT_EQ_UINT(bundle.ninterface_use_plans, 7);
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(
         &bundle, shape_id, bundle.dispatch_target_cases[0].receiver_class_id, parent_callsite_id));
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(

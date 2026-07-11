@@ -2964,17 +2964,16 @@ static uint32_t verify_effective_interface_implementor_count(const XgGlobalEvide
     return count;
 }
 
-static uint32_t verify_interface_object_use_reason_for_interface(const XgGlobalEvidence *ev,
-                                                                 XgInterfaceId interface_id) {
-    uint32_t reason = 0;
-    if (!ev || interface_id == XG_NO_ID)
-        return 0;
+static const XgInterfaceObjectUseSummary *
+verify_find_interface_object_use(const XgGlobalEvidence *ev, XgInterfaceObjectUseId use_id) {
+    if (!ev || use_id == XG_NO_ID)
+        return NULL;
     for (uint32_t i = 0; i < ev->ninterface_object_uses; i++) {
         const XgInterfaceObjectUseSummary *use = &ev->interface_object_uses[i];
-        if (use->interface_id == interface_id)
-            reason |= verify_interface_use_reason_from_object_use(use->reason);
+        if (use->use_id == use_id)
+            return use;
     }
-    return reason;
+    return NULL;
 }
 
 static bool verify_interface_abi_plan_rederives(const XgGlobalEvidence *ev,
@@ -5380,21 +5379,41 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             XAOT_INTERFACE_USE_REASON_CAPTURE | XAOT_INTERFACE_USE_REASON_PARAM;
         if (plan->reason == 0)
             return set_error(errbuf, errbuf_len, "AOT interface-use plan has no reason");
+        if (plan->object_use_id != XG_NO_ID && plan->use_site_id != XG_NO_ID)
+            return set_error(errbuf, errbuf_len,
+                             "AOT interface-use plan mixes callsite and object-use identity");
         if (plan->use_site_id == XG_NO_ID) {
             uint32_t storage_reason = plan->reason & storage_reason_mask;
-            uint32_t expected_storage_reason =
-                verify_interface_object_use_reason_for_interface(ev, plan->interface_id);
+            if (plan->object_use_id != XG_NO_ID && storage_reason == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use object-use plan has no storage reason");
             if ((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0 &&
                 !verify_has_interface_impl(ev, plan->interface_id, plan->implementor_class_id))
                 return set_error(errbuf, errbuf_len,
                                  "AOT interface-use plan has no implements evidence");
             if (storage_reason != 0) {
+                const XgInterfaceObjectUseSummary *use =
+                    verify_find_interface_object_use(ev, plan->object_use_id);
                 uint32_t expected_flags = XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT;
+                uint32_t expected_storage_reason;
+                if (!use)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT interface-use storage plan has no object-use evidence");
+                if (use->interface_id != plan->interface_id ||
+                    use->owner_func_id != plan->owner_func_id ||
+                    use->source_span_id != plan->source_span_id ||
+                    use->body_ordinal != plan->body_ordinal || use->type_key != plan->type_key)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT interface-use storage identity does not re-derive");
+                if ((plan->reason & XAOT_INTERFACE_USE_REASON_IMPLEMENTS) != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT interface-use storage plan mixes implements evidence");
                 if (!verify_has_effective_interface_impl(ev, plan->interface_id,
                                                          plan->implementor_class_id))
                     return set_error(errbuf, errbuf_len,
                                      "AOT interface-use storage plan has no effective evidence");
-                if ((storage_reason & ~expected_storage_reason) != 0)
+                expected_storage_reason = verify_interface_use_reason_from_object_use(use->reason);
+                if (storage_reason != expected_storage_reason)
                     return set_error(errbuf, errbuf_len,
                                      "AOT interface-use storage reason does not re-derive");
                 if (verify_interface_visible_method_count(ev, plan->interface_id) != 0)
