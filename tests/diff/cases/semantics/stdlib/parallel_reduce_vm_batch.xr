@@ -1,0 +1,13 @@
+import parallel
+
+var total = parallel.reduce(0..1000, 0, (i) -> i + 1, (a, b) -> a + b, parallel.Options(4))
+print(total)
+
+var oddCount = parallel.reduce(
+    0..64,
+    0,
+    (i) -> i % 2,
+    (a, b) -> a + b,
+    parallel.Options(0)
+)
+print(oddCount)
