@@ -678,7 +678,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
         // Send request via pooled connection (handles TCP/TLS transparently)
         size_t sent = 0;
         while (sent < request_len) {
-            int n = http_pooled_conn_write(X, pooled, request_buf + sent, request_len - sent);
+            int n = http_pooled_conn_write(pooled, request_buf + sent, request_len - sent);
             if (n <= 0) {
                 result.error = XR_HTTP_ERR_SEND;
                 result.error_msg = xr_strdup("Send failed");
@@ -718,7 +718,7 @@ static XrHttpResult http_request_internal(XrVMRuntime *X, const XrHttpRequestCon
 
         // Receive data via pooled connection
         size_t avail = http_buffer_available(recv_buf);
-        int n = http_pooled_conn_read(X, pooled, recv_buf->bytes + recv_buf->size,
+        int n = http_pooled_conn_read(pooled, recv_buf->bytes + recv_buf->size,
                                       avail > 0 ? avail - 1 : 0);
         if (n < 0) {
             result.error = XR_HTTP_ERR_RECV;
@@ -947,9 +947,9 @@ cleanup:
     // successful http_client_pool() resolution.
     if (pooled) {
         if (result.error == XR_HTTP_OK && conn_ok) {
-            http_conn_pool_put(X, pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
+            http_conn_pool_put(pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
         } else {
-            http_conn_pool_close(X, pool, pooled);
+            http_conn_pool_close(pooled);
         }
     }
     if (request_buf)
