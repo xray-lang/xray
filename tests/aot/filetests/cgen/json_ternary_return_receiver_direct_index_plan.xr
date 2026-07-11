@@ -1,0 +1,11 @@
+fn makeJsonTernaryReturnPlan(flag: bool) -> Json {
+    var left: Json = { name: "ada", age: 1 }
+    var right: Json = { name: "bob", age: 2 }
+    return flag ? left : right
+}
+
+fn jsonTernaryReturnReceiverPlan(flag: bool) -> int {
+    return makeJsonTernaryReturnPlan(flag).age
+}
+
+print(jsonTernaryReturnReceiverPlan(true))
