@@ -4454,6 +4454,39 @@ producer_find_class_field_json_constructor_assignment(const XgProducer *p, XgCla
     return saw_constructor ? literal : NULL;
 }
 
+static bool producer_class_field_json_constructor_writes_match_initializer(
+    const XgProducer *p, XgClassId class_id, uint32_t field_name_id,
+    const ObjectLiteralNode *initializer) {
+    const ClassDeclNode *cls;
+    uint64_t shape_hash;
+    if (!p || class_id == XG_NO_ID || field_name_id == 0 || !initializer)
+        return false;
+    cls = producer_lookup_class_decl_node(p, class_id);
+    if (!cls)
+        return false;
+    shape_hash = body_json_shape_hash(initializer);
+    for (int i = 0; i < cls->method_count; i++) {
+        const AstNode *method_node = cls->methods ? cls->methods[i] : NULL;
+        const MethodDeclNode *method;
+        XgJsonCtorFieldAssignScan scan;
+        if (!method_node || method_node->type != AST_METHOD_DECL)
+            continue;
+        method = &method_node->as.method_decl;
+        if (!method->is_constructor || method->is_static || method->is_static_constructor)
+            continue;
+        memset(&scan, 0, sizeof(scan));
+        scan.field_name_id = field_name_id;
+        scan.literal = initializer;
+        scan.shape_hash = shape_hash;
+        scan.field_count = initializer->count;
+        scan.saw_assignment = true;
+        if (!method->body || !ctor_scan_node_for_json_field_assignment(&scan, method->body) ||
+            scan.failed)
+            return false;
+    }
+    return true;
+}
+
 static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
     const AstNode *receiver = body_json_receiver_unwrap(expr);
     XgClassId receiver_class;
@@ -4472,9 +4505,14 @@ static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const
         return shape_id;
     initializer = producer_find_class_field_json_initializer(bc->producer, field->owner_class_id,
                                                              field->name_id);
-    if (!initializer)
+    if (initializer) {
+        if (!producer_class_field_json_constructor_writes_match_initializer(
+                bc->producer, field->owner_class_id, field->name_id, initializer))
+            return XG_NO_ID;
+    } else {
         initializer = producer_find_class_field_json_constructor_assignment(
             bc->producer, field->owner_class_id, field->name_id);
+    }
     if (!initializer)
         return XG_NO_ID;
     return body_add_json_shape_for_literal(bc, initializer, (uint32_t) receiver->line,

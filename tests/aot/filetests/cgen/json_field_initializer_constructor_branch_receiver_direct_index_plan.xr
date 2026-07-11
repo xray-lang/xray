@@ -1,0 +1,20 @@
+class InitBranchHolder {
+    payload: Json = { name: "ada", age: 7 }
+
+    constructor() {
+        var flag = true
+        if (flag) {
+            this.payload = { name: "bob", age: 8 }
+        }
+    }
+
+    jsonFieldInitializerConstructorBranchPlan() -> int {
+        return this.payload.age
+    }
+}
+
+fn mainValue() -> int {
+    return InitBranchHolder().jsonFieldInitializerConstructorBranchPlan()
+}
+
+print(mainValue())
