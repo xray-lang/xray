@@ -140,6 +140,13 @@ static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (!X)
         return;
 
+    static const char *result_members[] = {"Ok", "Err"};
+    static const int result_payload_counts[] = {1, 1};
+    XrEnumType *result_et =
+        make_prelude_enum(X, "Result", result_members, 2, result_payload_counts, true);
+    if (result_et)
+        bind_builtin_value(X, XR_GLOBAL_VAR_RESULT, XR_FROM_PTR(result_et));
+
     /* Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst } — ordinals
      * must match XrAtomicOrdering. */
     static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",

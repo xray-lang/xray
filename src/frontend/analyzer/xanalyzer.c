@@ -248,6 +248,15 @@ static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const 
 // per-module declaration.  The runtime binds the matching canonical
 // XrEnumType into builtin VM slots.
 static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
+    static const char *result_type_params[] = {"T", "E"};
+    static const char *result_members[] = {"Ok", "Err"};
+    static const int result_payload_counts[] = {1, 1};
+    XrType *result_ok_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
+    XrType *result_err_payload[] = {xr_type_new_type_param(analyzer->isolate, "E", 1)};
+    XrType **result_payload_types[] = {result_ok_payload, result_err_payload};
+    register_prelude_enum_full(analyzer, "Result", result_type_params, 2, result_members, 2,
+                               result_payload_counts, result_payload_types, true);
+
     static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
                                              "SeqCst"};
     register_prelude_enum(analyzer, "Ordering", ordering_members, 5, NULL, false);

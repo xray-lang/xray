@@ -1,0 +1,7 @@
+// Canonical fallible-value channel. The analyzer and VM/AOT runtimes bind one
+// prelude identity so values preserve their type across module boundaries.
+
+enum Result<T, E> {
+    Ok(T)
+    Err(E)
+}

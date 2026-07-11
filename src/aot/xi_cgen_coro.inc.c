@@ -143,6 +143,8 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
     if (!builtin || builtin->op != XI_GET_BUILTIN || !field)
         return true;
     switch ((int) builtin->aux_int) {
+        case XR_GLOBAL_VAR_RESULT:
+            return true;
         case XR_GLOBAL_VAR_ORDERING:
         case XR_GLOBAL_VAR_ENDIAN:
         case XR_GLOBAL_VAR_SEND_RESULT:
