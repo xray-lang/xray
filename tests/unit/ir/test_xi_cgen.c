@@ -11,6 +11,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/aot/xi_cgen.h"
 #include "../../../src/aot/xaot_bundle.h"
+#include "../../../src/aot/xaot_class_layout.h"
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/ir/xi_opt.h"
@@ -20,6 +21,7 @@
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
+#include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
@@ -125,6 +127,245 @@ static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgMo
         test_aot_add_function_evidence(plan, func->children[i], module_id, ids);
 }
 
+static uint8_t test_aot_class_field_semantic_kind(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+            return XG_CLASS_FIELD_TYPE_I8;
+        case XR_NATIVE_U8:
+            return XG_CLASS_FIELD_TYPE_U8;
+        case XR_NATIVE_I16:
+            return XG_CLASS_FIELD_TYPE_I16;
+        case XR_NATIVE_U16:
+            return XG_CLASS_FIELD_TYPE_U16;
+        case XR_NATIVE_I32:
+            return XG_CLASS_FIELD_TYPE_I32;
+        case XR_NATIVE_U32:
+            return XG_CLASS_FIELD_TYPE_U32;
+        case XR_NATIVE_I64:
+            return XG_CLASS_FIELD_TYPE_I64;
+        case XR_NATIVE_U64:
+            return XG_CLASS_FIELD_TYPE_U64;
+        case XR_NATIVE_ISIZE:
+            return XG_CLASS_FIELD_TYPE_ISIZE;
+        case XR_NATIVE_USIZE:
+            return XG_CLASS_FIELD_TYPE_USIZE;
+        case XR_NATIVE_F32:
+            return XG_CLASS_FIELD_TYPE_F32;
+        case XR_NATIVE_F64:
+            return XG_CLASS_FIELD_TYPE_F64;
+        case XR_NATIVE_BOOL:
+            return XG_CLASS_FIELD_TYPE_BOOL;
+        case XR_NATIVE_STRING:
+            return XG_CLASS_FIELD_TYPE_STRING;
+        case XR_NATIVE_ARRAY_REF:
+            return XG_CLASS_FIELD_TYPE_ARRAY;
+        case XR_NATIVE_MAP_REF:
+            return XG_CLASS_FIELD_TYPE_MAP;
+        case XR_NATIVE_SET_REF:
+            return XG_CLASS_FIELD_TYPE_SET;
+        default:
+            return XG_CLASS_FIELD_TYPE_DYNAMIC;
+    }
+}
+
+static uint8_t test_aot_class_field_native_width(uint8_t semantic_kind, uint8_t native_type) {
+    switch ((XgClassFieldTypeKind) semantic_kind) {
+        case XG_CLASS_FIELD_TYPE_I8:
+        case XG_CLASS_FIELD_TYPE_U8:
+        case XG_CLASS_FIELD_TYPE_I16:
+        case XG_CLASS_FIELD_TYPE_U16:
+        case XG_CLASS_FIELD_TYPE_I32:
+        case XG_CLASS_FIELD_TYPE_U32:
+        case XG_CLASS_FIELD_TYPE_I64:
+        case XG_CLASS_FIELD_TYPE_U64:
+        case XG_CLASS_FIELD_TYPE_ISIZE:
+        case XG_CLASS_FIELD_TYPE_USIZE:
+        case XG_CLASS_FIELD_TYPE_F32:
+        case XG_CLASS_FIELD_TYPE_F64:
+            return native_type;
+        default:
+            return 0;
+    }
+}
+
+static uint32_t test_aot_class_type_key(const char *name, uint32_t fallback) {
+    uint32_t key = xg_name_id(name ? name : "");
+    return key ? key : fallback;
+}
+
+static XgClassSummary *test_aot_find_class_by_name_mut(XgGlobalEvidence *ev, const char *name) {
+    uint32_t name_id = xg_name_id(name ? name : "");
+    if (!ev || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        XgClassSummary *cls = &ev->classes[i];
+        if (cls->name_id == name_id)
+            return cls;
+    }
+    return NULL;
+}
+
+static void test_aot_add_class_evidence(TestAotPlan *plan, XiModule *module, XgModuleId module_id,
+                                        TestAotEvidenceIds *ids) {
+    if (!plan || !module || !ids)
+        return;
+    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        const XiClassData *cd = module->classes ? module->classes[ci] : NULL;
+        const XrAggregateLayout *layout = cd ? cd->instance_layout : NULL;
+        uint32_t total_fields = layout ? layout->field_count : 0;
+        uint32_t inherited_fields = cd ? cd->inherited_field_count : 0;
+        uint32_t own_field_count =
+            total_fields > inherited_fields ? total_fields - inherited_fields : 0;
+        XgDeclId decl_id;
+        XgClassId class_id;
+        uint32_t source_node_id;
+        uint32_t name_id;
+        uint32_t field_start;
+        XgClassSummary *parent_summary;
+        XgDeclSummary decl;
+        XgClassSummary cls;
+        if (!cd || !cd->class_name || cd->struct_layout)
+            continue;
+        decl_id = ids->next_decl_id++;
+        class_id = (XgClassId) (plan->evidence.nclasses + 1);
+        source_node_id = ids->next_source_node_id++;
+        name_id = xg_name_id(cd->class_name);
+        field_start = own_field_count > 0 ? plan->evidence.nclass_fields + 1 : 0;
+
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.source_node_id = source_node_id;
+        decl.decl_id = decl_id;
+        decl.kind = XG_DECL_CLASS;
+        decl.name_id = name_id;
+        decl.source_span_id = source_node_id;
+        TEST_REQUIRE(xg_global_evidence_add_decl(&plan->evidence, &decl) != NULL,
+                     "AOT class declaration evidence allocation failed");
+
+        for (uint32_t fi = 0; fi < own_field_count; fi++) {
+            uint32_t layout_idx = inherited_fields + fi;
+            const XrAggregateFieldLayout *layout_field = &layout->fields[layout_idx];
+            const char *field_name = layout->field_names && layout_idx < layout->field_count
+                                         ? layout->field_names[layout_idx]
+                                         : NULL;
+            uint8_t semantic_kind = test_aot_class_field_semantic_kind(layout_field->native_type);
+            XaotClassFieldPhysicalLayout physical;
+            XgClassFieldSummary field;
+            memset(&field, 0, sizeof(field));
+            field.field_id = (XgFieldId) (plan->evidence.nclass_fields + 1);
+            field.module_id = module_id;
+            field.source_node_id = ids->next_source_node_id++;
+            field.owner_class_id = class_id;
+            field.name_id = xg_name_id(field_name ? field_name : "");
+            field.type_key = test_aot_class_type_key(field_name, field.source_node_id);
+            field.decl_ordinal = fi;
+            field.instance_slot = layout_idx;
+            field.semantic_kind = semantic_kind;
+            field.native_width =
+                test_aot_class_field_native_width(semantic_kind, layout_field->native_type);
+            if (xaot_class_field_physical_layout(&plan->bundle.target_data_layout, semantic_kind,
+                                                 &physical) &&
+                physical.ownership == XAOT_CLASS_FIELD_OWNERSHIP_OWNED)
+                field.flags |= XG_CLASS_FIELD_OWNED_REF;
+            TEST_REQUIRE(xg_global_evidence_add_class_field(&plan->evidence, &field) != NULL,
+                         "AOT class field evidence allocation failed");
+        }
+
+        memset(&cls, 0, sizeof(cls));
+        cls.module_id = module_id;
+        cls.decl_id = decl_id;
+        cls.class_id = class_id;
+        parent_summary = cd->super_name
+                             ? test_aot_find_class_by_name_mut(&plan->evidence, cd->super_name)
+                             : NULL;
+        cls.parent_class_id = parent_summary ? parent_summary->class_id : XG_NO_ID;
+        cls.name_id = name_id;
+        cls.flags = XG_CLASS_INFERRED_FINAL;
+        cls.field_start = field_start;
+        cls.field_count = own_field_count;
+        cls.decl_kind = XG_DECL_CLASS;
+        TEST_REQUIRE(xg_global_evidence_add_class(&plan->evidence, &cls) != NULL,
+                     "AOT class evidence allocation failed");
+        if (parent_summary) {
+            parent_summary->flags |= XG_CLASS_HAS_SUBCLASS;
+            parent_summary->flags &= ~XG_CLASS_INFERRED_FINAL;
+        }
+    }
+}
+
+static const XgClassFieldSummary *test_aot_find_class_field_for_value(const XgGlobalEvidence *ev,
+                                                                      const XiValue *v) {
+    const XrType *receiver_type;
+    uint32_t class_name_id;
+    uint32_t field_name_id;
+    const XgClassSummary *cls = NULL;
+    if (!ev || !v || (v->op != XI_LOAD_FIELD && v->op != XI_STORE_FIELD) ||
+        v->xg_class_field_id != 0 || !v->aux || v->nargs == 0 || !v->args || !v->args[0])
+        return NULL;
+    receiver_type = v->args[0]->type;
+    if (!receiver_type ||
+        (receiver_type->kind != XR_KIND_CLASS && receiver_type->kind != XR_KIND_INSTANCE) ||
+        !receiver_type->instance.class_name)
+        return NULL;
+    class_name_id = xg_name_id(receiver_type->instance.class_name);
+    field_name_id = xg_name_id((const char *) v->aux);
+    if (class_name_id == 0 || field_name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].name_id == class_name_id) {
+            cls = &ev->classes[i];
+            break;
+        }
+    }
+    for (uint32_t depth = 0; cls && depth < 64; depth++) {
+        uint32_t start = cls->field_start ? cls->field_start - 1 : 0;
+        for (uint32_t i = 0; i < cls->field_count && start + i < ev->nclass_fields; i++) {
+            const XgClassFieldSummary *field = &ev->class_fields[start + i];
+            if (field->owner_class_id == cls->class_id && field->name_id == field_name_id &&
+                (field->flags & XG_CLASS_FIELD_STATIC) == 0)
+                return field;
+        }
+        if (cls->parent_class_id == XG_NO_ID)
+            return NULL;
+        XgClassId parent_class_id = cls->parent_class_id;
+        cls = NULL;
+        for (uint32_t i = 0; i < ev->nclasses; i++) {
+            if (ev->classes[i].class_id == parent_class_id) {
+                cls = &ev->classes[i];
+                break;
+            }
+        }
+    }
+    return NULL;
+}
+
+static void test_aot_annotate_class_field_values_in_func(XiFunc *func, const XgGlobalEvidence *ev) {
+    if (!func || !ev)
+        return;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *v = block->values[vi];
+            const XgClassFieldSummary *field = test_aot_find_class_field_for_value(ev, v);
+            if (field)
+                v->xg_class_field_id = field->field_id;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++)
+        test_aot_annotate_class_field_values_in_func(func->children[ci], ev);
+}
+
+static void test_aot_annotate_class_field_values(XiModule **modules, uint32_t nmodules,
+                                                 const XgGlobalEvidence *ev) {
+    for (uint32_t mi = 0; mi < nmodules; mi++) {
+        XiModule *module = modules[mi];
+        if (module && module->init)
+            test_aot_annotate_class_field_values_in_func(module->init, ev);
+    }
+}
+
 static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
                                   uint32_t entry_module) {
     char verify_err[256];
@@ -151,6 +392,7 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
 
         if (!module || !module->init)
             continue;
+        test_aot_add_class_evidence(plan, module, module_id, &ids);
         func_id = ids.next_func_id++;
         body = (XgBodySummary) {
             .func_id = func_id,
@@ -169,8 +411,15 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
         xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE),
         "AOT global evidence attach failed");
     TEST_REQUIRE(xaot_prepare_bundle(&plan->bundle, NULL), "AOT prepare failed");
+    test_aot_annotate_class_field_values(modules, nmodules, &plan->evidence);
     if (!xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err))) {
         fprintf(stderr, "  AOT verify error: %s\n", verify_err);
+        for (uint32_t i = 0; i < plan->evidence.nclasses; i++) {
+            const XgClassSummary *cls = &plan->evidence.classes[i];
+            fprintf(stderr, "  class[%u] id=%u parent=%u name=%u flags=0x%x fields=%u+%u\n", i,
+                    cls->class_id, cls->parent_class_id, cls->name_id, cls->flags, cls->field_start,
+                    cls->field_count);
+        }
         TEST_REQUIRE(false, "AOT verify failed");
     }
 }

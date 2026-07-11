@@ -228,6 +228,46 @@ static uint32_t producer_unique_callsite_source_node_id(const XgBodyCollect *bc,
     return candidate;
 }
 
+static bool producer_body_source_seen(const XgProducer *p, XgModuleId module_id,
+                                      uint32_t source_node_id) {
+    if (!p || source_node_id == 0)
+        return false;
+    for (uint32_t i = 0; i < p->nbodies; i++) {
+        const XgPendingBody *body = &p->bodies[i];
+        if (body->module_id == module_id && body->source_node_id == source_node_id)
+            return true;
+    }
+    if (p->evidence) {
+        for (uint32_t i = 0; i < p->evidence->nbodies; i++) {
+            const XgBodySummary *body = &p->evidence->bodies[i];
+            if (body->module_id == module_id && body->source_node_id == source_node_id)
+                return true;
+        }
+    }
+    return false;
+}
+
+static uint32_t producer_unique_body_source_node_id(const XgProducer *p, XgModuleId module_id,
+                                                    uint32_t source_node_id, XgFuncId func_id,
+                                                    uint32_t name_id, uint32_t signature_key) {
+    uint32_t candidate = source_node_id;
+    uint32_t salt = 1;
+    if (!p || source_node_id == 0)
+        return source_node_id;
+    while (producer_body_source_seen(p, module_id, candidate)) {
+        uint64_t h = XR_FNV64_OFFSET_BASIS;
+        h = fold_u64(h, module_id);
+        h = fold_u64(h, source_node_id);
+        h = fold_u64(h, func_id);
+        h = fold_u64(h, name_id);
+        h = fold_u64(h, signature_key);
+        h = fold_u64(h, p->nbodies);
+        h = fold_u64(h, salt++);
+        candidate = hash_folded32(h);
+    }
+    return candidate;
+}
+
 static bool producer_stdlib_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
 }
@@ -5594,8 +5634,10 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
         return;
     child_func_id = producer_next_func_id(bc->producer);
     name = fn->name ? fn->name : "<anonymous>";
-    source_node_id = producer_source_node_id(bc->module_id, node);
     signature_key = hash_function_signature(fn);
+    source_node_id = producer_unique_body_source_node_id(
+        bc->producer, bc->module_id, producer_source_node_id(bc->module_id, node), child_func_id,
+        hash_name32(name), signature_key);
     if (!producer_enqueue_body(bc->producer, child_func_id, bc->module_id, XG_NO_ID,
                                bc->current_class_id, XG_NO_ID, hash_name32(name), signature_key,
                                source_node_id, (uint32_t) node->line, XG_BODY_FUNCTION, fn->body,
