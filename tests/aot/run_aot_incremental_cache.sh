@@ -175,6 +175,27 @@ expect_evidence_preproducer_summary() {
     fi
 }
 
+expect_evidence_producer_skip() {
+    local log="$1" producer="$2" name="$3"
+    local pattern="evidence cache producer skip: $producer"
+    if grep -q "$pattern" "$log"; then
+        record_pass "$name: $pattern"
+    else
+        record_fail "$name: expected $pattern"
+        show_evidence_cache_lines "$log"
+    fi
+}
+
+expect_no_evidence_producer_skip() {
+    local log="$1" name="$2"
+    if grep -q "evidence cache producer skip:" "$log"; then
+        record_fail "$name: unexpected evidence producer skip"
+        show_evidence_cache_lines "$log"
+    else
+        record_pass "$name: no evidence producer skip"
+    fi
+}
+
 expect_evidence_phase() {
     local log="$1" phase="$2" state="$3" name="$4"
     local pattern="evidence cache $phase: $state "
@@ -316,6 +337,7 @@ XR_EOF
     require_build "evidence-cold" "$dir/log1" \
         build_log "$cache" "$app" "$dir/ev1" "$dir/log1" || return 1
     expect_evidence_preproducer_summary "$dir/log1" 0 4 0 "evidence-cold"
+    expect_no_evidence_producer_skip "$dir/log1" "evidence-cold"
     expect_evidence_summary "$dir/log1" 0 4 "evidence-cold"
     expect_evidence_sidecars "$cache" "evidence-cold"
     expect_output "$dir/ev1" "7" "evidence-cold"
@@ -323,6 +345,8 @@ XR_EOF
     require_build "evidence-warm" "$dir/log2" \
         build_log "$cache" "$app" "$dir/ev2" "$dir/log2" || return 1
     expect_evidence_preproducer_summary "$dir/log2" 4 0 4 "evidence-warm"
+    expect_evidence_producer_skip "$dir/log2" pre_mono_generic_summary "evidence-warm"
+    expect_evidence_producer_skip "$dir/log2" global_evidence_summary "evidence-warm"
     expect_evidence_summary "$dir/log2" 4 0 "evidence-warm"
     expect_output "$dir/ev2" "7" "evidence-warm"
 
@@ -339,6 +363,9 @@ XR_EOF
     corrupt_evidence_payload_phase "$cache" global_evidence "evidence-payload-corrupt"
     require_build "evidence-payload-corrupt" "$dir/log_payload_corrupt" \
         build_log "$cache" "$app" "$dir/ev_payload_corrupt" "$dir/log_payload_corrupt" || return 1
+    expect_evidence_preproducer_summary "$dir/log_payload_corrupt" 3 1 3 \
+        "evidence-payload-corrupt"
+    expect_no_evidence_producer_skip "$dir/log_payload_corrupt" "evidence-payload-corrupt"
     expect_evidence_phase "$dir/log_payload_corrupt" declarations hit "evidence-payload-corrupt"
     expect_evidence_phase "$dir/log_payload_corrupt" semantic_graph hit "evidence-payload-corrupt"
     expect_evidence_phase "$dir/log_payload_corrupt" body_summary hit "evidence-payload-corrupt"
@@ -357,6 +384,7 @@ XR_EOF
     require_build "evidence-body-change" "$dir/log3" \
         build_log "$cache" "$app" "$dir/ev3" "$dir/log3" || return 1
     expect_evidence_preproducer_summary "$dir/log3" 0 4 0 "evidence-body-change"
+    expect_no_evidence_producer_skip "$dir/log3" "evidence-body-change"
     expect_evidence_phase "$dir/log3" declarations hit "evidence-body-change"
     expect_evidence_phase "$dir/log3" semantic_graph hit "evidence-body-change"
     expect_evidence_phase "$dir/log3" body_summary miss "evidence-body-change"
@@ -384,6 +412,7 @@ XR_EOF
     require_build "evidence-rebuild" "$dir/log5" \
         build_log "$cache" "$app" "$dir/ev5" "$dir/log5" --rebuild || return 1
     expect_evidence_preproducer_summary "$dir/log5" 0 4 0 "evidence-rebuild" " rebuild"
+    expect_no_evidence_producer_skip "$dir/log5" "evidence-rebuild"
     expect_evidence_summary "$dir/log5" 0 4 "evidence-rebuild" " rebuild"
     expect_output "$dir/ev5" "9" "evidence-rebuild"
 }
