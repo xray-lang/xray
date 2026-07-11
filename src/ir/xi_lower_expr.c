@@ -5214,7 +5214,7 @@ static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *r
         .type = l->type_int,
     }};
     XiNativeCallbackKind callback = parallel_call_type_can_use_scalar_collect_callback(elem_type)
-                                        ? XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY
+                                        ? XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY
                                         : XI_NATIVE_CALLBACK_NONE;
     XiFunc *body = parallel_call_lower_lambda_func(l, body_node, "map_body", elem_type, callback, 2,
                                                    abi_types, bindings, 1, node->line);
@@ -5229,8 +5229,8 @@ static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *r
     uint16_t extra_count = into_array ? 1u : 0u;
     uint16_t capture_base = (uint16_t) (4u + extra_count);
 
-    XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
-        l->func, (uint32_t) sizeof(XiParallelCollectData));
+    XiParallelMapData *data =
+        (XiParallelMapData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiParallelMapData));
     if (!data) {
         l->had_error = true;
         return NULL;
@@ -5248,7 +5248,7 @@ static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *r
     data->inclusive_end = rn->inclusive_end;
     data->into_result = into_array != NULL;
 
-    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, result_type,
+    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_MAP, result_type,
                                 (uint16_t) (capture_base + ncap));
     if (!par) {
         l->had_error = true;
@@ -5263,7 +5263,7 @@ static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *r
     for (uint16_t ci = 0; ci < ncap; ci++)
         par->args[capture_base + ci] = closure->args[ci];
     par->aux = data;
-    par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
+    par->aux_kind = XI_AUX_KIND_PAR_MAP;
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;

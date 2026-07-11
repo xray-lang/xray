@@ -899,7 +899,7 @@ static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
                  f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE ||
                  f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_BODY ||
                  f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE ||
-                 f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY ||
+                 f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY ||
                  f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_RANGE_I64);
 }
 
@@ -1550,8 +1550,8 @@ static bool cg_static_function_value_use_is_direct_parallel_callback(const XiVal
         const XiParallelForData *data = (const XiParallelForData *) user->aux;
         return data && data->body_func == target;
     }
-    if (user->op == XI_PAR_COLLECT && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_COLLECT) {
-        const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+    if (user->op == XI_PAR_MAP && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_MAP) {
+        const XiParallelMapData *data = (const XiParallelMapData *) user->aux;
         return data && data->body_func == target;
     }
     if (user->op == XI_PAR_REDUCE && (arg_idx == 4 || arg_idx == 5) &&
@@ -1604,7 +1604,7 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
                             return false;
                         break;
                     case XI_PAR_FOR:
-                    case XI_PAR_COLLECT:
+                    case XI_PAR_MAP:
                     case XI_PAR_REDUCE:
                         if (!cg_static_function_value_use_is_direct_parallel_callback(user, ai,
                                                                                       target))
@@ -8484,10 +8484,10 @@ static bool cg_parallel_op_targets_func(const XiValue *user, const XiFunc *targe
                                                 : NULL;
             return data && data->body_func == target;
         }
-        case XI_PAR_COLLECT: {
-            const XiParallelCollectData *data = (user->aux_kind == XI_AUX_KIND_PAR_COLLECT)
-                                                    ? (const XiParallelCollectData *) user->aux
-                                                    : NULL;
+        case XI_PAR_MAP: {
+            const XiParallelMapData *data = (user->aux_kind == XI_AUX_KIND_PAR_MAP)
+                                                ? (const XiParallelMapData *) user->aux
+                                                : NULL;
             return data && data->body_func == target;
         }
         case XI_PAR_REDUCE: {
@@ -8548,7 +8548,7 @@ static bool cg_static_func_ref_use_requires_body(XiCgenCtx *ctx, const XiFunc *o
                             return true;
                         break;
                     case XI_PAR_FOR:
-                    case XI_PAR_COLLECT:
+                    case XI_PAR_MAP:
                     case XI_PAR_REDUCE:
                         return true;
                     default:
@@ -8688,7 +8688,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     if (!cg_check_no_alloc_func(ctx, f))
         return;
     xicgen_emit_par_for_range_wrappers(ctx, out, f, prefix);
-    xicgen_emit_par_collect_range_wrappers(ctx, out, f, prefix);
+    xicgen_emit_par_map_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_reduce_range_wrappers(ctx, out, f, prefix);
 
     cg_class_field_cache_reset(&ctx->class_field_cache);

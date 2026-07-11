@@ -632,7 +632,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     XI_EMIT_VM_LOWERING_HANDLERS(XI_VM_HANDLER_ENTRY)
 #undef XI_VM_HANDLER_ENTRY
         [XI_PAR_FOR] = xi_emit_par_for,
-    [XI_PAR_COLLECT] = xi_emit_par_collect,
+    [XI_PAR_MAP] = xi_emit_par_map,
     [XI_PAR_REDUCE] = xi_emit_par_reduce,
     [XI_PHI] = NULL, /* handled separately by emit_phi_moves */
 };
