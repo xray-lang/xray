@@ -1,0 +1,34 @@
+schema = 1
+module = "url"
+contract_revision = 1
+legacy_commit = "8e78b825c86832179f48397dc7f7e7a43cc2dc94"
+legacy_public_surface = ["URL", "parse", "format", "parseQuery", "buildQuery", "encode", "decode", "encodeForm", "decodeForm", "resolve", "join"]
+intentional_semantic_changes = [
+  "parseQuery returns ordered duplicate-preserving QueryParams instead of Json",
+  "QueryParams.encode replaces buildQuery",
+  "malformed percent escapes throw UrlError.InvalidPercentEncoding",
+]
+known_legacy_bugs = ["Json query objects collapsed duplicate names and lost pair order"]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/url/diff_cases.txt"
+benchmark_suite = "stdlib/url"
+
+[[legacy_behavior]]
+id = "form-percent-encoding"
+classification = "required"
+new_behavior = "QueryParams decodes plus and percent escapes and encode emits canonical form pairs"
+
+[[legacy_behavior]]
+id = "duplicate-query-collapse"
+classification = "bug"
+new_behavior = "QueryParams preserves insertion order and every duplicate name"
+
+[[legacy_behavior]]
+id = "module-build-query"
+classification = "removed"
+new_behavior = "encoding is an invariant-preserving QueryParams instance method"
+
+[[legacy_behavior]]
+id = "malformed-percent-literal"
+classification = "accidental"
+new_behavior = "throw UrlError.InvalidPercentEncoding with the source offset"

@@ -1,6 +1,7 @@
 // AOT direct-call URL helpers must match VM tagged stdlib dispatch.
 
 import url
+import { UrlError } from url
 
 print(url.encode("hello 世界!"))
 print(url.decode("hello%20%E4%B8%96%E7%95%8C%21"))
@@ -20,13 +21,21 @@ print(url.format(r))
 print(url.format(url.parse("http://user:pass@example.com/path")))
 
 var q = url.parseQuery("msg=hello+world&key=a%26b")
-print(q.msg)
-print(q.key)
+print(q.get("msg")!)
+print(q.get("key")!)
 var q2 = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
-print(q2.empty)
-print(q2.flag)
-print(q2.msg)
-print(url.buildQuery(q))
+print(q2.get("empty")!)
+print(q2.get("flag")!)
+print(q2.get("msg")!)
+print(q2.get("")!)
+print(q.encode())
+try {
+    url.parseQuery("ok=1&bad=%GG")
+} catch (e: UrlError) {
+    print(match (e) {
+        UrlError.InvalidPercentEncoding(offset) -> offset
+    })
+}
 print(url.resolve("https://example.com/a/b/c", "d.html"))
 print(url.resolve("https://example.com/a/b/c?old=1#top", "?new=2"))
 print(url.resolve("https://example.com/a/b/c?old=1", "#frag"))

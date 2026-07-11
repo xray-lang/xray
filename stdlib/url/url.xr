@@ -6,6 +6,84 @@
 
 const HEX = "0123456789ABCDEF"
 
+enum UrlError {
+    InvalidPercentEncoding(int)
+}
+
+// QueryParams preserves insertion order, duplicate names, empty names, and
+// empty values. Names are case-sensitive; form encoding is applied only at
+// parse/encode boundaries.
+class QueryParams {
+    private names: Array<string>
+    private values: Array<string>
+
+    constructor() {
+        this.names = []
+        this.values = []
+    }
+
+    add(name: string, value: string) {
+        this.names.push(name)
+        this.values.push(value)
+    }
+
+    set(name: string, value: string) {
+        var nextNames: Array<string> = []
+        var nextValues: Array<string> = []
+        var replaced = false
+        for (var i = 0; i < this.names.length; i++) {
+            if (this.names[i] == name) {
+                if (!replaced) {
+                    nextNames.push(name)
+                    nextValues.push(value)
+                    replaced = true
+                }
+            } else {
+                nextNames.push(this.names[i])
+                nextValues.push(this.values[i])
+            }
+        }
+        if (!replaced) {
+            nextNames.push(name)
+            nextValues.push(value)
+        }
+        this.names = nextNames
+        this.values = nextValues
+    }
+
+    get(name: string) -> string? {
+        for (var i = 0; i < this.names.length; i++) {
+            if (this.names[i] == name) { return this.values[i] }
+        }
+        return null
+    }
+
+    getAll(name: string) -> Array<string> {
+        var out: Array<string> = []
+        for (var i = 0; i < this.names.length; i++) {
+            if (this.names[i] == name) { out.push(this.values[i]) }
+        }
+        return out
+    }
+
+    entries() -> Array<(string, string)> {
+        var out: Array<(string, string)> = []
+        for (var i = 0; i < this.names.length; i++) {
+            out.push((this.names[i], this.values[i]))
+        }
+        return out
+    }
+
+    encode() -> string {
+        var out = ""
+        for (var i = 0; i < this.names.length; i++) {
+            if (i > 0) { out = out + "&" }
+            out = out + encodeForm(this.names[i]) + "=" + encodeForm(this.values[i])
+        }
+        return out
+    }
+}
+
 // URL - Parsed URL handle with normalized host, origin, and href components.
 class URL {
     protocol: string
@@ -117,6 +195,37 @@ fn decodeImpl(s: string, form: bool) -> string {
             }
         }
         if (form && src[i] == 43) {
+            out[oi] = 32
+        } else {
+            out[oi] = src[i]
+        }
+        oi = oi + 1
+        i = i + 1
+    }
+    return out.toString()
+}
+
+fn decodeQueryComponent(s: string, baseOffset: int) -> string {
+    var src = s.toBytes()
+    var out = Bytes(decodedLen(src))
+    var oi = 0
+    var i = 0
+    while (i < src.length) {
+        if (src[i] == 37) {
+            if (i + 2 >= src.length) {
+                throw UrlError.InvalidPercentEncoding(baseOffset + i)
+            }
+            var hi = hexVal(src[i + 1])
+            var lo = hexVal(src[i + 2])
+            if (hi < 0 || lo < 0) {
+                throw UrlError.InvalidPercentEncoding(baseOffset + i)
+            }
+            out[oi] = (hi << 4) | lo
+            oi = oi + 1
+            i = i + 3
+            continue
+        }
+        if (src[i] == 43) {
             out[oi] = 32
         } else {
             out[oi] = src[i]
@@ -293,9 +402,9 @@ fn decodeForm(s: string) -> string {
     return decodeImpl(s, true)
 }
 
-// parseQuery - Parse a query string into a Json object.
-fn parseQuery(qs: string) -> Json {
-    var out: Json = {}
+// parseQuery - Parse a form-encoded query while preserving order and duplicates.
+fn parseQuery(qs: string) -> QueryParams {
+    var out = QueryParams()
     var start = 0
     if (qs.length > 0 && qs.charAt(0) == "?") { start = 1 }
 
@@ -307,39 +416,19 @@ fn parseQuery(qs: string) -> Json {
         var eq = findChar(qs, "=", start, pairEnd)
         var keyEnd = pairEnd
         if (eq >= 0) { keyEnd = eq }
-        var key = qs.slice(start, keyEnd)
-
-        if (key.length > 0) {
+        if (pairEnd > start) {
+            var key = decodeQueryComponent(qs.slice(start, keyEnd), start)
             var value = ""
             if (eq >= 0) {
-                value = decodeForm(qs.slice(eq + 1, pairEnd))
+                value = decodeQueryComponent(qs.slice(eq + 1, pairEnd), eq + 1)
             }
-            out[decodeForm(key)] = value
+            out.add(key, value)
         }
 
         if (amp < 0) { break }
         start = amp + 1
     }
 
-    return out
-}
-
-// buildQuery - Build a query string from a Json object.
-fn buildQuery(obj: Json) -> string {
-    var out = ""
-    var hasPairs = false
-    for (key in obj) {
-        var encKey = encodeForm(key)
-        if (encKey.length == 0) { continue }
-        var value = obj[key]
-
-        if (hasPairs) { out = out + "&" }
-        out = out + encKey
-        if (value != null) {
-            out = out + "=" + encodeForm(string(value))
-        }
-        hasPairs = true
-    }
     return out
 }
 
@@ -473,7 +562,7 @@ fn join(...parts: string) -> string {
 }
 
 export {
-    URL,
+    URL, UrlError, QueryParams,
     encode, decode, encodeForm, decodeForm,
-    parse, format, parseQuery, buildQuery, resolve, join
+    parse, format, parseQuery, resolve, join
 }
