@@ -1211,6 +1211,28 @@ static const char *lower_call_callee_imported_member(XiLower *l, AstNode *callee
                                      : (sym->name ? sym->name : var->name);
 }
 
+static bool lower_parallel_is_batch_method(const char *method) {
+    return method && (strcmp(method, "forEach") == 0 || strcmp(method, "map") == 0 ||
+                      strcmp(method, "mapInto") == 0 || strcmp(method, "reduce") == 0);
+}
+
+static XiValue *lower_parallel_module_intrinsic_or_error(XiLower *l, AstNode *node,
+                                                         CallExprNode *call, const char *method) {
+    XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_call(l, node, call, method);
+    if (parallel_intrinsic || (l && l->had_error) || !lower_parallel_is_batch_method(method))
+        return parallel_intrinsic;
+
+    int line = node ? node->line : -1;
+    fprintf(stderr,
+            "[LOWER] error: parallel.%s must lower to XI_PAR_*; stdlib reference body is "
+            "bootstrap-only (requires a Range literal, inline lambda callback(s), and "
+            "literal parallel.Options(...)) at line %d\n",
+            method, line);
+    if (l)
+        l->had_error = true;
+    return NULL;
+}
+
 static bool lower_mem_layout_member_name(const char *name) {
     return name && (strcmp(name, "sizeOf") == 0 || strcmp(name, "alignOf") == 0 ||
                     strcmp(name, "offsetOf") == 0);
@@ -3979,7 +4001,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         if (ma->name && lower_call_object_is_module(l, ma->object, "parallel")) {
             XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_call(l, node, call, ma->name);
+                lower_parallel_module_intrinsic_or_error(l, node, call, ma->name);
             if (parallel_intrinsic || l->had_error)
                 return parallel_intrinsic;
         }
@@ -4651,7 +4673,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             lower_call_callee_imported_member(l, call->callee, "parallel");
         if (parallel_member) {
             XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_call(l, node, call, parallel_member);
+                lower_parallel_module_intrinsic_or_error(l, node, call, parallel_member);
             if (parallel_intrinsic || l->had_error)
                 return parallel_intrinsic;
         }
