@@ -1,0 +1,12 @@
+class JsonArrayMethodReturnFactory {
+    makeUsers() -> Array<Json> {
+        return [{ name: "ada", age: 7 }, { name: "bob", age: 8 }]
+    }
+}
+
+fn jsonArrayMethodReturnContainerReceiverPlan() -> int {
+    var f = JsonArrayMethodReturnFactory()
+    return f.makeUsers()[0].age
+}
+
+print(jsonArrayMethodReturnContainerReceiverPlan())

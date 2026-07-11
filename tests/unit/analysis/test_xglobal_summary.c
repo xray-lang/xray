@@ -12689,6 +12689,96 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_return_contain
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers) {
+    setup_parser_session();
+    const char *source = "type User = { name: string, age: int }\n"
+                         "class ShapeFactory {\n"
+                         "    makeJson() -> Json {\n"
+                         "        return { name: \"ada\", age: 7 }\n"
+                         "    }\n"
+                         "    makeJsonArray() -> Array<Json> {\n"
+                         "        return [{ name: \"ada\", age: 7 }, { name: \"bob\", age: 8 }]\n"
+                         "    }\n"
+                         "    makeRecord() -> User {\n"
+                         "        return { name: \"ada\", age: 7 }\n"
+                         "    }\n"
+                         "}\n"
+                         "fn readJsonMethodAge() -> int {\n"
+                         "    var f = ShapeFactory()\n"
+                         "    return f.makeJson().age\n"
+                         "}\n"
+                         "fn readJsonArrayMethodAge() -> int {\n"
+                         "    var f = ShapeFactory()\n"
+                         "    return f.makeJsonArray()[0].age\n"
+                         "}\n"
+                         "fn readRecordMethodAge() -> int {\n"
+                         "    var f = ShapeFactory()\n"
+                         "    return f.makeRecord().age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *json_reader = evidence_find_body_by_name(&ev, "readJsonMethodAge");
+    const XgBodySummary *array_reader = evidence_find_body_by_name(&ev, "readJsonArrayMethodAge");
+    const XgBodySummary *record_reader = evidence_find_body_by_name(&ev, "readRecordMethodAge");
+    ASSERT_NOT_NULL(json_reader);
+    ASSERT_NOT_NULL(array_reader);
+    ASSERT_NOT_NULL(record_reader);
+    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
+    bool saw_json = false;
+    bool saw_array = false;
+    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
+        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+        ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
+        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(access->field_ordinal, 1);
+        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == json_reader->func_id)
+            saw_json = true;
+        if (access->owner_func_id == array_reader->func_id)
+            saw_array = true;
+    }
+    ASSERT_TRUE(saw_json);
+    ASSERT_TRUE(saw_array);
+    ASSERT_EQ_UINT(ev.record_accesses[0].owner_func_id, record_reader->func_id);
+    ASSERT_TRUE(ev.record_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.njson_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.json_access_plans[i].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(bundle.json_access_plans[i].field_ordinal, 1);
+    }
+    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.record_access_plans[0].action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    ASSERT_EQ_UINT(bundle.record_access_plans[0].field_ordinal, 1);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set) {
     setup_parser_session();
     const char *source = "fn readAfterMismatchedSet() -> int {\n"
@@ -14209,6 +14299,7 @@ RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_literal_co
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_push_container);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_alias_container);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_array_return_container);
+RUN_TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers);
 RUN_TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set);
 RUN_TEST(
     global_evidence_producer_propagates_json_bridge_shape_through_field_and_container_receivers);
