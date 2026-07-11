@@ -45,6 +45,17 @@ static bool write_temp_source(char *path, size_t path_sz) {
     return true;
 }
 
+static bool add_package_link_dependency(XgGlobalEvidence *package, XgModuleId module_id) {
+    XgLinkDependencySummary dep;
+    memset(&dep, 0, sizeof(dep));
+    dep.link_id = 1;
+    dep.module_id = module_id;
+    dep.kind = XG_LINK_DEP_STDLIB_SYMBOL;
+    dep.name_id = xg_name_id("math.abs");
+    snprintf(dep.name, sizeof(dep.name), "%s", "math.abs");
+    return xg_global_evidence_add_link_dependency(package, &dep) != NULL;
+}
+
 static bool write_file_text(const char *path, const char *text) {
     FILE *f = fopen(path, "w");
     if (!f)
@@ -96,7 +107,8 @@ static char *make_package_payload_for_source(const char *canonical, const char *
     if (!xg_module_summary_from_module_spec(&module, 1, &spec))
         return NULL;
     xg_global_evidence_init(&package, key);
-    if (!xg_global_evidence_add_module(&package, &module)) {
+    if (!xg_global_evidence_add_module(&package, &module) ||
+        !add_package_link_dependency(&package, module.module_id)) {
         xg_global_evidence_free(&package);
         return NULL;
     }
@@ -137,6 +149,8 @@ static char *make_package_payload_for_ordered_sources(const char *const *canonic
             !xg_global_evidence_add_module(&package, &module))
             goto done;
     }
+    if (!add_package_link_dependency(&package, 1))
+        goto done;
     payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
 
 done:
@@ -246,7 +260,8 @@ static char *make_package_payload(void) {
     };
     char *payload;
     xg_global_evidence_init(&package, key);
-    if (!xg_global_evidence_add_module(&package, &module)) {
+    if (!xg_global_evidence_add_module(&package, &module) ||
+        !add_package_link_dependency(&package, module.module_id)) {
         xg_global_evidence_free(&package);
         return NULL;
     }
@@ -259,6 +274,10 @@ static bool dump_contains_import_hash(const char *dump, uint64_t imported_hash) 
     char needle[64];
     snprintf(needle, sizeof(needle), "imports=%016" PRIx64, imported_hash);
     return dump && strstr(dump, needle) != NULL;
+}
+
+static bool dump_contains_imported_package_link_dep(const char *dump) {
+    return dump && strstr(dump, "link-dep") && strstr(dump, "name=math.abs");
 }
 
 static void test_driver_consumes_imported_summary_payload_set(void) {
@@ -286,6 +305,7 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
 
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
+    ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
 
     xaot_build_result_free(&result);
     xaot_target_free(&target);
@@ -355,6 +375,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
 
     ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
+    ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
 
     xaot_build_result_free(&result);
     xaot_target_free(&target);

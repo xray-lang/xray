@@ -6304,6 +6304,50 @@ TEST(global_evidence_build_key_uses_explicit_imported_summary_hash) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_build_skips_imported_package_module_rows) {
+    setup_parser_session();
+    const char *package_source = "fn package_value() -> int { return 1 }\n";
+    const char *entry_source = "fn local_value() -> int { return 2 }\n";
+    AstNode *package_ast = xr_parse(g_session, package_source);
+    AstNode *entry_ast = xr_parse(g_session, entry_source);
+    ASSERT_NOT_NULL(package_ast);
+    ASSERT_NOT_NULL(entry_ast);
+
+    XrModuleSpec specs[2];
+    int topo_order[2] = {0, 1};
+    XrModuleGraph graph;
+    XgModuleSummary imported_package;
+    XgGlobalEvidence ev;
+
+    memset(specs, 0, sizeof(specs));
+    specs[0].canonical = "codex/pkg";
+    specs[0].kind = XR_MOD_PACKAGE;
+    specs[0].ast = package_ast;
+    specs[1].canonical = "entry";
+    specs[1].kind = XR_MOD_FILE;
+    specs[1].ast = entry_ast;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = specs;
+    graph.spec_count = 2;
+    graph.topo_order = topo_order;
+    graph.topo_count = 2;
+    graph.entry_index = 1;
+
+    ASSERT_TRUE(xg_module_summary_from_module_spec(&imported_package, 77, &specs[0]));
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules(
+        &ev, &graph, XG_BUILD_NATIVE_RELEASE, UINT64_C(0xfeed), &imported_package, 1));
+    ASSERT_EQ_UINT(ev.nmodules, 2);
+    ASSERT_EQ_UINT(ev.modules[0].module_id, 1);
+    ASSERT_TRUE(xg_module_summary_identity_matches(&ev.modules[0], &imported_package));
+    ASSERT_EQ_UINT(ev.ndecls, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.decls[0].module_id, 2);
+    ASSERT_EQ_UINT(ev.bodies[0].module_id, 2);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     setup_parser_session();
     const char *source = "fn callee(x: int) -> int { return x + 1 }\n"
@@ -11710,6 +11754,7 @@ RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_build_key_uses_explicit_imported_summary_hash);
+RUN_TEST(global_evidence_build_skips_imported_package_module_rows);
 RUN_TEST(global_evidence_producer_resolves_direct_function_callsite_targets);
 RUN_TEST(global_evidence_producer_uses_stable_source_identity);
 RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);

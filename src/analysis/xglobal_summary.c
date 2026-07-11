@@ -5239,6 +5239,18 @@ static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence 
     return false;
 }
 
+static bool target_has_link_dependency_identity(const XgGlobalEvidence *target, uint8_t kind,
+                                                const char *name) {
+    if (!target || !name || !name[0])
+        return false;
+    for (uint32_t i = 0; i < target->nlink_deps; i++) {
+        const XgLinkDependencySummary *dep = &target->link_deps[i];
+        if (dep->kind == kind && strcmp(dep->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
 typedef struct XgImportedPackageHashEntry {
     uint64_t request_hash;
     uint64_t key_hash;
@@ -5381,6 +5393,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     XgPackageImportOffsets offsets;
     XgModuleImportMap *module_maps = NULL;
     XgEvidencePackageImportReport report;
+    uint32_t skipped_link_deps = 0;
     bool ok = false;
     if (out_report)
         memset(out_report, 0, sizeof(*out_report));
@@ -5518,6 +5531,10 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     }
     for (uint32_t i = 0; i < package.nlink_deps; i++) {
         XgLinkDependencySummary row = package.link_deps[i];
+        if (target_has_link_dependency_identity(target, row.kind, row.name)) {
+            skipped_link_deps++;
+            continue;
+        }
         REMAP_ID(row.link_id, offsets.link_id);
         REMAP_MODULE(row.module_id);
         REMAP_ID(row.decl_id, offsets.decl_id);
@@ -5741,7 +5758,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
 #undef REMAP_ID
 #undef REMAP_MODULE
 
-    report.rows_imported = package_non_module_row_count(&package);
+    report.rows_imported = package_non_module_row_count(&package) - skipped_link_deps;
     report.payloads_imported = 1;
     if (out_report)
         *out_report = report;

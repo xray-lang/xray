@@ -6422,6 +6422,18 @@ static bool add_module_summary(XgGlobalEvidence *evidence, XgModuleId module_id,
     return xg_global_evidence_add_module(evidence, &row) != NULL;
 }
 
+static bool module_identity_is_imported(const XgModuleSummary *imported_modules,
+                                        uint32_t imported_module_count,
+                                        const XgModuleSummary *candidate) {
+    if (!candidate || !imported_modules || imported_module_count == 0)
+        return false;
+    for (uint32_t i = 0; i < imported_module_count; i++) {
+        if (xg_module_summary_identity_matches(&imported_modules[i], candidate))
+            return true;
+    }
+    return false;
+}
+
 XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key, const XrModuleSpec *spec,
                                                       uint32_t profile,
                                                       uint64_t imported_summary_hash) {
@@ -6477,9 +6489,17 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
                                                         const XrModuleGraph *graph,
                                                         uint32_t profile,
                                                         uint64_t imported_summary_hash) {
+    return xg_global_evidence_build_from_module_graph_with_imported_modules(
+        evidence, graph, profile, imported_summary_hash, NULL, 0);
+}
+
+XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
+    XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
+    uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
+    uint32_t imported_module_count) {
     XgBuildKey key;
     XgProducer producer;
-    if (!evidence || !graph)
+    if (!evidence || !graph || (imported_module_count > 0 && !imported_modules))
         return false;
     if (!xg_build_key_from_module_graph(&key, graph, profile, imported_summary_hash))
         return false;
@@ -6493,7 +6513,9 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
         int idx = graph->topo_order[ti];
         const XrModuleSpec *spec = &graph->specs[idx];
         XgModuleId module_id = (XgModuleId) (ti + 1);
-        if (!add_module_summary(evidence, module_id, spec)) {
+        XgModuleSummary module_summary;
+        if (!xg_module_summary_from_module_spec(&module_summary, module_id, spec) ||
+            !xg_global_evidence_add_module(evidence, &module_summary)) {
             xr_free(producer.classes);
             xr_free(producer.interfaces);
             xr_free(producer.funcs);
@@ -6502,6 +6524,8 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
             xg_global_evidence_free(evidence);
             return false;
         }
+        if (module_identity_is_imported(imported_modules, imported_module_count, &module_summary))
+            continue;
         if (!add_module_ast(&producer, module_id, spec->ast)) {
             xr_free(producer.classes);
             xr_free(producer.interfaces);
