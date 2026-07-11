@@ -929,6 +929,73 @@ TEST(cache_payload_imports_package_with_id_remap) {
     xg_global_evidence_free(&package);
 }
 
+TEST(cache_payload_import_reuses_module_stub_without_duplicate_module) {
+    XgGlobalEvidence package = {0};
+    XgGlobalEvidence target = {0};
+    XgEvidencePackageImportReport report;
+    XgModuleSummary existing_module = {0};
+    char *payload;
+
+    package.key.module_id = 7;
+    package.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_semantic_summary(&package);
+    add_sample_body_summary(&package);
+    add_sample_global_extra_summary(&package);
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+
+    existing_module = package.modules[0];
+    existing_module.module_id = 100;
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&target, &existing_module));
+
+    ASSERT(xg_global_evidence_import_package_payload(&target, payload, &report));
+    ASSERT_EQ_UINT(report.modules_remapped, 1);
+    ASSERT_EQ_UINT(report.modules_added, 0);
+    ASSERT_EQ_UINT(report.rows_imported, 36);
+    ASSERT_EQ_UINT(target.nmodules, 1);
+    ASSERT_EQ_UINT(target.modules[0].module_id, 100);
+    ASSERT_EQ_UINT(target.decls[0].module_id, 100);
+    ASSERT_EQ_UINT(target.bodies[0].module_id, 100);
+    ASSERT_EQ_UINT(target.json_shapes[0].module_id, 100);
+
+    xr_free(payload);
+    xg_global_evidence_free(&target);
+    xg_global_evidence_free(&package);
+}
+
+TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module) {
+    XgGlobalEvidence package = {0};
+    XgGlobalEvidence target = {0};
+    XgModuleSummary existing_module = {0};
+    XgDeclSummary existing_decl = {0};
+    char *payload;
+
+    package.key.module_id = 7;
+    package.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_semantic_summary(&package);
+    add_sample_body_summary(&package);
+    add_sample_global_extra_summary(&package);
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+
+    existing_module = package.modules[0];
+    existing_module.module_id = 100;
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&target, &existing_module));
+    existing_decl.decl_id = 1;
+    existing_decl.module_id = existing_module.module_id;
+    existing_decl.kind = XG_DECL_FUNC;
+    existing_decl.name_id = xg_name_id("already_loaded");
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&target, &existing_decl));
+
+    ASSERT(!xg_global_evidence_import_package_payload(&target, payload, NULL));
+    ASSERT_EQ_UINT(target.nmodules, 1);
+    ASSERT_EQ_UINT(target.ndecls, 1);
+
+    xr_free(payload);
+    xg_global_evidence_free(&target);
+    xg_global_evidence_free(&package);
+}
+
 TEST(cache_payload_import_rejects_non_global_or_missing_module_identity) {
     XgGlobalEvidence ev = {0};
     XgGlobalEvidence target = {0};
@@ -965,6 +1032,8 @@ RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_parse_rejects_request_drift);
 RUN_TEST(cache_payload_materializes_global_evidence);
 RUN_TEST(cache_payload_imports_package_with_id_remap);
+RUN_TEST(cache_payload_import_reuses_module_stub_without_duplicate_module);
+RUN_TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module);
 RUN_TEST(cache_payload_import_rejects_non_global_or_missing_module_identity);
 
 TEST_MAIN_END()
