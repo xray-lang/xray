@@ -124,7 +124,7 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
-    if (!xg_global_evidence_build_from_module_graph(out_ev, &graph, XG_BUILD_NATIVE_RELEASE)) {
+    if (!xg_global_evidence_build_from_module_graph(out_ev, &graph, XG_BUILD_NATIVE_RELEASE, 0)) {
         fprintf(stderr, "  GLOBAL EVIDENCE FAILED for: %s\n", source);
         xr_program_destroy(program);
         return NULL;

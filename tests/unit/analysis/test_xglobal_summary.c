@@ -6216,7 +6216,8 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 4);
     ASSERT_EQ_UINT(ev.nmethods, 4);
 
@@ -6260,6 +6261,49 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_build_key_uses_explicit_imported_summary_hash) {
+    XrModuleSpec specs[2];
+    int entry_deps[1] = {1};
+    int topo_order[2] = {1, 0};
+    XrModuleGraph graph;
+    XgBuildKey empty_imports;
+    XgBuildKey imported;
+    XgEvidenceCacheRequestKey empty_request;
+    XgEvidenceCacheRequestKey imported_request;
+    XgGlobalEvidence ev;
+
+    memset(specs, 0, sizeof(specs));
+    specs[0].canonical = "entry";
+    specs[0].dep_indices = entry_deps;
+    specs[0].dep_count = 1;
+    specs[1].canonical = "dep";
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = specs;
+    graph.spec_count = 2;
+    graph.topo_order = topo_order;
+    graph.topo_count = 2;
+    graph.entry_index = 0;
+
+    ASSERT_TRUE(xg_build_key_from_module_graph(&empty_imports, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(empty_imports.imported_summary_hash, 0);
+
+    ASSERT_TRUE(xg_build_key_from_module_graph(&imported, &graph, XG_BUILD_NATIVE_RELEASE,
+                                               UINT64_C(0xfeed12345678)));
+    ASSERT_EQ_UINT(imported.imported_summary_hash, UINT64_C(0xfeed12345678));
+    ASSERT_EQ_UINT(imported.source_hash, empty_imports.source_hash);
+    imported_request =
+        xg_evidence_cache_request_key_from_build_key(&imported, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    empty_request = xg_evidence_cache_request_key_from_build_key(&empty_imports,
+                                                                 XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NE(xg_evidence_cache_request_key_hash(&imported_request),
+              xg_evidence_cache_request_key_hash(&empty_request));
+
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE,
+                                                           UINT64_C(0xfeed12345678)));
+    ASSERT_EQ_UINT(ev.key.imported_summary_hash, UINT64_C(0xfeed12345678));
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     setup_parser_session();
     const char *source = "fn callee(x: int) -> int { return x + 1 }\n"
@@ -6280,7 +6324,8 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 2);
     ASSERT_EQ_UINT(ev.nbodies, 2);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
@@ -6328,9 +6373,10 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
 
     XgGlobalEvidence ev;
     XgGlobalEvidence rebuilt;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&rebuilt, &graph, XG_BUILD_NATIVE_RELEASE));
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&rebuilt, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 2);
     ASSERT_EQ_UINT(ev.nbodies, 2);
     ASSERT_EQ_UINT(ev.ncallsites, 2);
@@ -6398,9 +6444,10 @@ TEST(global_evidence_producer_disambiguates_same_location_callsites) {
 
     XgGlobalEvidence ev;
     XgGlobalEvidence rebuilt;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&rebuilt, &graph, XG_BUILD_NATIVE_RELEASE));
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&rebuilt, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ncallsites, 3);
     ASSERT_EQ_UINT(rebuilt.ncallsites, 3);
     ASSERT_EQ_UINT(ev.callsites[0].owner_func_id, ev.callsites[1].owner_func_id);
@@ -6458,9 +6505,9 @@ TEST(global_evidence_source_identity_survives_body_only_change) {
     XgGlobalEvidence ev_a;
     XgGlobalEvidence ev_b;
     ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev_a, &graph_a, XG_BUILD_NATIVE_RELEASE));
+        xg_global_evidence_build_from_module_graph(&ev_a, &graph_a, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev_b, &graph_b, XG_BUILD_NATIVE_RELEASE));
+        xg_global_evidence_build_from_module_graph(&ev_b, &graph_b, XG_BUILD_NATIVE_RELEASE, 0));
 
     const XgBodySummary *id_body_a = evidence_find_body_by_name(&ev_a, "id");
     const XgBodySummary *id_body_b = evidence_find_body_by_name(&ev_b, "id");
@@ -6500,7 +6547,8 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ngeneric_insts, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     const XgGenericInstSummary *inst = &ev.generic_insts[0];
@@ -6978,7 +7026,8 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 1);
     ASSERT_EQ_UINT(ev.nbodies, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
@@ -7009,7 +7058,8 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 2);
     ASSERT_EQ_UINT(ev.nbodies, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
@@ -7079,7 +7129,8 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 2);
     ASSERT_TRUE(ev.ncallsites >= 4);
     assert_body_callsite_ordinals(&ev);
@@ -7204,7 +7255,8 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *use_body = evidence_find_body_by_name(&ev, "use");
     const XgBodySummary *push_body = evidence_find_body_by_name(&ev, "push");
     ASSERT_NOT_NULL(use_body);
@@ -7291,7 +7343,8 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
 
     XgClassId shape_id = XG_NO_ID;
     XgMethodId shape_ctor_id = XG_NO_ID;
@@ -7384,7 +7437,8 @@ TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
 
     uint32_t push_int_name = xg_name_id("pushInt");
     uint32_t push_string_name = xg_name_id("pushString");
@@ -7454,7 +7508,8 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 0);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
@@ -7514,7 +7569,8 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
 
     XgGlobalEvidence ev;
     char *dump;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *make_adder = evidence_find_body_by_name(&ev, "makeAdder");
     const XgBodySummary *make_identity = evidence_find_body_by_name(&ev, "makeIdentity");
     ASSERT_NOT_NULL(make_adder);
@@ -7561,7 +7617,8 @@ TEST(global_evidence_producer_marks_read_mem_effect) {
 
     XgGlobalEvidence ev;
     char *dump;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *add = evidence_find_body_by_name(&ev, "add");
     const XgBodySummary *read_index = evidence_find_body_by_name(&ev, "readIndex");
     ASSERT_NOT_NULL(add);
@@ -7603,7 +7660,8 @@ TEST(global_evidence_producer_marks_call_effect) {
 
     XgGlobalEvidence ev;
     char *dump;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *add = evidence_find_body_by_name(&ev, "add");
     const XgBodySummary *call_add = evidence_find_body_by_name(&ev, "callAdd");
     ASSERT_NOT_NULL(add);
@@ -7644,7 +7702,8 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 1);
     ASSERT_EQ_UINT(ev.nmethods, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
@@ -7683,7 +7742,8 @@ TEST(global_evidence_producer_marks_native_methods_bodyless) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 1);
     ASSERT_EQ_UINT(ev.nmethods, 1);
     ASSERT_TRUE((ev.classes[0].flags & XG_CLASS_NATIVE) != 0);
@@ -7752,7 +7812,8 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 2);
     ASSERT_EQ_UINT(ev.ninterface_impls, 2);
     ASSERT_EQ_UINT(ev.ninterface_methods, 1);
@@ -7864,7 +7925,8 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ninterface_impls, 2);
     ASSERT_TRUE(ev.ninterface_object_uses >= 6);
     XgInterfaceId drawable_id = ev.interface_impls[0].interface_id;
@@ -8037,7 +8099,8 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nclasses, 4);
     ASSERT_EQ_UINT(ev.nclass_fields, 12);
 
@@ -8449,7 +8512,8 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ninterface_extends, 1);
     ASSERT_EQ_UINT(ev.ninterface_methods, 1);
     ASSERT_EQ_UINT(ev.ninterface_impls, 1);
@@ -8532,7 +8596,8 @@ TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ninterface_extends, 2);
     ASSERT_EQ_UINT(ev.ninterface_methods, 2);
 
@@ -8597,7 +8662,8 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ninterface_extends, 1);
     ASSERT_EQ_UINT(ev.ninterface_methods, 1);
     ASSERT_EQ_UINT(ev.ninterface_impls, 3);
@@ -8746,7 +8812,8 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(evidence_body_count_with_metadata(&ev, XG_METADATA_TYPENAME), 1);
     ASSERT_EQ_UINT(evidence_decl_count_with_flags(&ev, XG_DECL_DERIVE), 1);
     ASSERT_EQ_UINT(ev.decls[0].derive_flags, XR_DERIVE_INSPECT);
@@ -8804,7 +8871,8 @@ TEST(global_evidence_producer_records_derive_rows) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nderives, 2);
     ASSERT_EQ_UINT(ev.nderived_fields, 4);
     ASSERT_EQ_UINT(ev.nderived_methods, 0);
@@ -8923,7 +8991,8 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nderives, 2);
     ASSERT_EQ_UINT(ev.derives[0].derive_kind, XG_DERIVE_EQ);
     ASSERT_EQ_UINT(ev.derives[1].derive_kind, XG_DERIVE_HASH);
@@ -8998,7 +9067,8 @@ TEST(global_evidence_producer_records_derived_clone_plan) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nderives, 1);
     ASSERT_EQ_UINT(ev.derives[0].derive_kind, XG_DERIVE_CLONE);
     ASSERT_EQ_UINT(ev.derives[0].field_count, 1);
@@ -9968,7 +10038,8 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nhash_eqs, 1);
     ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_USER_METHOD);
     ASSERT_NE(ev.hash_eqs[0].eq_func_id, XG_NO_ID);
@@ -10164,7 +10235,8 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nsequence_accesses, 3);
     ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
     ASSERT_EQ_UINT(ev.nbulk_ops, 2);
@@ -10244,7 +10316,8 @@ TEST(global_evidence_producer_records_explicit_json_shape_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_fields, 2);
     ASSERT_EQ_UINT(ev.njson_accesses, 1);
@@ -10306,7 +10379,8 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
     ASSERT_EQ_UINT(ev.record_shapes[0].shape_kind, XG_RECORD_SHAPE_STATIC);
     ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0);
@@ -10379,7 +10453,8 @@ TEST(global_evidence_producer_records_json_computed_key_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_accesses, 1);
     ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
@@ -10431,7 +10506,8 @@ TEST(global_evidence_producer_records_json_static_key_index_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_accesses, 2);
 
@@ -10486,7 +10562,8 @@ TEST(global_evidence_producer_records_json_open_shape_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_accesses, 1);
     ASSERT_EQ_UINT(ev.json_shapes[0].shape_kind, XG_JSON_SHAPE_OPEN);
@@ -10541,7 +10618,8 @@ TEST(global_evidence_producer_records_json_open_shape_static_key_index_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_accesses, 1);
     ASSERT_EQ_UINT(ev.json_shapes[0].shape_kind, XG_JSON_SHAPE_OPEN);
@@ -10590,7 +10668,8 @@ TEST(global_evidence_producer_records_json_unknown_shape_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 0);
     ASSERT_EQ_UINT(ev.njson_accesses, 1);
     ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
@@ -10641,7 +10720,8 @@ TEST(global_evidence_producer_propagates_json_shape_through_local_alias) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 1);
     ASSERT_EQ_UINT(ev.njson_accesses, 1);
     ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
@@ -10685,7 +10765,8 @@ TEST(global_evidence_producer_records_record_shape_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.njson_shapes, 0);
     ASSERT_EQ_UINT(ev.njson_accesses, 0);
     ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
@@ -10745,7 +10826,8 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 1);
     ASSERT_EQ_UINT(ev.nmap_entries, 2);
     ASSERT_EQ_UINT(ev.nhash_eqs, 1);
@@ -10822,7 +10904,8 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 10);
     ASSERT_EQ_UINT(ev.nkey_accesses, 4);
@@ -10893,7 +10976,8 @@ TEST(global_evidence_producer_records_bool_direct_map_shape) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 4);
     ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0);
@@ -10950,7 +11034,8 @@ TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 1);
     ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_BOOL_DIRECT) == 0);
     ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) != 0);
@@ -10995,7 +11080,8 @@ TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 2);
     ASSERT_EQ_UINT(ev.nkey_accesses, 2);
@@ -11046,7 +11132,8 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 0);
     ASSERT_EQ_UINT(ev.nhash_eqs, 2);
@@ -11115,7 +11202,8 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 3);
     ASSERT_EQ_UINT(ev.nhash_eqs, 1);
@@ -11202,7 +11290,8 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_COMPTIME_VALUE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_FIXED_LAYOUT), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_RODATA), 1);
@@ -11248,7 +11337,8 @@ TEST(global_evidence_producer_marks_static_data_runtime_init) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_COMPTIME_VALUE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_RUNTIME_INIT), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_FREESTANDING_SAFE), 0);
@@ -11315,7 +11405,8 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
 
     ASSERT_TRUE(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE) >= 2);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_CHANNEL), 1);
@@ -11368,7 +11459,8 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SYS_THREAD), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
@@ -11407,7 +11499,8 @@ TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nlink_deps, 1);
     ASSERT_TRUE((ev.decls[0].flags & XG_DECL_EXTERN) != 0);
     ASSERT_TRUE((ev.decls[1].flags & XG_DECL_EXTERN) != 0);
@@ -11450,7 +11543,8 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nlink_deps, 5);
     ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_MODULE, "path"));
     ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_MODULE, "os"));
@@ -11493,7 +11587,8 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SEMAPHORE), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_OBJECTS), 1);
@@ -11530,7 +11625,8 @@ TEST(global_evidence_producer_marks_module_init_body) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nbodies, 2);
     uint32_t module_init_bodies = 0;
     uint32_t function_bodies = 0;
@@ -11613,8 +11709,10 @@ RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
 RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
+RUN_TEST(global_evidence_build_key_uses_explicit_imported_summary_hash);
 RUN_TEST(global_evidence_producer_resolves_direct_function_callsite_targets);
 RUN_TEST(global_evidence_producer_uses_stable_source_identity);
+RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);
 RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);

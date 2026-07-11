@@ -897,7 +897,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     if (evidence_cache_dir && evidence_cache_dir[0]) {
         XgBuildKey preproducer_key;
-        if (xg_build_key_from_module_graph(&preproducer_key, graph, xg_profile))
+        if (xg_build_key_from_module_graph(&preproducer_key, graph, xg_profile, 0))
             xaot_probe_preproducer_evidence_cache(evidence_cache_dir, &preproducer_key,
                                                   evidence_cache_verbose, evidence_cache_rebuild,
                                                   &cached_global_evidence,
@@ -975,7 +975,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             printf("[xi-native] evidence cache producer skip: pre_mono_generic_summary\n");
     } else {
         if (!xg_global_evidence_build_from_module_graph(&pre_mono_generic_evidence, graph,
-                                                        xg_profile)) {
+                                                        xg_profile, 0)) {
             fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
             goto fail_free_analyzer;
         }
@@ -1069,7 +1069,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         if (evidence_cache_verbose)
             printf("[xi-native] evidence cache producer skip: global_evidence_summary\n");
     } else {
-        if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph, xg_profile)) {
+        if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph, xg_profile, 0)) {
             fprintf(stderr, "Error: failed to build global evidence\n");
             goto fail_free_ir;
         }
