@@ -3975,45 +3975,8 @@ static bool xicgen_emit_net_handle_method(XiCgenCtx *ctx, FILE *out, const XiFun
     return true;
 }
 
-static bool xicgen_emit_prelude_adt_constructor(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                                const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method)
-        return false;
-    const XiValue *recv = cg_unwrap_identity_value(v->args[0]);
-    if (!recv || recv->op != XI_GET_BUILTIN)
-        return false;
-    const CgPreludeEnumData *ed = cg_prelude_enum_data((int) recv->aux_int);
-    int member_index = cg_prelude_enum_member_index(ed, method);
-    if (!ed || member_index < 0 || (uint32_t) member_index >= ed->member_count ||
-        !ed->members[member_index].has_payload || nargs != v->nargs - 1)
-        return false;
-
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_enum_box_new_payloads(0, ");
-    emit_c_string_literal(out, ed->enum_name);
-    fprintf(out, ", ");
-    emit_c_string_literal(out, ed->members[member_index].name);
-    fprintf(out, ", %d, %u, ", member_index, (unsigned) nargs);
-    if (nargs == 0) {
-        fprintf(out, "NULL)");
-    } else {
-        fprintf(out, "(const XrValue[%u]){", (unsigned) nargs);
-        for (uint16_t i = 0; i < nargs; i++) {
-            if (i > 0)
-                fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[i + 1], XR_REP_TAGGED);
-        }
-        fprintf(out, "})");
-    }
-    emit_conversion_suffix(out, conv_suffix);
-    return true;
-}
-
 static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                    const char *method, uint16_t nargs) {
-    if (xicgen_emit_prelude_adt_constructor(ctx, out, v, method, nargs))
-        return true;
+                                    const char *method) {
     const XiEnumData *recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
     if (!recv_enum)
         recv_enum = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
@@ -6322,7 +6285,7 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (xicgen_emit_net_handle_method(ctx, out, f, v, method, nargs))
         return;
-    if (xicgen_emit_enum_method(ctx, out, f, v, method, nargs))
+    if (xicgen_emit_enum_method(ctx, out, f, v, method))
         return;
     if (xicgen_emit_task_method(ctx, out, f, v, method, nargs))
         return;
