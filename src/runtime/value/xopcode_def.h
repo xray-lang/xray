@@ -360,15 +360,17 @@
     _(PTR_STORE, FMT_ABC, KOP_ABC_STORE_LIT, "*(T*)R[A] = R[B], C = XrFFIType width of T")         \
     _(PTR_COPY_NONOVERLAP, FMT_ABC, KOP_ABC_INPLACE, "memcpy(R[A], R[B], R[C] * elem_size)")       \
     /* Inserted just before NOP: NUM_OPCODES is (OP_NOP + 1), so NOP must stay                     \
-     * the last entry. Placing these here keeps every pre-NOP opcode value stable                  \
+     * the last entry. Placing these here keeps every older pre-NOP opcode value stable            \
      * (the embedded bytecode smoke blob uses only those), while NOP — unused by                 \
-     * the blob — simply shifts up by two. */                                                    \
+     * the blob — may shift as internal VM-only ops are added. */                                \
     _(ARRAY_EXTEND, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.extend(R[B]:Array) — splice + retain")     \
     _(JSON_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Json.merge(R[B]:Json) — object spread")            \
     _(TOCHAR, FMT_AB, KOP_AB_UNARY, "R[A] = char(R[B]) — int codepoint to Unicode scalar")         \
     _(GEN_YIELD, FMT_A, KOP_A_USE, "generator yield: hand R[A] to the driver, suspend")            \
     _(GEN_START, FMT_ABC, KOP_ABC_BIN_LIT,                                                         \
       "R[A] = generator iterator over closure R[B] with C args at R[B+1..B+C]")                    \
+    _(PAR_FOR, FMT_ABC, KOP_ABC_BIN_LIT,                                                           \
+      "R[A] = VM internal parallel for over R[B..B+4], C=flags")                                   \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H

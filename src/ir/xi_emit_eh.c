@@ -476,9 +476,11 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
-/* xi.par.for VM fallback: execute the batch body sequentially.
- * The VM path is a semantic oracle, not the performance implementation; AOT can
- * later replace the same IR op with persistent-worker range dispatch. */
+/* xi.par.for VM path: first try the hosted runtime batch opcode.  It submits a
+ * small number of VM lane coroutines to scheduler workers when the range and
+ * closure are safe/profitable.  If that opcode reports handled=false (small
+ * range, single worker, deterministic profile, private capture, etc.), execute
+ * the same lane split sequentially as the cost-model/safety fallback. */
 XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (!ctx || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_FOR || !v->aux) {
@@ -501,10 +503,14 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    if (ctx->next_reg + (data->range_body ? 17 : 16) > MAX_REGS) {
+    if (ctx->next_reg + (data->range_body ? 24 : 23) > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
+    XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += 5;
     XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
     XiEmitReg count = (XiEmitReg) ctx->next_reg++;
     XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
@@ -522,6 +528,21 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     ctx->next_reg += data->range_body ? 4 : 3;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
+
+    uint8_t par_flags = 0;
+    if (data->inclusive_end)
+        par_flags |= 0x01;
+    if (data->range_body)
+        par_flags |= 0x02;
+    emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, par_handled, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, par_true, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, par_base, start, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 1), end, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 2), workers, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (par_base + 3), closure, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 4), 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_PAR_FOR, par_handled, par_base, par_flags));
+    int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, end_excl, end, 0));
     if (data->inclusive_end)
@@ -620,6 +641,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
 
     int exit_pc = current_pc(ctx);
+    patch_jump_to(ctx, par_handled_jmp_pc, exit_pc);
     patch_jump_to(ctx, empty_jmp_pc, exit_pc);
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
 }

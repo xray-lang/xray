@@ -825,6 +825,8 @@ startfunc:
 
 /* Coroutine + scheduler opcodes — see xvm_dispatch_coro.inc.c. */
 #include "xvm_dispatch_coro.inc.c"
+/* Structured parallel batch opcodes — see xvm_dispatch_parallel.inc.c. */
+#include "xvm_dispatch_parallel.inc.c"
 
 /* Channel + select opcodes — see xvm_dispatch_chan.inc.c. */
 #include "xvm_dispatch_chan.inc.c"
