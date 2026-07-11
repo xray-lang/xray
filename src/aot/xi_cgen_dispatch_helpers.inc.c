@@ -8708,7 +8708,7 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
             case XI_CONST_LITERAL_FLOAT:
             case XI_CONST_LITERAL_BOOL:
             case XI_CONST_LITERAL_CHAR:
-                cg_emit_static_scalar_const_name(ctx, out, module, slot);
+                cg_emit_static_scalar_var_name(ctx, out, module, slot);
                 return true;
             default:
                 return false;

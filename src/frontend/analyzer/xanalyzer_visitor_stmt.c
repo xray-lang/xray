@@ -135,26 +135,19 @@ static void xa_validate_static_data_attrs(XaInferContext *ctx, AstNode *node, Va
         return;
     }
 
-    if (xa_var_attr(var, ATTR_WEAK)) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@weak mutable static data is not supported; use @section/@used on a module-level "
-            "mutable static data object",
-            &loc);
-        return;
-    }
     if (!var->initializer ||
         !xa_freestanding_top_var_static_initializer_allowed(ctx, var, var_type)) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "@section/@used mutable static data requires a compile-time "
-                                   "static initializer",
-                                   &loc);
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "@section/@weak/@used mutable static data requires a compile-time "
+            "static initializer",
+            &loc);
         return;
     }
     if (!xa_type_supports_mutable_static_data_object(var_type)) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@used mutable static data currently requires a scalar, "
+            "@section/@weak/@used mutable static data currently requires a scalar, "
             "struct, or union static object",
             &loc);
     }
