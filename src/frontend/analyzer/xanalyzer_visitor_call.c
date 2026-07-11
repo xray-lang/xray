@@ -21,6 +21,7 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_ast_visitor.h"
+#include "xa_parallel_call_plan.h"
 #include "xtype_ref_resolve.h"
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -1791,6 +1792,21 @@ static const char *xa_parallel_plan_call_member_name(XaInferContext *ctx, XrType
     return xa_type_is_parallel_plan(ctx, receiver_type) ? method_name : NULL;
 }
 
+static void xa_record_parallel_call_plan(XaInferContext *ctx, AstNode *node, const char *member,
+                                         bool is_plan_method) {
+    if (!ctx || !ctx->analyzer || !node || !member || !ctx->analyzer->parallel_call_plan_table)
+        return;
+    XaParallelCallKind kind = xa_parallel_call_kind_from_name(member);
+    if (kind == XA_PAR_CALL_NONE)
+        return;
+    XaParallelCallPlan plan = {
+        .kind = kind,
+        .is_plan_method = is_plan_method,
+    };
+    xa_parallel_call_plan_table_set(
+        (XaParallelCallPlanTable *) ctx->analyzer->parallel_call_plan_table, node, &plan);
+}
+
 static AstNode *xa_call_unwrap_grouping(AstNode *node) {
     while (node && node->type == AST_GROUPING)
         node = node->as.grouping;
@@ -3254,6 +3270,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    const char *parallel_call_member = xa_parallel_call_member_name(ctx, call, fn_links, fn_sym);
+    const char *parallel_plan_member =
+        xa_parallel_plan_call_member_name(ctx, callee_obj_type, method_name);
+    xa_record_parallel_call_plan(ctx, node, parallel_call_member, false);
+    xa_record_parallel_call_plan(ctx, node, parallel_plan_member, true);
+    xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
+
     const char *payload_enum_name = NULL;
     const char *payload_variant_name = NULL;
     const XaEnumVariantInfo *payload_variant =
@@ -3582,10 +3605,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     XrType *saved_index_type = ctx->callback_index_type;
     XrType *saved_acc_type = ctx->callback_accumulator_type;
     XrType *saved_arr_type = ctx->callback_array_type;
-    const char *parallel_call_member = xa_parallel_call_member_name(ctx, call, fn_links, fn_sym);
-    const char *parallel_plan_member =
-        xa_parallel_plan_call_member_name(ctx, callee_obj_type, method_name);
-    xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
 
     // Set callback context if this is a container method with callbacks
     if (container_elem_type && method_name) {

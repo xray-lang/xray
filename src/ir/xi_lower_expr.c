@@ -26,6 +26,7 @@
 #include "../analysis/xglobal_summary.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
+#include "../frontend/analyzer/xa_parallel_call_plan.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/lexer/xlex.h"
@@ -1216,6 +1217,16 @@ static const char *lower_call_callee_imported_member(XiLower *l, AstNode *callee
 static bool lower_parallel_is_batch_method(const char *method) {
     return method && (strcmp(method, "forEach") == 0 || strcmp(method, "map") == 0 ||
                       strcmp(method, "mapInto") == 0 || strcmp(method, "reduce") == 0);
+}
+
+static const XaParallelCallPlan *lower_analyzer_parallel_call_plan(XiLower *l, AstNode *call_node) {
+    if (!l || !l->analyzer || !call_node)
+        return NULL;
+    return xa_analyzer_get_parallel_call_plan(l->analyzer, call_node);
+}
+
+static const char *lower_analyzer_parallel_call_method(const XaParallelCallPlan *plan) {
+    return plan ? xa_parallel_call_kind_name(plan->kind) : NULL;
 }
 
 static bool lower_path_is_parallel_stdlib_module(const char *file) {
@@ -4151,6 +4162,19 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return addr_of;
         }
 
+        const XaParallelCallPlan *analyzer_parallel_plan =
+            lower_analyzer_parallel_call_plan(l, node);
+        const char *analyzer_parallel_method =
+            lower_analyzer_parallel_call_method(analyzer_parallel_plan);
+
+        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method &&
+            analyzer_parallel_method) {
+            XiValue *parallel_intrinsic =
+                lower_parallel_module_intrinsic_or_error(l, node, call, analyzer_parallel_method);
+            if (parallel_intrinsic || l->had_error)
+                return parallel_intrinsic;
+        }
+
         if (ma->name && lower_call_object_is_module(l, ma->object, "parallel")) {
             XiValue *parallel_intrinsic =
                 lower_parallel_module_intrinsic_or_error(l, node, call, ma->name);
@@ -4171,6 +4195,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue *recv = xi_lower_expr(l, ma->object);
         if (!recv)
             return NULL;
+
+        if (analyzer_parallel_plan && analyzer_parallel_plan->is_plan_method &&
+            analyzer_parallel_method) {
+            XiValue *parallel_plan_intrinsic =
+                lower_parallel_plan_intrinsic_call(l, node, call, recv, analyzer_parallel_method);
+            if (parallel_plan_intrinsic || l->had_error)
+                return parallel_plan_intrinsic;
+        }
 
         if (ma->name && (lower_type_is_parallel_plan(l, recv->type) ||
                          lower_selection_is_parallel_plan_method(l, call->callee, ma->name))) {
@@ -4830,6 +4862,17 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * and emit specialized Xi ops instead of generic XI_CALL. */
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fname = call->callee->as.variable.name;
+        const XaParallelCallPlan *analyzer_parallel_plan =
+            lower_analyzer_parallel_call_plan(l, node);
+        const char *analyzer_parallel_method =
+            lower_analyzer_parallel_call_method(analyzer_parallel_plan);
+        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method &&
+            analyzer_parallel_method) {
+            XiValue *parallel_intrinsic =
+                lower_parallel_module_intrinsic_or_error(l, node, call, analyzer_parallel_method);
+            if (parallel_intrinsic || l->had_error)
+                return parallel_intrinsic;
+        }
         const char *parallel_member =
             lower_call_callee_imported_member(l, call->callee, "parallel");
         if (parallel_member) {
