@@ -139,6 +139,7 @@ typedef struct {
 } XrH2StreamHash;
 
 typedef struct {
+    XrVMRuntime *isolate;
     int fd;
     void *tls_conn;
     bool is_client;
@@ -163,7 +164,7 @@ int http2_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
                                         size_t value_len, void *user_data),
                        void *user_data);
 
-XrH2Conn *http2_conn_new(int fd, void *tls_conn, bool is_client);
+XrH2Conn *http2_conn_new(XrVMRuntime *X, int fd, void *tls_conn, bool is_client);
 void http2_conn_free(XrH2Conn *conn);
 int http2_conn_init(XrH2Conn *conn);
 XrH2ErrorCode http2_validate_inbound_frame_header(const XrH2FrameHeader *header);
