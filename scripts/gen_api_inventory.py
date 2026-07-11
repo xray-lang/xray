@@ -606,7 +606,8 @@ def collect_runtime_intrinsic_modules(root: Path) -> list[dict[str, Any]]:
         r"(?P<is_method>true|false)\s*,\s*"
         r"(?P<is_static>true|false)\s*,\s*"
         r"(?P<is_internal>true|false)\s*,\s*"
-        r"(?P<is_lowered_only>true|false)\s*\}",
+        r"(?P<is_lowered_only>true|false)"
+        r"(?:\s*,\s*(?:true|false))*\s*\}",
         re.S,
     )
     for array_match in member_array_re.finditer(text):

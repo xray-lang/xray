@@ -1,0 +1,29 @@
+{
+  "module": "parallel",
+  "summary": "Structured CPU data-parallel operations",
+  "lead": "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns.",
+  "sections": [
+    {
+      "heading": "Execution model",
+      "before_text": "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies exist for bootstrap and tooling semantics."
+    },
+    {
+      "heading": "Safety contract",
+      "bullets": [
+        "Lane callbacks must not suspend, await, spawn tasks, or throw.",
+        "Writable captured state is rejected unless it is protected by an explicit synchronization primitive such as `Atomic<T>`.",
+        "`Options(workers)` requests lane parallelism; small ranges and deterministic execution may still choose a sequential fast path."
+      ]
+    },
+    {
+      "heading": "Persistent lane state",
+      "before_text": "`Plan<S>` owns one state value per logical lane and reuses it across `forEach`, `map`, `mapInto`, and `reduce` calls. Call `close()` when the plan is no longer needed."
+    },
+    {
+      "heading": "Example",
+      "code": [
+        "import parallel\n\nvar options = parallel.Options(4)\nvar squares = parallel.map(0..8, (i) -> i * i, options)\nvar total = parallel.reduce(0..8, 0, (i) -> i, (a, b) -> a + b, options)\nprint(squares[3])\nprint(total)"
+      ]
+    }
+  ]
+}

@@ -2490,6 +2490,69 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
+    {
+        .name = "Options",
+        .signature = "Options",
+        .summary = "",
+    },
+    {
+        .name = "Options.constructor",
+        .signature = "(workers: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "Options.workers",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "Plan",
+        .signature = "Plan",
+        .summary = "",
+    },
+    {
+        .name = "Plan.close",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Plan.constructor",
+        .signature = "(options: Options, init: (int): S)",
+        .summary = "",
+    },
+    {
+        .name = "Plan.forEach",
+        .signature = "(range: Range, body: (S, int): ())",
+        .summary = "",
+    },
+    {
+        .name = "Plan.map",
+        .signature = "(range: Range, body: (S, int): T) -> Array<T>",
+        .summary = "",
+    },
+    {
+        .name = "Plan.mapInto",
+        .signature = "(range: Range, output: Array<T>, body: (S, int): T) -> Array<T>",
+        .summary = "",
+    },
+    {
+        .name = "Plan.options",
+        .signature = ": Options",
+        .summary = "",
+    },
+    {
+        .name = "Plan.reduce",
+        .signature = "(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A",
+        .summary = "",
+    },
+    {
+        .name = "forEach",
+        .signature = "(range: Range, body: (int): (), options: Options = Options())",
+        .summary = "",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "PathInfo",
@@ -5864,6 +5927,58 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_os) / sizeof(_symbols_os[0])),
     },
     {
+        .module = "parallel",
+        .summary = "Structured CPU data-parallel operations",
+        .body =
+            "# parallel module\n"
+            "\n"
+            "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns.\n"
+            "\n"
+            "Usage: `import parallel` then call `parallel.function()`.\n"
+            "\n"
+            "### Execution model\n"
+            "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies exist for bootstrap and tooling semantics.\n"
+            "\n"
+            "### Safety contract\n"
+            "- Lane callbacks must not suspend, await, spawn tasks, or throw.\n"
+            "- Writable captured state is rejected unless it is protected by an explicit synchronization primitive such as `Atomic<T>`.\n"
+            "- `Options(workers)` requests lane parallelism; small ranges and deterministic execution may still choose a sequential fast path.\n"
+            "\n"
+            "### Persistent lane state\n"
+            "`Plan<S>` owns one state value per logical lane and reuses it across `forEach`, `map`, `mapInto`, and `reduce` calls. Call `close()` when the plan is no longer needed.\n"
+            "\n"
+            "### Example\n"
+            "```xray\n"
+            "import parallel\n"
+            "\n"
+            "var options = parallel.Options(4)\n"
+            "var squares = parallel.map(0..8, (i) -> i * i, options)\n"
+            "var total = parallel.reduce(0..8, 0, (i) -> i, (a, b) -> a + b, options)\n"
+            "print(squares[3])\n"
+            "print(total)\n"
+            "```\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `Options` | `Options` |  |\n"
+            "| `Options.constructor` | `(workers: int = 0): ()` |  |\n"
+            "| `Options.workers` | `: int` |  |\n"
+            "| `Plan` | `Plan` |  |\n"
+            "| `Plan.close` | `(): ()` |  |\n"
+            "| `Plan.constructor` | `(options: Options, init: (int): S)` |  |\n"
+            "| `Plan.forEach` | `(range: Range, body: (S, int): ())` |  |\n"
+            "| `Plan.map` | `(range: Range, body: (S, int): T) -> Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: Array<T>, body: (S, int): T) -> Array<T>` |  |\n"
+            "| `Plan.options` | `: Options` |  |\n"
+            "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: (int): (), options: Options = Options())` |  |\n"
+            "",
+        .symbols = _symbols_parallel,
+        .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
+    },
+    {
         .module = "path",
         .summary = "File path manipulation",
         .body =
@@ -6290,7 +6405,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 28;
+XR_DATADEF const int xmcp_generated_stdlib_count = 29;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
@@ -6821,6 +6936,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `datetime` | Date and time manipulation |\n"
     "| `encoding` | Character encoding conversion |\n"
     "| `mem` | Raw memory, Buffer, page allocation, volatile access, and memory primitives |\n"
+    "| `parallel` | Structured CPU data-parallel operations |\n"
     "| `runtime` | Runtime and heap introspection |\n"
     "| `sync` | Coroutine-domain synchronization primitives |\n"
     "| `sys` | OS-thread-domain system primitives |\n"
