@@ -10,7 +10,7 @@ fn serveReadUntilEof(c: NetConn) {
         if (data == null) {
             break
         }
-        total = total + data!.byteLength
+        total = total + len(data!.bytes())
     }
     if (total == 4) {
         net.write(c, "done")

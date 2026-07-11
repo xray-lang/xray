@@ -401,13 +401,17 @@ TEST(string_slice_bounds) {
     setup();
     XrString *s = xr_string_intern(X, "abcdef", 6, xr_string_hash("abcdef", 6));
 
-    XrString *slice = xr_string_slice(X, s, -3, -1);
+    XrString *slice = xr_string_slice(X, s, 3, 5);
     ASSERT_NOT_NULL(slice);
     ASSERT_STR_EQ(slice->data, "de");
 
-    slice = xr_string_slice(X, s, 2, -1);
+    slice = xr_string_slice(X, s, 2, 5);
     ASSERT_NOT_NULL(slice);
     ASSERT_STR_EQ(slice->data, "cde");
+
+    ASSERT_NULL(xr_string_slice(X, s, -1, 2));
+    ASSERT_NULL(xr_string_slice(X, s, 2, 7));
+    ASSERT_NULL(xr_string_slice(X, s, 4, 2));
     teardown();
 }
 

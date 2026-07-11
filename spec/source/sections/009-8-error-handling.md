@@ -257,7 +257,7 @@ fn fetch(url: string) -> string {
     defer conn.close()                       // 无论后续如何，conn 一定关闭
 
     var data = conn.read()
-    if (data.isEmpty()) {
+    if (len(data) == 0) {
         throw FetchErr.Empty                 // defer 仍执行
     }
     return data
@@ -649,7 +649,7 @@ fn fetch(url: string) -> string {
     defer conn.close()                       // conn is guaranteed to close
 
     var data = conn.read()
-    if (data.isEmpty()) {
+    if (len(data) == 0) {
         throw FetchErr.Empty                 // defer still runs
     }
     return data

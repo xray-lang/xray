@@ -267,6 +267,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"float", XR_TID_FLOAT, TYPE_NAME_FLOAT},
     {"bool", XR_TID_BOOL, TYPE_NAME_BOOL},
     {"string", XR_TID_STRING, TYPE_NAME_STRING},
+    {"rune", XR_TID_RUNE, TYPE_NAME_RUNE},
     {"Array", XR_TID_ARRAY, TYPE_NAME_ARRAY},
     {"Map", XR_TID_MAP, TYPE_NAME_MAP},
     {"Set", XR_TID_SET, TYPE_NAME_SET},
@@ -488,6 +489,8 @@ static XrClass *xa_native_protocol_core_class(XrVMRuntime *X, XrTypeId tid,
 static bool xa_native_protocol_intrinsic_method(XrTypeId tid, const char *name, bool is_static) {
     if (!name || is_static)
         return false;
+    if (tid == XR_TID_RUNE)
+        return true;
     if (tid == XR_TID_CHANNEL) {
         static const char *channel_methods[] = {
             "send",        "recv",        "recvOr", "trySend", "tryRecv",

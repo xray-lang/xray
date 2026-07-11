@@ -1,3 +1,5 @@
+import text
+
 // Demo: Testing
 // @test functions, assertions, test lifecycle
 //
@@ -19,7 +21,7 @@ fn test_strings() {
     assert_eq(len(s), 13)
     assert_true(s.startsWith("Hello"))
     assert_true(s.endsWith("!"))
-    assert_eq(s.toLowerCase(), "hello, world!")
+    assert_eq(text.lower(s), "hello, world!")
 }
 
 @test

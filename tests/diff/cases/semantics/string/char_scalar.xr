@@ -6,7 +6,7 @@ var face: rune = '\u{1F600}'
 
 print(a)
 print(a.toString())
-print(a.ord())
+print(a.toUInt32())
 print(a.isLetter())
 print(a.isNumber())
 print(a.isAlphanumeric())
@@ -15,19 +15,19 @@ print(digit.isNumber())
 print(digit.isAlphanumeric())
 print(ws.isWhitespace())
 print(face)
-print(face.ord())
+print(face.toUInt32())
 
 var s = "aé😀z"
 print(len(s))
-print(s[0])
-print(s[1])
-print(s[2])
-print(s[-1])
+print(s.runes().nth(0))
+print(s.runes().nth(1))
+print(s.runes().nth(2))
+print(s.runes().nth(len(s) - 1))
 
 print("-- for value --")
 for (ch in s) {
     print(ch)
-    print(ch.ord())
+    print(ch.toUInt32())
 }
 
 print("-- for key value --")
@@ -36,7 +36,8 @@ for (i, ch in s) {
     print(ch)
 }
 
-var e = s.entries()
+var e: Array<(int, rune)> = []
+for (i, ch in s) { e.push((i, ch)) }
 print(len(e))
 print(e[1].0)
 print(e[1].1)

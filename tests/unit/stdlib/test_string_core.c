@@ -396,11 +396,12 @@ TEST(string_core_substring_bounds) {
 
 TEST(string_core_slice_bounds) {
     const char *s = "abcdef";
-    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), -3, -1), "de");
-    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 2, -1), "cde");
-    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), -100, 99), "abcdef");
-    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 9, 12), "");
-    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 4, 2), "");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 3, 5), "de");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 2, 5), "cde");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 0, 6), "abcdef");
+    ASSERT_NULL(xr_string_core_range_slice(s, strlen(s), -1, 2).data);
+    ASSERT_NULL(xr_string_core_range_slice(s, strlen(s), 2, 7).data);
+    ASSERT_NULL(xr_string_core_range_slice(s, strlen(s), 4, 2).data);
 }
 
 TEST(string_core_utf8_char_slice) {

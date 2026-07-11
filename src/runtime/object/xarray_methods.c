@@ -404,20 +404,12 @@ static XrValue m_some(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
 
 /* === toString === */
 
-/* For ordinary arrays, return the debug representation ("[1, 2, 3]").
- * For byte arrays (Array<uint8>, i.e. Bytes), return the UTF-8 decoded
- * text — symmetric with string.copyBytes(). Binary blobs that are not
- * valid UTF-8 still pass through verbatim; callers needing strict
- * validation should layer their own decoder on top. */
+/* Arrays always use the container representation ("[1, 2, 3]"). Byte arrays
+ * are binary containers too; decode them explicitly with string.fromUtf8(). */
 static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    XrArray *arr = array_self(self);
-    if (arr && arr->elem_type == XR_ELEM_U8) {
-        const char *bytes = (const char *) arr->data;
-        size_t len = (size_t) arr->length;
-        return xr_string_value(xr_string_intern(iso, bytes, len, 0));
-    }
+    (void) array_self(self);
     return xr_string_value(xr_value_to_string(iso, self));
 }
 

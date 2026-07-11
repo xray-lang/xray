@@ -1,3 +1,7 @@
+import strconv
+
+import text
+
 // toml - pure-Xray TOML parser and writer.
 //
 // TOML is an L4 format module: user-facing parse/stringify semantics live here.
@@ -10,13 +14,13 @@ const TOML_MAX_DEPTH = 256
 
 fn _isDigit(c: string) -> bool {
     if (len(c) == 0) { return false }
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     return o >= 48 && o <= 57
 }
 
 fn _isAlpha(c: string) -> bool {
     if (len(c) == 0) { return false }
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
 }
 
@@ -26,12 +30,12 @@ fn _isAlphaNum(c: string) -> bool {
 
 fn _isHexDigit(c: string) -> bool {
     if (len(c) == 0) { return false }
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
 
 fn _hexValue(c: string) -> int {
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     if (o >= 48 && o <= 57) { return o - 48 }
     if (o >= 65 && o <= 70) { return o - 55 }
     if (o >= 97 && o <= 102) { return o - 87 }
@@ -45,7 +49,7 @@ fn _isBareKeyChar(c: string) -> bool {
 fn _isBareKey(key: string) -> bool {
     if (len(key) == 0) { return false }
     for (var i = 0; i < len(key); i++) {
-        if (!_isBareKeyChar(key.charAt(i))) { return false }
+        if (!_isBareKeyChar(key.slice(i, (i) + 1))) { return false }
     }
     return true
 }
@@ -53,7 +57,7 @@ fn _isBareKey(key: string) -> bool {
 fn _stripUnderscores(s: string) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i)
+        var c = s.slice(i, (i) + 1)
         if (c != "_") { out.append(c) }
     }
     return out.toString()
@@ -108,13 +112,13 @@ class TomlParser {
 
     peek() -> string {
         if (this.atEnd()) { return "" }
-        return this.data.charAt(this.pos)
+        return this.data.slice(this.pos, (this.pos) + 1)
     }
 
     peekAt(offset: int) -> string {
         var p = this.pos + offset
         if (p < 0 || p >= len(this.data)) { return "" }
-        return this.data.charAt(p)
+        return this.data.slice(p, (p) + 1)
     }
 
     advance() -> string {
@@ -336,26 +340,26 @@ class TomlParser {
         while (!this.atEnd() && !_isValueTerminator(this.peek())) {
             this.advance()
         }
-        return this.data.slice(start, this.pos).trimEnd()
+        return text.trimEnd(this.data.slice(start, this.pos))
     }
 
     parseBaseInt(raw: string, base: int) -> int {
         var s = _stripUnderscores(raw)
         var start = 0
         var sign = 1
-        if (len(s) > 0 && s.charAt(0) == "-") {
+        if (len(s) > 0 && s.slice(0, (0) + 1) == "-") {
             sign = -1
             start = 1
-        } else if (len(s) > 0 && s.charAt(0) == "+") {
+        } else if (len(s) > 0 && s.slice(0, (0) + 1) == "+") {
             start = 1
         }
-        if (start + 1 < len(s) && s.charAt(start) == "0") {
-            var p = s.charAt(start + 1).toLowerCase()
+        if (start + 1 < len(s) && s.slice(start, (start) + 1) == "0") {
+            var p = text.lower(s.slice(start + 1, (start + 1) + 1))
             if (p == "x" || p == "o" || p == "b") { start = start + 2 }
         }
         var out = 0
         for (var i = start; i < len(s); i++) {
-            var d = _hexValue(s.charAt(i))
+            var d = _hexValue(s.slice(i, (i) + 1))
             if (d < 0 || d >= base) { break }
             out = out * base + d
         }
@@ -370,20 +374,20 @@ class TomlParser {
 
         var signOffset = 0
         if (s.startsWith("+") || s.startsWith("-")) { signOffset = 1 }
-        if (signOffset + 1 < len(s) && s.charAt(signOffset) == "0") {
-            var p = s.charAt(signOffset + 1).toLowerCase()
+        if (signOffset + 1 < len(s) && s.slice(signOffset, (signOffset) + 1) == "0") {
+            var p = text.lower(s.slice(signOffset + 1, (signOffset + 1) + 1))
             if (p == "x") { return this.parseBaseInt(s, 16) }
             if (p == "o") { return this.parseBaseInt(s, 8) }
             if (p == "b") { return this.parseBaseInt(s, 2) }
         }
 
         if (s.contains(".") || s.contains("e") || s.contains("E")) {
-            var f = s.toFloat()
+            var f = strconv.parseFloat(s)
             if (f != null) { return f! }
             this.addError("InvalidNumber", "Invalid number")
             return 0.0
         }
-        var i = s.toInt()
+        var i = strconv.parseInt(s)
         if (i != null) { return i! }
         this.addError("InvalidNumber", "Invalid number")
         return 0
@@ -476,8 +480,8 @@ class TomlParser {
         if (c == "{") { return this.parseInlineTable() }
 
         var raw = this.scanLiteral()
-        if (len(raw) >= 5 && _isDigit(raw.charAt(0)) && _isDigit(raw.charAt(1)) &&
-            _isDigit(raw.charAt(2)) && _isDigit(raw.charAt(3)) && raw.charAt(4) == "-") {
+        if (len(raw) >= 5 && _isDigit(raw.slice(0, (0) + 1)) && _isDigit(raw.slice(1, (1) + 1)) &&
+            _isDigit(raw.slice(2, (2) + 1)) && _isDigit(raw.slice(3, (3) + 1)) && raw.slice(4, (4) + 1) == "-") {
             return this.parseDateTimeLiteral(raw)
         }
         if (raw == "inf" || raw == "+inf" || raw == "-inf" || raw == "nan" ||
@@ -681,7 +685,7 @@ fn _escapeString(value: string) -> string {
     var out = StringBuilder()
     out.append("\"")
     for (var i = 0; i < len(value); i++) {
-        var c = value.charAt(i)
+        var c = value.slice(i, (i) + 1)
         if (c == "\"") {
             out.append("\\\"")
         } else if (c == "\\") {
@@ -693,14 +697,14 @@ fn _escapeString(value: string) -> string {
         } else if (c == "\t") {
             out.append("\\t")
         } else {
-            var o = c.ord()!
+            var o = c.runes().nth(0).toUInt32()
             if (o < 32 || o == 127) {
                 out.append("\\u")
                 var hex = "0123456789ABCDEF"
-                out.append(hex.charAt((o / 4096) % 16))
-                out.append(hex.charAt((o / 256) % 16))
-                out.append(hex.charAt((o / 16) % 16))
-                out.append(hex.charAt(o % 16))
+                out.append(hex.slice((o / 4096) % 16, ((o / 4096) % 16) + 1))
+                out.append(hex.slice((o / 256) % 16, ((o / 256) % 16) + 1))
+                out.append(hex.slice((o / 16) % 16, ((o / 16) % 16) + 1))
+                out.append(hex.slice(o % 16, (o % 16) + 1))
             } else {
                 out.append(c)
             }

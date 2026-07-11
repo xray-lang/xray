@@ -86,7 +86,7 @@ fn repeat_fasta(id, desc, seq, count) {
         // 使用 StringBuilder 构建行
         var sb = StringBuilder()
         for (var i = 0; i < line_len; i++) {
-            sb.append(seq.charAt(pos))
+            sb.append(seq.runes().nth(pos))
             pos = pos + 1
             if (pos >= sequenceLength) {
                 pos = 0

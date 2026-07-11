@@ -1,0 +1,95 @@
+// text - explicit Unicode-text operations for always-valid UTF-8 strings.
+
+fn lower(value: string) -> string {
+    var out = StringBuilder()
+    var iter = value.runes()
+    while (iter.hasNext()) {
+        var r = iter.next()
+        var cp = int(r.toUInt32())
+        if (cp >= 65 && cp <= 90) {
+            out.append(rune(cp + 32)!)
+        } else {
+            out.append(r)
+        }
+    }
+    return out.toString()
+}
+
+fn upper(value: string) -> string {
+    var out = StringBuilder()
+    var iter = value.runes()
+    while (iter.hasNext()) {
+        var r = iter.next()
+        var cp = int(r.toUInt32())
+        if (cp >= 97 && cp <= 122) {
+            out.append(rune(cp - 32)!)
+        } else {
+            out.append(r)
+        }
+    }
+    return out.toString()
+}
+
+fn trimStart(value: string) -> string {
+    var start = 0
+    var iter = value.runes()
+    while (iter.hasNext()) {
+        if (!iter.next().isWhitespace()) { break }
+        start = start + 1
+    }
+    return value.slice(start, len(value))
+}
+
+fn trimEnd(value: string) -> string {
+    var end = len(value)
+    while (end > 0 && value.runes().nth(end - 1).isWhitespace()) { end = end - 1 }
+    return value.slice(0, end)
+}
+
+fn trim(value: string) -> string {
+    return trimEnd(trimStart(value))
+}
+
+fn reverseRunes(value: string) -> string {
+    var out = StringBuilder()
+    for (var i = len(value); i > 0; i--) { out.append(value.runes().nth(i - 1)) }
+    return out.toString()
+}
+
+fn padStart(value: string, targetLength: int, padding: string = " ") -> string {
+    if (targetLength <= len(value) || len(padding) == 0) { return value }
+    var out = StringBuilder()
+    var needed = targetLength - len(value)
+    for (var i = 0; i < needed; i++) { out.append(padding.runes().nth(i % len(padding))) }
+    out.append(value)
+    return out.toString()
+}
+
+fn padEnd(value: string, targetLength: int, padding: string = " ") -> string {
+    if (targetLength <= len(value) || len(padding) == 0) { return value }
+    var out = StringBuilder()
+    out.append(value)
+    var needed = targetLength - len(value)
+    for (var i = 0; i < needed; i++) { out.append(padding.runes().nth(i % len(padding))) }
+    return out.toString()
+}
+
+fn translate(value: string, table: Map<string, string>) -> string {
+    var out = StringBuilder()
+    var iter = value.runes()
+    while (iter.hasNext()) {
+        var r = iter.next()
+        var key = r.toString()
+        var translated = key
+        for (candidate, replacement in table) {
+            if (candidate == key) {
+                translated = replacement
+                break
+            }
+        }
+        out.append(translated)
+    }
+    return out.toString()
+}
+
+export { lower, upper, trim, trimStart, trimEnd, reverseRunes, padStart, padEnd, translate }

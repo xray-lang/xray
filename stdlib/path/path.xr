@@ -44,7 +44,7 @@ fn _isSep(c: string) -> bool {
 // isAbsolute — POSIX: a leading '/'.
 fn isAbsolute(p: string) -> bool {
     if (len(p) == 0) { return false }
-    return _isSep(p.charAt(0))
+    return _isSep(p.slice(0, (0) + 1))
 }
 
 // joinAll — join a segment array (POSIX). The last absolute segment resets the
@@ -65,12 +65,12 @@ fn joinAll(parts: Array<string>) -> string {
         var p = parts[i]
         if (len(p) == 0) { continue }
 
-        if (len(out) > 0 && !_isSep(out.charAt(len(out) - 1)) && !_isSep(p.charAt(0))) {
+        if (len(out) > 0 && !_isSep(out.slice(len(out) - 1, (len(out) - 1) + 1)) && !_isSep(p.slice(0, (0) + 1))) {
             out = out + "/"
         }
 
         var off = 0
-        if (len(out) > 0 && _isSep(p.charAt(0))) { off = 1 }
+        if (len(out) > 0 && _isSep(p.slice(0, (0) + 1))) { off = 1 }
         if (off < len(p)) {
             out = out + p.slice(off)
         }
@@ -87,11 +87,11 @@ fn join(...parts: string) -> string {
 fn dirname(p: string) -> string {
     if (len(p) == 0) { return "." }
     var end = len(p)
-    while (end > 0 && _isSep(p.charAt(end - 1))) { end = end - 1 }
-    while (end > 0 && !_isSep(p.charAt(end - 1))) { end = end - 1 }
-    while (end > 1 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
+    while (end > 0 && !_isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
+    while (end > 1 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
     if (end == 0) {
-        if (_isSep(p.charAt(0))) { return "/" }
+        if (_isSep(p.slice(0, (0) + 1))) { return "/" }
         return "."
     }
     return p.slice(0, end)
@@ -101,10 +101,10 @@ fn dirname(p: string) -> string {
 fn basename(p: string) -> string {
     if (len(p) == 0) { return "" }
     var end = len(p)
-    while (end > 0 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
     if (end == 0) { return "" }
     var start = end
-    while (start > 0 && !_isSep(p.charAt(start - 1))) { start = start - 1 }
+    while (start > 0 && !_isSep(p.slice(start - 1, (start - 1) + 1))) { start = start - 1 }
     return p.slice(start, end)
 }
 
@@ -113,15 +113,15 @@ fn basename(p: string) -> string {
 fn extname(p: string) -> string {
     if (len(p) == 0) { return "" }
     var end = len(p)
-    while (end > 0 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
     var start = end
-    while (start > 0 && !_isSep(p.charAt(start - 1))) { start = start - 1 }
+    while (start > 0 && !_isSep(p.slice(start - 1, (start - 1) + 1))) { start = start - 1 }
 
     var baseLen = end - start
     var dotIdx = -1
     var i = baseLen
     while (i > 0) {
-        if (p.charAt(start + i - 1) == ".") {
+        if (p.slice(start + i - 1, (start + i - 1) + 1) == ".") {
             if (i > 1) { dotIdx = start + i - 1 }
             break
         }
@@ -134,7 +134,7 @@ fn extname(p: string) -> string {
 // normalize — collapse '.'/'..' and redundant separators.
 fn normalize(p: string) -> string {
     if (len(p) == 0) { return "." }
-    var isAbs = _isSep(p.charAt(0))
+    var isAbs = _isSep(p.slice(0, (0) + 1))
 
     var segs: Array<string> = []
     var parts = p.split("/")
@@ -170,33 +170,33 @@ fn relative(fromRaw: string, toRaw: string) -> string {
 
     var common = 0
     var lastSep = 0
-    while (common < fromLen && common < toLen && fromP.charAt(common) == toP.charAt(common)) {
-        if (_isSep(fromP.charAt(common))) { lastSep = common }
+    while (common < fromLen && common < toLen && fromP.slice(common, (common) + 1) == toP.slice(common, (common) + 1)) {
+        if (_isSep(fromP.slice(common, (common) + 1))) { lastSep = common }
         common = common + 1
     }
 
     var atBoundary = false
     if (common == fromLen && common == toLen) {
         atBoundary = true
-    } else if (common == fromLen && common < toLen && _isSep(toP.charAt(common))) {
+    } else if (common == fromLen && common < toLen && _isSep(toP.slice(common, (common) + 1))) {
         atBoundary = true
-    } else if (common == toLen && common < fromLen && _isSep(fromP.charAt(common))) {
+    } else if (common == toLen && common < fromLen && _isSep(fromP.slice(common, (common) + 1))) {
         atBoundary = true
     }
     if (!atBoundary) { common = lastSep }
 
     var fromPos = common
-    while (fromPos < fromLen && _isSep(fromP.charAt(fromPos))) { fromPos = fromPos + 1 }
+    while (fromPos < fromLen && _isSep(fromP.slice(fromPos, (fromPos) + 1))) { fromPos = fromPos + 1 }
     var upCount = 0
     if (fromPos < fromLen) {
         upCount = 1
         for (var i = fromPos; i < fromLen; i++) {
-            if (_isSep(fromP.charAt(i))) { upCount = upCount + 1 }
+            if (_isSep(fromP.slice(i, (i) + 1))) { upCount = upCount + 1 }
         }
     }
 
     var toRestStart = common
-    while (toRestStart < toLen && _isSep(toP.charAt(toRestStart))) { toRestStart = toRestStart + 1 }
+    while (toRestStart < toLen && _isSep(toP.slice(toRestStart, (toRestStart) + 1))) { toRestStart = toRestStart + 1 }
     var toRest = toP.slice(toRestStart, toLen)
 
     var out = ""
@@ -241,7 +241,7 @@ fn parse(p: string) -> PathInfo {
         name = base.slice(0, len(base) - len(ext))
     }
     var root = ""
-    if (len(p) > 0 && _isSep(p.charAt(0))) { root = "/" }
+    if (len(p) > 0 && _isSep(p.slice(0, (0) + 1))) { root = "/" }
     return PathInfo(root, dir, base, name, ext)
 }
 
@@ -257,7 +257,7 @@ fn format(info: PathInfo) -> string {
     var out = ""
     if (len(dir) > 0) {
         out = dir
-        if (!_isSep(dir.charAt(len(dir) - 1))) { out = out + "/" }
+        if (!_isSep(dir.slice(len(dir) - 1, (len(dir) - 1) + 1))) { out = out + "/" }
     }
     return out + base
 }

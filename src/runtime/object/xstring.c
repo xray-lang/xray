@@ -436,39 +436,14 @@ XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start,
     return xr_string_new(iso, &str->data[start], len);
 }
 
-// slice - slice with negative index support
+// Rune-ordinal half-open slice. Invalid or reversed ranges are rejected.
 XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
     if (!iso || !str)
         return NULL;
-
-    xr_Integer len = (xr_Integer) str->length;
-
-    // Handle negative index: count from end
-    if (start < 0) {
-        start = len + start;
-        if (start < 0)
-            start = 0;
-    }
-    if (end < 0) {
-        end = len + end;
-        if (end < 0)
-            end = 0;
-    }
-
-    // Bounds check
-    if (start > len)
-        start = len;
-    if (end > len)
-        end = len;
-
-    // start > end returns empty string
-    if (start >= end) {
-        return xr_string_new(iso, "", 0);
-    }
-
-    // Extract substring
-    size_t slice_len = (size_t) (end - start);
-    return xr_string_new(iso, &str->data[start], slice_len);
+    xr_Integer count = (xr_Integer) xr_string_rune_length(str);
+    if (start < 0 || end < start || end > count)
+        return NULL;
+    return xr_string_substring_by_char(iso, str, (size_t) start, (size_t) end);
 }
 
 // indexOf - find substring position

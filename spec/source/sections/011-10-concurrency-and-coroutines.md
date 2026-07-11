@@ -323,7 +323,7 @@ var outcomes = supervisor scope {
     go failing("error2")
     go ok()
 }
-print(outcomes.length)               // 3（每个子协程一个 outcome）
+print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ```
 
 **通用语义**：
@@ -346,7 +346,7 @@ var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
-// print(buf.length)
+// print(len(buf))
 
 // 移交给 channel
 shared ch = Channel<Array<byte>>(1)
@@ -772,7 +772,7 @@ var outcomes = supervisor scope {
     go failing("error2")
     go ok()
 }
-print(outcomes.length)               // 3 (one outcome per child)
+print(len(outcomes))                 // 3 (one outcome per child)
 ```
 
 **General semantics**:
@@ -795,7 +795,7 @@ var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
-// print(buf.length)
+// print(len(buf))
 
 // hand off to a channel
 shared ch = Channel<Array<byte>>(1)

@@ -14,8 +14,8 @@ static const char xr_native_def_array[] =
     "item: T) -> U, initial: U) -> U\n    forEach(fn: (item: T, index: int) -> ())\n    find(fn: "
     "(item: T) -> bool) -> T?\n    findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: "
     "T) -> bool) -> bool\n    some(fn: (item: T) -> bool) -> bool\n    fill(value: T, start?: int, "
-    "end?: int) -> Array<T>\n    // Array<byte> (Array<byte>) decodes as UTF-8 text — round-trips "
-    "with\n    // string.copyBytes(). Other element types render the \"[a, b]\" form.\n    "
+    "end?: int) -> Array<T>\n    // All arrays, including Array<byte>, render the \"[a, b]\" "
+    "container form.\n    // Decode UTF-8 byte arrays explicitly with string.fromUtf8().\n    "
     "toString() -> string\n    // Iteration protocol — used by for-in lowering. Users can also\n   "
     " // call them directly; iterator()/next() yields elements, while\n    // "
     "entriesIterator()/next() yields (index, element) tuples.\n    iterator() -> Iterator<T>\n    "
@@ -141,6 +141,12 @@ static const char xr_native_def_resultgroup[] =
     "flush()\n    reset(count: int) -> bool\n    recv(): int?\n    tryRecv(): (int?, bool)\n    "
     "close()\n}\n";
 
+static const char xr_native_def_rune[] =
+    "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar "
+    "value.\n\n@native\nclass rune {\n    toUInt32() -> uint32\n    toString() -> string\n    "
+    "isLetter() -> bool\n    isNumber() -> bool\n    isAlphanumeric() -> bool\n    isWhitespace() "
+    "-> bool\n}\n";
+
 static const char xr_native_def_semaphore[] =
     "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "
     "available: int\n    isClosed: bool\n    release(count?: int) -> int\n    tryAcquire() -> "
@@ -160,26 +166,16 @@ static const char xr_native_def_string[] =
     "table to preserve\n// zero-allocation value semantics. Methods also supported by the AOT "
     "dispatch\n// (src/aot/xrt_method.h + xi_method_sym.def) compile to native code, while\n// "
     "VM-only methods fail AOT codegen with an explicit \"unsupported AOT method\"\n// error (never "
-    "a silent null).\n\n@native\nclass string {\n    charAt(index: int) -> string\n    "
-    "codePointAt(index: int) -> int\n    byteAt(index: int) -> string?\n    ord() -> int?\n    "
-    "concat(...strings: string) -> string\n    contains(search: string) -> bool\n    "
-    "indexOf(search: string, start?: int) -> int\n    lastIndexOf(search: string) -> int\n    "
-    "slice(start: int, end?: int) -> string\n    substring(start: int, end?: int) -> string\n    "
-    "toLowerCase() -> string\n    toUpperCase() -> string\n    toInt() -> int?\n    toFloat() -> "
-    "float?\n    toString() -> string\n    trim() -> string\n    trimStart() -> string\n    "
-    "trimEnd() -> string\n    split(separator: string, limit?: int) -> Array<string>\n    "
-    "replace(search: string, replacement: string) -> string\n    replaceAll(search: string, "
-    "replacement: string) -> string\n    repeat(count: int) -> string\n    reverse() -> string\n   "
-    " startsWith(search: string) -> bool\n    endsWith(search: string) -> bool\n    "
-    "padStart(length: int, pad?: string) -> string\n    padEnd(length: int, pad?: string) -> "
-    "string\n    match(pattern: Regex) -> Array<string>?\n    // Owned UTF-8 byte bridge — "
-    "round-trips with Array<byte>.toString().\n    copyBytes() -> Array<byte>\n    // Borrowed "
-    "UTF-8 bytes; readonly because strings are immutable.\n    // @lowered\n    bytes() -> "
-    "Slice<byte>\n    translate(table: Map<string, string>) -> string\n    // Iteration protocol — "
-    "iterator() yields each character, while\n    // entriesIterator() yields (charIndex, "
-    "character) tuples. Both\n    // are used by for-in lowering and may be called directly.\n    "
-    "iterator() -> Iterator<rune>\n    entriesIterator() -> Iterator<(int, rune)>\n    entries() "
-    "-> Array<(int, rune)>\n}\n";
+    "a silent null).\n\n@native\nclass string {\n    static fromUtf8(bytes: Slice<byte>) -> "
+    "string?\n    static fromUtf8Lossy(bytes: Slice<byte>) -> string\n    contains(search: string) "
+    "-> bool\n    indexOf(search: string, start?: int) -> int\n    lastIndexOf(search: string) -> "
+    "int\n    slice(start: int, end?: int) -> string\n    toString() -> string\n    "
+    "split(separator: string, limit?: int) -> Array<string>\n    replace(search: string, "
+    "replacement: string) -> string\n    replaceAll(search: string, replacement: string) -> "
+    "string\n    repeat(count: int) -> string\n    startsWith(search: string) -> bool\n    "
+    "endsWith(search: string) -> bool\n    // Owned UTF-8 byte bridge.\n    copyBytes() -> "
+    "Array<byte>\n    // Borrowed UTF-8 bytes; readonly because strings are immutable.\n    // "
+    "@lowered\n    bytes() -> Slice<byte>\n    runes() -> Iterator<rune>\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
@@ -219,6 +215,7 @@ static const char xr_native_def_workqueue[] =
     X("panic_info", xr_native_def_panic_info)                                                      \
     X("regex", xr_native_def_regex)                                                                \
     X("resultgroup", xr_native_def_resultgroup)                                                    \
+    X("rune", xr_native_def_rune)                                                                  \
     X("semaphore", xr_native_def_semaphore)                                                        \
     X("set", xr_native_def_set)                                                                    \
     X("string", xr_native_def_string)                                                              \

@@ -2620,10 +2620,22 @@ static bool xa_len_type_supported(XrType *type) {
         case XR_KIND_UNKNOWN:
             return true;
         case XR_KIND_TYPE_PARAM:
-            return type->type_param.constraint &&
-                   type->type_param.constraint->kind == XR_KIND_INTERFACE &&
-                   type->type_param.constraint->instance.class_name &&
-                   strcmp(type->type_param.constraint->instance.class_name, "Lengthable") == 0;
+            /* Unconstrained synthetic parameters are used while higher-order
+             * callback inference is still converging.  Defer their check to
+             * the specialized call site; an explicit non-Lengthable
+             * constraint is rejected immediately. */
+            return !type->type_param.constraint ||
+                   (type->type_param.constraint->kind == XR_KIND_INTERFACE &&
+                    type->type_param.constraint->instance.class_name &&
+                    strcmp(type->type_param.constraint->instance.class_name, "Lengthable") == 0);
+        case XR_KIND_UNION:
+            if (type->union_type.member_count == 0)
+                return false;
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (!xa_len_type_supported(type->union_type.members[i]))
+                    return false;
+            }
+            return true;
         case XR_KIND_INSTANCE:
         case XR_KIND_CLASS: {
             const char *class_name = xr_type_get_class_name(type);
@@ -2638,7 +2650,7 @@ static bool xa_len_type_supported(XrType *type) {
             }
             return class_name &&
                    (strcmp(class_name, "StringBuilder") == 0 || strcmp(class_name, "Buffer") == 0 ||
-                    strcmp(class_name, "WorkQueue") == 0);
+                    strcmp(class_name, "WorkQueue") == 0 || strcmp(class_name, "Range") == 0);
         }
         default:
             return false;
@@ -2939,7 +2951,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_check_raw_pointer_of_static_arg(ctx, node, call, raw_pointer_namespace_type);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
-        if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
+        if (xa_method_call_creates_span_borrow(callee_obj_type, method_name) &&
+            !ctx->allow_view_expr_for_copy) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
 

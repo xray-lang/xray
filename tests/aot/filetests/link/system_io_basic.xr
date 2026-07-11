@@ -50,7 +50,7 @@ print(io.exists(moved))
 
 var stat = io.stat(file)
 print(stat != null)
-print(len(stat!) == 11)
+print(stat!.size == 11)
 print(stat!.mode >= 0)
 print(stat!.mtime >= 0)
 print(stat!.atime >= 0)

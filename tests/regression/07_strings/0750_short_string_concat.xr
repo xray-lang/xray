@@ -94,10 +94,10 @@ fn test_long_concat_large() {
     var b = "y".repeat(100)
     var result = a + b
     assert_eq(len(result), 200)
-    assert_eq(result.charAt(0), "x")
-    assert_eq(result.charAt(99), "x")
-    assert_eq(result.charAt(100), "y")
-    assert_eq(result.charAt(199), "y")
+    assert_eq(result.runes().nth(0), 'x')
+    assert_eq(result.runes().nth(99), 'x')
+    assert_eq(result.runes().nth(100), 'y')
+    assert_eq(result.runes().nth(199), 'y')
 }
 
 // ===== 属性测试：拼接正确性 =====
@@ -129,10 +129,10 @@ fn test_property_concat_correctness_short() {
         
         // 验证内容：前半部分是 a，后半部分是 b
         if (len(a) > 0) {
-            assert_eq(result.substring(0, len(a)), a)
+            assert_eq(result.slice(0, len(a)), a)
         }
         if (len(b) > 0) {
-            assert_eq(result.substring(len(a), len(a) + len(b)), b)
+            assert_eq(result.slice(len(a), len(a) + len(b)), b)
         }
     }
 }
@@ -158,8 +158,8 @@ fn test_property_concat_correctness_long() {
         assert_eq(len(result), len(a) + len(b))
         
         // 验证内容
-        assert_eq(result.substring(0, len(a)), a)
-        assert_eq(result.substring(len(a), len(a) + len(b)), b)
+        assert_eq(result.slice(0, len(a)), a)
+        assert_eq(result.slice(len(a), len(a) + len(b)), b)
     }
 }
 
@@ -206,8 +206,8 @@ fn test_chained_concat_mixed() {
         result = result + "y".repeat(10)
     }
     assert_eq(len(result), 101)
-    assert_eq(result.charAt(0), "x")
-    assert_eq(result.charAt(100), "y")
+    assert_eq(result.runes().nth(0), 'x')
+    assert_eq(result.runes().nth(100), 'y')
 }
 
 // ===== 特殊字符测试 =====

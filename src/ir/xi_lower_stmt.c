@@ -2189,7 +2189,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 /* ========== For-In Dispatcher ========== */
 
 /* Whether the collection's static type is iterable via the fast
- * length + INDEX_GET path. Only Array, Span, Set and string qualify: those
+ * length + INDEX_GET path. Only Array, Span and Set qualify: those
  * have integer indexable layouts that produce the loop variable's
  * canonical type directly. Map / Json instead route through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
@@ -2200,7 +2200,7 @@ static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
     return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_VIEW || t->kind == XR_KIND_SPAN ||
-           t->kind == XR_KIND_SET || t->kind == XR_KIND_STRING;
+           t->kind == XR_KIND_SET;
 }
 
 static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
@@ -2298,12 +2298,16 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     }
 
-    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_int, 1);
+    /* Builtin collection iteration uses the same compiler-known len query as
+     * source-level `len(coll)`.  Do not resurrect the removed `.length`
+     * property as an internal lowering shortcut. */
+    XiValue *len = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, l->type_int, 1);
     if (!len)
         return;
     len->args[0] = coll;
-    len->aux = (void *) "length";
-    len->aux_int = xi_lower_method_symbol(l, "length");
+    len->aux = (void *) "len";
+    len->aux_int = 0;
+    len->flags |= XI_FLAG_READS_MEM;
     len->line = (uint32_t) node->line;
 
     XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);

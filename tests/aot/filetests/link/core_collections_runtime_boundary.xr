@@ -1,5 +1,7 @@
+import text
+
 fn run_collections_boundary() {
-    var label = "  alpha,beta  ".trim()
+    var label = text.trim("  alpha,beta  ")
     var parts = label.split(",")
     print(len(parts))
     print(parts[0])

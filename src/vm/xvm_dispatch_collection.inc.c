@@ -972,6 +972,11 @@ vmcase(OP_LEN) {
         R(a) = xr_int((xr_Integer) xr_stringbuilder_length(xr_to_stringbuilder(value)));
         vmbreak;
     }
+    XrRange *range = xr_value_get_range_body(isolate, value);
+    if (range) {
+        R(a) = xr_int((xr_Integer) xr_range_length(range));
+        vmbreak;
+    }
     int64_t buffer_length = xr_mem_buffer_length(value);
     if (buffer_length >= 0) {
         R(a) = xr_int((xr_Integer) buffer_length);

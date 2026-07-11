@@ -1,3 +1,5 @@
+import text
+
 // 0560_method_chaining.xr
 // 作者：xingleixu@gmail.com
 // 测试：方法链式调用
@@ -27,7 +29,7 @@ fn test_array_map_filter() {
 @test
 fn test_string_chain() {
     var s = "  Hello World  "
-    var result = s.trim().toLowerCase()
+    var result = text.lower(text.trim(s))
     assert_eq(result, "hello world")
 }
 

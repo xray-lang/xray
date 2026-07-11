@@ -311,85 +311,14 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         return XR_FROM_BOOL(slen == 0);
     if (sym == XRT_SYM_TOSTRING)
         return recv;
-    if (sym == XRT_SYM_ITERATOR)
+    if (sym == XRT_SYM_ITERATOR || sym == XRT_SYM_RUNES)
         return xrt_iterator_new(recv, XRT_ITER_VALUES);
     if (sym == XRT_SYM_ENTRIES_ITERATOR)
         return xrt_iterator_new(recv, XRT_ITER_PAIRS);
-    if (sym == XRT_SYM_ENTRIES)
-        return xrt_string_entries(recv);
-    if (sym == XRT_SYM_TRIM || sym == XRT_SYM_TRIM_START || sym == XRT_SYM_TRIM_END) {
-        const char *start = s, *end = s + slen;
-        if (sym != XRT_SYM_TRIM_END)
-            while (start < end &&
-                   (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r'))
-                start++;
-        if (sym != XRT_SYM_TRIM_START)
-            while (end > start &&
-                   (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r'))
-                end--;
-        int64_t rlen = (int64_t) (end - start);
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
-        return sv;
-    }
-    if (sym == XRT_SYM_TOLOWER) {
-        XrValue sv = xrt_str_alloc((size_t) slen);
-        char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = (s[i] >= 'A' && s[i] <= 'Z') ? (char) (s[i] + 32) : s[i];
-        r[slen] = 0;
-        return sv;
-    }
-    if (sym == XRT_SYM_TOUPPER) {
-        XrValue sv = xrt_str_alloc((size_t) slen);
-        char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = (s[i] >= 'a' && s[i] <= 'z') ? (char) (s[i] - 32) : s[i];
-        r[slen] = 0;
-        return sv;
-    }
-    if (sym == XRT_SYM_TOINT) {
-        XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(s, (size_t) slen);
-        return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
-    }
-    if (sym == XRT_SYM_TOFLOAT) {
-        XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(s, (size_t) slen);
-        return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
-    }
-    if (sym == XRT_SYM_ORD) {
-        /* Mirror VM xr_string_ord: empty -> null; a 1-byte string is a raw
-         * octet (byteAt() on binary buffers) -> unsigned byte; otherwise
-         * decode the first UTF-8 scalar (invalid sequences -> U+FFFD). */
-        if (slen == 0)
-            return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
-        const unsigned char *p = (const unsigned char *) s;
-        if (slen == 1 || (p[0] & 0x80u) == 0)
-            return XR_FROM_INT((int64_t) p[0]);
-        uint32_t cp = 0xFFFD;
-        if ((p[0] & 0xE0u) == 0xC0u && slen >= 2 && (p[1] & 0xC0u) == 0x80u) {
-            cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
-        } else if ((p[0] & 0xF0u) == 0xE0u && slen >= 3 && (p[1] & 0xC0u) == 0x80u &&
-                   (p[2] & 0xC0u) == 0x80u) {
-            cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
-                 (uint32_t) (p[2] & 0x3Fu);
-        } else if ((p[0] & 0xF8u) == 0xF0u && slen >= 4 && (p[1] & 0xC0u) == 0x80u &&
-                   (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
-            cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
-                 ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
-        }
-        return XR_FROM_INT((int64_t) cp);
-    }
-    if (sym == XRT_SYM_REVERSE) {
-        XrValue sv = xrt_str_alloc((size_t) slen);
-        xr_string_core_reverse_utf8_write(xr_str_buf(sv), s, (size_t) slen);
-        return sv;
-    }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
-/* string.copyBytes() -> Array<byte>: the UTF-8 bytes of the string.
- * Mirrors the VM m_to_bytes and round-trips with Bytes.toString(). */
+/* string.copyBytes() -> Array<byte>: the UTF-8 bytes of the string. */
 static inline XrValue xrt_str_to_bytes(XrValue s) {
     int64_t len = (int64_t) xr_str_len(s);
     xrt_array_t *b = xrt_array_new_typed_ptr(len, XR_ELEM_U8);
@@ -405,16 +334,6 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     if (sym == XRT_SYM_TOSTRING) {
         int rk = xrt_value_kind(recv);
         if (rk == XR_TAG_ARRAY) {
-            /* Bytes (Array<uint8>) decodes as UTF-8 text — mirrors the VM
-             * m_to_string and round-trips with string.copyBytes(). */
-            xrt_array_t *a = (xrt_array_t *) recv.ptr;
-            if (a->elem_type == XR_ELEM_U8) {
-                XrValue sv = xrt_str_alloc((size_t) a->length);
-                if (a->length > 0)
-                    memcpy(xr_str_buf(sv), a->data, (size_t) a->length);
-                xr_str_buf(sv)[a->length] = 0;
-                return sv;
-            }
             return xrt_value_to_string(recv);
         }
         if (rk == XR_TAG_MAP || rk == XR_TAG_SET || rk == XR_TAG_TUPLE)
@@ -605,7 +524,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         uint32_t cp = XR_TO_RUNE(recv);
         if (sym == XRT_SYM_TOSTRING)
             return xrt_rune_to_string(cp);
-        if (sym == XRT_SYM_ORD)
+        if (sym == XRT_SYM_TO_UINT32)
             return XR_FROM_INT((int64_t) cp);
         if (sym == XRT_SYM_IS_LETTER)
             return XR_FROM_BOOL(xrt_rune_is_letter(cp));
@@ -656,6 +575,53 @@ static inline XrValue xrt_str_split(const char *s, int64_t slen, const char *sep
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
+    if ((sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY) && XR_IS_ARRAY(arg0)) {
+        xrt_array_t *bytes = (xrt_array_t *) arg0.ptr;
+        if (!bytes || bytes->elem_type != XR_ELEM_U8)
+            return sym == XRT_SYM_FROM_UTF8 ? XR_NULL_VAL : xrt_str_alloc(0);
+        const char *data = (const char *) bytes->data;
+        size_t len = (size_t) bytes->length;
+        bool valid = true;
+        for (size_t pos = 0; pos < len;) {
+            uint32_t cp = 0;
+            int consumed = xr_string_core_utf8_decode(data + pos, len - pos, &cp);
+            if (consumed <= 0 || (consumed == 1 && (unsigned char) data[pos] >= 0x80u)) {
+                valid = false;
+                break;
+            }
+            pos += (size_t) consumed;
+        }
+        if (valid) {
+            XrValue out = xrt_str_alloc(len);
+            if (len > 0)
+                memcpy(xr_str_buf(out), data, len);
+            xr_str_buf(out)[len] = 0;
+            return out;
+        }
+        if (sym == XRT_SYM_FROM_UTF8)
+            return XR_NULL_VAL;
+
+        XrValue out = xrt_str_alloc(len * 3);
+        size_t src = 0, dst = 0;
+        while (src < len) {
+            uint32_t cp = 0;
+            int consumed = xr_string_core_utf8_decode(data + src, len - src, &cp);
+            bool invalid = consumed <= 0 || (consumed == 1 && (unsigned char) data[src] >= 0x80u);
+            if (invalid) {
+                static const char replacement[] = {(char) 0xEF, (char) 0xBF, (char) 0xBD};
+                memcpy(xr_str_buf(out) + dst, replacement, sizeof(replacement));
+                consumed = 1;
+                dst += sizeof(replacement);
+            } else {
+                memcpy(xr_str_buf(out) + dst, data + src, (size_t) consumed);
+                dst += (size_t) consumed;
+            }
+            src += (size_t) consumed;
+        }
+        xr_str_buf(out)[dst] = 0;
+        xr_str_hdr(out)->len = (int64_t) dst;
+        return out;
+    }
     if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0)) {
         return XR_FROM_BOOL(xr_string_core_contains(s, (size_t) slen, xr_str_data(arg0),
                                                     (size_t) xr_str_len(arg0)));
@@ -665,7 +631,10 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
                                                              (size_t) xr_str_len(arg0)));
     }
     if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
-        XrStringCoreSlice slice = xr_string_core_range_slice(s, (size_t) slen, arg0.i, slen);
+        int64_t count = xr_str_rune_len(recv);
+        if (arg0.i < 0 || arg0.i > count)
+            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "string.slice rune range out of bounds");
+        XrStringCoreSlice slice = xr_string_core_range_slice(s, (size_t) slen, arg0.i, count);
         return xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_STARTSWITH && XR_IS_STR(arg0)) {
@@ -677,20 +646,6 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         const char *p = xr_str_data(arg0);
         size_t plen = (size_t) xr_str_len(arg0);
         return XR_FROM_BOOL(xr_string_core_ends_with(s, (size_t) slen, p, plen));
-    }
-    if (sym == XRT_SYM_CHARAT && arg0.tag == XR_TAG_I64) {
-        XrStringCoreSlice slice = xr_string_core_utf8_rune_slice_at(s, (size_t) slen, arg0.i);
-        return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
-    }
-    if (sym == XRT_SYM_CONCAT && XR_IS_STR(arg0)) {
-        const char *s2 = xr_str_data(arg0);
-        size_t s2len = (size_t) xr_str_len(arg0);
-        size_t rlen = (size_t) slen + s2len;
-        XrValue sv = xrt_str_alloc(rlen);
-        memcpy(xr_str_buf(sv), s, (size_t) slen);
-        memcpy(xr_str_buf(sv) + slen, s2, s2len);
-        xr_str_buf(sv)[rlen] = 0;
-        return sv;
     }
     if (sym == XRT_SYM_LASTINDEXOF && XR_IS_STR(arg0)) {
         const char *needle = xr_str_data(arg0);
@@ -736,54 +691,6 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         r[rlen] = 0;
         return sv;
     }
-    if ((sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) && arg0.tag == XR_TAG_I64) {
-        XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) slen, arg0.i, NULL, 0);
-        if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
-            return recv;
-        XrValue sv = xrt_str_alloc(plan.len);
-        xr_string_core_pad_write(xr_str_buf(sv), s, (size_t) slen, plan,
-                                 sym == XRT_SYM_PAD_START ? XR_STRING_CORE_PAD_START
-                                                          : XR_STRING_CORE_PAD_END);
-        return sv;
-    }
-    if (sym == XRT_SYM_BYTE_AT && arg0.tag == XR_TAG_I64) {
-        XrStringCoreSlice slice = xr_string_core_byte_slice_at(s, (size_t) slen, arg0.i);
-        return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
-    }
-    if (sym == XRT_SYM_CODEPOINT_AT && arg0.tag == XR_TAG_I64) {
-        int64_t target = arg0.i;
-        if (target < 0)
-            return XR_FROM_INT(-1);
-        const unsigned char *p = (const unsigned char *) s;
-        const unsigned char *end = p + slen;
-        for (int64_t char_index = 0; p < end; char_index++) {
-            int64_t remaining = (int64_t) (end - p);
-            uint32_t cp = p[0];
-            int advance = 1;
-            if ((p[0] & 0x80u) == 0) {
-                cp = p[0];
-            } else if ((p[0] & 0xE0u) == 0xC0u && remaining >= 2 && (p[1] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
-                advance = 2;
-            } else if ((p[0] & 0xF0u) == 0xE0u && remaining >= 3 && (p[1] & 0xC0u) == 0x80u &&
-                       (p[2] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
-                     (uint32_t) (p[2] & 0x3Fu);
-                advance = 3;
-            } else if ((p[0] & 0xF8u) == 0xF0u && remaining >= 4 && (p[1] & 0xC0u) == 0x80u &&
-                       (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
-                     ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
-                advance = 4;
-            } else {
-                cp = 0xFFFD;
-            }
-            if (char_index == target)
-                return XR_FROM_INT(cp);
-            p += advance;
-        }
-        return XR_FROM_INT(-1);
-    }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
@@ -799,6 +706,21 @@ static inline XrValue xrt_len_value(XrValue recv, int json_dynamic) {
 }
 
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
+    /* Static string constructors do not depend on the runtime class value. */
+    if (sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY)
+        return xrt_str_method_1("", 0, XR_NULL_VAL, sym, arg0);
+    if (recv.tag == XR_TAG_ITERATOR && sym == XRT_SYM_NTH && arg0.tag == XR_TAG_I64) {
+        xrt_iterator_t *it = (xrt_iterator_t *) recv.ptr;
+        if (arg0.i < 0)
+            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Iterator.nth index must be non-negative");
+        for (int64_t i = 0; i <= arg0.i; i++) {
+            if (!xrt_iterator_has_next(it))
+                xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Iterator.nth index out of bounds");
+            XrValue value = xrt_iterator_next(it);
+            if (i == arg0.i)
+                return value;
+        }
+    }
     if (XR_IS_STR(recv)) {
         return xrt_str_method_1(xr_str_data(recv), xr_str_len(recv), recv, sym, arg0);
     }
@@ -1004,14 +926,15 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             xr_str_data(recv), (size_t) xr_str_len(recv), xr_str_data(arg0),
             (size_t) xr_str_len(arg0), arg1.i));
     }
-    if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
+    if (XR_IS_STR(recv) && sym == XRT_SYM_SLICE) {
         const char *s = xr_str_data(recv);
         size_t slen = (size_t) xr_str_len(recv);
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
-        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : xr_string_core_len_i64(slen);
-        XrStringCoreSlice slice = (sym == XRT_SYM_SUBSTRING)
-                                      ? xr_string_core_substring_slice(s, slen, start, end)
-                                      : xr_string_core_range_slice(s, slen, start, end);
+        int64_t count = xr_str_rune_len(recv);
+        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : count;
+        if (start < 0 || end < start || end > count)
+            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "string.slice rune range out of bounds");
+        XrStringCoreSlice slice = xr_string_core_range_slice(s, slen, start, end);
         return xrt_str_from_core_slice(slice);
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
@@ -1028,20 +951,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             return recv;
         XrValue sv = xrt_str_alloc(plan.len);
         xr_string_core_replace_write(xr_str_buf(sv), s, slen, old_s, olen, new_s, nlen, plan, true);
-        return sv;
-    }
-    if (XR_IS_STR(recv) && (sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) &&
-        arg0.tag == XR_TAG_I64 && XR_IS_STR(arg1)) {
-        const char *s = xr_str_data(recv);
-        const char *pad = xr_str_data(arg1);
-        XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) xr_str_len(recv), arg0.i,
-                                                           pad, (size_t) xr_str_len(arg1));
-        if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
-            return recv;
-        XrValue sv = xrt_str_alloc(plan.len);
-        xr_string_core_pad_write(xr_str_buf(sv), s, (size_t) xr_str_len(recv), plan,
-                                 sym == XRT_SYM_PAD_START ? XR_STRING_CORE_PAD_START
-                                                          : XR_STRING_CORE_PAD_END);
         return sv;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACE && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {

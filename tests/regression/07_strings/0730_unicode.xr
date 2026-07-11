@@ -1,3 +1,5 @@
+import text
+
 // 0730_unicode.xr
 // 作者：xingleixu@gmail.com
 // 测试：Unicode 字符串支持
@@ -31,118 +33,107 @@ fn test_length_mixed() {
     assert_eq(len("a中b"), 3)
 }
 
-// ===== byteLength 属性（字节数）=====
+// ===== UTF-8 byte 数 =====
 
 @test
 fn test_byteLength_ascii() {
-    assert_eq("Hello".byteLength, 5)
-    assert_eq("".byteLength, 0)
+    assert_eq(len("Hello".bytes()), 5)
+    assert_eq(len("".bytes()), 0)
 }
 
 @test
 fn test_byteLength_chinese() {
-    assert_eq("你好".byteLength, 6)       // 2 * 3 bytes
-    assert_eq("你好世界".byteLength, 12)  // 4 * 3 bytes
+    assert_eq(len("你好".bytes()), 6)       // 2 * 3 bytes
+    assert_eq(len("你好世界".bytes()), 12)  // 4 * 3 bytes
 }
 
 @test
 fn test_byteLength_emoji() {
-    assert_eq("🎉".byteLength, 4)         // 4 bytes
-    assert_eq("🎉🎊🌍".byteLength, 12)    // 3 * 4 bytes
+    assert_eq(len("🎉".bytes()), 4)         // 4 bytes
+    assert_eq(len("🎉🎊🌍".bytes()), 12)    // 3 * 4 bytes
 }
 
 @test
 fn test_byteLength_mixed() {
-    assert_eq("Hello世界🌍".byteLength, 15)  // 5 + 6 + 4
+    assert_eq(len("Hello世界🌍".bytes()), 15)  // 5 + 6 + 4
 }
 
-// ===== 字符串索引 str[i] =====
+// ===== 显式 rune 访问 =====
 
 @test
 fn test_index_ascii() {
     var s = "Hello"
-    assert_eq(s[0], 'H')
-    assert_eq(s[1], 'e')
-    assert_eq(s[4], 'o')
+    assert_eq(s.runes().nth(0), 'H')
+    assert_eq(s.runes().nth(1), 'e')
+    assert_eq(s.runes().nth(4), 'o')
 }
 
 @test
 fn test_index_chinese() {
     var s = "你好世界"
-    assert_eq(s[0], '你')
-    assert_eq(s[1], '好')
-    assert_eq(s[3], '界')
+    assert_eq(s.runes().nth(0), '你')
+    assert_eq(s.runes().nth(1), '好')
+    assert_eq(s.runes().nth(3), '界')
 }
 
 @test
 fn test_index_emoji() {
     var s = "🎉🎊🌍"
-    assert_eq(s[0], '🎉')
-    assert_eq(s[1], '🎊')
-    assert_eq(s[2], '🌍')
+    assert_eq(s.runes().nth(0), '🎉')
+    assert_eq(s.runes().nth(1), '🎊')
+    assert_eq(s.runes().nth(2), '🌍')
 }
 
 @test
 fn test_index_mixed() {
     var s = "Hello世界🌍"
-    assert_eq(s[0], 'H')
-    assert_eq(s[5], '世')
-    assert_eq(s[6], '界')
-    assert_eq(s[7], '🌍')
+    assert_eq(s.runes().nth(0), 'H')
+    assert_eq(s.runes().nth(5), '世')
+    assert_eq(s.runes().nth(6), '界')
+    assert_eq(s.runes().nth(7), '🌍')
+}
+
+// ===== rune nth =====
+
+@test
+fn test_rune_nth_ascii() {
+    assert_eq("Hello".runes().nth(0), 'H')
+    assert_eq("Hello".runes().nth(4), 'o')
 }
 
 @test
-fn test_index_out_of_bounds() {
-    var s = "abc"
-    assert_eq(s[10], null)
-    assert_eq(s[100], null)
-}
-
-// ===== charAt 方法 =====
-
-@test
-fn test_charAt_ascii() {
-    assert_eq("Hello".charAt(0), "H")
-    assert_eq("Hello".charAt(4), "o")
+fn test_rune_nth_chinese() {
+    assert_eq("你好世界".runes().nth(0), '你')
+    assert_eq("你好世界".runes().nth(1), '好')
 }
 
 @test
-fn test_charAt_chinese() {
-    assert_eq("你好世界".charAt(0), "你")
-    assert_eq("你好世界".charAt(1), "好")
-    assert_eq("你好世界".charAt(-1), "界")
+fn test_rune_nth_emoji() {
+    assert_eq("🎉🎊".runes().nth(0), '🎉')
+    assert_eq("🎉🎊".runes().nth(1), '🎊')
 }
 
-@test
-fn test_charAt_emoji() {
-    assert_eq("🎉🎊".charAt(0), "🎉")
-    assert_eq("🎉🎊".charAt(1), "🎊")
-    assert_eq("🎉🎊".charAt(-1), "🎊")
-}
-
-// ===== codePointAt 方法 =====
+// ===== rune code point =====
 
 @test
 fn test_codePointAt_ascii() {
-    assert_eq("A".codePointAt(0), 65)
-    assert_eq("Z".codePointAt(0), 90)
-    assert_eq("a".codePointAt(0), 97)
-    assert_eq("0".codePointAt(0), 48)
+    assert_eq("A".runes().nth(0).toUInt32(), 65)
+    assert_eq("Z".runes().nth(0).toUInt32(), 90)
+    assert_eq("a".runes().nth(0).toUInt32(), 97)
+    assert_eq("0".runes().nth(0).toUInt32(), 48)
 }
 
 @test
 fn test_codePointAt_chinese() {
-    assert_eq("世".codePointAt(0), 19990)  // U+4E16
-    assert_eq("界".codePointAt(0), 30028)  // U+754C
-    assert_eq("你".codePointAt(0), 20320)  // U+4F60
+    assert_eq("世".runes().nth(0).toUInt32(), 19990)  // U+4E16
+    assert_eq("界".runes().nth(0).toUInt32(), 30028)  // U+754C
+    assert_eq("你".runes().nth(0).toUInt32(), 20320)  // U+4F60
 }
 
 @test
 fn test_codePointAt_emoji() {
-    assert_eq("🎉".codePointAt(0), 127881)  // U+1F389
-    assert_eq("🌍".codePointAt(0), 127757)  // U+1F30D
-    assert_eq("🌍".codePointAt(-1), -1)
-    assert_eq("🌍".codePointAt(9), -1)
+    assert_eq("🎉".runes().nth(0).toUInt32(), 127881)  // U+1F389
+    assert_eq("🌍".runes().nth(0).toUInt32(), 127757)  // U+1F30D
 }
 
 // ===== 字符遍历 =====
@@ -150,15 +141,13 @@ fn test_codePointAt_emoji() {
 @test
 fn test_iterate_mixed() {
     var s = "Hi你好"
-    var chars: Array<string> = []
-    for (var i = 0; i < len(s); i++) {
-        chars.push(string(s[i]))
-    }
+    var chars: Array<rune> = []
+    for (r in s) { chars.push(r) }
     assert_eq(len(chars), 4)
-    assert_eq(chars[0], "H")
-    assert_eq(chars[1], "i")
-    assert_eq(chars[2], "你")
-    assert_eq(chars[3], "好")
+    assert_eq(chars[0], 'H')
+    assert_eq(chars[1], 'i')
+    assert_eq(chars[2], '你')
+    assert_eq(chars[3], '好')
 }
 
 // ===== 字符串比较 =====
@@ -195,32 +184,31 @@ fn test_concat_emoji() {
 
 @test
 fn test_reverse_unicode() {
-    assert_eq("你好🌍".reverse(), "🌍好你")
-    assert_eq("a你b".reverse(), "b你a")
+    assert_eq(text.reverseRunes("你好🌍"), "🌍好你")
+    assert_eq(text.reverseRunes("a你b"), "b你a")
 }
 
-// ===== charLength 属性 =====
+// ===== rune 数 =====
 
 @test
 fn test_charLength() {
-    assert_eq("Hello".charLength, 5)
-    assert_eq("你好世界".charLength, 4)
-    assert_eq("🎉🎊🌍".charLength, 3)
+    assert_eq(len("Hello"), 5)
+    assert_eq(len("你好世界"), 4)
+    assert_eq(len("🎉🎊🌍"), 3)
 }
 
-// ===== substring（字节级）=====
+// ===== slice（rune ordinal）=====
 
 @test
 fn test_substring_ascii() {
-    assert_eq("Hello".substring(0, 5), "Hello")
-    assert_eq("Hello".substring(0, 2), "He")
+    assert_eq("Hello".slice(0, 5), "Hello")
+    assert_eq("Hello".slice(0, 2), "He")
 }
 
 @test
 fn test_substring_chinese() {
-    // substring 是字节级操作，中文每字符 3 字节
-    assert_eq("你好世界".substring(0, 6), "你好")
-    assert_eq("你好世界".substring(0, 3), "你")
+    assert_eq("你好世界".slice(0, 2), "你好")
+    assert_eq("你好世界".slice(0, 1), "你")
 }
 
 print("=== Unicode tests completed ===")

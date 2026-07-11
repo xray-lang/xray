@@ -14,14 +14,13 @@
 // Run: /usr/bin/time -p xray run bench/vm_invoke_microbench.xr
 //      Take min of 5-10 cold runs; outliers are scheduler noise.
 
-// ---------- len(string) / charAt ----------
+// ---------- len(string) / rune nth ----------
 fn bench_string_methods(iters: int): int {
     var s = "the quick brown fox jumps over the lazy dog"
     var acc = 0
     for (var i = 0; i < iters; i++) {
         acc = acc + len(s)
-        // charAt returns a 1-rune String; length on it is always 1.
-        if (len(s.charAt(i % 43)) > 0) {
+        if (s.runes().nth(i % 43).toUInt32() > 0) {
             acc = acc + 1
         }
     }

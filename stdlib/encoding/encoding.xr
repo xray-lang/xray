@@ -9,6 +9,10 @@ const BE = 1
 
 const HEX = "0123456789abcdef"
 
+fn utf8String(bytes: Array<byte>) -> string? {
+    return string.fromUtf8(bytes[:])
+}
+
 // ---- hex ----
 
 // Map a hex character's byte value to its nibble, or -1 if not a hex digit.
@@ -24,8 +28,8 @@ fn hexEncode(data: string) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(src); i++) {
         var b = src[i]
-        out.append(HEX.charAt(b >> 4))
-        out.append(HEX.charAt(b & 15))
+        out.append(HEX.runes().nth(b >> 4))
+        out.append(HEX.runes().nth(b & 15))
     }
     return out.toString()
 }
@@ -51,7 +55,7 @@ fn hexDecode(hex: string) -> Array<byte>? {
 fn hexDecodeString(hex: string) -> string? {
     var b = hexDecode(hex)
     if (b == null) { return null }
-    return b.toString()
+    return utf8String(b!)
 }
 
 fn hexValid(hex: string) -> bool {
@@ -128,13 +132,13 @@ fn utf16Encode(data: string, endian: int = 0) -> Array<byte> {
     // First pass: count 16-bit units (BMP = 1, supplementary = 2).
     var units = 0
     for (var i = 0; i < cpCount; i++) {
-        var cp = data.codePointAt(i)
+        var cp = data.runes().nth(i).toUInt32()
         if (cp >= 0x10000) { units = units + 2 } else { units = units + 1 }
     }
     var out = Array<byte>(units * 2)
     var oi = 0
     for (var i = 0; i < cpCount; i++) {
-        var cp = data.codePointAt(i)
+        var cp = data.runes().nth(i).toUInt32()
         if (cp >= 0x10000) {
             var v = cp - 0x10000
             putU16(out, oi, 0xD800 + (v >> 10), endian)
@@ -221,7 +225,7 @@ fn utf16Decode(data: Array<byte>, endian: int = 0, stripBom: bool = true) -> str
     var out = Array<byte>(outLen)
     var oi = 0
     for (var k = 0; k < len(cps); k++) { oi = putUtf8(out, oi, cps[k]) }
-    return out.toString()
+    return string.fromUtf8(out[:])
 }
 
 export {

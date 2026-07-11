@@ -3,8 +3,8 @@ var chars: Array<rune> = ['b', '中', '\u{1F600}']
 print(len(chars))
 print(typeName(chars[0]))
 print(chars[0])
-print(chars[1].ord())
-print(chars[2].ord())
+print(chars[1].toUInt32())
+print(chars[2].toUInt32())
 
 chars[0] = 'a'
 chars.push('z')
@@ -22,7 +22,7 @@ print(chars[5])
 
 chars.sort()
 print(chars.join(""))
-print(chars[0].ord())
+print(chars[0].toUInt32())
 
 var made = Array<rune>(3, 'k')
 print(len(made))

@@ -8,6 +8,10 @@
 const STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
+fn utf8String(bytes: Array<byte>) -> string? {
+    return string.fromUtf8(bytes[:])
+}
+
 // Encode raw bytes with the given 64-rune alphabet; append '=' padding when
 // `padding` is true (standard) and omit it otherwise (URL-safe default).
 fn encodeAlpha(data: Array<byte>, alpha: string, padding: bool) -> string {
@@ -18,24 +22,24 @@ fn encodeAlpha(data: Array<byte>, alpha: string, padding: bool) -> string {
         var b0 = data[i]
         var b1 = data[i + 1]
         var b2 = data[i + 2]
-        out.append(alpha.charAt(b0 >> 2))
-        out.append(alpha.charAt(((b0 & 3) << 4) | (b1 >> 4)))
-        out.append(alpha.charAt(((b1 & 15) << 2) | (b2 >> 6)))
-        out.append(alpha.charAt(b2 & 63))
+        out.append(alpha.runes().nth(b0 >> 2))
+        out.append(alpha.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(alpha.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
+        out.append(alpha.runes().nth(b2 & 63))
         i = i + 3
     }
     var rem = n - i
     if (rem == 1) {
         var b0 = data[i]
-        out.append(alpha.charAt(b0 >> 2))
-        out.append(alpha.charAt((b0 & 3) << 4))
+        out.append(alpha.runes().nth(b0 >> 2))
+        out.append(alpha.runes().nth((b0 & 3) << 4))
         if (padding) { out.append("==") }
     } else if (rem == 2) {
         var b0 = data[i]
         var b1 = data[i + 1]
-        out.append(alpha.charAt(b0 >> 2))
-        out.append(alpha.charAt(((b0 & 3) << 4) | (b1 >> 4)))
-        out.append(alpha.charAt((b1 & 15) << 2))
+        out.append(alpha.runes().nth(b0 >> 2))
+        out.append(alpha.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(alpha.runes().nth((b1 & 15) << 2))
         if (padding) { out.append("=") }
     }
     return out.toString()
@@ -110,9 +114,9 @@ fn encode(data: string) -> string {
 
 // decode — standard/URL-safe input to a UTF-8 string; null on invalid input.
 fn decode(data: string) -> string? {
-    var b = decodeBytes(data)
-    if (b == null) { return null }
-    return b.toString()
+    var bytes = decodeBytes(data)
+    if (bytes == null) { return null }
+    return utf8String(bytes!)
 }
 
 // encodeUrl — URL-safe alphabet, no padding.

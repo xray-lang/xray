@@ -1,3 +1,5 @@
+import text
+
 // 0940_edge_cases.xr
 // 作者：xingleixu@gmail.com
 // 测试：边界条件和特殊情况
@@ -112,8 +114,8 @@ fn test_zero_division_float() {
 fn test_string_edge_cases() {
     var s = "a"
     assert_eq(len(s), 1)
-    assert_eq(s.charAt(0), "a")
-    assert_eq(s.toUpperCase(), "A")
+    assert_eq(s.runes().nth(0), 'a')
+    assert_eq(text.upper(s), "A")
 }
 
 @test

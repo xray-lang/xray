@@ -1,3 +1,5 @@
+import text
+
 // 0140_special_values.xr
 // 作者：xingleixu@gmail.com
 // 测试：特殊值和边界条件
@@ -78,7 +80,7 @@ fn test_empty_string() {
 fn test_whitespace_string() {
     var s = "   "
     assert_eq(len(s), 3)
-    assert_eq(s.trim(), "")
+    assert_eq(text.trim(s), "")
 }
 
 // ===== 空集合 =====

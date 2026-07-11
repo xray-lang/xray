@@ -81,7 +81,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `bool` | 允许 | 直接布尔判断 |
 | `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
+| `int` / `float` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
@@ -100,13 +100,13 @@ if (flag != null) { }    // OK
 // if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
 var s = ""
-if (!s.isEmpty()) { }    // OK
+if (len(s) != 0) { }     // OK
 // if (s) { }            // 编译错误
 ```
 
 #### 2.3.4 `string`
 
-不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `rune`，切片返回 `string`。丰富方法集见 §14.5。
+不可变且始终合法的 UTF-8 字符串。`len(s)` 以 O(1) 返回 Unicode scalar 数量，`len(s.bytes())` 以 O(1) 返回 UTF-8 byte 数量。默认迭代元素是 `rune`；整数下标与 slice operator 均不适用于 string，显式访问见 §14.5。
 
 底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
 
@@ -119,7 +119,7 @@ var a: rune = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
 print(typeName(a))        // "rune"
-print(int(smile))         // 128512
+print(smile.toUInt32())   // 128512
 ```
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
@@ -201,7 +201,7 @@ var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
 
-定长数组支持 `length`/`size`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
+定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
 
 ```xray
 var data: [byte; 4] = [5, 6, 7, 8]
@@ -369,7 +369,7 @@ var z: int = null       // 编译错误：null 不是 int
 var v = x ?? 0
 
 // 2. 可选链
-var len = name?.length    // 若 name 为 null，结果为 null
+var nameLen = name == null ? null : len(name!)
 
 // 3. 强制解包
 var v: int = x!           // 若 x 为 null，运行时抛 NullError
@@ -621,7 +621,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
+| `int` / `float` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -640,13 +640,13 @@ if (flag != null) { }    // OK
 // if (flag) { }         // compile error: bare bool? cannot be a condition
 
 var s = ""
-if (!s.isEmpty()) { }    // OK
+if (len(s) != 0) { }     // OK
 // if (s) { }            // compile error
 ```
 
 #### 2.3.4 `string`
 
-Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `rune`, and slicing returns `string`. For the rich method set, see §14.5.
+Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
 Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
 
@@ -659,7 +659,7 @@ var a: rune = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
 print(typeName(a))        // "rune"
-print(int(smile))         // 128512
+print(smile.toUInt32())   // 128512
 ```
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
@@ -741,7 +741,7 @@ var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
 
-Fixed arrays support `length`/`size`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
+Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
 
 ```xray
 var data: [byte; 4] = [5, 6, 7, 8]
@@ -909,7 +909,7 @@ var z: int = null       // compile error: null is not int
 var v = x ?? 0
 
 // 2. Optional chaining
-var len = name?.length    // null if name is null
+var nameLen = name == null ? null : len(name!)
 
 // 3. Force unwrap
 var v: int = x!           // throws NullError at runtime if x is null

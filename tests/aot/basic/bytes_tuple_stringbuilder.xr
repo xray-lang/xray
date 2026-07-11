@@ -1,4 +1,4 @@
-// AOT test: Array<byte>, tuple values, codePointAt, and StringBuilder.
+// AOT test: Array<byte>, tuple values, rune code points, and StringBuilder.
 
 fn pair(n: int) -> (int, int) {
     return (n, n + 1)
@@ -38,10 +38,10 @@ var p = pair(41)
 print(p.0)
 print(p.1)
 
-print("A".codePointAt(0))
-print("世界".codePointAt(0))
-print("世界".codePointAt(1))
-print("A".codePointAt(9))
+print("A".runes().nth(0).toUInt32())
+print("世界".runes().nth(0).toUInt32())
+print("世界".runes().nth(1).toUInt32())
+print("A".runes().nth(9).toUInt32())
 print("0123456789abcdef"[10])
 print("你好"[1])
 print("A"[9])

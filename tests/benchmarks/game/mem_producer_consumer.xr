@@ -19,15 +19,15 @@ fn createQueue(capacity: int) {
 
 fn enqueue(q, item) {
     q.data[q.tail] = item
-    q.tail = (q.tail + 1) % len(q.capacity
-    q) = len(q) + 1
+    q.tail = (q.tail + 1) % q.capacity
+    q.size = q.size + 1
 }
 
 fn dequeue(q) {
     var item = q.data[q.head]
     q.data[q.head] = null
-    q.head = (q.head + 1) % len(q.capacity
-    q) = len(q) - 1
+    q.head = (q.head + 1) % q.capacity
+    q.size = q.size - 1
     return item
 }
 
@@ -44,7 +44,7 @@ fn run(n: int) {
         enqueue(q, { "id": i, "payload": "data_" + i })
         i = i + 1
     }
-    print("Queue initialized: size=" + len(q))
+    print("Queue initialized: size=" + q.size)
 
     // Steady-state: produce and consume at same rate
     var checksum = 0
@@ -70,7 +70,7 @@ fn run(n: int) {
             i = i + 1
         }
         // Consume all
-        while (len(burstQ) > 0) {
+        while (burstQ.size > 0) {
             var item = dequeue(burstQ)
             total = total + item.v
         }

@@ -47,8 +47,8 @@ fn test_single_thread_long_concat() {
     assert_eq(len(result), 200)
     
     // 验证内容正确
-    assert_eq(result.charAt(0), "x")
-    assert_eq(result.charAt(199), "x")
+    assert_eq(result.runes().nth(0), 'x')
+    assert_eq(result.runes().nth(199), 'x')
 }
 
 // ===== 多核模式测试 =====

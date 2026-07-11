@@ -10,44 +10,23 @@
 
 @native
 class string {
-    charAt(index: int) -> string
-    codePointAt(index: int) -> int
-    byteAt(index: int) -> string?
-    ord() -> int?
-    concat(...strings: string) -> string
+    static fromUtf8(bytes: Slice<byte>) -> string?
+    static fromUtf8Lossy(bytes: Slice<byte>) -> string
     contains(search: string) -> bool
     indexOf(search: string, start?: int) -> int
     lastIndexOf(search: string) -> int
     slice(start: int, end?: int) -> string
-    substring(start: int, end?: int) -> string
-    toLowerCase() -> string
-    toUpperCase() -> string
-    toInt() -> int?
-    toFloat() -> float?
     toString() -> string
-    trim() -> string
-    trimStart() -> string
-    trimEnd() -> string
     split(separator: string, limit?: int) -> Array<string>
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
     repeat(count: int) -> string
-    reverse() -> string
     startsWith(search: string) -> bool
     endsWith(search: string) -> bool
-    padStart(length: int, pad?: string) -> string
-    padEnd(length: int, pad?: string) -> string
-    match(pattern: Regex) -> Array<string>?
-    // Owned UTF-8 byte bridge — round-trips with Array<byte>.toString().
+    // Owned UTF-8 byte bridge.
     copyBytes() -> Array<byte>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
     bytes() -> Slice<byte>
-    translate(table: Map<string, string>) -> string
-    // Iteration protocol — iterator() yields each character, while
-    // entriesIterator() yields (charIndex, character) tuples. Both
-    // are used by for-in lowering and may be called directly.
-    iterator() -> Iterator<rune>
-    entriesIterator() -> Iterator<(int, rune)>
-    entries() -> Array<(int, rune)>
+    runes() -> Iterator<rune>
 }

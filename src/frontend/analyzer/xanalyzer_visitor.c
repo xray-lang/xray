@@ -3709,15 +3709,14 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     result = xr_type_new_unknown(NULL);
                 }
             } else if (src && XR_TYPE_IS_STRING(src)) {
-                if (xa_freestanding_profile_enabled(ctx->analyzer)) {
-                    xa_freestanding_report_unavailable(
-                        ctx, node, "string slice expression",
-                        "string literals may be passed or printed, but string slicing needs "
-                        "hosted helpers");
-                    result = xr_type_new_unknown(NULL);
-                    break;
-                }
-                result = xr_type_new_string(NULL);
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                    "string does not support integer indexing or slice syntax; use runes(), "
+                    "bytes(), or slice(start, end)",
+                    &loc);
+                result = xr_type_new_unknown(NULL);
             } else {
                 result = xr_type_new_unknown(NULL);
             }

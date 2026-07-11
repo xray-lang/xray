@@ -438,24 +438,17 @@ static inline XrStringCoreSlice xr_string_core_substring_slice(const char *data,
 
 static inline XrStringCoreSlice xr_string_core_range_slice(const char *data, size_t len,
                                                            int64_t start, int64_t end) {
-    int64_t n = xr_string_core_len_i64(len);
-    if (start < 0) {
-        start += n;
-        if (start < 0)
-            start = 0;
-    }
-    if (end < 0) {
-        end += n;
-        if (end < 0)
-            end = 0;
-    }
-    if (start > n)
-        start = n;
-    if (end > n)
-        end = n;
-    if (start >= end)
-        return xr_string_core_slice_at(data, len, (size_t) start, 0);
-    return xr_string_core_slice_at(data, len, (size_t) start, (size_t) (end - start));
+    int64_t count = xr_string_core_len_i64(xr_string_core_utf8_rune_count(data, len));
+    if (start < 0 || end < start || end > count)
+        return (XrStringCoreSlice) {NULL, 0};
+
+    size_t byte_start = len;
+    size_t byte_end = len;
+    if (start < count && !xr_string_core_utf8_rune_at(data, len, (size_t) start, NULL, &byte_start))
+        return (XrStringCoreSlice) {NULL, 0};
+    if (end < count && !xr_string_core_utf8_rune_at(data, len, (size_t) end, NULL, &byte_end))
+        return (XrStringCoreSlice) {NULL, 0};
+    return xr_string_core_slice_at(data, len, byte_start, byte_end - byte_start);
 }
 
 static inline bool xr_string_core_is_ascii_whitespace(unsigned char c) {
