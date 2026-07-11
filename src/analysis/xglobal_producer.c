@@ -3510,7 +3510,7 @@ static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const I
     uint32_t base_returns;
     bool then_returned;
     bool else_returned;
-    if (!scan || !stmt || !stmt->then_branch || !stmt->else_branch)
+    if (!scan || !stmt || !stmt->then_branch)
         return false;
     if (!return_literal_scan_node(scan, stmt->condition))
         return false;
@@ -3520,7 +3520,8 @@ static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const I
     else_scan = *scan;
     if (!return_literal_scan_node(&then_scan, stmt->then_branch) || then_scan.failed)
         return false;
-    if (!return_literal_scan_node(&else_scan, stmt->else_branch) || else_scan.failed)
+    if (stmt->else_branch &&
+        (!return_literal_scan_node(&else_scan, stmt->else_branch) || else_scan.failed))
         return false;
     then_returned = then_scan.return_count > base_returns;
     else_returned = else_scan.return_count > base_returns;
