@@ -1,1 +1,1 @@
-Type 'char' is not assignable to type 'uint32'
+Type 'rune' is not assignable to type 'uint32'

@@ -1,1 +1,1 @@
-char literal must contain exactly one Unicode scalar value
+rune literal must contain exactly one Unicode scalar value
