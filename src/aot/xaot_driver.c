@@ -829,6 +829,35 @@ static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotB
     }
 }
 
+static bool xaot_func_contains_parallel_op(const XiFunc *func) {
+    if (!func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values ? blk->values[vi] : NULL;
+            if (!v)
+                continue;
+            if (v->op == XI_PAR_FOR || v->op == XI_PAR_COLLECT || v->op == XI_PAR_REDUCE)
+                return true;
+        }
+    }
+    return false;
+}
+
+static void features_apply_parallel_ops(XaotFeatureSet *fs, const XaotBundle *bundle) {
+    if (!fs || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nfunc_plans; i++) {
+        if (xaot_func_contains_parallel_op(bundle->func_plans[i].func)) {
+            fs->need_parallel = true;
+            return;
+        }
+    }
+}
+
 static bool reject_profile_capability_plans(const XaotBundle *bundle) {
     if (!bundle)
         return false;
@@ -1021,6 +1050,11 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             return false;
         needs_aot_runtime = true;
     }
+    if (features->need_parallel) {
+        if (!add_runtime_cap(manifest, "parallel"))
+            return false;
+        needs_aot_runtime = true;
+    }
     if (features->need_scope) {
         if (!add_runtime_cap(manifest, "transfer"))
             return false;
@@ -1114,8 +1148,9 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
            !features->need_task && !features->need_atomic && !features->need_work_queue &&
            !features->need_result_group && !features->need_countdown_latch &&
            !features->need_semaphore && !features->need_event_count && !features->need_generator &&
-           !features->need_stacktrace && !features->need_instanceof && features->stdlib == 0 &&
-           features->n_stdlib_symbols == 0 && features->n_extern_dylibs == 0;
+           !features->need_parallel && !features->need_stacktrace && !features->need_instanceof &&
+           features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
+           features->n_extern_dylibs == 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget *target,
@@ -1773,6 +1808,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
     features_apply_link_dependency_plans(&features, &aot_bundle);
+    features_apply_parallel_ops(&features, &aot_bundle);
     if (!build_link_manifest(&features, options->target, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");

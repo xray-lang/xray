@@ -57,6 +57,8 @@ static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
                                 int arg_count);
+static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                     const char *method);
 
 static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
@@ -3950,6 +3952,13 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return addr_of;
         }
 
+        if (ma->name && lower_call_object_is_module(l, ma->object, "parallel")) {
+            XiValue *parallel_intrinsic =
+                lower_parallel_module_intrinsic_call(l, node, call, ma->name);
+            if (parallel_intrinsic || l->had_error)
+                return parallel_intrinsic;
+        }
+
         uint8_t method_key_access_op = 0;
         uint32_t method_key_access_ordinal = UINT32_MAX;
         struct XrType *method_receiver_type = ma->object ? xi_lower_node_type(l, ma->object) : NULL;
@@ -4868,6 +4877,586 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     }
 
     return v;
+}
+
+static AstNode *parallel_call_unwrap_grouping(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    return node;
+}
+
+static bool parallel_call_int_literal_value(AstNode *node, int64_t *out) {
+    node = parallel_call_unwrap_grouping(node);
+    if (!node)
+        return false;
+    if (node->type == AST_LITERAL_INT) {
+        if (out)
+            *out = node->as.literal.raw_value.int_val;
+        return true;
+    }
+    if (node->type == AST_UNARY_NEG) {
+        AstNode *operand = parallel_call_unwrap_grouping(node->as.unary.operand);
+        if (operand && operand->type == AST_LITERAL_INT) {
+            if (out)
+                *out = -operand->as.literal.raw_value.int_val;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool parallel_call_options_ctor_is_parallel(XiLower *l, AstNode *callee) {
+    callee = parallel_call_unwrap_grouping(callee);
+    if (!callee)
+        return false;
+    if (callee->type == AST_VARIABLE && callee->as.variable.name &&
+        strcmp(callee->as.variable.name, "Options") == 0)
+        return true;
+    if (callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &callee->as.member_access;
+        return ma->name && strcmp(ma->name, "Options") == 0 &&
+               lower_call_object_is_module(l, ma->object, "parallel");
+    }
+    return false;
+}
+
+static AstNode *parallel_call_options_workers_ast(XiLower *l, AstNode *options_arg,
+                                                  bool *out_supported) {
+    if (out_supported)
+        *out_supported = false;
+    options_arg = parallel_call_unwrap_grouping(options_arg);
+    if (!options_arg || options_arg->type != AST_CALL_EXPR)
+        return NULL;
+    CallExprNode *ctor = &options_arg->as.call_expr;
+    if (!parallel_call_options_ctor_is_parallel(l, ctor->callee))
+        return NULL;
+    if (ctor->arg_count == 0) {
+        if (out_supported)
+            *out_supported = true;
+        return NULL;
+    }
+    if (ctor->arg_count != 1)
+        return NULL;
+    int64_t literal = 0;
+    if (!parallel_call_int_literal_value(ctor->arguments[0], &literal) || literal < 0)
+        return NULL;
+    if (out_supported)
+        *out_supported = true;
+    return ctor->arguments[0];
+}
+
+static bool parallel_call_extract_workers(XiLower *l, CallExprNode *call, int options_index,
+                                          XiValue **out_workers) {
+    if (!out_workers)
+        return false;
+    *out_workers = NULL;
+    if (options_index < 0 || options_index >= call->arg_count) {
+        *out_workers = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        return *out_workers != NULL;
+    }
+
+    bool supported = false;
+    AstNode *workers_ast =
+        parallel_call_options_workers_ast(l, call->arguments[options_index], &supported);
+    if (!supported)
+        return false;
+    if (!workers_ast) {
+        *out_workers = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        return *out_workers != NULL;
+    }
+    *out_workers = xi_lower_expr(l, workers_ast);
+    return *out_workers != NULL;
+}
+
+static bool parallel_call_is_plain_lambda(AstNode *node, int param_count) {
+    node = parallel_call_unwrap_grouping(node);
+    return node && node->type == AST_FUNCTION_EXPR &&
+           node->as.function_expr.param_count == param_count && node->as.function_expr.body != NULL;
+}
+
+static struct XrType *parallel_call_param_type(XiLower *l, XrParamNode *param,
+                                               struct XrType *fallback) {
+    if (l && l->analyzer && param && param->symbol_id != 0) {
+        XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, param->symbol_id);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        if (links && links->type)
+            return links->type;
+    }
+    struct XrType *type = (param && param->type) ? xr_tref_resolve(l->isolate, param->type) : NULL;
+    return type ? type : fallback;
+}
+
+typedef struct ParallelCallParamBinding {
+    XrParamNode *param;
+    uint16_t abi_index;
+    struct XrType *type;
+} ParallelCallParamBinding;
+
+static XiFunc *parallel_call_lower_lambda_func(
+    XiLower *parent, AstNode *lambda_node, const char *suffix, struct XrType *return_type,
+    XiNativeCallbackKind callback_kind, uint16_t abi_param_count, struct XrType **abi_param_types,
+    ParallelCallParamBinding *bindings, uint16_t binding_count, int line) {
+    lambda_node = parallel_call_unwrap_grouping(lambda_node);
+    if (!parent || !lambda_node || lambda_node->type != AST_FUNCTION_EXPR || !suffix ||
+        abi_param_count == 0)
+        return NULL;
+    FunctionDeclNode *fn = &lambda_node->as.function_expr;
+
+    char name_buf[160];
+    snprintf(name_buf, sizeof(name_buf), "%s$parallel_%s_%d",
+             parent->func && parent->func->name ? parent->func->name : "<anon>", suffix,
+             parent->synthetic_id++);
+
+    XiLower child_l;
+    xi_lower_init(&child_l, parent->analyzer, parent->isolate);
+    child_l.parent = parent;
+    child_l.repl_mode = parent->repl_mode;
+    xi_lower_inherit_evidence(&child_l, parent);
+
+    child_l.func = xi_func_new(name_buf, return_type ? return_type : child_l.type_unit);
+    if (!child_l.func) {
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    child_l.func->native_callback_kind = callback_kind;
+    child_l.func->parent_func = parent->func;
+    child_l.func->analyzer = parent->analyzer;
+    child_l.func->nparams = abi_param_count;
+    child_l.func->min_params = abi_param_count;
+    child_l.func->entry_type = 0;
+    child_l.func->params = (XiValue **) xr_calloc(abi_param_count, sizeof(XiValue *));
+    if (!child_l.func->params) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+
+    XiBlock *entry = xi_block_new(child_l.func);
+    if (!entry) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    entry->sealed = true;
+    child_l.cur_block = entry;
+
+    for (uint16_t i = 0; i < abi_param_count; i++) {
+        struct XrType *ptype =
+            abi_param_types && abi_param_types[i] ? abi_param_types[i] : child_l.type_any;
+        XiValue *param = xi_param(child_l.func, entry, i, ptype);
+        if (!param) {
+            xi_func_free(child_l.func);
+            xi_lower_cleanup(&child_l);
+            return NULL;
+        }
+        child_l.func->params[i] = param;
+    }
+
+    for (uint16_t i = 0; i < binding_count; i++) {
+        ParallelCallParamBinding *binding = &bindings[i];
+        if (!binding->param || binding->abi_index >= abi_param_count || !binding->param->name) {
+            xi_func_free(child_l.func);
+            xi_lower_cleanup(&child_l);
+            return NULL;
+        }
+        struct XrType *ptype = parallel_call_param_type(
+            &child_l, binding->param,
+            binding->type ? binding->type : child_l.func->params[binding->abi_index]->type);
+        int var_id =
+            xi_lower_var_create(&child_l, binding->param->symbol_id, binding->param->name, ptype);
+        if (var_id < 0) {
+            xi_func_free(child_l.func);
+            xi_lower_cleanup(&child_l);
+            return NULL;
+        }
+        xi_lower_braun_write(&child_l, var_id, entry, child_l.func->params[binding->abi_index]);
+    }
+
+    xi_lower_defer_scope_push(&child_l);
+    if (fn->body)
+        xi_lower_stmt(&child_l, fn->body);
+    xi_lower_defer_scope_pop_normal(&child_l, line);
+
+    if (child_l.cur_block)
+        xi_block_set_return(child_l.cur_block, NULL);
+
+    XiFunc *result = child_l.had_error ? NULL : child_l.func;
+    if (result) {
+        result->stage = XI_STAGE_RAW;
+        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+        xi_lower_capture_source_vars(&child_l);
+    } else {
+        xi_func_free(child_l.func);
+    }
+    xi_lower_cleanup(&child_l);
+    return result;
+}
+
+static XiValue *parallel_call_child_closure(XiLower *l, XiFunc *child, int line) {
+    if (!l || !child)
+        return NULL;
+    uint16_t before = l->func->nchildren;
+    xi_lower_func_add_child(l->func, child);
+    if (l->func->nchildren == before) {
+        xi_func_free(child);
+        l->had_error = true;
+        return NULL;
+    }
+    uint16_t child_idx = (uint16_t) (l->func->nchildren - 1);
+    uint16_t ncap = child->ncaptures;
+    XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, ncap);
+    if (!closure) {
+        l->had_error = true;
+        return NULL;
+    }
+    for (uint16_t ci = 0; ci < ncap; ci++) {
+        XiCapture *cap = &child->captures[ci];
+        closure->args[ci] = (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
+    }
+    closure->aux = (void *) child;
+    closure->aux_int = child_idx;
+    closure->line = (uint32_t) line;
+    return closure;
+}
+
+static bool parallel_call_type_can_use_scalar_collect_callback(const struct XrType *type) {
+    return type && !type->is_nullable &&
+           (XR_TYPE_IS_INT(type) || XR_TYPE_IS_FLOAT(type) || XR_TYPE_IS_BOOL(type) ||
+            XR_TYPE_IS_CHAR(type));
+}
+
+static XiValue *parallel_call_make_for_each(XiLower *l, AstNode *node, AstNode *range,
+                                            AstNode *body_node, XiValue *workers) {
+    RangeNode *rn = &range->as.range;
+    XiValue *start = xi_lower_expr(l, rn->start);
+    XiValue *end = xi_lower_expr(l, rn->end);
+    if (!start || !end || !workers)
+        return NULL;
+
+    FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
+    struct XrType *abi_types[2] = {l->type_int, l->type_int};
+    ParallelCallParamBinding bindings[1] = {{
+        .param = body_expr->params[0],
+        .abi_index = 0,
+        .type = l->type_int,
+    }};
+    XiFunc *body = parallel_call_lower_lambda_func(l, body_node, "for_each_body", l->type_unit,
+                                                   XI_NATIVE_CALLBACK_PAR_FOR_I64, 2, abi_types,
+                                                   bindings, 1, node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *closure = parallel_call_child_closure(l, body, node->line);
+    if (!closure)
+        return NULL;
+    uint16_t ncap = body->ncaptures;
+
+    XiParallelForData *data =
+        (XiParallelForData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiParallelForData));
+    if (!data) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(data, 0, sizeof(*data));
+    data->body_func = body;
+    data->item_name =
+        body_expr->params[0] ? arena_strdup(l->func, body_expr->params[0]->name) : NULL;
+    data->item_symbol_id = body_expr->params[0] ? body_expr->params[0]->symbol_id : 0;
+    data->body_child_index = (uint16_t) closure->aux_int;
+    data->inclusive_end = rn->inclusive_end;
+    data->range_body = false;
+
+    XiValue *par =
+        xi_value_new(l->func, l->cur_block, XI_PAR_FOR, l->type_unit, (uint16_t) (4u + ncap));
+    if (!par) {
+        l->had_error = true;
+        return NULL;
+    }
+    par->args[0] = start;
+    par->args[1] = end;
+    par->args[2] = workers;
+    par->args[3] = closure;
+    for (uint16_t ci = 0; ci < ncap; ci++)
+        par->args[4 + ci] = closure->args[ci];
+    par->aux = data;
+    par->aux_kind = XI_AUX_KIND_PAR_FOR;
+    par->line = (uint32_t) node->line;
+    return par;
+}
+
+static XiValue *parallel_call_make_collect(XiLower *l, AstNode *node, AstNode *range,
+                                           AstNode *body_node, XiValue *workers,
+                                           XiValue *into_array) {
+    RangeNode *rn = &range->as.range;
+    XiValue *start = xi_lower_expr(l, rn->start);
+    XiValue *end = xi_lower_expr(l, rn->end);
+    if (!start || !end || !workers)
+        return NULL;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    struct XrType *elem_type = NULL;
+    if (into_array && into_array->type && XR_TYPE_IS_ARRAY(into_array->type))
+        elem_type = xi_get_container_elem_type(into_array->type);
+    if (!elem_type && result_type && XR_TYPE_IS_ARRAY(result_type))
+        elem_type = xi_get_container_elem_type(result_type);
+    if (!elem_type)
+        elem_type = l->type_any;
+    if (!result_type || !XR_TYPE_IS_ARRAY(result_type))
+        result_type = into_array && into_array->type ? into_array->type
+                                                     : xr_type_new_array(l->isolate, elem_type);
+
+    FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
+    struct XrType *abi_types[2] = {l->type_int, l->type_int};
+    ParallelCallParamBinding bindings[1] = {{
+        .param = body_expr->params[0],
+        .abi_index = 0,
+        .type = l->type_int,
+    }};
+    XiNativeCallbackKind callback = parallel_call_type_can_use_scalar_collect_callback(elem_type)
+                                        ? XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY
+                                        : XI_NATIVE_CALLBACK_NONE;
+    XiFunc *body = parallel_call_lower_lambda_func(l, body_node, "map_body", elem_type, callback, 2,
+                                                   abi_types, bindings, 1, node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *closure = parallel_call_child_closure(l, body, node->line);
+    if (!closure)
+        return NULL;
+    uint16_t ncap = body->ncaptures;
+    uint16_t extra_count = into_array ? 1u : 0u;
+    uint16_t capture_base = (uint16_t) (4u + extra_count);
+
+    XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
+        l->func, (uint32_t) sizeof(XiParallelCollectData));
+    if (!data) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(data, 0, sizeof(*data));
+    data->body_func = body;
+    data->element_type = elem_type;
+    data->item_name =
+        body_expr->params[0] ? arena_strdup(l->func, body_expr->params[0]->name) : NULL;
+    data->item_symbol_id = body_expr->params[0] ? body_expr->params[0]->symbol_id : 0;
+    data->body_child_index = (uint16_t) closure->aux_int;
+    data->result_capture_index = ncap;
+    data->start_capture_index = (uint16_t) (ncap + 1u);
+    data->lane_count = 1;
+    data->inclusive_end = rn->inclusive_end;
+    data->into_result = into_array != NULL;
+
+    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, result_type,
+                                (uint16_t) (capture_base + ncap));
+    if (!par) {
+        l->had_error = true;
+        return NULL;
+    }
+    par->args[0] = start;
+    par->args[1] = end;
+    par->args[2] = workers;
+    par->args[3] = closure;
+    if (into_array)
+        par->args[4] = into_array;
+    for (uint16_t ci = 0; ci < ncap; ci++)
+        par->args[capture_base + ci] = closure->args[ci];
+    par->aux = data;
+    par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
+    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    par->line = (uint32_t) node->line;
+
+    if (!into_array)
+        return par;
+
+    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    if (!copy)
+        return into_array;
+    copy->args[0] = into_array;
+    copy->line = (uint32_t) node->line;
+    return copy;
+}
+
+static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *range,
+                                          AstNode *initial_node, AstNode *body_node,
+                                          AstNode *combine_node, XiValue *workers) {
+    RangeNode *rn = &range->as.range;
+    XiValue *start = xi_lower_expr(l, rn->start);
+    XiValue *end = xi_lower_expr(l, rn->end);
+    XiValue *initial = xi_lower_expr(l, initial_node);
+    if (!start || !end || !workers || !initial)
+        return NULL;
+
+    struct XrType *acc_type = xi_lower_node_type(l, node);
+    if (!acc_type || XR_TYPE_IS_UNKNOWN(acc_type))
+        acc_type = initial->type ? initial->type : l->type_int;
+    initial = xi_lower_checktype_for_type(l, initial_node, initial, acc_type);
+    bool native_i64 = acc_type && XR_TYPE_IS_INT(acc_type);
+    bool native_agg = !native_i64 && xi_lower_type_struct_layout(l, acc_type) != NULL;
+    XiNativeCallbackKind body_callback = XI_NATIVE_CALLBACK_NONE;
+    XiNativeCallbackKind combine_callback = XI_NATIVE_CALLBACK_NONE;
+    if (native_i64) {
+        body_callback = XI_NATIVE_CALLBACK_PAR_REDUCE_I64_BODY;
+        combine_callback = XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE;
+    } else if (native_agg) {
+        body_callback = XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_BODY;
+        combine_callback = XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE;
+    }
+
+    FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
+    struct XrType *body_abi_types[2] = {l->type_int, l->type_int};
+    ParallelCallParamBinding body_bindings[1] = {{
+        .param = body_expr->params[0],
+        .abi_index = 0,
+        .type = l->type_int,
+    }};
+    XiFunc *body =
+        parallel_call_lower_lambda_func(l, body_node, "reduce_body", acc_type, body_callback, 2,
+                                        body_abi_types, body_bindings, 1, node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    FunctionDeclNode *combine_expr = &parallel_call_unwrap_grouping(combine_node)->as.function_expr;
+    struct XrType *combine_abi_types[2] = {acc_type, acc_type};
+    ParallelCallParamBinding combine_bindings[2] = {{
+                                                        .param = combine_expr->params[0],
+                                                        .abi_index = 0,
+                                                        .type = acc_type,
+                                                    },
+                                                    {
+                                                        .param = combine_expr->params[1],
+                                                        .abi_index = 1,
+                                                        .type = acc_type,
+                                                    }};
+    XiFunc *combine = parallel_call_lower_lambda_func(l, combine_node, "reduce_combine", acc_type,
+                                                      combine_callback, 2, combine_abi_types,
+                                                      combine_bindings, 2, node->line);
+    if (!combine) {
+        xi_func_free(body);
+        l->had_error = true;
+        return NULL;
+    }
+
+    XiValue *body_closure = parallel_call_child_closure(l, body, node->line);
+    if (!body_closure) {
+        xi_func_free(combine);
+        return NULL;
+    }
+    XiValue *combine_closure = parallel_call_child_closure(l, combine, node->line);
+    if (!combine_closure)
+        return NULL;
+    uint16_t body_ncap = body->ncaptures;
+    uint16_t combine_ncap = combine->ncaptures;
+
+    XiParallelReduceData *data = (XiParallelReduceData *) xi_func_arena_alloc(
+        l->func, (uint32_t) sizeof(XiParallelReduceData));
+    if (!data) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(data, 0, sizeof(*data));
+    data->body_func = body;
+    data->combine_func = combine;
+    data->accumulator_type = acc_type;
+    data->item_name =
+        body_expr->params[0] ? arena_strdup(l->func, body_expr->params[0]->name) : NULL;
+    data->item_symbol_id = body_expr->params[0] ? body_expr->params[0]->symbol_id : 0;
+    data->body_child_index = (uint16_t) body_closure->aux_int;
+    data->combine_child_index = (uint16_t) combine_closure->aux_int;
+    data->inclusive_end = rn->inclusive_end;
+    data->range_body = false;
+
+    uint16_t nargs = (uint16_t) (6u + body_ncap + combine_ncap);
+    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_REDUCE, acc_type, nargs);
+    if (!par) {
+        l->had_error = true;
+        return NULL;
+    }
+    par->args[0] = start;
+    par->args[1] = end;
+    par->args[2] = workers;
+    par->args[3] = initial;
+    par->args[4] = body_closure;
+    par->args[5] = combine_closure;
+    for (uint16_t ci = 0; ci < body_ncap; ci++)
+        par->args[6 + ci] = body_closure->args[ci];
+    for (uint16_t ci = 0; ci < combine_ncap; ci++)
+        par->args[6 + body_ncap + ci] = combine_closure->args[ci];
+    par->aux = data;
+    par->aux_kind = XI_AUX_KIND_PAR_REDUCE;
+    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    par->line = (uint32_t) node->line;
+    return par;
+}
+
+static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                     const char *method) {
+    if (!l || !node || !call || !method)
+        return NULL;
+
+    if (strcmp(method, "forEach") == 0) {
+        if (call->arg_count != 2 && call->arg_count != 3)
+            return NULL;
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[1], 1))
+            return NULL;
+        XiValue *workers = NULL;
+        if (!parallel_call_extract_workers(l, call, call->arg_count == 3 ? 2 : -1, &workers))
+            return NULL;
+        return parallel_call_make_for_each(l, node, range, call->arguments[1], workers);
+    }
+
+    if (strcmp(method, "map") == 0) {
+        if (call->arg_count != 2 && call->arg_count != 3)
+            return NULL;
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[1], 1))
+            return NULL;
+        XiValue *workers = NULL;
+        if (!parallel_call_extract_workers(l, call, call->arg_count == 3 ? 2 : -1, &workers))
+            return NULL;
+        return parallel_call_make_collect(l, node, range, call->arguments[1], workers, NULL);
+    }
+
+    if (strcmp(method, "mapInto") == 0) {
+        if (call->arg_count != 3 && call->arg_count != 4)
+            return NULL;
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[2], 1))
+            return NULL;
+        XiValue *workers = NULL;
+        if (!parallel_call_extract_workers(l, call, call->arg_count == 4 ? 3 : -1, &workers))
+            return NULL;
+        XiValue *into = xi_lower_expr(l, call->arguments[1]);
+        if (!into)
+            return NULL;
+        return parallel_call_make_collect(l, node, range, call->arguments[2], workers, into);
+    }
+
+    if (strcmp(method, "reduce") == 0) {
+        if (call->arg_count != 4 && call->arg_count != 5)
+            return NULL;
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[2], 1) ||
+            !parallel_call_is_plain_lambda(call->arguments[3], 2))
+            return NULL;
+        XiValue *workers = NULL;
+        if (!parallel_call_extract_workers(l, call, call->arg_count == 5 ? 4 : -1, &workers))
+            return NULL;
+        return parallel_call_make_reduce(l, node, range, call->arguments[1], call->arguments[2],
+                                         call->arguments[3], workers);
+    }
+
+    return NULL;
 }
 
 /* Shared construction lowering used by both `T(args)` calls (lower_call) and

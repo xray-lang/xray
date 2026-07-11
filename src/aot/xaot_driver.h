@@ -85,6 +85,7 @@ typedef struct {
     bool need_event_count;
     bool need_generator;
     bool need_sys_thread;
+    bool need_parallel;
     bool need_objects;
     bool need_deep_copy;
     bool need_exception;
