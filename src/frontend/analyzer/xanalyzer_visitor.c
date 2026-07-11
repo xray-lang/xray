@@ -600,6 +600,51 @@ static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *ca
     return sym && sym->kind == XA_SYM_MODULE && sym->is_builtin;
 }
 
+static XrType *xa_parallel_node_type(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return NULL;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, node);
+    if (!type)
+        type = xa_visit_infer_expr(ctx, node);
+    return type;
+}
+
+static const char *xa_parallel_channel_blocking_method_feature(const char *name) {
+    if (!name)
+        return NULL;
+    if (strcmp(name, "send") == 0)
+        return "channel send";
+    if (strcmp(name, "recv") == 0)
+        return "channel recv";
+    if (strcmp(name, "recvOr") == 0)
+        return "channel recvOr";
+    if (strcmp(name, "sendTimeout") == 0)
+        return "channel sendTimeout";
+    if (strcmp(name, "recvTimeout") == 0)
+        return "channel recvTimeout";
+    return NULL;
+}
+
+static const char *xa_parallel_channel_blocking_call_feature(XaInferContext *ctx,
+                                                             CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    const char *feature = xa_parallel_channel_blocking_method_feature(ma->name);
+    if (!feature || !ma->object)
+        return NULL;
+    XrType *receiver_type = xa_parallel_node_type(ctx, ma->object);
+    return receiver_type && receiver_type->kind == XR_KIND_CHANNEL ? feature : NULL;
+}
+
+static bool xa_parallel_for_in_iterates_channel(XaInferContext *ctx, AstNode *node) {
+    if (!node || node->type != AST_FOR_IN_STMT)
+        return false;
+    AstNode *collection = node->as.for_in_stmt.collection;
+    XrType *collection_type = xa_parallel_node_type(ctx, collection);
+    return collection_type && collection_type->kind == XR_KIND_CHANNEL;
+}
+
 static bool xa_parallel_function_symbol_has_effect(XaInferContext *ctx, XaSymbol *sym,
                                                    XaSymbol **call_stack, int call_depth,
                                                    bool *out_suspend);
@@ -635,6 +680,13 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         if (is_suspend)
             *is_suspend = true;
         return "Coro.yield()";
+    }
+
+    const char *channel_feature = xa_parallel_channel_blocking_call_feature(ctx, call);
+    if (channel_feature) {
+        if (is_suspend)
+            *is_suspend = true;
+        return channel_feature;
     }
 
     if (call->callee->type == AST_VARIABLE &&
@@ -853,6 +905,24 @@ static void xa_parallel_callback_effect_scan_pre(AstNode *node, void *ud) {
         case AST_YIELD_STMT:
             feature = "yield";
             is_suspend = true;
+            break;
+        case AST_SELECT_STMT:
+            feature = "select statement";
+            is_suspend = true;
+            break;
+        case AST_CHAN_SEND:
+            feature = "channel send";
+            is_suspend = true;
+            break;
+        case AST_CHAN_RECV:
+            feature = "channel recv";
+            is_suspend = true;
+            break;
+        case AST_FOR_IN_STMT:
+            if (xa_parallel_for_in_iterates_channel(scan->ctx, node)) {
+                feature = "channel iteration";
+                is_suspend = true;
+            }
             break;
         case AST_THROW_STMT:
             feature = "throw";

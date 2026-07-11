@@ -1,0 +1,13 @@
+import parallel
+
+shared ch: Channel<int> = Channel<int>(8)
+shared hits = Atomic<int>(0)
+
+parallel.forEach(0..4, (i) -> {
+    var sent = ch.trySend(i)
+    var received = ch.tryRecv()
+    hits.add(1, Ordering.Relaxed)
+}, parallel.Options(2))
+
+ch.close()
+print(hits.load(Ordering.Relaxed))

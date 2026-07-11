@@ -1,0 +1,8 @@
+import parallel
+
+shared ch: Channel<int> = Channel<int>(4)
+
+parallel.forEach(0..4, (i) -> {
+    var value = ch.recvOr(-1)
+    print(value)
+}, parallel.Options(2))

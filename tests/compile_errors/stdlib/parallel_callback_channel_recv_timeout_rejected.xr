@@ -1,0 +1,8 @@
+import parallel
+
+shared ch: Channel<int> = Channel<int>(4)
+
+parallel.forEach(0..4, (i) -> {
+    var result = ch.recvTimeout(0)
+    print(result)
+}, parallel.Options(2))
