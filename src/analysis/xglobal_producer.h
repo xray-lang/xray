@@ -25,6 +25,10 @@ XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key,
                                                       const struct XrModuleSpec *spec,
                                                       uint32_t profile,
                                                       uint64_t imported_summary_hash);
+XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
+                                                    const struct XrModuleSpec *const *specs,
+                                                    uint32_t spec_count, uint32_t profile,
+                                                    uint64_t imported_summary_hash);
 XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const struct XrModuleGraph *graph,
                                             uint32_t profile, uint64_t imported_summary_hash);
 XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *evidence,

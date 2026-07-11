@@ -6386,10 +6386,6 @@ static uint64_t source_hash_for_graph(const XrModuleGraph *graph) {
     return h;
 }
 
-static uint64_t source_hash_for_standalone_module(const XrModuleSpec *spec) {
-    return fold_graph_module_source(XR_FNV64_OFFSET_BASIS, 1, spec);
-}
-
 static uint64_t module_source_hash(const XrModuleSpec *spec) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!spec)
@@ -6429,11 +6425,29 @@ static bool add_module_summary(XgGlobalEvidence *evidence, XgModuleId module_id,
 XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key, const XrModuleSpec *spec,
                                                       uint32_t profile,
                                                       uint64_t imported_summary_hash) {
-    XgBuildKey key;
-    if (!out_key || !spec)
+    const XrModuleSpec *specs[1];
+    if (!spec)
         return false;
+    specs[0] = spec;
+    return xg_build_key_from_ordered_module_specs(out_key, specs, 1, profile,
+                                                  imported_summary_hash);
+}
+
+XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
+                                                    const XrModuleSpec *const *specs,
+                                                    uint32_t spec_count, uint32_t profile,
+                                                    uint64_t imported_summary_hash) {
+    XgBuildKey key;
+    uint64_t source_hash = XR_FNV64_OFFSET_BASIS;
+    if (!out_key || !specs || spec_count == 0)
+        return false;
+    for (uint32_t i = 0; i < spec_count; i++) {
+        if (!specs[i])
+            return false;
+        source_hash = fold_graph_module_source(source_hash, (uint64_t) (i + 1), specs[i]);
+    }
     memset(&key, 0, sizeof(key));
-    key.source_hash = source_hash_for_standalone_module(spec);
+    key.source_hash = source_hash;
     key.compiler_semver_hash = UINT64_C(0x0000017200000001);
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
