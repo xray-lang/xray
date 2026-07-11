@@ -1,0 +1,5 @@
+{
+  "module": "parallel",
+  "summary": "Structured CPU batch parallelism",
+  "lead": "Structured CPU batch parallelism with typed `Options`, reusable `Plan<S>`, and `parallel.forEach`, `map`, `mapInto`, and `reduce` operations. The source-derived surface includes `Options.constructor`, `Options.workers`, `Plan.constructor`, `Plan.options`, `Plan.create`, `Plan.forEach`, `Plan.map`, `Plan.mapInto`, `Plan.reduce`, and `Plan.close`. The `.xr` module is the canonical semantic reference; hosted VM and native AOT may lower eligible operations to verified batch intrinsics without changing the public contract."
+}
