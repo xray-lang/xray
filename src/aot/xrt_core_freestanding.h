@@ -408,6 +408,10 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
+#if defined(XRAY_TARGET_RUNTIME_PROVIDER)
+#include "xrt_provider_abi.h"
+#endif
+
 #ifdef XRT_IMPL
 XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
 XrAotEnumAggregate xrt_pending_enum_error = {0};

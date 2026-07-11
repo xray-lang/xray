@@ -1991,7 +1991,12 @@ static void emit_coro_sync_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, "    (void)_cl;\n");
     for (uint16_t i = 0; i < f->nparams; i++)
         fprintf(out, "    (void)p%u;\n", i);
-    fprintf(out, "    return (abort(), XR_NULL_VAL);\n");
+    if (ctx && ctx->freestanding_profile)
+        fprintf(out,
+                "    xrt_freestanding_trap(\"suspendable function requires coroutine entry\");\n"
+                "    return XR_NULL_VAL;\n");
+    else
+        fprintf(out, "    return (abort(), XR_NULL_VAL);\n");
     fprintf(out, "}\n\n");
 }
 
