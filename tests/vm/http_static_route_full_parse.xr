@@ -1,85 +1,8 @@
-import http
-import net
-import time
-
-const PORT = 9196
-
-fn serveStaticRoutes(port: int) {
-    http.route("GET", "/plain", "hello static")
-    http.route("GET", "/empty", "")
-    http.route("POST", "/dynamic", fn(req: Json) -> string {
-        return "handler:" + string(Json.has(req, "streaming"))
-    })
-    http.listen(port)
-}
-
-fn waitForServer(port: int) -> bool {
-    for (var i = 0; i < 50; i = i + 1) {
-        var conn = net.dial("127.0.0.1", port)
-        if (conn != null) {
-            net.close(conn!)
-            return true
-        }
-        time.sleep(20)
-    }
-    return false
-}
-
-fn sendRaw(port: int, request: string) -> string {
-    var conn = net.dial("127.0.0.1", port)
-    if (conn == null) {
-        return ""
-    }
-    net.write(conn!, request)
-    var response = net.read(conn!, 4096) ?? ""
-    net.close(conn!)
-    return response
-}
+import { runHttpStaticRouteFullParse } from "./modules/http_static_route_full_parse_lib"
 
 @test
 fn test_http_static_routes_after_full_parse() {
-    var probe = net.listen(PORT, 1)
-    if (probe == null) {
-        return
-    }
-    net.close(probe!)
-
-    go serveStaticRoutes(PORT)
-    assert(waitForServer(PORT))
-
-    var plain = http.request({url: "http://127.0.0.1:" + string(PORT) + "/plain"})
-    assert(plain.ok)
-    assert_eq(plain.status, 200)
-    assert_eq(plain.body, "hello static")
-
-    var empty = http.request({url: "http://127.0.0.1:" + string(PORT) + "/empty"})
-    assert(empty.ok)
-    assert_eq(empty.status, 200)
-    assert_eq(empty.body, "")
-
-    var dynamic = sendRaw(
-        PORT,
-        "POST /dynamic HTTP/1.1\r\n" +
-        "Host: 127.0.0.1\r\n" +
-        "Content-Length: 5\r\n" +
-        "Connection: close\r\n\r\n" +
-        "hello"
-    )
-    assert(dynamic.includes("HTTP/1.1 200 OK\r\n"))
-    assert(dynamic.includes("handler:false"))
-
-    var oversized = sendRaw(
-        PORT,
-        "POST /dynamic HTTP/1.1\r\n" +
-        "Host: 127.0.0.1\r\n" +
-        "Content-Length: 1048577\r\n" +
-        "Connection: close\r\n\r\n" +
-        "x"
-    )
-    assert(oversized.includes("HTTP/1.1 413 Payload Too Large\r\n"))
-    assert(!oversized.includes("handler:"))
-
-    http.stopServer()
+    runHttpStaticRouteFullParse()
 }
 
-print("HTTP static route full-parse test passed")
+print("HTTP static route full-parse test loaded")

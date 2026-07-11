@@ -843,46 +843,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpRequest",
-        .signature = "HttpRequest",
-        .summary = "Native handle type",
-    },
-    {
-        .name = "HttpRequest.body",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "HttpRequest.contentLength",
-        .signature = "const int",
-        .summary = "Handle field",
-    },
-    {
-        .name = "HttpRequest.headers",
-        .signature = "const Json",
-        .summary = "Handle field",
-    },
-    {
-        .name = "HttpRequest.method",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "HttpRequest.params",
-        .signature = "const Json",
-        .summary = "Handle field",
-    },
-    {
-        .name = "HttpRequest.path",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "HttpRequest.query",
-        .signature = "const Json",
-        .summary = "Handle field",
-    },
-    {
         .name = "HttpResponse",
         .signature = "HttpResponse",
         .summary = "",
@@ -1250,7 +1210,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "listen",
         .signature = "(port: int): bool",
-        .summary = "Start HTTP server accept loop",
+        .summary = "",
     },
     {
         .name = "parseChunkedBody",
@@ -1309,8 +1269,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "route",
-        .signature = "(method: string, path: string, handler: fn | string | Json): ()",
-        .summary = "Register a route handler or static response",
+        .signature = "(method: string, path: string, handler: unknown): ()",
+        .summary = "",
     },
     {
         .name = "router",
@@ -1320,7 +1280,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "stopServer",
         .signature = "(): ()",
-        .summary = "Stop the HTTP server",
+        .summary = "",
     },
     {
         .name = "urlDecode",
@@ -1331,11 +1291,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "urlEncode",
         .signature = "(s: string): string",
         .summary = "",
-    },
-    {
-        .name = "ws",
-        .signature = "(path: string, handler: fn(conn: WsConn): ()): ()",
-        .summary = "Register WebSocket upgrade route on HTTP server",
     },
 };
 
@@ -5411,14 +5366,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FormData.maxFileSize` | `: int` |  |\n"
             "| `FormData.maxTotalSize` | `: int` |  |\n"
             "| `FormData.totalSize` | `: int` |  |\n"
-            "| `http.HttpRequest` | `HttpRequest` | Native handle type |\n"
-            "| `http.HttpRequest.body` | `const string` | Handle field |\n"
-            "| `http.HttpRequest.contentLength` | `const int` | Handle field |\n"
-            "| `http.HttpRequest.headers` | `const Json` | Handle field |\n"
-            "| `http.HttpRequest.method` | `const string` | Handle field |\n"
-            "| `http.HttpRequest.params` | `const Json` | Handle field |\n"
-            "| `http.HttpRequest.path` | `const string` | Handle field |\n"
-            "| `http.HttpRequest.query` | `const Json` | Handle field |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: string` |  |\n"
             "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Json, body: string, error: string?): ()` |  |\n"
@@ -5492,7 +5439,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
-            "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
+            "| `http.listen` | `(port: int): bool` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
             "| `http.parseRequestText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?` |  |\n"
@@ -5504,12 +5451,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: Json): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?` |  |\n"
-            "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
+            "| `http.route` | `(method: string, path: string, handler: unknown): ()` |  |\n"
             "| `http.router` | `(): Router` |  |\n"
-            "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
+            "| `http.stopServer` | `(): ()` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
-            "| `http.ws` | `(path: string, handler: fn(conn: WsConn): ()): ()` | Register WebSocket upgrade route on HTTP server |\n"
             "",
         .symbols = _symbols_http,
         .symbol_count = (int)(sizeof(_symbols_http) / sizeof(_symbols_http[0])),

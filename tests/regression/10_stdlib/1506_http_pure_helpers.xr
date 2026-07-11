@@ -29,6 +29,9 @@ fn test_response_json() {
     assert(resp.includes("Content-Type: application/json; charset=utf-8\r\n"))
     assert(resp.includes("Content-Length: 14\r\n"))
     assert(resp.endsWith("{\"error\":\"no\"}"))
+
+    var large = responseText(413, "too large")!
+    assert(large.includes("HTTP/1.1 413 Payload Too Large\r\n"))
 }
 
 @test

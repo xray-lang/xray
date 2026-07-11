@@ -121,14 +121,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
-    {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", NULL, 0},
-    {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "Start HTTP server accept loop", NULL, 0},
-    {"ws", XLSP_SYM_FUNCTION, "fn(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", NULL, 0},
-    {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the HTTP server", NULL, 0},
     {"h2Request", XLSP_SYM_FUNCTION, "fn(options: Json): Json", "Generic HTTP/2 request", NULL, 0},
     {"parseSetCookie", XLSP_SYM_FUNCTION, "fn(header: string, requestDomain?: string, requestPath?: string, nowSeconds?: int): Cookie?", "", NULL, 0},
     {"cookieJar", XLSP_SYM_FUNCTION, "fn(maxCookies?: int): CookieJar", "", NULL, 0},
     {"router", XLSP_SYM_FUNCTION, "fn(): Router", "", NULL, 0},
+    {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: unknown): ()", "", NULL, 0},
+    {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "", NULL, 0},
+    {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
     {"urlDecode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-decode and treat + as a space, matching the former HTTP", NULL, 0},
     {"responseText", XLSP_SYM_FUNCTION, "fn(status: int, body?: string, contentType?: string, headers?: Json, keepAlive?: bool): string?", "Format a complete HTTP/1.1 response with explicit headers.", NULL, 0},
@@ -144,7 +143,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"redirectTarget", XLSP_SYM_FUNCTION, "fn(currentUrl: string, location: string): string?", "Resolve a Location value against the current URL.", NULL, 0},
     {"redirectDecision", XLSP_SYM_FUNCTION, "fn(status: int, currentUrl: string, location: string, method?: string, alreadyStripped?: bool): RedirectDecision?", "Compute the next URL/method and credential stripping rule.", NULL, 0},
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
-    {"HttpRequest", XLSP_SYM_CLASS, "type HttpRequest", "Native handle type", NULL, 0},
     {"Cookie", XLSP_SYM_CLASS, "type Cookie", "Class type", NULL, 0},
     {"CookieJar", XLSP_SYM_CLASS, "type CookieJar", "Class type", NULL, 0},
     {"Router", XLSP_SYM_CLASS, "type Router", "Class type", NULL, 0},
@@ -159,7 +157,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 37
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 35
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

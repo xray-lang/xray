@@ -1,0 +1,95 @@
+import http
+import net
+import time
+
+const PORT = 9196
+
+fn serveStaticRoutes(port: int) {
+    http.route("GET", "/plain", "hello static")
+    http.route("GET", "/empty", "")
+    http.route("POST", "/dynamic", fn(req: Json) -> string {
+        return Json.has(req, "streaming") ? "handler:true" : "handler:false"
+    })
+    http.listen(port)
+}
+
+fn waitForServer(port: int) -> bool {
+    for (var i = 0; i < 50; i = i + 1) {
+        var conn = net.dial("127.0.0.1", port)
+        if (conn != null) {
+            net.close(conn!)
+            return true
+        }
+        time.sleep(20)
+    }
+    return false
+}
+
+fn sendRaw(port: int, request: string) -> string {
+    var conn = net.dial("127.0.0.1", port)
+    if (conn == null) {
+        return ""
+    }
+    net.write(conn!, request)
+    var response = net.read(conn!, 4096) ?? ""
+    net.close(conn!)
+    return response
+}
+
+fn runHttpStaticRouteFullParse() {
+    var probe = net.listen(PORT, 1)
+    if (probe == null) {
+        return
+    }
+    net.close(probe!)
+
+    go serveStaticRoutes(PORT)
+    assert(waitForServer(PORT))
+
+    var plain = sendRaw(
+        PORT,
+        "GET /plain HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Connection: close\r\n\r\n"
+    )
+    assert(plain.includes("HTTP/1.1 200 OK\r\n"))
+    assert(plain.endsWith("\r\n\r\nhello static"))
+
+    var empty = sendRaw(
+        PORT,
+        "GET /empty HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Connection: close\r\n\r\n"
+    )
+    assert(empty.includes("HTTP/1.1 200 OK\r\n"))
+    assert(empty.includes("Content-Length: 0\r\n"))
+    assert(empty.endsWith("\r\n\r\n"))
+
+    var dynamic = sendRaw(
+        PORT,
+        "POST /dynamic HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Content-Length: 5\r\n" +
+        "Connection: close\r\n\r\n" +
+        "hello"
+    )
+    assert(dynamic.includes("HTTP/1.1 200 OK\r\n"))
+    assert(dynamic.includes("handler:false"))
+
+    var oversized = sendRaw(
+        PORT,
+        "POST /dynamic HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Content-Length: 1048577\r\n" +
+        "Connection: close\r\n\r\n" +
+        "x"
+    )
+    assert(oversized.includes("HTTP/1.1 413 Payload Too Large\r\n"))
+    assert(!oversized.includes("handler:"))
+
+    http.stopServer()
+}
+
+export {
+    runHttpStaticRouteFullParse,
+}

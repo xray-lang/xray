@@ -1354,9 +1354,9 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(http_static_route_full_parse PROPERTIES
-        LABELS "vm;http;stdlib;regression"
+        LABELS "vm;aot;http;stdlib;regression"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT 90
     )
 
     add_test(

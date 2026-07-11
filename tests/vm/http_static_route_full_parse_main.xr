@@ -1,0 +1,4 @@
+import { runHttpStaticRouteFullParse } from "./modules/http_static_route_full_parse_lib"
+
+runHttpStaticRouteFullParse()
+print("HTTP static route full-parse test passed")

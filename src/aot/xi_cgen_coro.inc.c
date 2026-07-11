@@ -920,9 +920,11 @@ static CgCoroSuspendCallSite cg_coro_direct_call_site_info(XiCgenCtx *ctx, const
             cg_class_native_ctor_call_data(ctx, current, v, &ctor, &ctor_prefix);
         if (ctor && ctor_class)
             site.call = cg_static_class_constructor_data_call(ctor, ctor_prefix, ctor_class);
-        if (!is_super && method)
-            if (!site.call.func)
-                site.call = cg_resolve_module_member_call(ctx, current, v, method);
+        if (!is_super && method && !site.call.func) {
+            site.call = cg_resolve_module_member_call(ctx, current, v, method);
+            if (site.call.func)
+                site.arg_start = 1;
+        }
         if (!site.call.func) {
             const char *method_prefix = NULL;
             const XiFunc *mfunc =
@@ -931,7 +933,6 @@ static CgCoroSuspendCallSite cg_coro_direct_call_site_info(XiCgenCtx *ctx, const
                 site.call = cg_static_function_call(mfunc, method_prefix);
         }
         site.cl_source = NULL;
-        site.arg_start = 0;
     }
 
     return site;
