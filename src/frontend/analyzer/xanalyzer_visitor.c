@@ -775,6 +775,17 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         callee_name = ma->name;
     }
 
+    XaSymbol *target_sym = xa_parallel_import_target_symbol(ctx, callee_sym);
+    XaSymbolLinks *target_links =
+        target_sym ? xa_analyzer_get_links(ctx->analyzer, target_sym) : NULL;
+    if (target_links && target_links->is_extern) {
+        if (is_suspend)
+            *is_suspend = false;
+        snprintf(scan->feature_buf, sizeof(scan->feature_buf), "call to extern function '%s'",
+                 callee_name ? callee_name : "?");
+        return scan->feature_buf;
+    }
+
     XaParallelFunctionValueStatus status = xa_parallel_function_value_symbol_status(
         ctx, callee_sym, scan->call_stack, scan->call_depth, &callee_suspend);
     if (status == XA_PARALLEL_FN_VALUE_EFFECT) {
@@ -815,8 +826,11 @@ static bool xa_parallel_function_symbol_has_effect(XaInferContext *ctx, XaSymbol
     if (!ctx || !sym || sym->kind != XA_SYM_FUNCTION || sym->is_builtin)
         return false;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (links && links->is_extern)
-        return false;
+    if (links && links->is_extern) {
+        if (out_suspend)
+            *out_suspend = false;
+        return true;
+    }
     if (xa_parallel_call_stack_contains(call_stack, call_depth, sym))
         return false;
     if (call_depth >= 32)
