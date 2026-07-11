@@ -29,7 +29,7 @@
     },
     {
       "heading": "Common constraints",
-      "markdown": "`go { ... }` is a zero-argument block form and cannot capture ordinary mutable locals; pass local data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`. `await all` is homogeneous: mixed `Task<int>` / `Task<string>` collections must be awaited individually or converted to a shared result type."
+      "markdown": "`go { ... }` is a zero-argument block form and consumes the same provenance-based capture plan as other execution boundaries. Inline, module-readonly, and shared identities may cross directly; pass owned execution-local graphs with explicit `copy(...)` / `move` arguments. `await all` is homogeneous: mixed `Task<int>` / `Task<string>` collections must be awaited individually or converted to a shared result type."
     },
     {
       "heading": "Task handle",

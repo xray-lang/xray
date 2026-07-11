@@ -492,7 +492,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
-- 捕获规则：见 §7.4 闭包捕获。**`go` 协程闭包对普通 `var` / `const` 局部引用值的捕获是编译错误**——必须显式 `shared`、`copy(...)`、`move`、或参数传递。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、module-readonly 与 shared identity 可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move` 或改用 `shared`。
 
 ### 3.13 `match` 表达式
 
@@ -1058,7 +1058,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
-- Capture rules: see §7.4 closure capture. **A `go` coroutine closure cannot capture ordinary local `var` / `const` reference values** — pass them explicitly via `shared`, `copy(...)`, `move`, or parameters.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline, module-readonly, and shared identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments or through `shared`.
 
 ### 3.13 `match` Expression
 

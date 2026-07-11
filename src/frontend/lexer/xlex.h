@@ -92,25 +92,25 @@ typedef enum {
     TK_VAR = TK_FIRST_KEYWORD,  // var
     TK_CONST,                   // const
     TK_COMPTIME,                // comptime - force compile-time expression evaluation
-    TK_SHARED,    // shared - stored in global heap, pass by reference (zero-copy across coroutines)
-    TK_IF,        // if
-    TK_ELSE,      // else
-    TK_WHILE,     // while
-    TK_FOR,       // for
-    TK_IN,        // in (for for-in loop)
-    TK_IS,        // is (runtime type check)
-    TK_BREAK,     // break
-    TK_CONTINUE,  // continue
-    TK_RETURN,    // return
-    TK_YIELD,     // yield (cooperative coroutine yield, statement form)
-    TK_NULL,      // null
-    TK_TRUE,      // true
-    TK_FALSE,     // false
-    TK_CLASS,     // class
-    TK_STRUCT,    // struct
-    TK_UNION,     // union
-    TK_PACKED,    // packed
-    TK_EXTENDS,   // extends
+    TK_SHARED,       // shared - stable shared/system-owned identity with lexical visibility
+    TK_IF,           // if
+    TK_ELSE,         // else
+    TK_WHILE,        // while
+    TK_FOR,          // for
+    TK_IN,           // in (for for-in loop)
+    TK_IS,           // is (runtime type check)
+    TK_BREAK,        // break
+    TK_CONTINUE,     // continue
+    TK_RETURN,       // return
+    TK_YIELD,        // yield (cooperative coroutine yield, statement form)
+    TK_NULL,         // null
+    TK_TRUE,         // true
+    TK_FALSE,        // false
+    TK_CLASS,        // class
+    TK_STRUCT,       // struct
+    TK_UNION,        // union
+    TK_PACKED,       // packed
+    TK_EXTENDS,      // extends
     TK_INTERFACE,    // interface
     TK_IMPLEMENTS,   // implements
     TK_FN,           // fn (unified function keyword)

@@ -1527,7 +1527,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
-- Capture rules: see §7.4 closure capture. **A `go` coroutine closure cannot capture ordinary local `var` / `const` reference values** — pass them explicitly via `shared`, `copy(...)`, `move`, or parameters.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline, module-readonly, and shared identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments or through `shared`.
 
 ### 3.13 `match` Expression
 
@@ -1970,7 +1970,7 @@ shared PRIMES = [2, 3, 5, 7, 11]
 shared counter = Atomic(0)
 ```
 
-- Stored on the **global heap**, refcount-managed.
+- Materialized directly under the **shared/system owner** as a stable shared identity; the concrete heap layout is not language semantics.
 - The binding name cannot be reassigned and cannot be used as a `move` source.
 - It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
 - Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.
@@ -4961,18 +4961,20 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 
 | Region | Use |
 |--|--|
-| **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared` / `shared`, reference counting |
-| **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
+| **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
+| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
+| **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
+| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, reference-counted |
+| **Execution owner** | local RC object graphs of a root, task, or direct entry; no physical coroutine identity is required |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
 ### 16.3 Memory Model
 
-- Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
+- Default reclamation is **per-execution reference counting**. AllocationContext explicitly selects the module, shared/system, or execution owner; ordinary allocation does not require `current_coro` as its sole entry. Objects enter their owner's reclamation path when the last strong reference is released.
 - **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
 - **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current ExecutionContext's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 

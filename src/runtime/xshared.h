@@ -16,7 +16,7 @@
  *   Atomic, Semaphore, and OS-domain synchronization objects.
  *
  * SCOPING RULES:
- *   - Stored in global heap, but visibility is lexical scope only
+ *   - Owned by the shared/system owner; visibility remains lexical
  *   - Unlike global variables, shared variables respect block scope
  *   - Duplicate shared variable names across scopes cause compile error
  *   - This prevents accidental shadowing and name conflicts
