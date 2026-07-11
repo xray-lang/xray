@@ -4585,6 +4585,28 @@ static XgMapShapeId body_add_map_shape_for_static_type(XgBodyCollect *bc, uint8_
     return shape.shape_id;
 }
 
+static void body_bind_map_shape_local_for_type_ref(XgBodyCollect *bc, const char *name,
+                                                   const XrTypeRef *type, uint32_t source_span_id) {
+    uint8_t container_kind;
+    uint32_t key_type_key;
+    uint32_t value_type_key;
+    uint32_t stored_value_type_key;
+    XgMapShapeId shape_id;
+    if (!bc || !name)
+        return;
+    if (!body_type_ref_map_parts(type, &container_kind, &key_type_key, &value_type_key))
+        return;
+    stored_value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
+    shape_id = body_add_map_shape_for_static_type(bc, container_kind, key_type_key,
+                                                  stored_value_type_key, source_span_id);
+    if (shape_id == XG_NO_ID)
+        return;
+    body_bind_map_shape_local(
+        bc, name, shape_id, container_kind,
+        body_map_receiver_type_key(container_kind, key_type_key, stored_value_type_key),
+        key_type_key, stored_value_type_key);
+}
+
 static bool body_lookup_map_receiver_shape(XgBodyCollect *bc, const AstNode *expr,
                                            uint32_t source_span_id, XgLocalType *out) {
     const AstNode *unwrapped;
@@ -5530,6 +5552,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                           map_key_type_key, map_value_type_key);
             } else if (source_map_local) {
                 body_bind_map_shape_local_from_source(bc, node->as.var_decl.name, source_map_local);
+            } else {
+                body_bind_map_shape_local_for_type_ref(bc, node->as.var_decl.name,
+                                                       node->as.var_decl.type_annotation,
+                                                       (uint32_t) node->line);
             }
             if (sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
@@ -6015,6 +6041,9 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
             0);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
                                interface_id, type_key, false);
+        body_bind_map_shape_local_for_type_ref(
+            bc, method->parameters ? method->parameters[i] : NULL,
+            method->param_types ? method->param_types[i] : NULL, 0);
         if (body_type_ref_sequence_parts(method->param_types ? method->param_types[i] : NULL,
                                          &sequence_kind, &sequence_elem_type_key))
             body_bind_sequence_local(bc, method->parameters ? method->parameters[i] : NULL,
@@ -6041,6 +6070,9 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             param && param->line > 0 ? (uint32_t) param->line : 0);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key, false);
+        body_bind_map_shape_local_for_type_ref(
+            bc, param ? param->name : NULL, param ? param->type : NULL,
+            param && param->line > 0 ? (uint32_t) param->line : 0);
         if (body_type_ref_sequence_parts(param ? param->type : NULL, &sequence_kind,
                                          &sequence_elem_type_key))
             body_bind_sequence_local(bc, param ? param->name : NULL, sequence_kind,
