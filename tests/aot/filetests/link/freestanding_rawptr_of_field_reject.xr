@@ -1,0 +1,11 @@
+import mem
+
+struct AddressPair {
+    value: int
+}
+
+@c_export("xray_rawptr_of_field_reject")
+fn rawptrOfFieldReject() -> int {
+    var pair = AddressPair{value: 7}
+    return mem.addressOf(RawPtr<int>.of(pair.value))
+}
