@@ -3245,6 +3245,9 @@ body_find_record_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_
 }
 
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr);
+static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode *expr);
+static const XgClassFieldSummary *
+body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32_t field_name_id);
 
 static void body_add_json_fields_for_literal(XgBodyCollect *bc, XgJsonShapeId shape_id,
                                              const ObjectLiteralNode *obj) {
@@ -4273,12 +4276,73 @@ static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const A
     return row->record_shape_id;
 }
 
+static const AstNode *body_record_receiver_unwrap(const AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_MOVE_EXPR:
+                expr = expr->as.move_expr.expr;
+                break;
+            case AST_UNSAFE_EXPR:
+                expr = expr->as.unsafe_expr.operand;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return expr;
+        }
+    }
+    return NULL;
+}
+
+static XgRecordShapeId body_lookup_static_record_shape_for_type_key(XgBodyCollect *bc,
+                                                                    uint32_t type_key) {
+    const XgRecordShapeSummary *shape =
+        body_find_record_shape_for_type_key(bc, type_key, XG_RECORD_SHAPE_STATIC);
+    return shape ? shape->record_shape_id : XG_NO_ID;
+}
+
+static XgRecordShapeId body_lookup_sequence_record_shape(XgBodyCollect *bc, const AstNode *expr) {
+    XgLocalType *local;
+    const AstNode *receiver = body_record_receiver_unwrap(expr);
+    if (!bc || !receiver || receiver->type != AST_INDEX_GET)
+        return XG_NO_ID;
+    local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
+    if (!local || local->sequence_elem_type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_record_shape_for_type_key(bc, local->sequence_elem_type_key);
+}
+
+static XgRecordShapeId body_lookup_class_field_record_shape(XgBodyCollect *bc,
+                                                            const AstNode *expr) {
+    const AstNode *receiver = body_record_receiver_unwrap(expr);
+    XgClassId receiver_class;
+    const XgClassFieldSummary *field;
+    if (!bc || !receiver || receiver->type != AST_MEMBER_ACCESS || !receiver->as.member_access.name)
+        return XG_NO_ID;
+    receiver_class = body_resolve_expr_class(bc, receiver->as.member_access.object);
+    field = body_find_class_field_in_hierarchy(bc, receiver_class,
+                                               hash_name32(receiver->as.member_access.name));
+    if (!field || field->type_key == 0)
+        return XG_NO_ID;
+    return body_lookup_static_record_shape_for_type_key(bc, field->type_key);
+}
+
 static XgRecordShapeId body_lookup_record_shape(XgBodyCollect *bc, const AstNode *expr,
                                                 const ObjectLiteralNode **out_literal) {
     XgRecordShapeId shape_id = body_lookup_local_record_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
-    return body_lookup_call_record_return_shape(bc, expr, out_literal);
+    shape_id = body_lookup_call_record_return_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_sequence_record_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    return body_lookup_class_field_record_shape(bc, expr);
 }
 
 static int body_record_shape_static_field_index(XgBodyCollect *bc, XgRecordShapeId shape_id,
