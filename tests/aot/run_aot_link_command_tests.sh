@@ -3680,17 +3680,42 @@ else
     sed 's/^/      /' "$FREESTANDING_ENUM_PAYLOAD_ERR_LOG" | sed -n '1,120p'
 fi
 
-FREESTANDING_FORCE_UNWRAP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_force_unwrap_reject.xr"
-FREESTANDING_FORCE_UNWRAP_LOG="$WORK/freestanding_force_unwrap_reject.log"
-if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_force_unwrap_reject" \
+FREESTANDING_FORCE_UNWRAP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_force_unwrap_panic_hook.xr"
+FREESTANDING_FORCE_UNWRAP_OBJ="$WORK/freestanding_force_unwrap_panic_hook.o"
+FREESTANDING_FORCE_UNWRAP_LOG="$WORK/freestanding_force_unwrap_panic_hook.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_FORCE_UNWRAP_OBJ" \
         "$FREESTANDING_FORCE_UNWRAP_SRC" >"$FREESTANDING_FORCE_UNWRAP_LOG" 2>&1; then
-    record_fail "freestanding-profile: rejects force unwrap value-error channel"
-    sed 's/^/      /' "$FREESTANDING_FORCE_UNWRAP_LOG" | sed -n '1,120p'
+    FREESTANDING_FORCE_UNWRAP_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_FORCE_UNWRAP_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_FORCE_UNWRAP_C" ]; then
+        expect_log_contains "$FREESTANDING_FORCE_UNWRAP_C" "xrt_freestanding_trap" \
+            "freestanding-profile/force-unwrap: generated C uses panic hook trap"
+        expect_log_not_contains "$FREESTANDING_FORCE_UNWRAP_C" "xrt_throw_exc" \
+            "freestanding-profile/force-unwrap: generated C avoids hosted throw helper"
+        expect_log_not_contains "$FREESTANDING_FORCE_UNWRAP_C" \
+            "xrt_exception_from_message_value" \
+            "freestanding-profile/force-unwrap: generated C avoids hosted exception constructor"
+    else
+        record_fail "freestanding-profile/force-unwrap: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_FORCE_UNWRAP_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_FORCE_UNWRAP_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_FORCE_UNWRAP_OBJ")"
+    FREESTANDING_FORCE_UNWRAP_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_FORCE_UNWRAP_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(xr_hook_panic)$' || true)"
+    if [ -z "$FREESTANDING_FORCE_UNWRAP_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/force-unwrap: undefined symbols stay in panic hook family"
+    else
+        record_fail "freestanding-profile/force-unwrap: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_FORCE_UNWRAP_UNEXPECTED" | sed 's/^/      /'
+    fi
 else
-    expect_log_contains "$FREESTANDING_FORCE_UNWRAP_LOG" \
-        "freestanding profile rejects force unwrap" \
-        "freestanding-profile: rejects force unwrap value-error channel"
+    record_fail "freestanding-profile/force-unwrap: object build failed"
+    sed 's/^/      /' "$FREESTANDING_FORCE_UNWRAP_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_MATCH_PANIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_match_panic_hook.xr"

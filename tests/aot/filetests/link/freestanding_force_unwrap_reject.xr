@@ -1,4 +1,0 @@
-@c_export("xray_force_unwrap_reject")
-fn xray_force_unwrap_reject(x: int?) -> int {
-    return x!
-}

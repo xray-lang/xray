@@ -3366,9 +3366,6 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
     XrType *inner = xa_visit_infer_expr(ctx, node->as.unary.operand);
     if (!inner)
         return xr_type_new_unknown(NULL);
-    xa_freestanding_report_unavailable(ctx, node, "force unwrap `!`",
-                                       "null force-unwrap still materializes an Exception value; "
-                                       "use explicit enum throw/catch in freestanding code");
     // Strip nullable: T? -> T
     if (inner->is_nullable) {
         return xr_type_non_nullable(ctx->analyzer->isolate, inner);

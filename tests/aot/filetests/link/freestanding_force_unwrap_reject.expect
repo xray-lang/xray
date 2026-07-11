@@ -1,7 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=freestanding profile rejects force unwrap `!`
-contains=null force-unwrap still materializes an Exception value
-contains=use explicit enum throw/catch in freestanding code
-not_contains=unsupported AOT
-not_contains=CRASH
