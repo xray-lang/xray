@@ -370,7 +370,7 @@
     _(GEN_START, FMT_ABC, KOP_ABC_BIN_LIT,                                                         \
       "R[A] = generator iterator over closure R[B] with C args at R[B+1..B+C]")                    \
     _(PAR_FOR, FMT_ABC, KOP_ABC_BIN_LIT,                                                           \
-      "R[A] = VM internal parallel for over R[B..B+4], C=flags")                                   \
+      "R[A] = VM internal parallel.forEach over R[B..B+4], C=flags")                               \
     _(PAR_MAP, FMT_ABC, KOP_ABC_BIN_LIT,                                                           \
       "R[A] = VM internal parallel map over R[B..B+5], C=flags")                                   \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")

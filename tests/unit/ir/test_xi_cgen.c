@@ -1347,12 +1347,13 @@ TEST(cgen_for_loop) {
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_for_uses_runtime_executor) {
-    const char *src = "fn run(n: int) {\n"
+TEST(cgen_parallel_for_each_uses_runtime_executor) {
+    const char *src = "import parallel\n"
+                      "fn run(n: int) {\n"
                       "    var base = 10\n"
-                      "    parallel for i in 0..n workers 2 worker wid {\n"
-                      "        print(i + wid + base)\n"
-                      "    }\n"
+                      "    parallel.forEach(0..n, (i) -> {\n"
+                      "        print(i + base)\n"
+                      "    }, parallel.Options(2))\n"
                       "}\n"
                       "run(3)\n";
 
@@ -1363,429 +1364,37 @@ TEST(cgen_parallel_for_uses_runtime_executor) {
     assert(code != NULL);
 
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "parallel for should lower to the AOT runtime executor");
+           "parallel.forEach should lower to the AOT runtime executor");
     assert(contains(code, "_xr_par_workers_") && "workers expression should be evaluated once");
     assert(contains(code, "(XrAotParForRangeI64Fn)") &&
            "runtime executor should receive the native range callback");
     assert(contains(code, "_par_range_") &&
-           "parallel for should emit a chunk range wrapper around the item body");
-    assert(!contains(code, "xr_aot_parallel_for_i64(") &&
-           "parallel for should not use the per-item callback runtime path");
-    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1") &&
-           "capturing parallel body should keep native int callback params");
-    assert(contains(code, "static XR_AINLINE void ") && contains(code, "_parallel_for_0_") &&
-           "parallel for item body should be internal inline C so range wrappers can inline it");
-    assert(!contains(code, "for (int64_t _xr_par_i_") &&
-           "exclusive parallel for should not fall back to the serial counted loop");
+           "parallel.forEach should emit a chunk range wrapper around the item body");
     assert(!contains(code, "xr_aot_spawn_child") &&
-           "parallel for must not fall back to per-iteration task spawning");
+           "parallel.forEach must not fall back to per-iteration task spawning");
 
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_for_local_init_uses_range_body_executor) {
-    const char *src = "fn run(n: int) {\n"
-                      "    var base = 10\n"
-                      "    parallel for i in 0..n workers 2 worker wid\n"
-                      "        local acc = wid {\n"
-                      "        print(i + acc + base)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    char *code = generate_c(ir, "test");
-    assert(code != NULL);
-
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "parallel for local init should use the AOT range executor");
-    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2") &&
-           "local-init parallel for body should use begin/end/worker native params");
-    assert(contains(code, "_par_range_") && "parallel for should still emit a range wrapper");
-    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
-           "range wrapper should pass begin/end/worker directly to the body");
-    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
-           "local-init parallel for wrapper must not call the body once per item");
-    assert(!contains(code, "xr_aot_parallel_for_i64(") &&
-           "local-init parallel for should not use the per-item callback runtime path");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_final_uses_range_body_executor) {
-    const char *src = "fn run(n: int) {\n"
-                      "    parallel for i in 0..n workers 2 worker wid\n"
-                      "        final { print(wid) } {\n"
-                      "        print(i)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    char *code = generate_c(ir, "test");
-    assert(code != NULL);
-
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "parallel for final should use the AOT range executor");
-    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2") &&
-           "parallel final body should use begin/end/worker native params");
-    assert(contains(code, "_par_range_") && "parallel final should emit a range wrapper");
-    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
-           "range wrapper should pass begin/end/worker directly to the body");
-    assert(!contains(code, "xr_aot_parallel_for_i64(") &&
-           "parallel final should not use a per-item callback runtime path");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_range_uses_range_body_executor) {
-    const char *src = "fn run(n: int) {\n"
-                      "    var base = 10\n"
-                      "    parallel range begin, end in 0..n workers 2 worker wid {\n"
-                      "        print(begin + end + wid + base)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    char *code = generate_c(ir, "test");
-    assert(code != NULL);
-
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "parallel range should use the AOT range executor");
-    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2") &&
-           "range body should keep begin/end/worker native params");
-    assert(contains(code, "_par_range_") && "parallel range should emit a range wrapper");
-    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
-           "range wrapper should pass begin/end/worker to the body");
-    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
-           "parallel range wrapper must not loop over each item");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_reduce_uses_runtime_executor) {
-    const char *src = "fn run(n: int) -> int {\n"
-                      "    var base = 10\n"
-                      "    return parallel reduce i in 0..n workers 2 worker wid init 0 "
-                      "combine (a: int, b: int) -> a + b {\n"
-                      "        i + wid - wid + base\n"
-                      "    }\n"
-                      "}\n"
-                      "print(run(3))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel reduce AOT program should generate");
-
-    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
-           "parallel reduce should lower to the AOT runtime reducer");
-    assert(contains(code, "_xr_pr_workers_") && "workers expression should be evaluated once");
-    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
-           "runtime reducer should receive the native range callback");
-    assert(contains(code, "(XrAotParReduceCombineI64Fn)") &&
-           "runtime reducer should receive the native combine callback");
-    assert(contains(code, "_par_reduce_range_") &&
-           "parallel reduce should emit a chunk range wrapper around the item body");
-    assert(contains(code, "_par_reduce_combine_") &&
-           "parallel reduce should emit a native combine wrapper");
-    assert(contains(code, "static XR_AINLINE int64_t ") &&
-           "reduce body/combine should be inline native i64 callbacks");
-    assert(!contains(code, "xr_aot_spawn_child") &&
-           "parallel reduce must not fall back to per-iteration task spawning");
-    assert(!contains(code, "xr_aot_await_all") &&
-           "parallel reduce must not route scalar aggregation through await all");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_reduce_local_init_uses_range_body_executor) {
-    const char *src = "fn run(n: int) -> int {\n"
-                      "    return parallel reduce i in 0..n workers 2 worker wid\n"
-                      "        local acc = wid\n"
-                      "        init 0\n"
-                      "        combine (a: int, b: int) -> a + b {\n"
-                      "        acc = acc + i\n"
-                      "        acc\n"
-                      "    }\n"
-                      "}\n"
-                      "print(run(4))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel reduce local init should generate");
-
-    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
-           "local-init reduce should lower to the scalar runtime reducer");
-    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
-           "local-init reduce should pass a native range callback");
-    assert(contains(code, "_par_reduce_range_") && "local-init reduce should emit a range wrapper");
-    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
-           "range wrapper should pass begin/end/worker directly to the synthetic body");
-    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
-           "local-init reduce wrapper must not call the body once per item");
-    assert(!contains(code, "xrt_closure_new((void*)test_run_parallel_reduce_body") &&
-           "lane-local static combine closure should be elided in the synthetic range body");
-    assert(!contains(code, "xr_aot_await_all") &&
-           "local-init reduce must not route scalar aggregation through await all");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_reduce_local_init_guarded_upval_mod_is_nothrow) {
-    const char *src =
-        "struct Totals {\n"
-        "    compressed: int\n"
-        "    checksum: int\n"
-        "    failed: int\n"
-        "}\n"
-        "fn mergeTotals(a: Totals, b: Totals) -> Totals {\n"
-        "    if (a.failed != 0 || b.failed != 0) {\n"
-        "        return Totals{compressed: 0, checksum: 0, failed: 1}\n"
-        "    }\n"
-        "    return Totals{compressed: a.compressed + b.compressed, "
-        "checksum: a.checksum + b.checksum, failed: 0}\n"
-        "}\n"
-        "fn run(n: int, blocks: int) -> int {\n"
-        "    if (blocks <= 0) { return 0 }\n"
-        "    const stableBlocks = blocks\n"
-        "    var totals = parallel reduce job in 0..n workers 2 worker wid\n"
-        "        local acc = wid\n"
-        "        init Totals{compressed: 0, checksum: 0, failed: 0}\n"
-        "        combine (a: Totals, b: Totals) -> mergeTotals(a, b) {\n"
-        "        var result = Totals{compressed: 0, checksum: 0, failed: 1}\n"
-        "        if (stableBlocks > 0) {\n"
-        "            var b = job % stableBlocks\n"
-        "            result = Totals{compressed: b + acc - acc, checksum: 0, failed: 0}\n"
-        "        }\n"
-        "        result\n"
-        "    }\n"
-        "    return totals.compressed\n"
-        "}\n"
-        "print(run(8, 3))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error &&
-           "guarded modulo by captured const in local-init reduce must be trusted nothrow");
-    assert(contains(code, "_par_reduce_range_") &&
-           "guarded captured modulo case should stay on the range reduce path");
-    assert(contains(code, " % ") && "guarded captured modulo should emit native C %");
-    assert(!contains(code, "xrt_int_mod(") &&
-           "guarded captured modulo must not call the throwing runtime helper");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_range_reduce_uses_range_body_executor) {
-    const char *src = "fn run(n: int) -> int {\n"
-                      "    return parallel range reduce begin, end in 0..n workers 2 worker wid "
-                      "init 0 combine (a: int, b: int) -> a + b {\n"
-                      "        end - begin + wid - wid\n"
-                      "    }\n"
-                      "}\n"
-                      "print(run(3))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel range reduce AOT program should generate");
-
-    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
-           "range reduce should lower to the scalar runtime reducer");
-    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
-           "range reduce should pass a native range callback");
-    assert(contains(code, "_par_reduce_range_") && "range reduce should emit a range wrapper");
-    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
-           "range reduce wrapper should pass begin/end/worker directly to the body");
-    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
-           "range reduce wrapper must not loop over each item");
-    assert(!contains(code, "xr_aot_await_all") &&
-           "range reduce must not route scalar aggregation through await all");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
-    const char *src = "struct Totals {\n"
-                      "    bytes: int\n"
-                      "    checksum: int\n"
-                      "}\n"
-                      "fn run(n: int) -> int {\n"
-                      "    var totals = parallel reduce i in 0..n workers 2 worker wid "
-                      "init Totals{bytes: 0, checksum: 0} "
-                      "combine (a: Totals, b: Totals) -> Totals{"
-                      "bytes: a.bytes + b.bytes, "
-                      "checksum: a.checksum + b.checksum} {\n"
-                      "        Totals{bytes: i, checksum: wid}\n"
-                      "    }\n"
-                      "    return totals.bytes + totals.checksum\n"
-                      "}\n"
-                      "print(run(3))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "struct accumulator parallel reduce should generate");
-    assert(contains(code, "xr_aot_parallel_reduce_agg(") &&
-           "struct reduce should lower to the aggregate runtime reducer");
-    assert(contains(code, "(XrAotParReduceRangeAggFn)") &&
-           "aggregate reducer should receive the native range callback");
-    assert(contains(code, "(XrAotParReduceCombineAggFn)") &&
-           "aggregate reducer should receive the native combine callback");
-    assert(contains(code, "static XR_AINLINE xrt_struct_test_") &&
-           "reduce body/combine should be inline native struct callbacks");
-    assert(contains(code, "_par_reduce_range_") && "struct reduce should emit a range wrapper");
-    assert(contains(code, "_par_reduce_combine_") && "struct reduce should emit a combine wrapper");
-    assert(!contains(code, "xr_aot_parallel_reduce_i64(") &&
-           "struct reduce must not route through the i64 runtime reducer");
-    assert(!contains(code, "_boxed") &&
-           "direct aggregate reduce callbacks should not require boxed adapters");
-    assert(!contains(code, "xrt_value_clone_for_coro(v") &&
-           "aggregate value clone should be a typed assignment, not a boxed clone");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_range_reduce_struct_accumulator_uses_aggregate_runtime) {
-    const char *src = "struct Totals {\n"
-                      "    bytes: int\n"
-                      "    checksum: int\n"
-                      "}\n"
-                      "fn run(n: int) -> int {\n"
-                      "    var totals = parallel range reduce begin, end in 0..n workers 2 "
-                      "worker wid init Totals{bytes: 0, checksum: 0} "
-                      "combine (a: Totals, b: Totals) -> Totals{"
-                      "bytes: a.bytes + b.bytes, "
-                      "checksum: a.checksum + b.checksum} {\n"
-                      "        Totals{bytes: end - begin, checksum: wid - wid}\n"
-                      "    }\n"
-                      "    return totals.bytes + totals.checksum\n"
-                      "}\n"
-                      "print(run(3))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "struct accumulator range reduce should generate");
-    assert(contains(code, "xr_aot_parallel_reduce_agg(") &&
-           "struct range reduce should lower to the aggregate runtime reducer");
-    assert(contains(code, "(XrAotParReduceRangeAggFn)") &&
-           "aggregate range reducer should receive the native range callback");
-    assert(contains(code, "_par_reduce_range_") &&
-           "struct range reduce should emit a range wrapper");
-    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
-           "struct range reduce wrapper should pass begin/end/worker directly to the body");
-    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
-           "struct range reduce wrapper must not loop over each item");
-    assert(!contains(code, "xr_aot_parallel_reduce_i64(") &&
-           "struct range reduce must not route through the i64 runtime reducer");
-    assert(!contains(code, "_boxed") &&
-           "direct aggregate range reduce callbacks should not require boxed adapters");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_range_reduce_struct_debug_locals_use_value_slots) {
-    const char *src = "struct Totals {\n"
-                      "    bytes: int\n"
-                      "    checksum: int\n"
-                      "}\n"
-                      "fn run(n: int) -> int {\n"
-                      "    var totals = parallel range reduce begin, end in 0..n workers 2 "
-                      "worker wid init Totals{bytes: 0, checksum: 0} "
-                      "combine (a: Totals, b: Totals) -> Totals{"
-                      "bytes: a.bytes + b.bytes, "
-                      "checksum: a.checksum + b.checksum} {\n"
-                      "        var result = Totals{bytes: end - begin, checksum: wid - wid}\n"
-                      "        result\n"
-                      "    }\n"
-                      "    return totals.bytes + totals.checksum\n"
-                      "}\n"
-                      "print(run(3))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "struct range reduce debug locals should generate");
-    assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
-           "struct aggregate debug locals should stay behind the debug guard");
-    assert(contains(code, "xrt_struct_test_") &&
-           "test module should emit native aggregate struct types");
-    assert(contains(code, " totals = ((xrt_struct_test_") &&
-           "aggregate source local totals should use a value debug slot");
-    assert(contains(code, " result = ((xrt_struct_test_") &&
-           "aggregate source local result should use a value debug slot");
-    assert(!contains(code, "* totals =") &&
-           "aggregate debug local totals must not be declared as a pointer");
-    assert(!contains(code, "* result =") &&
-           "aggregate debug local result must not be declared as a pointer");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_collect_into_scalar_lanes_use_direct_storage) {
-    const char *src = "const bias = 2\n"
+TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
+    const char *src = "import parallel\n"
+                      "const bias = 2\n"
                       "var floats: Array<float> = []\n"
                       "floats.reserve(8)\n"
-                      "parallel for i in 0..4 workers 2 collect into floats {\n"
-                      "    float(i + bias) + 0.5\n"
-                      "}\n"
+                      "parallel.mapInto(0..4, floats, (i) -> float(i + bias) + 0.5, "
+                      "parallel.Options(2))\n"
                       "var flags: Array<bool> = []\n"
                       "flags.reserve(8)\n"
-                      "parallel for i in 0..4 workers 2 collect into flags {\n"
-                      "    ((i + bias) % 2) == 0\n"
-                      "}\n"
+                      "parallel.mapInto(0..4, flags, (i) -> ((i + bias) % 2) == 0, "
+                      "parallel.Options(2))\n"
                       "fn byteValue() -> uint8 { return 2 }\n"
                       "var bytes: Array<uint8> = []\n"
                       "bytes.reserve(8)\n"
-                      "parallel for i in 0..4 workers 2 collect into bytes {\n"
-                      "    byteValue()\n"
-                      "}\n"
-                      "print(floats[0])\n"
-                      "print(flags[0])\n"
-                      "print(bytes[0])\n";
+                      "parallel.mapInto(0..4, bytes, (i) -> byteValue(), parallel.Options(2))\n"
+                      "print(floats.length)\n"
+                      "print(flags.length)\n"
+                      "print(bytes.length)\n";
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
@@ -1793,106 +1402,27 @@ TEST(cgen_parallel_collect_into_scalar_lanes_use_direct_storage) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "scalar parallel collect into should generate");
+    TEST_REQUIRE(!had_error, "scalar parallel.mapInto should generate");
 
     const char *code_end = code + strlen(code);
     TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 3,
-                 "scalar collect into should use one range executor per collect");
-    TEST_REQUIRE(count_between(code, code_end, "((double*)") >= 2,
-                 "Array<float> collect should store/load through direct double storage");
-    TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 4,
-                 "Array<bool>/Array<uint8> collect should store/load through direct byte storage");
+                 "scalar mapInto should use one range executor per map");
+    TEST_REQUIRE(count_between(code, code_end, "((double*)") >= 1,
+                 "Array<float> mapInto should store through direct double storage");
+    TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 2,
+                 "Array<bool>/Array<uint8> mapInto should store through direct byte storage");
     TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
-                 "scalar collect into must not box through preallocated array writes");
-    TEST_REQUIRE(count_between(code, code_end, "_xr_pc_item_") == 0,
-                 "scalar collect into should not materialize boxed temporary items");
+                 "scalar mapInto must not box through preallocated array writes");
 
-    printf("  Generated scalar collect direct storage %zu bytes of C code\n", strlen(code));
+    printf("  Generated scalar parallel.mapInto direct storage %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_collect_into_multi_lanes_use_direct_storage) {
-    const char *src = "var ints: Array<int> = []\n"
-                      "var flags: Array<bool> = []\n"
-                      "ints.reserve(8)\n"
-                      "flags.reserve(8)\n"
-                      "parallel for i in 0..4 workers 2 worker wid collect into (ints, flags) {\n"
-                      "    (i + wid, ((i + wid) % 2) == 0)\n"
-                      "}\n"
-                      "print(ints.length + flags.length)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "IR compilation failed");
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "multi-lane parallel collect into should generate");
-
-    const char *code_end = code + strlen(code);
-    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
-                 "multi-lane collect into should use one range executor");
-    TEST_REQUIRE(count_between(code, code_end, "_xr_pc_out_") >= 2,
-                 "multi-lane collect into should prepare each output lane");
-    TEST_REQUIRE(count_between(code, code_end, "->length = _xr_pc_count_") >= 2,
-                 "multi-lane collect into should resize lanes before dispatch");
-    TEST_REQUIRE(count_between(code, code_end, "((int64_t*)") >= 1,
-                 "int lane should store through direct int64 storage");
-    TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 1,
-                 "bool lane should store through direct byte storage");
-    TEST_REQUIRE(count_between(code, code_end, "xrt_tuple_make") == 0 &&
-                     count_between(code, code_end, "xrt_tuple_new") == 0,
-                 "multi-lane collect into must not materialize tuple results");
-    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
-                 "multi-lane collect into must not box through preallocated array writes");
-
-    printf("  Generated multi-lane collect direct storage %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_collect_into_local_init_uses_range_body) {
-    const char *src = "var ints: Array<int> = []\n"
-                      "ints.reserve(8)\n"
-                      "parallel for i in 0..8 workers 4 worker wid\n"
-                      "    local acc = wid\n"
-                      "    collect into ints {\n"
-                      "    acc = acc + 1\n"
-                      "    i + acc\n"
-                      "}\n"
-                      "print(ints.length)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "collect into local init should generate");
-
-    const char *code_end = code + strlen(code);
-    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
-                 "collect into local init should use one range executor");
-    TEST_REQUIRE(count_between(code, code_end,
-                               "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") == 0,
-                 "range wrapper should call the worker-range body once per lane");
-    TEST_REQUIRE(count_between(code, code_end, "((int64_t*)") >= 1,
-                 "int lane should still store through direct int64 storage");
-    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
-                 "collect into local init must not box through preallocated writes");
-
-    printf("  Generated collect local-init range body %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_collect_return_local_init_uses_direct_storage) {
-    const char *src = "var xs = parallel for i in 0..8 workers 4 worker wid\n"
-                      "    local acc = wid\n"
-                      "    collect {\n"
-                      "    acc = acc + 1\n"
-                      "    i + acc\n"
-                      "}\n"
+TEST(cgen_parallel_map_return_uses_runtime_executor) {
+    const char *src = "import parallel\n"
+                      "var xs = parallel.map(0..8, (i) -> i + 1, parallel.Options(4))\n"
                       "print(xs.length)\n"
                       "print(xs[7])\n";
 
@@ -1902,115 +1432,140 @@ TEST(cgen_parallel_collect_return_local_init_uses_direct_storage) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "returning collect local init should generate");
+    TEST_REQUIRE(!had_error, "returning parallel.map should generate");
 
     const char *code_end = code + strlen(code);
     TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
-                 "returning collect local init should use one range executor");
-    TEST_REQUIRE(count_between(code, code_end, "((int64_t*)") >= 1,
-                 "returning int collect should store through direct int64 storage");
-    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
-                 "returning collect local init must not box through preallocated writes");
-    TEST_REQUIRE(count_between(code, code_end, "xrt_release(v") == 0,
-                 "hidden returning collect result array must not be released before use");
+                 "returning map should use one range executor");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_array_new_typed") >= 1,
+                 "returning map should preallocate a result array before dispatch");
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_spawn_child") == 0,
+                 "returning map must not fall back to per-item task spawning");
 
-    printf("  Generated returning collect local-init direct storage %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated returning parallel.map executor path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_collect_final_uses_range_body_executor) {
-    const char *src = "var xs = parallel for i in 0..8 workers 4 worker wid\n"
-                      "    final { print(wid) }\n"
-                      "    collect {\n"
-                      "    i + wid\n"
+TEST(cgen_parallel_reduce_uses_runtime_executor) {
+    const char *src = "import parallel\n"
+                      "fn run(n: int) -> int {\n"
+                      "    var base = 10\n"
+                      "    return parallel.reduce(0..n, 0, (i) -> i + base, "
+                      "(a, b) -> a + b, parallel.Options(2))\n"
                       "}\n"
-                      "print(xs.length)\n";
+                      "print(run(3))\n";
 
     XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    assert(ir != NULL);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "collect final should generate");
+    assert(code != NULL);
+    assert(!had_error && "parallel.reduce AOT program should generate");
 
-    const char *code_end = code + strlen(code);
-    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
-                 "collect final should use one range executor");
-    TEST_REQUIRE(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2"),
-                 "collect final body should use begin/end/worker native params");
-    TEST_REQUIRE(count_between(code, code_end,
-                               "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") == 0,
-                 "range wrapper should call the worker-range body once per lane");
-    TEST_REQUIRE(!contains(code, "xr_aot_parallel_for_i64("),
-                 "collect final should not use the per-item callback runtime path");
+    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "parallel.reduce should lower to the AOT runtime reducer");
+    assert(contains(code, "_xr_pr_workers_") && "workers expression should be evaluated once");
+    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
+           "runtime reducer should receive the native range callback");
+    assert(contains(code, "(XrAotParReduceCombineI64Fn)") &&
+           "runtime reducer should receive the native combine callback");
+    assert(contains(code, "_par_reduce_range_") &&
+           "parallel.reduce should emit a chunk range wrapper around the item body");
+    assert(contains(code, "_par_reduce_combine_") &&
+           "parallel.reduce should emit a native combine wrapper");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "parallel.reduce must not fall back to per-iteration task spawning");
+    assert(!contains(code, "xr_aot_await_all") &&
+           "parallel.reduce must not route scalar aggregation through await all");
 
-    printf("  Generated collect final range body %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_collect_into_reference_lane_uses_direct_body_write) {
-    const char *src = "var out: Array<string> = []\n"
-                      "out.reserve(8)\n"
-                      "var label = \"chunk\"\n"
-                      "parallel for i in 0..4 workers 2 collect into out {\n"
-                      "    label\n"
+TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
+    const char *src = "import parallel\n"
+                      "struct Totals {\n"
+                      "    bytes: int\n"
+                      "    checksum: int\n"
                       "}\n"
-                      "print(out.length)\n"
-                      "print(out[0])\n";
+                      "fn run(n: int) -> int {\n"
+                      "    var totals = parallel.reduce(0..n, Totals{bytes: 0, checksum: 0}, "
+                      "(i) -> Totals{bytes: i, checksum: 1}, "
+                      "(a, b) -> Totals{bytes: a.bytes + b.bytes, "
+                      "checksum: a.checksum + b.checksum}, parallel.Options(2))\n"
+                      "    return totals.bytes + totals.checksum\n"
+                      "}\n"
+                      "print(run(3))\n";
 
     XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    assert(ir != NULL);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "reference parallel collect into should generate");
+    assert(code != NULL);
+    assert(!had_error && "struct accumulator parallel.reduce should generate");
+    assert(contains(code, "xr_aot_parallel_reduce_agg(") &&
+           "struct reduce should lower to the aggregate runtime reducer");
+    assert(contains(code, "(XrAotParReduceRangeAggFn)") &&
+           "aggregate reducer should receive the native range callback");
+    assert(contains(code, "(XrAotParReduceCombineAggFn)") &&
+           "aggregate reducer should receive the native combine callback");
+    assert(contains(code, "static XR_AINLINE xrt_struct_test_") &&
+           "reduce body/combine should be inline native struct callbacks");
+    assert(!contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "struct reduce must not route through the i64 runtime reducer");
+    assert(!contains(code, "_boxed") &&
+           "direct aggregate reduce callbacks should not require boxed adapters");
 
-    const char *code_end = code + strlen(code);
-    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
-                 "reference collect into should use one range executor");
-    TEST_REQUIRE(count_between(code, code_end, "xrt_array_resize_value(") >= 1,
-                 "reference collect into should pre-size the output array");
-    size_t direct_ref_writes = count_between(code, code_end, "xrt_array_write_preallocated(") +
-                               count_between(code, code_end, "((XrValue*)") +
-                               count_between(code, code_end, "xrt_index_set(");
-    TEST_REQUIRE(direct_ref_writes >= 1, "reference lane should write directly from the body");
-    TEST_REQUIRE(count_between(code, code_end, "_xr_pc_item_") == 0,
-                 "reference collect into should not materialize outer boxed temporary items");
-    TEST_REQUIRE(count_between(code, code_end, "XR_ELEM_ANY") >= 1,
-                 "reference lane should use the generic array storage path");
-    TEST_REQUIRE(count_between(code, code_end, "int64_t _idx = v") == 0,
-                 "constant reference-lane indexes should be emitted as literals");
-
-    printf("  Generated reference collect direct write %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_for_inside_unsafe_keeps_loop_bindings) {
-    const char *src = "fn run(n: int) {\n"
-                      "    unsafe {\n"
-                      "        parallel for i in 0..n workers 2 worker wid {\n"
-                      "            print(i + wid)\n"
-                      "        }\n"
-                      "    }\n"
+TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
+    const char *src = "import parallel\n"
+                      "shared total = Atomic(0)\n"
+                      "fn run(n: int) {\n"
+                      "    parallel.forEach(0..n, (i) -> {\n"
+                      "        total.fetchAdd(i, Ordering.Relaxed)\n"
+                      "    }, parallel.Options(2))\n"
                       "}\n"
                       "run(3)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "parallel for loop bindings should be collected inside unsafe blocks");
+    assert(ir != NULL);
 
-    char *code = generate_c(ir, "test");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
-
+    assert(!had_error && "parallel.forEach AOT body should allow direct Atomic<int> RMW ops");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "parallel for inside unsafe should still use the AOT runtime executor");
-    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1") &&
-           "unsafe-wrapped parallel body should keep native loop callback params");
+           "Atomic body should still use the AOT runtime executor");
+    assert(contains(code, "atomic_fetch_add_explicit(") &&
+           "Atomic<int>.fetchAdd should keep the direct C11 atomic lowering");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_each_rejects_throwing_body) {
+    const char *src = "import parallel\n"
+                      "fn run(n: int) {\n"
+                      "    parallel.forEach(0..n, (i) -> {\n"
+                      "        assert(false)\n"
+                      "    }, parallel.Options(2))\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(had_error && "AOT parallel.forEach body must reject throwing ops");
+    assert(contains(code, "abort();") && "rejected parallel body should fail fast in generated C");
 
     xr_free(code);
     xi_func_free(ir);
@@ -2086,473 +1641,26 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
     xi_escape_analyze(ir);
     xi_stack_alloc_rewrite(ir);
     assert(closure->op == XI_STACK_ALLOC &&
-           "parallel for body closure should be recognized as no-escape");
+           "XI_PAR_FOR body closure should be recognized as no-escape");
     xi_arc_insert(ir);
     xi_arc_elim(ir);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "parallel for stack closure should generate");
+    assert(!had_error && "XI_PAR_FOR stack closure should generate");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "parallel for should still use the AOT runtime executor");
+           "XI_PAR_FOR should still use the AOT runtime executor");
     assert(contains(code, "_xr_par_closure_storage_") &&
-           "parallel for no-escape closure should use a scoped C closure env");
+           "XI_PAR_FOR no-escape closure should use a scoped C closure env");
     assert(contains(code, "xrt_closure_init(_xr_par_closure_") &&
-           "parallel for scoped closure env should initialize the runtime closure view");
+           "XI_PAR_FOR scoped closure env should initialize the runtime closure view");
     assert(!contains(code, "xrt_closure_stack_new((void*)") &&
-           "parallel for scoped closure env must not use function-lifetime alloca");
+           "XI_PAR_FOR scoped closure env must not use function-lifetime alloca");
     assert(!contains(code, "xrt_closure_new((void*)") &&
-           "parallel for no-escape closure must not allocate a heap closure");
+           "XI_PAR_FOR no-escape closure must not allocate a heap closure");
 
     printf("  Generated parallel-for stack closure path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_loop_body_closure_uses_scoped_stack_env) {
-    const char *src = "fn run(n: int, rounds: int) {\n"
-                      "    shared sums: Array<int> = []\n"
-                      "    sums.push(0)\n"
-                      "    var r = 0\n"
-                      "    while (r < rounds) {\n"
-                      "        parallel for i in 0..n workers 2 worker wid {\n"
-                      "            unsafe {\n"
-                      "                var old = sums.get(0)\n"
-                      "                sums.set(0, old + i + wid)\n"
-                      "            }\n"
-                      "        }\n"
-                      "        r = r + 1\n"
-                      "    }\n"
-                      "}\n"
-                      "run(4, 3)\n";
-
-    XiPipelineConfig cfg = xi_pipeline_aot_config();
-    cfg.run_optimize = false;
-    XiFunc *ir = compile_to_ir_with_config(src, cfg);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for in a loop should generate with scoped closure env");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "loop parallel for should still use the runtime executor");
-    assert(contains(code, "_xr_par_closure_storage_") &&
-           "loop parallel for body closure should use scoped C storage");
-    assert(contains(code, "xrt_closure_init(_xr_par_closure_") &&
-           "loop parallel for scoped closure should initialize the runtime closure view");
-    assert(!contains(code, "xrt_closure_new((void*)test_run_parallel_for") &&
-           "loop parallel for body closure must not allocate a heap closure");
-    assert(!contains(code, "xrt_closure_stack_new((void*)") &&
-           "loop parallel for body closure must not use function-lifetime alloca");
-
-    printf("  Generated loop parallel-for scoped closure path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_upval_array_unchecked_uses_raw_storage) {
-    const char *src = "fn run(n: int) {\n"
-                      "    shared sums: Array<int> = []\n"
-                      "    sums.push(0)\n"
-                      "    sums.push(0)\n"
-                      "    parallel for i in 0..n workers 2 worker wid {\n"
-                      "        unsafe {\n"
-                      "            var old = sums.get(wid)\n"
-                      "            sums.set(wid, old + i)\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(4)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for captured Array<int> unchecked access should generate");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "captured array body should still use the AOT runtime executor");
-    assert(contains(code, "((int64_t*)") && contains(code, "->data)[") &&
-           "captured Array<int>.get/set should use raw i64 storage");
-    assert(!contains(code, "xrt_index_get(") &&
-           "captured Array<int>.get should not fall back to dynamic index get");
-    assert(!contains(code, "xrt_index_set(") &&
-           "captured Array<int>.set should not fall back to dynamic index set");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_rejects_throwing_body) {
-    const char *src = "fn run(n: int) {\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        assert(false)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(had_error && "AOT parallel for body must reject throwing ops");
-    assert(contains(code, "abort();") && "rejected parallel for should fail fast in generated C");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_proven_nothrow_helper_body) {
-    const char *src = "fn touch(v: int) {\n"
-                      "    print(v)\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        touch(i)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error &&
-           "parallel for AOT body should allow direct calls to proven nonthrowing helpers");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "helper body should use the AOT runtime executor");
-    assert(contains(code, "test_touch_") && "helper should be called directly from the body");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_atomic_i64_direct_body) {
-    const char *src = "shared total = Atomic(0)\n"
-                      "fn run(n: int) {\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        total.fetchAdd(i, Ordering.Relaxed)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow direct Atomic<int> RMW ops");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "Atomic body should still use the AOT runtime executor");
-    assert(contains(code, "atomic_fetch_add_explicit(") &&
-           "Atomic<int>.fetchAdd should keep the direct C11 atomic lowering");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
-    const char *src = "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    shared outs: Array<Bytes> = []\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    parallel for i in 0..n workers 2 worker wid {\n"
-                      "        var out = outs.get(wid)\n"
-                      "        out.resize(0)\n"
-                      "        out.appendFrom(src[0:2])\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow safe Bytes append on Bytes values "
-                         "loaded from arrays");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "safe Bytes append body should still use the AOT runtime executor");
-    assert(contains(code, "_src.guard != _dst") &&
-           "appendFrom should expose the non-alias fast path");
-    assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
-           "borrow-only Array<Bytes>.get slot loads should not retain every item");
-    assert(!contains(code, "xrt_method_1(") &&
-           "appendFrom must not fall back to dynamic method dispatch");
-    const char *body = strstr(code, "static XR_AINLINE void test_run_parallel_for_");
-    const char *body_end = body ? next_static_after(body) : NULL;
-    assert(body != NULL && body_end != NULL && "parallel for body should be bounded");
-    assert(count_between(body, body_end, "XR_TO_INT(v") == 0 &&
-           count_between(body, body_end, "XR_FROM_INT(v") == 0 &&
-           "Array<Bytes>.get(wid) should keep the worker id as a native index");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
-    const char *src = "enum FastResult<T> {\n"
-                      "    Ok(T),\n"
-                      "    Err(int)\n"
-                      "}\n"
-                      "fn writePrepared(src: in ByteSpan, out: Bytes) -> FastResult<int> {\n"
-                      "    var mark = out.length\n"
-                      "    if (out.capacity < mark + 2) {\n"
-                      "        return FastResult.Err(-1)\n"
-                      "    }\n"
-                      "    out.appendFrom(src[0:2])\n"
-                      "    return FastResult.Ok(out.length - mark)\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    shared outs: Array<Bytes> = []\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        var out = outs.get(0)\n"
-                      "        out.resize(0)\n"
-                      "        var result = writePrepared(src, out)\n"
-                      "        match (result) {\n"
-                      "            FastResult.Ok(written) -> {\n"
-                      "                assert(written == 2)\n"
-                      "            }\n"
-                      "            FastResult.Err(code) -> {\n"
-                      "                assert(code == 0)\n"
-                      "            }\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error &&
-           "parallel for AOT body should allow prepared helper calls on Bytes loaded from arrays");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "_src.guard != _dst") &&
-           "prepared helper should keep the inline Bytes+ByteSpan append fast path");
-    assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
-           "borrow-only Array<Bytes>.get should survive through prepared helper calls");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
-    const char *src = "enum FastResult<T> {\n"
-                      "    Ok(T),\n"
-                      "    Err(int)\n"
-                      "}\n"
-                      "fn appendRange(src: in ByteSpan, out: Bytes, start: int, len: int) -> "
-                      "FastResult<int> {\n"
-                      "    var mark = out.length\n"
-                      "    if (start < 0 || len < 0 || start + len > src.length || "
-                      "out.capacity < mark + len) {\n"
-                      "        return FastResult.Err(-1)\n"
-                      "    }\n"
-                      "    out.appendFrom(src[start:start + len])\n"
-                      "    return FastResult.Ok(len)\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    shared outs: Array<Bytes> = []\n"
-                      "    outs.push(Bytes.withCapacity(8))\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        var out = outs.get(0)\n"
-                      "        out.resize(0)\n"
-                      "        var result = appendRange(src, out, 0, src.length)\n"
-                      "        match (result) {\n"
-                      "            FastResult.Ok(written) -> {\n"
-                      "                assert(written == src.length)\n"
-                      "            }\n"
-                      "            FastResult.Err(code) -> {\n"
-                      "                assert(code == 0)\n"
-                      "            }\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow prepared dynamic Bytes append helper");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "dynamic prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "_src.guard != _dst") &&
-           "dynamic prepared helper should keep the inline Bytes+ByteSpan append fast path");
-    assert(!contains(code, "xrt_method_1(") &&
-           "dynamic appendFrom must not fall back to method dispatch");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
-    const char *src = "enum FastResult<T> {\n"
-                      "    Ok(T),\n"
-                      "    Err(int)\n"
-                      "}\n"
-                      "fn readU32(src: in ByteSpan, pos: int) -> FastResult<int> {\n"
-                      "    if (pos < 0 || pos + 4 > src.length) {\n"
-                      "        return FastResult.Err(-1)\n"
-                      "    }\n"
-                      "    var value: uint32 = src.load<uint32>(pos, Endian.LE)\n"
-                      "    return FastResult.Ok(int(value))\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(4)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "        seed.push(3)\n"
-                      "        seed.push(4)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        var result = readU32(src, 0)\n"
-                      "        match (result) {\n"
-                      "            FastResult.Ok(value) -> {\n"
-                      "                assert(value > 0)\n"
-                      "            }\n"
-                      "            FastResult.Err(code) -> {\n"
-                      "                assert(code == 0)\n"
-                      "            }\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow prepared ByteSpan typed loads");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "prepared load helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_span_bytes_load_u32_le_unchecked_raw(") &&
-           "prepared LE load helper should keep the trusted static ByteSpan typed load lowering");
-    assert(!contains(code, "BYTES_LOAD_U32") &&
-           "prepared ByteSpan load must not be rejected by parallel body validation");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
-    const char *src = "enum FastResult<T> {\n"
-                      "    Ok(T),\n"
-                      "    Err(int)\n"
-                      "}\n"
-                      "fn prefix(src: in ByteSpan, left: int, right: int, len: int) -> "
-                      "FastResult<int> {\n"
-                      "    if (left < 0 || right < 0 || len < 0 || left + len > src.length || "
-                      "right + len > src.length) {\n"
-                      "        return FastResult.Err(-1)\n"
-                      "    }\n"
-                      "    var leftSpan: ByteSpan = src[left:left + len]\n"
-                      "    var rightSpan: ByteSpan = src[right:right + len]\n"
-                      "    return FastResult.Ok(leftSpan.commonPrefix(rightSpan))\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    var seed = Bytes.withCapacity(8)\n"
-                      "    unsafe {\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "        seed.push(3)\n"
-                      "        seed.push(4)\n"
-                      "        seed.push(1)\n"
-                      "        seed.push(2)\n"
-                      "        seed.push(9)\n"
-                      "        seed.push(9)\n"
-                      "    }\n"
-                      "    shared src = seed\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        var result = prefix(src, 0, 4, 4)\n"
-                      "        match (result) {\n"
-                      "            FastResult.Ok(value) -> {\n"
-                      "                assert(value == 2)\n"
-                      "            }\n"
-                      "            FastResult.Err(code) -> {\n"
-                      "                assert(code == 0)\n"
-                      "            }\n"
-                      "        }\n"
-                      "    }\n"
-                      "}\n"
-                      "run(1)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow prepared ByteSpan commonPrefix");
-    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "prepared commonPrefix helper body should still use the AOT runtime executor");
-    assert(contains(code, "xr_array_core_bytes_common_prefix_raw(") &&
-           "prepared commonPrefix helper should keep the trusted static ByteSpan lowering");
-    assert(!contains(code, "BYTES_SPAN_COMMON_PREFIX") &&
-           "prepared commonPrefix must not be rejected by parallel body validation");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_parallel_for_rejects_throwing_helper_body) {
-    const char *src = "fn fail(v: int) {\n"
-                      "    assert(false)\n"
-                      "}\n"
-                      "fn run(n: int) {\n"
-                      "    parallel for i in 0..n workers 2 {\n"
-                      "        fail(i)\n"
-                      "    }\n"
-                      "}\n"
-                      "run(3)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(had_error && "parallel for AOT body must reject helper calls that may throw");
-    assert(contains(code, "abort();") && "rejected helper body should fail fast in generated C");
-
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2934,7 +2042,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     xi_func_free(ir);
 }
 
-TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
+TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
 #define CHECK_RAWPTR_PAR_CAPTURE(cond, msg)                                                        \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
@@ -2943,27 +2051,27 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
         }                                                                                          \
     } while (0)
 
-    const char *src = "fn run(n: int) {\n"
+    const char *src = "import parallel\n"
+                      "fn run(n: int) {\n"
                       "    shared slots: Array<int> = []\n"
-                      "    slots.push(0)\n"
                       "    slots.push(0)\n"
                       "    unsafe {\n"
                       "        shared p = slots.mutPtr()\n"
-                      "        parallel for i in 0..n workers 2 worker wid {\n"
-                      "            var first = p[wid]\n"
-                      "            print(first + i + wid)\n"
-                      "        }\n"
+                      "        parallel.forEach(0..n, (i) -> {\n"
+                      "            var first = p[0]\n"
+                      "            print(first + i)\n"
+                      "        }, parallel.Options(2))\n"
                       "    }\n"
                       "}\n"
                       "run(4)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    CHECK_RAWPTR_PAR_CAPTURE(ir != NULL, "RawMut capture inside parallel for should lower");
+    CHECK_RAWPTR_PAR_CAPTURE(ir != NULL, "RawMut capture inside parallel.forEach should lower");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     CHECK_RAWPTR_PAR_CAPTURE(code != NULL, "C code generation failed");
-    CHECK_RAWPTR_PAR_CAPTURE(!had_error, "RawMut capture inside parallel for should generate");
+    CHECK_RAWPTR_PAR_CAPTURE(!had_error, "RawMut capture inside parallel.forEach should generate");
 
     const char *run = code;
     while ((run = strstr(run, "static void test_run_")) != NULL) {
@@ -2985,13 +2093,13 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
     CHECK_RAWPTR_PAR_CAPTURE(run_end != NULL, "run function body should be bounded");
     const char *par_for = strstr(run, "xr_aot_parallel_for_range_i64(");
     CHECK_RAWPTR_PAR_CAPTURE(par_for && par_for < run_end,
-                             "parallel for should use the AOT runtime executor");
+                             "parallel.forEach should use the AOT runtime executor");
     const char *release = strstr(run, "xrt_release(xr_mkptr(");
     CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
     CHECK_RAWPTR_PAR_CAPTURE(release > par_for,
                              "Array owner borrowed by mutPtr must outlive RawMut parallel capture");
 
-    printf("  Generated RawMut parallel capture owner-lifetime path %zu bytes of C code\n",
+    printf("  Generated RawMut parallel.forEach capture owner-lifetime path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -8430,36 +7538,14 @@ int main(void) {
     run_cgen_coro_syncs_helper_result_debug_source_vars();
     run_cgen_recursive();
     run_cgen_for_loop();
-    run_cgen_parallel_for_uses_runtime_executor();
-    run_cgen_parallel_for_local_init_uses_range_body_executor();
-    run_cgen_parallel_for_final_uses_range_body_executor();
-    run_cgen_parallel_range_uses_range_body_executor();
+    run_cgen_parallel_for_each_uses_runtime_executor();
+    run_cgen_parallel_map_into_scalar_lanes_use_direct_storage();
+    run_cgen_parallel_map_return_uses_runtime_executor();
     run_cgen_parallel_reduce_uses_runtime_executor();
-    run_cgen_parallel_reduce_local_init_uses_range_body_executor();
-    run_cgen_parallel_reduce_local_init_guarded_upval_mod_is_nothrow();
-    run_cgen_parallel_range_reduce_uses_range_body_executor();
     run_cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime();
-    run_cgen_parallel_range_reduce_struct_accumulator_uses_aggregate_runtime();
-    run_cgen_parallel_range_reduce_struct_debug_locals_use_value_slots();
-    run_cgen_parallel_collect_into_scalar_lanes_use_direct_storage();
-    run_cgen_parallel_collect_into_multi_lanes_use_direct_storage();
-    run_cgen_parallel_collect_into_local_init_uses_range_body();
-    run_cgen_parallel_collect_return_local_init_uses_direct_storage();
-    run_cgen_parallel_collect_final_uses_range_body_executor();
-    run_cgen_parallel_collect_into_reference_lane_uses_direct_body_write();
-    run_cgen_parallel_for_inside_unsafe_keeps_loop_bindings();
+    run_cgen_parallel_for_each_allows_atomic_i64_direct_body();
+    run_cgen_parallel_for_each_rejects_throwing_body();
     run_cgen_parallel_for_body_closure_stack_allocates();
-    run_cgen_parallel_for_loop_body_closure_uses_scoped_stack_env();
-    run_cgen_parallel_for_upval_array_unchecked_uses_raw_storage();
-    run_cgen_parallel_for_rejects_throwing_body();
-    run_cgen_parallel_for_allows_proven_nothrow_helper_body();
-    run_cgen_parallel_for_allows_atomic_i64_direct_body();
-    run_cgen_parallel_for_allows_safe_bytes_append_from_array_slot();
-    run_cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper();
-    run_cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper();
-    run_cgen_parallel_for_allows_prepared_bytes_load_helper();
-    run_cgen_parallel_for_allows_prepared_common_prefix_helper();
-    run_cgen_parallel_for_rejects_throwing_helper_body();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();
@@ -8468,7 +7554,7 @@ int main(void) {
     run_cgen_direct_call_converts_bytes_to_bytespan_arg();
     run_cgen_boxed_adapter_converts_bytespan_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
-    run_cgen_rawptr_parallel_for_capture_keeps_owner_alive();
+    run_cgen_rawptr_parallel_for_each_capture_keeps_owner_alive();
     run_cgen_span_index_get_elides_dead_err_check();
     run_cgen_span_slice_elides_dead_err_check();
     run_cgen_bytes_append_from_slice_elides_dead_err_check();
