@@ -1,0 +1,4 @@
+@c_export("xray_force_unwrap")
+fn xray_force_unwrap(x: int?) -> int {
+    return x!
+}

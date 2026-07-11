@@ -7280,8 +7280,28 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, throw_blk);
     xi_lower_braun_seal(l, ok_blk);
 
-    /* Throw path: construct Exception(E0413) and throw */
+    /* Freestanding has no hosted Exception/unwind channel. A failed force
+     * unwrap is a terminal panic hook/trap, matching other freestanding
+     * runtime-error paths. */
     l->cur_block = throw_blk;
+    if (l->analyzer && xa_analyzer_is_freestanding(l->analyzer)) {
+        XiValue *panic_arg = xi_const_null(l->func, l->cur_block, l->type_null);
+        XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
+        if (thr) {
+            thr->args[0] = panic_arg;
+            thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+            thr->line = (uint32_t) node->line;
+        }
+        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+        l->cur_block->control = thr;
+        l->cur_block = ok_blk;
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+        if (copy)
+            copy->args[0] = val;
+        return copy ? copy : val;
+    }
+
+    /* Throw path: construct Exception(E0413) and throw */
     struct XrType *exception_type = xr_type_new_class(NULL, "PanicInfo");
     XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
     if (!cls) {
