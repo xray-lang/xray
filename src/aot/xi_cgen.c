@@ -2025,7 +2025,7 @@ static bool cg_const_literal_is_static_raw_scalar_kind(const XiConstLiteral *lit
 
 static void cg_emit_static_const_storage(FILE *out, const XiConstLiteral *lit) {
     if (lit && lit->data_mutable) {
-        fprintf(out, "static ");
+        fprintf(out, "%s", lit->data_weak ? "" : "static ");
         return;
     }
     fprintf(out, "%s", lit && lit->data_weak ? "const " : "static const ");
@@ -2037,14 +2037,18 @@ static const XiConstLiteral *cg_module_const_literal(const XiModule *module, int
     return &module->slot_const_literals[slot];
 }
 
+static const XiConstLiteral *cg_module_shared_slot_literal(const XiModule *module, int64_t slot) {
+    if (!module || !module->slot_shared_initializers || slot < 0 || slot >= module->nslots)
+        return NULL;
+    const XiConstLiteral *lit = &module->slot_shared_initializers[slot];
+    return lit && lit->kind != XI_CONST_LITERAL_NONE ? lit : NULL;
+}
+
 static const XiConstLiteral *cg_module_static_data_literal(const XiModule *module, int64_t slot) {
     const XiConstLiteral *lit = cg_module_const_literal(module, slot);
     if (lit && lit->kind != XI_CONST_LITERAL_NONE)
         return lit;
-    if (!module || !module->slot_shared_initializers || slot < 0 || slot >= module->nslots)
-        return NULL;
-    lit = &module->slot_shared_initializers[slot];
-    return lit && lit->kind != XI_CONST_LITERAL_NONE ? lit : NULL;
+    return cg_module_shared_slot_literal(module, slot);
 }
 
 static const char *cg_module_const_slot_name(const XiModule *module, int64_t slot) {
@@ -2114,10 +2118,10 @@ static void cg_emit_static_const_fallback_name(FILE *out, const XiModule *module
     fprintf(out, "%s_%" PRId64, base, slot);
 }
 
-static void cg_emit_static_const_data_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
-                                           int64_t slot, const char *fallback_prefix) {
+static void cg_emit_static_data_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                     int64_t slot, const XiConstLiteral *lit,
+                                     const char *fallback_prefix, const char *external_prefix) {
     const XiModule *mod = module ? module : (ctx ? ctx->module : NULL);
-    const XiConstLiteral *lit = cg_module_const_literal(mod, slot);
     if (!lit || !lit->data_weak) {
         cg_emit_static_const_fallback_name(out, mod, fallback_prefix, slot);
         return;
@@ -2133,7 +2137,22 @@ static void cg_emit_static_const_data_name(XiCgenCtx *ctx, FILE *out, const XiMo
     } else {
         snprintf(name_buf, sizeof(name_buf), "slot_%" PRId64, slot);
     }
-    fprintf(out, "xray_const_%s_%s", module_buf, name_buf);
+    fprintf(out, "%s_%s_%s", external_prefix && external_prefix[0] ? external_prefix : "xray_const",
+            module_buf, name_buf);
+}
+
+static void cg_emit_static_const_data_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                           int64_t slot, const char *fallback_prefix) {
+    const XiModule *mod = module ? module : (ctx ? ctx->module : NULL);
+    cg_emit_static_data_name(ctx, out, mod, slot, cg_module_const_literal(mod, slot),
+                             fallback_prefix, "xray_const");
+}
+
+static void cg_emit_static_var_data_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                         int64_t slot, const char *fallback_prefix) {
+    const XiModule *mod = module ? module : (ctx ? ctx->module : NULL);
+    cg_emit_static_data_name(ctx, out, mod, slot, cg_module_shared_slot_literal(mod, slot),
+                             fallback_prefix, "xray_var");
 }
 
 static bool cg_imported_static_const_needs_weak_symbol(const XiCgenCtx *ctx, const XiModule *module,
@@ -2224,6 +2243,11 @@ cg_key_access_direct_user_hash_eq_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *
 static void cg_emit_static_scalar_const_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
                                              int64_t slot) {
     cg_emit_static_const_data_name(ctx, out, module, slot, "_xctscalar");
+}
+
+static void cg_emit_static_scalar_var_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
+                                           int64_t slot) {
+    cg_emit_static_var_data_name(ctx, out, module, slot, "_xctscalar");
 }
 
 static void cg_emit_static_string_const_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
@@ -2580,7 +2604,7 @@ static bool cg_emit_freestanding_static_scalar_const_defs(XiCgenCtx *ctx, FILE *
                 case XI_CONST_LITERAL_CHAR:
                     cg_emit_static_const_storage(out, lit);
                     fprintf(out, "int64_t ");
-                    cg_emit_static_scalar_const_name(ctx, out, module, slot);
+                    cg_emit_static_scalar_var_name(ctx, out, module, slot);
                     emit_aot_const_data_attrs(out, lit);
                     fprintf(out, " = ");
                     cg_emit_static_scalar_i64(out, lit->kind == XI_CONST_LITERAL_BOOL
@@ -2592,7 +2616,7 @@ static bool cg_emit_freestanding_static_scalar_const_defs(XiCgenCtx *ctx, FILE *
                 case XI_CONST_LITERAL_FLOAT:
                     cg_emit_static_const_storage(out, lit);
                     fprintf(out, "double ");
-                    cg_emit_static_scalar_const_name(ctx, out, module, slot);
+                    cg_emit_static_scalar_var_name(ctx, out, module, slot);
                     emit_aot_const_data_attrs(out, lit);
                     fprintf(out, " = ");
                     emit_c_float_literal(out, lit->float_value);
@@ -2678,7 +2702,7 @@ static bool cg_emit_freestanding_static_scalar_var_ref_in_module(XiCgenCtx *ctx,
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
     const XrType *type = lit->type ? lit->type : v->type;
     const char *suffix = emit_conversion_prefix(out, type, from_rep, to_rep);
-    cg_emit_static_scalar_const_name(ctx, out, module, slot);
+    cg_emit_static_scalar_var_name(ctx, out, module, slot);
     emit_conversion_suffix(out, suffix);
     return true;
 }
@@ -2700,38 +2724,38 @@ static bool cg_emit_freestanding_static_scalar_var_store(XiCgenCtx *ctx, FILE *o
     switch (lit->kind) {
         case XI_CONST_LITERAL_INT:
             fprintf(out, "(");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
             fprintf(out, ", XR_FROM_INT(");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, "))");
             return true;
         case XI_CONST_LITERAL_BOOL:
             fprintf(out, "(");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
             fprintf(out, ", ");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " ? XR_TRUE_VAL : XR_FALSE_VAL)");
             return true;
         case XI_CONST_LITERAL_CHAR:
             fprintf(out, "(");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
             fprintf(out, ", XR_FROM_CHAR((uint32_t)");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, "))");
             return true;
         case XI_CONST_LITERAL_FLOAT:
             fprintf(out, "(");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, value, XR_REP_F64);
             fprintf(out, ", XR_FROM_FLOAT(");
-            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, "))");
             return true;
         default:

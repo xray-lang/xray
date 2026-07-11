@@ -774,7 +774,13 @@ static bool cg_freestanding_static_tuple_value_ex(XiCgenCtx *ctx, const XiValue 
 
 static void cg_emit_static_struct_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
                                        int64_t slot) {
-    cg_emit_static_const_data_name(ctx, out, module, slot, "_xctstruct");
+    const XiModule *mod = module ? module : (ctx ? ctx->module : NULL);
+    const XiConstLiteral *lit = cg_module_static_data_literal(mod, slot);
+    if (lit && lit->data_mutable) {
+        cg_emit_static_var_data_name(ctx, out, mod, slot, "_xctstruct");
+        return;
+    }
+    cg_emit_static_const_data_name(ctx, out, mod, slot, "_xctstruct");
 }
 
 static void cg_emit_static_tuple_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,

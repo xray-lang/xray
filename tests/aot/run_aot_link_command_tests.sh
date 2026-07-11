@@ -3322,13 +3322,84 @@ expect_freestanding_reject \
     "freestanding profile rejects top-level var declaration" \
     "only int/float/bool/char/string/null consteval initializers, typed int/float/bool zero defaults, typed nullable scalar/string/null defaults, or recursively scalar struct/union consteval initializers are supported as static mutable module storage in the current freestanding slice"
 
-expect_freestanding_reject \
-    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_weak_reject.xr" \
-    "$WORK/freestanding_top_var_weak_reject" \
-    "$WORK/freestanding_top_var_weak_reject.log" \
-    "freestanding-profile: rejects weak mutable aggregate top-level var" \
-    "@weak mutable static data is not supported" \
-    "mutable static data object"
+FREESTANDING_TOP_VAR_WEAK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_var_weak_static.xr"
+FREESTANDING_TOP_VAR_WEAK_OBJ="$WORK/freestanding_top_var_weak_static.o"
+FREESTANDING_TOP_VAR_WEAK_LOG="$WORK/freestanding_top_var_weak_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_VAR_WEAK_OBJ" \
+        "$FREESTANDING_TOP_VAR_WEAK_SRC" >"$FREESTANDING_TOP_VAR_WEAK_LOG" 2>&1; then
+    FREESTANDING_TOP_VAR_WEAK_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_VAR_WEAK_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_VAR_WEAK_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE" \
+            "freestanding-profile/top-var-weak: emits stable weak aggregate data symbol"
+        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "int64_t xray_var_freestanding_top_var_weak_static_TICKS" \
+            "freestanding-profile/top-var-weak: emits stable weak scalar data symbol"
+        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xr_weak_state\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-var-weak: preserves section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "xray_var_freestanding_top_var_weak_static_STATE.value =" \
+            "freestanding-profile/top-var-weak: writes weak aggregate directly"
+        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "xray_var_freestanding_top_var_weak_static_TICKS =" \
+            "freestanding-profile/top-var-weak: writes weak scalar directly"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "static struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE" \
+            "freestanding-profile/top-var-weak: weak aggregate is externally visible"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "static int64_t xray_var_freestanding_top_var_weak_static_TICKS" \
+            "freestanding-profile/top-var-weak: weak scalar is externally visible"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" "xrt_shared[0] =" \
+            "freestanding-profile/top-var-weak: avoids aggregate shared slot"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" "xrt_shared[1] =" \
+            "freestanding-profile/top-var-weak: avoids scalar shared slot"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" "xrt_arc_alloc" \
+            "freestanding-profile/top-var-weak: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" "xr_aggregate_ref" \
+            "freestanding-profile/top-var-weak: avoids runtime aggregate refs"
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" "#include \"xrt.h\"" \
+            "freestanding-profile/top-var-weak: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/top-var-weak: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_WEAK_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_VAR_WEAK_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_VAR_WEAK_OBJ")"
+    FREESTANDING_TOP_VAR_WEAK_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_VAR_WEAK_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_TOP_VAR_WEAK_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-var-weak: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/top-var-weak: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_VAR_WEAK_UNEXPECTED" | sed 's/^/      /'
+    fi
+    FREESTANDING_TOP_VAR_WEAK_NM="$WORK/freestanding_top_var_weak_static.nm"
+    if object_has_weak_symbol "$FREESTANDING_TOP_VAR_WEAK_OBJ" \
+            "xray_var_freestanding_top_var_weak_static_STATE" \
+            "$FREESTANDING_TOP_VAR_WEAK_NM"; then
+        record_pass "freestanding-profile/top-var-weak: weak aggregate data symbol is external"
+    else
+        record_fail "freestanding-profile/top-var-weak: weak aggregate data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_WEAK_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_TOP_VAR_WEAK_OBJ" \
+            "xray_var_freestanding_top_var_weak_static_TICKS" \
+            "$FREESTANDING_TOP_VAR_WEAK_NM"; then
+        record_pass "freestanding-profile/top-var-weak: weak scalar data symbol is external"
+    else
+        record_fail "freestanding-profile/top-var-weak: weak scalar data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_VAR_WEAK_NM" | sed -n '1,80p'
+    fi
+else
+    record_fail "freestanding-profile/top-var-weak: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_VAR_WEAK_LOG" | sed -n '1,120p'
+fi
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \
