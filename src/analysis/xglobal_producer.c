@@ -3364,38 +3364,237 @@ static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
     return row.json_shape_id;
 }
 
-static bool body_find_unique_return_object_literal(const AstNode *node,
-                                                   const ObjectLiteralNode **out_literal,
-                                                   bool *out_seen) {
-    if (!node || !out_literal || !out_seen)
+typedef struct XgReturnObjectLiteralLocal {
+    const char *name;
+    uint32_t symbol_id;
+    const ObjectLiteralNode *literal;
+} XgReturnObjectLiteralLocal;
+
+typedef struct XgReturnObjectLiteralScan {
+    XgReturnObjectLiteralLocal locals[64];
+    uint32_t nlocals;
+    const ObjectLiteralNode *literal;
+    bool seen;
+    bool failed;
+} XgReturnObjectLiteralScan;
+
+static int return_literal_local_index(const XgReturnObjectLiteralScan *scan, const char *name,
+                                      uint32_t symbol_id) {
+    if (!scan || !name)
+        return -1;
+    for (uint32_t i = scan->nlocals; i > 0; i--) {
+        const XgReturnObjectLiteralLocal *local = &scan->locals[i - 1];
+        if (symbol_id != 0 && local->symbol_id != 0) {
+            if (local->symbol_id == symbol_id)
+                return (int) (i - 1);
+            continue;
+        }
+        if (local->name && strcmp(local->name, name) == 0)
+            return (int) (i - 1);
+    }
+    return -1;
+}
+
+static bool return_literal_push_local(XgReturnObjectLiteralScan *scan, const char *name,
+                                      uint32_t symbol_id, const ObjectLiteralNode *literal) {
+    if (!scan || !name || !literal)
+        return true;
+    if (scan->nlocals >= (uint32_t) (sizeof(scan->locals) / sizeof(scan->locals[0]))) {
+        scan->failed = true;
+        return false;
+    }
+    scan->locals[scan->nlocals].name = name;
+    scan->locals[scan->nlocals].symbol_id = symbol_id;
+    scan->locals[scan->nlocals].literal = literal;
+    scan->nlocals++;
+    return true;
+}
+
+static bool return_literal_record(XgReturnObjectLiteralScan *scan,
+                                  const ObjectLiteralNode *literal) {
+    if (!scan || !literal)
+        return false;
+    if (scan->seen && scan->literal != literal) {
+        scan->failed = true;
+        return false;
+    }
+    scan->literal = literal;
+    scan->seen = true;
+    return true;
+}
+
+static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstNode *node);
+
+static bool return_literal_scan_node_list(XgReturnObjectLiteralScan *scan, AstNode *const *nodes,
+                                          int count) {
+    if (!scan || scan->failed)
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (!return_literal_scan_node(scan, nodes ? nodes[i] : NULL))
+            return false;
+    }
+    return true;
+}
+
+static bool return_literal_scan_assignment(XgReturnObjectLiteralScan *scan, const char *name,
+                                           uint32_t symbol_id, const AstNode *value) {
+    if (!scan)
+        return false;
+    if (return_literal_local_index(scan, name, symbol_id) >= 0) {
+        scan->failed = true;
+        return false;
+    }
+    return return_literal_scan_node(scan, value);
+}
+
+static bool return_literal_scan_tracked_local_read(XgReturnObjectLiteralScan *scan,
+                                                   const AstNode *node) {
+    if (!scan || !node)
+        return true;
+    if (node->type == AST_VARIABLE && node->as.variable.name &&
+        return_literal_local_index(scan, node->as.variable.name, node->as.variable.symbol_id) >=
+            0) {
+        scan->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstNode *node) {
+    if (!scan || scan->failed)
+        return false;
+    if (!node)
         return true;
     switch (node->type) {
-        case AST_BLOCK:
-            for (int i = 0; i < node->as.block.count; i++) {
-                if (!body_find_unique_return_object_literal(node->as.block.statements[i],
-                                                            out_literal, out_seen))
-                    return false;
-            }
-            return true;
+        case AST_BLOCK: {
+            uint32_t base_locals = scan->nlocals;
+            bool ok = return_literal_scan_node_list(scan, node->as.block.statements,
+                                                    node->as.block.count);
+            scan->nlocals = base_locals;
+            return ok;
+        }
+        case AST_EXPR_STMT:
+            return return_literal_scan_node(scan, node->as.expr_stmt);
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL: {
+            const ObjectLiteralNode *literal =
+                body_static_object_literal(node->as.var_decl.initializer);
+            if (literal)
+                return return_literal_push_local(scan, node->as.var_decl.name,
+                                                 node->as.var_decl.symbol_id, literal);
+            return return_literal_scan_node(scan, node->as.var_decl.initializer);
+        }
+        case AST_ASSIGNMENT:
+            return return_literal_scan_assignment(scan, node->as.assignment.name,
+                                                  node->as.assignment.symbol_id,
+                                                  node->as.assignment.value);
+        case AST_COMPOUND_ASSIGNMENT:
+            if (!return_literal_scan_assignment(scan, node->as.compound_assignment.name,
+                                                node->as.compound_assignment.symbol_id,
+                                                node->as.compound_assignment.value))
+                return false;
+            return return_literal_scan_node(scan, node->as.compound_assignment.object);
+        case AST_INC:
+            return return_literal_scan_assignment(scan, node->as.inc.name, node->as.inc.symbol_id,
+                                                  NULL);
+        case AST_DEC:
+            return return_literal_scan_assignment(scan, node->as.dec.name, node->as.dec.symbol_id,
+                                                  NULL);
         case AST_RETURN_STMT: {
+            const AstNode *value;
             const ObjectLiteralNode *literal;
+            int local_index;
             if (node->as.return_stmt.value_count != 1 || !node->as.return_stmt.values)
                 return false;
-            literal = body_static_object_literal(node->as.return_stmt.values[0]);
-            if (!literal)
+            value = node->as.return_stmt.values[0];
+            literal = body_static_object_literal(value);
+            if (literal)
+                return return_literal_record(scan, literal);
+            if (!value || value->type != AST_VARIABLE || !value->as.variable.name)
                 return false;
-            if (*out_seen && *out_literal != literal)
+            local_index = return_literal_local_index(scan, value->as.variable.name,
+                                                     value->as.variable.symbol_id);
+            if (local_index < 0)
                 return false;
-            *out_literal = literal;
-            *out_seen = true;
-            return true;
+            return return_literal_record(scan, scan->locals[local_index].literal);
         }
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
             return true;
+        case AST_VARIABLE:
+            return return_literal_scan_tracked_local_read(scan, node);
+        case AST_GROUPING:
+            return return_literal_scan_node(scan, node->as.grouping);
+        case AST_MOVE_EXPR:
+            return return_literal_scan_node(scan, node->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return return_literal_scan_node(scan, node->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return return_literal_scan_node(scan, node->as.unary.operand);
+        case AST_CALL_EXPR:
+            return return_literal_scan_node(scan, node->as.call_expr.callee) &&
+                   return_literal_scan_node_list(scan, node->as.call_expr.arguments,
+                                                 node->as.call_expr.arg_count);
+        case AST_MEMBER_ACCESS:
+            return return_literal_scan_node(scan, node->as.member_access.object);
+        case AST_MEMBER_SET:
+            return return_literal_scan_node(scan, node->as.member_set.object) &&
+                   return_literal_scan_node(scan, node->as.member_set.value);
+        case AST_INDEX_GET:
+            return return_literal_scan_node(scan, node->as.index_get.array) &&
+                   return_literal_scan_node(scan, node->as.index_get.index);
+        case AST_INDEX_SET:
+            return return_literal_scan_node(scan, node->as.index_set.array) &&
+                   return_literal_scan_node(scan, node->as.index_set.index) &&
+                   return_literal_scan_node(scan, node->as.index_set.value);
+        case AST_ARRAY_LITERAL:
+            return return_literal_scan_node_list(scan, node->as.array_literal.elements,
+                                                 node->as.array_literal.count) &&
+                   return_literal_scan_node(scan, node->as.array_literal.repeat_value) &&
+                   return_literal_scan_node(scan, node->as.array_literal.repeat_count);
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++) {
+                if (node->as.object_literal.computed && node->as.object_literal.computed[i] &&
+                    !return_literal_scan_node(scan, node->as.object_literal.keys
+                                                        ? node->as.object_literal.keys[i]
+                                                        : NULL))
+                    return false;
+                if (!return_literal_scan_node(scan, node->as.object_literal.values
+                                                        ? node->as.object_literal.values[i]
+                                                        : NULL))
+                    return false;
+            }
+            return true;
+        case AST_IF_STMT:
+        case AST_WHILE_STMT:
+        case AST_FOR_STMT:
+        case AST_FOR_IN_STMT:
+        case AST_TRY_CATCH:
+        case AST_MATCH_EXPR:
+        case AST_SELECT_STMT:
+        case AST_SCOPE_BLOCK:
+            scan->failed = true;
+            return false;
         default:
             return true;
     }
+}
+
+static bool body_find_unique_return_object_literal(const AstNode *node,
+                                                   const ObjectLiteralNode **out_literal,
+                                                   bool *out_seen) {
+    XgReturnObjectLiteralScan scan;
+    if (!out_literal || !out_seen)
+        return true;
+    memset(&scan, 0, sizeof(scan));
+    scan.literal = *out_literal;
+    scan.seen = *out_seen;
+    if (!return_literal_scan_node(&scan, node) || scan.failed)
+        return false;
+    *out_literal = scan.literal;
+    *out_seen = scan.seen;
+    return true;
 }
 
 static const ObjectLiteralNode *
