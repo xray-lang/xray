@@ -848,7 +848,7 @@ var y: int? = 42        // OK
 var z: int = null       // 编译错误：null 不是 int
 ```
 
-`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错；需要表达解析失败或缺失值时应使用 `Result<T, E>`、ADT、或含显式状态字段的 Record。
+`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 Record。不要引入全局 `Result<T,E>`。
 
 **可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 

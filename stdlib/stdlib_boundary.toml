@@ -4,10 +4,13 @@ schema = 1
 
 [governance]
 vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
+error_model = "enum_value_channel"
+failure_as_data = "domain_adt"
+forbidden_prelude_symbols = ["Result"]
 
 [dynamic_audit]
 # These modules still expose fixed-shape Json/unknown APIs and must be migrated
-# by task 196 after the Result/ADT and 191/197 consumer prerequisites land.
+# by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
 migration_modules = [
   "Coro", "CoroPool", "cluster", "csv", "http", "log", "net", "toml",
   "url", "ws", "xml", "yaml",
