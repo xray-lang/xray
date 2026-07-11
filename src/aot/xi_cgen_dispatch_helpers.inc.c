@@ -8988,6 +8988,41 @@ static void xicgen_emit_par_for_body_call(XiCgenCtx *ctx, FILE *out, const XiFun
     fprintf(out, ");\n");
 }
 
+static void xicgen_emit_par_for_plan_state_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *body,
+                                               const char *state_name) {
+    const XrType *state_type = (body && body->nparams > 0 && body->params && body->params[0])
+                                   ? body->params[0]->type
+                                   : NULL;
+    XrRep state_rep = cg_func_param_abi_rep(ctx, body, 0);
+    const char *state_suffix = emit_conversion_prefix(out, state_type, XR_REP_TAGGED, state_rep);
+    fprintf(out, "%s", state_name ? state_name : "XR_NULL_VAL");
+    emit_conversion_suffix(out, state_suffix);
+}
+
+static void xicgen_emit_par_range_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *body,
+                                          uint16_t param_index, const char *expr);
+
+static void xicgen_emit_par_for_plan_state_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiFunc *body, const XiValue *closure,
+                                                const char *prefix, const char *state_name,
+                                                const char *iter_name, const char *worker_name,
+                                                const char *scoped_closure_name) {
+    fprintf(out, "            ");
+    emit_fname(ctx, out, prefix, body);
+    fprintf(out, "(");
+    if (scoped_closure_name)
+        fprintf(out, "%s", scoped_closure_name);
+    else
+        emit_call_hidden_closure(out, f, body, closure);
+    fprintf(out, ", ");
+    xicgen_emit_par_for_plan_state_arg(ctx, out, body, state_name);
+    fprintf(out, ", ");
+    xicgen_emit_par_range_i64_arg(ctx, out, body, 1, iter_name);
+    fprintf(out, ", ");
+    xicgen_emit_par_range_i64_arg(ctx, out, body, 2, worker_name);
+    fprintf(out, ");\n");
+}
+
 static void xicgen_emit_par_range_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *body,
                                           uint16_t param_index, const char *expr) {
     const XrType *type =
@@ -9032,7 +9067,8 @@ static bool xicgen_par_for_value_is_range_wrappable(const XiValue *v) {
         return false;
     const XiParallelForData *data = (const XiParallelForData *) v->aux;
     const XiFunc *body = data ? data->body_func : NULL;
-    return body && body->nparams == (data->range_body ? 3 : 2);
+    uint16_t expected = data && data->plan_state ? 3 : (data && data->range_body ? 3 : 2);
+    return body && body->nparams == expected;
 }
 
 static void xicgen_emit_par_for_range_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *owner,
@@ -9043,9 +9079,21 @@ static void xicgen_emit_par_for_range_wrapper(XiCgenCtx *ctx, FILE *out, const X
     const XiFunc *body = data->body_func;
     fprintf(out, "static void ");
     xicgen_emit_par_for_range_wrapper_name(ctx, out, owner, v, prefix);
-    fprintf(out,
-            "(xrt_closure_t *_cl, int64_t _xr_begin, int64_t _xr_end, int64_t _xr_worker) {\n");
-    if (data->range_body) {
+    if (data->plan_state) {
+        fprintf(out, "(xrt_closure_t *_cl, XrValue _xr_states, int64_t _xr_begin, int64_t _xr_end, "
+                     "int64_t _xr_worker) {\n");
+    } else {
+        fprintf(out, "(xrt_closure_t *_cl, int64_t _xr_begin, int64_t _xr_end, int64_t _xr_worker) "
+                     "{\n");
+    }
+    if (data->plan_state) {
+        fprintf(out,
+                "    XrValue _xr_state = xrt_index_get(_xr_states, XR_FROM_INT(_xr_worker));\n");
+        fprintf(out, "    for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++) {\n");
+        xicgen_emit_par_for_plan_state_call(ctx, out, owner, body, NULL, prefix, "_xr_state",
+                                            "_xr_i", "_xr_worker", "_cl");
+        fprintf(out, "    }\n");
+    } else if (data->range_body) {
         xicgen_emit_par_range_body_call(ctx, out, owner, body, NULL, prefix, "_xr_begin", "_xr_end",
                                         "_xr_worker", "_cl");
     } else {
@@ -9561,7 +9609,8 @@ static bool xicgen_par_for_stack_closure_value_is_elided(XiCgenCtx *ctx, const X
 
 static void xicgen_emit_par_for_scoped_closure(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                const XiValue *par_for, const XiFunc *body,
-                                               const XiValue *closure, const char *prefix) {
+                                               const XiValue *closure, const char *prefix,
+                                               bool native_entry) {
     uint16_t ncap = body ? body->ncaptures : 0;
     fprintf(out,
             "        union { XrObjHeader hdr; long double align; unsigned char "
@@ -9581,7 +9630,10 @@ static void xicgen_emit_par_for_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
             "*)_xr_par_closure_hdr_%u + sizeof(XrObjHeader));\n",
             par_for->id, par_for->id);
     fprintf(out, "        xrt_closure_init(_xr_par_closure_%u, (void*)", par_for->id);
-    emit_closure_entry_pointer(ctx, out, prefix, body);
+    if (native_entry)
+        emit_fname(ctx, out, prefix, body);
+    else
+        emit_closure_entry_pointer(ctx, out, prefix, body);
     fprintf(out, ", %u);\n", ncap);
     fprintf(out, "        { xrt_closure_t *_c = _xr_par_closure_%u; ", par_for->id);
     emit_closure_upval_initializers(ctx, out, f, closure, false);
@@ -10070,7 +10122,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if (scoped_closure) {
         snprintf(scoped_closure_name, sizeof(scoped_closure_name), "_xr_par_closure_%u", v->id);
-        xicgen_emit_par_for_scoped_closure(ctx, out, f, v, body, v->args[4], prefix);
+        xicgen_emit_par_for_scoped_closure(ctx, out, f, v, body, v->args[4], prefix, false);
     }
     if (struct_accumulator) {
         if (data->inclusive_end) {
@@ -10514,21 +10566,28 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, "    abort();\n");
         return;
     }
-    uint16_t expected_params = data->range_body ? 3 : 2;
+    uint16_t expected_params = data->plan_state ? 3 : (data->range_body ? 3 : 2);
     if (!body || body->nparams != expected_params) {
         ctx->error = true;
         fprintf(out, "    abort();\n");
         return;
     }
-    bool abi_ok = cg_func_return_abi_rep(ctx, body) == XR_REP_VOID &&
-                  cg_func_param_abi_rep(ctx, body, 0) == XR_REP_I64 &&
-                  cg_func_param_abi_rep(ctx, body, 1) == XR_REP_I64 &&
-                  (!data->range_body || cg_func_param_abi_rep(ctx, body, 2) == XR_REP_I64);
+    bool abi_ok = cg_func_return_abi_rep(ctx, body) == XR_REP_VOID;
+    if (data->plan_state) {
+        abi_ok = abi_ok && cg_func_param_abi_rep(ctx, body, 1) == XR_REP_I64 &&
+                 cg_func_param_abi_rep(ctx, body, 2) == XR_REP_I64;
+    } else {
+        abi_ok = abi_ok && cg_func_param_abi_rep(ctx, body, 0) == XR_REP_I64 &&
+                 cg_func_param_abi_rep(ctx, body, 1) == XR_REP_I64 &&
+                 (!data->range_body || cg_func_param_abi_rep(ctx, body, 2) == XR_REP_I64);
+    }
     if (!abi_ok) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: parallel %s AOT body must use %s ABI: '%s'\n",
-                data->range_body ? "range" : "for",
-                data->range_body ? "void(int64, int64, int64)" : "void(int64, int64)",
+                data->plan_state ? "Plan.forEach" : (data->range_body ? "range" : "for"),
+                data->plan_state
+                    ? "void(state, int64, int64)"
+                    : (data->range_body ? "void(int64, int64, int64)" : "void(int64, int64)"),
                 body->name ? body->name : "?");
         fprintf(out, "    abort();\n");
         return;
@@ -10561,7 +10620,9 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
 
     char iter_name[64];
+    char plan_state_name[64];
     snprintf(iter_name, sizeof(iter_name), "_xr_par_i_%u", v->id);
+    snprintf(plan_state_name, sizeof(plan_state_name), "_xr_par_state_%u", v->id);
     const char *aot_ctx_expr = xicgen_aot_context_expr(ctx, f);
 
     fprintf(out, "    {\n");
@@ -10574,17 +10635,38 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     fprintf(out, "        int64_t _xr_par_workers_%u = ", v->id);
     emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
     fprintf(out, ";\n");
+    if (data->plan_state) {
+        fprintf(out, "        XrValue _xr_par_states_%u = ", v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[4], XR_REP_TAGGED);
+        fprintf(out, ";\n");
+    }
     bool scoped_closure = xicgen_par_for_uses_stack_callback_closure(v, v->args[3], body);
     char scoped_closure_name[64];
     scoped_closure_name[0] = '\0';
     if (scoped_closure) {
         snprintf(scoped_closure_name, sizeof(scoped_closure_name), "_xr_par_closure_%u", v->id);
-        xicgen_emit_par_for_scoped_closure(ctx, out, f, v, body, v->args[3], prefix);
+        xicgen_emit_par_for_scoped_closure(ctx, out, f, v, body, v->args[3], prefix,
+                                           data->plan_state);
     }
     if (data->inclusive_end) {
         fprintf(out, "        if (_xr_par_end_%u == INT64_MAX) {\n", v->id);
         if (data->range_body) {
             fprintf(out, "            abort();\n");
+        } else if (data->plan_state) {
+            fprintf(out,
+                    "            XrValue _xr_par_state_%u = "
+                    "xrt_index_get(_xr_par_states_%u, XR_FROM_INT(0));\n",
+                    v->id, v->id);
+            fprintf(out, "            if (_xr_par_start_%u <= _xr_par_end_%u) {\n", v->id, v->id);
+            fprintf(out, "                for (int64_t %s = _xr_par_start_%u; ; %s++) {\n",
+                    iter_name, v->id, iter_name);
+            xicgen_emit_par_for_plan_state_call(ctx, out, f, body, v->args[3], prefix,
+                                                plan_state_name, iter_name, "0",
+                                                scoped_closure ? scoped_closure_name : NULL);
+            fprintf(out, "                    if (%s == _xr_par_end_%u) break;\n", iter_name,
+                    v->id);
+            fprintf(out, "                }\n");
+            fprintf(out, "            }\n");
         } else {
             fprintf(out, "            if (_xr_par_start_%u <= _xr_par_end_%u) {\n", v->id, v->id);
             fprintf(out, "                for (int64_t %s = _xr_par_start_%u; ; %s++) {\n",
@@ -10599,29 +10681,47 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, "        } else {\n");
         fprintf(out, "            int64_t _xr_par_end_excl_%u = _xr_par_end_%u + 1;\n", v->id,
                 v->id);
-        fprintf(out,
-                "            if (!xr_parallel_for_range_i64(%s, _xr_par_start_%u, "
-                "_xr_par_end_excl_%u, _xr_par_workers_%u, (XrParallelRangeI64Fn)",
-                aot_ctx_expr, v->id, v->id, v->id);
+        if (data->plan_state) {
+            fprintf(out,
+                    "            if (!xr_parallel_for_range_state_i64(%s, _xr_par_start_%u, "
+                    "_xr_par_end_excl_%u, _xr_par_workers_%u, (XrParallelRangeStateI64Fn)",
+                    aot_ctx_expr, v->id, v->id, v->id);
+        } else {
+            fprintf(out,
+                    "            if (!xr_parallel_for_range_i64(%s, _xr_par_start_%u, "
+                    "_xr_par_end_excl_%u, _xr_par_workers_%u, (XrParallelRangeI64Fn)",
+                    aot_ctx_expr, v->id, v->id, v->id);
+        }
         xicgen_emit_par_for_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
         if (scoped_closure)
             fprintf(out, "%s", scoped_closure_name);
         else
             emit_call_hidden_closure(out, f, body, v->args[3]);
+        if (data->plan_state)
+            fprintf(out, ", _xr_par_states_%u", v->id);
         fprintf(out, ")) abort();\n");
         fprintf(out, "        }\n");
     } else {
-        fprintf(out,
-                "        if (!xr_parallel_for_range_i64(%s, _xr_par_start_%u, _xr_par_end_%u, "
-                "_xr_par_workers_%u, (XrParallelRangeI64Fn)",
-                aot_ctx_expr, v->id, v->id, v->id);
+        if (data->plan_state) {
+            fprintf(out,
+                    "        if (!xr_parallel_for_range_state_i64(%s, _xr_par_start_%u, "
+                    "_xr_par_end_%u, _xr_par_workers_%u, (XrParallelRangeStateI64Fn)",
+                    aot_ctx_expr, v->id, v->id, v->id);
+        } else {
+            fprintf(out,
+                    "        if (!xr_parallel_for_range_i64(%s, _xr_par_start_%u, _xr_par_end_%u, "
+                    "_xr_par_workers_%u, (XrParallelRangeI64Fn)",
+                    aot_ctx_expr, v->id, v->id, v->id);
+        }
         xicgen_emit_par_for_range_wrapper_name(ctx, out, f, v, prefix);
         fprintf(out, ", ");
         if (scoped_closure)
             fprintf(out, "%s", scoped_closure_name);
         else
             emit_call_hidden_closure(out, f, body, v->args[3]);
+        if (data->plan_state)
+            fprintf(out, ", _xr_par_states_%u", v->id);
         fprintf(out, ")) abort();\n");
     }
     fprintf(out, "    }\n");

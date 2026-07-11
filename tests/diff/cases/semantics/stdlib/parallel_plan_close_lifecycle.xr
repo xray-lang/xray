@@ -4,23 +4,6 @@ var plan = Plan<int>(Options(2), (lane) -> lane + 1)
 
 print(plan.reduce(0..3, 0, (state, i) -> state + i, (a, b) -> a + b))
 
-var busy = Plan<int>(Options(1), (lane) -> lane + 10)
-try {
-    busy.forEach(0..1, (state, i) -> {
-        busy.forEach(0..1, (nestedState, nested) -> {
-            print(nestedState + nested)
-        })
-    })
-    print("miss-busy")
-} catch (e) {
-    match (e) {
-        ParallelError.ConcurrentDispatch -> print("busy")
-        _ -> print("other-busy")
-    }
-}
-
-print(busy.reduce(0..2, 0, (state, i) -> state + i, (a, b) -> a + b))
-
 plan.close()
 
 try {

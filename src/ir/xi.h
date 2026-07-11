@@ -969,15 +969,19 @@ typedef struct XiConstLiteral {
 
 typedef struct XiParallelForData {
     struct XiFunc *body_func;
+    struct XrType *state_type;
     const char *item_name;
+    const char *state_name;
     const char *end_name;
     const char *worker_name;
     uint32_t item_symbol_id;
+    uint32_t state_symbol_id;
     uint32_t end_symbol_id;
     uint32_t worker_symbol_id;
     uint16_t body_child_index;
     bool inclusive_end;
     bool range_body;
+    bool plan_state;
 } XiParallelForData;
 
 typedef struct XiParallelMapData {
