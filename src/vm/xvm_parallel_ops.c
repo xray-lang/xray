@@ -527,7 +527,9 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
     XrValue *workers_slot = &base[arg_base + 2];
     XrValue *closure_slot = &base[arg_base + 3];
     XrValue *output_slot = &base[arg_base + 4];
-    XrValue *batch_slot = &base[arg_base + 5];
+    bool plan_state = (flags & XR_VM_PAR_FLAG_PLAN_STATE) != 0;
+    XrValue *states_slot = plan_state ? &base[arg_base + 5] : NULL;
+    XrValue *batch_slot = &base[arg_base + (plan_state ? 6 : 5)];
 
     XrVmParBatch *resume_batch = vm_par_batch_from_value(*batch_slot);
     if (resume_batch)
@@ -574,9 +576,17 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
     XrClosure *closure = (XrClosure *) XR_TO_PTR(*closure_slot);
     if (!vm_par_closure_safe_to_share(closure))
         return XR_DISP_NEXT;
+    XrArray *states = NULL;
+    if (plan_state) {
+        if (!states_slot || !XR_IS_ARRAY(*states_slot))
+            return XR_DISP_NEXT;
+        states = XR_TO_ARRAY(*states_slot);
+        if (!states || states->length < lane_count)
+            return XR_DISP_NEXT;
+    }
 
-    XrVmParBatch *batch = vm_par_batch_new(isolate, runtime, closure, NULL, output, NULL, start,
-                                           end_excl, lane_count, false, false, true, false);
+    XrVmParBatch *batch = vm_par_batch_new(isolate, runtime, closure, NULL, output, states, start,
+                                           end_excl, lane_count, false, plan_state, true, false);
     if (!batch) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.map batch allocation failed");
     }

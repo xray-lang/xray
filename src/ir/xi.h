@@ -987,9 +987,12 @@ typedef struct XiParallelForData {
 typedef struct XiParallelMapData {
     struct XiFunc *body_func;
     struct XrType *element_type;
+    struct XrType *state_type;
     const char *item_name;
+    const char *state_name;
     const char *worker_name;
     uint32_t item_symbol_id;
+    uint32_t state_symbol_id;
     uint32_t worker_symbol_id;
     uint16_t body_child_index;
     uint16_t result_capture_index;
@@ -998,6 +1001,7 @@ typedef struct XiParallelMapData {
     bool direct_lane_writes;
     bool inclusive_end;
     bool into_result;
+    bool plan_state;
 } XiParallelMapData;
 
 typedef struct XiParallelReduceData {
