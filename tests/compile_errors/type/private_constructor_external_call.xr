@@ -1,0 +1,9 @@
+class Hidden {
+    private constructor(v: int) {}
+
+    static make(v: int) -> Hidden {
+        return Hidden(v)
+    }
+}
+
+const value = Hidden(1)

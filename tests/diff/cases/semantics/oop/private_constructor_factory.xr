@@ -1,0 +1,18 @@
+class Token {
+    private value: int
+
+    private constructor(v: int) {
+        this.value = v
+    }
+
+    static make(v: int) -> Token {
+        return Token(v)
+    }
+
+    get() -> int {
+        return this.value
+    }
+}
+
+var a = Token.make(7)
+print(a.get())

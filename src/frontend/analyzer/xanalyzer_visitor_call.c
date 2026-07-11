@@ -128,6 +128,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     if (!ctx || !ctx->analyzer || !class_info)
         return xr_type_new_unknown(NULL);
 
+    xa_check_constructor_visibility(ctx, node, class_info);
+
     bool is_value_type = class_links && class_links->type && class_links->type->is_value_type;
     int type_param_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
     if (call && type_param_count > 0) {

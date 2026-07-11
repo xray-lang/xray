@@ -742,6 +742,16 @@ XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSy
                                &loc);
 }
 
+XR_FUNC void xa_check_constructor_visibility(XaInferContext *ctx, AstNode *node,
+                                             struct XrClassInfo *owner) {
+    if (!ctx || !ctx->analyzer || !node || !owner)
+        return;
+    XaSymbol *ctor = xa_class_info_lookup_member(owner, XR_KEYWORD_CONSTRUCTOR);
+    if (!ctor || ctor->kind != XA_SYM_METHOD)
+        return;
+    xa_check_member_visibility(ctx, node, ctor, owner);
+}
+
 XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type) {
     if (!ctx || !ctx->analyzer || !node || !cond_type || XR_TYPE_IS_UNKNOWN(cond_type))
         return;
@@ -2876,6 +2886,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     // expressions so they are evaluated at the construction site rather than
     // via a runtime null sentinel inside the constructor body.
     if (class_info) {
+        xa_check_constructor_visibility(ctx, node, class_info);
         XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
         XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
         if (ctor_links && ctor_links->param_defaults && ctor_links->param_count > ne->arg_count) {

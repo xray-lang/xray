@@ -3628,6 +3628,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                                 break;
                             }
                         }
+                    } else {
+                        xa_check_constructor_visibility(ctx, node, cl->class_info->base);
                     }
                 }
             }
