@@ -121,7 +121,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
-    {"request", XLSP_SYM_FUNCTION, "fn(options: Json): HttpResponse", "Generic HTTP request", NULL, 0},
     {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", NULL, 0},
     {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "Start HTTP server accept loop", NULL, 0},
     {"ws", XLSP_SYM_FUNCTION, "fn(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", NULL, 0},
@@ -133,6 +132,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
     {"urlDecode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-decode and treat + as a space, matching the former HTTP", NULL, 0},
     {"responseText", XLSP_SYM_FUNCTION, "fn(status: int, body?: string, contentType?: string, headers?: Json, keepAlive?: bool): string?", "Format a complete HTTP/1.1 response with explicit headers.", NULL, 0},
+    {"request", XLSP_SYM_FUNCTION, "fn(options: Json): HttpResponse", "", NULL, 0},
     {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Json, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
     {"parseResponseHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): ResponseHead?", "Parse an HTTP/1.x response head without reading sockets.", NULL, 0},
     {"parseRequestHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): RequestHead?", "Parse an HTTP/1.x request head without reading sockets.", NULL, 0},
@@ -144,12 +144,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"redirectTarget", XLSP_SYM_FUNCTION, "fn(currentUrl: string, location: string): string?", "Resolve a Location value against the current URL.", NULL, 0},
     {"redirectDecision", XLSP_SYM_FUNCTION, "fn(status: int, currentUrl: string, location: string, method?: string, alreadyStripped?: bool): RedirectDecision?", "Compute the next URL/method and credential stripping rule.", NULL, 0},
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
-    {"HttpResponse", XLSP_SYM_CLASS, "type HttpResponse", "Native handle type", NULL, 0},
     {"HttpRequest", XLSP_SYM_CLASS, "type HttpRequest", "Native handle type", NULL, 0},
     {"Cookie", XLSP_SYM_CLASS, "type Cookie", "Class type", NULL, 0},
     {"CookieJar", XLSP_SYM_CLASS, "type CookieJar", "Class type", NULL, 0},
     {"Router", XLSP_SYM_CLASS, "type Router", "Class type", NULL, 0},
     {"RouteMatch", XLSP_SYM_CLASS, "type RouteMatch", "Class type", NULL, 0},
+    {"HttpResponse", XLSP_SYM_CLASS, "type HttpResponse", "Class type", NULL, 0},
     {"ResponseHead", XLSP_SYM_CLASS, "type ResponseHead", "Parsed HTTP/1.x response status line and headers.", NULL, 0},
     {"RedirectDecision", XLSP_SYM_CLASS, "type RedirectDecision", "Pure redirect control-plane result for the HTTP client.", NULL, 0},
     {"ChunkedBody", XLSP_SYM_CLASS, "type ChunkedBody", "Decoded Transfer-Encoding: chunked body and parsed trailers.", NULL, 0},

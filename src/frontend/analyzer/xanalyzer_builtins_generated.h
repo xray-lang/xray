@@ -110,16 +110,6 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 10
 
-// http.HttpResponse handle fields
-static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
-    {"status", "int", true},
-    {"statusText", "string", true},
-    {"headers", "Json", true},
-    {"body", "string", true},
-    {"error", "string", true},
-    {"ok", "bool", true},
-};
-
 // http.HttpRequest handle fields
 static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
     {"method", "string", true},
@@ -132,21 +122,19 @@ static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_http_handles[] = {
-    {"HttpResponse", g_gen_http_httpresponse_fields, 6, NULL, 0},
     {"HttpRequest", g_gen_http_httprequest_fields, 7, NULL, 0},
 };
-#define GEN_HTTP_HANDLE_COUNT 2
+#define GEN_HTTP_HANDLE_COUNT 1
 
 // http module functions
 static const XaBuiltinMember g_gen_http_functions[] = {
-    {"request", "(options: Json): HttpResponse", "Generic HTTP request", true, false, false, false},
     {"route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", true, false, false, false},
     {"listen", "(port: int): bool", "Start HTTP server accept loop", true, false, false, false},
     {"ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", true, false, false, false},
     {"stopServer", "(): ()", "Stop the HTTP server", true, false, false, false},
     {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 6
+#define GEN_HTTP_FUNCTION_COUNT 5
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {

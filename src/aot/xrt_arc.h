@@ -114,6 +114,8 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_SYS_ONCE 8u
 #define XRT_ARC_KIND_THREAD 9u
 #define XRT_ARC_KIND_BUFFER 10u
+#define XRT_ARC_KIND_NET_CONN 11u
+#define XRT_ARC_KIND_NET_LISTENER 12u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -287,7 +289,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX ||
            v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
            v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||
-           v.tag == XR_TAG_BUFFER;
+           v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN || v.tag == XR_TAG_NET_LISTENER;
 }
 
 /* ARC retain: acquire a new owning reference (0-based: rc++ adds one ref).

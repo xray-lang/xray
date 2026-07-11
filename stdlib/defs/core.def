@@ -3005,9 +3005,35 @@ module net {
     doc: "Dial a TCP connection"
     vm: "net_dial_yieldable"
     vm_binding: "yieldable"
+    argc: 2
+    arg_spec: "sv"
+    aot: "xrt_net_dial_default"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn dial {
+    signature: "(host: string, port: int, timeout?: int): NetConn?"
+    doc: "Dial a TCP connection"
+    vm: "net_dial_yieldable"
+    vm_binding: "yieldable"
     argc: 3
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "svv"
+    aot: "xrt_net_dial"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn listen {
+    signature: "(port: int, backlog?: int): NetListener?"
+    doc: "Start listening on a port"
+    vm: "net_listen_handle"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_listen_default"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3017,8 +3043,9 @@ module net {
     doc: "Start listening on a port"
     vm: "net_listen_handle"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_listen"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3029,8 +3056,22 @@ module net {
     vm: "net_accept_handle_yieldable"
     vm_binding: "yieldable"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_accept"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn read {
+    signature: "(conn: NetConn, maxlen?: int): string?"
+    doc: "Read data from connection"
+    vm: "net_read_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_read_default"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3041,8 +3082,9 @@ module net {
     vm: "net_read_handle_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_read"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3065,8 +3107,9 @@ module net {
     vm: "net_write_handle_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vs"
+    aot: "xrt_net_write"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3112,8 +3155,9 @@ module net {
     doc: "Shut down the read side of a TCP connection"
     vm: "net_shutdown_read"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_shutdown_read"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3123,8 +3167,9 @@ module net {
     doc: "Shut down the write side of a TCP connection"
     vm: "net_shutdown_write"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_shutdown_write"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3134,8 +3179,9 @@ module net {
     doc: "Shut down both sides of a TCP connection"
     vm: "net_shutdown_conn"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_shutdown"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3145,8 +3191,9 @@ module net {
     doc: "Close a connection or listener"
     vm: "net_close_handle"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_close"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3156,8 +3203,9 @@ module net {
     doc: "Get fd from handle"
     vm: "net_fd_handle"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_fd"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3167,8 +3215,9 @@ module net {
     doc: "Set read deadline in monotonic ms"
     vm: "net_set_read_deadline"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_set_read_deadline"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3178,8 +3227,9 @@ module net {
     doc: "Set write deadline in monotonic ms"
     vm: "net_set_write_deadline"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_set_write_deadline"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3189,8 +3239,9 @@ module net {
     doc: "Set read and write deadlines in monotonic ms"
     vm: "net_set_deadline"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_set_deadline"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3200,8 +3251,9 @@ module net {
     doc: "Set accept deadline in monotonic ms"
     vm: "net_set_accept_deadline"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_set_accept_deadline"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3211,8 +3263,9 @@ module net {
     doc: "Return the last network error name"
     vm: "net_last_error"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_last_error"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3222,8 +3275,9 @@ module net {
     doc: "Return the last system errno"
     vm: "net_last_errno"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot: "xrt_net_last_errno"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3245,7 +3299,22 @@ module net {
     vm: "net_has_tls"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot: "xrt_net_has_tls"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn dialTLS {
+    signature: "(host: string, port: int, timeout?: int): NetConn?"
+    doc: "Dial a TLS connection"
+    vm: "net_dial_tls_yieldable"
+    vm_binding: "yieldable"
+    vm_ifdef: "XR_ENABLE_TLS"
+    argc: 2
+    arg_spec: "sv"
+    aot: "xrt_net_dial_tls_default"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3257,8 +3326,9 @@ module net {
     vm_binding: "yieldable"
     vm_ifdef: "XR_ENABLE_TLS"
     argc: 3
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "svv"
+    aot: "xrt_net_dial_tls"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3313,24 +3383,8 @@ module net {
 }
 
 module http {
-  handle HttpResponse {
-    fields: "const status: int, const statusText: string, const headers: Json, const body: string, const error: string, const ok: bool"
-  }
-
   handle HttpRequest {
     fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json"
-  }
-
-  fn request {
-    signature: "(options: Json): HttpResponse"
-    doc: "Generic HTTP request"
-    vm: "http_request"
-    vm_binding: "slow"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
   }
 
   fn route {

@@ -17,6 +17,7 @@
 
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
+#include "xrt_net.h"
 #include "xrt_range.h"
 #include "xrt_class.h"
 #include "xrt_sys.h"
@@ -4492,6 +4493,10 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_BUFFER:
             xrt_buffer_destroy_builtin(obj);
             break;
+        case XRT_ARC_KIND_NET_CONN:
+        case XRT_ARC_KIND_NET_LISTENER:
+            xrt_net_destroy_builtin(obj);
+            break;
 #ifdef XRT_ENABLE_SYS_THREAD
         /* Guarded like regex: xrt_thread_destroy_builtin calls the extern
          * xr_thread_detach, which only links when the coro runtime archive is
@@ -4639,6 +4644,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                                 : xr_mkptr(dst, XR_TAG_AGG_REF);
         }
         case XR_TAG_REGEX:
+        case XR_TAG_NET_CONN:
+        case XR_TAG_NET_LISTENER:
             xrt_retain(val);
             return val;
         default:

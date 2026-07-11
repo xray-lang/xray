@@ -57,6 +57,8 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_SYS_ONCE:
         case XR_TAG_THREAD:
         case XR_TAG_BUFFER:
+        case XR_TAG_NET_CONN:
+        case XR_TAG_NET_LISTENER:
         case XR_TAG_RANGE:
         case XR_TAG_ENUM:
         case XR_TAG_ITERATOR:

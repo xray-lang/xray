@@ -142,9 +142,8 @@ fn test_request_stream_option_does_not_expose_native_stream_facade() {
     })
 
     assert(resp.ok)
+    assert_eq(typename(resp), "HttpResponse")
     assert_eq(resp.body, "hello")
-    assert_eq(Json.has(resp, "_streamId"), false)
-    assert_eq(Json.has(resp, "streaming"), false)
 }
 
 print("All http request options tests passed")
