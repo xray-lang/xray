@@ -1182,8 +1182,7 @@ static bool lower_call_object_is_module(XiLower *l, AstNode *object, const char 
         return false;
 
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-    const char *resolved = links && links->module_name ? links->module_name : var->name;
-    return resolved && strcmp(resolved, module_name) == 0;
+    return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
 static bool lower_mem_layout_member_name(const char *name) {
