@@ -6366,6 +6366,52 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_disambiguates_same_location_callsites) {
+    setup_parser_session();
+    const char *source = "fn caller(a: uint32, b: uint64, c: int16) -> int {\n"
+                         "    return int(a) + int(b) + int(c)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    XgGlobalEvidence rebuilt;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&rebuilt, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ncallsites, 3);
+    ASSERT_EQ_UINT(rebuilt.ncallsites, 3);
+    ASSERT_EQ_UINT(ev.callsites[0].owner_func_id, ev.callsites[1].owner_func_id);
+    ASSERT_EQ_UINT(ev.callsites[1].owner_func_id, ev.callsites[2].owner_func_id);
+    ASSERT_EQ_UINT(ev.callsites[0].source_span_id, ev.callsites[1].source_span_id);
+    ASSERT_EQ_UINT(ev.callsites[1].source_span_id, ev.callsites[2].source_span_id);
+    ASSERT_TRUE(ev.callsites[0].source_node_id != 0);
+    ASSERT_TRUE(ev.callsites[1].source_node_id != 0);
+    ASSERT_TRUE(ev.callsites[2].source_node_id != 0);
+    ASSERT_NE(ev.callsites[0].source_node_id, ev.callsites[1].source_node_id);
+    ASSERT_NE(ev.callsites[0].source_node_id, ev.callsites[2].source_node_id);
+    ASSERT_NE(ev.callsites[1].source_node_id, ev.callsites[2].source_node_id);
+    ASSERT_EQ_UINT(rebuilt.callsites[0].source_node_id, ev.callsites[0].source_node_id);
+    ASSERT_EQ_UINT(rebuilt.callsites[1].source_node_id, ev.callsites[1].source_node_id);
+    ASSERT_EQ_UINT(rebuilt.callsites[2].source_node_id, ev.callsites[2].source_node_id);
+
+    xg_global_evidence_free(&rebuilt);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_source_identity_survives_body_only_change) {
     setup_parser_session();
     const char *source_a = "fn id(x: int) -> int { return x }\n"
