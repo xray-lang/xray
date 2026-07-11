@@ -46,15 +46,6 @@ typedef struct XaotModuleInitPlan {
     bool may_suspend;
 } XaotModuleInitPlan;
 
-typedef enum XaotCaptureAction {
-    XAOT_CAPTURE_INLINE_VALUE = 0,
-    XAOT_CAPTURE_DEEP_COPY,
-    XAOT_CAPTURE_MOVE,
-    XAOT_CAPTURE_MODULE_READONLY,
-    XAOT_CAPTURE_SHARED_REF,
-    XAOT_CAPTURE_REJECT,
-} XaotCaptureAction;
-
 enum {
     XAOT_CAPTURE_EV_CLOSED_CAPTURE = 1u << 0,
     XAOT_CAPTURE_EV_STORAGE_OWNER = 1u << 1,

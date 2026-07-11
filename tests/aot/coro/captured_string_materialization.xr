@@ -1,0 +1,9 @@
+fn captured_string(s: string) -> string {
+    fn child() -> string {
+        return s + "!"
+    }
+
+    return (await go child()) ?? "failed"
+}
+
+print(await go captured_string("capture"))

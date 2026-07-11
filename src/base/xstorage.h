@@ -44,6 +44,15 @@ typedef enum XrStorageMaterialization {
     XR_MATERIALIZE_REJECT,
 } XrStorageMaterialization;
 
+typedef enum XrCaptureAction {
+    XR_CAPTURE_INLINE_VALUE = 0,
+    XR_CAPTURE_DEEP_COPY,
+    XR_CAPTURE_MOVE,
+    XR_CAPTURE_MODULE_READONLY,
+    XR_CAPTURE_SHARED_REF,
+    XR_CAPTURE_REJECT,
+} XrCaptureAction;
+
 enum {
     XR_STORAGE_DEEP_READONLY = 1u << 0,
     XR_STORAGE_SHARE_SAFE = 1u << 1,

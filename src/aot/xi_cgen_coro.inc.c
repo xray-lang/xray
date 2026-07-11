@@ -1091,7 +1091,7 @@ static void cg_prepare_sync_go_targets_for_modules(XiCgenCtx *ctx, XiModule **mo
 static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_params) {
     bool need_comma = false;
     if (cg_func_frame_needs_cl(f)) {
-        fprintf(out, "xrt_closure_t *_cl");
+        fprintf(out, "xrt_closure_t *_cl, bool _take_cl");
         need_comma = true;
     }
     for (uint16_t i = 0; i < f->nparams; i++) {
@@ -1102,7 +1102,7 @@ static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_par
     }
 }
 
-static void emit_aot_frame_new_cl_arg(FILE *out, const XiFunc *current, const XiValue *callee,
+static void emit_aot_frame_raw_cl_arg(FILE *out, const XiFunc *current, const XiValue *callee,
                                       const XiFunc *target) {
     if (!cg_func_frame_needs_cl(target))
         return;
@@ -1130,6 +1130,42 @@ static void emit_aot_frame_new_cl_arg(FILE *out, const XiFunc *current, const Xi
         return;
     }
     fprintf(out, "NULL");
+}
+
+static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                           const XiValue *callee, const XiFunc *target) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || !target || target->ncaptures == 0)
+        return false;
+    for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
+        const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
+        if (!plan || plan->action == XR_CAPTURE_REJECT || plan->action == XR_CAPTURE_MOVE) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: rejected AOT cross-execution capture target=%s index=%u\n",
+                    target->name ? target->name : "?", (unsigned) ci);
+            fprintf(out, "NULL");
+            return true;
+        }
+    }
+    fprintf(out, "({ xrt_closure_t *_src = ");
+    emit_aot_frame_raw_cl_arg(out, current, callee, target);
+    fprintf(out,
+            "; xrt_closure_t *_dst = NULL; if (_src) { XrValue _dstv = "
+            "xrt_closure_new(_src->fn, %u); _dst = (xrt_closure_t *)_dstv.ptr; ",
+            (unsigned) target->ncaptures);
+    for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
+        const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
+        fprintf(out, "_dst->upvals[%u] = ", (unsigned) ci);
+        if (plan->action == XR_CAPTURE_DEEP_COPY)
+            fprintf(out, "xrt_value_clone_for_coro(_src->upvals[%u]); ", (unsigned) ci);
+        else {
+            fprintf(out, "_src->upvals[%u]; xrt_retain(_dst->upvals[%u]); ", (unsigned) ci,
+                    (unsigned) ci);
+        }
+    }
+    fprintf(out, "} _dst; })");
+    return true;
 }
 
 static bool cg_aot_frame_new_can_supply_cl_arg(const XiFunc *current, const XiValue *callee,
@@ -1160,11 +1196,14 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
                                          uint16_t arg_start, uint16_t nargs,
                                          const XiValue *transfer_owner) {
     bool need_comma = false;
+    bool transfer_owner_has_plans = cg_transfer_plan_site_is_spawn_arg(transfer_owner);
     if (cg_func_frame_needs_cl(target)) {
-        emit_aot_frame_new_cl_arg(out, current, callee, target);
+        if (!transfer_owner_has_plans ||
+            !emit_aot_frame_transfer_cl_arg(ctx, out, current, callee, target))
+            emit_aot_frame_raw_cl_arg(out, current, callee, target);
+        fprintf(out, ", %s", transfer_owner_has_plans ? "true" : "false");
         need_comma = true;
     }
-    bool transfer_owner_has_plans = cg_transfer_plan_site_is_spawn_arg(transfer_owner);
     for (uint16_t a = arg_start; a < nargs; a++) {
         uint16_t transfer_slot = (uint16_t) (a - arg_start);
         const XaotTransferPlan *transfer_plan = NULL;
@@ -1247,7 +1286,8 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, "    if (!f)\n        return NULL;\n");
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
-        fprintf(out, "    if (_cl)\n        xrt_retain(xr_mkptr(_cl, XR_TAG_CLOSURE));\n");
+        fprintf(out,
+                "    if (_cl && !_take_cl)\n        xrt_retain(xr_mkptr(_cl, XR_TAG_CLOSURE));\n");
     }
     for (uint16_t i = 0; i < f->nparams; i++) {
         fprintf(out, "    f->p%u = p%u;\n", i, i);
@@ -1676,7 +1716,7 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 static void emit_aot_frame_param_names(FILE *out, const XiFunc *f) {
     bool need_comma = false;
     if (cg_func_frame_needs_cl(f)) {
-        fprintf(out, "_cl");
+        fprintf(out, "_cl, _take_cl");
         need_comma = true;
     }
     for (uint16_t i = 0; i < f->nparams; i++) {
@@ -1706,7 +1746,8 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xrt_defer_init(&f->_xrt_ds);\n");
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
-        fprintf(out, "    if (_cl)\n        xrt_retain(xr_mkptr(_cl, XR_TAG_CLOSURE));\n");
+        fprintf(out,
+                "    if (_cl && !_take_cl)\n        xrt_retain(xr_mkptr(_cl, XR_TAG_CLOSURE));\n");
     }
     for (uint16_t i = 0; i < f->nparams; i++)
         emit_assign_coro_param_from_xrvalue(ctx, out, f, i);

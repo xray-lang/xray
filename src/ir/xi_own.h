@@ -37,6 +37,7 @@
 
 #include "xi.h"
 #include "../base/xdefs.h"
+#include "../base/xstorage.h"
 #include <stdbool.h>
 
 /* ========== Ownership State ========== */
@@ -103,6 +104,7 @@ XR_FUNC void xi_own_free(XiOwnResult *out);
 /* Whether a type is reference-counted (needs dup/drop).
  * Scalars (int/float/bool/null/unit/never) are not. */
 XR_FUNC bool xi_own_type_is_rc(const struct XrType *type);
+XR_FUNC XrCaptureAction xi_capture_cross_execution_action(const XiCapture *capture);
 
 /* Whether a projection (field/element read) of this type could yield a heap
  * reference whose storage belongs to the owner. Conservative: only the fixed

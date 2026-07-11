@@ -636,6 +636,8 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
             return false;
         if (!bc_put_u8(w, info.slot_type))
             return false;
+        if (!bc_put_u8(w, info.capture_action))
+            return false;
     }
 
     // 8. Nested Protos
@@ -816,6 +818,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
         info.storage_mode = bc_get_u8(r);
         info.is_const = bc_get_u8(r);
         info.slot_type = bc_get_u8(r);
+        info.capture_action = bc_get_u8(r);
         if (r->error != XR_BC_OK)
             goto fail;
         DYNARRAY_ADD(&proto->upvalues, info, UpvalInfo);

@@ -43,6 +43,7 @@
 #include "../../base/xdynarray.h"
 #include <stdint.h>
 #include "../../base/xdefs.h"
+#include "../../base/xstorage.h"
 
 typedef struct XrString XrString;
 typedef struct XrVMRuntime XrVMRuntime;
@@ -206,6 +207,7 @@ typedef struct UpvalInfo {
     uint8_t is_const;          // const variable flag
     uint8_t slot_type;         // XrSlotType: storage class for GC traversal
     uint8_t source;            // UPVAL_SRC_REG or UPVAL_SRC_UPVAL
+    uint8_t capture_action;    // XrCaptureAction for cross-execution materialization
     struct XrType *type_info;  // full compile-time type (NULL = unknown/any)
 } UpvalInfo;
 
@@ -355,7 +357,7 @@ XR_FUNC int xr_vm_proto_add_constant(XrProto *proto, XrValue value);
 XR_FUNC int xr_vm_proto_add_proto(XrProto *proto, XrProto *child);
 XR_FUNC int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode,
                                     uint8_t is_const, uint8_t slot_type, uint8_t source,
-                                    struct XrType *type_info);
+                                    uint8_t capture_action, struct XrType *type_info);
 XR_FUNC int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol);
 
 /* ========== Debug Helpers ========== */
