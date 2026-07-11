@@ -16,7 +16,7 @@
 #include "../class/xinstance.h"
 
 static const XrTypeId tag_to_typeid[8] = {
-    [XR_TAG_NULL] = XR_TID_NULL,    [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_CHAR] = XR_TID_CHAR,
+    [XR_TAG_NULL] = XR_TID_NULL,    [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_RUNE] = XR_TID_RUNE,
     [XR_TAG_I64] = XR_TID_INT,      [XR_TAG_F64] = XR_TID_FLOAT,     [XR_TAG_PTR] = XR_TID_NULL,
     [XR_TAG_AGG_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
 };
@@ -114,7 +114,7 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_FLOAT32] = TYPE_NAME_FLOAT32,
     [XR_TID_FLOAT] = TYPE_NAME_FLOAT,
     [XR_TID_STRING] = TYPE_NAME_STRING,
-    [XR_TID_CHAR] = TYPE_NAME_CHAR,
+    [XR_TID_RUNE] = TYPE_NAME_RUNE,
     [XR_TID_RECORD] = TYPE_NAME_RECORD,
     [XR_TID_FUNCTION] = TYPE_NAME_FUNCTION,
     [XR_TID_ARRAY] = TYPE_NAME_ARRAY,
@@ -193,8 +193,8 @@ uint8_t xr_type_to_tid(const XrType *type) {
             return XR_TID_STRING;
         case XR_KIND_BOOL:
             return XR_TID_BOOL;
-        case XR_KIND_CHAR:
-            return XR_TID_CHAR;
+        case XR_KIND_RUNE:
+            return XR_TID_RUNE;
         case XR_KIND_ARRAY:
         case XR_KIND_VIEW:
         case XR_KIND_SPAN:

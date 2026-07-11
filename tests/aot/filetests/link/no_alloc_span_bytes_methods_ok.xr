@@ -1,32 +1,32 @@
 @no_alloc
 @c_export("xray_no_alloc_span_bytes_methods_ok")
 fn xray_no_alloc_span_bytes_methods_ok(seed: int) -> int {
-    var raw: [uint8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    var srcRaw: [uint8; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    var raw: [byte; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    var srcRaw: [byte; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
     var wordsRaw: [uint32; 2] = [11, 12]
 
-    var view: ByteSpan = raw[:]
-    var src: ByteSpan = srcRaw[:]
-    var words: Span<uint32> = wordsRaw[:]
+    var view: Slice<byte> = raw[:]
+    var src: Slice<byte> = srcRaw[:]
+    var words: Slice<uint32> = wordsRaw[:]
 
     view.store<uint32>(0, 0x01020304, Endian.LE)
     view.store<uint64>(8, 42, Endian.LE)
     var loaded32: uint32 = view.load<uint32>(0, Endian.LE)
     var loaded64: uint64 = view.load<uint64>(8, Endian.LE)
 
-    var window: ByteSpan = view[4:12]
+    var window: Slice<byte> = view[4:12]
     window.copyFrom(src)
     var prefix = window.commonPrefix(src)
     window.fill(9)
     view.repeatFrom(12, 4, 4)
 
-    var asBytes: ByteSpan = words.asBytes()
-    var halfWords: Span<uint16> = asBytes.reinterpret<uint16>()
+    var asBytes: Slice<byte> = words.asBytes()
+    var halfWords: Slice<uint16> = asBytes.reinterpret<uint16>()
     var copiedWordsRaw: [uint32; 2] = [0, 0]
-    var copiedWords: Span<uint32> = copiedWordsRaw[:]
+    var copiedWords: Slice<uint32> = copiedWordsRaw[:]
     copiedWords.copyFrom(words)
     var cmp = copiedWords.compare(words)
 
-    return seed + int(loaded32) + int(loaded64) + prefix + asBytes.length +
-        halfWords.length + cmp + int(view[12])
+    return seed + int(loaded32) + int(loaded64) + prefix + len(asBytes) +
+        len(halfWords) + cmp + int(view[12])
 }

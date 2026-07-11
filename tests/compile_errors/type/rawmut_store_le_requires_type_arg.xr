@@ -1,4 +1,4 @@
-fn write(dst: ByteSpan) {
+fn write(dst: Slice<byte>) {
     unsafe {
         var p = dst.mutPtr()
         p.storeLE(0, 1)

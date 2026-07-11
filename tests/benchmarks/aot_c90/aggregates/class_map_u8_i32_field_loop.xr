@@ -1,8 +1,8 @@
 class ByteMapBag {
-    values: Map<uint8, int32>
+    values: Map<byte, int32>
 
     constructor() {
-        var values: Map<uint8, int32> = #{}
+        var values: Map<byte, int32> = #{}
         this.values = values
     }
 
@@ -12,7 +12,7 @@ class ByteMapBag {
             this.values.set(i, i * 5 + 7)
             i = i + 1
         }
-        return this.values.size
+        return len(this.values)
     }
 
     scan(n: int, rounds: int) -> int {
@@ -21,7 +21,7 @@ class ByteMapBag {
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                if (this.values.has(i)) {
+                if (this.values.containsKey(i)) {
                     sum = sum + this.values.get(i)
                 }
                 i = i + 1

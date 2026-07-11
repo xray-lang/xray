@@ -1,10 +1,10 @@
-fn worker(view: ByteSpan) -> int {
-    return view.length
+fn worker(view: Slice<byte>) -> int {
+    return len(view)
 }
 
 fn bad() {
-    var bytes = Bytes(4)
-    var view: ByteSpan = bytes[0:2]
+    var bytes = Array<byte>(4)
+    var view: Slice<byte> = bytes[0:2]
     var task = go worker(move view)
     print(await task)
 }

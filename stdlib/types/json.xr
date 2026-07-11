@@ -10,10 +10,8 @@ class Json {
     static keys(obj: Json) -> Array<string>
     static values(obj: Json) -> Array<Json>
     static entries(obj: Json) -> Array<(string, Json)>
-    static has(obj: Json, key: string) -> bool
+    static containsKey(obj: Json, key: string) -> bool
     static get(obj: Json, key: string, default?: unknown) -> Json
-    static size(obj: Json) -> int
-    static isEmpty(obj: Json) -> bool
 
     keys() -> Array<string>
     values() -> Array<Json>
@@ -23,6 +21,5 @@ class Json {
     // (fieldName, value) tuples (used by `for (k, v in jsonObj)`).
     iterator() -> Iterator<string>
     entriesIterator() -> Iterator<(string, Json)>
-    has(key: string) -> bool
     toString() -> string
 }

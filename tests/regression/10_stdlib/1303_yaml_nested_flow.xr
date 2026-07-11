@@ -160,7 +160,7 @@ fn test_block_sequence_three_items() {
     var data = "tasks:\n  - id: 1\n    status: done\n  - id: 2\n    status: pending\n  - id: 3\n    status: active"
     var obj = yaml.parse(data)
     var tasks = obj["tasks"]
-    assert_eq(tasks.length, 3)
+    assert_eq(len(tasks), 3)
     assert_eq(tasks[0]["id"], 1)
     assert_eq(tasks[0]["status"], "done")
     assert_eq(tasks[1]["id"], 2)

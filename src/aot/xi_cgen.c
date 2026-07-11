@@ -2394,7 +2394,7 @@ static void cg_emit_xrvalue_literal_initializer(FILE *out, const XiConstLiteral 
             fprintf(out, "%s", lit->bool_value ? "XR_TRUE_VAL" : "XR_FALSE_VAL");
             break;
         case XI_CONST_LITERAL_CHAR:
-            fprintf(out, "XR_FROM_CHAR(UINT32_C(%" PRIu32 "))", (uint32_t) lit->int_value);
+            fprintf(out, "XR_FROM_RUNE(UINT32_C(%" PRIu32 "))", (uint32_t) lit->int_value);
             break;
         case XI_CONST_LITERAL_STRING:
             fprintf(out, "{.tag = XR_TAG_STR, .ptr = (void *) &");
@@ -2454,7 +2454,7 @@ static bool cg_const_value_matches_literal(const XiValue *value, const XiConstLi
             return v->op == XI_CONST && v->type->kind == XR_KIND_BOOL &&
                    (v->aux_int != 0) == lit->bool_value;
         case XI_CONST_LITERAL_CHAR:
-            return v->op == XI_CONST && v->type->kind == XR_KIND_CHAR &&
+            return v->op == XI_CONST && v->type->kind == XR_KIND_RUNE &&
                    v->aux_int == lit->int_value;
         case XI_CONST_LITERAL_STRING: {
             const char *value_s = v->aux ? (const char *) v->aux : "";
@@ -2745,7 +2745,7 @@ static bool cg_emit_freestanding_static_scalar_var_store(XiCgenCtx *ctx, FILE *o
             cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
-            fprintf(out, ", XR_FROM_CHAR((uint32_t)");
+            fprintf(out, ", XR_FROM_RUNE((uint32_t)");
             cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, "))");
             return true;
@@ -4183,7 +4183,7 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_STRING, NULL, "padStart", "string.padStart"},
         {XR_KIND_STRING, NULL, "padEnd", "string.padEnd"},
         {XR_KIND_STRING, NULL, "match", "string.match"},
-        {XR_KIND_STRING, NULL, "toBytes", "string.toBytes"},
+        {XR_KIND_STRING, NULL, "copyBytes", "string.copyBytes"},
         {XR_KIND_STRING, NULL, "translate", "string.translate"},
         {XR_KIND_STRING, NULL, "entries", "string.entries"},
         {XR_KIND_STRING, NULL, "iterator", "string.iterator"},
@@ -4194,7 +4194,7 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_FLOAT, NULL, "toString", "float.toString"},
         {XR_KIND_FLOAT, NULL, "toFixed", "float.toFixed"},
         {XR_KIND_BOOL, NULL, "toString", "bool.toString"},
-        {XR_KIND_CHAR, NULL, "toString", "char.toString"},
+        {XR_KIND_RUNE, NULL, "toString", "char.toString"},
         {XR_KIND_NULL, NULL, "toString", "null.toString"},
         {XR_KIND_ENUM, NULL, "toString", "enum.toString"},
         {XR_KIND_UNKNOWN, "BigInt", "toString", "BigInt.toString"},

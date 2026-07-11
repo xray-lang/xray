@@ -1,6 +1,6 @@
 fn make(data: in Array<int>) -> () -> int {
     return fn() -> int {
-        return data.length
+        return len(data)
     }
 }
 

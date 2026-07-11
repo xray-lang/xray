@@ -24,11 +24,11 @@ print("hello".reverse())     // olleh
 var arr = [3, 1, 2]
 arr.unshift(0)
 print(arr[0])               // 0
-print(arr.length)           // 4
+print(len(arr))           // 4
 
 var first = arr.shift()
 print(first)                // 0
-print(arr.length)           // 3
+print(len(arr))           // 3
 
 var arr2 = [0, 0, 0]
 arr2.fill(7)

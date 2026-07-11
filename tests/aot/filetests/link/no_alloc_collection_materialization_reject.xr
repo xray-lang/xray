@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_array_unshift_reject(values: Array<int>) -> int {
     values.unshift(0)
-    return values.length
+    return len(values)
 }
 
 @no_alloc
@@ -11,7 +11,7 @@ fn xray_no_alloc_array_tostring_reject(values: Array<int>) -> string {
 
 @no_alloc
 fn xray_no_alloc_array_entries_reject(values: Array<int>) -> int {
-    return values.entries().length
+    return len(values.entries())
 }
 
 @no_alloc
@@ -21,17 +21,17 @@ fn xray_no_alloc_array_entries_iterator_reject(values: Array<int>) -> bool {
 
 @no_alloc
 fn xray_no_alloc_map_keys_reject(values: Map<int, int>) -> int {
-    return values.keys().length
+    return len(values.keys())
 }
 
 @no_alloc
 fn xray_no_alloc_map_values_reject(values: Map<int, int>) -> int {
-    return values.values().length
+    return len(values.values())
 }
 
 @no_alloc
 fn xray_no_alloc_map_entries_reject(values: Map<int, int>) -> int {
-    return values.entries().length
+    return len(values.entries())
 }
 
 @no_alloc
@@ -51,32 +51,32 @@ fn xray_no_alloc_map_tostring_reject(values: Map<int, int>) -> string {
 
 @no_alloc
 fn xray_no_alloc_set_toarray_reject(values: Set<int>) -> int {
-    return values.toArray().length
+    return len(values.toArray())
 }
 
 @no_alloc
 fn xray_no_alloc_set_values_reject(values: Set<int>) -> int {
-    return values.values().length
+    return len(values.values())
 }
 
 @no_alloc
 fn xray_no_alloc_set_union_reject(values: Set<int>, other: Set<int>) -> int {
-    return values.union(other).length
+    return len(values.union(other))
 }
 
 @no_alloc
 fn xray_no_alloc_set_intersection_reject(values: Set<int>, other: Set<int>) -> int {
-    return values.intersection(other).length
+    return len(values.intersection(other))
 }
 
 @no_alloc
 fn xray_no_alloc_set_difference_reject(values: Set<int>, other: Set<int>) -> int {
-    return values.difference(other).length
+    return len(values.difference(other))
 }
 
 @no_alloc
 fn xray_no_alloc_set_symmetric_difference_reject(values: Set<int>, other: Set<int>) -> int {
-    return values.symmetricDifference(other).length
+    return len(values.symmetricDifference(other))
 }
 
 @no_alloc

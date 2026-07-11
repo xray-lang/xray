@@ -281,6 +281,10 @@ static const char *xr_builtin_symbol_names[] = {
     "asSpan",
     "ptr",
     "appendFrom",
+    "containsKey",
+    "containsValue",
+    "__operator_len",
+    "count",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

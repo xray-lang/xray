@@ -1,6 +1,6 @@
 union U32Bytes {
     u: uint32
-    b: [uint8; 4]
+    b: [byte; 4]
 }
 
 var x = U32Bytes{u: 0x01020304}

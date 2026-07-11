@@ -1,9 +1,9 @@
 fn main() {
-    var chunks: Array<Bytes> = [Bytes(0)]
+    var chunks: Array<Array<byte>> = [Array<byte>(0)]
     chunks[0].push(1)
-    var view: ByteSpan = chunks[0][:]
+    var view: Slice<byte> = chunks[0][:]
     chunks[0].push(2)
-    print(view.length)
+    print(len(view))
 }
 
 main()

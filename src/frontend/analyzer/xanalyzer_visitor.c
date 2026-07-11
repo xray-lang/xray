@@ -2358,7 +2358,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         // Expressions
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_STRING:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_REGEX:
@@ -3407,7 +3407,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
             result = xr_type_new_float(NULL);
             break;
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
             result = xr_type_new_char(NULL);
             break;
         case AST_LITERAL_STRING:

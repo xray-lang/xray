@@ -53,7 +53,7 @@ fn mandelbrot(size) {
 
 // 主程序
 var size = 1000
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     size = int(process.args[0])
 }
 var count = mandelbrot(size)

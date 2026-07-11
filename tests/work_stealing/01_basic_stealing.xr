@@ -35,7 +35,7 @@ for (var i = 0; i < CORO_COUNT; i++) {
 }
 /* 等待所有协程完成 */
 print("等待所有协程完成...")
-for (var i = 0; i < tasks.length; i++) {
+for (var i = 0; i < len(tasks); i++) {
     var result: int = await tasks[i]
     var expected = compute_work(i, WORK_PER_CORO)
     if (result != expected) {

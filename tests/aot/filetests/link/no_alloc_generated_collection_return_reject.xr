@@ -2,12 +2,12 @@ import os
 
 @no_alloc
 fn xray_no_alloc_os_loadavg_reject() -> int {
-    return os.loadavg().length
+    return len(os.loadavg())
 }
 
 @no_alloc
 fn xray_no_alloc_os_environ_reject() -> int {
-    return os.environ().length
+    return len(os.environ())
 }
 
 print(xray_no_alloc_os_loadavg_reject())

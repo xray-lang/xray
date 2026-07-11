@@ -85,7 +85,7 @@ static const KwExpect kKnownKeywords[] = {
     {"bool", TK_BOOL},
     {"break", TK_BREAK},
     {"catch", TK_CATCH},
-    {"char", TK_CHAR},
+    {"char", TK_RUNE},
     {"class", TK_CLASS},
     {"comptime", TK_COMPTIME},
     {"const", TK_CONST},

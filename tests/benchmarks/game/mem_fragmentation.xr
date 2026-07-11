@@ -105,11 +105,11 @@ fn run(n: int) {
         }
         round = round + 1
     }
-    var lastLen = mixed.length
+    var lastLen = len(mixed)
     print("Phase 3 (size mixing x" + n + "): final array length=" + lastLen)
 }
 
-var n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500
 run(n)
 var a = []
 var b:Array;

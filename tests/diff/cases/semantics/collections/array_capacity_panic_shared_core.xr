@@ -5,7 +5,7 @@ var dyn: Json = {
 
 try {
     var xs = Array<int>(dyn.bad, 1)
-    print(xs.length)
+    print(len(xs))
 } catch panic (p) {
     print(p.message)
     print(p.code)
@@ -13,7 +13,7 @@ try {
 
 try {
     var ys = Array.withCapacity(dyn.bad)
-    print(ys.length)
+    print(len(ys))
 } catch panic (p) {
     print(p.message)
     print(p.code)

@@ -1,17 +1,17 @@
 /* Owned slice-copy lifetime across source grow (task 152 surface split).
  *
- * `Span<T>`/`ByteSpan` are scoped fast borrowed views, so they may not stay live
- * across owner growth. Long-lived non-copying slices belong to `View<T>`/
- * `ByteView`; `copy(slice)` is the explicit owned snapshot path and must survive
+ * `Slice<T>`/`Slice<byte>` are scoped fast borrowed views, so they may not stay live
+ * across owner growth. Long-lived non-copying slices belong to `Slice<T>`/
+ * `Slice<byte>`; `copy(slice)` is the explicit owned snapshot path and must survive
  * source growth independently.
  *
- * Covers POD element buffers (Bytes / typed Array<int>) and ANY buffers (object
+ * Covers POD element buffers (Array<byte> / typed Array<int>) and ANY buffers (object
  * arrays), including the `copy(slice)` target-typed view path.
  */
 
 @test
 fn test_bytes_copy_survives_source_grow() {
-    var b = Bytes(4)
+    var b = Array<byte>(4)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -23,7 +23,7 @@ fn test_bytes_copy_survives_source_grow() {
         b.push(200)
     }
 
-    var s: Bytes = copy(b[1:4])
+    var s: Array<byte> = copy(b[1:4])
     print(s[0])  // 2
     print(s[2])  // 4
 

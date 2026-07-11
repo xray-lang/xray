@@ -8,7 +8,7 @@ import csv
 fn test_parse_basic() {
     var data = "name,age,city\nAlice,30,Beijing\nBob,25,Shanghai"
     var rows = csv.parse(data)
-    assert_eq(rows.length, 3)
+    assert_eq(len(rows), 3)
     assert_eq(rows[0][0], "name")
     assert_eq(rows[1][0], "Alice")
     assert_eq(rows[1][1], "30")
@@ -18,7 +18,7 @@ fn test_parse_basic() {
 fn test_parse_with_header() {
     var data = "name,age,city\nAlice,30,Beijing\nBob,25,Shanghai"
     var rows = csv.parse(data, { header: true })
-    assert_eq(rows.length, 2)
+    assert_eq(len(rows), 2)
     assert_eq(rows[0]["name"], "Alice")
     assert_eq(rows[0]["age"], "30")
 }
@@ -45,7 +45,7 @@ fn test_parse_escaped_quotes() {
 fn test_stringify() {
     var arr = [["a", "b", "c"], ["1", "2", "3"]]
     var result = csv.stringify(arr)
-    assert(result.length > 0)
+    assert(len(result) > 0)
 }
 
 // ===== TSV =====
@@ -62,7 +62,7 @@ fn test_parse_tsv() {
 @test
 fn test_parse_empty() {
     var empty = csv.parse("")
-    assert_eq(empty.length, 0)
+    assert_eq(len(empty), 0)
 }
 
 // ===== Dynamic typing =====
@@ -100,14 +100,14 @@ fn test_parse_empty_fields() {
     var rows = csv.parse(data)
     assert_eq(rows[0][1], "")
     assert_eq(rows[1][1], "")
-    assert_eq(rows[0].length, 3)
+    assert_eq(len(rows[0]), 3)
 }
 
 @test
 fn test_parse_consecutive_delimiters() {
     var data = ",,,\n,,,"
     var rows = csv.parse(data)
-    assert_eq(rows[0].length, 4)
+    assert_eq(len(rows[0]), 4)
     assert_eq(rows[0][0], "")
 }
 
@@ -117,7 +117,7 @@ fn test_parse_consecutive_delimiters() {
 fn test_parse_crlf() {
     var data = "a,b\r\n1,2\r\n3,4"
     var rows = csv.parse(data)
-    assert_eq(rows.length, 3)
+    assert_eq(len(rows), 3)
     assert_eq(rows[2][0], "3")
 }
 
@@ -125,7 +125,7 @@ fn test_parse_crlf() {
 fn test_parse_mixed_linebreaks() {
     var data = "a,b\n1,2\r\n3,4\r5,6"
     var rows = csv.parse(data)
-    assert_eq(rows.length, 4)
+    assert_eq(len(rows), 4)
 }
 
 // ===== Config: skipRows =====
@@ -134,7 +134,7 @@ fn test_parse_mixed_linebreaks() {
 fn test_parse_skip_rows() {
     var data = "skip1\nskip2\na,b\n1,2"
     var rows = csv.parse(data, { skipRows: 2 })
-    assert_eq(rows.length, 2)
+    assert_eq(len(rows), 2)
     assert_eq(rows[0][0], "a")
 }
 
@@ -144,7 +144,7 @@ fn test_parse_skip_rows() {
 fn test_parse_max_rows() {
     var data = "a,b\n1,2\n3,4\n5,6\n7,8"
     var rows = csv.parse(data, { maxRows: 2 })
-    assert_eq(rows.length, 2)
+    assert_eq(len(rows), 2)
 }
 
 // ===== Config: trimFields =====
@@ -164,7 +164,7 @@ fn test_parse_trim_fields() {
 fn test_parse_comments() {
     var data = "a,b\n# comment\n1,2"
     var rows = csv.parse(data, { comments: "#" })
-    assert_eq(rows.length, 2)
+    assert_eq(len(rows), 2)
     assert_eq(rows[1][0], "1")
 }
 
@@ -174,7 +174,7 @@ fn test_parse_comments() {
 fn test_parse_relax_columns() {
     var data = "a,b,c\n1,2\n3,4,5,6"
     var result = csv.parseDetailed(data, { relaxColumns: true })
-    assert_eq(result["data"].length, 3)
+    assert_eq(len(result["data"]), 3)
 }
 
 // ===== Stringify with typed values =====
@@ -196,7 +196,7 @@ fn test_roundtrip() {
     var parsed = csv.parse(original)
     var output = csv.stringify(parsed)
     var reparsed = csv.parse(output)
-    assert_eq(reparsed.length, parsed.length)
+    assert_eq(len(reparsed), len(parsed))
     assert_eq(reparsed[0][0], parsed[0][0])
 }
 
@@ -206,7 +206,7 @@ fn test_roundtrip() {
 fn test_quoted_newline() {
     var data = "a,b\n"  + "\"line1\nline2\",value"
     var rows = csv.parse(data)
-    assert_eq(rows.length, 2)
+    assert_eq(len(rows), 2)
     assert_eq(rows[1][0], "line1\nline2")
 }
 

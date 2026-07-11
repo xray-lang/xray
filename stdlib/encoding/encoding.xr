@@ -20,9 +20,9 @@ fn hexVal(c: int) -> int {
 }
 
 fn hexEncode(data: string) -> string {
-    var src = data.toBytes()
+    var src = data.copyBytes()
     var out = StringBuilder()
-    for (var i = 0; i < src.length; i++) {
+    for (var i = 0; i < len(src); i++) {
         var b = src[i]
         out.append(HEX.charAt(b >> 4))
         out.append(HEX.charAt(b & 15))
@@ -30,11 +30,11 @@ fn hexEncode(data: string) -> string {
     return out.toString()
 }
 
-fn hexDecode(hex: string) -> Bytes? {
-    var src = hex.toBytes()
-    var n = src.length
+fn hexDecode(hex: string) -> Array<byte>? {
+    var src = hex.copyBytes()
+    var n = len(src)
     if (n % 2 != 0) { return null }
-    var out = Bytes(n / 2)
+    var out = Array<byte>(n / 2)
     var oi = 0
     var i = 0
     while (i < n) {
@@ -55,8 +55,8 @@ fn hexDecodeString(hex: string) -> string? {
 }
 
 fn hexValid(hex: string) -> bool {
-    var src = hex.toBytes()
-    var n = src.length
+    var src = hex.copyBytes()
+    var n = len(src)
     if (n % 2 != 0) { return false }
     for (var i = 0; i < n; i++) {
         if (hexVal(src[i]) < 0) { return false }
@@ -67,18 +67,18 @@ fn hexValid(hex: string) -> bool {
 // ---- UTF-8 ----
 
 fn utf8ByteLength(data: string) -> int {
-    return data.toBytes().length
+    return len(data.copyBytes())
 }
 
 fn utf8Count(data: string) -> int {
-    return data.length
+    return len(data)
 }
 
 // Validate that the string's bytes form well-formed UTF-8. A Xray string is
 // already valid UTF-8, but scanning keeps the semantics honest and total.
 fn utf8Valid(data: string) -> bool {
-    var src = data.toBytes()
-    var n = src.length
+    var src = data.copyBytes()
+    var n = len(src)
     var i = 0
     while (i < n) {
         var b = src[i]
@@ -100,8 +100,8 @@ fn utf8Valid(data: string) -> bool {
 
 // ---- UTF-16 ----
 
-// Write a 16-bit code unit into Bytes in the requested endianness.
-fn putU16(out: Bytes, oi: int, unit: int, endian: int) {
+// Write a 16-bit code unit into Array<byte> in the requested endianness.
+fn putU16(out: Array<byte>, oi: int, unit: int, endian: int) {
     if (endian == BE) {
         out[oi] = (unit >> 8) & 255
         out[oi + 1] = unit & 255
@@ -111,10 +111,10 @@ fn putU16(out: Bytes, oi: int, unit: int, endian: int) {
     }
 }
 
-// Read a 16-bit code unit from Bytes in the requested endianness. The bytes are
-// promoted to int before shifting: a Bytes element is uint8, so `<< 8` in the
-// uint8 domain would truncate the high byte to zero.
-fn getU16(src: Bytes, i: int, endian: int) -> int {
+// Read a 16-bit code unit from Array<byte> in the requested endianness. The bytes are
+// promoted to int before shifting: a Array<byte> element is byte, so `<< 8` in the
+// byte domain would truncate the high byte to zero.
+fn getU16(src: Array<byte>, i: int, endian: int) -> int {
     var lo: int = src[i]
     var hi: int = src[i + 1]
     if (endian == BE) {
@@ -123,15 +123,15 @@ fn getU16(src: Bytes, i: int, endian: int) -> int {
     return (hi << 8) | lo
 }
 
-fn utf16Encode(data: string, endian: int = 0) -> Bytes {
-    var cpCount = data.length
+fn utf16Encode(data: string, endian: int = 0) -> Array<byte> {
+    var cpCount = len(data)
     // First pass: count 16-bit units (BMP = 1, supplementary = 2).
     var units = 0
     for (var i = 0; i < cpCount; i++) {
         var cp = data.codePointAt(i)
         if (cp >= 0x10000) { units = units + 2 } else { units = units + 1 }
     }
-    var out = Bytes(units * 2)
+    var out = Array<byte>(units * 2)
     var oi = 0
     for (var i = 0; i < cpCount; i++) {
         var cp = data.codePointAt(i)
@@ -156,8 +156,8 @@ fn utf8Len(cp: int) -> int {
     return 4
 }
 
-// Encode a code point as UTF-8 into Bytes; returns the next write offset.
-fn putUtf8(out: Bytes, oi: int, cp: int) -> int {
+// Encode a code point as UTF-8 into Array<byte>; returns the next write offset.
+fn putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
     if (cp < 0x80) {
         out[oi] = cp
         return oi + 1
@@ -180,8 +180,8 @@ fn putUtf8(out: Bytes, oi: int, cp: int) -> int {
 
 // Decode UTF-16 bytes to a string. Auto-detects a leading BOM (FE FF = BE,
 // FF FE = LE); without a BOM the `endian` argument selects byte order.
-fn utf16Decode(data: Bytes, endian: int = 0, stripBom: bool = true) -> string? {
-    var n = data.length
+fn utf16Decode(data: Array<byte>, endian: int = 0, stripBom: bool = true) -> string? {
+    var n = len(data)
     if (n % 2 != 0) { return null }
 
     var e = endian
@@ -217,10 +217,10 @@ fn utf16Decode(data: Bytes, endian: int = 0, stripBom: bool = true) -> string? {
 
     // Pass 2: encode code points as UTF-8 and materialize the string.
     var outLen = 0
-    for (var k = 0; k < cps.length; k++) { outLen = outLen + utf8Len(cps[k]) }
-    var out = Bytes(outLen)
+    for (var k = 0; k < len(cps); k++) { outLen = outLen + utf8Len(cps[k]) }
+    var out = Array<byte>(outLen)
     var oi = 0
-    for (var k = 0; k < cps.length; k++) { oi = putUtf8(out, oi, cps[k]) }
+    for (var k = 0; k < len(cps); k++) { oi = putUtf8(out, oi, cps[k]) }
     return out.toString()
 }
 

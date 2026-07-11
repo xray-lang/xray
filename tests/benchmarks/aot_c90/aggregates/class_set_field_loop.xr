@@ -12,7 +12,7 @@ class IntSetBag {
             this.values.add(i)
             i = i + 1
         }
-        return this.values.length + this.values.size
+        return len(this.values) + len(this.values)
     }
 
     scan(n: int, rounds: int) -> int {
@@ -21,7 +21,7 @@ class IntSetBag {
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                if (this.values.has(i)) {
+                if (this.values.contains(i)) {
                     hits = hits + i
                 }
                 i = i + 1
@@ -40,7 +40,7 @@ class IntSetBag {
             }
             i = i + 2
         }
-        return removed + this.values.length
+        return removed + len(this.values)
     }
 }
 

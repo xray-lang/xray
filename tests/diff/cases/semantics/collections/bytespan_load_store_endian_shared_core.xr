@@ -1,7 +1,7 @@
 // anchor: bytespan-load-store-endian-shared-core
 fn main() {
-    var bytes = Bytes(12)
-    var view: ByteSpan = bytes[:]
+    var bytes = Array<byte>(12)
+    var view: Slice<byte> = bytes[:]
     view.store<uint16>(0, 4660, Endian.LE)
     view.store<uint16>(2, 4660, Endian.BE)
     view.store<uint32>(4, 16909060, Endian.BE)

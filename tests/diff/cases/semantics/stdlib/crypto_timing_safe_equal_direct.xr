@@ -10,10 +10,10 @@ print(crypto.timingSafeEqual("same length", "same lengtz"))
 print(crypto.timingSafeEqual("prefix", "prefix suffix"))
 
 var cipher = crypto.encrypt("secret", "hello world")
-print(cipher.length == 64)
+print(len(cipher) == 64)
 print(crypto.decrypt("secret", cipher) == "hello world")
 var emptyCipher = crypto.encrypt("secret", "")
-print(emptyCipher.length == 64)
+print(len(emptyCipher) == 64)
 print(crypto.decrypt("secret", emptyCipher) == "")
 print(crypto.decrypt("secret", "xyz") == null)
 

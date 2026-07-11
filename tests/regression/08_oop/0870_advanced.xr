@@ -272,7 +272,7 @@ fn test_object_array() {
         Item("orange", 75)
     ]
 
-    assert_eq(items.length, 3)
+    assert_eq(len(items), 3)
     assert_eq(items[0].name, "apple")
     assert_eq(items[1].price, 50)
 

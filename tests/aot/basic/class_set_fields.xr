@@ -8,11 +8,11 @@ class SeenSet {
 
     add(value: int) -> int {
         this.values.add(value)
-        return this.values.length
+        return len(this.values)
     }
 
     contains(value: int) -> bool {
-        return this.values.has(value)
+        return this.values.contains(value)
     }
 
     remove(value: int) -> bool {
@@ -20,7 +20,7 @@ class SeenSet {
     }
 
     count() -> int {
-        return this.values.length
+        return len(this.values)
     }
 }
 

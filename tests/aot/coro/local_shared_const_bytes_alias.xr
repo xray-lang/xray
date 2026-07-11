@@ -1,14 +1,14 @@
-fn worker(src: Bytes) -> int {
+fn worker(src: Array<byte>) -> int {
     return int(src[0])
 }
 
-fn child(src: Bytes) {
+fn child(src: Array<byte>) {
     shared alias = src
     var task = go worker(alias)
     print(await task)
 }
 
-fn runMode(mode: string, src: Bytes) {
+fn runMode(mode: string, src: Array<byte>) {
     if (mode == "parallel") {
         child(src)
     } else {
@@ -16,7 +16,7 @@ fn runMode(mode: string, src: Bytes) {
     }
 }
 
-var data = Bytes(0)
+var data = Array<byte>(0)
 data.push(42)
-var mode = process.args.length > 0 ? process.args[0] : "parallel"
+var mode = len(process.args) > 0 ? process.args[0] : "parallel"
 runMode(mode, data)

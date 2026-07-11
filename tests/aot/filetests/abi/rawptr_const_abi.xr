@@ -1,17 +1,17 @@
-fn raw_const(p: RawPtr<uint8>) -> RawPtr<uint8> {
+fn raw_const(p: RawPtr<byte>) -> RawPtr<byte> {
     return p
 }
 
-fn raw_mut(p: RawMut<uint8>) -> RawMut<uint8> {
+fn raw_mut(p: RawMut<byte>) -> RawMut<byte> {
     return p
 }
 
-fn raw_const_from_mut(p: RawMut<uint8>) -> RawPtr<uint8> {
+fn raw_const_from_mut(p: RawMut<byte>) -> RawPtr<byte> {
     return p
 }
 
-var rp = RawPtr<uint8>.null()
-var mp = RawMut<uint8>.null()
+var rp = RawPtr<byte>.null()
+var mp = RawMut<byte>.null()
 
 print(raw_const(rp).isNull())
 print(raw_mut(mp).isNull())

@@ -3,10 +3,10 @@ import time
 var COUNT = 1000
 var TIMEOUT_MS = 10
 
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     COUNT = int(process.args[0]) ?? COUNT
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     TIMEOUT_MS = int(process.args[1]) ?? TIMEOUT_MS
 }
 

@@ -124,7 +124,7 @@ fn test_enum() {
     // ===== Enum in array =====
 
     var colors = [Color.Red, Color.Green, Color.Blue]
-    assert_eq(colors.length, 3)
+    assert_eq(len(colors), 3)
     assert_eq(colors[0] == Color.Red, true)
     assert_eq(colors[2] == Color.Blue, true)
 }

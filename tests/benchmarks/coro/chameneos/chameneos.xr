@@ -6,10 +6,10 @@ import time
 
 var N_MEETINGS = 600000  // 会合次数
 var N_CHAMENEOS = 4      // 变色龙数量
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N_MEETINGS = int(process.args[0]) ?? N_MEETINGS
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     N_CHAMENEOS = int(process.args[1]) ?? N_CHAMENEOS
 }
 if (N_CHAMENEOS < 2) {

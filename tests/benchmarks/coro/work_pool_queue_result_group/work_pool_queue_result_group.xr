@@ -6,13 +6,13 @@ import time
 var WORKERS = 8
 var TASKS = 100000
 var BATCH = 64
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     WORKERS = int(process.args[0]) ?? WORKERS
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     TASKS = int(process.args[1]) ?? TASKS
 }
-if (process.args.length > 2) {
+if (len(process.args) > 2) {
     BATCH = int(process.args[2]) ?? BATCH
 }
 if (WORKERS < 1) {

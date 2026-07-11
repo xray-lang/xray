@@ -2,19 +2,19 @@ var counts: Map<bool, int> = #{}
 counts.set(true, 7)
 counts.set(false, 11)
 counts.set(true, 13)
-print(counts.length)
-print(counts.size)
+print(len(counts))
+print(len(counts))
 print(counts.get(true))
 print(counts.get(false))
-print(counts.has(false))
+print(counts.containsKey(false))
 
 var keys = counts.keys()
 var values = counts.values()
-print(keys.length)
-print(values.length)
+print(len(keys))
+print(len(values))
 print(values[0] + values[1])
 print(counts.delete(false))
-print(counts.has(false))
+print(counts.containsKey(false))
 print(counts.get(false) == null)
 
 class BoolKeyMapBag {
@@ -28,17 +28,17 @@ class BoolKeyMapBag {
     fill() -> int {
         this.values.set(true, 21)
         this.values.set(false, 34)
-        return this.values.size
+        return len(this.values)
     }
 
     scan(rounds: int) -> int {
         var r = 0
         var sum = 0
         while (r < rounds) {
-            if (this.values.has(true)) {
+            if (this.values.containsKey(true)) {
                 sum = sum + this.values.get(true)
             }
-            if (this.values.has(false)) {
+            if (this.values.containsKey(false)) {
                 sum = sum + this.values.get(false)
             }
             r = r + 1
@@ -48,7 +48,7 @@ class BoolKeyMapBag {
 
     prune() -> int {
         if (this.values.delete(false)) {
-            return this.values.length
+            return len(this.values)
         }
         return 0
     }

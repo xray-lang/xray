@@ -1,36 +1,36 @@
-// AOT test: Bytes, tuple values, codePointAt, and StringBuilder.
+// AOT test: Array<byte>, tuple values, codePointAt, and StringBuilder.
 
 fn pair(n: int) -> (int, int) {
     return (n, n + 1)
 }
 
-var empty = Bytes()
-print(empty.length)
+var empty = Array<byte>()
+print(len(empty))
 
-var sized = Bytes(3)
+var sized = Array<byte>(3)
 sized[0] = 65
 sized[1] = 255 + 45
 sized[2] = 0 - 1
-print(sized.length)
+print(len(sized))
 print(sized[0])
 print(sized[1])
 print(sized[2])
 
-var filled = Bytes(2, 256 + 1)
+var filled = Array<byte>(2, 256 + 1)
 print(filled[0])
 print(filled[1])
 
 var raw = [72, 101, 300]
-var copied = Bytes(raw)
-print(copied.length)
+var copied = Array<byte>(raw)
+print(len(copied))
 print(copied[0])
 print(copied[1])
 print(copied[2])
 
-var grown = Bytes()
+var grown = Array<byte>()
 grown.push(88)
 grown.push(255 + 45)
-print(grown.length)
+print(len(grown))
 print(grown[0])
 print(grown[1])
 
@@ -48,10 +48,10 @@ print("A"[9])
 
 var sb = StringBuilder()
 sb.append("A").append(7).append(true)
-print(sb.length)
+print(len(sb))
 print(sb.toString())
 sb.clear().append("B")
-print(sb.length)
+print(len(sb))
 print(sb.toString())
 sb.clear().append("0123456789abcdef"[10]).append("你好"[1])
 print(sb.toString())

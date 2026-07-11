@@ -1,6 +1,6 @@
 var r = 2..6
 print(r)
-print(typename(r))
+print(typeName(r))
 
 for (i in 2..5) {
     print(i)

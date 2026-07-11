@@ -2,9 +2,9 @@
 // Exercises RawPtr/RawMut subscript read+write, deref(), offset(), isNull(),
 // and a multi-statement unsafe block. The VM (libffi + OP_PTR_LOAD/STORE) and
 // AOT (direct C call + inline *(T*)) backends must produce identical output.
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
-@extern("C") fn memcpy(dst: RawMut<uint8>, src: RawPtr<uint8>, n: uintsize) -> RawMut<uint8>
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn memcpy(dst: RawMut<byte>, src: RawPtr<byte>, n: uintsize) -> RawMut<byte>
 
 var src = unsafe { malloc(4) }
 var dst = unsafe { malloc(4) }

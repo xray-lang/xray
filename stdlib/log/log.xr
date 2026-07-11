@@ -32,7 +32,7 @@ fn _levelName(level: int) -> string {
 }
 
 fn _parseLevel(value: unknown) -> int {
-    if (typename(value) == "int") { return value }
+    if (typeName(value) == "int") { return value }
     var name = string(value).toLowerCase()
     if (name == "debug") { return DEBUG }
     if (name == "info") { return INFO }
@@ -45,7 +45,7 @@ fn _parseLevel(value: unknown) -> int {
 fn _jsonEscape(s: string) -> string {
     var out = StringBuilder()
     out.append("\"")
-    for (var i = 0; i < s.length; i++) {
+    for (var i = 0; i < len(s); i++) {
         var c = s.charAt(i)
         if (c == "\"") {
             out.append("\\\"")
@@ -66,7 +66,7 @@ fn _jsonEscape(s: string) -> string {
 }
 
 fn _jsonValue(value: unknown) -> string {
-    var t = typename(value)
+    var t = typeName(value)
     if (t == "null") { return "null" }
     if (t == "bool") { return value ? "true" : "false" }
     if (t == "int" || t == "float") { return string(value) }
@@ -74,7 +74,7 @@ fn _jsonValue(value: unknown) -> string {
 }
 
 fn _needsQuote(s: string) -> bool {
-    for (var i = 0; i < s.length; i++) {
+    for (var i = 0; i < len(s); i++) {
         var c = s.charAt(i)
         if (c == " " || c == "\"" || c == "=" || c == "\n" || c == "\t") {
             return true
@@ -84,13 +84,13 @@ fn _needsQuote(s: string) -> bool {
 }
 
 fn _message(args: Array<unknown>) -> string {
-    if (args.length == 0) { return "" }
+    if (len(args) == 0) { return "" }
     return string(args[0])
 }
 
 fn _appendTextAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
     var i = start
-    while (i + 1 < args.length) {
+    while (i + 1 < len(args)) {
         var key = string(args[i])
         var val = string(args[i + 1])
         out.append(" ")
@@ -109,7 +109,7 @@ fn _appendTextAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
 
 fn _appendJsonAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
     var i = start
-    while (i + 1 < args.length) {
+    while (i + 1 < len(args)) {
         out.append(",")
         out.append(_jsonEscape(string(args[i])))
         out.append(":")
@@ -127,7 +127,7 @@ fn _formatLine(logger: Logger, level: int, args: Array<unknown>) -> string {
         out.append(",\"msg\":")
         out.append(_jsonEscape(msg))
         if (logger.source) { out.append(",\"source\":true") }
-        if (logger.jsonContext.length > 0) {
+        if (len(logger.jsonContext) > 0) {
             out.append(",")
             out.append(logger.jsonContext)
         }
@@ -139,11 +139,11 @@ fn _formatLine(logger: Logger, level: int, args: Array<unknown>) -> string {
     var out = StringBuilder()
     out.append(_levelName(level))
     if (logger.source) { out.append(" [source]") }
-    if (msg.length > 0) {
+    if (len(msg) > 0) {
         out.append(" ")
         out.append(msg)
     }
-    if (logger.textContext.length > 0) {
+    if (len(logger.textContext) > 0) {
         out.append(" ")
         out.append(logger.textContext)
     }
@@ -152,7 +152,7 @@ fn _formatLine(logger: Logger, level: int, args: Array<unknown>) -> string {
 }
 
 fn _writeRaw(output: string, line: string) {
-    if (output == "stdout" || output == "stderr" || output.length == 0) {
+    if (output == "stdout" || output == "stderr" || len(output) == 0) {
         print(line)
     } else {
         io.appendFile(output, line + "\n")
@@ -160,7 +160,7 @@ fn _writeRaw(output: string, line: string) {
 }
 
 fn _queueLine(line: string) {
-    if (_asyncQueue.length >= _QUEUE_LIMIT) {
+    if (len(_asyncQueue) >= _QUEUE_LIMIT) {
         _dropped = _dropped + 1
         return
     }
@@ -188,7 +188,7 @@ fn _contextText(args: Array<unknown>) -> string {
     var out = StringBuilder()
     _appendTextAttrs(out, args, 0)
     var s = out.toString()
-    if (s.length > 0 && s.charAt(0) == " ") { return s.slice(1) }
+    if (len(s) > 0 && s.charAt(0) == " ") { return s.slice(1) }
     return s
 }
 
@@ -196,13 +196,13 @@ fn _contextJson(args: Array<unknown>) -> string {
     var out = StringBuilder()
     _appendJsonAttrs(out, args, 0)
     var s = out.toString()
-    if (s.length > 0 && s.charAt(0) == ",") { return s.slice(1) }
+    if (len(s) > 0 && s.charAt(0) == ",") { return s.slice(1) }
     return s
 }
 
 fn _joinContext(parent: string, child: string, sep: string) -> string {
-    if (parent.length == 0) { return child }
-    if (child.length == 0) { return parent }
+    if (len(parent) == 0) { return child }
+    if (len(child) == 0) { return parent }
     return parent + sep + child
 }
 
@@ -326,7 +326,7 @@ fn enableAsync(enabled: bool = true) {
 }
 
 fn flush() {
-    while (_asyncQueue.length > 0) {
+    while (len(_asyncQueue) > 0) {
         var line = _asyncQueue.shift() ?? ""
         _writeRaw(_output, line)
     }

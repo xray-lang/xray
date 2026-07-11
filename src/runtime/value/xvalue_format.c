@@ -250,11 +250,11 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             xr_strbuf_append_cstr(sb, "false", 5);
         return;
     }
-    if (XR_IS_CHAR(val)) {
+    if (XR_IS_RUNE(val)) {
         /* In nested/dump context wrap in single quotes so a char is visibly
          * distinct from a one-character string ("a" vs 'a'). */
         char buf[XR_UTF8_MAX_BYTES];
-        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        int n = xr_utf8_encode(XR_TO_RUNE(val), buf);
         if (depth > 0)
             xr_strbuf_append_cstr(sb, "'", 1);
         xr_strbuf_append_cstr(sb, buf, (size_t) (n > 0 ? n : 0));
@@ -538,9 +538,9 @@ XrString *xr_value_to_string(XrVMRuntime *isolate, XrValue val) {
         return XR_TO_BOOL(val) ? xr_string_intern(isolate, "true", 4, 0)
                                : xr_string_intern(isolate, "false", 5, 0);
     }
-    if (XR_IS_CHAR(val)) {
+    if (XR_IS_RUNE(val)) {
         char buf[XR_UTF8_MAX_BYTES];
-        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        int n = xr_utf8_encode(XR_TO_RUNE(val), buf);
         return xr_string_intern(isolate, buf, (size_t) (n > 0 ? n : 0), 0);
     }
     if (XR_IS_NULL(val)) {

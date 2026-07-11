@@ -25,7 +25,7 @@ fn probeConcat(a: string, b: string) -> string {
 // --- variadic function (gap A: rest-parameter ABI) ---
 fn probeSum(...nums: int) -> int {
     var total = 0
-    for (var i = 0; i < nums.length; i++) {
+    for (var i = 0; i < len(nums); i++) {
         total = total + nums[i]
     }
     return total
@@ -103,7 +103,7 @@ class ProbeBag {
 
     labels() -> string {
         var out: Array<string> = []
-        for (var i = 0; i < this.boxes.length; i++) {
+        for (var i = 0; i < len(this.boxes); i++) {
             out.push(this.boxes[i].describe())
         }
         return out.join("|")

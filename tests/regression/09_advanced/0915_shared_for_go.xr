@@ -23,7 +23,7 @@ fn test_shared_typeof_for_go() {
     scope {
         for (i in 0..3) {
             go fn() {
-                if (typename(counter) == "Atomic") {
+                if (typeName(counter) == "Atomic") {
                     ok_count.add(1)
                 }
             }()

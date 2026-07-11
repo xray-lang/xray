@@ -143,7 +143,7 @@ static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
                           b->as.string_val ? b->as.string_val : "") == 0;
             return true;
         case XR_CT_CHAR:
-            *out = a->as.char_val == b->as.char_val;
+            *out = a->as.rune_val == b->as.rune_val;
             return true;
         case XR_CT_NULL:
             *out = true;
@@ -720,9 +720,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             out->as.string_val = expr->as.literal.raw_value.string_val;
             ok = true;
             break;
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
             out->kind = XR_CT_CHAR;
-            out->as.char_val = expr->as.literal.raw_value.char_val;
+            out->as.rune_val = expr->as.literal.raw_value.rune_val;
             ok = true;
             break;
         case AST_LITERAL_NULL:
@@ -886,14 +886,9 @@ static XrType *resolve_named(XrVMRuntime *X, const char *name) {
 
     if (strcmp(name, TYPE_NAME_BYTESPAN) == 0)
         return xr_type_new_bytespan(X);
-    if (strcmp(name, TYPE_NAME_BYTEVIEW) == 0)
-        return xr_type_new_byteview(X);
     if (strcmp(name, TYPE_NAME_SPAN) == 0)
         return xr_type_new_span(X, xr_type_new_unknown(NULL));
-    if (strcmp(name, TYPE_NAME_VIEW) == 0)
-        return xr_type_new_view(X, xr_type_new_unknown(NULL));
-
-    /* Prelude lookup (Array, Map, Set, Channel, Json, Bytes, ...) */
+    /* Prelude lookup (Array, Map, Set, Channel, Json, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
     if (symbols) {
         const XrPreludeTypeEntry *entry = xr_prelude_lookup_type(symbols, name, strlen(name));
@@ -908,8 +903,6 @@ static XrType *resolve_named(XrVMRuntime *X, const char *name) {
                 case XR_PRELUDE_KIND_GENERIC_1:
                 case XR_PRELUDE_KIND_GENERIC_2:
                     /* Bare name without type args — use unknown placeholders */
-                    if (strcmp(entry->name, "Bytes") == 0)
-                        return xr_type_new_bytes(X);
                     if (strcmp(entry->name, "Array") == 0)
                         return xr_type_new_array(X, xr_type_new_unknown(NULL));
                     if (strcmp(entry->name, "Set") == 0)
@@ -959,7 +952,7 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         result = xr_type_new_array(X, args[0]);
     } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs >= 1) {
         result = xr_type_new_span(X, args[0]);
-    } else if (strcmp(name, TYPE_NAME_VIEW) == 0 && nargs >= 1) {
+    } else if (false && nargs >= 1) {
         result = xr_type_new_view(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
         result = xr_type_new_set(X, args[0]);
@@ -1005,7 +998,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
             return xr_type_new_string(NULL);
         case XR_TREF_BOOL:
             return xr_type_new_bool(NULL);
-        case XR_TREF_CHAR:
+        case XR_TREF_RUNE:
             return xr_type_new_char(NULL);
         case XR_TREF_UNIT:
             return xr_type_new_unit(NULL);

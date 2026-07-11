@@ -4,10 +4,10 @@ enum LangErr {
 
 var xs = [1, 2, 3]
 var ys = copy(xs)
-print(ys.length)
+print(len(ys))
 
 try {
     throw LangErr.Msg("boom")
 } catch (e) {
-    print(typename(ys))
+    print(typeName(ys))
 }

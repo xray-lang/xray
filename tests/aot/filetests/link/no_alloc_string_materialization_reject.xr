@@ -65,7 +65,7 @@ fn xray_no_alloc_string_replace_all_reject(value: string) -> string {
 
 @no_alloc
 fn xray_no_alloc_string_split_reject(value: string) -> int {
-    return value.split(",").length
+    return len(value.split(","))
 }
 
 @no_alloc

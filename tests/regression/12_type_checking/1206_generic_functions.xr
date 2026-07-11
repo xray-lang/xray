@@ -18,7 +18,7 @@ fn test_identity_string() {
     }
     var s = identity("hello")
     assert_eq(s, "hello")
-    assert_eq(s.length, 5)
+    assert_eq(len(s), 5)
 }
 
 @test
@@ -45,7 +45,7 @@ fn test_identity_array() {
         return x
     }
     var arr = identity([1, 2, 3])
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
     assert_eq(arr[0], 1)
 }
 
@@ -85,7 +85,7 @@ fn test_triple_params() {
 @test
 fn test_array_first() {
     fn first<T>(arr: Array<T>) -> T? {
-        if (arr.length > 0) {
+        if (len(arr) > 0) {
             return arr[0]
         }
         return null
@@ -98,8 +98,8 @@ fn test_array_first() {
 @test
 fn test_array_last() {
     fn last<T>(arr: Array<T>) -> T? {
-        if (arr.length > 0) {
-            return arr[arr.length - 1]
+        if (len(arr) > 0) {
+            return arr[len(arr) - 1]
         }
         return null
     }
@@ -144,7 +144,7 @@ fn test_array_contains() {
 @test
 fn test_array_find_index() {
     fn findIndex<T>(arr: Array<T>, target: T) -> int {
-        for (var i = 0; i < arr.length; i++) {
+        for (var i = 0; i < len(arr); i++) {
             if (arr[i] == target) {
                 return i
             }
@@ -163,10 +163,10 @@ fn test_wrap_in_array() {
         return [x]
     }
     var intArr = wrap(42)
-    assert_eq(intArr.length, 1)
+    assert_eq(len(intArr), 1)
     assert_eq(intArr[0], 42)
     var strArr = wrap("hello")
-    assert_eq(strArr.length, 1)
+    assert_eq(len(strArr), 1)
     assert_eq(strArr[0], "hello")
 }
 
@@ -180,11 +180,11 @@ fn test_repeat_value() {
         return result
     }
     var nums = repeat(1, 3)
-    assert_eq(nums.length, 3)
+    assert_eq(len(nums), 3)
     assert_eq(nums[0], 1)
     assert_eq(nums[2], 1)
     var strs = repeat("x", 2)
-    assert_eq(strs.length, 2)
+    assert_eq(len(strs), 2)
     assert_eq(strs[0], "x")
 }
 
@@ -199,7 +199,7 @@ fn test_generic_apply() {
     })
     assert_eq(doubled, 10)
     var length = apply("hello", fn(s) {
-        return s.length
+        return len(s)
     })
     assert_eq(length, 5)
 }
@@ -225,7 +225,7 @@ fn test_generic_transform() {
 @test
 fn test_safe_get() {
     fn safeGet<T>(arr: Array<T>, index: int) -> T? {
-        if (index >= 0 && index < arr.length) {
+        if (index >= 0 && index < len(arr)) {
             return arr[index]
         }
         return null
@@ -266,14 +266,14 @@ fn test_nested_generic_calls() {
     }
     // Nested calls: wrap(identity(value))
     var arr = wrap(identity(42))
-    assert_eq(arr.length, 1)
+    assert_eq(len(arr), 1)
     assert_eq(arr[0], 42)
 }
 
 @test
 fn test_chained_generic_operations() {
     fn first<T>(arr: Array<T>) -> T? {
-        if (arr.length > 0) {
+        if (len(arr) > 0) {
             return arr[0]
         }
         return null
@@ -290,7 +290,7 @@ fn test_chained_generic_operations() {
 @test
 fn test_generic_with_map() {
     fn getOrDefault<K: Hashable, V>(m: Map<K, V>, key: K, defaultVal: V) -> V {
-        if (m.has(key)) {
+        if (m.containsKey(key)) {
             return m.get(key)
         }
         return defaultVal
@@ -313,7 +313,7 @@ fn test_generic_merge_arrays() {
         return result
     }
     var merged = merge([1, 2], [3, 4])
-    assert_eq(merged.length, 4)
+    assert_eq(len(merged), 4)
     assert_eq(merged[0], 1)
     assert_eq(merged[3], 4)
 }
@@ -335,7 +335,7 @@ fn test_infer_from_return_usage() {
 @test
 fn test_infer_from_array_literal() {
     fn first<T>(arr: Array<T>) -> T? {
-        if (arr.length > 0) {
+        if (len(arr) > 0) {
             return arr[0]
         }
         return null

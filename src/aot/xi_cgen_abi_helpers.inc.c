@@ -512,8 +512,8 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
             fprintf(out, "xr_mkptr(");
             return cg_ptr_box_suffix_for_type(type);
         }
-        if (from_rep == XR_REP_I64 && type && type->kind == XR_KIND_CHAR) {
-            fprintf(out, "XR_FROM_CHAR((uint32_t)");
+        if (from_rep == XR_REP_I64 && type && type->kind == XR_KIND_RUNE) {
+            fprintf(out, "XR_FROM_RUNE((uint32_t)");
             return ")";
         }
         if (from_rep == XR_REP_F64)
@@ -556,7 +556,7 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
         if (from_rep == XR_REP_RAWPTR)
             fprintf(out, "(int64_t)(uintptr_t)(");
         else if (from_rep == XR_REP_TAGGED)
-            fprintf(out, type && type->kind == XR_KIND_CHAR ? "XR_TO_CHAR(" : "XR_TO_INT(");
+            fprintf(out, type && type->kind == XR_KIND_RUNE ? "XR_TO_RUNE(" : "XR_TO_INT(");
         else
             fprintf(out, "(int64_t)(");
         return ")";
@@ -837,10 +837,10 @@ static bool emit_checked_tagged_direct_call_scalar_arg(XiCgenCtx *ctx, FILE *out
         predicate = "XR_IS_BOOL";
         extract_prefix = "XR_TO_INT(";
         expected = "bool";
-    } else if (param_type && param_type->kind == XR_KIND_CHAR) {
-        predicate = "XR_IS_CHAR";
-        extract_prefix = "(int64_t)XR_TO_CHAR(";
-        expected = "char";
+    } else if (param_type && param_type->kind == XR_KIND_RUNE) {
+        predicate = "XR_IS_RUNE";
+        extract_prefix = "(int64_t)XR_TO_RUNE(";
+        expected = "rune";
     } else {
         return false;
     }

@@ -10,7 +10,7 @@ fn run(n: int) -> int {
 
     var sum = 0
     i = 0
-    while (i < kept.length) {
+    while (i < len(kept)) {
         sum = sum + kept[i]
         i = i + 1
     }

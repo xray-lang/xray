@@ -114,8 +114,9 @@ static XrValue xr_json_static_entries(XrVMRuntime *isolate, XrValue self, XrValu
     return xr_value_from_array(entries);
 }
 
-// Json.has(obj, key) -> bool
-static XrValue xr_json_static_has(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+// Json.containsKey(obj, key) -> bool
+static XrValue xr_json_static_contains_key(XrVMRuntime *isolate, XrValue self, XrValue *args,
+                                           int nargs) {
     (void) self;
     if (nargs < 2 || !xr_value_is_json(args[0]))
         return xr_bool(false);
@@ -158,33 +159,6 @@ static XrValue xr_json_static_get(XrVMRuntime *isolate, XrValue self, XrValue *a
     if (!xr_json_has_field(isolate, json, sym))
         return (nargs >= 3) ? args[2] : xr_null();
     return xr_json_get_by_key(isolate, json, key_str->data);
-}
-
-// Json.size(obj) -> int
-static XrValue xr_json_static_size(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
-    (void) self;
-    if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_int(0);
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return xr_int(0);
-
-    return xr_int((xr_Integer) xr_json_field_count(isolate, json));
-}
-
-// Json.isEmpty(obj) -> bool
-static XrValue xr_json_static_isEmpty(XrVMRuntime *isolate, XrValue self, XrValue *args,
-                                      int nargs) {
-    (void) self;
-    if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_bool(true);
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return xr_bool(true);
-
-    return xr_bool(xr_json_field_count(isolate, json) == 0);
 }
 
 // Json.stringify(value, indent?) — thin wrapper that calls the core
@@ -236,10 +210,8 @@ static XrClass *create_json_utility_class(XrVMRuntime *X) {
     xr_class_builder_add_static_method(builder, "keys", xr_json_static_keys, 1, 0);
     xr_class_builder_add_static_method(builder, "values", xr_json_static_values, 1, 0);
     xr_class_builder_add_static_method(builder, "entries", xr_json_static_entries, 1, 0);
-    xr_class_builder_add_static_method(builder, "has", xr_json_static_has, 2, 0);
+    xr_class_builder_add_static_method(builder, "containsKey", xr_json_static_contains_key, 2, 0);
     xr_class_builder_add_static_method(builder, "get", xr_json_static_get, 2, 0);
-    xr_class_builder_add_static_method(builder, "size", xr_json_static_size, 1, 0);
-    xr_class_builder_add_static_method(builder, "isEmpty", xr_json_static_isEmpty, 1, 0);
 
     // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
     xr_class_builder_add_static_method(builder, "parse", xr_json_fn_parse, 1, 0);

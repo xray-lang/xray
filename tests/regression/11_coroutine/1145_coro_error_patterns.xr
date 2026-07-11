@@ -89,7 +89,7 @@ fn test_await_all_with_errors() {
         go fn() -> string { return "ok-3" }()
     ]
 
-    for (var i = 0; i < tasks.length; i++) {
+    for (var i = 0; i < len(tasks); i++) {
         var r = tasks[i].awaitResult()
         match (r) {
             TaskResult.Success(v) -> print("  task[" + string(i) + "] OK:", v)

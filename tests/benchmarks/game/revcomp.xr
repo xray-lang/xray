@@ -13,11 +13,11 @@ fn reverseComplement(seq: string): string {
 // 按 60 字符宽度格式化输出
 fn printFormatted(seq: string) {
     var i = 0
-    var len = seq.length
-    while (i < len) {
+    var count = len(seq)
+    while (i < count) {
         var end = i + 60
-        if (end > len) {
-            end = len
+        if (end > count) {
+            end = count
         }
         print(seq.substring(i, end))
         i = i + 60
@@ -31,12 +31,12 @@ fn processFasta(input: string) {
     var header = ""
     var seqBuilder = StringBuilder()
     var i = 0
-    while (i < lines.length) {
+    while (i < len(lines)) {
         var line = lines[i]
-        if (line.length > 0) {
+        if (len(line) > 0) {
             if (line.charAt(0) == ">") {
                 // 输出之前的序列
-                if (header.length > 0) {
+                if (len(header) > 0) {
                     print(header)
                     printFormatted(reverseComplement(seqBuilder.toString()))
                 }
@@ -49,7 +49,7 @@ fn processFasta(input: string) {
         i = i + 1
     }
     // 输出最后一个序列
-    if (header.length > 0) {
+    if (len(header) > 0) {
         print(header)
         printFormatted(reverseComplement(seqBuilder.toString()))
     }
@@ -65,10 +65,10 @@ fn generateFasta(n: int): string {
 ")
     var i = 0
     while (i < n) {
-        var start = i % alu.length
+        var start = i % len(alu)
         var end = start + 60
-        if (end > alu.length) {
-            end = alu.length
+        if (end > len(alu)) {
+            end = len(alu)
         }
         sb.append(alu.substring(start, end))
         sb.append("
@@ -82,7 +82,7 @@ fn generateFasta(n: int): string {
     while (i < n / 3) {
         var j = 0
         while (j < 60 && i + j < n / 3) {
-            sb.append(iub.charAt((i + j) % iub.length))
+            sb.append(iub.charAt((i + j) % len(iub)))
             j = j + 1
         }
         sb.append("
@@ -93,6 +93,6 @@ fn generateFasta(n: int): string {
 }
 
 // 主程序 - 性能基准测试（从命令行读取，默认 250000）
-var n = process.args.length > 0 ? int(process.args[0]) ?? 250000 : 250000
+var n = len(process.args) > 0 ? int(process.args[0]) ?? 250000 : 250000
 var input = generateFasta(n)
 processFasta(input)

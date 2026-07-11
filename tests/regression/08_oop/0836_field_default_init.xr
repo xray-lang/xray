@@ -27,11 +27,11 @@ class Complex {
     }
 
     getMapSize() -> int {
-        return this._map.keys().length
+        return len(this._map.keys())
     }
 
     getArrSize() -> int {
-        return this._arr.length
+        return len(this._arr)
     }
 
     getPort() -> int {
@@ -65,7 +65,7 @@ class Counter {
     }
 
     count() -> int {
-        return this._items.length
+        return len(this._items)
     }
 }
 
@@ -125,15 +125,15 @@ fn test_field_default_init_without_constructor() {
     var a = NoCtorDefaults()
     var b = NoCtorDefaults()
 
-    assert_eq(a.nums.length, 2)
+    assert_eq(len(a.nums), 2)
     assert_eq(a.settings["port"], 8080)
 
     a.nums.push(3)
     a.settings["port"] = 9090
 
-    assert_eq(a.nums.length, 3)
+    assert_eq(len(a.nums), 3)
     assert_eq(a.settings["port"], 9090)
-    assert_eq(b.nums.length, 2)
+    assert_eq(len(b.nums), 2)
     assert_eq(b.settings["port"], 8080)
 }
 

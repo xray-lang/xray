@@ -1,14 +1,14 @@
-fn pair(src: ByteSpan) -> int {
+fn pair(src: Slice<byte>) -> int {
     unsafe {
         return int(src.get(1)) + int(src.get(2))
     }
 }
 
-var bytes = Bytes.withCapacity(4)
+var bytes = Array<byte>.withCapacity(4)
 unsafe {
     bytes.push(3)
     bytes.push(7)
     bytes.push(11)
 }
-var view: ByteSpan = bytes[:]
+var view: Slice<byte> = bytes[:]
 print(pair(view))

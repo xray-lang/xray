@@ -12,7 +12,7 @@ class FloatMapBag {
             this.values.set(i + 0.5, i * 0.25 + 1.0)
             i = i + 1
         }
-        return this.values.size
+        return len(this.values)
     }
 
     scan(n: int, rounds: int) -> float {
@@ -22,7 +22,7 @@ class FloatMapBag {
             var i = 0
             while (i < n) {
                 var key = i + 0.5
-                if (this.values.has(key)) {
+                if (this.values.containsKey(key)) {
                     sum = sum + this.values.get(key)
                 }
                 i = i + 1

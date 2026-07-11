@@ -150,7 +150,7 @@ typedef enum {
     TK_FLOAT,    // float (= float64)
     TK_STRING,   // string
     TK_BOOL,     // bool
-    TK_CHAR,     // char (Unicode scalar value)
+    TK_RUNE,     // char (Unicode scalar value)
     TK_INT8,     // int8
     TK_INT16,    // int16
     TK_INT32,    // int32
@@ -201,7 +201,7 @@ typedef enum {
     TK_LITERAL_FLOAT,   // float literal
     TK_LITERAL_BIGINT,  // bigint literal 123n
     TK_LITERAL_STRING,  // string literal
-    TK_LITERAL_CHAR,    // char literal: 'a', '\n', '\u{1F600}'
+    TK_LITERAL_RUNE,    // char literal: 'a', '\n', '\u{1F600}'
     TK_LITERAL_REGEX,   // regex literal /pattern/flags
     TK_NAME,            // identifier
 

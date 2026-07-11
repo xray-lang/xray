@@ -123,9 +123,9 @@ AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, in
 
 // Create char literal node
 AstNode *xr_ast_literal_char(XrCompilerSession *session, uint32_t value, int line) {
-    AstNode *node = alloc_node(session, AST_LITERAL_CHAR, line);
+    AstNode *node = alloc_node(session, AST_LITERAL_RUNE, line);
     node->as.literal.kind = LITERAL_KIND_CHAR;
-    node->as.literal.raw_value.char_val = value;
+    node->as.literal.raw_value.rune_val = value;
     return node;
 }
 
@@ -1399,7 +1399,7 @@ const char *xr_ast_typename(AstNodeType type) {
             return "LiteralFloat";
         case AST_LITERAL_STRING:
             return "LiteralString";
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
             return "LiteralChar";
         case AST_LITERAL_REGEX:
             return "LiteralRegex";
@@ -1601,9 +1601,9 @@ void xr_ast_print(AstNode *node, int indent) {
         case AST_LITERAL_STRING:
             printf("(\"%s\")", node->as.literal.raw_value.string_val);  // Print C string
             break;
-        case AST_LITERAL_CHAR: {
+        case AST_LITERAL_RUNE: {
             char buf[5] = {0};
-            int n = xr_utf8_encode(node->as.literal.raw_value.char_val, buf);
+            int n = xr_utf8_encode(node->as.literal.raw_value.rune_val, buf);
             if (n > 0 && n < (int) sizeof(buf))
                 buf[n] = '\0';
             printf("('%s')", buf);

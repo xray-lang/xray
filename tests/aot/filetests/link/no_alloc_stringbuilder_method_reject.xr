@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_stringbuilder_append_reject(sb: StringBuilder, value: int) -> int {
     sb.append(value)
-    return sb.length
+    return len(sb)
 }
 
 @no_alloc

@@ -1,41 +1,41 @@
 // 0910_typeof.xr
 // 作者：xingleixu@gmail.com
-// 测试：typename() 运行时类型名
+// 测试：typeName() 运行时类型名
 
 // ===== 基本类型 =====
 
 @test
 fn test_typeof_int() {
     var x = 42
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
     // Bare literals without type context are NaN-boxed
-    assert_eq(typename(0), "int")
-    assert_eq(typename(-100), "int")
+    assert_eq(typeName(0), "int")
+    assert_eq(typeName(-100), "int")
 }
 
 @test
 fn test_typeof_float() {
     var x = 3.14
-    assert_eq(typename(x), "float")
-    assert_eq(typename(0.0), "float")
+    assert_eq(typeName(x), "float")
+    assert_eq(typeName(0.0), "float")
 }
 
 @test
 fn test_typeof_string() {
     var s = "hello"
-    assert_eq(typename(s), "string")
-    assert_eq(typename(""), "string")
+    assert_eq(typeName(s), "string")
+    assert_eq(typeName(""), "string")
 }
 
 @test
 fn test_typeof_bool() {
-    assert_eq(typename(true), "bool")
-    assert_eq(typename(false), "bool")
+    assert_eq(typeName(true), "bool")
+    assert_eq(typeName(false), "bool")
 }
 
 @test
 fn test_typeof_null() {
-    assert_eq(typename(null), "null")
+    assert_eq(typeName(null), "null")
 }
 
 // ===== 集合类型 =====
@@ -43,19 +43,19 @@ fn test_typeof_null() {
 @test
 fn test_typeof_array() {
     var arr = [1, 2, 3]
-    assert_eq(typename(arr), "Array")
+    assert_eq(typeName(arr), "Array")
 }
 
 @test
 fn test_typeof_map() {
     var m = #{"key": "value"}
-    assert_eq(typename(m), "Map")
+    assert_eq(typeName(m), "Map")
 }
 
 @test
 fn test_typeof_set() {
     var s = #[1, 2, 3]
-    assert_eq(typename(s), "Set")
+    assert_eq(typeName(s), "Set")
 }
 
 // ===== 函数类型 =====
@@ -63,10 +63,10 @@ fn test_typeof_set() {
 @test
 fn test_typeof_function() {
     fn add(a: int, b: int) -> int { return a + b }
-    assert_eq(typename(add), "function")
+    assert_eq(typeName(add), "function")
     
     var lambda = (x: int) -> x * 2
-    assert_eq(typename(lambda), "function")
+    assert_eq(typeName(lambda), "function")
 }
 
 // ===== 类实例 =====
@@ -79,5 +79,5 @@ class MyClass {
 @test
 fn test_typeof_instance() {
     var obj = MyClass(10)
-    assert_eq(typename(obj), "MyClass")
+    assert_eq(typeName(obj), "MyClass")
 }

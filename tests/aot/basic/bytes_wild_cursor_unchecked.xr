@@ -1,5 +1,5 @@
-fn makeWildBytes() -> Bytes {
-    var out = Bytes(4)
+fn makeWildBytes() -> Array<byte> {
+    var out = Array<byte>(4)
     out[0] = 65
     out[1] = 66
     out[2] = 67
@@ -11,5 +11,5 @@ fn makeWildBytes() -> Bytes {
 }
 
 var out = makeWildBytes()
-print(out.length)
+print(len(out))
 print(string(out[4]) + "," + string(out[7]) + "," + string(out[12]) + "," + string(out[19]))

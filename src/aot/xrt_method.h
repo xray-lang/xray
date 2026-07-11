@@ -70,7 +70,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
 
 /* toString helper. */
 
-static inline int xrt_char_encode(uint32_t cp, char *tmp) {
+static inline int xrt_rune_encode(uint32_t cp, char *tmp) {
     if (cp <= 0x7Fu) {
         tmp[0] = (char) cp;
         return 1;
@@ -98,9 +98,9 @@ static inline int xrt_char_encode(uint32_t cp, char *tmp) {
     return 0;
 }
 
-static inline XrValue xrt_char_to_string(uint32_t cp) {
+static inline XrValue xrt_rune_to_string(uint32_t cp) {
     char tmp[4];
-    int n = xrt_char_encode(cp, tmp);
+    int n = xrt_rune_encode(cp, tmp);
     XrValue out = xrt_str_alloc((size_t) (n > 0 ? n : 0));
     if (n > 0)
         memcpy(xr_str_buf(out), tmp, (size_t) n);
@@ -163,8 +163,8 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
         return xr_box_str(val.i ? "true" : "false");
-    if (val.tag == XR_TAG_CHAR) {
-        return xrt_char_to_string(XR_TO_CHAR(val));
+    if (val.tag == XR_TAG_RUNE) {
+        return xrt_rune_to_string(XR_TO_RUNE(val));
     }
     if (val.tag == XR_TAG_ENUM) {
         char tmp[256];
@@ -173,29 +173,29 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
     return xr_box_str("[object]");
 }
 
-/* char(x): construct a Unicode scalar char (tagged XR_TAG_CHAR).
+/* char(x): construct a Unicode scalar char (tagged XR_TAG_RUNE).
  * Validates range and excludes UTF-16 surrogates; invalid yields null. */
-static XrValue xrt_to_char(XrValue val) {
-    if (XR_IS_CHAR(val))
+static XrValue xrt_to_rune(XrValue val) {
+    if (XR_IS_RUNE(val))
         return val;
     if (XR_IS_INT(val)) {
         int64_t cp = XR_TO_INT(val);
         if (cp >= 0 && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF))
-            return XR_FROM_CHAR((uint32_t) cp);
+            return XR_FROM_RUNE((uint32_t) cp);
     }
     return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_chr(XrValue val) {
-    XrValue ch = xrt_to_char(val);
-    return XR_IS_NULL(ch) ? XR_NULL_VAL : xrt_char_to_string(XR_TO_CHAR(ch));
+    XrValue ch = xrt_to_rune(val);
+    return XR_IS_NULL(ch) ? XR_NULL_VAL : xrt_rune_to_string(XR_TO_RUNE(ch));
 }
 
 static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_INT(val))
         return val;
-    if (XR_IS_CHAR(val))
-        return XR_FROM_INT((int64_t) XR_TO_CHAR(val));
+    if (XR_IS_RUNE(val))
+        return XR_FROM_INT((int64_t) XR_TO_RUNE(val));
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
@@ -388,7 +388,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
-/* string.toBytes() -> Bytes (Array<uint8>): the UTF-8 bytes of the string.
+/* string.copyBytes() -> Array<byte>: the UTF-8 bytes of the string.
  * Mirrors the VM m_to_bytes and round-trips with Bytes.toString(). */
 static inline XrValue xrt_str_to_bytes(XrValue s) {
     int64_t len = (int64_t) xr_str_len(s);
@@ -406,7 +406,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         int rk = xrt_value_kind(recv);
         if (rk == XR_TAG_ARRAY) {
             /* Bytes (Array<uint8>) decodes as UTF-8 text — mirrors the VM
-             * m_to_string and round-trips with string.toBytes(). */
+             * m_to_string and round-trips with string.copyBytes(). */
             xrt_array_t *a = (xrt_array_t *) recv.ptr;
             if (a->elem_type == XR_ELEM_U8) {
                 XrValue sv = xrt_str_alloc((size_t) a->length);
@@ -601,10 +601,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_BOOL && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
-    if (recv.tag == XR_TAG_CHAR) {
-        uint32_t cp = XR_TO_CHAR(recv);
+    if (recv.tag == XR_TAG_RUNE) {
+        uint32_t cp = XR_TO_RUNE(recv);
         if (sym == XRT_SYM_TOSTRING)
-            return xrt_char_to_string(cp);
+            return xrt_rune_to_string(cp);
         if (sym == XRT_SYM_ORD)
             return XR_FROM_INT((int64_t) cp);
         if (sym == XRT_SYM_IS_LETTER)
@@ -656,7 +656,7 @@ static inline XrValue xrt_str_split(const char *s, int64_t slen, const char *sep
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
-    if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0)) {
+    if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0)) {
         return XR_FROM_BOOL(xr_string_core_contains(s, (size_t) slen, xr_str_data(arg0),
                                                     (size_t) xr_str_len(arg0)));
     }
@@ -787,6 +787,17 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
+static inline XrValue xrt_len_value(XrValue recv, int json_dynamic) {
+    XrValue result = xrt_method_0(recv, XRT_SYM_LENGTH);
+    if (!XR_IS_NULL(result))
+        return result;
+    if (json_dynamic)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "len(Json) requires an object, array, or string variant");
+    xrt_throw_error(XR_ERR_TYPE_MISMATCH, "value does not implement Lengthable");
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (XR_IS_STR(recv)) {
         return xrt_str_method_1(xr_str_data(recv), xr_str_len(recv), recv, sym, arg0);
@@ -803,7 +814,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return xrt_bytes_append_from_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
             return xrt_array_resize_value(
-                recv, arg0, a->elem_type == XR_ELEM_CHAR ? XR_FROM_CHAR(0) : XR_FROM_INT(0));
+                recv, arg0, a->elem_type == XR_ELEM_RUNE ? XR_FROM_RUNE(0) : XR_FROM_INT(0));
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_check_store_or_abort(a, arg0, "Array.unshift");
             if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
@@ -834,7 +845,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
             return XR_FROM_INT(-1);
         }
-        if (sym == XRT_SYM_INCLUDES) {
+        if (sym == XRT_SYM_CONTAINS) {
             int handled;
             int64_t idx = xrt_array_indexof_typed_fast(a, arg0, &handled);
             if (handled)
@@ -897,8 +908,10 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_GET)
             return xrt_map_get_owned(m, arg0);
-        if (sym == XRT_SYM_HAS)
+        if (sym == XRT_SYM_CONTAINS_KEY)
             return XR_FROM_BOOL(xrt_map_has(m, arg0));
+        if (sym == XRT_SYM_CONTAINS_VALUE)
+            return XR_FROM_BOOL(xrt_map_has_value(m, arg0));
         if (sym == XRT_SYM_DELETE)
             return XR_FROM_BOOL(xrt_map_delete(m, arg0));
     }
@@ -910,7 +923,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             (void) xrt_set_add(s, arg0);
             return XR_NULL_VAL;
         }
-        if (sym == XRT_SYM_HAS)
+        if (sym == XRT_SYM_CONTAINS)
             return XR_FROM_BOOL(xrt_set_has(s, arg0));
         if (sym == XRT_SYM_DELETE)
             return XR_FROM_BOOL(xrt_set_delete(s, arg0));

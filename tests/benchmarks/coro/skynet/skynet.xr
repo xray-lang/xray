@@ -51,7 +51,7 @@ fn calc_total(depth: int) -> int {
 }
 
 // 主程序
-const depth = process.args.length > 0 ? (int(process.args[0]) ?? 6) : 6
+const depth = len(process.args) > 0 ? (int(process.args[0]) ?? 6) : 6
 print("=== Skynet 测试 ===")
 print("深度:", depth)
 print("预计协程数:", calc_total(depth))

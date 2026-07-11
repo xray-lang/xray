@@ -198,9 +198,9 @@ vmcase(OP_TOINT) {
         R(a) = val;
     } else if (XR_IS_FLOAT(val)) {
         R(a) = xr_int((xr_Integer) XR_TO_FLOAT(val));
-    } else if (XR_IS_CHAR(val)) {
+    } else if (XR_IS_RUNE(val)) {
         /* int(char) yields the Unicode codepoint. */
-        R(a) = xr_int((xr_Integer) XR_TO_CHAR(val));
+        R(a) = xr_int((xr_Integer) XR_TO_RUNE(val));
     } else if (XR_IS_STRING(val)) {
         XrString *str = XR_TO_STRING(val);
         XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(str->data, str->length);
@@ -384,7 +384,7 @@ vmcase(OP_CHR) {
     vmbreak;
 }
 
-vmcase(OP_TOCHAR) {
+vmcase(OP_TORUNE) {
     /* char(x): construct a Unicode scalar char.
      *   - char(char) is identity.
      *   - char(int) validates the scalar range (excluding surrogates).
@@ -392,12 +392,12 @@ vmcase(OP_TOCHAR) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue val = R(b);
-    if (XR_IS_CHAR(val)) {
+    if (XR_IS_RUNE(val)) {
         R(a) = val;
     } else if (XR_IS_INT(val)) {
         xr_Integer cp = XR_TO_INT(val);
         if (cp >= 0 && xr_unicode_is_scalar((uint32_t) cp))
-            R(a) = xr_char((uint32_t) cp);
+            R(a) = xr_rune((uint32_t) cp);
         else
             R(a) = xr_null();
     } else {

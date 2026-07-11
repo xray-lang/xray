@@ -1372,7 +1372,7 @@ TEST(cmp_array_push) {
     run_compare((CompareSpec) {
         .source = "var arr = [10, 20]\n"
                   "arr.push(30)\n"
-                  "print(arr.length)\nprint(arr[2])",
+                  "print(len(arr))\nprint(arr[2])",
         .label = "array push and length",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1383,7 +1383,7 @@ TEST(cmp_array_push) {
 TEST(cmp_string_method) {
     run_compare((CompareSpec) {
         .source = "var s = \"hello\"\n"
-                  "print(s.length)\n"
+                  "print(len(s))\n"
                   "print(s.toUpperCase())",
         .label = "string length and toUpperCase",
         .expect_xi_success = true,
@@ -1887,7 +1887,7 @@ TEST(cmp_multi_assign) {
 TEST(cmp_set_literal) {
     run_compare((CompareSpec) {
         .source = "var s = #[1, 2, 3, 2, 1]\n"
-                  "print(s.size())",
+                  "print(len(s)())",
         .label = "set literal with duplicates",
         .expect_xi_success = true,
         .min_similarity = 0.1,

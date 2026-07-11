@@ -364,12 +364,10 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         return XR_DISP_NEXT;
     }
 
-    // Channel properties: ch.length, ch.capacity, ch.isClosed
+    // Channel domain properties. Length is available only through len(ch).
     if (xr_value_is_channel(obj)) {
         XrChannel *ch = xr_value_to_channel(obj);
-        if (prop_symbol == SYMBOL_LENGTH) {
-            base[a] = xr_int((xr_Integer) ch->buf_count);
-        } else if (prop_symbol == SYMBOL_CAPACITY) {
+        if (prop_symbol == SYMBOL_CAPACITY) {
             base[a] = xr_int((xr_Integer) ch->buf_size);
         } else if (prop_symbol == SYMBOL_IS_CLOSED) {
             base[a] = xr_bool(xr_channel_is_closed(ch));
@@ -383,9 +381,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         XrWorkQueue *q = xr_value_to_work_queue(obj);
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        if (prop_symbol == SYMBOL_LENGTH) {
-            base[a] = xr_int((xr_Integer) xr_work_queue_length(q));
-        } else if (prop_symbol == SYMBOL_IS_CLOSED) {
+        if (prop_symbol == SYMBOL_IS_CLOSED) {
             base[a] = xr_bool(xr_work_queue_is_closed(q));
         } else if (prop_name && strcmp(prop_name, "shardCount") == 0) {
             base[a] = xr_int((xr_Integer) q->shard_count);
@@ -399,7 +395,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         XrResultGroup *g = xr_value_to_result_group(obj);
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        if (prop_symbol == SYMBOL_LENGTH) {
+        if (prop_name && strcmp(prop_name, "readyCount") == 0) {
             base[a] = xr_int((xr_Integer) xr_result_group_length(g));
         } else if (prop_symbol == SYMBOL_IS_CLOSED) {
             base[a] = xr_bool(xr_result_group_is_closed(g));
@@ -501,11 +497,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     // Map property access
     if (XR_IS_MAP(obj)) {
         XrMap *map = XR_TO_MAP(obj);
-        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
-            base[a] = xr_int((xr_Integer) xr_map_size(map));
-        } else if (prop_symbol == SYMBOL_IS_EMPTY) {
-            base[a] = xr_bool(xr_map_is_empty(map));
-        } else if (prop_symbol == SYMBOL_KEYS) {
+        if (prop_symbol == SYMBOL_KEYS) {
             XrArray *keys = xr_map_keys(vm_get_coro(vm_ctx), map);
             base[a] = keys ? xr_value_from_array(keys) : xr_null();
         } else if (prop_symbol == SYMBOL_VALUES) {
@@ -514,9 +506,13 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_ENTRIES) {
             XrArray *entries = xr_map_entries(vm_get_coro(vm_ctx), map);
             base[a] = entries ? xr_value_from_array(entries) : xr_null();
-        } else if (prop_symbol == SYMBOL_HAS) {
+        } else if (prop_symbol == SYMBOL_CONTAINS_KEY) {
             XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_HAS));
+                xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_CONTAINS_KEY));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_CONTAINS_VALUE) {
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_map_get_handler(isolate, SYMBOL_CONTAINS_VALUE));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_DELETE) {
             XrBoundMethod *bm =
@@ -543,18 +539,13 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // Set property access
     if (XR_IS_SET(obj)) {
-        struct XrSet *set = XR_TO_SET(obj);
-        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
-            base[a] = xr_int((xr_Integer) xr_set_size(set));
-        } else if (prop_symbol == SYMBOL_IS_EMPTY) {
-            base[a] = xr_bool(xr_set_is_empty(set));
-        } else if (prop_symbol == SYMBOL_ADD) {
+        if (prop_symbol == SYMBOL_ADD) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_ADD));
             base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_HAS) {
+        } else if (prop_symbol == SYMBOL_CONTAINS) {
             XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_HAS));
+                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_CONTAINS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_DELETE) {
             XrBoundMethod *bm =
@@ -604,24 +595,12 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // String property access
     if (XR_IS_STRING(obj)) {
-        // Fast path: .length/.byteLength use str_data/len directly, no promote
-        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_CHAR_LENGTH ||
-            prop_symbol == SYMBOL_CHARS) {
-            const char *d = xr_value_str_data(&obj);
-            uint32_t bl = xr_value_str_len(&obj);
-            base[a] = xr_int((xr_Integer) xr_utf8_strlen(d, bl));
-            return XR_DISP_NEXT;
-        }
-        if (prop_symbol == SYMBOL_BYTE_LENGTH) {
-            base[a] = xr_int((xr_Integer) xr_value_str_len(&obj));
-            return XR_DISP_NEXT;
-        }
         // Slow path: promote SSO to heap for bound method creation
         XrString *str = xr_value_to_string(isolate, obj);
         (void) str;
-        if (prop_symbol == SYMBOL_HAS) {
+        if (prop_symbol == SYMBOL_CONTAINS) {
             XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_HAS));
+                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_CONTAINS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_CHARAT) {
             XrBoundMethod *bm =
@@ -732,24 +711,11 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                  "tuple has no named field '%s'; use .N (zero-based) instead", name ? name : "?");
     }
 
-    // Frame-local Span property access
-    if (XR_IS_SPAN_REF(obj)) {
-        XrSpanView *span = XR_TO_SPAN_REF(obj);
-        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
-            base[a] = xr_int((xr_Integer) (span ? span->length : 0));
-            return XR_DISP_NEXT;
-        }
-    }
-
     // Array property access
     if (XR_IS_ARRAY(obj)) {
         XrArray *array = XR_TO_ARRAY(obj);
-        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
-            base[a] = xr_int((xr_Integer) array->length);
-        } else if (prop_symbol == SYMBOL_CAPACITY) {
+        if (prop_symbol == SYMBOL_CAPACITY) {
             base[a] = xr_int((xr_Integer) array->capacity);
-        } else if (prop_symbol == SYMBOL_IS_EMPTY) {
-            base[a] = xr_bool(array->length == 0);
         } else if (prop_symbol == SYMBOL_KEYS) {
             XrArray *keys = xr_array_with_capacity(vm_get_coro(vm_ctx), array->length);
             for (int idx = 0; idx < array->length; idx++) {
@@ -799,9 +765,9 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_INDEXOF));
             base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_HAS) {
+        } else if (prop_symbol == SYMBOL_CONTAINS) {
             XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_HAS));
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_CONTAINS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_JOIN) {
             XrBoundMethod *bm =

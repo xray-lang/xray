@@ -459,8 +459,8 @@ static void class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
         case XR_TREF_BOOL:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_BOOL;
             break;
-        case XR_TREF_CHAR:
-            row->semantic_kind = XG_CLASS_FIELD_TYPE_CHAR;
+        case XR_TREF_RUNE:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_RUNE;
             break;
         case XR_TREF_STRING:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_STRING;
@@ -520,7 +520,7 @@ static bool class_field_semantic_is_owned(uint8_t semantic_kind) {
         case XG_CLASS_FIELD_TYPE_F32:
         case XG_CLASS_FIELD_TYPE_F64:
         case XG_CLASS_FIELD_TYPE_BOOL:
-        case XG_CLASS_FIELD_TYPE_CHAR:
+        case XG_CLASS_FIELD_TYPE_RUNE:
         case XG_CLASS_FIELD_TYPE_UNIT:
         case XG_CLASS_FIELD_TYPE_NULL:
             return false;
@@ -2461,8 +2461,8 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0);
         case AST_LITERAL_STRING:
             return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
-        case AST_LITERAL_CHAR:
-            return hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0);
+        case AST_LITERAL_RUNE:
+            return hash_synthetic_tref32(XR_TREF_RUNE, NULL, NULL, 0);
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
             return hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0);
@@ -2682,8 +2682,8 @@ static uint32_t body_uint8_type_key(void) {
     return hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
 }
 
-static uint32_t body_char_type_key(void) {
-    return hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0);
+static uint32_t body_rune_type_key(void) {
+    return hash_synthetic_tref32(XR_TREF_RUNE, NULL, NULL, 0);
 }
 
 static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_sequence_kind,
@@ -2698,7 +2698,7 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
         if (out_sequence_kind)
             *out_sequence_kind = XG_SEQ_STRING;
         if (out_elem_type_key)
-            *out_elem_type_key = body_char_type_key();
+            *out_elem_type_key = body_rune_type_key();
         return true;
     }
     if (type->kind == XR_TREF_NAMED && type->name) {
@@ -2720,7 +2720,7 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
             if (out_sequence_kind)
                 *out_sequence_kind = XG_SEQ_STRING_BUILDER;
             if (out_elem_type_key)
-                *out_elem_type_key = body_char_type_key();
+                *out_elem_type_key = body_rune_type_key();
             return true;
         }
     }
@@ -2761,7 +2761,7 @@ static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
     if (type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0) ||
         type_key == hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0) ||
         type_key == hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0) ||
-        type_key == hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0))
+        type_key == hash_synthetic_tref32(XR_TREF_RUNE, NULL, NULL, 0))
         return true;
     for (uint32_t i = 0; i < sizeof(int_widths) / sizeof(int_widths[0]); i++) {
         if (type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, int_widths[i]))
@@ -3944,8 +3944,8 @@ static uint32_t body_const_expr_id(const AstNode *expr) {
             h = fold_u64(h, expr->as.literal.int_bits);
             h = fold_u64(h, expr->as.literal.int_overflows_i64 ? 1 : 0);
             return hash_folded32(h);
-        case AST_LITERAL_CHAR:
-            h = fold_u64(h, expr->as.literal.raw_value.char_val);
+        case AST_LITERAL_RUNE:
+            h = fold_u64(h, expr->as.literal.raw_value.rune_val);
             return hash_folded32(h);
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
@@ -3983,8 +3983,8 @@ static uint64_t body_map_const_prehash(const AstNode *expr) {
             return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.int_bits);
         case AST_LITERAL_FLOAT:
             return body_map_runtime_hash_f64(expr->as.literal.raw_value.float_val);
-        case AST_LITERAL_CHAR:
-            return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.raw_value.char_val);
+        case AST_LITERAL_RUNE:
+            return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.raw_value.rune_val);
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
             return (uint32_t) xr_hash_core_mix_u64(
@@ -4069,7 +4069,7 @@ static uint64_t body_map_shape_hash(uint8_t container_kind, uint32_t key_type_ke
 
 static bool body_map_key_type_has_builtin_hash_eq(uint32_t key_type_key) {
     static const uint8_t builtin_kinds[] = {
-        XR_TREF_INT, XR_TREF_FLOAT, XR_TREF_STRING, XR_TREF_CHAR, XR_TREF_BOOL,
+        XR_TREF_INT, XR_TREF_FLOAT, XR_TREF_STRING, XR_TREF_RUNE, XR_TREF_BOOL,
     };
     static const uint8_t int_widths[] = {
         XR_TREF_NW_I64, XR_TREF_NW_I8,  XR_TREF_NW_I16, XR_TREF_NW_I32,   XR_TREF_NW_U8,
@@ -4857,7 +4857,7 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
         if (strcmp(member->name, "get") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_GET;
             key = call->arguments ? call->arguments[0] : NULL;
-        } else if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
+        } else if (strcmp(member->name, "containsKey") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_HAS;
             key = call->arguments ? call->arguments[0] : NULL;
         } else if (strcmp(member->name, "delete") == 0 && call->arg_count == 1) {
@@ -4873,7 +4873,7 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
             mutating = true;
         }
     } else if (receiver_shape.map_container_kind == XG_MAP_CONTAINER_SET) {
-        if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
+        if (strcmp(member->name, "contains") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_HAS;
             key = call->arguments ? call->arguments[0] : NULL;
         } else if (strcmp(member->name, "delete") == 0 && call->arg_count == 1) {
@@ -5041,7 +5041,7 @@ static void body_add_bulk_op(XgBodyCollect *bc, const AstNode *node, uint8_t op_
                                                              dst_local->sequence_elem_type_key);
     row.length_expr_id = body_const_expr_id(length_expr);
     if (dst_local->sequence_elem_type_key == body_uint8_type_key() ||
-        dst_local->sequence_elem_type_key == body_char_type_key())
+        dst_local->sequence_elem_type_key == body_rune_type_key())
         row.flags |= XG_BULK_POD;
     if (overlap_possible)
         row.flags |= XG_BULK_OVERLAP_POSSIBLE;
@@ -5131,7 +5131,7 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
         }
     }
 
-    if (strcmp(member->name, "toBytes") == 0 && call->arg_count == 0 &&
+    if (strcmp(member->name, "copyBytes") == 0 && call->arg_count == 0 &&
         body_expr_type_key(bc, member->object) ==
             hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0)) {
         uint32_t output_type_key = hash_named_type_key32("Bytes", NULL, 0);
@@ -5345,7 +5345,7 @@ static bool static_data_node_is_scalar_rodata(const AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:

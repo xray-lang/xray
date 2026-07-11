@@ -79,5 +79,5 @@ fn fannkuch(n: int) {
     print("Pfannkuchen(" + n + ") = " + maxFlips)
 }
 
-var n = process.args.length > 0 ? int(process.args[0]) ?? 10 : 10
+var n = len(process.args) > 0 ? int(process.args[0]) ?? 10 : 10
 fannkuch(n)

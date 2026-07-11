@@ -1,7 +1,7 @@
 fn xray_no_alloc_array_find_allocating_callback(value: int) -> bool {
     var scratch: Array<int> = []
     scratch.push(value)
-    return scratch.length > 0
+    return len(scratch) > 0
 }
 
 @no_alloc

@@ -457,8 +457,8 @@ XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val, struct XrType *bool_ty
     return v;
 }
 
-XiValue *xi_const_char(XiFunc *f, XiBlock *blk, uint32_t val, struct XrType *char_type) {
-    XR_DCHECK(char_type != NULL, "xi_const_char: type is NULL");
+XiValue *xi_const_rune(XiFunc *f, XiBlock *blk, uint32_t val, struct XrType *char_type) {
+    XR_DCHECK(char_type != NULL, "xi_const_rune: type is NULL");
     XiValue *v = xi_value_new(f, blk, XI_CONST, char_type, 0);
     if (v)
         v->aux_int = (int64_t) val;
@@ -525,7 +525,7 @@ XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, Xi
                     continue;
                 XrTypeKind k = t->kind;
                 if (k != XR_KIND_INT && k != XR_KIND_FLOAT && k != XR_KIND_BOOL &&
-                    k != XR_KIND_CHAR && k != XR_KIND_NULL && k != XR_KIND_UNIT &&
+                    k != XR_KIND_RUNE && k != XR_KIND_NULL && k != XR_KIND_UNIT &&
                     k != XR_KIND_ENUM) {
                     v->flags |= XI_FLAG_READS_MEM;
                     break;

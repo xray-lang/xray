@@ -1,6 +1,6 @@
 // anchor: basic-strings
 var s = "Hello, World"
-print(s.length)
+print(len(s))
 print(s.toUpperCase())
 print(s.toLowerCase())
 print("Hello 世界🌍".toUpperCase())
@@ -13,7 +13,7 @@ print("abcdef".slice(2, -1))
 print("abcdef"[-3:-1])
 print("abcdef"[2:-1])
 print("abcdef"[9:12])
-print(s.includes("World"))
+print(s.contains("World"))
 print(s.indexOf("World"))
 print("a" + "b" + "c")
 print(s.charAt(1))
@@ -51,17 +51,17 @@ print("aaaa".replaceAll("aa", "X"))
 print("abc".replaceAll("b", ""))
 
 var parts = "a,b,c,d".split(",")
-print(parts.length)
-for (i in 0..parts.length) {
+print(len(parts))
+for (i in 0..len(parts)) {
     print(parts[i])
 }
 var edgeParts = "a,,b,".split(",")
-print(edgeParts.length)
-for (i in 0..edgeParts.length) {
+print(len(edgeParts))
+for (i in 0..len(edgeParts)) {
     print(edgeParts[i])
 }
 var charParts = "ab".split("")
-print(charParts.length)
-for (i in 0..charParts.length) {
+print(len(charParts))
+for (i in 0..len(charParts)) {
     print(charParts[i])
 }

@@ -109,7 +109,7 @@ fn test_nested_multi_catch_rethrow() {
         log.push("outer-catch")
         match (e) { CatchErr.Msg(s) -> { assert_eq(s, "rethrown") } }
     }
-    assert_eq(log.length, 2)
+    assert_eq(len(log), 2)
     assert_eq(log[0], "inner-catch")
     assert_eq(log[1], "outer-catch")
 }

@@ -1729,7 +1729,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "[1] = XR_FROM_FLOAT(0x1p-1)," \
             "freestanding-profile/shared-literals-static: initializes float shared slot statically"
         expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
-            "[2] = XR_FROM_CHAR(UINT32_C(65))," \
+            "[2] = XR_FROM_RUNE(UINT32_C(65))," \
             "freestanding-profile/shared-literals-static: initializes char shared slot statically"
         expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
             "[3] = XR_NULL_VAL," \
@@ -1741,7 +1741,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "xrt_shared[1] = XR_FROM_FLOAT(0x1p-1)" \
             "freestanding-profile/shared-literals-static: elides module-init float write"
         expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
-            "xrt_shared[2] = XR_FROM_CHAR(UINT32_C(65))" \
+            "xrt_shared[2] = XR_FROM_RUNE(UINT32_C(65))" \
             "freestanding-profile/shared-literals-static: elides module-init char write"
         expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
             "xrt_shared[3] = XR_NULL_VAL" \
@@ -3662,7 +3662,7 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_STRING_MEMBER_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string.toBytes" \
+        "freestanding profile rejects string.copyBytes" \
         "freestanding-profile: rejects hosted string-to-Bytes bridge"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
         "freestanding profile rejects string.byteLength" \

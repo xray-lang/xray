@@ -52,7 +52,7 @@ fn test_multi_variable() {
 fn test_nested_quotes() {
     var name = "test"
     var s = "He said \"Hello, ${name}\""
-    assert_eq(s.includes("Hello"), true)
+    assert_eq(s.contains("Hello"), true)
 }
 
 @test
@@ -126,5 +126,5 @@ fn test_multiline() {
     var name = "Alice"
     var s = "Hello,
 ${name}!"
-    assert_eq(s.includes("Alice"), true)
+    assert_eq(s.contains("Alice"), true)
 }

@@ -273,7 +273,7 @@ static XrValue m_reverse(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     return result ? xr_string_value(result) : xr_null();
 }
 
-/* str.toBytes() -> Bytes (Array<uint8>). UTF-8 encoded; round-trips with
+/* str.copyBytes() -> Array<byte>. UTF-8 encoded; round-trips with
  * Bytes.toString(). The receiver remains immutable; the result owns its
  * own backing storage. */
 static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -300,12 +300,6 @@ static XrValue m_translate(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
 }
 
 /* === Predicates / classification === */
-
-static XrValue m_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_string_is_empty(iso, str_self(self)));
-}
 
 static XrValue m_is_letter(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
@@ -454,7 +448,7 @@ static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
         if (!pair)
             return xr_null();
         xr_tuple_set(pair, 0, xr_int((int64_t) i));
-        xr_tuple_set(pair, 1, cp >= 0 ? xr_char((uint32_t) cp) : xr_null());
+        xr_tuple_set(pair, 1, cp >= 0 ? xr_rune((uint32_t) cp) : xr_null());
         xr_array_set(out, (int) i, xr_value_from_tuple(pair));
     }
     out->length = (int32_t) n;
@@ -476,7 +470,7 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
         /* Search */
         {"indexOf", m_index_of, 0},
         {"lastIndexOf", m_last_index_of, 1},
-        {"includes", m_includes, 1},
+        {"contains", m_includes, 1},
         {"startsWith", m_starts_with, 1},
         {"endsWith", m_ends_with, 1},
         /* Case / whitespace */
@@ -497,9 +491,8 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
         {"reverse", m_reverse, 0},
         {"translate", m_translate, 1},
         /* Bytes interop */
-        {"toBytes", m_to_bytes, 0},
+        {"copyBytes", m_to_bytes, 0},
         /* Predicates */
-        {"isEmpty", m_is_empty, 0},
         {"isLetter", m_is_letter, 0},
         {"isNumber", m_is_number, 0},
         {"isAlphanumeric", m_is_alnum, 0},

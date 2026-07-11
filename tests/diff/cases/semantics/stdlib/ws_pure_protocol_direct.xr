@@ -5,7 +5,7 @@ import { acceptKey, maskPayload, frame, parseFrame } from ws
 
 var key = "dGhlIHNhbXBsZSBub25jZQ=="
 print(acceptKey(key))
-print(ws.upgradeResponse(key).includes("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
+print(ws.upgradeResponse(key).contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
 
 var upgradeRequest = "GET /chat?room=1 HTTP/1.1\r\n" +
     "Host: example.com\r\n" +
@@ -48,14 +48,14 @@ var queryOnly = ws.parseUrl("ws://example.com?token=a")!
 print(queryOnly.path)
 
 var handshakeRequest = ws.clientHandshakeRequest(url, key, ["chat"], true)!
-print(handshakeRequest.includes("GET /chat?room=1 HTTP/1.1\r\n"))
-print(handshakeRequest.includes("Host: example.com\r\n"))
-print(handshakeRequest.includes("Sec-WebSocket-Protocol: chat\r\n"))
-print(handshakeRequest.includes("permessage-deflate"))
+print(handshakeRequest.contains("GET /chat?room=1 HTTP/1.1\r\n"))
+print(handshakeRequest.contains("Host: example.com\r\n"))
+print(handshakeRequest.contains("Sec-WebSocket-Protocol: chat\r\n"))
+print(handshakeRequest.contains("permessage-deflate"))
 
 var ipv6Handshake = ws.clientHandshakeRequest(ipv6, key, null, false)!
-print(ipv6Handshake.includes("Host: [::1]:8080\r\n"))
-print(ipv6Handshake.includes("permessage-deflate"))
+print(ipv6Handshake.contains("Host: [::1]:8080\r\n"))
+print(ipv6Handshake.contains("permessage-deflate"))
 
 print(ws.clientHandshakeRequest(url, "bad", ["chat"], true) == null)
 print(ws.clientHandshakeRequest(url, key, ["chat\nbad"], true) == null)
@@ -84,55 +84,55 @@ print(ws.parseUpgradeResponse(serverResponse.replace("Upgrade: websocket\r\n", "
 print(ws.parseUpgradeResponse(serverResponse, key, ["other"], true) == null)
 print(ws.parseUpgradeResponse(serverResponse, key, ["chat"], false) == null)
 
-var closePayload = ws.parseClosePayload(Bytes([3, 232, 79, 75]))!
+var closePayload = ws.parseClosePayload(Array<byte>([3, 232, 79, 75]))!
 print(closePayload.code)
 print(closePayload.reason)
 
-var emptyClose = ws.parseClosePayload(Bytes(0))!
+var emptyClose = ws.parseClosePayload(Array<byte>(0))!
 print(emptyClose.code)
-print(emptyClose.reason.length)
+print(len(emptyClose.reason))
 
 print(ws.isValidCloseCode(1000))
 print(ws.isValidCloseCode(1005))
 print(ws.isValidCloseCode(3000))
 print(ws.isValidCloseCode(5000))
-print(ws.parseClosePayload(Bytes([3])) == null)
-print(ws.parseClosePayload(Bytes([3, 238])) == null)
-print(ws.parseClosePayload(Bytes([3, 232, 192, 175])) == null)
-print(ws.parseClosePayload(Bytes([3, 232, 226, 130])) == null)
-var oversizedClose = Bytes(126)
+print(ws.parseClosePayload(Array<byte>([3])) == null)
+print(ws.parseClosePayload(Array<byte>([3, 238])) == null)
+print(ws.parseClosePayload(Array<byte>([3, 232, 192, 175])) == null)
+print(ws.parseClosePayload(Array<byte>([3, 232, 226, 130])) == null)
+var oversizedClose = Array<byte>(126)
 oversizedClose[0] = 3
 oversizedClose[1] = 232
 print(ws.parseClosePayload(oversizedClose) == null)
 
-var masked = maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
+var masked = maskPayload(Array<byte>([1, 2, 3, 4, 5]), Array<byte>([1, 1, 1, 1]))
 print(masked[0])
 print(masked[1])
 print(masked[2])
 print(masked[3])
 print(masked[4])
 
-var f = frame("Hi".toBytes(), 1, false)
-print(f.length)
+var f = frame("Hi".copyBytes(), 1, false)
+print(len(f))
 print(f[0])
 print(f[1])
 print(f[2])
 print(f[3])
 
-var payload = Bytes(126)
+var payload = Array<byte>(126)
 var ext = ws.frame(payload, 2, false)
 print(ext[0])
 print(ext[1])
 print(ext[2])
 print(ext[3])
 
-var payload300 = Bytes(300)
+var payload300 = Array<byte>(300)
 payload300[299] = 90
 var ext300 = ws.frame(payload300, 2, false)
 var parsed300 = parseFrame(ext300, false)!
 print(ext300[2])
 print(ext300[3])
-print(parsed300.payload.length)
+print(len(parsed300.payload))
 print(parsed300.payload[299])
 
 var parsed = parseFrame(f, false)!
@@ -143,24 +143,24 @@ print(parsed.masked)
 print(parsed.payload.toString())
 print(parsed.consumedBytes)
 
-var maskedFrame = Bytes([129, 130, 1, 2, 3, 4, 73, 107])
+var maskedFrame = Array<byte>([129, 130, 1, 2, 3, 4, 73, 107])
 var parsedMasked = parseFrame(maskedFrame, true)!
 print(parsedMasked.masked)
 print(parsedMasked.payload.toString())
 
-var withTail = Bytes([129, 1, 65, 66])
+var withTail = Array<byte>([129, 1, 65, 66])
 var parsedTail = parseFrame(withTail, false)!
 print(parsedTail.payload.toString())
 print(parsedTail.consumedBytes)
 
-var rsv = parseFrame(Bytes([193, 0]), false, false, true)!
+var rsv = parseFrame(Array<byte>([193, 0]), false, false, true)!
 print(rsv.rsv1)
-print(parseFrame(Bytes([193, 0]), false) == null)
+print(parseFrame(Array<byte>([193, 0]), false) == null)
 
-print(parseFrame(Bytes([131, 0]), false) == null)
-print(parseFrame(Bytes([9, 0]), false) == null)
-print(parseFrame(Bytes([137, 126, 0, 126]), false) == null)
-print(parseFrame(Bytes([129, 126, 0, 1, 65]), false) == null)
-print(parseFrame(Bytes([129, 127, 128, 0, 0, 0, 0, 0, 0, 1, 65]), false) == null)
-print(parseFrame(Bytes([129, 2, 65]), false) == null)
+print(parseFrame(Array<byte>([131, 0]), false) == null)
+print(parseFrame(Array<byte>([9, 0]), false) == null)
+print(parseFrame(Array<byte>([137, 126, 0, 126]), false) == null)
+print(parseFrame(Array<byte>([129, 126, 0, 1, 65]), false) == null)
+print(parseFrame(Array<byte>([129, 127, 128, 0, 0, 0, 0, 0, 0, 1, 65]), false) == null)
+print(parseFrame(Array<byte>([129, 2, 65]), false) == null)
 print(parseFrame(maskedFrame, false, true) == null)

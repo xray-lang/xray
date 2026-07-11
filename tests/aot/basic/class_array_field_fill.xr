@@ -18,7 +18,7 @@ class FillBag {
 
         var j = 0
         var total = 0
-        while (j < this.values.length) {
+        while (j < len(this.values)) {
             total = total + this.values[j]
             j = j + 1
         }
@@ -30,7 +30,7 @@ class FillBag {
     }
 
     len() -> int {
-        return this.values.length
+        return len(this.values)
     }
 }
 

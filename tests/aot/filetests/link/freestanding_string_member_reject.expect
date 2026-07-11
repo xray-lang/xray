@@ -1,6 +1,6 @@
 args=--profile freestanding
 status=fail
-contains=freestanding profile rejects string.toBytes
+contains=freestanding profile rejects string.copyBytes
 contains=string literals may be passed or printed, but string member access needs hosted helpers
 contains=freestanding profile rejects string.byteLength
 contains=freestanding profile rejects string index access

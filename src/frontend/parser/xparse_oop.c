@@ -1244,6 +1244,17 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     // Determine operator and op_type based on token type
     OperatorType op_type_val;
     switch (op_token) {
+        case TK_NAME:
+            if (parser->current.length != 3 || memcmp(parser->current.start, "len", 3) != 0) {
+                xr_parser_error(parser, "unsupported named operator; expected 'len'");
+                return NULL;
+            }
+            /* Store named operators outside the ordinary member namespace.
+             * The spelling is retained in op_type for formatter/tooling use. */
+            name = ast_strdup(parser->compiler_session, "__operator_len");
+            op_type_val = OPTYPE_LEN;
+            expected_params = 0;
+            break;
         // Arithmetic operators
         case TK_PLUS:
             name = ast_strdup(parser->compiler_session, "+");
@@ -1811,6 +1822,23 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
 // object-type fields tolerate `const` in xparse_type.c.  All forms allow an
 // optional trailing semicolon.
 AstNode *xr_parse_interface_member(Parser *parser) {
+    if (xr_parser_match(parser, TK_OPERATOR)) {
+        int member_line = parser->previous.line;
+        xr_parser_consume(parser, TK_NAME, "expected named operator after 'operator'");
+        if (parser->previous.length != 3 || memcmp(parser->previous.start, "len", 3) != 0) {
+            xr_parser_error(parser, "unsupported named operator; expected 'len'");
+            return NULL;
+        }
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'operator len'");
+        xr_parser_consume(parser, TK_RPAREN, "operator len does not accept parameters");
+        xr_parser_consume(parser, TK_ARROW, "expected '->' after 'operator len()'");
+        XrTypeRef *return_type = xr_parse_type_annotation(parser);
+        xr_parser_match(parser, TK_SEMICOLON);
+        return xr_ast_interface_method(parser->compiler_session,
+                                       ast_strdup(parser->compiler_session, "__operator_len"), NULL,
+                                       NULL, 0, return_type, member_line);
+    }
+
     // Optional `const` modifier — only valid for property signatures.
     bool is_readonly = xr_parser_match(parser, TK_CONST);
 

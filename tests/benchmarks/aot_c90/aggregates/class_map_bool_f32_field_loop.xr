@@ -9,17 +9,17 @@ class BoolFloatMapBag {
     fill() -> int {
         this.values.set(true, 1.5)
         this.values.set(false, 2.25)
-        return this.values.size
+        return len(this.values)
     }
 
     scan(rounds: int) -> float {
         var r = 0
         var sum = 0.0
         while (r < rounds) {
-            if (this.values.has(true)) {
+            if (this.values.containsKey(true)) {
                 sum = sum + this.values.get(true)
             }
-            if (this.values.has(false)) {
+            if (this.values.containsKey(false)) {
                 sum = sum + this.values.get(false)
             }
             r = r + 1

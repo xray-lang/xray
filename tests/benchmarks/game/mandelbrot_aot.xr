@@ -37,5 +37,5 @@ fn run(size: int) {
     print("Points in set: " + count)
 }
 
-var size: int = process.args.length > 0 ? int(process.args[0]) ?? 200 : 200
+var size: int = len(process.args) > 0 ? int(process.args[0]) ?? 200 : 200
 run(size)

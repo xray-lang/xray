@@ -11,10 +11,10 @@ fn main() {
     higher[1] = 3
     var prefix = Array<uint32>(1, 0)
     prefix[0] = 1
-    var leftSpan: Span<uint32> = left[:]
-    var sameSpan: Span<uint32> = same[:]
-    var higherSpan: Span<uint32> = higher[:]
-    var prefixSpan: Span<uint32> = prefix[:]
+    var leftSpan: Slice<uint32> = left[:]
+    var sameSpan: Slice<uint32> = same[:]
+    var higherSpan: Slice<uint32> = higher[:]
+    var prefixSpan: Slice<uint32> = prefix[:]
     print(leftSpan.compare(sameSpan))
     print(leftSpan.compare(higherSpan))
     print(higherSpan.compare(leftSpan))
@@ -25,9 +25,9 @@ fn main() {
     windowed[1] = 7
     windowed[2] = 8
     windowed[3] = 6
-    var winSpan: Span<uint16> = windowed[:]
-    var first: Span<uint16> = winSpan[1:3]
-    var second: Span<uint16> = winSpan[2:4]
+    var winSpan: Slice<uint16> = windowed[:]
+    var first: Slice<uint16> = winSpan[1:3]
+    var second: Slice<uint16> = winSpan[2:4]
     print(first.compare(second))
 }
 

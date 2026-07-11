@@ -3,9 +3,9 @@
 
 var inc = 1..=3
 print(inc)
-print(inc.length)
-print(inc.includes(3))
-print(inc.includes(4))
+print(len(inc))
+print(inc.contains(3))
+print(inc.contains(4))
 print(inc[0])
 print(inc[2])
 
@@ -23,7 +23,7 @@ print(half_total)
 
 var max = 9223372036854775807
 var min = -9223372036854775807 - 1
-print((min..=max).length)
+print((min..=max).count())
 
 var boundary_count = 0
 for (i in max..=max) {

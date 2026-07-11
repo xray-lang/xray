@@ -47,10 +47,10 @@ fn test_scope_basic() {
 
     // scope 退出后，所有任务应该已完成
     print("scope 结束")
-    print("任务数量:", results.length)
+    print("任务数量:", len(results))
 
     // 检查所有任务都执行了
-    if (results.length >= 6) {
+    if (len(results) >= 6) {
         print("所有任务完成")
     } else {
         print("错误：任务未完成")
@@ -74,6 +74,6 @@ fn test_scope_basic() {
         outer_results.push("after_nested")
     }
 
-    print("嵌套 scope 结果数量:", outer_results.length)
+    print("嵌套 scope 结果数量:", len(outer_results))
 }
 

@@ -52,13 +52,13 @@ for (var i = 0; i < IO_COROS; i++) {
 print("等待所有协程完成...")
 var cpu_completed = 0
 var io_completed = 0
-for (var i = 0; i < cpu_tasks.length; i++) {
+for (var i = 0; i < len(cpu_tasks); i++) {
     var result: int = await cpu_tasks[i]
     if (result >= 0) {
         cpu_completed = cpu_completed + 1
     }
 }
-for (var i = 0; i < io_tasks.length; i++) {
+for (var i = 0; i < len(io_tasks); i++) {
     var result: int = await io_tasks[i]
     if (result >= 0) {
         io_completed = io_completed + 1

@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Json objects have no instance methods to avoid name conflicts
  *   with user-defined fields. All operations go through Json.xxx()
- *   static methods (e.g. Json.keys(obj), Json.has(obj, "key")).
+ *   static methods (e.g. Json.keys(obj), Json.containsKey(obj, "key")).
  */
 
 #ifndef XJSON_BUILTINS_H

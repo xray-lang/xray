@@ -1,9 +1,9 @@
 @test
 fn test_fixed_array_local_length_index_and_set() {
-    var key: [uint8; 4] = [1, 2, 3, 4]
+    var key: [byte; 4] = [1, 2, 3, 4]
 
-    assert(key.length == 4)
-    assert(key.size == 4)
+    assert(len(key) == 4)
+    assert(len(key) == 4)
     assert(key[0] == 1)
     assert(first_fixed_array_lane(key) == 1)
 
@@ -12,6 +12,6 @@ fn test_fixed_array_local_length_index_and_set() {
     assert(key[2] == 3)
 }
 
-fn first_fixed_array_lane(key: [uint8; 4]) -> int {
+fn first_fixed_array_lane(key: [byte; 4]) -> int {
     return key[0]
 }

@@ -38,9 +38,9 @@ static void xi_emit_load_array_zero_value(EmitCtx *ctx, XrArrayElemType elem_typ
         case XR_ELEM_F64:
             emit_inst(ctx, CREATE_AsBx(OP_LOADF, dst, 0));
             break;
-        case XR_ELEM_CHAR:
+        case XR_ELEM_RUNE:
             emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, 0));
-            emit_inst(ctx, CREATE_ABC(OP_TOCHAR, dst, dst, 0));
+            emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, dst, 0));
             break;
         default:
             emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, 0));

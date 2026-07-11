@@ -8,7 +8,7 @@
 import time
 
 var MSGS = 1000        // 每个生产者发送的消息数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     MSGS = int(process.args[0]) ?? MSGS
 }
 

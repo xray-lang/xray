@@ -80,7 +80,7 @@ fn test_roundtrip_empty_array() {
     var original: Array<int> = []
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 0)
+    assert_eq(len(parsed), 0)
 }
 
 @test
@@ -88,7 +88,7 @@ fn test_roundtrip_integer_array() {
     var original = [1, 2, 3, 4, 5]
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 5)
+    assert_eq(len(parsed), 5)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[4], 5)
 }
@@ -98,7 +98,7 @@ fn test_roundtrip_string_array() {
     var original = ["a", "b", "c"]
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 3)
+    assert_eq(len(parsed), 3)
     assert_eq(parsed[0], "a")
     assert_eq(parsed[2], "c")
 }
@@ -108,7 +108,7 @@ fn test_roundtrip_mixed_array() {
     var original = [1, "two", true, null]
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 4)
+    assert_eq(len(parsed), 4)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[1], "two")
     assert_eq(parsed[2], true)
@@ -120,7 +120,7 @@ fn test_roundtrip_nested_array() {
     var original = [[1, 2], [3, 4]]
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 2)
+    assert_eq(len(parsed), 2)
     assert_eq(parsed[0][0], 1)
     assert_eq(parsed[1][1], 4)
 }
@@ -158,7 +158,7 @@ fn test_roundtrip_object_with_array() {
     var original: Json = { numbers: [1, 2, 3], active: true }
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.numbers.length, 3)
+    assert_eq(len(parsed.numbers), 3)
     assert_eq(parsed.numbers[0], 1)
     assert_eq(parsed.active, true)
 }
@@ -248,7 +248,7 @@ fn test_roundtrip_complex_structure() {
     assert_eq(parsed.id, 12345)
     assert_eq(parsed.name, "Test User")
     assert_eq(parsed.active, true)
-    assert_eq(parsed.tags.length, 3)
+    assert_eq(len(parsed.tags), 3)
     assert_eq(parsed.tags[0], "tag1")
     assert_eq(parsed.metadata.created, "2024-01-01")
     assert_eq(parsed.metadata.updated, null)
@@ -264,7 +264,7 @@ fn test_roundtrip_array_of_objects() {
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
     
-    assert_eq(parsed.length, 3)
+    assert_eq(len(parsed), 3)
     assert_eq(parsed[0].id, 1)
     assert_eq(parsed[0].name, "First")
     assert_eq(parsed[2].id, 3)
@@ -284,7 +284,7 @@ fn test_double_roundtrip() {
     var obj3 = Json.parse(json3)
     
     assert_eq(obj3.a, 1)
-    assert_eq(obj3.b.length, 2)
+    assert_eq(len(obj3.b), 2)
     assert_eq(obj3.b[0], 2)
 }
 
@@ -306,8 +306,8 @@ fn test_consistency_object() {
     var json1 = Json.stringify(data)
     var json2 = Json.stringify(data)
     // 至少两次应该包含相同内容
-    assert_eq(json1.includes("a"), true)
-    assert_eq(json2.includes("a"), true)
+    assert_eq(json1.contains("a"), true)
+    assert_eq(json2.contains("a"), true)
 }
 
 // ===== 边界情况往返 =====
@@ -334,7 +334,7 @@ fn test_roundtrip_long_string() {
     var original = "x".repeat(100)
     var jsonStr = Json.stringify(original)
     var parsed = Json.parse(jsonStr)
-    assert_eq(parsed.length, 100)
+    assert_eq(len(parsed), 100)
     assert_eq(parsed, original)
 }
 

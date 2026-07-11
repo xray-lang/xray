@@ -6,7 +6,7 @@ var dyn: Json = { "bad": 3.5, "items": [1, 2, 3] }
 
 try {
     var value = dyn.bad as Array
-    print(value.length)
+    print(len(value))
 } catch panic (p) {
     print(p.message)
     print(p.code)
@@ -16,12 +16,12 @@ var maybeItems = dyn.items as Array?
 if (maybeItems == null) {
     print("missing")
 } else {
-    print(maybeItems.length)
+    print(len(maybeItems))
 }
 
 var maybeBad = dyn.bad as Array?
 if (maybeBad == null) {
     print("safe-null")
 } else {
-    print(maybeBad.length)
+    print(len(maybeBad))
 }

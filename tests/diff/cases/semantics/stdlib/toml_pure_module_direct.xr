@@ -10,14 +10,14 @@ print(nested["fruit"]["name"])
 print(nested["fruit"]["color"])
 
 var products = toml.parse("[[products]]\nname = \"Hammer\"\n\n[[products]]\nname = \"Nail\"")
-print(products["products"].length)
+print(len(products["products"]))
 print(products["products"][1]["name"])
 
 var strict = toml.parseStrict("name = \"Alice\"\nname = \"Bob\"")
-print(strict["errors"].length > 0)
+print(len(strict["errors"]) > 0)
 print(strict["data"]["name"])
 
 var out = toml.stringify({"name": "xray", "version": 1, "enabled": true})
-print(out.includes("name = \"xray\""))
-print(out.includes("version = 1"))
+print(out.contains("name = \"xray\""))
+print(out.contains("version = 1"))
 print(toml.parse(out)["enabled"])

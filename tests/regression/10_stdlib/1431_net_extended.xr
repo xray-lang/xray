@@ -5,43 +5,43 @@ import net
 // @test module exports exist
 @test
 fn test_net_core_apis() {
-    assert(typename(net.dial) == "function")
-    assert(typename(net.listen) == "function")
-    assert(typename(net.accept) == "function")
-    assert(typename(net.read) == "function")
-    assert(typename(net.readInto) == "function")
-    assert(typename(net.write) == "function")
-    assert(typename(net.writeBytes) == "function")
-    assert(typename(net.copy) == "function")
-    assert(typename(net.copyBidirectional) == "function")
-    assert(typename(net.shutdownRead) == "function")
-    assert(typename(net.shutdownWrite) == "function")
-    assert(typename(net.shutdown) == "function")
-    assert(typename(net.close) == "function")
-    assert(typename(net.lookup) == "function")
-    assert(typename(net.fd) == "function")
-    assert(typename(net.setReadDeadline) == "function")
-    assert(typename(net.setWriteDeadline) == "function")
-    assert(typename(net.setDeadline) == "function")
-    assert(typename(net.setAcceptDeadline) == "function")
-    assert(typename(net.lastError) == "function")
-    assert(typename(net.lastErrno) == "function")
+    assert(typeName(net.dial) == "function")
+    assert(typeName(net.listen) == "function")
+    assert(typeName(net.accept) == "function")
+    assert(typeName(net.read) == "function")
+    assert(typeName(net.readInto) == "function")
+    assert(typeName(net.write) == "function")
+    assert(typeName(net.writeBytes) == "function")
+    assert(typeName(net.copy) == "function")
+    assert(typeName(net.copyBidirectional) == "function")
+    assert(typeName(net.shutdownRead) == "function")
+    assert(typeName(net.shutdownWrite) == "function")
+    assert(typeName(net.shutdown) == "function")
+    assert(typeName(net.close) == "function")
+    assert(typeName(net.lookup) == "function")
+    assert(typeName(net.fd) == "function")
+    assert(typeName(net.setReadDeadline) == "function")
+    assert(typeName(net.setWriteDeadline) == "function")
+    assert(typeName(net.setDeadline) == "function")
+    assert(typeName(net.setAcceptDeadline) == "function")
+    assert(typeName(net.lastError) == "function")
+    assert(typeName(net.lastErrno) == "function")
 }
 
 // @test TLS APIs exist
 @test
 fn test_net_tls_apis() {
-    assert(typename(net.hasTLS) == "function")
+    assert(typeName(net.hasTLS) == "function")
     var tls = net.hasTLS()
-    assert(typename(tls) == "bool")
+    assert(typeName(tls) == "bool")
 }
 
 // @test UDP APIs exist
 @test
 fn test_net_udp_apis() {
-    assert(typename(net.udpBind) == "function")
-    assert(typename(net.sendTo) == "function")
-    assert(typename(net.recvFrom) == "function")
+    assert(typeName(net.udpBind) == "function")
+    assert(typeName(net.sendTo) == "function")
+    assert(typeName(net.recvFrom) == "function")
 }
 
 // @test DNS lookup - multiple calls consistent
@@ -57,8 +57,8 @@ fn test_lookup_consistent() {
 fn test_lookup_type() {
     var addr = net.lookup("localhost")
     if (addr != null) {
-        assert_eq(typename(addr), "string")
-        assert(addr.length > 0)
+        assert_eq(typeName(addr), "string")
+        assert(len(addr) > 0)
     }
 }
 

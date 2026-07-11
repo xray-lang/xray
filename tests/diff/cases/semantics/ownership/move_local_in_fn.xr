@@ -15,10 +15,10 @@ fn take_owned() -> Array<int> {
 fn observe() {
     var local = [1, 2, 3]
     var moved = move local
-    print(moved.length)
+    print(len(moved))
 }
 
 observe()
 var r = take_owned()
-print(r.length)
+print(len(r))
 print(r[0] + r[3])

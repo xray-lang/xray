@@ -167,7 +167,7 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         int64_t out_index = lane->iter - batch->start;
         if (!output || output->elem_type == XR_ELEM_ANY || out_index < 0 ||
             out_index >= output->length || out_index > INT32_MAX ||
-            (output->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(resume_value))) {
+            (output->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(resume_value))) {
             atomic_store_explicit(&batch->failed, true, memory_order_release);
             vm_par_lane_done(lane);
             if (result)

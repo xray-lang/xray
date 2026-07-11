@@ -65,14 +65,14 @@ for (var i = 0; i < PRODUCER_COUNT; i++) {
 }
 /* 等待所有生产者完成 */
 var total_produced = 0
-for (var i = 0; i < producers.length; i++) {
+for (var i = 0; i < len(producers); i++) {
     var result = await producers[i]
     total_produced = total_produced + result
 }
 print("所有生产者完成，已生产: " + string(total_produced))
 /* 等待所有消费者完成 */
 var total_consumed = 0
-for (var i = 0; i < consumers.length; i++) {
+for (var i = 0; i < len(consumers); i++) {
     var result = await consumers[i]
     total_consumed = total_consumed + result
 }

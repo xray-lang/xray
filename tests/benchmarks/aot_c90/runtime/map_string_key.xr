@@ -12,13 +12,13 @@ fn run(n: int) -> int {
     i = 0
     while (i < n) {
         var key = "user:" + i.toString()
-        if (m.has(key)) {
+        if (m.containsKey(key)) {
             sum = sum + m.get(key)
         }
         i = i + 1
     }
 
-    return sum + m.size
+    return sum + len(m)
 }
 
 print(run(60000))

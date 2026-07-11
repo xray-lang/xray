@@ -291,8 +291,6 @@ static XlspBuiltinType infer_type_from_source(const char *content, const char *v
                     return XLSP_TYPE_MAP;
                 if (strncmp(after, TYPE_NAME_SET, 3) == 0)
                     return XLSP_TYPE_SET;
-                if (strncmp(after, "Bytes", 5) == 0)
-                    return XLSP_TYPE_ARRAY;
                 if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0)
                     return XLSP_TYPE_CHANNEL;
                 if (strncmp(after, TYPE_NAME_JSON, 4) == 0)
@@ -685,10 +683,6 @@ static void scan_binding_assignment(XrLspDocument *doc, const char *prefix,
         }
         if (strncmp(after, TYPE_NAME_SET, 3) == 0) {
             *early_items = xlsp_builtin_get_completions(XLSP_TYPE_SET);
-            return;
-        }
-        if (strncmp(after, "Bytes", 5) == 0) {
-            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
             return;
         }
         if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0) {

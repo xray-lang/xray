@@ -9,7 +9,7 @@ fn test_array_push_json_objects() {
     for (i in 0..100) {
         arr.push({ id: i, name: "item" + string(i) })
     }
-    assert_eq(arr.length, 100)
+    assert_eq(len(arr), 100)
     assert_eq(arr[0]["id"], 0)
     assert_eq(arr[99]["id"], 99)
 }
@@ -20,7 +20,7 @@ fn test_array_push_strings() {
     for (i in 0..200) {
         arr.push("string_" + string(i))
     }
-    assert_eq(arr.length, 200)
+    assert_eq(len(arr), 200)
     assert_eq(arr[0], "string_0")
     assert_eq(arr[199], "string_199")
 }
@@ -34,7 +34,7 @@ fn test_array_push_mixed_types() {
         arr.push({ v: i })
         arr.push(true)
     }
-    assert_eq(arr.length, 200)
+    assert_eq(len(arr), 200)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], "s0")
     assert_eq(arr[2]["v"], 0)
@@ -62,8 +62,8 @@ fn test_nested_array_push() {
         }
         outer.push(inner)
     }
-    assert_eq(outer.length, 20)
-    assert_eq(outer[0].length, 10)
+    assert_eq(len(outer), 20)
+    assert_eq(len(outer[0]), 10)
     assert_eq(outer[0][0], 0)
     assert_eq(outer[19][9], 199)
 }

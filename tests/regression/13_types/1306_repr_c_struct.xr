@@ -8,7 +8,7 @@ struct CPoint {
 
 struct CBox {
     p: CPoint
-    tag: uint8
+    tag: byte
 }
 
 fn make_point() -> CPoint {

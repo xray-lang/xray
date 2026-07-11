@@ -163,7 +163,7 @@ fn test_coro_named_batch() {
         }
     }
     print("完成顺序:", order)
-    assert_eq(order.length, 3)
+    assert_eq(len(order), 3)
     print("✓ 命名协程批量完成测试通过")
 }
 
@@ -216,11 +216,11 @@ fn test_execution_trace() {
             events.push(evt)
         }
     }
-    print("追踪事件数:", events.length)
+    print("追踪事件数:", len(events))
     // 验证每个任务有 start 和 end 事件
     var starts = 0
     var ends = 0
-    for (var i = 0; i < events.length; i++) {
+    for (var i = 0; i < len(events); i++) {
         var evt = events[i]
         if (evt.get("event") == "start") {
             starts = starts + 1

@@ -4,15 +4,15 @@ import http
 
 @test
 fn test_http_client_apis_exist() {
-    assert(typename(http.request) == "function")
+    assert(typeName(http.request) == "function")
 }
 
 @test
 fn test_http_server_apis_exist() {
-    assert(typename(http.route) == "function")
-    assert(typename(http.listen) == "function")
-    assert(typename(http.urlEncode) == "function")
-    assert(typename(http.urlDecode) == "function")
+    assert(typeName(http.route) == "function")
+    assert(typeName(http.listen) == "function")
+    assert(typeName(http.urlEncode) == "function")
+    assert(typeName(http.urlDecode) == "function")
 }
 
 print("All http client basic tests passed")

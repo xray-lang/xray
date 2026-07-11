@@ -619,7 +619,7 @@ static bool cg_static_tuple_native_for_type(const XrType *type, uint8_t *out_nat
     int native = -1;
     if (type->kind == XR_KIND_STRING)
         native = XR_NATIVE_STRING;
-    else if (type->kind == XR_KIND_CHAR)
+    else if (type->kind == XR_KIND_RUNE)
         native = XR_NATIVE_U32;
     else
         native = xr_type_kind_to_native(type->kind, type->native_width);
@@ -805,7 +805,7 @@ static void cg_emit_static_struct_scalar(FILE *out, uint8_t native_type, const X
             fprintf(out, "%d", value->as.bool_val ? 1 : 0);
             return;
         case XR_CT_CHAR:
-            fprintf(out, "0x%X", (unsigned) value->as.char_val);
+            fprintf(out, "0x%X", (unsigned) value->as.rune_val);
             return;
         case XR_CT_INT:
         default:

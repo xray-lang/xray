@@ -78,7 +78,7 @@ fn test_nested_for_in_inner_break() {
         }
     }
     // Lower triangle: (1,1), (2,1),(2,2), (3,1),(3,2),(3,3), ...
-    assert_eq(pairs.length, 15)
+    assert_eq(len(pairs), 15)
     assert_eq(pairs[0], "1,1")
     assert_eq(pairs[1], "2,1")
     assert_eq(pairs[2], "2,2")
@@ -98,7 +98,7 @@ fn test_nested_for_in_outer_continue() {
         results.push(i * sum)
     }
     // i=1,3,5; sum=1+2+3=6; results=[6, 18, 30]
-    assert_eq(results.length, 3)
+    assert_eq(len(results), 3)
     assert_eq(results[0], 6)
     assert_eq(results[1], 18)
     assert_eq(results[2], 30)
@@ -138,7 +138,7 @@ fn test_mixed_iterator_types_nested() {
             results.push("${i}:${j}")
         }
     }
-    assert_eq(results.length, 9)
+    assert_eq(len(results), 9)
     assert_eq(results[0], "0:10")
     assert_eq(results[3], "1:10")
     assert_eq(results[8], "2:30")
@@ -155,7 +155,7 @@ fn test_for_in_with_array_map() {
         results.push(mapped.reduce(fn(a, b) { return a + b }, 0))
     }
     // i=1: sum([1,2,3])=6, i=2: sum([2,4,6])=12, i=3: sum([3,6,9])=18
-    assert_eq(results.length, 3)
+    assert_eq(len(results), 3)
     assert_eq(results[0], 6)
     assert_eq(results[1], 12)
     assert_eq(results[2], 18)
@@ -173,8 +173,8 @@ fn test_nested_for_in_matrix_build() {
         }
         matrix.push(row)
     }
-    assert_eq(matrix.length, 3)
-    assert_eq(matrix[0].length, 4)
+    assert_eq(len(matrix), 3)
+    assert_eq(len(matrix[0]), 4)
     assert_eq(matrix[0][0], 0)
     assert_eq(matrix[1][2], 6)
     assert_eq(matrix[2][3], 11)
@@ -238,8 +238,8 @@ class FlattenIter {
         this.innerIdx = 0
     }
     hasNext() -> bool {
-        while (this.outerIdx < this.outer.length) {
-            if (this.innerIdx < this.outer[this.outerIdx].length) {
+        while (this.outerIdx < len(this.outer)) {
+            if (this.innerIdx < len(this.outer[this.outerIdx])) {
                 return true
             }
             this.outerIdx = this.outerIdx + 1
@@ -267,7 +267,7 @@ fn test_flatten_iterator() {
     for (v in FlattenIterable(data)) {
         result.push(v)
     }
-    assert_eq(result.length, 6)
+    assert_eq(len(result), 6)
     assert_eq(result[0], 1)
     assert_eq(result[2], 3)
     assert_eq(result[5], 6)
@@ -284,7 +284,7 @@ fn test_nested_flatten_iterators() {
         }
     }
     // 1*10,1*20,1*30,2*10,2*20,2*30,3*10,3*20,3*30,4*10,4*20,4*30
-    assert_eq(products.length, 12)
+    assert_eq(len(products), 12)
     assert_eq(products[0], 10)
     assert_eq(products[2], 30)
     assert_eq(products[11], 120)
@@ -334,7 +334,7 @@ fn test_nested_filtered_ranges() {
         }
     }
     // a: 3,6,9,12,15,18 (6 values); b: 5,10,15,20,25 (5 values)
-    assert_eq(pairs.length, 30)
+    assert_eq(len(pairs), 30)
     assert_eq(pairs[0], "3x5")
     assert_eq(pairs[5], "6x5")
     assert_eq(pairs[29], "18x25")
@@ -391,7 +391,7 @@ fn collect_custom_range_recursive(depth: int, max_depth: int) -> Array<string> {
     }
     for (i in CustomRange(0, 3)) {
         var sub = collect_custom_range_recursive(depth + 1, max_depth)
-        for (var j = 0; j < sub.length; j++) {
+        for (var j = 0; j < len(sub); j++) {
             results.push("d${depth}i${i}:${sub[j]}")
         }
     }
@@ -403,7 +403,7 @@ fn test_recursive_with_iterator() {
     var result = collect_custom_range_recursive(0, 2)
     // depth 0: 3 branches, each depth 1: 3 branches, each depth 2: leaf
     // Total: 3 * 3 = 9
-    assert_eq(result.length, 9)
+    assert_eq(len(result), 9)
     assert_eq(result[0], "d0i0:d1i0:leaf:2")
     assert_eq(result[8], "d0i2:d1i2:leaf:2")
 }

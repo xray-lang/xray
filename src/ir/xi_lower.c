@@ -1532,10 +1532,10 @@ static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *typ
             out->type = type ? type : l->type_bool;
             out->bool_value = false;
             return true;
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
             out->kind = XI_CONST_LITERAL_CHAR;
             out->type = type ? type : l->type_char;
-            out->int_value = (int64_t) expr->as.literal.raw_value.char_val;
+            out->int_value = (int64_t) expr->as.literal.raw_value.rune_val;
             return true;
         case AST_LITERAL_STRING:
             out->kind = XI_CONST_LITERAL_STRING;
@@ -1756,7 +1756,7 @@ static bool const_literal_from_ct_value(XiLower *l, const XrCtValue *value, stru
         case XR_CT_CHAR:
             out->kind = XI_CONST_LITERAL_CHAR;
             out->type = type ? type : l->type_char;
-            out->int_value = (int64_t) value->as.char_val;
+            out->int_value = (int64_t) value->as.rune_val;
             return true;
         case XR_CT_STRING:
             if (!value->as.string_val)

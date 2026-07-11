@@ -30,7 +30,7 @@ fn test_json_parse_object() {
 @test
 fn test_json_parse_array() {
     var arr = Json.parse("[1, 2, 3]")
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
     assert_eq(arr[0], 1)
 }
 
@@ -52,8 +52,8 @@ fn test_json_stringify_array() {
 fn test_json_stringify_object() {
     var obj = { name: "Bob" }
     var s = Json.stringify(obj)
-    assert_eq(s.includes("name"), true)
-    assert_eq(s.includes("Bob"), true)
+    assert_eq(s.contains("name"), true)
+    assert_eq(s.contains("Bob"), true)
 }
 
 // ===== Json.encode =====
@@ -61,7 +61,7 @@ fn test_json_stringify_object() {
 fn test_json_encode_record() {
     var user = { name: "Bob", scores: [10, 20] }
     var encoded = Json.encode(user)
-    assert_eq(typename(encoded), "Json")
+    assert_eq(typeName(encoded), "Json")
     assert_eq(encoded.name, "Bob")
     assert_eq(encoded.scores[1], 20)
 }
@@ -75,7 +75,7 @@ fn test_json_encode_map_and_set() {
 
     var s: Set<int> = #[1, 2, 3]
     var arr = Json.encode(s)
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
     assert_eq(arr[0], 1)
     assert_eq(arr[2], 3)
 }
@@ -88,7 +88,7 @@ fn test_json_encode_non_serializable_throws() {
         Json.encode(f)
     } catch panic (e) {
         caught = true
-        assert(string(e).includes("cannot encode"))
+        assert(string(e).contains("cannot encode"))
     }
     assert(caught)
 }
@@ -123,7 +123,7 @@ fn test_json_roundtrip() {
     var original = [1, "two", true, null]
     var s = Json.stringify(original)
     var parsed = Json.parse(s)
-    assert_eq(parsed.length, 4)
+    assert_eq(len(parsed), 4)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[1], "two")
     assert_eq(parsed[2], true)

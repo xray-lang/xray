@@ -27,13 +27,13 @@ fn test_json_stringify_catches_nested() {
         msg = string(e)
     }
     assert_eq(caught, true)
-    assert_eq(msg.length > 0, true)
+    assert_eq(len(msg) > 0, true)
 }
 
 @test
 fn test_json_stringify_normal_succeeds() {
     var result = Json.stringify({a: 1, b: "hello"})
-    assert_eq(result.length > 0, true)
+    assert_eq(len(result) > 0, true)
 }
 
 @test

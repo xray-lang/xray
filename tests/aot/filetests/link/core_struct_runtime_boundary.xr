@@ -2,7 +2,7 @@ struct Sample {
     x: int
     y: float
     ok: bool
-    byte: uint8
+    byte: byte
 }
 
 struct CPoint {
@@ -12,7 +12,7 @@ struct CPoint {
 
 struct CBox {
     p: CPoint
-    tag: uint8
+    tag: byte
 }
 
 fn sample_score() -> int {

@@ -23,12 +23,12 @@ fn total(m: Map<int, int>) -> int {
 }
 
 var sq = squares(6)
-print(sq.length)
+print(len(sq))
 print(sq[0])
 print(sq[3])
 print(sq[5])
 print(total(sq))
 
 var sq2 = squares(3)
-print(sq2.length)
+print(len(sq2))
 print(sq2[2])

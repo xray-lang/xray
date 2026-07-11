@@ -2831,7 +2831,7 @@ static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_STRING:
             return true;

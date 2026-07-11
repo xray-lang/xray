@@ -1,10 +1,10 @@
 // FFI: pass a top-level Xray function as a CFn callback to libc bsearch.
 // VM uses libffi's callback bridge; AOT emits a no-closure C ABI stub.
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
-@extern("C") fn bsearch(key: RawPtr<uint8>, base: RawPtr<uint8>, count: uintsize, size: uintsize, cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>) -> RawPtr<uint8>
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn bsearch(key: RawPtr<byte>, base: RawPtr<byte>, count: uintsize, size: uintsize, cmp: CFn<(RawPtr<byte>, RawPtr<byte>) -> int32>) -> RawPtr<byte>
 
-fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+fn zeroCmp(a: RawPtr<byte>, b: RawPtr<byte>) -> int32 {
     return 0
 }
 

@@ -1,7 +1,7 @@
 // 116 boundary: local `var` ownership transferred into a goroutine via `move`.
 // Deterministic via await; output must match across VM/JIT/AOT.
 fn consume(data: Array<int>) -> int {
-    return data.length
+    return len(data)
 }
 
 var job: Array<int> = [1, 2, 3]

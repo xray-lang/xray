@@ -1,5 +1,5 @@
 fn lenOf(data: in Array<int>) -> int {
-    return data.length
+    return len(data)
 }
 
 var values: Array<int> = [1, 2, 3]

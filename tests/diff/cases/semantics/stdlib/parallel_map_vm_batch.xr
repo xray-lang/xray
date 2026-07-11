@@ -1,14 +1,14 @@
 import parallel
 
 var values = parallel.map(0..256, (i) -> i + 1, parallel.Options(4))
-print(values.length)
+print(len(values))
 print(values[0])
 print(values[127])
 print(values[255])
 
 var out: Array<int> = [99, 98]
 var same = parallel.mapInto(3..9, out, (i) -> i * 2, parallel.Options(4))
-print(same.length)
-print(out.length)
+print(len(same))
+print(len(out))
 print(out[0])
 print(out[5])

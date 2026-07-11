@@ -41,14 +41,14 @@
 
 #define VM_ARRAY_CHECK_STORABLE(arr, val)                                                          \
     do {                                                                                           \
-        if ((arr)->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(val)) {                                \
+        if ((arr)->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(val)) {                                \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array<char> element must be char");            \
         }                                                                                          \
     } while (0)
 
 #define VM_SPAN_CHECK_STORABLE(span, val)                                                          \
     do {                                                                                           \
-        if ((span)->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(val)) {                               \
+        if ((span)->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(val)) {                               \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span<char> element must be char");             \
         }                                                                                          \
     } while (0)
@@ -591,7 +591,7 @@ vmcase(OP_ARRAY_GETC) {
         uint32_t cp = 0;
         R(a) = (c >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) c, &cp, NULL) &&
                 xr_unicode_is_scalar(cp))
-                   ? xr_char(cp)
+                   ? xr_rune(cp)
                    : xr_null();
         vmbreak;
     }
@@ -926,6 +926,62 @@ vmcase(OP_ARRAY_LEN) {
     XrArray *arr = XR_TO_ARRAY(R(b));
     R(a) = xr_int((xr_Integer) arr->length);
     vmbreak;
+}
+
+vmcase(OP_LEN) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    bool json_dynamic = GETARG_C(i) != 0;
+    XrValue value = R(b);
+    if (XR_IS_ARRAY(value)) {
+        R(a) = xr_int((xr_Integer) XR_TO_ARRAY(value)->length);
+        vmbreak;
+    }
+    if (XR_IS_SPAN_REF(value)) {
+        XrSpanView *span = XR_TO_SPAN_REF(value);
+        R(a) = xr_int((xr_Integer) (span ? span->length : 0));
+        vmbreak;
+    }
+    if (XR_IS_MAP(value)) {
+        R(a) = xr_int((xr_Integer) xr_map_size(XR_TO_MAP(value)));
+        vmbreak;
+    }
+    if (XR_IS_SET(value)) {
+        R(a) = xr_int((xr_Integer) xr_set_size(XR_TO_SET(value)));
+        vmbreak;
+    }
+    if (XR_IS_STRING(value)) {
+        XrString *string = XR_TO_STRING(value);
+        R(a) = xr_int((xr_Integer) (string ? string->rune_length : 0));
+        vmbreak;
+    }
+    if (xr_value_is_json(value)) {
+        XrJson *json = xr_value_to_json(value);
+        R(a) = xr_int((xr_Integer) xr_json_field_count(isolate, json));
+        vmbreak;
+    }
+    if (xr_value_is_channel(value)) {
+        R(a) = xr_int((xr_Integer) xr_value_to_channel(value)->buf_count);
+        vmbreak;
+    }
+    if (xr_value_is_work_queue(value)) {
+        R(a) = xr_int((xr_Integer) xr_work_queue_length(xr_value_to_work_queue(value)));
+        vmbreak;
+    }
+    if (xr_is_stringbuilder(value)) {
+        R(a) = xr_int((xr_Integer) xr_stringbuilder_length(xr_to_stringbuilder(value)));
+        vmbreak;
+    }
+    int64_t buffer_length = xr_mem_buffer_length(value);
+    if (buffer_length >= 0) {
+        R(a) = xr_int((xr_Integer) buffer_length);
+        vmbreak;
+    }
+    if (json_dynamic) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "len(Json) requires an object, array, or string variant");
+    }
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "value does not implement Lengthable");
 }
 
 vmcase(OP_ARRAY_DATA_PTR) {
@@ -1873,7 +1929,7 @@ vmcase(OP_MAP_SETK) {
 vmcase(OP_MAP_INCREMENT) {
     /* OP_MAP_INCREMENT: Map counter pattern optimization
     ** R[A]:Map[R[B]]++ - if key doesn't exist set to 1, otherwise +1
-    ** Replaces: if (map.has(key)) { map[key] = map[key] + 1 } else { map[key] = 1 }
+    ** Replaces: if (map.containsKey(key)) { map[key] = map[key] + 1 } else { map[key] = 1 }
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -2041,7 +2097,7 @@ vmcase(OP_INDEX_GET) {
         uint32_t cp = 0;
         R(a) = (idx >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) idx, &cp, NULL) &&
                 xr_unicode_is_scalar(cp))
-                   ? xr_char(cp)
+                   ? xr_rune(cp)
                    : xr_null();
         vmbreak;
     }

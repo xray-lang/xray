@@ -1,32 +1,32 @@
-/* Bytes basic tests: Bytes is Array<uint8> */
+/* Array<byte> basic tests: Array<byte> is Array<byte> */
 
 @test
 fn test_bytes_basic() {
 
-    // ========== Create Bytes ==========
+    // ========== Create Array<byte> ==========
 
-    // Empty Bytes
-    var b1 = Bytes()
-    print(b1.length)  // 0
+    // Empty Array<byte>
+    var b1 = Array<byte>()
+    print(len(b1))  // 0
 
     // Specified length (initialized to 0)
-    var b2 = Bytes(5)
-    print(b2.length)  // 5
+    var b2 = Array<byte>(5)
+    print(len(b2))  // 5
     print(b2[0])      // 0
 
     // Specified length and fill value
-    var b3 = Bytes(3, 255)
+    var b3 = Array<byte>(3, 255)
     print(b3[0])  // 255
     print(b3[1])  // 255
     print(b3[2])  // 255
 
     // From array
-    var b4 = Bytes([72, 101, 108, 108, 111])
-    print(b4.length)  // 5
+    var b4 = Array<byte>([72, 101, 108, 108, 111])
+    print(len(b4))  // 5
 
     // ========== Index get/set ==========
 
-    var b5 = Bytes(3)
+    var b5 = Array<byte>(3)
     b5[0] = 65   // 'A'
     b5[1] = 66   // 'B'
     b5[2] = 67   // 'C'
@@ -36,16 +36,16 @@ fn test_bytes_basic() {
 
     // ========== push ==========
 
-    var b6 = Bytes()
+    var b6 = Array<byte>()
     b6.push(88)  // 'X'
     b6.push(89)  // 'Y'
     b6.push(90)  // 'Z'
-    print(b6.length)  // 3
+    print(len(b6))  // 3
     print(b6[0])      // 88
     print(b6[1])      // 89
     print(b6[2])      // 90
 
-    print("Bytes basic tests passed!")
+    print("Array<byte> basic tests passed!")
 
     // expect: 0
     // expect: 5
@@ -61,6 +61,6 @@ fn test_bytes_basic() {
     // expect: 88
     // expect: 89
     // expect: 90
-    // expect: Bytes basic tests passed!
+    // expect: Array<byte> basic tests passed!
 }
 

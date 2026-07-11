@@ -333,7 +333,7 @@ TEST(selection_table_has_entries_after_analysis) {
 
 TEST(builtin_method_has_selection) {
     AnalysisResult r = analyze("var arr = [1, 2, 3]\n"
-                               "var n = arr.length\n"
+                               "var n = len(arr)\n"
                                "print(n)\n");
     if (!r.program)
         return false;
@@ -347,7 +347,7 @@ TEST(builtin_method_has_selection) {
             ok = true;
         } else {
             /* Builtin members may not yet be tracked — record as info */
-            printf("    no selection for arr.length (builtin not tracked yet)\n");
+            printf("    no selection for len(arr) (builtin not tracked yet)\n");
             ok = true;
         }
     } else {

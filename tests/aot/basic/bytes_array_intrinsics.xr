@@ -1,4 +1,4 @@
-var b = Bytes(16)
+var b = Array<byte>(16)
 b[0] = 1
 b[1] = 2
 b[2] = 3
@@ -8,22 +8,22 @@ b[5] = 6
 b[6] = 7
 b[7] = 8
 
-var view: ByteSpan = b[:]
+var view: Slice<byte> = b[:]
 var u32: uint32 = view.load<uint32>(0, Endian.LE)
 var u64: uint64 = view.load<uint64>(0, Endian.LE)
 print(int(u32))
 print(int(u64))
 
-var dst = Bytes.withCapacity(6)
-print(dst.length)
+var dst = Array<byte>.withCapacity(6)
+print(len(dst))
 print(dst.capacity)
 dst.appendFrom(view[1:4])
 print(dst[0])
 print(dst[1])
 print(dst[2])
 
-var rep = Bytes.withCapacity(9)
-var seed = Bytes(3)
+var rep = Array<byte>.withCapacity(9)
+var seed = Array<byte>(3)
 seed[0] = 65
 seed[1] = 66
 seed[2] = 67
@@ -37,7 +37,7 @@ print(rep[7])
 print(rep[8])
 
 var xs = Array<int>(4, 9)
-print(xs.length)
+print(len(xs))
 print(xs[0])
 print(xs[3])
 
@@ -48,6 +48,6 @@ print(wrapped)
 var assigned: uint32 = 4294967295 + 1
 print(assigned)
 
-var byte: uint8 = 255
+var byte: byte = 255
 var byte_wrapped = byte + 1
 print(byte_wrapped)

@@ -4,7 +4,7 @@ var doc = xml.parse("<?xml version=\"1.0\"?><root xmlns=\"urn:x\" id=\"7\"><item
 print(doc["tag"])
 print(doc["attrs"]["id"])
 print(doc["namespaces"][""])
-print(doc["children"].length)
+print(len(doc["children"]))
 print(doc["children"][0]["children"][0]["text"])
 print(doc["children"][1]["type"])
 print(doc["children"][1]["text"])
@@ -14,17 +14,17 @@ print(cdataAsText["children"][0]["type"])
 print(cdataAsText["children"][0]["text"])
 
 var comments = xml.parse("<root><!-- keep --><leaf/></root>", { preserveComments: true })
-print(comments["children"].length)
+print(len(comments["children"]))
 print(comments["children"][0]["type"])
 
 var detailed = xml.parseDetailed("<ok/>")
 print(detailed["doc"]["tag"])
-print(detailed["errors"].length)
+print(len(detailed["errors"]))
 
 var made = xml.element("entry", { id: "42", ignored: 7 })
 print(made["tag"])
 print(made["attrs"]["id"])
-if (Json.has(made["attrs"], "ignored")) {
+if (Json.containsKey(made["attrs"], "ignored")) {
     print("has-ignored")
 } else {
     print("no-ignored")

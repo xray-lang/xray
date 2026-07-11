@@ -6,7 +6,7 @@ import runtime
 @test
 fn test_mem_is_cycle_collection_enabled() {
     var running = runtime.isCycleCollectionEnabled()
-    assert_eq(typename(running), "bool")
+    assert_eq(typeName(running), "bool")
 }
 
 // @test runtime.liveBytes returns non-negative

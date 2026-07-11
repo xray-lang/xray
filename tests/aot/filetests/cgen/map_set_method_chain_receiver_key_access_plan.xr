@@ -23,8 +23,8 @@ fn mapSetMethodChainReceiverPlan(value: int) -> int {
     var bag = Bag(value)
     var one = bag.scores().get(1) ?? 0
     var two = bag.scores()[2]
-    var hasOne = bag.scores().has(1)
-    var sawOne = bag.seen().has(1)
+    var hasOne = bag.scores().containsKey(1)
+    var sawOne = bag.seen().contains(1)
     if (hasOne) {
         if (sawOne) {
             return one + two

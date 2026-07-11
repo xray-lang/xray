@@ -4,7 +4,7 @@ fn compute(n: int) -> int {
 
 fn mutate_copy(xs: Array<int>) -> int {
     xs.push(99)
-    return xs.length
+    return len(xs)
 }
 
 fn identity_copy(xs: Array<int>) -> Array<int> {
@@ -17,10 +17,10 @@ print(await high)
 var xs = [1, 2]
 var copied = go mutate_copy(copy(xs))
 print(await copied)
-print(xs.length)
+print(len(xs))
 
 var roundtrip = go identity_copy(copy(xs))
 var ys = await roundtrip
 ys.push(7)
-print(ys.length)
-print(xs.length)
+print(len(ys))
+print(len(xs))

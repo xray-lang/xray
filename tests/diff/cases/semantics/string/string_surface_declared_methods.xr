@@ -1,17 +1,17 @@
 // anchor: string-surface-declared-methods
-// Declared string/Bytes surface (stdlib/types/string.xr, array.xr) must
+// Declared string/Array<byte> surface (stdlib/types/string.xr, array.xr) must
 // behave identically on VM and AOT. Covers the methods added when the
 // declaration file was re-synced with the runtime method tables:
 // codePointAt / byteAt / ord / reverse / toInt / toFloat / isEmpty /
-// toString, plus the Bytes(Array<uint8>).toString() UTF-8 decode.
+// toString, plus the Array<byte>(Array<byte>).toString() UTF-8 decode.
 
 var s = "héllo"
 
 // length counts UTF-8 scalars; byteLength counts raw bytes
-print(s.length)
+print(len(s))
 print(s.byteLength)
 
-// codePointAt: Unicode scalar by char index, -1 when out of bounds
+// codePointAt: Unicode scalar by rune index, -1 when out of bounds
 print(s.codePointAt(0))
 print(s.codePointAt(1))
 print(s.codePointAt(99))
@@ -38,14 +38,14 @@ print("3.5".toFloat())
 print("nope".toFloat())
 
 // isEmpty / toString
-print("".isEmpty())
-print("a".isEmpty())
+print(len("") == 0)
+print(len("a") == 0)
 print("self".toString())
 
-// Bytes <-> text bridge: Bytes.toString() decodes UTF-8 bytes
-var bin = Bytes([104, 105])
+// Array<byte> <-> text bridge: Array<byte>.toString() decodes UTF-8 bytes
+var bin = Array<byte>([104, 105])
 print(bin.toString())
-var accented = Bytes([104, 195, 169])
+var accented = Array<byte>([104, 195, 169])
 print(accented.toString())
 
 // non-U8 arrays keep the formatter rendering

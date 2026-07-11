@@ -2,8 +2,8 @@
 fn test_closure_captures_owner_and_uses_local_span() {
     fn make_reader(owner: Array<int>) -> () -> int {
         return fn() -> int {
-            var view: Span<int> = owner[0:2]
-            return view.length + view[0]
+            var view: Slice<int> = owner[0:2]
+            return len(view) + view[0]
         }
     }
 

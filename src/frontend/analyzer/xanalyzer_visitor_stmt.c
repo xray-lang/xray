@@ -46,7 +46,7 @@ static bool xa_type_supports_const_static_data_object(const XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_STRING:
         case XR_KIND_NULL:
         case XR_KIND_FIXED_ARRAY:
@@ -70,7 +70,7 @@ static bool xa_type_supports_mutable_static_data_object(const XrType *type) {
             case XR_KIND_FLOAT:
                 return type->native_width != XR_NATIVE_F32;
             case XR_KIND_BOOL:
-            case XR_KIND_CHAR:
+            case XR_KIND_RUNE:
                 return true;
             default:
                 break;
@@ -1555,7 +1555,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
@@ -4352,7 +4352,7 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
@@ -5593,7 +5593,7 @@ static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *c
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_STRING:
         case XR_KIND_NULL:
             return true;

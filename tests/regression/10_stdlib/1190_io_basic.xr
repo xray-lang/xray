@@ -49,7 +49,7 @@ fn test_file_stat() {
     io.writeFile(tmp, "test content")
     var st = io.stat(tmp)
     assert(st != null)
-    assert_eq(st!.size, 12)
+    assert_eq(len(st!), 12)
     assert_eq(st!.isFile, true)
     io.remove(tmp)
 }
@@ -95,7 +95,7 @@ fn test_read_dir() {
     io.writeFile(tmpDir + "/file1.txt", "f1")
     io.writeFile(tmpDir + "/file2.txt", "f2")
     var entries = io.readDir(tmpDir)
-    assert(entries.length >= 2)
+    assert(len(entries) >= 2)
     io.removeAll(tmpDir)
 }
 
@@ -142,7 +142,7 @@ fn test_touch() {
 @test
 fn test_cwd() {
     var cwd = io.cwd()
-    assert(cwd.length > 0)
+    assert(len(cwd) > 0)
 }
 
 @test

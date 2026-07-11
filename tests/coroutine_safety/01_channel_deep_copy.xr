@@ -22,12 +22,12 @@ fn test_array_isolation() {
     // 接收
     var received = recvValue(ch)
     // 验证隔离：接收到的应该是 [1,2,3]，不是 [1,2,3,4,5]
-    print("原数组长度:", original.length)
+    print("原数组长度:", len(original))
     // 应该是 5
-    print("接收数组长度:", received.length)
+    print("接收数组长度:", len(received))
     // 应该是 3
-    assert_eq(original.length, 5)
-    assert_eq(received.length, 3)
+    assert_eq(len(original), 5)
+    assert_eq(len(received), 3)
     print("✓ 数组隔离测试通过")
 }
 
@@ -42,12 +42,12 @@ fn test_map_isolation() {
     // 接收
     var received = recvValue(ch)
     // 验证隔离
-    print("原 Map 大小:", original.size)
+    print("原 Map 大小:", len(original))
     // 应该是 4
-    print("接收 Map 大小:", received.size)
+    print("接收 Map 大小:", len(received))
     // 应该是 2
-    assert_eq(original.size, 4)
-    assert_eq(received.size, 2)
+    assert_eq(len(original), 4)
+    assert_eq(len(received), 2)
     print("✓ Map 隔离测试通过")
 }
 
@@ -63,12 +63,12 @@ fn test_nested_isolation() {
     // 验证深层隔离
     var orig_items = original.get("items")
     var recv_items = received.get("items")
-    print("原嵌套数组长度:", orig_items.length)
+    print("原嵌套数组长度:", len(orig_items))
     // 应该是 4
-    print("接收嵌套数组长度:", recv_items.length)
+    print("接收嵌套数组长度:", len(recv_items))
     // 应该是 3
-    assert_eq(orig_items.length, 4)
-    assert_eq(recv_items.length, 3)
+    assert_eq(len(orig_items), 4)
+    assert_eq(len(recv_items), 3)
     print("✓ 嵌套结构隔离测试通过")
 }
 

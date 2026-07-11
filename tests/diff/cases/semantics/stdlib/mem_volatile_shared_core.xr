@@ -4,8 +4,8 @@
 // native-order sized value. size in {1,2,4,8}. RawMut args coerce into the
 // RawPtr param of volatileLoad via mut->const.
 import mem
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(16) }
 mem.set(p, 0, 16)

@@ -51,7 +51,7 @@ fn test_map_single_arg_callback() {
 fn test_filter_single_arg_callback() {
     var xs = [1, 2, 3, 4, 5]
     var evens = xs.filter(fn(x: int) -> bool { return x % 2 == 0 })
-    assert_eq(evens.length, 2)
+    assert_eq(len(evens), 2)
     assert_eq(evens[0], 2)
     assert_eq(evens[1], 4)
 }

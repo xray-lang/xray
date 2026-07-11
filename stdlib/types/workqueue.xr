@@ -2,7 +2,6 @@
 
 @native
 class WorkQueue<T> {
-    length: int
     shardCount: int
     isClosed: bool
     push(value: T, shard?: int) -> bool

@@ -1,13 +1,13 @@
 @no_alloc
 fn xray_no_alloc_json_scalar_methods_ok(value: Json) -> int {
-    var score = Json.size(value)
-    if (Json.has(value, "answer")) {
+    var score = len(value)
+    if (Json.containsKey(value, "answer")) {
         score = score + 10
     }
-    if (value.has("label")) {
+    if (Json.containsKey(value, "label")) {
         score = score + 20
     }
-    if (!Json.isEmpty(value)) {
+    if (len(value) != 0) {
         score = score + 30
     }
     if (Json.get(value, "answer", 0) == 42) {

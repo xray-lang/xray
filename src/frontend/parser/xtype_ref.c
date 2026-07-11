@@ -73,7 +73,7 @@ XR_FUNC XrTypeRef *xr_tref_bool(struct XrCompilerSession *session) {
 
 XR_FUNC XrTypeRef *xr_tref_char(struct XrCompilerSession *session) {
     XrTypeRef *t = tref_alloc(session);
-    t->kind = XR_TREF_CHAR;
+    t->kind = XR_TREF_RUNE;
     return t;
 }
 
@@ -264,8 +264,8 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
         case XR_TREF_BOOL:
             tref_append(buf, pos, cap, "bool");
             break;
-        case XR_TREF_CHAR:
-            tref_append(buf, pos, cap, "char");
+        case XR_TREF_RUNE:
+            tref_append(buf, pos, cap, "rune");
             break;
         case XR_TREF_UNIT:
             tref_append(buf, pos, cap, "()");

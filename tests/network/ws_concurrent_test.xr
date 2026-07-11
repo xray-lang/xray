@@ -165,7 +165,7 @@ fn runStressTest() {
         ws.send(conn, "stress test message")
     }
     var sendTime = time.now() - sendStart
-    print("  发送 " + connections.length.toString() + " 条消息耗时: " + sendTime.toString() + "ms")
+    print("  发送 " + len(connections).toString() + " 条消息耗时: " + sendTime.toString() + "ms")
     
     // 关闭所有连接
     var closeStart = time.now()
@@ -173,7 +173,7 @@ fn runStressTest() {
         ws.close(conn)
     }
     var closeTime = time.now() - closeStart
-    print("  关闭 " + connections.length.toString() + " 个连接耗时: " + closeTime.toString() + "ms")
+    print("  关闭 " + len(connections).toString() + " 个连接耗时: " + closeTime.toString() + "ms")
     print("")
 }
 

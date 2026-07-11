@@ -12,14 +12,14 @@ var n = 42
 print("num=${n}")       // num=42
 
 // String length
-print(a.length)         // 5
-print(c.length)         // 11
+print(len(a))         // 5
+print(len(c))         // 11
 
 // Repeated concat
 var s = "ab"
 var t = s + s + s
 print(t)                // ababab
-print(t.length)         // 6
+print(len(t))         // 6
 
 fn lowByteAt(text: string, index: int) -> int {
     return text.codePointAt(index) & 0xFF

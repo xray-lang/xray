@@ -12,7 +12,7 @@ const CHANNEL_NAME_MAX = 127
 const TOPIC_PATTERN_MAX = 127
 
 fn _asciiPrintable(s: string) -> bool {
-    for (var i = 0; i < s.length; i++) {
+    for (var i = 0; i < len(s); i++) {
         var c = s.charAt(i).ord()!
         if (c < 0x20 || c > 0x7E) { return false }
     }
@@ -20,7 +20,7 @@ fn _asciiPrintable(s: string) -> bool {
 }
 
 fn _validName(s: string, maxLen: int) -> bool {
-    return s.length > 0 && s.length <= maxLen && _asciiPrintable(s)
+    return len(s) > 0 && len(s) <= maxLen && _asciiPrintable(s)
 }
 
 fn validNodeName(name: string) -> bool {
@@ -32,9 +32,9 @@ fn validChannelName(name: string) -> bool {
 }
 
 fn _parsePort(raw: string) -> int {
-    if (raw.length == 0) { return 0 }
+    if (len(raw) == 0) { return 0 }
     var out = 0
-    for (var i = 0; i < raw.length; i++) {
+    for (var i = 0; i < len(raw); i++) {
         var c = raw.charAt(i).ord()!
         if (c < 48 || c > 57) { return 0 }
         out = out * 10 + (c - 48)
@@ -44,41 +44,41 @@ fn _parsePort(raw: string) -> int {
 }
 
 fn _stripIpv6Brackets(host: string) -> string {
-    if (host.length >= 2 && host.charAt(0) == "[" && host.charAt(host.length - 1) == "]") {
-        return host.slice(1, host.length - 1)
+    if (len(host) >= 2 && host.charAt(0) == "[" && host.charAt(len(host) - 1) == "]") {
+        return host.slice(1, len(host) - 1)
     }
     return host
 }
 
 fn parseAddress(addr: string) -> Json {
     var colon = addr.lastIndexOf(":")
-    if (colon <= 0 || colon + 1 >= addr.length) { return null }
+    if (colon <= 0 || colon + 1 >= len(addr)) { return null }
     var host = _stripIpv6Brackets(addr.slice(0, colon))
     var port = _parsePort(addr.slice(colon + 1))
-    if (host.length == 0 || port <= 0) { return null }
+    if (len(host) == 0 || port <= 0) { return null }
     return { host: host, port: port }
 }
 
 fn _hasEmptyTopicSegment(s: string) -> bool {
-    if (s.length == 0) { return true }
-    if (s.charAt(0) == "." || s.charAt(s.length - 1) == ".") { return true }
-    for (var i = 1; i < s.length; i++) {
+    if (len(s) == 0) { return true }
+    if (s.charAt(0) == "." || s.charAt(len(s) - 1) == ".") { return true }
+    for (var i = 1; i < len(s); i++) {
         if (s.charAt(i) == "." && s.charAt(i - 1) == ".") { return true }
     }
     return false
 }
 
 fn validTopicName(topic: string) -> bool {
-    if (topic.length > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(topic)) { return false }
+    if (len(topic) > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(topic)) { return false }
     return topic.indexOf("*") < 0 && topic.indexOf(">") < 0
 }
 
 fn validTopicPattern(pattern: string) -> bool {
-    if (pattern.length > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(pattern)) { return false }
+    if (len(pattern) > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(pattern)) { return false }
     var parts = pattern.split(".")
-    for (var i = 0; i < parts.length; i++) {
+    for (var i = 0; i < len(parts); i++) {
         var part = parts[i]
-        if (part == ">") { return i == parts.length - 1 }
+        if (part == ">") { return i == len(parts) - 1 }
         if (part == "*") { continue }
         if (part.indexOf("*") >= 0 || part.indexOf(">") >= 0) { return false }
     }
@@ -92,17 +92,17 @@ fn topicMatches(pattern: string, topic: string) -> bool {
     var t = topic.split(".")
     var pi = 0
     var ti = 0
-    while (pi < p.length) {
+    while (pi < len(p)) {
         var part = p[pi]
         if (part == ">") {
-            return ti < t.length
+            return ti < len(t)
         }
-        if (ti >= t.length) { return false }
+        if (ti >= len(t)) { return false }
         if (part != "*" && part != t[ti]) { return false }
         pi = pi + 1
         ti = ti + 1
     }
-    return ti == t.length
+    return ti == len(t)
 }
 
 export {

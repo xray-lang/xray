@@ -1,8 +1,8 @@
 fn make() -> () -> int {
     var owner = [1, 2, 3]
-    var view: Span<int> = owner[0:2]
+    var view: Slice<int> = owner[0:2]
     var read = fn() -> int {
-        return view.length
+        return len(view)
     }
     return read
 }

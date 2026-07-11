@@ -610,7 +610,7 @@ TEST(index_access) {
 
 TEST(member_access) {
     XiFunc *f = lower_source("var arr = [1, 2, 3]\n"
-                             "var n = arr.length\n"
+                             "var n = len(arr)\n"
                              "print(n)\n");
     assert(f != NULL);
     int found_load_field = 0;
@@ -948,7 +948,7 @@ TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
                                                           "}\n"
                                                           "\n"
                                                           "var h = Holder()\n"
-                                                          "print(h.values.length)\n",
+                                                          "print(len(h.values))\n",
                                                           &ev);
     REQUIRE_CLASS_FIELD_INIT_EVIDENCE(main_func != NULL, "source should lower");
 
@@ -1581,11 +1581,11 @@ TEST(map_set_method_key_access_lowers_with_global_evidence_id) {
                                           "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                                           "    var seen: Set<string> = #[\"ada\"]\n"
                                           "    scores.get(\"ada\")\n"
-                                          "    scores.has(\"lin\")\n"
+                                          "    scores.containsKey(\"lin\")\n"
                                           "    scores.delete(\"lin\")\n"
                                           "    scores.set(\"ada\", 8)\n"
                                           "    scores.clear()\n"
-                                          "    seen.has(\"ada\")\n"
+                                          "    seen.contains(\"ada\")\n"
                                           "    seen.add(\"lin\")\n"
                                           "    seen.delete(\"ada\")\n"
                                           "    seen.clear()\n"
@@ -1887,7 +1887,7 @@ TEST(direct_await_go_one_shot) {
 }
 
 TEST(go_arg_transfer_modes) {
-    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                    "var xs = [1, 2]\n"
                                    "var task = go worker(copy(xs))\n"
                                    "print(await task)\n");
@@ -1901,7 +1901,7 @@ TEST(go_arg_transfer_modes) {
            "go boundary copy(...) must not lower to a separate copy op before GO");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                    "shared xs: Array<int> = [1, 2]\n"
                                    "var task = go worker(move xs)\n"
                                    "print(await task)\n");
@@ -1914,7 +1914,7 @@ TEST(go_arg_transfer_modes) {
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                     "shared xs: Array<int> = [1, 2]\n"
                                     "var task = go worker(xs)\n"
                                     "print(await task)\n");

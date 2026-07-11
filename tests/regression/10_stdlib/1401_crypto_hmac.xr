@@ -38,7 +38,7 @@ fn test_hmac_sha256_complex_key() {
 fn test_hmac_sha256_long_data() {
     // 长数据的 HMAC-SHA256
     var hmac = crypto.hmac("sha256", "secret", "The quick brown fox jumps over the lazy dog")!
-    assert_eq(hmac.length, 64)
+    assert_eq(len(hmac), 64)
 }
 
 // ============================================================
@@ -63,7 +63,7 @@ fn test_hmac_sha1_empty_message() {
 fn test_hmac_sha1_length() {
     // HMAC-SHA1 长度验证
     var hmac = crypto.hmac("sha1", "secret", "data")!
-    assert_eq(hmac.length, 40)
+    assert_eq(len(hmac), 40)
 }
 
 // ============================================================
@@ -88,5 +88,5 @@ fn test_hmac_md5_empty_message() {
 fn test_hmac_md5_length() {
     // HMAC-MD5 长度验证
     var hmac = crypto.hmac("md5", "secret", "data")!
-    assert_eq(hmac.length, 32)
+    assert_eq(len(hmac), 32)
 }

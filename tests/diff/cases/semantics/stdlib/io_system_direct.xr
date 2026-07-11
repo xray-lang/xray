@@ -3,7 +3,7 @@
 import io
 
 var root = io.tempDir() ?? ""
-print(root.length > 0)
+print(len(root) > 0)
 
 var dir = root + "/a/b"
 print(io.mkdirp(dir))
@@ -22,33 +22,33 @@ print(io.readFile(file) == "hello")
 print(io.appendFile(file, "\nworld"))
 
 var lines = io.readLines(file)
-print(lines.length)
+print(len(lines))
 print(lines[0])
 print(lines[1])
 
 var trailingFile = dir + "/trailing.txt"
 print(io.writeFile(trailingFile, "alpha\n"))
 var trailingLines = io.readLines(trailingFile)
-print(trailingLines.length)
+print(len(trailingLines))
 print(trailingLines[0])
 
 var crlfFile = dir + "/crlf.txt"
 print(io.writeFile(crlfFile, "a\r\n\r\nb\r\n"))
 var crlfLines = io.readLines(crlfFile)
-print(crlfLines.length)
+print(len(crlfLines))
 print(crlfLines[0])
 print(crlfLines[1] == "")
 print(crlfLines[2])
 
 var bytesFile = dir + "/bytes.bin"
-var bytes = Bytes(3)
+var bytes = Array<byte>(3)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 255
 print(io.writeFileBytes(bytesFile, bytes))
 var readBytes = io.readFileBytes(bytesFile)
 if (readBytes != null) {
-    print(readBytes.length)
+    print(len(readBytes))
     print(readBytes[0])
     print(readBytes[1])
     print(readBytes[2])
@@ -69,7 +69,7 @@ print(io.exists(moved))
 
 var stat = io.stat(file)
 print(stat != null)
-print(stat!.size == 11)
+print(len(stat!) == 11)
 print(stat!.mode >= 0)
 print(stat!.mtime >= 0)
 print(stat!.atime >= 0)
@@ -85,14 +85,14 @@ print(io.touch(touched))
 print(io.chmod(file, 420))
 
 var entries = io.readDir(dir)
-print(entries.length >= 2)
+print(len(entries) >= 2)
 var recursive = io.readDirRecursive(root)
-print(recursive.length >= 4)
+print(len(recursive) >= 4)
 
 var resolvedDir = io.realpath(dir) ?? ""
 var oldCwd = io.cwd()
-print(oldCwd.length > 0)
-print(resolvedDir.length > 0)
+print(len(oldCwd) > 0)
+print(len(resolvedDir) > 0)
 print(io.chdir(dir))
 print(io.cwd() == resolvedDir)
 print(io.chdir(oldCwd))
@@ -108,7 +108,7 @@ if (linkOk) {
 }
 
 var tmpFile = io.tempFile() ?? ""
-print(tmpFile.length > 0)
+print(len(tmpFile) > 0)
 print(io.exists(tmpFile))
 print(io.remove(tmpFile))
 

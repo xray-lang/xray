@@ -2,13 +2,13 @@ var flags: Map<int, bool> = #{}
 flags.set(1, true)
 flags.set(2, false)
 flags.set(3, true)
-print(flags.length)
+print(len(flags))
 print(flags.get(1))
 print(flags.get(2))
-print(flags.has(4))
+print(flags.containsKey(4))
 
 var values = flags.values()
-print(values.length)
+print(len(values))
 print(values[0])
 
 class BoolValueMapBag {
@@ -25,14 +25,14 @@ class BoolValueMapBag {
             this.values.set(i, i % 3 == 0)
             i = i + 1
         }
-        return this.values.size
+        return len(this.values)
     }
 
     count(n: int) -> int {
         var i = 0
         var total = 0
         while (i < n) {
-            if (this.values.has(i)) {
+            if (this.values.containsKey(i)) {
                 if (this.values.get(i) == true) {
                     total = total + 1
                 }

@@ -76,7 +76,7 @@ fn test_self_closing_with_attrs() {
     assert_eq(img["tag"], "img")
     assert_eq(img["attrs"]["src"], "a.png")
     assert_eq(img["attrs"]["alt"], "pic")
-    assert_eq(img["children"].length, 0)
+    assert_eq(len(img["children"]), 0)
 }
 
 // ===== Processing instruction =====
@@ -96,7 +96,7 @@ fn test_create_element_with_attrs() {
     assert_eq(elem["tag"], "div")
     assert_eq(elem["attrs"]["class"], "container")
     assert_eq(elem["attrs"]["id"], "main")
-    assert_eq(elem["children"].length, 0)
+    assert_eq(len(elem["children"]), 0)
 }
 
 // ===== Create text/comment/cdata nodes =====
@@ -139,7 +139,7 @@ fn test_stringify_roundtrip() {
     var str = xml.stringify(doc, { indent: 0, declaration: false })
     var doc2 = xml.parse(str)
     assert_eq(doc2["tag"], "root")
-    assert_eq(doc2["children"].length, 2)
+    assert_eq(len(doc2["children"]), 2)
     assert_eq(doc2["children"][0]["attrs"]["id"], "1")
     assert_eq(doc2["children"][1]["children"][0]["text"], "World")
 }
@@ -150,7 +150,7 @@ fn test_stringify_roundtrip() {
 fn test_parse_detailed_valid() {
     var result = xml.parseDetailed("<ok/>")
     assert_eq(result["doc"]["tag"], "ok")
-    assert_eq(result["errors"].length, 0)
+    assert_eq(len(result["errors"]), 0)
 }
 
 // ===== Whitespace handling =====
@@ -159,7 +159,7 @@ fn test_parse_detailed_valid() {
 fn test_whitespace_stripped_by_default() {
     var data = "<root>  \n  <item/>\n  </root>"
     var doc: Json = xml.parse(data) ?? {}
-    assert_eq(doc["children"].length, 1)
+    assert_eq(len(doc["children"]), 1)
     assert_eq(doc["children"][0]["tag"], "item")
 }
 
@@ -168,7 +168,7 @@ fn test_whitespace_preserved() {
     var data = "<root> text </root>"
     var doc: Json = xml.parse(data, { preserveWhitespace: true }) ?? {}
     // Should preserve whitespace-only text nodes
-    assert_eq(doc["children"].length, 1)
+    assert_eq(len(doc["children"]), 1)
 }
 
 // ===== DOCTYPE handling =====
@@ -207,7 +207,7 @@ fn test_stringify_escapes_text() {
 fn test_mixed_content() {
     var data = "<root>Hello<b>World</b>!</root>"
     var doc: Json = xml.parse(data) ?? {}
-    assert_eq(doc["children"].length, 3)
+    assert_eq(len(doc["children"]), 3)
     assert_eq(doc["children"][0]["type"], "text")
     assert_eq(doc["children"][0]["text"], "Hello")
     assert_eq(doc["children"][1]["tag"], "b")

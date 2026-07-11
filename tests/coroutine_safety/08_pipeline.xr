@@ -124,8 +124,8 @@ fn test_parallel_pipeline() {
     for (var i = 0; i < 20; i++) {
         results.push(recvValue(output))
     }
-    print("并行流水线结果数:", results.length)
-    assert_eq(results.length, 20)
+    print("并行流水线结果数:", len(results))
+    assert_eq(len(results), 20)
     print("✓ 并行流水线测试通过")
 }
 

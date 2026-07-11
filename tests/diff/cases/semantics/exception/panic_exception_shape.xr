@@ -42,8 +42,8 @@ fn show_mod_zero() {
 }
 
 fn show_bytes_load_oob() {
-    var bytes = Bytes(4, 1)
-    var view: ByteSpan = bytes[:]
+    var bytes = Array<byte>(4, 1)
+    var view: Slice<byte> = bytes[:]
     try {
         var value: uint32 = view.load<uint32>(2, Endian.LE)
         print(int(value))
@@ -54,7 +54,7 @@ fn show_bytes_load_oob() {
 }
 
 fn show_bytes_copy_within_oob() {
-    var bytes = Bytes.withCapacity(4)
+    var bytes = Array<byte>.withCapacity(4)
     unsafe {
         bytes.push(1)
     }
@@ -69,16 +69,16 @@ fn show_bytes_copy_within_oob() {
 
 fn show_bytes_ctor_type_error() {
     try {
-        var bytes1 = Bytes("bad")
-        print(bytes1.length)
+        var bytes1 = Array<byte>("bad")
+        print(len(bytes1))
     } catch panic (p) {
         print(p.message)
         print(p.code)
     }
 
     try {
-        var bytes2 = Bytes(2, "bad")
-        print(bytes2.length)
+        var bytes2 = Array<byte>(2, "bad")
+        print(len(bytes2))
     } catch panic (p) {
         print(p.message)
         print(p.code)
@@ -88,8 +88,8 @@ fn show_bytes_ctor_type_error() {
 fn show_slice_bounds_type_error() {
     var xs = [1, 2, 3]
     try {
-        var view: Span<int> = xs["a":"b"]
-        print(view.length)
+        var view: Slice<int> = xs["a":"b"]
+        print(len(view))
     } catch panic (p) {
         print(p.message)
         print(p.code)

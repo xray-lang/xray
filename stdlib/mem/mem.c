@@ -90,6 +90,16 @@ typedef struct XrMemBufferBody {
     XrSpanView span_cache;
 } XrMemBufferBody;
 
+int64_t xr_mem_buffer_length(XrValue value) {
+    if (!XR_IS_INSTANCE(value))
+        return -1;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_BUFFER)
+        return -1;
+    XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
+    return buf ? buf->length : 0;
+}
+
 static void mem_buffer_body_init(XrInstance *inst, void *body) {
     (void) inst;
     XrMemBufferBody *buf = (XrMemBufferBody *) body;
@@ -251,14 +261,6 @@ static XrValue mem_alloc_aligned(XrVMRuntime *isolate, XrValue *args, int argc) 
     int64_t n = XR_TO_INT(args[0]);
     size_t a = (size_t) XR_TO_INT(args[1]);
     return mem_buffer_new(isolate, n, false, a);
-}
-
-static XrValue mem_buffer_length(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    XrMemBufferBody *buf = mem_buffer_body(isolate, self);
-    return xr_int(buf ? buf->length : 0);
 }
 
 static XrValue mem_buffer_ptr(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {

@@ -100,8 +100,8 @@ fn test_not_explicit() {
     // ! requires an explicit bool operand (no truthy/falsy)
     assert_eq(!(0 != 0), true)         // 0 == 0
     assert_eq(!(1 != 0), false)        // 1 != 0
-    assert_eq(!("".isEmpty()), false)  // empty string
-    assert_eq(!("hi".isEmpty()), true) // non-empty
+    assert_eq(!(len("") == 0), false)  // empty string
+    assert_eq(!(len("hi") == 0), true) // non-empty
     var n: int? = null
     assert_eq(!(n != null), true)      // null presence
 }
@@ -163,4 +163,3 @@ fn test_complex_condition() {
     assert_eq(x > 0 && y > 0 && x < y, true)
     assert_eq(x < 0 || y < 0 || x > y, false)
 }
-

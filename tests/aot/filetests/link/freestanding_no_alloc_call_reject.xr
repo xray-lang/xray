@@ -2,7 +2,7 @@ import mem
 
 fn xray_no_alloc_helper_allocates(n: int) -> int {
     var b = mem.alloc(n)
-    return b.length()
+    return len(b)
 }
 
 @no_alloc

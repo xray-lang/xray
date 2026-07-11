@@ -29,9 +29,9 @@ fn test_const_array() {
     const data = [1, 2, 3, 4, 5]
     ch.send(data)
     var received = recvValue(ch)
-    print("发送长度:", data.length)
-    print("接收长度:", received.length)
-    assert_eq(received.length, 5)
+    print("发送长度:", len(data))
+    print("接收长度:", len(received))
+    assert_eq(len(received), 5)
     assert_eq(received[0], 1)
     assert_eq(received[4], 5)
     print("✓ const 数组测试通过")

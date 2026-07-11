@@ -6,10 +6,10 @@ var N = 1000
 // 协程数量
 var M = 1000
 // 消息轮数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     M = int(process.args[1]) ?? M
 }
 print("=== Ring 测试 ===")

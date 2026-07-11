@@ -20,7 +20,7 @@ fn bigint(n: int) {
 
 fn bigint_clone(a) {
     var nd = []
-    for (i in 0..a.digits.length) {
+    for (i in 0..len(a.digits)) {
         nd.push(a.digits[i])
     }
     return { "sign": a.sign, "digits": nd }
@@ -28,10 +28,10 @@ fn bigint_clone(a) {
 
 fn normalize(a) {
     var d = a.digits
-    while (d.length > 1 && d[d.length - 1] == 0) {
+    while (len(d) > 1 && d[len(d) - 1] == 0) {
         d.pop()
     }
-    if (d.length == 1 && d[0] == 0) {
+    if (len(d) == 1 && d[0] == 0) {
         a.sign = 1
     }
     return a
@@ -40,13 +40,13 @@ fn normalize(a) {
 fn compare_abs(a, b): int {
     var da = a.digits
     var db = b.digits
-    if (da.length > db.length) {
+    if (len(da) > len(db)) {
         return 1
     }
-    if (da.length < db.length) {
+    if (len(da) < len(db)) {
         return -1
     }
-    var i = da.length - 1
+    var i = len(da) - 1
     while (i >= 0) {
         if (da[i] > db[i]) {
             return 1
@@ -64,17 +64,17 @@ fn add_abs(a, b) {
     var db = b.digits
     var rd = []
     var carry = 0
-    var len = da.length
-    if (db.length > len) {
-        len = db.length
+    var count = len(da)
+    if (len(db) > count) {
+        count = len(db)
     }
-    for (i in 0..len) {
+    for (i in 0..count) {
         var va = 0
         var vb = 0
-        if (i < da.length) {
+        if (i < len(da)) {
             va = da[i]
         }
-        if (i < db.length) {
+        if (i < len(db)) {
             vb = db[i]
         }
         var sum = va + vb + carry
@@ -92,9 +92,9 @@ fn sub_abs(a, b) {
     var db = b.digits
     var rd = []
     var borrow = 0
-    for (i in 0..da.length) {
+    for (i in 0..len(da)) {
         var vb = 0
-        if (i < db.length) {
+        if (i < len(db)) {
             vb = db[i]
         }
         var diff = da[i] - vb - borrow
@@ -132,7 +132,7 @@ fn bigint_add(a, b) {
 
 fn bigint_sub(a, b) {
     var nb = bigint_clone(b)
-    if (b.digits.length == 1 && b.digits[0] == 0) {
+    if (len(b.digits) == 1 && b.digits[0] == 0) {
         nb.sign = 1
     } else {
         nb.sign = 0 - b.sign
@@ -152,7 +152,7 @@ fn bigint_mul_int(a, n: int) {
     var da = a.digits
     var rd = []
     var carry = 0
-    for (i in 0..da.length) {
+    for (i in 0..len(da)) {
         var prod = da[i] * n + carry
         rd.push(prod % 10)
         carry = prod / 10
@@ -171,14 +171,14 @@ fn bigint_div(a, b) {
     }
     var da = a.digits
     var qd = []
-    for (i in 0..da.length) {
+    for (i in 0..len(da)) {
         qd.push(0)
     }
     var rem = { "sign": 1, "digits": [] }
-    for (pos in 0..da.length) {
-        var idx = da.length - 1 - pos
+    for (pos in 0..len(da)) {
+        var idx = len(da) - 1 - pos
         var nrd = [da[idx]]
-        for (j in 0..rem.digits.length) {
+        for (j in 0..len(rem.digits)) {
             nrd.push(rem.digits[j])
         }
         rem = normalize({ "sign": 1, "digits": nrd })
@@ -196,7 +196,7 @@ fn bigint_to_int(a): int {
     var d = a.digits
     var r = 0
     var base = 1
-    for (i in 0..d.length) {
+    for (i in 0..len(d)) {
         r = r + d[i] * base
         base = base * 10
     }
@@ -258,8 +258,8 @@ fn pidigits(n: int) {
             produce(digit)
         }
     }
-    if (output.length > 0) {
-        var pad = 10 - output.length
+    if (len(output) > 0) {
+        var pad = 10 - len(output)
         while (pad > 0) {
             output = output + " "
             pad--
@@ -268,5 +268,5 @@ fn pidigits(n: int) {
     }
 }
 
-var n = process.args.length > 0 ? int(process.args[0]) ?? 30 : 30
+var n = len(process.args) > 0 ? int(process.args[0]) ?? 30 : 30
 pidigits(n)

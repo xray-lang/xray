@@ -715,6 +715,17 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_unary_opcode(ctx, v, dst, OP_COPY);
         return;
     }
+    if (bname && strcmp(bname, "len") == 0) {
+        if (v->nargs != 1) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        XiEmitReg src = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_LEN, dst, src, (uint8_t) (v->aux_int != 0)));
+        return;
+    }
     if (bname && strcmp(bname, "to_shared") == 0) {
         emit_builtin_unary_opcode(ctx, v, dst, OP_TO_SHARED);
         return;

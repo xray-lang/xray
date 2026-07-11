@@ -1,12 +1,12 @@
-fn touch(xs: Array<int>, b: Bytes, s: string, span: ByteSpan, sb: StringBuilder) -> int {
+fn touch(xs: Array<int>, b: Array<byte>, s: string, span: Slice<byte>, sb: StringBuilder) -> int {
     xs.push(1)
     var first = xs[0]
-    var part: Span<int> = xs[0:1]
-    var n = xs.length
+    var part: Slice<int> = xs[0:1]
+    var n = len(xs)
     b.appendFrom(span)
     b.fill(0)
     var text = b.toString()
-    var bytes = s.toBytes()
+    var bytes = s.copyBytes()
     sb.append(text)
     return n + first
 }

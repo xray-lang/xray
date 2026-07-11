@@ -80,7 +80,7 @@ fn test_replace_all() {
 fn test_split() {
     var re = /[,;]/
     var parts = regex.split(re, "a,b;c")
-    assert_eq(parts.length, 3)
+    assert_eq(len(parts), 3)
     assert_eq(parts[0], "a")
     assert_eq(parts[1], "b")
     assert_eq(parts[2], "c")

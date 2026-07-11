@@ -36,8 +36,8 @@ static const char *xi_type_name(const struct XrType *type) {
             return "float";
         case XR_KIND_BOOL:
             return "bool";
-        case XR_KIND_CHAR:
-            return "char";
+        case XR_KIND_RUNE:
+            return "rune";
         case XR_KIND_STRING:
             return "string";
         case XR_KIND_NULL:
@@ -113,7 +113,7 @@ static void dump_value(FILE *out, const XiValue *v) {
             fprintf(out, " %g", fval);
         } else if (v->type && v->type->kind == XR_KIND_BOOL) {
             fprintf(out, " %s", v->aux_int ? "true" : "false");
-        } else if (v->type && v->type->kind == XR_KIND_CHAR) {
+        } else if (v->type && v->type->kind == XR_KIND_RUNE) {
             fprintf(out, " U+%04" PRIX64, (uint64_t) v->aux_int);
         } else if (v->type && v->type->kind == XR_KIND_NULL) {
             fprintf(out, " null");

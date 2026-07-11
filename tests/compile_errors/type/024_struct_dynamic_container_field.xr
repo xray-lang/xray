@@ -4,5 +4,5 @@ struct Bag {
 
 fn main() {
     var bag = Bag{data: []}
-    print(bag.data.length)
+    print(len(bag.data))
 }

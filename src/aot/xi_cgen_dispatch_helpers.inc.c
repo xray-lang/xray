@@ -183,8 +183,8 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         fprintf(out, "%" PRId64, v->aux_int);
         if (boxed)
             fprintf(out, ")");
-    } else if (v->type->kind == XR_KIND_CHAR) {
-        fprintf(out, "XR_FROM_CHAR((uint32_t)0x%X)", (unsigned) (uint32_t) v->aux_int);
+    } else if (v->type->kind == XR_KIND_RUNE) {
+        fprintf(out, "XR_FROM_RUNE((uint32_t)0x%X)", (unsigned) (uint32_t) v->aux_int);
     } else if (v->type->kind == XR_KIND_NULL)
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {
@@ -3780,6 +3780,21 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
+    } else if (strcmp(bn, "len") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin len: need arg");
+        if (xi_value_type_is_channel(v->args[0])) {
+            fprintf(out, "XR_TO_INT(xr_aot_chan_length(ctx, ");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, "))");
+        } else if (xi_value_type_is_work_queue(v->args[0])) {
+            fprintf(out, "XR_TO_INT(xr_aot_work_queue_length(ctx, ");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, "))");
+        } else {
+            fprintf(out, "XR_TO_INT(xrt_len_value(");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, ", %d))", v->aux_int != 0 ? 1 : 0);
+        }
     } else if (strcmp(bn, "chr") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin chr: need arg");
         fprintf(out, "xrt_chr(");
@@ -3804,9 +3819,9 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_slice(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "range") == 0) {
         xicgen_range(ctx, out, f, v, prefix);
-    } else if (strcmp(bn, "typeof") == 0) {
+    } else if (strcmp(bn, "typeOf") == 0) {
         xicgen_typeid(ctx, out, f, v, prefix);
-    } else if (strcmp(bn, "typename") == 0) {
+    } else if (strcmp(bn, "typeName") == 0) {
         xicgen_typename(ctx, out, f, v, prefix);
     } else if (xicgen_emit_math_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the math helper. */
@@ -5572,7 +5587,7 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
         return true;
     }
 
-    if (strcmp(method, "has") == 0 && nargs == 2 && v->nargs >= 3) {
+    if (strcmp(method, "containsKey") == 0 && nargs == 2 && v->nargs >= 3) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "xrt_json_static_has(");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -5913,9 +5928,9 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     int sym = cg_method_sym(method);
     if (sym < 0 && xicgen_emit_stringbuilder_append(out, v, method, nargs))
         return;
-    /* string.toBytes(): the VM dispatches this by name (no stable method-symbol
+    /* string.copyBytes(): the VM dispatches this by name (no stable method-symbol
      * id), so lower it directly to the runtime helper. Mirrors VM m_to_bytes. */
-    if (sym < 0 && method && strcmp(method, "toBytes") == 0 && nargs == 0 && v->nargs >= 1) {
+    if (sym < 0 && method && strcmp(method, "copyBytes") == 0 && nargs == 0 && v->nargs >= 1) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_str_to_bytes(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -7764,9 +7779,9 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_vref(out, v->args[0]);
             fprintf(out, " != 0)");
         }
-    } else if (v->type->kind == XR_KIND_CHAR) {
-        /* char(x): tagged XR_TAG_CHAR result, validated Unicode scalar. */
-        fprintf(out, "xrt_to_char(");
+    } else if (v->type->kind == XR_KIND_RUNE) {
+        /* char(x): tagged XR_TAG_RUNE result, validated Unicode scalar. */
+        fprintf(out, "xrt_to_rune(");
         emit_boxed_value_ref(out, v->args[0]);
         fprintf(out, ")");
     } else {
@@ -9131,8 +9146,8 @@ static bool xicgen_par_map_array_elem_info(XiCgenCtx *ctx, const XiValue *v, CgA
 
 static void xicgen_emit_par_map_zero_value(FILE *out, const CgArrayElemInfo *info) {
     const char *elem = (info && info->elem_name) ? info->elem_name : "XR_ELEM_ANY";
-    if (strcmp(elem, "XR_ELEM_CHAR") == 0)
-        fprintf(out, "XR_FROM_CHAR(0)");
+    if (strcmp(elem, "XR_ELEM_RUNE") == 0)
+        fprintf(out, "XR_FROM_RUNE(0)");
     else if (strcmp(elem, "XR_ELEM_F32") == 0 || strcmp(elem, "XR_ELEM_F64") == 0)
         fprintf(out, "XR_FROM_FLOAT(0.0)");
     else if (strcmp(elem, "XR_ELEM_BOOL") == 0)
@@ -9840,8 +9855,8 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
             return "fixed array";
         case XR_KIND_POINTER:
             return type->ptr_is_mut ? "RawMut" : "RawPtr";
-        case XR_KIND_CHAR:
-            return "char";
+        case XR_KIND_RUNE:
+            return "rune";
         case XR_KIND_RECORD:
             return "record";
         case XR_KIND_SPAN:

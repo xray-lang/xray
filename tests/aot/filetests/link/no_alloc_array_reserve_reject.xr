@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_array_reserve_reject(xs: Array<int>) -> int {
     xs.reserve(16)
-    return xs.length
+    return len(xs)
 }
 
 var xs = Array<int>(0, 0)

@@ -65,7 +65,7 @@ typedef double xr_Number;
 typedef enum {
     XR_TAG_NULL = 0,      // null singleton
     XR_TAG_BOOL = 1,      // bool: payload 0=false, 1=true
-    XR_TAG_CHAR = 2,      // char: Unicode scalar value in .i (0..0x10FFFF, no surrogates)
+    XR_TAG_RUNE = 2,      // char: Unicode scalar value in .i (0..0x10FFFF, no surrogates)
     XR_TAG_I64 = 3,       // integer (stored in .i as int64)
     XR_TAG_F64 = 4,       // float (stored in .f as double)
     XR_TAG_PTR = 5,       // GC heap object pointer (stored in .ptr)
@@ -134,7 +134,7 @@ static inline XrValue xr_make_ptr_val(void *p) {
 // Singletons
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
-#define XR_IS_CHAR(v) ((v).tag == XR_TAG_CHAR)
+#define XR_IS_RUNE(v) ((v).tag == XR_TAG_RUNE)
 #define XR_IS_NOTFOUND(v) ((v).tag == XR_TAG_NOTFOUND)
 #define XR_IS_TRUE(v) (XR_IS_BOOL(v) && (v).i != 0)
 #define XR_IS_FALSE(v) (XR_IS_BOOL(v) && (v).i == 0)
@@ -271,7 +271,7 @@ static inline uint16_t xr_aggregate_layout_id(XrValue v) {
 #define XR_FROM_BOOL(x) xr_make_int_val((x) ? 1 : 0, XR_TAG_BOOL)
 /* char: Unicode scalar value held in the int64 payload; caller must have
  * validated the scalar (0..0x10FFFF, excluding U+D800..U+DFFF). */
-#define XR_FROM_CHAR(cp) xr_make_int_val((int64_t) (uint32_t) (cp), XR_TAG_CHAR)
+#define XR_FROM_RUNE(cp) xr_make_int_val((int64_t) (uint32_t) (cp), XR_TAG_RUNE)
 #define XR_FROM_PTR(p) xr_make_ptr_val((void *) (p))
 #define XR_FROM_STR(s) xr_make_ptr_val((void *) (s))
 
@@ -281,7 +281,7 @@ static inline uint16_t xr_aggregate_layout_id(XrValue v) {
 #define XR_TO_FLOAT(v) ((v).f)
 #define XR_TO_PTR(v) ((v).ptr)
 #define XR_TO_BOOL(v) ((int) (v).i)
-#define XR_TO_CHAR(v) ((uint32_t) (v).i)
+#define XR_TO_RUNE(v) ((uint32_t) (v).i)
 
 /* ========== Value Set Macros ========== */
 
@@ -395,8 +395,8 @@ static inline XrValue xr_null(void) {
 static inline XrValue xr_bool(int b) {
     return b ? XR_TRUE_VAL : XR_FALSE_VAL;
 }
-static inline XrValue xr_char(uint32_t cp) {
-    return XR_FROM_CHAR(cp);
+static inline XrValue xr_rune(uint32_t cp) {
+    return XR_FROM_RUNE(cp);
 }
 XR_FUNC bool xr_value_is_truthy(XrValue value);
 static inline XrValue xr_int(xr_Integer i) {

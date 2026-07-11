@@ -1,7 +1,7 @@
 // 116 boundary: build a `shared` map, alias the same shared identity, then
 // pass it across two goroutines.
 fn reader(t: Map<int, int>) -> int {
-    return t.length
+    return len(t)
 }
 
 shared table: Map<int, int> = #{}

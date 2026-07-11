@@ -12,7 +12,7 @@ m.set(dyn.goodBool, dyn.goodInt)
 print("map=" + m.get(true)!.toString())
 
 try {
-    print(m.has(dyn.badBool).toString())
+    print(m.containsKey(dyn.badBool).toString())
     print("bad-map-key")
 } catch panic(e) {
     print("caught-map-key")
