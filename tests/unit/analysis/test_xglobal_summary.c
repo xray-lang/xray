@@ -11105,6 +11105,110 @@ TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_b
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_propagates_json_shape_through_fallthrough_return_receiver) {
+    setup_parser_session();
+    const char *source = "fn makeUser(flag: bool) -> Json {\n"
+                         "    if (flag) {\n"
+                         "        return { name: \"ada\", age: 1 }\n"
+                         "    }\n"
+                         "    return { name: \"bob\", age: 2 }\n"
+                         "}\n"
+                         "fn readReturnedFallthrough(flag: bool) -> int {\n"
+                         "    return makeUser(flag).age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedFallthrough");
+    ASSERT_NOT_NULL(reader);
+    ASSERT_EQ_UINT(ev.njson_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotJsonAccessPlan *access_plan =
+        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_fallthrough_return) {
+    setup_parser_session();
+    const char *source = "fn makeUser(flag: bool) -> Json {\n"
+                         "    if (flag) {\n"
+                         "        return { name: \"ada\", age: 1 }\n"
+                         "    }\n"
+                         "    return { name: \"bob\", score: 2 }\n"
+                         "}\n"
+                         "fn readReturnedFallthroughUnknown(flag: bool) -> int {\n"
+                         "    return makeUser(flag).age\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedFallthroughUnknown");
+    ASSERT_NOT_NULL(reader);
+    ASSERT_EQ_UINT(ev.njson_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotJsonAccessPlan *access_plan =
+        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    ASSERT_NOT_NULL(access_plan);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_propagates_json_shape_through_return_initialized_local) {
     setup_parser_session();
     const char *source = "fn makeUser() -> Json {\n"
@@ -13380,6 +13484,9 @@ RUN_TEST(global_evidence_producer_does_not_propagate_json_shape_after_indirect_r
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_branch_return_receiver);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_branch_local_return_receiver);
 RUN_TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_branch_return);
+RUN_TEST(global_evidence_producer_propagates_json_shape_through_fallthrough_return_receiver);
+RUN_TEST(
+    global_evidence_producer_does_not_propagate_json_shape_through_mismatched_fallthrough_return);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_return_initialized_local);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_branch_return_initialized_local);
 RUN_TEST(global_evidence_producer_propagates_json_shape_through_branch_assignment_return_receiver);
