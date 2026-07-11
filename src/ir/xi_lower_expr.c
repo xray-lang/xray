@@ -5896,6 +5896,145 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
     return copy;
 }
 
+static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValue *plan,
+                                               AstNode *range, AstNode *initial_node,
+                                               AstNode *body_node, AstNode *combine_node) {
+    RangeNode *rn = &range->as.range;
+    XiValue *start = xi_lower_expr(l, rn->start);
+    XiValue *end = xi_lower_expr(l, rn->end);
+    XiValue *initial = xi_lower_expr(l, initial_node);
+    if (!start || !end || !plan || !initial)
+        return NULL;
+
+    if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    struct XrType *plan_state_type = lower_parallel_plan_state_type(l, plan->type);
+    struct XrType *states_type =
+        xr_type_new_array(l->isolate, plan_state_type ? plan_state_type : l->type_any);
+    XiValue *states = lower_emit_field_load(l, plan, "_states", states_type, node->line);
+    XiValue *workers = lower_emit_field_load(l, states, "length", l->type_int, node->line);
+    if (!states || !workers)
+        return NULL;
+
+    struct XrType *acc_type = xi_lower_node_type(l, node);
+    if (!acc_type || XR_TYPE_IS_UNKNOWN(acc_type))
+        acc_type = initial->type ? initial->type : l->type_int;
+    initial = xi_lower_checktype_for_type(l, initial_node, initial, acc_type);
+    bool native_i64 = acc_type && XR_TYPE_IS_INT(acc_type);
+    bool native_agg = !native_i64 && xi_lower_type_struct_layout(l, acc_type) != NULL;
+    XiNativeCallbackKind combine_callback = XI_NATIVE_CALLBACK_NONE;
+    if (native_i64)
+        combine_callback = XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE;
+    else if (native_agg)
+        combine_callback = XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE;
+
+    FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
+    struct XrType *state_type = parallel_call_param_type(l, body_expr->params[0], plan_state_type);
+    struct XrType *body_abi_types[3] = {state_type ? state_type : l->type_any, l->type_int,
+                                        l->type_int};
+    ParallelCallParamBinding body_bindings[2] = {{
+                                                     .param = body_expr->params[0],
+                                                     .abi_index = 0,
+                                                     .type = body_abi_types[0],
+                                                 },
+                                                 {
+                                                     .param = body_expr->params[1],
+                                                     .abi_index = 1,
+                                                     .type = l->type_int,
+                                                 }};
+    XiFunc *body = parallel_call_lower_lambda_func(l, body_node, "plan_reduce_body", acc_type,
+                                                   XI_NATIVE_CALLBACK_NONE, 3, body_abi_types,
+                                                   body_bindings, 2, node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    FunctionDeclNode *combine_expr = &parallel_call_unwrap_grouping(combine_node)->as.function_expr;
+    struct XrType *combine_abi_types[2] = {acc_type, acc_type};
+    ParallelCallParamBinding combine_bindings[2] = {{
+                                                        .param = combine_expr->params[0],
+                                                        .abi_index = 0,
+                                                        .type = acc_type,
+                                                    },
+                                                    {
+                                                        .param = combine_expr->params[1],
+                                                        .abi_index = 1,
+                                                        .type = acc_type,
+                                                    }};
+    XiFunc *combine = parallel_call_lower_lambda_func(
+        l, combine_node, "plan_reduce_combine", acc_type, combine_callback, 2, combine_abi_types,
+        combine_bindings, 2, node->line);
+    if (!combine) {
+        xi_func_free(body);
+        l->had_error = true;
+        return NULL;
+    }
+
+    XiValue *body_closure = parallel_call_child_closure(l, body, node->line);
+    if (!body_closure) {
+        xi_func_free(combine);
+        return NULL;
+    }
+    XiValue *combine_closure = parallel_call_child_closure(l, combine, node->line);
+    if (!combine_closure)
+        return NULL;
+    uint16_t body_ncap = body->ncaptures;
+    uint16_t combine_ncap = combine->ncaptures;
+
+    XiParallelReduceData *data = (XiParallelReduceData *) xi_func_arena_alloc(
+        l->func, (uint32_t) sizeof(XiParallelReduceData));
+    if (!data) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(data, 0, sizeof(*data));
+    data->body_func = body;
+    data->combine_func = combine;
+    data->accumulator_type = acc_type;
+    data->state_type = body_abi_types[0];
+    data->state_name =
+        body_expr->params[0] ? arena_strdup(l->func, body_expr->params[0]->name) : NULL;
+    data->item_name =
+        body_expr->params[1] ? arena_strdup(l->func, body_expr->params[1]->name) : NULL;
+    data->state_symbol_id = body_expr->params[0] ? body_expr->params[0]->symbol_id : 0;
+    data->item_symbol_id = body_expr->params[1] ? body_expr->params[1]->symbol_id : 0;
+    data->body_child_index = (uint16_t) body_closure->aux_int;
+    data->combine_child_index = (uint16_t) combine_closure->aux_int;
+    data->inclusive_end = rn->inclusive_end;
+    data->range_body = false;
+    data->plan_state = true;
+
+    uint16_t nargs = (uint16_t) (7u + body_ncap + combine_ncap);
+    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_REDUCE, acc_type, nargs);
+    if (!par) {
+        l->had_error = true;
+        return NULL;
+    }
+    par->args[0] = start;
+    par->args[1] = end;
+    par->args[2] = workers;
+    par->args[3] = initial;
+    par->args[4] = body_closure;
+    par->args[5] = combine_closure;
+    par->args[6] = states;
+    for (uint16_t ci = 0; ci < body_ncap; ci++)
+        par->args[7 + ci] = body_closure->args[ci];
+    for (uint16_t ci = 0; ci < combine_ncap; ci++)
+        par->args[7 + body_ncap + ci] = combine_closure->args[ci];
+    par->aux = data;
+    par->aux_kind = XI_AUX_KIND_PAR_REDUCE;
+    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    par->line = (uint32_t) node->line;
+
+    (void) lower_parallel_plan_lifecycle_call(l, node, plan, "_end");
+    return par;
+}
+
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                    XiValue *plan, const char *method) {
     if (!l || !node || !call || !plan || !method)
@@ -5968,6 +6107,31 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
         if (!into)
             return NULL;
         return parallel_plan_call_make_map(l, node, plan, range, call->arguments[2], into);
+    }
+
+    if (strcmp(method, "reduce") == 0) {
+        if (call->arg_count != 4) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.reduce must lower to XI_PAR_REDUCE; expected "
+                    "(Range, initial, inline body, inline combine) at line %d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
+        if (!range || range->type != AST_RANGE ||
+            !parallel_call_is_plain_lambda(call->arguments[2], 2) ||
+            !parallel_call_is_plain_lambda(call->arguments[3], 2)) {
+            fprintf(stderr,
+                    "[LOWER] error: parallel.Plan.reduce must lower to XI_PAR_REDUCE; expected a "
+                    "Range literal, inline (state, item) body, and inline combine lambda at line "
+                    "%d\n",
+                    node ? node->line : -1);
+            l->had_error = true;
+            return NULL;
+        }
+        return parallel_plan_call_make_reduce(l, node, plan, range, call->arguments[1],
+                                              call->arguments[2], call->arguments[3]);
     }
 
     return NULL;
