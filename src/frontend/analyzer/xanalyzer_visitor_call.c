@@ -196,12 +196,20 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
     XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
     if (ptr_type->ptr_is_mut) {
         XrType *sym_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
+        bool mutable_static_object =
+            sym_type &&
+            (xa_type_has_fixed_layout_data_object(sym_type) ||
+             (!sym_type->is_nullable &&
+              ((sym_type->kind == XR_KIND_INT && sym_type->native_width == XR_NATIVE_I64) ||
+               (sym_type->kind == XR_KIND_FLOAT && sym_type->native_width != XR_NATIVE_F32) ||
+               sym_type->kind == XR_KIND_BOOL || sym_type->kind == XR_KIND_CHAR)));
         if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->scope ||
-            sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared ||
-            !xa_type_has_fixed_layout_data_object(sym_type)) {
+            sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared || sym->is_imported ||
+            !mutable_static_object) {
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "RawMut.of can only take the name of a top-level mutable aggregate static object",
+                "RawMut.of can only take the name of a top-level mutable scalar or aggregate "
+                "static object",
                 &aloc);
         }
         return;
