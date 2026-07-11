@@ -1,0 +1,5 @@
+import parallel
+
+parallel.forEach(0..4, (i) -> {
+    Coro.yield()
+}, parallel.Options(2))

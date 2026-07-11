@@ -1,0 +1,1 @@
+parallel.forEach callback cannot throw or suspend; go expression is not allowed in a parallel callback
