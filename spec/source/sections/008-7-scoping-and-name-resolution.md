@@ -113,16 +113,18 @@ print(big_buffer.length)  // 编译错误：move 后访问
 
 "保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
 
-`go` 启动的协程**不能直接捕获**外层作用域的可变变量；数据必须通过**参数传递**进入协程。普通局部引用值必须显式 `copy(...)` 或 `move`；`shared` 绑定是稳定共享身份，可直接跨协程使用：
+所有跨 execution 边界（`go` 闭包、`go` 实参、Channel send、deferred task、线程入口和导出 callback）消费同一个已验证 capture plan。合法性由值的 **storage owner、provenance、可变性与类型表示**共同决定，不由 `var` / `const` 关键字单独决定：
 
-| 变量种类 | 跨协程传递规则 |
-|---|---|
-| 普通 `var` / `const`（局部） | 引用型 owned heap 值作为实参时必须显式 `copy(...)` 或 `move`；不能被闭包捕获修改 |
-| 函数参数 | ✅ 完全自由（已经是拷贝 / move 进来的） |
-| `shared` | ✅ 可直接跨协程传递/捕获；绑定不可重新赋值，也不能 `move` |
-| `Channel<T>` | ✅ 可被闭包捕获（生命周期由 channel 自身管理） |
-| `this` / 闭包 upvalue（可变） | ❌ 不能跨协程；必须通过参数显式传递 |
-| 全局 `import` 的函数/类 | ✅ 不可变定义，可自由引用 |
+| Capture action | 适用值 | 边界行为 |
+|---|---|---|
+| inline value | 标量、不可变小值 | 直接复制位表示 |
+| deep copy | 显式 `copy(x)` 的 owned graph | 在目标 execution owner 中物化独立图 |
+| move | 显式 `move x` 的可转移局部 `var` | 转移所有权并静态废弃源绑定 |
+| module readonly | 已冻结并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
+| shared ref | `shared`、Channel、Task、Atomic 等稳定共享身份 | 保留 shared/system owner 的引用 |
+| reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
+
+因此，局部 `const` 若只含 inline 值可以直接跨界；若它仍指向 execution-local graph，则仍需显式 `copy(...)`，且因为 `const` 不能作为 move 源，不能写成 `move constValue`。模块级 `const` 只有在完成冻结与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
 
 ```xray
 var local = 0
@@ -132,12 +134,12 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 #### 正确姿势
 
 ```xray
-// 方法 1：作为参数传值（普通变量自动深拷贝）
+// 方法 1：显式复制 owned graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
     return data.length
-}(arr)
+}(copy(arr))
 print(arr)                  // [1, 2, 3] 未变
 
 // 方法 2：shared 零拷贝只读（可被捕获）
@@ -146,8 +148,8 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// 方法 3：move 转移所有权
-shared big = Bytes(1024)
+// 方法 3：move 转移普通局部 var 的所有权
+var big = Bytes(1024)
 var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
@@ -170,8 +172,10 @@ Xray 采用多层内存管理：
 
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
-| 全局堆（`shared`） | refcount | refcount 变 0 |
-| 局部堆（一般对象） | 引用计数 + 循环引用回收 | 最后引用释放；强引用环由 cycle collector 回收 |
+| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 freeze + publish | 模块卸载 |
+| 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
+| 共享存储（`shared`） | shared/system owner + refcount | 最后共享引用释放 |
+| execution-local heap（一般局部对象） | execution owner + 引用计数 + 循环引用回收 | execution 结束或最后引用释放；强引用环由 cycle collector 回收 |
 | 栈（`struct` 值、本地） | RAII | 作用域退出 |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
@@ -293,16 +297,18 @@ print(big_buffer.length)  // compile error: accessed after move
 
 "Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
 
-A coroutine launched by `go` **cannot directly capture** mutable variables from the outer scope; data must enter the coroutine through **parameter passing**. Plain local reference values must use explicit `copy(...)` or `move`; `shared` bindings are stable shared identities and may cross coroutine boundaries directly:
+Every cross-execution boundary (`go` closure, `go` argument, Channel send, deferred task, thread entry, and exported callback) consumes the same verified capture plan. Legality is determined jointly by the value's **storage owner, provenance, mutability, and type representation**, never by the `var` / `const` keyword alone:
 
-| Variable kind | Cross-coroutine transfer rule |
-|---|---|
-| Plain `var` / `const` (local) | Owned heap values must use explicit `copy(...)` or `move` when passed as arguments; cannot be captured and mutated by closures |
-| Function parameters | ✅ Fully free (already copied / moved in) |
-| `shared` | ✅ May be passed/captured across coroutines directly; the binding cannot be reassigned or moved |
-| `Channel<T>` | ✅ May be captured by closures (lifetime managed by the channel itself) |
-| `this` / mutable closure upvalues | ❌ Cannot cross coroutines; must be passed explicitly through parameters |
-| Globally imported functions/classes | ✅ Immutable definitions, freely referenceable |
+| Capture action | Values | Boundary behavior |
+|---|---|---|
+| inline value | scalars and small immutable values | copy the bits directly |
+| deep copy | owned graph under explicit `copy(x)` | materialize an independent graph in the destination execution owner |
+| move | transferable local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| module readonly | frozen and published module values | retain the module-readonly owner; do not copy into a root/task heap |
+| shared ref | `shared`, Channel, Task, Atomic, and other stable shared identities | retain a reference owned by the shared/system owner |
+| reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
+
+Consequently, a local `const` containing only inline values may cross directly. If it still points at an execution-local graph, it requires explicit `copy(...)`; because a `const` cannot be a move source, `move constValue` is invalid. A module-level `const` becomes module-readonly only after freeze-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
 
 ```xray
 var local = 0
@@ -312,12 +318,12 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 #### Recommended patterns
 
 ```xray
-// Pattern 1: pass by value (plain variables are deep-copied)
+// Pattern 1: explicitly copy an owned graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
     return data.length
-}(arr)
+}(copy(arr))
 print(arr)                  // [1, 2, 3] unchanged
 
 // Pattern 2: shared, zero-copy read-only (capturable)
@@ -326,8 +332,8 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// Pattern 3: move ownership
-shared big = Bytes(1024)
+// Pattern 3: move ownership from an ordinary local var
+var big = Bytes(1024)
 var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
@@ -350,8 +356,10 @@ Xray uses a layered memory management strategy:
 
 | Storage | Mechanism | Reclamation |
 |--|--|--|
-| Global heap (`shared`) | refcount | when refcount reaches 0 |
-| Local heap (general objects) | reference counting + cycle collection | when the last reference is released; strong cycles are reclaimed by the cycle collector |
+| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by freeze + publish | at module unload |
+| Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
+| Shared storage (`shared`) | shared/system owner + reference counting | when the last shared reference is released |
+| Execution-local heap (ordinary local objects) | execution owner + reference counting + cycle collection | when the execution ends or the last reference is released; strong cycles are reclaimed by the cycle collector |
 | Stack (`struct` values, locals) | RAII | when scope exits |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 

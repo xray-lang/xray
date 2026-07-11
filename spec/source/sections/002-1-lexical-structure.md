@@ -67,7 +67,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 |--|--|
 | `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
-| `shared` | 共享身份绑定（全局堆存储，词法作用域照常） |
+| `shared` | 共享身份绑定（由 shared/system owner 持有，词法作用域照常） |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -455,7 +455,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 |--|--|
 | `var` | mutable variable declaration |
 | `const` | immutable variable declaration |
-| `shared` | shared identity binding (global-heap storage, ordinary lexical scope) |
+| `shared` | shared identity binding (owned by the shared/system owner, ordinary lexical scope) |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
