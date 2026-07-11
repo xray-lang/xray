@@ -211,9 +211,9 @@ class CharIterator {
     }
     
     next() -> string {
-        var ch = this.str[this.index]
+        var ch = this.str.runes().nth(this.index)
         this.index = this.index + 1
-        return string(ch)
+        return ch.toString()
     }
 }
 

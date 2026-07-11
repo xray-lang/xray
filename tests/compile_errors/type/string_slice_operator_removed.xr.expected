@@ -1,0 +1,1 @@
+string does not support integer indexing or slice syntax; use runes(), bytes(), or slice(start, end)

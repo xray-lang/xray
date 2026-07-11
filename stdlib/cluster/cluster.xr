@@ -13,7 +13,7 @@ const TOPIC_PATTERN_MAX = 127
 
 fn _asciiPrintable(s: string) -> bool {
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i).ord()!
+        var c = s.runes().nth(i).toUInt32()
         if (c < 0x20 || c > 0x7E) { return false }
     }
     return true
@@ -35,7 +35,7 @@ fn _parsePort(raw: string) -> int {
     if (len(raw) == 0) { return 0 }
     var out = 0
     for (var i = 0; i < len(raw); i++) {
-        var c = raw.charAt(i).ord()!
+        var c = raw.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return 0 }
         out = out * 10 + (c - 48)
         if (out > 65535) { return 0 }
@@ -44,7 +44,7 @@ fn _parsePort(raw: string) -> int {
 }
 
 fn _stripIpv6Brackets(host: string) -> string {
-    if (len(host) >= 2 && host.charAt(0) == "[" && host.charAt(len(host) - 1) == "]") {
+    if (len(host) >= 2 && host.runes().nth(0) == "[" && host.runes().nth(len(host) - 1) == "]") {
         return host.slice(1, len(host) - 1)
     }
     return host
@@ -61,9 +61,9 @@ fn parseAddress(addr: string) -> Json {
 
 fn _hasEmptyTopicSegment(s: string) -> bool {
     if (len(s) == 0) { return true }
-    if (s.charAt(0) == "." || s.charAt(len(s) - 1) == ".") { return true }
+    if (s.runes().nth(0) == "." || s.runes().nth(len(s) - 1) == ".") { return true }
     for (var i = 1; i < len(s); i++) {
-        if (s.charAt(i) == "." && s.charAt(i - 1) == ".") { return true }
+        if (s.runes().nth(i) == "." && s.runes().nth(i - 1) == ".") { return true }
     }
     return false
 }

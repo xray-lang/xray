@@ -114,7 +114,7 @@ class DateTime {
                 out = out + _pad(this._second, 2)
                 i = i + 2
             } else {
-                out = out + pattern.charAt(i)
+                out = out + pattern.runes().nth(i)
                 i = i + 1
             }
         }
@@ -303,7 +303,7 @@ fn parse(s: string, format: string = "ISO8601") -> DateTime? {
     if (timeStart >= 0) {
         var z = _findTimezoneStart(s, timeStart)
         if (z >= 0) {
-            if (s.charAt(z) == "Z") {
+            if (s.runes().nth(z) == "Z") {
                 isUtc = true
             } else {
                 var parsedOff = _parseTimezoneOffset(s, z)
@@ -444,7 +444,7 @@ fn _parseNDigits(s: string, start: int, count: int) -> int? {
     if (start < 0 || start + count > len(s)) { return null }
     var out = 0
     for (var i = 0; i < count; i++) {
-        var c = s.charAt(start + i).ord()!
+        var c = s.runes().nth(start + i).toUInt32()
         if (c < 48 || c > 57) { return null }
         out = out * 10 + (c - 48)
     }
@@ -454,10 +454,10 @@ fn _parseNDigits(s: string, start: int, count: int) -> int? {
 fn _parseDateAt(s: string, start: int, sep: string) -> DateTimeParts? {
     var y = _parseNDigits(s, start, 4)
     if (y == null) { return null }
-    if (start + 4 >= len(s) || s.charAt(start + 4) != sep) { return null }
+    if (start + 4 >= len(s) || s.runes().nth(start + 4) != sep) { return null }
     var m = _parseNDigits(s, start + 5, 2)
     if (m == null) { return null }
-    if (start + 7 >= len(s) || s.charAt(start + 7) != sep) { return null }
+    if (start + 7 >= len(s) || s.runes().nth(start + 7) != sep) { return null }
     var d = _parseNDigits(s, start + 8, 2)
     if (d == null) { return null }
     return DateTimeParts(y!, m!, d!, 0, 0, 0, 0, 0)
@@ -466,11 +466,11 @@ fn _parseDateAt(s: string, start: int, sep: string) -> DateTimeParts? {
 fn _parseTimeAt(s: string, start: int) -> DateTimeParts? {
     var h = _parseNDigits(s, start, 2)
     if (h == null) { return null }
-    if (start + 2 >= len(s) || s.charAt(start + 2) != ":") { return null }
+    if (start + 2 >= len(s) || s.runes().nth(start + 2) != ":") { return null }
     var m = _parseNDigits(s, start + 3, 2)
     if (m == null) { return null }
     var sec = 0
-    if (start + 5 < len(s) && s.charAt(start + 5) == ":") {
+    if (start + 5 < len(s) && s.runes().nth(start + 5) == ":") {
         var s2 = _parseNDigits(s, start + 6, 2)
         if (s2 == null) { return null }
         sec = s2!
@@ -482,7 +482,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
     var dot = -1
     var i = timeStart
     while (i < len(s)) {
-        var ch = s.charAt(i)
+        var ch = s.runes().nth(i)
         if (ch == ".") {
             dot = i
             break
@@ -495,7 +495,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
     var digits = 0
     var p = dot + 1
     while (p < len(s) && digits < 3) {
-        var c = s.charAt(p).ord()!
+        var c = s.runes().nth(p).toUInt32()
         if (c < 48 || c > 57) { break }
         ms = ms * 10 + (c - 48)
         digits = digits + 1
@@ -510,7 +510,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
 
 fn _findTimeSeparator(s: string) -> int {
     for (var i = 0; i < len(s); i++) {
-        var ch = s.charAt(i)
+        var ch = s.runes().nth(i)
         if (ch == "T" || ch == " ") { return i }
     }
     return -1
@@ -518,7 +518,7 @@ fn _findTimeSeparator(s: string) -> int {
 
 fn _findTimezoneStart(s: string, start: int) -> int {
     for (var i = start; i < len(s); i++) {
-        var ch = s.charAt(i)
+        var ch = s.runes().nth(i)
         if (ch == "Z" || ch == "+" || ch == "-") { return i }
     }
     return -1
@@ -527,11 +527,11 @@ fn _findTimezoneStart(s: string, start: int) -> int {
 fn _parseTimezoneOffset(s: string, start: int) -> int? {
     if (start >= len(s)) { return null }
     var sign = 1
-    if (s.charAt(start) == "-") { sign = -1 }
+    if (s.runes().nth(start) == "-") { sign = -1 }
     var h = _parseNDigits(s, start + 1, 2)
     if (h == null) { return null }
     var m = 0
-    if (start + 3 < len(s) && s.charAt(start + 3) == ":") {
+    if (start + 3 < len(s) && s.runes().nth(start + 3) == ":") {
         var mm = _parseNDigits(s, start + 4, 2)
         if (mm == null) { return null }
         m = mm!

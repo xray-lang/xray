@@ -199,7 +199,7 @@ invoke_dispatch:;
             R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
             vmbreak;
         }
-        if (nargs == 0 && method_symbol == SYMBOL_ORD) {
+        if (nargs == 0 && method_symbol == SYMBOL_TO_UINT32) {
             R(a) = xr_int((int64_t) cp);
             vmbreak;
         }

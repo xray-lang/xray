@@ -1,3 +1,5 @@
+import text
+
 // 0120_string_basic.xr
 // 作者：xingleixu@gmail.com
 // 测试：字符串字面量基础
@@ -114,6 +116,6 @@ fn test_long_string() {
 fn test_whitespace_only() {
     var s = "   "
     assert_eq(len(s), 3)
-    assert_eq(s.trim(), "")
+    assert_eq(text.trim(s), "")
 }
 

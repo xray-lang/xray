@@ -1,3 +1,5 @@
+import "text" as textutil
+
 // xml - pure-Xray XML parser and writer.
 //
 // XML is an L4 format module: the public parse/stringify/node-builder
@@ -71,7 +73,7 @@ fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
 
 fn _startsWithAtIgnoreCase(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + len(prefix) > len(s)) { return false }
-    return s.slice(pos, pos + len(prefix)).toLowerCase() == prefix.toLowerCase()
+    return textutil.lower(s.slice(pos, pos + len(prefix))) == textutil.lower(prefix)
 }
 
 fn _isWhitespace(c: string) -> bool {
@@ -80,13 +82,13 @@ fn _isWhitespace(c: string) -> bool {
 
 fn _isAlpha(c: string) -> bool {
     if (len(c) == 0) { return false }
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
 }
 
 fn _isDigit(c: string) -> bool {
     if (len(c) == 0) { return false }
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     return o >= 48 && o <= 57
 }
 
@@ -100,12 +102,12 @@ fn _isNameChar(c: string) -> bool {
 
 fn _isHexDigit(c: string) -> bool {
     if (len(c) == 0) { return false }
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
 
 fn _hexValue(c: string) -> int {
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     if (o >= 48 && o <= 57) { return o - 48 }
     if (o >= 65 && o <= 70) { return o - 55 }
     if (o >= 97 && o <= 102) { return o - 87 }
@@ -114,7 +116,7 @@ fn _hexValue(c: string) -> int {
 
 fn _allWhitespace(s: string) -> bool {
     for (var i = 0; i < len(s); i++) {
-        if (!_isWhitespace(s.charAt(i))) { return false }
+        if (!_isWhitespace(s.slice(i, (i) + 1))) { return false }
     }
     return true
 }
@@ -192,21 +194,21 @@ fn _numericEntity(name: string) -> string? {
     if (!name.startsWith("#")) { return null }
     var base = 10
     var pos = 1
-    if (len(name) >= 3 && (name.charAt(1) == "x" || name.charAt(1) == "X")) {
+    if (len(name) >= 3 && (name.slice(1, (1) + 1) == "x" || name.slice(1, (1) + 1) == "X")) {
         base = 16
         pos = 2
     }
     if (pos >= len(name)) { return null }
     var cp = 0
     while (pos < len(name)) {
-        var c = name.charAt(pos)
+        var c = name.slice(pos, (pos) + 1)
         var d = -1
         if (base == 16) {
             if (!_isHexDigit(c)) { return null }
             d = _hexValue(c)
         } else {
             if (!_isDigit(c)) { return null }
-            d = c.ord()! - 48
+            d = c.runes().nth(0).toUInt32() - 48
         }
         cp = cp * base + d
         if (cp > 0x10FFFF) { return null }
@@ -225,7 +227,7 @@ fn _indentText(level: int, spaces: int) -> string {
 fn _escapeText(value: string) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(value); i++) {
-        var c = value.charAt(i)
+        var c = value.slice(i, (i) + 1)
         if (c == "<") {
             out.append("&lt;")
         } else if (c == ">") {
@@ -242,7 +244,7 @@ fn _escapeText(value: string) -> string {
 fn _escapeAttr(value: string) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(value); i++) {
-        var c = value.charAt(i)
+        var c = value.slice(i, (i) + 1)
         if (c == "<") {
             out.append("&lt;")
         } else if (c == ">") {
@@ -306,13 +308,13 @@ class XmlParser {
 
     peek() -> string {
         if (this.atEnd()) { return "" }
-        return this.data.charAt(this.pos)
+        return this.data.slice(this.pos, (this.pos) + 1)
     }
 
     peekAt(offset: int) -> string {
         var p = this.pos + offset
         if (p < 0 || p >= len(this.data)) { return "" }
-        return this.data.charAt(p)
+        return this.data.slice(p, (p) + 1)
     }
 
     startsWith(prefix: string) -> bool {
@@ -377,13 +379,13 @@ class XmlParser {
         var out = StringBuilder()
         var i = 0
         while (i < len(value)) {
-            var c = value.charAt(i)
+            var c = value.slice(i, (i) + 1)
             if (c == "&") {
                 var j = i + 1
-                while (j < len(value) && value.charAt(j) != ";" && j - i < 12) {
+                while (j < len(value) && value.slice(j, (j) + 1) != ";" && j - i < 12) {
                     j = j + 1
                 }
-                if (j < len(value) && value.charAt(j) == ";") {
+                if (j < len(value) && value.slice(j, (j) + 1) == ";") {
                     var name = value.slice(i + 1, j)
                     out.append(this.decodeEntity(name))
                     i = j + 1

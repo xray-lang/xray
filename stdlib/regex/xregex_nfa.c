@@ -351,7 +351,11 @@ static bool onepass_match_simple(XrProg *prog, const char *text_start, const cha
 
             case XR_OP_ANY_BYTE:
                 if (p < end && *p != '\n') {
-                    p++;
+                    uint32_t cp;
+                    int char_len = decode_utf8(p, end, &cp);
+                    if (char_len <= 0)
+                        return false;
+                    p += char_len;
                     pc = XR_INST_OUT(ip);
                 } else {
                     return false;
@@ -360,7 +364,11 @@ static bool onepass_match_simple(XrProg *prog, const char *text_start, const cha
 
             case XR_OP_ANY_BYTE_NL:
                 if (p < end) {
-                    p++;
+                    uint32_t cp;
+                    int char_len = decode_utf8(p, end, &cp);
+                    if (char_len <= 0)
+                        return false;
+                    p += char_len;
                     pc = XR_INST_OUT(ip);
                 } else {
                     return false;
@@ -543,15 +551,23 @@ XR_FUNC bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **
                     break;
 
                 case XR_OP_ANY_BYTE:
-                    if (c >= 0 && c != '\n')
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
-                                   end, ncaptures);
+                    if (c >= 0 && c != '\n') {
+                        uint32_t cp;
+                        int char_len = decode_utf8(p, end, &cp);
+                        if (char_len > 0)
+                            add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text,
+                                       p + char_len, end, ncaptures);
+                    }
                     break;
 
                 case XR_OP_ANY_BYTE_NL:
-                    if (c >= 0)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
-                                   end, ncaptures);
+                    if (c >= 0) {
+                        uint32_t cp;
+                        int char_len = decode_utf8(p, end, &cp);
+                        if (char_len > 0)
+                            add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text,
+                                       p + char_len, end, ncaptures);
+                    }
                     break;
 
                 case XR_OP_UNICODE_RANGE: {
@@ -813,7 +829,7 @@ XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char *
     // Optimization 4: no-capture fast path
     // Skip fast path for Unicode properties (byte-oriented fast search doesn't handle UTF-8)
     // Skip fast path for non-greedy patterns (fast path doesn't respect ALT priority)
-    if (prog->capture_count == 0 && prog->unicode_range_count == 0 &&
+    if (prog->capture_count == 0 && prog->unicode_range_count == 0 && !prog->has_any_scalar &&
         !(prog->flags & XR_RE_UNGREEDY)) {
         const char *match_start = NULL;
         const char *match_end = NULL;
@@ -923,15 +939,23 @@ XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char *
                     break;
 
                 case XR_OP_ANY_BYTE:
-                    if (c >= 0 && c != '\n')
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
-                                   end, ncaptures);
+                    if (c >= 0 && c != '\n') {
+                        uint32_t cp;
+                        int char_len = decode_utf8(p, end, &cp);
+                        if (char_len > 0)
+                            add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text,
+                                       p + char_len, end, ncaptures);
+                    }
                     break;
 
                 case XR_OP_ANY_BYTE_NL:
-                    if (c >= 0)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
-                                   end, ncaptures);
+                    if (c >= 0) {
+                        uint32_t cp;
+                        int char_len = decode_utf8(p, end, &cp);
+                        if (char_len > 0)
+                            add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text,
+                                       p + char_len, end, ncaptures);
+                    }
                     break;
 
                 case XR_OP_UNICODE_RANGE: {

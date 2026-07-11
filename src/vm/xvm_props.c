@@ -602,14 +602,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_CONTAINS));
             base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_CHARAT) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_CHARAT));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_SUBSTRING) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_SUBSTRING));
-            base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_INDEXOF) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_INDEXOF));
@@ -625,18 +617,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_ENDSWITH) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_ENDSWITH));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_TOLOWERCASE) {
-            XrBoundMethod *bm = xr_bound_method_new(
-                isolate, obj, xr_string_get_handler(isolate, SYMBOL_TOLOWERCASE));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_TOUPPERCASE) {
-            XrBoundMethod *bm = xr_bound_method_new(
-                isolate, obj, xr_string_get_handler(isolate, SYMBOL_TOUPPERCASE));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_TRIM) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_TRIM));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_SPLIT) {
             XrBoundMethod *bm =
@@ -654,17 +634,9 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_REPEAT));
             base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_CONCAT) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_CONCAT));
-            base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_ITERATOR) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_ITERATOR));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_CODEPOINT_AT || prop_symbol == SYMBOL_CHARCODEAT) {
-            XrBoundMethod *bm = xr_bound_method_new(
-                isolate, obj, xr_string_get_handler(isolate, SYMBOL_CODEPOINT_AT));
             base[a] = xr_value_from_bound_method(bm);
         } else {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;

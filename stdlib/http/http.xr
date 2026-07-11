@@ -1,3 +1,5 @@
+import text
+
 // http - pure-Xray HTTP helpers and HTTP/1.x client/server control plane.
 //
 // Socket/TLS primitives and HTTP/2 data-plane remain native runtime boundaries.
@@ -44,20 +46,20 @@ fn _timeFromCivil(year: int, month: int, day: int, hour: int, minute: int, secon
 }
 
 fn _parseIntStrict(s: string) -> int? {
-    var t = s.trim()
+    var t = text.trim(s)
     if (len(t) == 0) { return null }
     var sign = 1
     var i = 0
-    if (t.charAt(0) == "-") {
+    if (t.runes().nth(0) == "-") {
         sign = -1
         i = 1
-    } else if (t.charAt(0) == "+") {
+    } else if (t.runes().nth(0) == "+") {
         i = 1
     }
     if (i >= len(t)) { return null }
     var out = 0
     while (i < len(t)) {
-        var c = t.charAt(i).ord()!
+        var c = t.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return null }
         out = out * 10 + (c - 48)
         i = i + 1
@@ -69,11 +71,11 @@ fn _splitWs(s: string) -> Array<string> {
     var out: Array<string> = []
     var i = 0
     while (i < len(s)) {
-        while (i < len(s) && (s.charAt(i) == " " || s.charAt(i) == "\t")) {
+        while (i < len(s) && (s.runes().nth(i) == " " || s.runes().nth(i) == "\t")) {
             i = i + 1
         }
         var start = i
-        while (i < len(s) && s.charAt(i) != " " && s.charAt(i) != "\t") {
+        while (i < len(s) && s.runes().nth(i) != " " && s.runes().nth(i) != "\t") {
             i = i + 1
         }
         if (i > start) { out.push(s.slice(start, i)) }
@@ -82,7 +84,7 @@ fn _splitWs(s: string) -> Array<string> {
 }
 
 fn _monthNumber(raw: string) -> int {
-    var m = raw.toLowerCase()
+    var m = text.lower(raw)
     if (m == "jan") { return 1 }
     if (m == "feb") { return 2 }
     if (m == "mar") { return 3 }
@@ -128,7 +130,7 @@ fn _twoDigitCookieYear(y: int) -> int {
 }
 
 fn _parseCookieDate(raw: string) -> int {
-    var tokens = _splitWs(raw.trim())
+    var tokens = _splitWs(text.trim(raw))
     if (len(tokens) >= 5 && tokens[0].endsWith(",")) {
         var day = _parseIntStrict(tokens[1])
         var month = _monthNumber(tokens[2])
@@ -166,7 +168,7 @@ fn _parseCookieDate(raw: string) -> int {
 }
 
 fn _defaultCookiePath(requestPath: string) -> string {
-    if (len(requestPath) == 0 || requestPath.charAt(0) != "/") { return "/" }
+    if (len(requestPath) == 0 || requestPath.runes().nth(0) != "/") { return "/" }
     var last = requestPath.lastIndexOf("/")
     if (last <= 0) { return "/" }
     return requestPath.slice(0, last)
@@ -174,9 +176,9 @@ fn _defaultCookiePath(requestPath: string) -> string {
 
 fn _domainMatches(cookieDomain: string, requestDomain: string) -> bool {
     if (len(cookieDomain) == 0 || len(requestDomain) == 0) { return false }
-    var cd = cookieDomain.toLowerCase()
+    var cd = text.lower(cookieDomain)
     if (cd.startsWith(".")) { cd = cd.slice(1) }
-    var rd = requestDomain.toLowerCase()
+    var rd = text.lower(requestDomain)
     if (cd == rd) { return true }
     return len(rd) > len(cd) + 1 &&
            rd.endsWith("." + cd)
@@ -187,12 +189,12 @@ fn _pathMatches(cookiePath: string, requestPath: string) -> bool {
     if (!requestPath.startsWith(cookiePath)) { return false }
     if (len(requestPath) == len(cookiePath)) { return true }
     if (cookiePath.endsWith("/")) { return true }
-    return requestPath.charAt(len(cookiePath)) == "/"
+    return requestPath.runes().nth(len(cookiePath)) == "/"
 }
 
 fn _sameCookie(a: Cookie, b: Cookie) -> bool {
     return a.name == b.name &&
-           a.domain.toLowerCase() == b.domain.toLowerCase() &&
+           text.lower(a.domain) == text.lower(b.domain) &&
            a.path == b.path
 }
 
@@ -241,7 +243,7 @@ class Cookie {
     matches(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0) -> bool {
         if (this.isExpired(nowSeconds)) { return false }
         if (this.hostOnly) {
-            if (this.domain.toLowerCase() != domain.toLowerCase()) { return false }
+            if (text.lower(this.domain) != text.lower(domain)) { return false }
         } else if (!_domainMatches(this.domain, domain)) {
             return false
         }
@@ -323,11 +325,11 @@ class CookieJar {
     }
 
     clearDomain(domain: string) {
-        var target = domain.toLowerCase()
+        var target = text.lower(domain)
         var next: Array<Cookie> = []
         for (var i = 0; i < len(this.cookies); i++) {
             var c = this.cookies[i]
-            if (c.domain.toLowerCase() != target) { next.push(c) }
+            if (text.lower(c.domain) != target) { next.push(c) }
         }
         this.cookies = next
     }
@@ -340,14 +342,14 @@ class CookieJar {
 fn parseSetCookie(header: string, requestDomain: string = "", requestPath: string = "/",
                   nowSeconds: int = 0) -> Cookie? {
     var now = _cookieNow(nowSeconds)
-    if (len(header) == 0 || header.byteLength > COOKIE_MAX_INPUT_LEN) { return null }
+    if (len(header) == 0 || len(header.bytes()) > COOKIE_MAX_INPUT_LEN) { return null }
     var parts = header.split(";")
     if (len(parts) == 0) { return null }
     var first = parts[0]
     var eq = first.indexOf("=")
     if (eq < 0) { return null }
-    var name = first.slice(0, eq).trim()
-    var value = first.slice(eq + 1).trim()
+    var name = text.trim(first.slice(0, eq))
+    var value = text.trim(first.slice(eq + 1))
     if (len(name) == 0) { return null }
 
     var domain = requestDomain
@@ -359,16 +361,16 @@ fn parseSetCookie(header: string, requestDomain: string = "", requestPath: strin
     var hostOnly = true
 
     for (var i = 1; i < len(parts); i++) {
-        var attr = parts[i].trim()
+        var attr = text.trim(parts[i])
         if (len(attr) == 0) { continue }
         var attrEq = attr.indexOf("=")
         var attrName = attr
         var attrValue = ""
         if (attrEq >= 0) {
-            attrName = attr.slice(0, attrEq).trim()
-            attrValue = attr.slice(attrEq + 1).trim()
+            attrName = text.trim(attr.slice(0, attrEq))
+            attrValue = text.trim(attr.slice(attrEq + 1))
         }
-        var key = attrName.toLowerCase()
+        var key = text.lower(attrName)
         if (key == "domain" && len(attrValue) > 0) {
             domain = attrValue
             if (domain.startsWith(".")) { domain = domain.slice(1) }
@@ -386,7 +388,7 @@ fn parseSetCookie(header: string, requestDomain: string = "", requestPath: strin
         } else if (key == "httponly") {
             httpOnly = true
         } else if (key == "samesite" && len(attrValue) > 0) {
-            var ss = attrValue.toLowerCase()
+            var ss = text.lower(attrValue)
             if (ss == "strict") {
                 sameSite = "Strict"
             } else if (ss == "lax") {
@@ -443,7 +445,7 @@ fn _boundary() -> string {
 fn _basename(path: string) -> string {
     var start = 0
     for (var i = 0; i < len(path); i++) {
-        var c = path.charAt(i)
+        var c = path.runes().nth(i)
         if (c == "/" || c == "\\") { start = i + 1 }
     }
     return path.slice(start)
@@ -455,7 +457,7 @@ fn _guessMimeType(filename: string) -> string {
         return "application/octet-stream"
     }
 
-    var ext = filename.slice(dot + 1).toLowerCase()
+    var ext = text.lower(filename.slice(dot + 1))
     if (ext == "txt") { return "text/plain" }
     if (ext == "html" || ext == "htm") { return "text/html" }
     if (ext == "css") { return "text/css" }
@@ -480,7 +482,7 @@ fn _guessMimeType(filename: string) -> string {
 fn _headerParam(s: string) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i)
+        var c = s.runes().nth(i)
         if (c == "\"") {
             out.append("\\\"")
         } else if (c == "\\") {
@@ -495,7 +497,7 @@ fn _headerParam(s: string) -> string {
 }
 
 fn _routeMethodKey(method: string) -> string {
-    return method.trim().toLowerCase()
+    return text.lower(text.trim(method))
 }
 
 fn _routePathOnly(path: string) -> string {
@@ -505,18 +507,18 @@ fn _routePathOnly(path: string) -> string {
 }
 
 fn _routeValidPath(path: string) -> bool {
-    return len(path) > 0 && path.charAt(0) == "/"
+    return len(path) > 0 && path.runes().nth(0) == "/"
 }
 
 fn _routeSegments(path: string) -> Array<string> {
     var clean = _routePathOnly(path)
     if (clean == "/" || len(clean) == 0) { return [] }
-    if (clean.charAt(0) == "/") { clean = clean.slice(1) }
+    if (clean.runes().nth(0) == "/") { clean = clean.slice(1) }
     return clean.split("/")
 }
 
 fn _routeWildcardName(seg: string) -> string? {
-    if (len(seg) > 1 && seg.charAt(0) == "*") { return seg.slice(1) }
+    if (len(seg) > 1 && seg.runes().nth(0) == "*") { return seg.slice(1) }
     if (len(seg) > 3 && seg.startsWith("{*") && seg.endsWith("}")) {
         return seg.slice(2, len(seg) - 1)
     }
@@ -524,7 +526,7 @@ fn _routeWildcardName(seg: string) -> string? {
 }
 
 fn _routeParamName(seg: string) -> string? {
-    if (len(seg) > 1 && seg.charAt(0) == ":") { return seg.slice(1) }
+    if (len(seg) > 1 && seg.runes().nth(0) == ":") { return seg.slice(1) }
     return null
 }
 
@@ -822,8 +824,8 @@ fn _serverResponseFor(value: unknown, keepAlive: bool) -> string {
 
 fn _serverWriteAll(conn: NetConn, data: string) -> bool {
     var pos = 0
-    while (pos < data.byteLength) {
-        var chunk = _byteSlice(data, pos, data.byteLength)
+    while (pos < len(data.bytes())) {
+        var chunk = _byteSlice(data, pos, len(data.bytes()))
         if (chunk == null) { return false }
         var n = net.write(conn, chunk!)
         if (n <= 0) { return false }
@@ -891,12 +893,12 @@ fn _serveHttpConnection(conn: NetConn) {
                     net.close(conn)
                     return
                 }
-                var rest = _byteSlice(raw, msg!.consumedBytes, raw.byteLength)
+                var rest = _byteSlice(raw, msg!.consumedBytes, len(raw.bytes()))
                 raw = rest ?? ""
-                if (raw.byteLength > 0) { continue }
+                if (len(raw.bytes()) > 0) { continue }
             }
         }
-        if (raw.byteLength > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
+        if (len(raw.bytes()) > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
             _serverWriteAll(conn, _serverStatusResponse(413, "Payload Too Large", false))
             net.close(conn)
             return
@@ -974,7 +976,7 @@ class FormData {
     }
 
     append(name: string, value: string) -> bool {
-        var size = value.byteLength
+        var size = len(value.bytes())
         if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) {
             return false
         }
@@ -988,7 +990,7 @@ class FormData {
         if (data == null) { return false }
 
         var content = data!
-        var size = content.byteLength
+        var size = len(content.bytes())
         if (size <= 0) { return false }
         if (_limitExceeded(this.maxFileSize, 0, size)) { return false }
         if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) { return false }
@@ -1048,35 +1050,35 @@ fn formData(
 
 fn _hasCtlOr(s: string, extra: string) -> bool {
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i)
-        var o = c.ord()!
-        if (o < 0x20 || o == 0x7F || extra.indexOf(c) >= 0) { return true }
+        var c = s.runes().nth(i)
+        var o = c.toUInt32()
+        if (o < 0x20 || o == 0x7F || extra.indexOf(c.toString()) >= 0) { return true }
     }
     return false
 }
 
-fn _isTokenChar(c: string) -> bool {
-    var o = c.ord()!
+fn _isTokenChar(c: rune) -> bool {
+    var o = c.toUInt32()
     return (o >= 65 && o <= 90) ||
            (o >= 97 && o <= 122) ||
            (o >= 48 && o <= 57) ||
-           c == "!" || c == "#" || c == "$" || c == "%" ||
-           c == "&" || c == "'" || c == "*" || c == "+" ||
-           c == "-" || c == "." || c == "^" || c == "_" ||
-           c == "`" || c == "|" || c == "~"
+           c == '!' || c == '#' || c == '$' || c == '%' ||
+           c == '&' || c == '\'' || c == '*' || c == '+' ||
+           c == '-' || c == '.' || c == '^' || c == '_' ||
+           c == '`' || c == '|' || c == '~'
 }
 
 fn _headerNameValid(name: string) -> bool {
     if (len(name) == 0) { return false }
     for (var i = 0; i < len(name); i++) {
-        if (!_isTokenChar(name.charAt(i))) { return false }
+        if (!_isTokenChar(name.runes().nth(i))) { return false }
     }
     return true
 }
 
 fn _headerValueValid(value: string) -> bool {
     for (var i = 0; i < len(value); i++) {
-        var o = value.charAt(i).ord()!
+        var o = value.runes().nth(i).toUInt32()
         if (o == 9) { continue }
         if (o < 0x20 || o == 0x7F) { return false }
     }
@@ -1084,7 +1086,7 @@ fn _headerValueValid(value: string) -> bool {
 }
 
 fn _requestMethod(method: string) -> string? {
-    var m = method.trim().toUpperCase()
+    var m = text.upper(text.trim(method))
     if (len(m) == 0 || _hasCtlOr(m, " \t\r\n")) { return null }
     return m
 }
@@ -1092,34 +1094,34 @@ fn _requestMethod(method: string) -> string? {
 fn _requestPath(path: string) -> string? {
     var p = path
     if (len(p) == 0) { p = "/" }
-    if (p.charAt(0) != "/" || _hasCtlOr(p, " \r\n")) { return null }
+    if (p.runes().nth(0) != "/" || _hasCtlOr(p, " \r\n")) { return null }
     return p
 }
 
 fn _requestTarget(raw: string) -> string? {
-    var t = raw.trim()
+    var t = text.trim(raw)
     if (len(t) == 0 || _hasCtlOr(t, " \t\r\n")) { return null }
     return t
 }
 
 fn _hostHeaderValue(host: string) -> string? {
-    var h = host.trim()
+    var h = text.trim(host)
     if (len(h) == 0) { return null }
     if (_hasCtlOr(h, " /\r\n")) { return null }
     return h
 }
 
 fn _headerKeyEquals(name: string, target: string) -> bool {
-    return name.toLowerCase() == target.toLowerCase()
+    return text.lower(name) == text.lower(target)
 }
 
 fn _sensitiveHeader(name: string) -> bool {
-    var n = name.toLowerCase()
+    var n = text.lower(name)
     return n == "authorization" || n == "proxy-authorization"
 }
 
 fn _reservedResponseHeader(name: string) -> bool {
-    var n = name.toLowerCase()
+    var n = text.lower(name)
     return n == "content-length" ||
            n == "content-type" ||
            n == "connection" ||
@@ -1151,15 +1153,15 @@ fn _parseStatusCode(raw: string) -> int {
     if (len(raw) != 3) { return -1 }
     var code = 0
     for (var i = 0; i < len(raw); i++) {
-        var o = raw.charAt(i).ord()!
+        var o = raw.runes().nth(i).toUInt32()
         if (o < 48 || o > 57) { return -1 }
         code = code * 10 + (o - 48)
     }
     return code
 }
 
-fn _hexValue(c: string) -> int {
-    var o = c.ord()!
+fn _hexValue(c: rune) -> int {
+    var o = c.toUInt32()
     if (o >= 48 && o <= 57) { return o - 48 }
     if (o >= 65 && o <= 70) { return 10 + o - 65 }
     if (o >= 97 && o <= 102) { return 10 + o - 97 }
@@ -1170,12 +1172,12 @@ fn _parseChunkSize(line: string) -> int? {
     var semi = line.indexOf(";")
     var raw = line
     if (semi >= 0) { raw = line.slice(0, semi) }
-    raw = raw.trim()
+    raw = text.trim(raw)
     if (len(raw) == 0) { return null }
 
     var size = 0
     for (var i = 0; i < len(raw); i++) {
-        var v = _hexValue(raw.charAt(i))
+        var v = _hexValue(raw.runes().nth(i))
         if (v < 0) { return null }
         size = size * 16 + v
     }
@@ -1184,40 +1186,40 @@ fn _parseChunkSize(line: string) -> int? {
 
 fn _parseHeaderLine(line: string) -> (string, string)? {
     if (len(line) == 0) { return null }
-    if (line.charAt(0) == " " || line.charAt(0) == "\t") { return null }
+    if (line.runes().nth(0) == ' ' || line.runes().nth(0) == '\t') { return null }
     var colon = line.indexOf(":")
     if (colon <= 0) { return null }
     var name = line.slice(0, colon)
-    var value = line.slice(colon + 1).trim()
+    var value = text.trim(line.slice(colon + 1))
     if (!_headerNameValid(name) || !_headerValueValid(value)) { return null }
     return (name, value)
 }
 
 fn _headerListGet(pairs: Array<(string, string)>, name: string) -> string? {
-    var target = name.toLowerCase()
+    var target = text.lower(name)
     for (var i = 0; i < len(pairs); i++) {
-        if (pairs[i].0.toLowerCase() == target) { return pairs[i].1 }
+        if (text.lower(pairs[i].0) == target) { return pairs[i].1 }
     }
     return null
 }
 
 fn _headerListAll(pairs: Array<(string, string)>, name: string) -> Array<string> {
-    var target = name.toLowerCase()
+    var target = text.lower(name)
     var out: Array<string> = []
     for (var i = 0; i < len(pairs); i++) {
-        if (pairs[i].0.toLowerCase() == target) { out.push(pairs[i].1) }
+        if (text.lower(pairs[i].0) == target) { out.push(pairs[i].1) }
     }
     return out
 }
 
 fn _hasHeaderToken(value: string, token: string) -> bool {
-    var needle = token.toLowerCase()
+    var needle = text.lower(token)
     var start = 0
     while (start <= len(value)) {
         var comma = value.indexOf(",", start)
         var end = len(value)
         if (comma >= 0) { end = comma }
-        if (value.slice(start, end).trim().toLowerCase() == needle) {
+        if (text.lower(text.trim(value.slice(start, end))) == needle) {
             return true
         }
         if (comma < 0) { break }
@@ -1227,9 +1229,9 @@ fn _hasHeaderToken(value: string, token: string) -> bool {
 }
 
 fn _teIsSupportedChunked(value: string) -> bool {
-    var trimmed = value.trim()
+    var trimmed = text.trim(value)
     if (len(trimmed) == 0) { return false }
-    return trimmed.indexOf(",") < 0 && trimmed.toLowerCase() == "chunked"
+    return trimmed.indexOf(",") < 0 && text.lower(trimmed) == "chunked"
 }
 
 fn _chunkedFramingFrom(pairs: Array<(string, string)>) -> bool? {
@@ -1257,9 +1259,10 @@ fn _contentLengthFrom(pairs: Array<(string, string)>) -> int? {
 }
 
 fn _byteCrlfIndex(raw: string, start: int) -> int {
+    var bytes: Slice<byte> = raw.bytes()
     var pos = start
-    while (pos + 1 < raw.byteLength) {
-        if (raw.byteAt(pos) == "\r" && raw.byteAt(pos + 1) == "\n") {
+    while (pos + 1 < len(bytes)) {
+        if (bytes[pos] == '\r' && bytes[pos + 1] == '\n') {
             return pos
         }
         pos = pos + 1
@@ -1268,22 +1271,18 @@ fn _byteCrlfIndex(raw: string, start: int) -> int {
 }
 
 fn _byteSlice(raw: string, start: int, end: int) -> string? {
-    if (start < 0 || end < start || end > raw.byteLength) { return null }
-    if (len(raw) == raw.byteLength) { return raw.slice(start, end) }
-
-    var out = StringBuilder()
-    for (var i = start; i < end; i++) {
-        var b = raw.byteAt(i)
-        if (b == null) { return null }
-        out.append(b!)
-    }
+    var bytes = raw.copyBytes()
+    if (start < 0 || end < start || end > len(bytes)) { return null }
+    var out = Array<byte>()
+    for (var i = start; i < end; i++) { out.push(bytes[i]) }
     return out.toString()
 }
 
 fn _byteCrlfAt(raw: string, pos: int) -> bool {
-    return pos + 1 < raw.byteLength &&
-           raw.byteAt(pos) == "\r" &&
-           raw.byteAt(pos + 1) == "\n"
+    var bytes: Slice<byte> = raw.bytes()
+    return pos + 1 < len(bytes) &&
+           bytes[pos] == '\r' &&
+           bytes[pos + 1] == '\n'
 }
 
 fn _responseAllowsBody(status: int) -> bool {
@@ -1302,7 +1301,7 @@ fn _keepAlive(version: string, pairs: Array<(string, string)>) -> bool {
 
 fn _httpUrlOk(raw: string) -> bool {
     var p = parseUrl(raw)
-    var scheme = p.protocol.toLowerCase()
+    var scheme = text.lower(p.protocol)
     return (scheme == "http:" || scheme == "https:") && len(p.hostname) > 0
 }
 
@@ -1312,15 +1311,15 @@ fn _originPort(raw: string) -> int {
         var port = _parseIntStrict(p.port)
         if (port != null) { return port! }
     }
-    if (p.protocol.toLowerCase() == "https:") { return 443 }
+    if (text.lower(p.protocol) == "https:") { return 443 }
     return 80
 }
 
 fn _sameOrigin(a: string, b: string) -> bool {
     var pa = parseUrl(a)
     var pb = parseUrl(b)
-    return pa.protocol.toLowerCase() == pb.protocol.toLowerCase() &&
-           pa.hostname.toLowerCase() == pb.hostname.toLowerCase() &&
+    return text.lower(pa.protocol) == text.lower(pb.protocol) &&
+           text.lower(pa.hostname) == text.lower(pb.hostname) &&
            _originPort(a) == _originPort(b)
 }
 
@@ -1371,7 +1370,7 @@ fn _httpError(error: string) -> HttpResponse {
 fn _firstAuthorityEnd(raw: string, start: int) -> int {
     var i = start
     while (i < len(raw)) {
-        var ch = raw.charAt(i)
+        var ch = raw.runes().nth(i)
         if (ch == "/" || ch == "?" || ch == "#") { return i }
         i = i + 1
     }
@@ -1381,7 +1380,7 @@ fn _firstAuthorityEnd(raw: string, start: int) -> int {
 fn _findCharBefore(raw: string, needle: string, start: int, end: int) -> int {
     var i = start
     while (i < end) {
-        if (raw.charAt(i) == needle) { return i }
+        if (raw.runes().nth(i) == needle) { return i }
         i = i + 1
     }
     return -1
@@ -1391,7 +1390,7 @@ fn _parsePortStrict(raw: string) -> int? {
     if (len(raw) == 0 || len(raw) > 5) { return null }
     var port = 0
     for (var i = 0; i < len(raw); i++) {
-        var c = raw.charAt(i).ord()!
+        var c = raw.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return null }
         port = port * 10 + (c - 48)
     }
@@ -1407,7 +1406,7 @@ fn _httpPathFrom(raw: string, pos: int) -> string {
         if (hash >= 0) { path = path.slice(0, hash) }
         if (len(path) == 0) {
             path = "/"
-        } else if (path.charAt(0) == "?") {
+        } else if (path.runes().nth(0) == "?") {
             path = "/" + path
         }
     }
@@ -1415,7 +1414,7 @@ fn _httpPathFrom(raw: string, pos: int) -> string {
 }
 
 fn _parseHttpRequestUrl(rawUrl: string) -> _HttpRequestUrl? {
-    var raw = rawUrl.trim()
+    var raw = text.trim(rawUrl)
     if (len(raw) == 0) { return null }
 
     var scheme = "http"
@@ -1424,7 +1423,7 @@ fn _parseHttpRequestUrl(rawUrl: string) -> _HttpRequestUrl? {
     var pos = 0
     var schemeEnd = raw.indexOf("://")
     if (schemeEnd >= 0) {
-        scheme = raw.slice(0, schemeEnd).toLowerCase()
+        scheme = text.lower(raw.slice(0, schemeEnd))
         if (scheme != "http" && scheme != "https") { return null }
         isHttps = scheme == "https"
         port = isHttps ? 443 : 80
@@ -1436,13 +1435,13 @@ fn _parseHttpRequestUrl(rawUrl: string) -> _HttpRequestUrl? {
 
     var host = ""
     var rawPort = ""
-    if (pos < authorityEnd && raw.charAt(pos) == "[") {
+    if (pos < authorityEnd && raw.runes().nth(pos) == "[") {
         var close = _findCharBefore(raw, "]", pos + 1, authorityEnd)
         if (close < 0) { return null }
         host = raw.slice(pos + 1, close)
         pos = close + 1
         if (pos < authorityEnd) {
-            if (raw.charAt(pos) != ":") { return null }
+            if (raw.runes().nth(pos) != ":") { return null }
             rawPort = raw.slice(pos + 1, authorityEnd)
         }
     } else {
@@ -1553,7 +1552,7 @@ fn _headersLocation(headers: Json) -> string? {
 fn _readHttpResponse(conn: NetConn, method: string) -> ResponseMessage? {
     var raw = ""
     var closeDelimited = false
-    while (raw.byteLength <= HTTP_MAX_RESPONSE_BYTES) {
+    while (len(raw.bytes()) <= HTTP_MAX_RESPONSE_BYTES) {
         var chunk = net.read(conn, 8192)
         if (chunk == null) {
             break
@@ -1591,7 +1590,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Json, body: str
         return _httpError("Protocol parse error")
     }
 
-    if (net.write(conn!, request!) != request!.byteLength) {
+    if (net.write(conn!, request!) != len(request!.bytes())) {
         net.close(conn!)
         return _httpError("Write failed")
     }
@@ -1886,7 +1885,7 @@ fn parseChunkedBody(
         }
 
         if (maxBodyBytes > 0 && total + size! > maxBodyBytes) { return null }
-        if (pos + size! + 2 > raw.byteLength) { return null }
+        if (pos + size! + 2 > len(raw.bytes())) { return null }
         var chunk = _byteSlice(raw, pos, pos + size!)
         if (chunk == null) { return null }
         body.append(chunk!)
@@ -1969,7 +1968,7 @@ fn parseRequestText(
     var trailerPairs: Array<(string, string)> = []
 
     if (head!.chunked) {
-        var chunkedRaw = _byteSlice(raw, bodyStart, raw.byteLength)
+        var chunkedRaw = _byteSlice(raw, bodyStart, len(raw.bytes()))
         if (chunkedRaw == null) { return null }
         var chunked = parseChunkedBody(chunkedRaw!, maxBodyBytes, maxTrailerHeaders)
         if (chunked == null) { return null }
@@ -2018,7 +2017,7 @@ fn parseResponseText(
     }
 
     if (head!.chunked) {
-        var chunkedRaw = _byteSlice(raw, bodyStart, raw.byteLength)
+        var chunkedRaw = _byteSlice(raw, bodyStart, len(raw.bytes()))
         if (chunkedRaw == null) { return null }
         var chunked = parseChunkedBody(chunkedRaw!, maxBodyBytes, maxTrailerHeaders)
         if (chunked == null) { return null }
@@ -2045,10 +2044,10 @@ fn parseResponseText(
         )
     }
 
-    var body = _byteSlice(raw, bodyStart, raw.byteLength)
+    var body = _byteSlice(raw, bodyStart, len(raw.bytes()))
     if (body == null) { return null }
-    if (maxBodyBytes > 0 && body.byteLength > maxBodyBytes) { return null }
-    return ResponseMessage(head!, body!, trailers, trailerPairs, raw.byteLength)
+    if (maxBodyBytes > 0 && len(body.bytes()) > maxBodyBytes) { return null }
+    return ResponseMessage(head!, body!, trailers, trailerPairs, len(raw.bytes()))
 }
 
 // parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
@@ -2070,7 +2069,7 @@ fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
     var reason = ""
     if (secondSpace >= 0) {
         statusRaw = rest.slice(0, secondSpace)
-        reason = rest.slice(secondSpace + 1).trim()
+        reason = text.trim(rest.slice(secondSpace + 1))
     }
     var status = _parseStatusCode(statusRaw)
     if (status < 100 || status > 999) { return null }
@@ -2080,11 +2079,11 @@ fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
     for (var i = 1; i < len(lines); i++) {
         var line = _trimLineEnd(lines[i])
         if (len(line) == 0) { break }
-        if (line.charAt(0) == " " || line.charAt(0) == "\t") { return null }
+        if (line.runes().nth(0) == " " || line.runes().nth(0) == "\t") { return null }
         var colon = line.indexOf(":")
         if (colon <= 0) { return null }
         var name = line.slice(0, colon)
-        var value = line.slice(colon + 1).trim()
+        var value = text.trim(line.slice(colon + 1))
         if (!_headerNameValid(name) || !_headerValueValid(value)) { return null }
         pairs.push((name, value))
         headers[name] = value
@@ -2116,7 +2115,7 @@ fn isRedirectStatus(status: int) -> bool {
 
 // redirectTarget - Resolve a Location value against the current URL.
 fn redirectTarget(currentUrl: string, location: string) -> string? {
-    var loc = location.trim()
+    var loc = text.trim(location)
     if (len(loc) == 0 || !_headerValueValid(loc)) { return null }
     if (!_httpUrlOk(currentUrl)) { return null }
     var resolved = resolveUrl(currentUrl, loc)
@@ -2207,8 +2206,8 @@ fn requestText(
     if (!hasAccept) { _appendHeader(out, "Accept", "*/*") }
     if (!hasConnection) { _appendHeader(out, "Connection", "keep-alive") }
     if (!hasAcceptEncoding) { _appendHeader(out, "Accept-Encoding", "gzip, deflate") }
-    if (body.byteLength > 0 && !hasContentLength) {
-        _appendHeader(out, "Content-Length", string(body.byteLength))
+    if (len(body.bytes()) > 0 && !hasContentLength) {
+        _appendHeader(out, "Content-Length", string(len(body.bytes())))
     }
     out.append("\r\n")
     out.append(body)
@@ -2325,7 +2324,7 @@ fn responseText(
     out.append(_statusReason(status))
     out.append("\r\n")
     _appendHeader(out, "Content-Type", ct)
-    _appendHeader(out, "Content-Length", string(body.byteLength))
+    _appendHeader(out, "Content-Length", string(len(body.bytes())))
     for (var i = 0; i < len(custom); i++) {
         _appendHeader(out, custom[i].0, custom[i].1)
     }

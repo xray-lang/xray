@@ -1,0 +1,14 @@
+@test
+fn test_utf8_conversion_surface() {
+    var ascii: Array<byte> = [104, 105]
+    var unicode: Array<byte> = [104, 195, 169]
+    var invalid: Array<byte> = [255]
+
+    assert_eq(string.fromUtf8(ascii[:]), "hi")
+    assert_eq(string.fromUtf8(unicode[:]), "hé")
+    assert_eq(string.fromUtf8(invalid[:]), null)
+
+    var mixed: Array<byte> = [65, 255, 66]
+    assert_eq(string.fromUtf8Lossy(mixed[:]), "A�B")
+    assert_eq(ascii.toString(), "[104, 105]")
+}

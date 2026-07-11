@@ -3665,14 +3665,14 @@ else
         "freestanding profile rejects string.copyBytes" \
         "freestanding-profile: rejects hosted string-to-Bytes bridge"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string.byteLength" \
-        "freestanding-profile: rejects hosted string property helper"
+        "freestanding profile rejects string.bytes" \
+        "freestanding-profile: rejects hosted string byte-view helper"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string index access" \
-        "freestanding-profile: rejects hosted string index helper"
+        "string does not support integer indexing or slice syntax" \
+        "freestanding-profile: rejects string index syntax"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string slice expression" \
-        "freestanding-profile: rejects hosted string slice helper"
+        "string does not support integer indexing or slice syntax" \
+        "freestanding-profile: rejects string slice syntax"
 fi
 
 FREESTANDING_BYTES_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_bytes_static_reject.xr"

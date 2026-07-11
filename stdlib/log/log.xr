@@ -1,3 +1,5 @@
+import text
+
 // log - pure-Xray structured logging surface.
 //
 // The C side only anchors `import log`. Logger state, formatting, child context,
@@ -33,7 +35,7 @@ fn _levelName(level: int) -> string {
 
 fn _parseLevel(value: unknown) -> int {
     if (typeName(value) == "int") { return value }
-    var name = string(value).toLowerCase()
+    var name = text.lower(string(value))
     if (name == "debug") { return DEBUG }
     if (name == "info") { return INFO }
     if (name == "warn" || name == "warning") { return WARN }
@@ -46,7 +48,7 @@ fn _jsonEscape(s: string) -> string {
     var out = StringBuilder()
     out.append("\"")
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i)
+        var c = s.runes().nth(i)
         if (c == "\"") {
             out.append("\\\"")
         } else if (c == "\\") {
@@ -75,7 +77,7 @@ fn _jsonValue(value: unknown) -> string {
 
 fn _needsQuote(s: string) -> bool {
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i)
+        var c = s.runes().nth(i)
         if (c == " " || c == "\"" || c == "=" || c == "\n" || c == "\t") {
             return true
         }
@@ -188,7 +190,7 @@ fn _contextText(args: Array<unknown>) -> string {
     var out = StringBuilder()
     _appendTextAttrs(out, args, 0)
     var s = out.toString()
-    if (len(s) > 0 && s.charAt(0) == " ") { return s.slice(1) }
+    if (len(s) > 0 && s.runes().nth(0) == " ") { return s.slice(1) }
     return s
 }
 
@@ -196,7 +198,7 @@ fn _contextJson(args: Array<unknown>) -> string {
     var out = StringBuilder()
     _appendJsonAttrs(out, args, 0)
     var s = out.toString()
-    if (len(s) > 0 && s.charAt(0) == ",") { return s.slice(1) }
+    if (len(s) > 0 && s.runes().nth(0) == ",") { return s.slice(1) }
     return s
 }
 
@@ -299,7 +301,7 @@ fn setLevel(level: unknown) {
 }
 
 fn setFormat(format: string) {
-    var f = format.toLowerCase()
+    var f = text.lower(format)
     if (f == "json") {
         _format = "json"
     } else {

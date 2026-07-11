@@ -100,7 +100,7 @@ var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
-print(big_buffer.length)  // 编译错误：move 后访问
+print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
 **move 使用场景**：`move` 作为**实参前缀**出现在调用位置（参见 §10.8）：
@@ -136,7 +136,7 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
-    return data.length
+    return len(data)
 }(arr)
 print(arr)                  // [1, 2, 3] 未变
 
@@ -280,7 +280,7 @@ var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
-print(big_buffer.length)  // compile error: accessed after move
+print(len(big_buffer))    // compile error: accessed after move
 ```
 
 **`move` usage**: `move` appears as an **argument prefix** at call sites (see §10.8):
@@ -316,7 +316,7 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
-    return data.length
+    return len(data)
 }(arr)
 print(arr)                  // [1, 2, 3] unchanged
 

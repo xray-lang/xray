@@ -718,22 +718,22 @@ TEST(for_in_loop) {
     assert(f != NULL);
     /* Should have: entry, cond, body, incr, exit blocks (loop structure) */
     assert(f->nblocks >= 4);
-    /* Array for-in is desugared to index-based loop:
-     *   LOAD_FIELD(.length), INDEX_GET, LT, ADD (increment) */
-    int found_load_field = 0, found_index_get = 0, found_lt = 0;
+    /* Array for-in is desugared to an index-based loop with canonical len(). */
+    int found_len = 0, found_index_get = 0, found_lt = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             uint16_t op = blk->values[i]->op;
-            if (op == XI_LOAD_FIELD)
-                found_load_field = 1;
+            if (op == XI_CALL_BUILTIN && blk->values[i]->aux &&
+                strcmp((const char *) blk->values[i]->aux, "len") == 0)
+                found_len = 1;
             if (op == XI_INDEX_GET)
                 found_index_get = 1;
             if (op == XI_LT)
                 found_lt = 1;
         }
     }
-    assert(found_load_field && "should have LOAD_FIELD for .length");
+    assert(found_len && "should use canonical len builtin");
     assert(found_index_get && "should have INDEX_GET for coll[idx]");
     assert(found_lt && "should have LT for idx < len");
     xi_func_free(f);

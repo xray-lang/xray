@@ -1,69 +1,65 @@
+import text
+
 // 1150_string_byte_ops.xr - String byte-level operations
 
-// ===== byteAt =====
+// ===== byte view indexing =====
 
 @test
 fn test_byte_at() {
     var s = "ACGT"
-    assert_eq(s.byteAt(0), "A")
-    assert_eq(s.byteAt(1), "C")
-    assert_eq(s.byteAt(2), "G")
-    assert_eq(s.byteAt(3), "T")
-    assert_eq(s.byteAt(-1), "T")
-    assert_eq(s.byteAt(-4), "A")
+    assert_eq(s.bytes()[0], 65)
+    assert_eq(s.bytes()[1], 67)
+    assert_eq(s.bytes()[2], 71)
+    assert_eq(s.bytes()[3], 84)
 }
 
 @test
 fn test_byte_at_out_of_bounds() {
     var s = "ACGT"
-    assert_eq(s.byteAt(4), null)
-    assert_eq(s.byteAt(100), null)
-    assert_eq(s.byteAt(-5), null)
+    assert_throws(fn() { assert_eq(s.bytes()[4], 0) })
+    assert_throws(fn() { assert_eq(s.bytes()[-1], 0) })
 }
 
-// ===== byteAt + ord on raw octets (binary I/O) =====
-// Single-byte strings from byteAt() on binary buffers are raw octets, not
-// UTF-8 code units. ord() must return the unsigned byte 0..255 directly,
-// never the UTF-8 replacement rune (0xFFFD). codePointAt() must NOT be used
-// to recover high bytes — it UTF-8-decodes and corrupts octets >= 0x80.
+// ===== raw octets (binary I/O) =====
+// bytes() exposes the unsigned UTF-8 octets 0..255 directly.
 
 @test
 fn test_byte_at_ord_high_bytes() {
     // "é" = 0xC3 0xA9, "€" = 0xE2 0x82 0xAC in UTF-8
     var s = "é€"
-    assert_eq(s.byteLength, 5)
-    assert_eq(s.byteAt(0)!.ord(), 195)  // 0xC3
-    assert_eq(s.byteAt(1)!.ord(), 169)  // 0xA9
-    assert_eq(s.byteAt(2)!.ord(), 226)  // 0xE2
-    assert_eq(s.byteAt(3)!.ord(), 130)  // 0x82
-    assert_eq(s.byteAt(4)!.ord(), 172)  // 0xAC
+    assert_eq(len(s.bytes()), 5)
+    assert_eq(s.bytes()[0], 195)  // 0xC3
+    assert_eq(s.bytes()[1], 169)  // 0xA9
+    assert_eq(s.bytes()[2], 226)  // 0xE2
+    assert_eq(s.bytes()[3], 130)  // 0x82
+    assert_eq(s.bytes()[4], 172)  // 0xAC
 }
 
 @test
 fn test_byte_at_ord_ascii_matches_octet() {
     var s = "ACGT"
-    assert_eq(s.byteAt(0)!.ord(), 65)
-    assert_eq(s.byteAt(3)!.ord(), 84)
+    assert_eq(s.bytes()[0], 65)
+    assert_eq(s.bytes()[3], 84)
 }
 
 // ===== reverse (ASCII data only — Unicode reverse is rune-aware) =====
 
 @test
 fn test_reverse_ascii() {
-    assert_eq("ACGT".reverse(), "TGCA")
-    assert_eq("Hello".reverse(), "olleH")
-    assert_eq("".reverse(), "")
-    assert_eq("A".reverse(), "A")
+    assert_eq(text.reverseRunes("ACGT"), "TGCA")
+    assert_eq(text.reverseRunes("Hello"), "olleH")
+    assert_eq(text.reverseRunes(""), "")
+    assert_eq(text.reverseRunes("A"), "A")
 }
 
-// ===== byteAt vs charAt consistency =====
+// ===== byte vs rune consistency for ASCII =====
 
 @test
 fn test_byte_at_equals_char_at_ascii() {
     var dna = "ACGTACGTACGT"
     var i = 0
-    while (i < dna.byteLength) {
-        assert_eq(dna.charAt(i), dna.byteAt(i))
+    while (i < len(dna.bytes())) {
+        assert_eq(int(dna.runes().nth(i).toUInt32()), int(dna.bytes()[i]))
         i = i + 1
     }
 }
@@ -74,14 +70,13 @@ fn test_byte_at_equals_char_at_ascii() {
 var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
 
 fn reverseComplement(seq: string) -> string {
-    var reversed = seq.reverse()
+    var reversed = text.reverseRunes(seq)
     var sb = StringBuilder()
     var j = 0
     var byteCount = len(seq.bytes())
     while (j < byteCount) {
-        // byteAt is declared string? (null out of bounds); j < len keeps
-        // this access in bounds, so unwrap directly.
-        var c = reversed.byteAt(j)!
+        // j < len keeps this rune access in bounds.
+        var c = reversed.runes().nth(j).toString()
         var comp = COMP.get(c)
         if (comp != null) {
             sb.append(comp)

@@ -200,7 +200,7 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray @id=expr-optional-chain
-var len = name?.length          // null 时返回 null
+var nameLen = name == null ? null : len(name!)
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
 ```
@@ -287,7 +287,7 @@ for (i in 0..=n) { print(i) }
 - 类型 `Range`（仅 int 范围）。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
 - `a..=b` 是闭区间 `[a, b]`：两端都包含。
-- `for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
+- `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
 - 主要用途：`for-in` 循环、模式匹配中的范围判定。
 
 #### 展开 `...`
@@ -426,7 +426,7 @@ str[i]                  // 返回 rune
 
 - `Array` 索引：`int`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
-- `string` 索引：按 Unicode scalar 下标访问，返回 `rune`。
+- `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
 
 #### 切片
@@ -440,12 +440,13 @@ arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全切片（浅拷贝）
-str[0:5]                // 字符串切片
+var view: Slice<int> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
-- `Array` 与 `string` 切片统一支持负索引：负数先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
-- 切片返回新对象，不修改原数组。
+- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
+- string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
+- 切片是目标类型为 `Slice<T>` 的 scoped borrowed view，不修改 owner。
 
 ### 3.12 匿名函数与 Lambda
 
@@ -766,7 +767,7 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray @id=expr-optional-chain
-var len = name?.length          // returns null when name is null
+var nameLen = name == null ? null : len(name!)
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
 ```
@@ -853,7 +854,7 @@ for (i in 0..=n) { print(i) }
 - Type: `Range` (int ranges only).
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
-- `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
+- `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
 - Primary uses: `for-in` loops, range checks in pattern matching.
 
 #### Spread `...`
@@ -992,7 +993,7 @@ str[i]                  // returns rune
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: addresses Unicode scalar positions and returns `rune`.
+- Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -1006,12 +1007,13 @@ arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
 arr[:]                  // full slice (shallow copy)
-str[0:5]                // string slice
+var view: Slice<int> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
-- `Array` and `string` slicing share the same negative-index rule: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
-- Slicing returns a new object; the original array is not modified.
+- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
+- Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
+- A slice expression is a scoped borrowed `Slice<T>` selected by its target type and does not modify the owner.
 
 ### 3.12 Anonymous Functions and Lambdas
 

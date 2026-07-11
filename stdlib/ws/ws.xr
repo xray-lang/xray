@@ -1,3 +1,5 @@
+import text
+
 // ws - pure-Xray WebSocket protocol helpers.
 //
 // TCP/TLS readiness, connection registries, HTTP accept-loop integration, and
@@ -101,7 +103,7 @@ class ParsedUpgradeRequest {
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + len(prefix) > len(s)) { return false }
     for (var i = 0; i < len(prefix); i++) {
-        if (s.charAt(pos + i) != prefix.charAt(i)) { return false }
+        if (s.runes().nth(pos + i) != prefix.runes().nth(i)) { return false }
     }
     return true
 }
@@ -120,20 +122,20 @@ fn _trim(s: string) -> string {
     var start = 0
     var end = len(s)
     while (start < end) {
-        var c = s.charAt(start)
-        if (c != " " && c != "\t") { break }
+        var c = s.runes().nth(start)
+        if (c != ' ' && c != '\t') { break }
         start = start + 1
     }
     while (end > start) {
-        var c = s.charAt(end - 1)
-        if (c != " " && c != "\t" && c != "\r" && c != "\n") { break }
+        var c = s.runes().nth(end - 1)
+        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') { break }
         end = end - 1
     }
     return s.slice(start, end)
 }
 
-fn _hexNibble(c: string) -> int {
-    var n = c.ord()!
+fn _hexNibble(c: rune) -> int {
+    var n = c.toUInt32()
     if (n >= 48 && n <= 57) { return n - 48 }
     if (n >= 65 && n <= 70) { return n - 55 }
     if (n >= 97 && n <= 102) { return n - 87 }
@@ -146,8 +148,8 @@ fn _hexBytes(hex: string) -> Array<byte>? {
     var oi = 0
     var i = 0
     while (i + 1 < len(hex)) {
-        var hi = _hexNibble(hex.charAt(i))
-        var lo = _hexNibble(hex.charAt(i + 1))
+        var hi = _hexNibble(hex.runes().nth(i))
+        var lo = _hexNibble(hex.runes().nth(i + 1))
         if (hi < 0 || lo < 0) { return null }
         out[oi] = ((hi << 4) | lo) & 255
         oi = oi + 1
@@ -156,8 +158,8 @@ fn _hexBytes(hex: string) -> Array<byte>? {
     return out
 }
 
-fn _isDigit(c: string) -> bool {
-    var n = c.ord()!
+fn _isDigit(c: rune) -> bool {
+    var n = c.toUInt32()
     return n >= 48 && n <= 57
 }
 
@@ -165,9 +167,9 @@ fn _parsePort(s: string, start: int, end: int) -> int {
     if (start >= end) { return -1 }
     var n = 0
     for (var i = start; i < end; i++) {
-        var c = s.charAt(i)
+        var c = s.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        n = n * 10 + (c.ord()! - 48)
+        n = n * 10 + (c.toUInt32() - 48)
         if (n > 65535) { return -1 }
     }
     if (n <= 0) { return -1 }
@@ -252,14 +254,14 @@ fn _randomBytes(n: int) -> Array<byte> {
 }
 
 fn _header(headers: string, name: string) -> string? {
-    var target = name.toLowerCase()
+    var target = text.lower(name)
     var start = 0
     while (start < len(headers)) {
         var end = _indexOfFrom(headers, "\r\n", start)
         if (end < 0) { end = len(headers) }
         var line = headers.slice(start, end)
         var colon = line.indexOf(":")
-        if (colon > 0 && line.slice(0, colon).toLowerCase() == target) {
+        if (colon > 0 && text.lower(line.slice(0, colon)) == target) {
             return _trim(line.slice(colon + 1))
         }
         start = end + 2
@@ -268,12 +270,12 @@ fn _header(headers: string, name: string) -> string? {
 }
 
 fn _headerHasToken(value: string, token: string) -> bool {
-    var needle = token.toLowerCase()
+    var needle = text.lower(token)
     var start = 0
     while (start <= len(value)) {
         var comma = _indexOfFrom(value, ",", start)
         var end = comma >= 0 ? comma : len(value)
-        if (_trim(value.slice(start, end)).toLowerCase() == needle) { return true }
+        if (text.lower(_trim(value.slice(start, end))) == needle) { return true }
         if (comma < 0) { break }
         start = comma + 1
     }
@@ -281,7 +283,7 @@ fn _headerHasToken(value: string, token: string) -> bool {
 }
 
 fn _headerHasElementToken(value: string, token: string) -> bool {
-    var needle = token.toLowerCase()
+    var needle = text.lower(token)
     var start = 0
     while (start <= len(value)) {
         var comma = _indexOfFrom(value, ",", start)
@@ -289,7 +291,7 @@ fn _headerHasElementToken(value: string, token: string) -> bool {
         var item = _trim(value.slice(start, end))
         var semi = item.indexOf(";")
         if (semi >= 0) { item = _trim(item.slice(0, semi)) }
-        if (item.toLowerCase() == needle) { return true }
+        if (text.lower(item) == needle) { return true }
         if (comma < 0) { break }
         start = comma + 1
     }
@@ -299,12 +301,12 @@ fn _headerHasElementToken(value: string, token: string) -> bool {
 fn _parseStatusCode(line: string) -> int {
     if (!_startsWithAt(line, 0, "HTTP/1.1 ")) { return -1 }
     if (len(line) < 12) { return -1 }
-    if (len(line) > 12 && line.charAt(12) != " ") { return -1 }
+    if (len(line) > 12 && line.runes().nth(12) != ' ') { return -1 }
     var code = 0
     for (var i = 9; i < 12; i++) {
-        var c = line.charAt(i)
+        var c = line.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        code = code * 10 + (c.ord()! - 48)
+        code = code * 10 + (c.toUInt32() - 48)
     }
     return code
 }
@@ -384,14 +386,14 @@ fn parseUpgradeRequest(
     var versionStart = _indexOfFrom(line, " ", 4)
     if (versionStart <= 4) { return null }
     var target = line.slice(4, versionStart)
-    if (len(target) == 0 || target.charAt(0) != "/") { return null }
+    if (len(target) == 0 || target.runes().nth(0) != "/") { return null }
     if (line.slice(versionStart + 1, len(line)) != "HTTP/1.1") { return null }
 
     var upgrade = _header(request, "Upgrade")
     var connection = _header(request, "Connection")
     var secKey = _header(request, "Sec-WebSocket-Key")
     var version = _header(request, "Sec-WebSocket-Version")
-    if (upgrade == null || upgrade!.toLowerCase() != "websocket") { return null }
+    if (upgrade == null || text.lower(upgrade!) != "websocket") { return null }
     if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
     if (secKey == null || !_validSecKey(secKey!)) { return null }
     if (version == null || _trim(version!) != "13") { return null }
@@ -440,7 +442,7 @@ fn clientHandshakeRequest(
     deflate: bool = true
 ) -> string? {
     if (!_validSecKey(secKey) || _hasCrLf(secKey)) { return null }
-    if (len(url.path) == 0 || url.path.charAt(0) != "/" || _hasCrLf(url.path)) { return null }
+    if (len(url.path) == 0 || url.path.runes().nth(0) != "/" || _hasCrLf(url.path)) { return null }
     if (_hasCrLf(url.host)) { return null }
 
     var out = StringBuilder()
@@ -486,7 +488,7 @@ fn parseUpgradeResponse(
     if (statusCode != 101) { return null }
 
     var upgrade = _header(response, "Upgrade")
-    if (upgrade == null || upgrade!.toLowerCase() != "websocket") { return null }
+    if (upgrade == null || text.lower(upgrade!) != "websocket") { return null }
 
     var connection = _header(response, "Connection")
     if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
@@ -518,7 +520,7 @@ fn parseUrl(url: string) -> WsUrl? {
 
     var secure = false
     var pos = 0
-    var lower = url.toLowerCase()
+    var lower = text.lower(url)
     if (_startsWithAt(lower, 0, "wss://")) {
         secure = true
         pos = 6
@@ -529,19 +531,19 @@ fn parseUrl(url: string) -> WsUrl? {
     }
 
     var host = ""
-    if (pos < len(url) && url.charAt(pos) == "[") {
+    if (pos < len(url) && url.runes().nth(pos) == "[") {
         var endBracket = _indexOfFrom(url, "]", pos + 1)
         if (endBracket < 0 || endBracket == pos + 1) { return null }
         host = url.slice(pos + 1, endBracket)
         pos = endBracket + 1
         if (pos < len(url)) {
-            var c = url.charAt(pos)
+            var c = url.runes().nth(pos)
             if (c != ":" && c != "/" && c != "?") { return null }
         }
     } else {
         var hostStart = pos
         while (pos < len(url)) {
-            var c = url.charAt(pos)
+            var c = url.runes().nth(pos)
             if (c == ":" || c == "/" || c == "?") { break }
             pos = pos + 1
         }
@@ -550,11 +552,11 @@ fn parseUrl(url: string) -> WsUrl? {
     }
 
     var port = secure ? 443 : 80
-    if (pos < len(url) && url.charAt(pos) == ":") {
+    if (pos < len(url) && url.runes().nth(pos) == ":") {
         var portStart = pos + 1
         pos = portStart
         while (pos < len(url)) {
-            var c = url.charAt(pos)
+            var c = url.runes().nth(pos)
             if (c == "/" || c == "?") { break }
             pos = pos + 1
         }
@@ -564,7 +566,7 @@ fn parseUrl(url: string) -> WsUrl? {
 
     var path = "/"
     if (pos < len(url)) {
-        var c = url.charAt(pos)
+        var c = url.runes().nth(pos)
         if (c == "/") {
             path = url.slice(pos, len(url))
         } else if (c == "?") {

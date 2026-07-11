@@ -19,7 +19,7 @@ fn printFormatted(seq: string) {
         if (end > count) {
             end = count
         }
-        print(seq.substring(i, end))
+        print(seq.slice(i, end))
         i = i + 60
     }
 }
@@ -34,7 +34,7 @@ fn processFasta(input: string) {
     while (i < len(lines)) {
         var line = lines[i]
         if (len(line) > 0) {
-            if (line.charAt(0) == ">") {
+            if (line.runes().nth(0) == ">") {
                 // 输出之前的序列
                 if (len(header) > 0) {
                     print(header)
@@ -70,7 +70,7 @@ fn generateFasta(n: int): string {
         if (end > len(alu)) {
             end = len(alu)
         }
-        sb.append(alu.substring(start, end))
+        sb.append(alu.slice(start, end))
         sb.append("
 ")
         i = i + 60
@@ -82,7 +82,7 @@ fn generateFasta(n: int): string {
     while (i < n / 3) {
         var j = 0
         while (j < 60 && i + j < n / 3) {
-            sb.append(iub.charAt((i + j) % len(iub)))
+            sb.append(iub.runes().nth((i + j) % len(iub)))
             j = j + 1
         }
         sb.append("

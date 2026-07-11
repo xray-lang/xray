@@ -84,7 +84,7 @@ interface HasLength {
     length: int
 }
 
-class Buffer implements HasLength {
+class PropertyBuffer implements HasLength {
     size: int
 
     constructor(s: int) {
@@ -98,7 +98,7 @@ class Buffer implements HasLength {
 
 @test
 fn test_interface_property() {
-    var b = Buffer(10)
+    var b = PropertyBuffer(10)
     assert_eq(b.length, 10)
 }
 

@@ -217,13 +217,13 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `char`
+`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`float` `float32` `float64` `bool` `string` `rune`
 
 In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
+> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
 > They may be locally shadowed by user types of the same name, but typically need no import.
 
 #### 1.5.7 Literal Keywords
@@ -317,7 +317,7 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `char` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `rune` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
 
 ##### Plain strings (double quotes)
 
@@ -335,7 +335,7 @@ Interpolation ::= '${' Expression '}'
 
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
-- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / char literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
 ```xray
 "hello"
@@ -364,23 +364,23 @@ r"C:\path\to\file"          // literal contains two backslashes
 r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
 ```
 
-#### 1.6.6 `char` Literals
+#### 1.6.6 `rune` Literals
 
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
 
-- `'a'` has type `char` and represents one Unicode scalar value.
+- `'a'` has type `rune` and represents one Unicode scalar value.
 - The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
 - A literal must contain exactly one scalar; `''`, `'ab'`, `'🇨🇳'`, and `'é'` are compile errors.
 - Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
 - Char literals do not support `${...}` interpolation.
 
 ```xray
-var a: char = 'a'
-var zh: char = '中'
-var smile: char = '\u{1F600}'
+var a: rune = 'a'
+var zh: rune = '中'
+var smile: rune = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)
@@ -510,16 +510,16 @@ Xray is statically typed; every expression has a determined type at compile time
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
 5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
-6. **Minimal type identity**: `typeof`, `typename`, `is`, and `as`; there is no default runtime `Reflect` module.
+6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `char`, `()` (Unit, no return value) |
-| Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
+| Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
+| Sized integers | `int8`, `int16`, `int32`, `int64`, `byte`..`uint64` |
 | Sized floats | `float32`, `float64` |
-| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Array<byte>` (equivalent to `Array<byte>`) |
 | Fixed layout | `[T; N]` |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
 | Error-handling prelude | `PanicInfo` (see §8) |
@@ -543,13 +543,13 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int16` | `[-32768, 32767]` | — |
 | `int32` | `[-2³¹, 2³¹-1]` | — |
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
-| `uint8`..`uint64` | unsigned counterparts | — |
+| `byte`..`uint64` | unsigned counterparts | — |
 
 - Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`var x: int8 = 200` is rejected at compile time).
-- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
-- Values with static type `uint8`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`byte + byte -> byte`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- Values with static type `byte`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
-- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: uint8 = 255 + 1` evaluates to `0`.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: byte = 255 + 1` evaluates to `0`.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
@@ -572,7 +572,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `char` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
+| `int` / `float` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -591,31 +591,31 @@ if (flag != null) { }    // OK
 // if (flag) { }         // compile error: bare bool? cannot be a condition
 
 var s = ""
-if (!s.isEmpty()) { }    // OK
+if (len(s) != 0) { }     // OK
 // if (s) { }            // compile error
 ```
 
 #### 2.3.4 `string`
 
-Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
+Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
 Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
 
-#### 2.3.5 `char`
+#### 2.3.5 `rune`
 
-`char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
+`rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
 
 ```xray
-var a: char = 'a'
+var a: rune = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typename(a))        // "char"
-print(int(smile))         // 128512
+print(typeName(a))        // "rune"
+print(smile.toUInt32())   // 128512
 ```
 
-- A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
-- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
-- Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
+- `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
+- Explicit conversions: `int(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
 #### 2.3.6 Unit `()` (no return value)
@@ -646,8 +646,8 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -675,7 +675,7 @@ var c: Array<string> = []         // explicit empty array
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
-`Array<char>` preserves the `char` element identity: reads return `char`, and writes accept only `char`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_CHAR` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_RUNE` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
 
 #### 2.4.1.1 Fixed Arrays `[T; N]`
 
@@ -684,32 +684,32 @@ The `T` in `Array<T>` must be determinable at compile time. An empty `[]` withou
 The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
 
 ```xray
-var bytes: [uint8; 4] = [1, 2, 3, 4]
-var zero: [uint8; 64] = [0; 64]
+var bytes: [byte; 4] = [1, 2, 3, 4]
+var zero: [byte; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
 
-Fixed arrays support `length`/`size`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Span<T>`:
+Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
 
 ```xray
-var data: [uint8; 4] = [5, 6, 7, 8]
-var view: Span<uint8> = data[1:4]
+var data: [byte; 4] = [5, 6, 7, 8]
+var view: Slice<byte> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [uint8; 4]
-    payload: [uint8; 128]
+    magic: [byte; 4]
+    payload: [byte; 128]
 }
 
-var key: [uint8; 4] = [1, 2, 3, 4]
+var key: [byte; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> uint8 {
+fn first(packet: Packet) -> byte {
     return packet.magic[0]
 }
 ```
@@ -718,7 +718,7 @@ fn first(packet: Packet) -> uint8 {
 
 - `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
 - `Array<T>`: dynamic length, growable, heap-backed container.
-- `Span<T>`: borrowed view over contiguous storage; it does not own data.
+- `Slice<T>`: borrowed view over contiguous storage; it does not own data.
 
 The old `[N]T` syntax is not part of the Xray language.
 
@@ -763,13 +763,13 @@ Inter-coroutine communication channel. Named channel handles **must** be created
 shared ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Bytes`
+#### 2.4.5 `Array<byte>`
 
-Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
+Typed byte buffer. Semantically equivalent to `Array<byte>`, but stored as contiguous memory.
 
 ```xray
-var buf = Bytes(1024)
-var init = Bytes([72, 101, 108, 108, 111])
+var buf = Array<byte>(1024)
+var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` and Object Literals
@@ -782,7 +782,7 @@ The key difference between an **object literal** `{ field: value, ... }` and a M
 // Record/Json object literal: identifier or string key + colon ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // default type is sealed Record
-typename(user)                            // "Record"
+typeName(user)                            // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -860,7 +860,7 @@ var z: int = null       // compile error: null is not int
 var v = x ?? 0
 
 // 2. Optional chaining
-var len = name?.length    // null if name is null
+var nameLen = name == null ? null : len(name!)
 
 // 3. Force unwrap
 var v: int = x!           // throws NullError at runtime if x is null
@@ -1013,11 +1013,11 @@ if (v is User) {
 
 Acts only as a type guard; does not change the value.
 
-### 2.11 typeof / typename / Type Enum
+### 2.11 typeOf / typeName / Type Enum
 
 ```xray
-typeof(value)     // returns a Type enum value (an int representation)
-typename(value)   // returns the type name as a string
+typeOf(value)     // returns a Type enum value (an int representation)
+typeName(value)   // returns the type name as a string
 ```
 
 `Type` enum members:
@@ -1032,8 +1032,8 @@ Full list: see `XrTypeId` in `src/runtime/value/xtype_names.h`.
 
 Xray keeps only the minimal type identity layer by default:
 
-- `typeof(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
-- `typename(x)` returns a debug/logging type-name string and is a cold-path capability.
+- `typeOf(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
+- `typeName(x)` returns a debug/logging type-name string and is a cold-path capability.
 - Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
@@ -1097,8 +1097,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 `unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `RawPtr<T>` / `RawMut<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
@@ -1116,7 +1116,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
@@ -1150,7 +1150,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
-- `char` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
+- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -1160,7 +1160,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
 - `bool` does not participate in bitwise operations (use `&&` `||`).
-- `char` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
+- `rune` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
@@ -1235,7 +1235,7 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray
-var len = name?.length          // returns null when name is null
+var nameLen = name == null ? null : len(name!)
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
 ```
@@ -1322,7 +1322,7 @@ for (i in 0..=n) { print(i) }
 - Type: `Range` (int ranges only).
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
-- `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
+- `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
 - Primary uses: `for-in` loops, range checks in pattern matching.
 
 #### Spread `...`
@@ -1403,7 +1403,7 @@ var obj = { users }              // shorthand
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 - Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
-#### Bytes `Bytes(...)`
+#### Array<byte> `Array<byte>(...)`
 
 See §2.4.5 and §14.5.
 
@@ -1456,12 +1456,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // returns char
+str[i]                  // returns rune
 ```
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: addresses Unicode scalar positions and returns `char`.
+- Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -1475,12 +1475,13 @@ arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
 arr[:]                  // full slice (shallow copy)
-str[0:5]                // string slice
+var view: Slice<int> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
-- `Array` and `string` slicing share the same negative-index rule: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
-- Slicing returns a new object; the original array is not modified.
+- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
+- Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
+- A slice expression is a scoped borrowed `Slice<T>` selected by its target type and does not modify the owner.
 
 ### 3.12 Anonymous Functions and Lambdas
 
@@ -1571,7 +1572,7 @@ var m = Map<string, int>()
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<byte>` / `StringBuilder`, etc.; also `TypeName(args)`).
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
@@ -1590,7 +1591,7 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / char literals.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / rune literals.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement
@@ -1726,7 +1727,7 @@ ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression
 // Form A: two bare identifiers (more common)
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
 for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
-for (i, c in "hello") { print("${i}:${c}") }     // string → (index, char)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 
 // Form B: tuple-parenthesized (pairs well with .entries())
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
@@ -1740,7 +1741,7 @@ Iteration source / yield mapping:
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | `char` | (index, char) |
+| `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
 | Enum type | concrete enum value | — |
 | Custom `Iterator<T>` | T | — |
@@ -2147,8 +2148,8 @@ greet()                   // must be called explicitly
 `@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
 var p = unsafe { malloc(4) }
@@ -2169,14 +2170,14 @@ Rules:
 
 ```xray
 @extern("C") fn bsearch(
-    key: RawPtr<uint8>,
-    base: RawPtr<uint8>,
+    key: RawPtr<byte>,
+    base: RawPtr<byte>,
     count: uintsize,
     size: uintsize,
-    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
-) -> RawPtr<uint8>
+    cmp: CFn<(RawPtr<byte>, RawPtr<byte>) -> int32>
+) -> RawPtr<byte>
 
-fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+fn zeroCmp(a: RawPtr<byte>, b: RawPtr<byte>) -> int32 {
     return 0
 }
 
@@ -2558,7 +2559,7 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 
@@ -2857,7 +2858,7 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 
@@ -3041,17 +3042,17 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-var big_buffer = Bytes(1024 * 1024)
+var big_buffer = Array<byte>(1024 * 1024)
 
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(big_buffer)             // compile error: owned heap value cannot cross bare
 
-var t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
-print(big_buffer.length)  // compile error: accessed after move
+print(len(big_buffer))    // compile error: accessed after move
 ```
 
 **`move` usage**: `move` appears as an **argument prefix** at call sites (see §10.8):
@@ -3087,7 +3088,7 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
-    return data.length
+    return len(data)
 }(arr)
 print(arr)                  // [1, 2, 3] unchanged
 
@@ -3098,8 +3099,8 @@ var t2 = go fn(c: Json) -> int {
 }(config)
 
 // Pattern 3: move ownership
-shared big = Bytes(1024)
-var t3 = go fn(b: Bytes) -> int {
+shared big = Array<byte>(1024)
+var t3 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point
@@ -3386,7 +3387,7 @@ fn fetch(url: string) -> string {
     defer conn.close()                       // conn is guaranteed to close
 
     var data = conn.read()
-    if (data.isEmpty()) {
+    if (len(data) == 0) {
         throw FetchErr.Empty                 // defer still runs
     }
     return data
@@ -3659,7 +3660,7 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 **Performance impact**:
 - Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
 - Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful debug type names, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
-- Built-in specialized containers (`Array<int>`, `Bytes`) further avoid boxing overhead.
+- Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
 **Deferred features**:
@@ -3708,7 +3709,7 @@ Explicit variance annotations (`out T` / `in T`) are not currently supported. De
 
 ### 9.7 Generics and Type Identity
 
-Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typename`'s cold-path name table:
+Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typeName`'s cold-path name table:
 
 ```xray
 class Container<T> {
@@ -3716,7 +3717,7 @@ class Container<T> {
 }
 var c = Container<int>()
 print(c is Container<int>)     // true
-print(typename(c))             // "Container<int>" when type names are enabled
+print(typeName(c))             // "Container<int>" when type names are enabled
 ```
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
@@ -3792,7 +3793,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
+- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -4040,7 +4041,7 @@ var outcomes = supervisor scope {
     go failing("error2")
     go ok()
 }
-print(outcomes.length)               // 3 (one outcome per child)
+print(len(outcomes))                 // 3 (one outcome per child)
 ```
 
 **General semantics**:
@@ -4056,18 +4057,18 @@ MoveExpr ::= 'move' Identifier        // only at call-argument position
 `move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a rebindable local `var` value from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error. `const` and `shared` bindings cannot be used as `move` sources.
 
 ```xray
-var buf = Bytes(1024 * 1024)
+var buf = Array<byte>(1024 * 1024)
 
 // hand off to a coroutine
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
-// print(buf.length)
+// print(len(buf))
 
 // hand off to a channel
-shared ch = Channel<Bytes>(1)
-var payload = Bytes(4096)
+shared ch = Channel<Array<byte>>(1)
+var payload = Array<byte>(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
@@ -4166,7 +4167,7 @@ xray uses the type system to **eliminate most data races at compile time**:
 | `Atomic<T>` must be declared as `shared`; `move` prohibited | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
-- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Bytes` / immutable objects, or transfer ownership via `move`.
+- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Array<byte>` / immutable objects, or transfer ownership via `move`.
 
 ---
 
@@ -4475,11 +4476,11 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `int(x)` | `(value) -> int` | convert to int; `char` converts to its Unicode scalar code point; throws if string parsing fails |
+| `int(x)` | `(value) -> int` | convert to int; `rune` converts to its Unicode scalar code point; throws if string parsing fails |
 | `float(x)` | `(value) -> float` | convert to float |
-| `string(x)` | `(value) -> string` | convert to string; `char` converts to a one-scalar string |
+| `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
-| `char(n)` | `(int) -> char` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(T) -> T` | deep copy, preserving runtime type |
 
@@ -4487,16 +4488,16 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function / expression | Signature | Description |
 |---|---|---|
-| `typeof(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
-| `typename(x)` | `(value) -> string` | returns the debug/logging type-name string |
+| `typeOf(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
+| `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
 ```xray
 var x = 42
-print(typeof(x) == Type.int)    // true
-print(typename(x))              // "int"
+print(typeOf(x) == Type.int)    // true
+print(typeName(x))              // "int"
 print(x is int)                 // true
-// typeof(x) == "int"           // compile error: use Type.int or typename(x)
+// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
 ```
 
 ### 13.4 Coroutines
@@ -4594,60 +4595,55 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
-### 14.4.1 `char` Methods
+### 14.4.1 `rune` Methods
 
 | Method | Signature | Description |
 |--|--|--|
 | `toString()` | `() -> string` | return a one-Unicode-scalar string |
-| `ord()` | `() -> int` | return the Unicode scalar code point |
+| `toUInt32()` | `() -> uint32` | return the Unicode scalar code point |
 | `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
 | `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
 | `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
-`char` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
+`rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed.
 
 ### 14.5 `string` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` / `size` | Unicode scalar count property |
-| `charAt(i)` | one-scalar string at the given Unicode scalar index |
-| `charCodeAt(i)` | code point at the given Unicode scalar index |
-| `concat(...others)` | concatenate strings |
-| `includes(s)` | substring containment test |
-| `indexOf(s)` / `lastIndexOf(s)` | substring search |
-| `slice(start, end?)` / `substring(start, end?)` / `substr(start, len?)` | substrings |
-| `toLowerCase()` / `toUpperCase()` | case conversion |
-| `trim()` / `trimStart()` / `trimEnd()` | whitespace trimming |
+| `len(s)` | O(1) Unicode scalar count |
+| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / owned `Array<byte>` |
+| `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 returns `null` |
+| `string.fromUtf8Lossy(bytes)` | copies a `Slice<byte>`, replacing invalid sequences with U+FFFD |
+| `contains(s)` | substring containment test |
+| `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
+| `slice(start, end?)` | owned rune-ordinal slice; the range must be valid |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
 | `repeat(n)` | repeat |
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
-| `padStart(len, pad?)` / `padEnd(len, pad?)` | padding |
-| `match(pattern)` | regex match |
-| `iterator()` | `() -> Iterator<char>` |
-| `entriesIterator()` | `() -> Iterator<(int, char)>` |
-| `entries()` | `() -> Array<(int, char)>` |
+| `toString()` | return self |
 
-The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 
-### 14.6 `Bytes`
+### 14.6 `Array<byte>`
 
-`Bytes` is a prelude type; construction is handled via builtin paths such as `Bytes(n)` / `Bytes(n, fill)`. String conversion and encoding-related operations should prefer the `encoding` / `base64` modules. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
+`Array<byte>` is a prelude type; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
 
 ### 14.7 `Array<T>` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` | `int` property |
+| `len(arr)` | global `int` query |
 | `arr[i]` / `arr[i] = v` | indexed read/write |
 | `push(x)` / `pop()` | tail insert/remove |
 | `shift()` / `unshift(x)` | head insert/remove |
 | `slice(start?, end?)` | slicing |
 | `splice(start, deleteCount, ...items)` | in-place insert/remove |
 | `concat(...arrays)` | concatenation |
-| `indexOf(x)` / `includes(x)` | search |
+| `indexOf(x)` / `contains(x)` | search |
 | `join(sep?)` | concatenate into a string |
 | `reverse()` / `sort(cmp?)` | in-place reorder |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | functional helpers |
@@ -4661,10 +4657,10 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 
 | Member | Type / Description |
 |--|--|
-| `length` | `int` property |
+| `len(m)` | global `int` query |
 | `m[k]` / `m[k] = v` | indexed read/write |
 | `get(k)` / `set(k, v)` | read/write |
-| `has(k)` / `delete(k)` / `clear()` | query and remove |
+| `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
 | `keys()` / `values()` / `entries()` | keys, values, key/value pairs |
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
@@ -4675,8 +4671,8 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 
 | Member | Type / Description |
 |--|--|
-| `length` | `int` property |
-| `add(x)` / `has(x)` / `delete(x)` | insert, query, remove |
+| `len(set)` | global `int` query |
+| `add(x)` / `contains(x)` / `delete(x)` | insert, query, remove |
 | `clear()` | empty the set |
 | `values()` | returns `Array<T>` |
 | `forEach(fn)` | traversal |
@@ -4706,10 +4702,9 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | Static function | Description |
 |--|--|
 | `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | enumerate object fields |
-| `Json.has(obj, key)` | field existence |
+| `Json.containsKey(obj, key)` | field existence |
 | `Json.get(obj, key, default?)` | field read; returns `default` or `null` if absent |
-| `Json.size(obj)` | number of fields |
-| `Json.isEmpty(obj)` | emptiness predicate |
+| `len(obj)` | element count for Object / Array / String variants; scalar values throw TypeError |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
 | `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
@@ -4718,7 +4713,7 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 
 ### 14.12 `Range`
 
-`a..b` is the half-open interval `[a, b)`, used in expressions and `for-in`. Common members: `start`, `end`, `length`, `includes(x)`, `toArray()`, `toString()`.
+`a..b` is the half-open interval `[a, b)`, used in expressions and `for-in`. Common members are `start`, `end`, `contains(x)`, `toArray()`, and `toString()`; use `len(range)` for its element count.
 
 ### 14.13 `DateTime`
 
@@ -4749,7 +4744,7 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 
 | Method | Description |
 |--|--|
-| `length` | current length property |
+| `len(builder)` | current rune count |
 | `append(s)` | append and return self |
 | `toString()` | output string |
 | `clear()` | empty and return self |
@@ -4797,7 +4792,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
+> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Array<byte>`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -4826,7 +4821,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 The `net` TCP API intentionally has three data paths:
 
 - `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Bytes` buffer path for binary protocol hot loops without per-packet temporary strings.
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<byte>` buffer path for binary protocol hot loops without per-packet temporary strings.
 - `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
 
 Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.
@@ -4925,7 +4920,7 @@ Their functionality has either moved into other modules (see the per-section not
 
 Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
 
-- **Descriptor (8 bytes)**: `tag: uint8`, `flags: uint8`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
+- **Descriptor (8 bytes)**: `tag: byte`, `flags: byte`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
 - **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; only literals/symbols, explicit `intern()`, and map/set keys are interned in the global pool, and strings are promoted to shared (atomic RC) on demand when crossing coroutine boundaries (channel send, `go` arguments, task/scope results). These are object-storage policies and do not change the `XrValue` representation.
@@ -4935,13 +4930,13 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `int` | `XR_TAG_I64` + 64-bit signed payload |
 | `float` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
-| `char` | `XR_TAG_CHAR` + Unicode scalar payload |
+| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Bytes` | `XR_TAG_PTR` + bytes heap object |
+| `Array<byte>` | `XR_TAG_PTR` + bytes heap object |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
-Typed-array element layout is part of the container metadata. `Array<char>` uses `XR_ELEM_CHAR`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_CHAR`, and stores reject non-`char` values, so it cannot be confused with `Array<uint32>`.
+Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<uint32>`.
 
 ### 16.2 Memory Allocation
 
@@ -5229,7 +5224,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | array / string / Bytes out of bounds |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | array / string / Array<byte> out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map key not found |
 
 #### Memory and stack (E044x)
@@ -5632,7 +5627,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
-| `char` | §2.3.5 |
+| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -5677,7 +5672,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `uint8`..`uint64` | §2.3.1 |
+| `byte`..`uint64` | §2.3.1 |
 | `union` | §5.4 |
 | `unsafe` | §3.2 |
 | `var` | §5.1 |
@@ -5806,8 +5801,8 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **AOT** | Ahead-of-Time compilation: precompiles to machine code at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
-| **Bytes** | Byte buffer type (see §2.4.5) |
-| **char** | Primitive type for one Unicode scalar value; not numeric and not an alias of `uint32` (see §2.3.5) |
+| **Array<byte>** | Byte buffer type (see §2.4.5) |
+| **rune** | Primitive type for one Unicode scalar value; not numeric and not an alias of `uint32` (see §2.3.5) |
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
 | **coroutine** | User-space, suspendable/resumable execution flow |
@@ -5832,7 +5827,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
 | **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
-| **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; current `string.length` / indexing / iteration operate on Unicode scalars, not grapheme clusters |
+| **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; `len(string)` and rune iteration operate on Unicode scalars, not grapheme clusters |
 | **union** | Union type `A \| B` |
 | **Unicode scalar value** | Legal Unicode code point in `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF` |
 | **upvalue** | Outer variable captured by a closure |

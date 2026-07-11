@@ -1,52 +1,52 @@
+import text
+
+import strconv
+
 // anchor: string-surface-declared-methods
-// Declared string/Array<byte> surface (stdlib/types/string.xr, array.xr) must
-// behave identically on VM and AOT. Covers the methods added when the
-// declaration file was re-synced with the runtime method tables:
-// codePointAt / byteAt / ord / reverse / toInt / toFloat / isEmpty /
-// toString, plus the Array<byte>(Array<byte>).toString() UTF-8 decode.
+// Canonical string/rune/byte surface must behave identically on VM and AOT.
 
 var s = "héllo"
 
-// length counts UTF-8 scalars; byteLength counts raw bytes
+// len(string) counts UTF-8 scalars; len(bytes()) counts raw bytes
 print(len(s))
-print(s.byteLength)
+print(len(s.bytes()))
 
-// codePointAt: Unicode scalar by rune index, -1 when out of bounds
-print(s.codePointAt(0))
-print(s.codePointAt(1))
-print(s.codePointAt(99))
+// Unicode scalar by explicit rune index
+print(s.runes().nth(0).toUInt32())
+print(s.runes().nth(1).toUInt32())
 
-// byteAt: raw octet as 1-byte string, null when out of bounds
-print(s.byteAt(0))
-print(s.byteAt(99))
+// Raw octet through the borrowed byte view
+print(s.bytes()[0])
 
-// ord: first scalar; 1-byte strings are raw octets; empty -> null
-print("é".ord())
-print("x".ord())
-print("".ord())
-print("é!".ord())
+// Explicit rune conversion
+print('é'.toUInt32())
+print('x'.toUInt32())
 
 // reverse: UTF-8 aware
-print("abc".reverse())
-print("aé😀".reverse())
+print(text.reverseRunes("abc"))
+print(text.reverseRunes("aé😀"))
 
 // numeric parsing: null on failure
-print("42".toInt())
-print(" -7 ".toInt())
-print("x".toInt())
-print("3.5".toFloat())
-print("nope".toFloat())
+print(strconv.parseInt("42"))
+print(strconv.parseInt(" -7 "))
+print(strconv.parseInt("x"))
+print(strconv.parseFloat("3.5"))
+print(strconv.parseFloat("nope"))
 
-// isEmpty / toString
+// emptiness / toString
 print(len("") == 0)
 print(len("a") == 0)
 print("self".toString())
 
-// Array<byte> <-> text bridge: Array<byte>.toString() decodes UTF-8 bytes
-var bin = Array<byte>([104, 105])
+// Binary/text conversion is explicit and validates UTF-8.
+var bin: Array<byte> = [104, 105]
+print(string.fromUtf8(bin[:]))
+var accented: Array<byte> = [104, 195, 169]
+print(string.fromUtf8(accented[:]))
+var invalid: Array<byte> = [255]
+print(string.fromUtf8(invalid[:]))
+print(string.fromUtf8Lossy(invalid[:]))
 print(bin.toString())
-var accented = Array<byte>([104, 195, 169])
-print(accented.toString())
 
 // non-U8 arrays keep the formatter rendering
 var nums = [1, 2, 3]

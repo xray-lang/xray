@@ -1,24 +1,28 @@
+import strconv
+
+import text
+
 // AOT test: comprehensive builtin methods (string, array, map, number)
 
 // --- String new methods ---
 var s = "  hello  "
-print(s.trimStart())        // hello
-print(s.trimEnd())          //   hello
+print(text.trimStart(s))        // hello
+print(text.trimEnd(s))          //   hello
 
-print("hello".charAt(1))    // e
-print("hello".concat(" world")) // hello world
+print("hello".runes().nth(1))    // e
+print("hello" + " world") // hello world
 print("hello".lastIndexOf("l")) // 3
-print("hello".byteAt(0))    // 104
+print("hello".bytes()[0])    // 104
 
 print("aabaa".replaceAll("a", "x"))  // xxbxx
-print("hello".substring(1, 4))       // ell
-print("42".padStart(5, "0"))         // 00042
-print("hi".padEnd(5, "!"))           // hi!!!
+print("hello".slice(1, 4))       // ell
+print(text.padStart("42", 5, "0"))         // 00042
+print(text.padEnd("hi", 5, "!"))           // hi!!!
 
-print("123".toInt())         // 123
-print("3.14".toFloat())      // 3.14
-print("A".ord())             // 65
-print("hello".reverse())     // olleh
+print(strconv.parseInt("123"))         // 123
+print(strconv.parseFloat("3.14"))      // 3.14
+print("A".toUInt32())             // 65
+print(text.reverseRunes("hello"))     // olleh
 
 // --- Array new methods ---
 var arr = [3, 1, 2]

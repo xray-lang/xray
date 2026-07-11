@@ -1,3 +1,7 @@
+import strconv
+
+import text
+
 // csv - pure-Xray CSV parser and writer.
 //
 // CSV is an L4 algorithm module: parsing, dynamic typing, header mapping, and
@@ -12,9 +16,9 @@ const STATE_QUOTED = 2
 const STATE_QUOTE_END = 3
 
 class CsvConfig {
-    delimiter: string
-    quoteChar: string
-    escapeChar: string
+    delimiter: rune
+    quoteChar: rune
+    escapeChar: rune
     header: bool
     columns: Json
     hasColumns: bool
@@ -31,9 +35,9 @@ class CsvConfig {
     hasNullStrings: bool
 
     constructor() {
-        this.delimiter = ","
-        this.quoteChar = "\""
-        this.escapeChar = "\""
+        this.delimiter = ','
+        this.quoteChar = '"'
+        this.escapeChar = '"'
         this.header = false
         this.columns = []
         this.hasColumns = false
@@ -87,10 +91,10 @@ fn _jsonString(options: Json, key: string, fallback: string) -> string {
     return fallback
 }
 
-fn _jsonChar(options: Json, key: string, fallback: string) -> string {
-    var s = _jsonString(options, key, fallback)
+fn _jsonChar(options: Json, key: string, fallback: rune) -> rune {
+    var s = _jsonString(options, key, fallback.toString())
     if (len(s) == 0) { return fallback }
-    return s.charAt(0)
+    return s.runes().nth(0)
 }
 
 fn _jsonBool(options: Json, key: string, fallback: bool) -> bool {
@@ -113,9 +117,9 @@ fn _config(optionsValue: unknown) -> CsvConfig {
     }
 
     var cfg = CsvConfig()
-    cfg.delimiter = _jsonChar(options, "delimiter", ",")
-    cfg.quoteChar = _jsonChar(options, "quoteChar", "\"")
-    cfg.escapeChar = _jsonChar(options, "escapeChar", "\"")
+    cfg.delimiter = _jsonChar(options, "delimiter", ',')
+    cfg.quoteChar = _jsonChar(options, "quoteChar", '"')
+    cfg.escapeChar = _jsonChar(options, "escapeChar", '"')
     cfg.header = _jsonBool(options, "header", false)
     cfg.dynamicTyping = _jsonBool(options, "dynamicTyping", false)
     cfg.trimFields = _jsonBool(options, "trimFields", false)
@@ -163,23 +167,23 @@ fn _isDigitCode(c: int) -> bool {
 fn _numberKind(s: string) -> int {
     if (len(s) == 0) { return 0 }
     var i = 0
-    if (s.charAt(i) == "+" || s.charAt(i) == "-") {
+    if (s.runes().nth(i) == "+" || s.runes().nth(i) == "-") {
         i = i + 1
         if (i >= len(s)) { return 0 }
     }
 
     var wholeDigits = 0
-    while (i < len(s) && _isDigitCode(s.charAt(i).ord()!)) {
+    while (i < len(s) && _isDigitCode(s.runes().nth(i).toUInt32())) {
         wholeDigits = wholeDigits + 1
         i = i + 1
     }
 
     var isFloat = false
     var fracDigits = 0
-    if (i < len(s) && s.charAt(i) == ".") {
+    if (i < len(s) && s.runes().nth(i) == ".") {
         isFloat = true
         i = i + 1
-        while (i < len(s) && _isDigitCode(s.charAt(i).ord()!)) {
+        while (i < len(s) && _isDigitCode(s.runes().nth(i).toUInt32())) {
             fracDigits = fracDigits + 1
             i = i + 1
         }
@@ -188,14 +192,14 @@ fn _numberKind(s: string) -> int {
 
     if (wholeDigits == 0 && fracDigits == 0) { return 0 }
 
-    if (i < len(s) && (s.charAt(i) == "e" || s.charAt(i) == "E")) {
+    if (i < len(s) && (s.runes().nth(i) == "e" || s.runes().nth(i) == "E")) {
         isFloat = true
         i = i + 1
-        if (i < len(s) && (s.charAt(i) == "+" || s.charAt(i) == "-")) {
+        if (i < len(s) && (s.runes().nth(i) == "+" || s.runes().nth(i) == "-")) {
             i = i + 1
         }
         var expDigits = 0
-        while (i < len(s) && _isDigitCode(s.charAt(i).ord()!)) {
+        while (i < len(s) && _isDigitCode(s.runes().nth(i).toUInt32())) {
             expDigits = expDigits + 1
             i = i + 1
         }
@@ -214,7 +218,7 @@ fn _matchesConfiguredNull(field: string, cfg: CsvConfig) -> bool {
         }
         return false
     }
-    var lower = field.toLowerCase()
+    var lower = text.lower(field)
     return len(field) == 0 || lower == "null"
 }
 
@@ -223,16 +227,16 @@ fn _convertValue(field: string, cfg: CsvConfig) -> Json {
 
     if (_matchesConfiguredNull(field, cfg)) { return null }
 
-    var lower = field.toLowerCase()
+    var lower = text.lower(field)
     if (lower == "true") { return true }
     if (lower == "false") { return false }
 
     var kind = _numberKind(field)
     if (kind == 1) {
-        var i = field.toInt()
+        var i = strconv.parseInt(field)
         if (i != null) { return i! }
     } else if (kind == 2) {
-        var f = field.toFloat()
+        var f = strconv.parseFloat(field)
         if (f != null) { return f! }
     }
     return field
@@ -240,7 +244,7 @@ fn _convertValue(field: string, cfg: CsvConfig) -> Json {
 
 fn _finishField(result: CsvResult, cfg: CsvConfig, fieldBuilder: StringBuilder) {
     var field = fieldBuilder.toString()
-    if (cfg.trimFields) { field = field.trim() }
+    if (cfg.trimFields) { field = text.trim(field) }
     result.currentRow.push(_convertValue(field, cfg))
     result.currentColNum = result.currentColNum + 1
     fieldBuilder.clear()
@@ -326,12 +330,12 @@ fn _consumeHeader(result: CsvResult) -> Json {
     return header
 }
 
-fn _isNewline(c: string) -> bool {
-    return c == "\n" || c == "\r"
+fn _isNewline(c: rune) -> bool {
+    return c == '\n' || c == '\r'
 }
 
 fn _skipCRLF(data: string, pos: int, result: CsvResult) -> int {
-    if (pos + 1 < len(data) && data.charAt(pos) == "\r" && data.charAt(pos + 1) == "\n") {
+    if (pos + 1 < len(data) && data.runes().nth(pos) == "\r" && data.runes().nth(pos + 1) == "\n") {
         result.linebreak = "\r\n"
         return pos + 1
     }
@@ -339,7 +343,7 @@ fn _skipCRLF(data: string, pos: int, result: CsvResult) -> int {
 }
 
 fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
-    var result = CsvResult(cfg.delimiter)
+    var result = CsvResult(cfg.delimiter.toString())
     var header: Json = cfg.columns
     var hasHeader = cfg.hasColumns
     var mapRows = cfg.header || cfg.hasColumns
@@ -347,10 +351,10 @@ fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
     var state = STATE_FIELD_START
 
     var pos = 0
-    if (len(data) > 0 && data.charAt(0) == "\u{FEFF}") { pos = 1 }
+    if (len(data) > 0 && data.runes().nth(0) == '\u{FEFF}') { pos = 1 }
 
     while (pos < len(data)) {
-        var c = data.charAt(pos)
+        var c = data.runes().nth(pos)
 
         if (state == STATE_FIELD_START) {
             if (c == cfg.quoteChar) {
@@ -389,7 +393,7 @@ fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
             }
         } else if (state == STATE_QUOTED) {
             if (c == cfg.escapeChar && pos + 1 < len(data) &&
-                data.charAt(pos + 1) == cfg.quoteChar) {
+                data.runes().nth(pos + 1) == cfg.quoteChar) {
                 field.append(cfg.quoteChar)
                 pos = pos + 1
             } else if (c == cfg.quoteChar) {
@@ -453,15 +457,15 @@ fn _parseImpl(data: string, cfg: CsvConfig) -> CsvResult {
 }
 
 fn _detectDelimiter(data: string) -> string {
-    var candidates: Array<string> = [",", "\t", ";", "|"]
+    var candidates: Array<rune> = [',', '\t', ';', '|']
     var counts: Array<int> = [0, 0, 0, 0]
     var inQuote = false
     var limit = len(data)
     if (limit > 4096) { limit = 4096 }
 
     for (var i = 0; i < limit; i++) {
-        var c = data.charAt(i)
-        if (c == "\"") {
+        var c = data.runes().nth(i)
+        if (c == '"') {
             inQuote = !inQuote
             continue
         }
@@ -471,7 +475,7 @@ fn _detectDelimiter(data: string) -> string {
         }
     }
 
-    var best = ","
+    var best = ','
     var bestCount = 0
     for (var j = 0; j < len(candidates); j++) {
         if (counts[j] > bestCount) {
@@ -479,7 +483,7 @@ fn _detectDelimiter(data: string) -> string {
             best = candidates[j]
         }
     }
-    return best
+    return best.toString()
 }
 
 // parse - Parse CSV text into row arrays, or Json objects when header/columns is enabled.
@@ -509,25 +513,25 @@ fn parseDetailed(data: string, options: unknown = null) -> Json {
 // parseTsv - Parse tab-separated text.
 fn parseTsv(data: string, options: unknown = null) -> Array<Json> {
     var cfg = _config(options)
-    cfg.delimiter = "\t"
+    cfg.delimiter = '\t'
     return _parseImpl(data, cfg).data as Array<Json>
 }
 
 // parseAuto - Detect a common delimiter and parse the text.
 fn parseAuto(data: string, options: unknown = null) -> Array<Json> {
     var cfg = _config(options)
-    cfg.delimiter = _detectDelimiter(data)
+    cfg.delimiter = _detectDelimiter(data).runes().nth(0)
     return _parseImpl(data, cfg).data as Array<Json>
 }
 
 fn _needsQuoting(s: string, cfg: CsvConfig) -> bool {
     if (len(s) == 0) { return false }
-    if (s.charAt(0) == " " || s.charAt(0) == "\t" ||
-        s.charAt(len(s) - 1) == " " || s.charAt(len(s) - 1) == "\t") {
+    if (s.runes().nth(0) == ' ' || s.runes().nth(0) == '\t' ||
+        s.runes().nth(len(s) - 1) == ' ' || s.runes().nth(len(s) - 1) == '\t') {
         return true
     }
     for (var i = 0; i < len(s); i++) {
-        var c = s.charAt(i)
+        var c = s.runes().nth(i)
         if (c == cfg.delimiter || c == cfg.quoteChar || c == cfg.escapeChar || _isNewline(c)) {
             return true
         }
@@ -543,7 +547,7 @@ fn _writeField(out: StringBuilder, value: string, cfg: CsvConfig) {
     out.append(cfg.quoteChar)
     var prefixMode = cfg.escapeChar != cfg.quoteChar
     for (var i = 0; i < len(value); i++) {
-        var c = value.charAt(i)
+        var c = value.runes().nth(i)
         if (c == cfg.quoteChar || (prefixMode && c == cfg.escapeChar)) {
             if (prefixMode) {
                 out.append(cfg.escapeChar)

@@ -2808,7 +2808,11 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
             target = l->type_rune;
 
         if (target) {
-            XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+            AstNode *arg_node = call->arguments[0];
+            if (arg_node && arg_node->type == AST_SLICE_EXPR && !arg_node->as.slice_expr.start &&
+                !arg_node->as.slice_expr.end)
+                arg_node = arg_node->as.slice_expr.source;
+            XiValue *arg = xi_lower_expr(l, arg_node);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONVERT, target, 1);
             if (!v)
                 return NULL;
@@ -3899,6 +3903,54 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
 
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+
+    /* The source keyword is lowercase, while the runtime's builtin class is
+     * named String. Resolve canonical static constructors to that class. */
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS && call->arg_count == 1) {
+        MemberAccessNode *static_ma = &call->callee->as.member_access;
+        if (static_ma->object && static_ma->object->type == AST_VARIABLE && static_ma->name &&
+            strcmp(static_ma->object->as.variable.name, "string") == 0 &&
+            (strcmp(static_ma->name, "fromUtf8") == 0 ||
+             strcmp(static_ma->name, "fromUtf8Lossy") == 0)) {
+            AstNode *arg_node = call->arguments[0];
+            bool elided_full_slice = false;
+            if (arg_node && arg_node->type == AST_SLICE_EXPR && !arg_node->as.slice_expr.start &&
+                !arg_node->as.slice_expr.end) {
+                arg_node = arg_node->as.slice_expr.source;
+                elided_full_slice = true;
+            }
+            XiValue *arg = xi_lower_expr(l, arg_node);
+            if (!arg)
+                return NULL;
+            if (elided_full_slice) {
+                XiValue *retain = xi_value_new(l->func, l->cur_block, XI_RETAIN, l->type_unit, 1);
+                if (!retain)
+                    return NULL;
+                retain->args[0] = arg;
+                retain->flags |= XI_FLAG_SIDE_EFFECT;
+                retain->line = (uint32_t) node->line;
+            }
+            XiValue *recv = xi_lower_emit_builtin_class(l, "String", node->line);
+            if (!recv)
+                return NULL;
+            struct XrType *result_type = xi_lower_node_type(l, node);
+            if (!result_type || xi_lower_type_is_unknown(result_type))
+                result_type = strcmp(static_ma->name, "fromUtf8") == 0
+                                  ? xr_type_new_optional(l->isolate, l->type_string)
+                                  : l->type_string;
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = arg;
+            v->aux = (void *) arena_strdup(l->func, static_ma->name);
+            v->aux_int = (int64_t) xi_lower_method_symbol(l, static_ma->name) << 1;
+            v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+            v->line = (uint32_t) node->line;
+            xi_lower_insert_err_check(l, node);
+            return v;
+        }
+    }
 
     if (lower_call_is_sys_thread_spawn(call))
         return lower_thread_spawn_call(l, node, call);

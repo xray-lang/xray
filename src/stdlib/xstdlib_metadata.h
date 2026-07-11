@@ -18,9 +18,9 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
     if (!name || !name[0] || name[0] == '.')
         return false;
     static const char *modules[] = {
-        "regex", "math", "time",   "datetime", "path",     "io",  "os",
-        "net",   "http", "crypto", "base64",   "encoding", "url", "csv",
-        "toml",  "yaml", "xml",    "compress", "log",
+        "regex", "math", "time",   "datetime", "path",     "io",   "os",
+        "net",   "http", "crypto", "base64",   "encoding", "url",  "csv",
+        "toml",  "yaml", "xml",    "compress", "log",      "text", "strconv",
     };
     for (uint32_t i = 0; i < (uint32_t) (sizeof(modules) / sizeof(modules[0])); i++) {
         if (strcmp(name, modules[i]) == 0)

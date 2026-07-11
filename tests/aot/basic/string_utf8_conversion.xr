@@ -1,0 +1,9 @@
+var ascii: Array<byte> = [104, 105]
+var unicode: Array<byte> = [104, 195, 169]
+var invalid: Array<byte> = [65, 255, 66]
+
+print(string.fromUtf8(ascii[:]))
+print(string.fromUtf8(unicode[:]))
+print(string.fromUtf8(invalid[:]))
+print(string.fromUtf8Lossy(invalid[:]))
+print(ascii.toString())

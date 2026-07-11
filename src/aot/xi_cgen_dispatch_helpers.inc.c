@@ -1468,8 +1468,9 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
         v->aux_int == XR_GLOBAL_VAR_DIR) {
         fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
-    } else if (v->aux_int == XR_GLOBAL_VAR_JSON) {
-        fprintf(out, "XR_NULL_VAL /* builtin Json namespace */");
+    } else if (v->aux_int == XR_GLOBAL_VAR_JSON || v->aux_int == XR_GLOBAL_VAR_STRING) {
+        fprintf(out, "XR_NULL_VAL /* builtin %s namespace */",
+                v->aux ? (const char *) v->aux : "native");
     } else if (v->aux_int == XR_GLOBAL_VAR_ATOMIC || v->aux_int == XR_GLOBAL_VAR_WORKQUEUE ||
                v->aux_int == XR_GLOBAL_VAR_RESULTGROUP ||
                v->aux_int == XR_GLOBAL_VAR_COUNTDOWNLATCH ||

@@ -72,55 +72,50 @@ order: 015
 | 方法 | 签名 | 说明 |
 |--|--|--|
 | `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
-| `ord()` | `() -> int` | 返回 Unicode scalar code point |
+| `toUInt32()` | `() -> uint32` | 返回 Unicode scalar code point |
 | `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
 | `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
 | `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
 | `isWhitespace()` | `() -> bool` | 是否为空白字符 |
 
-`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `ord()` 或 `int(c)`。
+`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。
 
 ### 14.5 `string` 方法
 
 | 成员 | 类型 / 说明 |
 |--|--|
-| `length` / `size` | Unicode scalar 数量属性 |
-| `charAt(i)` | 返回指定 Unicode scalar 位置的单 scalar 字符串 |
-| `charCodeAt(i)` | 返回指定 Unicode scalar 位置的码点 |
-| `concat(...others)` | 拼接字符串 |
-| `includes(s)` | 是否包含子串 |
-| `indexOf(s)` / `lastIndexOf(s)` | 查找子串 |
-| `slice(start, end?)` / `substring(start, end?)` / `substr(start, len?)` | 子串 |
-| `toLowerCase()` / `toUpperCase()` | 大小写转换 |
-| `trim()` / `trimStart()` / `trimEnd()` | 去空白 |
+| `len(s)` | O(1) Unicode scalar 数量 |
+| `bytes()` / `copyBytes()` | 借用的 `Slice<byte>` / 独立的 `Array<byte>` |
+| `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 返回 `null` |
+| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<byte>`，非法序列替换为 U+FFFD |
+| `contains(s)` | 是否包含子串 |
+| `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
+| `slice(start, end?)` | 按 rune ordinal 取得 owned string；范围必须合法 |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
 | `repeat(n)` | 重复 |
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
-| `padStart(len, pad?)` / `padEnd(len, pad?)` | 填充 |
-| `match(pattern)` | 正则匹配 |
-| `iterator()` | `() -> Iterator<rune>` |
-| `entriesIterator()` | `() -> Iterator<(int, rune)>` |
-| `entries()` | `() -> Array<(int, rune)>` |
+| `toString()` | 返回自身 |
 
-字符串下标表达式 `s[i]` 返回 `rune`；`charAt(i)` 保留 JavaScript 风格的字符串返回值。`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
+string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
 ### 14.6 `Array<byte>`
 
-`Array<byte>` 是 prelude 类型，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。字符串转换和编码类操作优先使用 `encoding` / `base64` 模块。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
+`Array<byte>` 是 prelude 类型，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
 
 ### 14.7 `Array<T>` 方法
 
 | 成员 | 类型/说明 |
 |--|--|
-| `length` | `int` 属性 |
+| `len(arr)` | `int` 全局查询 |
 | `arr[i]` / `arr[i] = v` | 下标读写 |
 | `push(x)` / `pop()` | 尾部增删 |
 | `shift()` / `unshift(x)` | 头部增删 |
 | `slice(start?, end?)` | 切片 |
 | `splice(start, deleteCount, ...items)` | 原地增删 |
 | `concat(...arrays)` | 拼接 |
-| `indexOf(x)` / `includes(x)` | 查找 |
+| `indexOf(x)` / `contains(x)` | 查找 |
 | `join(sep?)` | 拼接为字符串 |
 | `reverse()` / `sort(cmp?)` | 原地重排 |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 函数式处理 |
@@ -134,10 +129,10 @@ order: 015
 
 | 成员 | 类型/说明 |
 |--|--|
-| `length` | `int` 属性 |
+| `len(m)` | `int` 全局查询 |
 | `m[k]` / `m[k] = v` | 下标读写 |
 | `get(k)` / `set(k, v)` | 读取/写入 |
-| `has(k)` / `delete(k)` / `clear()` | 查询与删除 |
+| `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
 | `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
@@ -148,8 +143,8 @@ order: 015
 
 | 成员 | 类型/说明 |
 |--|--|
-| `length` | `int` 属性 |
-| `add(x)` / `has(x)` / `delete(x)` | 插入、查询、删除 |
+| `len(set)` | `int` 全局查询 |
+| `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
 | `clear()` | 清空 |
 | `values()` | 返回 `Array<T>` |
 | `forEach(fn)` | 遍历 |
@@ -190,7 +185,7 @@ order: 015
 
 ### 14.12 `Range`
 
-`a..b` 是半开区间 `[a, b)`，用于表达式和 `for-in`。常见成员为 `start`、`end`、`length`、`includes(x)`、`toArray()`、`toString()`。
+`a..b` 是半开区间 `[a, b)`，用于表达式和 `for-in`。常见成员为 `start`、`end`、`contains(x)`、`toArray()`、`toString()`；元素数量使用 `len(range)`。
 
 ### 14.13 `DateTime`
 
@@ -221,7 +216,7 @@ order: 015
 
 | 方法 | 说明 |
 |--|--|
-| `length` | 当前长度属性 |
+| `len(builder)` | 当前 rune 数量 |
 | `append(s)` | 追加并返回自身 |
 | `toString()` | 输出字符串 |
 | `clear()` | 清空并返回自身 |
@@ -327,55 +322,50 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | Method | Signature | Description |
 |--|--|--|
 | `toString()` | `() -> string` | return a one-Unicode-scalar string |
-| `ord()` | `() -> int` | return the Unicode scalar code point |
+| `toUInt32()` | `() -> uint32` | return the Unicode scalar code point |
 | `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
 | `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
 | `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
-`rune` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
+`rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed.
 
 ### 14.5 `string` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` / `size` | Unicode scalar count property |
-| `charAt(i)` | one-scalar string at the given Unicode scalar index |
-| `charCodeAt(i)` | code point at the given Unicode scalar index |
-| `concat(...others)` | concatenate strings |
-| `includes(s)` | substring containment test |
-| `indexOf(s)` / `lastIndexOf(s)` | substring search |
-| `slice(start, end?)` / `substring(start, end?)` / `substr(start, len?)` | substrings |
-| `toLowerCase()` / `toUpperCase()` | case conversion |
-| `trim()` / `trimStart()` / `trimEnd()` | whitespace trimming |
+| `len(s)` | O(1) Unicode scalar count |
+| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / owned `Array<byte>` |
+| `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 returns `null` |
+| `string.fromUtf8Lossy(bytes)` | copies a `Slice<byte>`, replacing invalid sequences with U+FFFD |
+| `contains(s)` | substring containment test |
+| `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
+| `slice(start, end?)` | owned rune-ordinal slice; the range must be valid |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
 | `repeat(n)` | repeat |
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
-| `padStart(len, pad?)` / `padEnd(len, pad?)` | padding |
-| `match(pattern)` | regex match |
-| `iterator()` | `() -> Iterator<rune>` |
-| `entriesIterator()` | `() -> Iterator<(int, rune)>` |
-| `entries()` | `() -> Array<(int, rune)>` |
+| `toString()` | return self |
 
-The string index expression `s[i]` returns `rune`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 
 ### 14.6 `Array<byte>`
 
-`Array<byte>` is a prelude type; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. String conversion and encoding-related operations should prefer the `encoding` / `base64` modules. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
+`Array<byte>` is a prelude type; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
 
 ### 14.7 `Array<T>` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` | `int` property |
+| `len(arr)` | global `int` query |
 | `arr[i]` / `arr[i] = v` | indexed read/write |
 | `push(x)` / `pop()` | tail insert/remove |
 | `shift()` / `unshift(x)` | head insert/remove |
 | `slice(start?, end?)` | slicing |
 | `splice(start, deleteCount, ...items)` | in-place insert/remove |
 | `concat(...arrays)` | concatenation |
-| `indexOf(x)` / `includes(x)` | search |
+| `indexOf(x)` / `contains(x)` | search |
 | `join(sep?)` | concatenate into a string |
 | `reverse()` / `sort(cmp?)` | in-place reorder |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | functional helpers |
@@ -389,10 +379,10 @@ The string index expression `s[i]` returns `rune`; `charAt(i)` keeps the JavaScr
 
 | Member | Type / Description |
 |--|--|
-| `length` | `int` property |
+| `len(m)` | global `int` query |
 | `m[k]` / `m[k] = v` | indexed read/write |
 | `get(k)` / `set(k, v)` | read/write |
-| `has(k)` / `delete(k)` / `clear()` | query and remove |
+| `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
 | `keys()` / `values()` / `entries()` | keys, values, key/value pairs |
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
@@ -403,8 +393,8 @@ The string index expression `s[i]` returns `rune`; `charAt(i)` keeps the JavaScr
 
 | Member | Type / Description |
 |--|--|
-| `length` | `int` property |
-| `add(x)` / `has(x)` / `delete(x)` | insert, query, remove |
+| `len(set)` | global `int` query |
+| `add(x)` / `contains(x)` / `delete(x)` | insert, query, remove |
 | `clear()` | empty the set |
 | `values()` | returns `Array<T>` |
 | `forEach(fn)` | traversal |
@@ -445,7 +435,7 @@ The string index expression `s[i]` returns `rune`; `charAt(i)` keeps the JavaScr
 
 ### 14.12 `Range`
 
-`a..b` is the half-open interval `[a, b)`, used in expressions and `for-in`. Common members: `start`, `end`, `length`, `includes(x)`, `toArray()`, `toString()`.
+`a..b` is the half-open interval `[a, b)`, used in expressions and `for-in`. Common members are `start`, `end`, `contains(x)`, `toArray()`, and `toString()`; use `len(range)` for its element count.
 
 ### 14.13 `DateTime`
 
@@ -476,7 +466,7 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 
 | Method | Description |
 |--|--|
-| `length` | current length property |
+| `len(builder)` | current rune count |
 | `append(s)` | append and return self |
 | `toString()` | output string |
 | `clear()` | empty and return self |

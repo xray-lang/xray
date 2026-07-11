@@ -432,6 +432,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
 
+// strconv module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_strconv_symbols[] = {
+    {"parseInt", XLSP_SYM_FUNCTION, "fn(value: string): int?", "", NULL, 0},
+    {"parseFloat", XLSP_SYM_FUNCTION, "fn(value: string): float?", "", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_STRCONV_SYMBOL_COUNT 2
+
 // sync module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form (task 147 §6.5).", NULL, 0},
@@ -463,6 +470,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 16
+
+// text module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
+    {"lower", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"upper", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"trim", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"trimStart", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"trimEnd", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"reverseRunes", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"padStart", XLSP_SYM_FUNCTION, "fn(value: string, targetLength: int, padding?: string): string", "", NULL, 0},
+    {"padEnd", XLSP_SYM_FUNCTION, "fn(value: string, targetLength: int, padding?: string): string", "", NULL, 0},
+    {"translate", XLSP_SYM_FUNCTION, "fn(value: string, table: Map<string, string>): string", "", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_TEXT_SYMBOL_COUNT 9
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
@@ -584,8 +605,10 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
     {"runtime", "runtime standard library module", g_xlsp_stdlib_runtime_symbols, GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT},
+    {"strconv", "strconv standard library module", g_xlsp_stdlib_strconv_symbols, GEN_XLSP_STDLIB_STRCONV_SYMBOL_COUNT},
     {"sync", "sync standard library module", g_xlsp_stdlib_sync_symbols, GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT},
     {"sys", "sys standard library module", g_xlsp_stdlib_sys_symbols, GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT},
+    {"text", "text standard library module", g_xlsp_stdlib_text_symbols, GEN_XLSP_STDLIB_TEXT_SYMBOL_COUNT},
     {"time", "time standard library module", g_xlsp_stdlib_time_symbols, GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT},
     {"toml", "toml standard library module", g_xlsp_stdlib_toml_symbols, GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT},
     {"url", "url standard library module", g_xlsp_stdlib_url_symbols, GEN_XLSP_STDLIB_URL_SYMBOL_COUNT},

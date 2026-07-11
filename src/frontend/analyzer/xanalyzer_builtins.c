@@ -310,22 +310,11 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
     // String methods
     if (XR_TYPE_IS_STRING(container_type)) {
         switch (sym) {
-            case SYMBOL_CHARAT:
-            case SYMBOL_CONCAT:
             case SYMBOL_SLICE:
-            case SYMBOL_SUBSTRING:
-            case SYMBOL_TOLOWERCASE:
-            case SYMBOL_TOUPPERCASE:
-            case SYMBOL_TRIM:
-            case SYMBOL_TRIM_START:
-            case SYMBOL_TRIM_END:
             case SYMBOL_REPLACE:
             case SYMBOL_REPLACEALL:
             case SYMBOL_REPEAT:
-            case SYMBOL_PAD_START:
-            case SYMBOL_PAD_END:
                 return xr_type_new_string(NULL);
-            case SYMBOL_CODEPOINT_AT:
             case SYMBOL_INDEXOF:
             case SYMBOL_LASTINDEXOF:
                 return xr_type_new_int(NULL);
@@ -335,12 +324,6 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
                 return xr_type_new_bool(NULL);
             case SYMBOL_SPLIT:
                 return xr_type_new_array(X, xr_type_new_string(NULL));
-            case SYMBOL_MATCH: {
-                XrType *t = xr_type_new_array(X, xr_type_new_string(NULL));
-                if (t)
-                    t->is_nullable = true;
-                return t;
-            }
             default:
                 break;
         }
@@ -351,7 +334,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
         switch (sym) {
             case SYMBOL_TOSTRING:
                 return xr_type_new_string(NULL);
-            case SYMBOL_ORD:
+            case SYMBOL_TO_UINT32:
                 return xr_type_new_int(NULL);
             case SYMBOL_IS_LETTER:
             case SYMBOL_IS_NUMBER:

@@ -426,6 +426,12 @@ AstNode *xr_parse_type_cast(Parser *parser) {
 
     int line = parser->previous.line;
 
+    /* Primitive type keywords also name their native type object for static
+     * members (for example string.fromUtf8(...)). A following dot therefore
+     * starts ordinary member access; only a following '(' is a cast. */
+    if (xr_parser_check(parser, TK_DOT))
+        return xr_ast_variable(parser->compiler_session, type_name, line);
+
     if (!xr_parser_match(parser, TK_LPAREN)) {
         xr_parser_error(parser, "expected '(' after type cast");
         return NULL;

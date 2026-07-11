@@ -29,7 +29,7 @@ print(noBody.consumedBytes)
 
 var unicodeBody = parseRequestText("POST /utf8 HTTP/1.1\r\nContent-Length: 3\r\n\r\néxtrail")!
 print(unicodeBody.body)
-print(unicodeBody.body.byteLength)
+print(len(unicodeBody.body.bytes()))
 print(unicodeBody.consumedBytes)
 
 var unicodeChunk = parseRequestText(
@@ -37,7 +37,7 @@ var unicodeChunk = parseRequestText(
     "2\r\né\r\n0\r\n\r\n"
 )!
 print(unicodeChunk.body)
-print(unicodeChunk.body.byteLength)
+print(len(unicodeChunk.body.bytes()))
 
 print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabc") == null)
 print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello", 3) == null)

@@ -67,6 +67,9 @@ XR_FUNC struct XrModule *xr_load_module_compress(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_cluster(struct XrVMRuntime *isolate);
 #endif  // ========== Data Format Modules ==========
 
+XR_FUNC struct XrModule *xr_load_module_text(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_strconv(struct XrVMRuntime *isolate);
+
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_load_module_csv(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_toml(struct XrVMRuntime *isolate);

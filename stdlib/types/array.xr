@@ -33,8 +33,8 @@ class Array<T> {
     every(fn: (item: T) -> bool) -> bool
     some(fn: (item: T) -> bool) -> bool
     fill(value: T, start?: int, end?: int) -> Array<T>
-    // Array<byte> (Array<byte>) decodes as UTF-8 text — round-trips with
-    // string.copyBytes(). Other element types render the "[a, b]" form.
+    // All arrays, including Array<byte>, render the "[a, b]" container form.
+    // Decode UTF-8 byte arrays explicitly with string.fromUtf8().
     toString() -> string
     // Iteration protocol — used by for-in lowering. Users can also
     // call them directly; iterator()/next() yields elements, while

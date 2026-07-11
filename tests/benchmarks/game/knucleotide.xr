@@ -40,7 +40,7 @@ fn count_frequencies(seq, k) {
     var freq = #{}
     var end = len(seq) - k + 1
     for (j in 0..end) {
-        var subseq = seq.substring(j, j + k)
+        var subseq = seq.slice(j, j + k)
         freq.increment(subseq)
     }
     return freq

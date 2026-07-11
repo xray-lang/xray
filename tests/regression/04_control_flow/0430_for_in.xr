@@ -1,3 +1,5 @@
+import text
+
 // 0430_for_in.xr
 // 作者：xingleixu@gmail.com
 // 测试：for-in 循环
@@ -155,7 +157,7 @@ fn test_iterator_array_manual() {
 
 @test
 fn test_iterator_string_manual() {
-    var it = "abc".iterator()
+    var it = "abc".runes()
     var acc = ""
     while (it.hasNext()) {
         acc += it.next()
@@ -257,10 +259,10 @@ fn test_for_in_string_index_unicode() {
 }
 
 @test
-fn test_for_in_string_entries_method() {
+fn test_for_in_string_indexed() {
     var s = "hi"
     var acc = ""
-    for ((i, c) in s.entries()) {
+    for (i, c in s) {
         acc += "${i}-${c}|"
     }
     assert_eq(acc, "0-h|1-i|")
@@ -350,9 +352,8 @@ fn test_for_in_transform() {
     var names = ["alice", "bob", "charlie"]
     var upper: Array<string> = []
     for (name in names) {
-        upper.push(name.toUpperCase())
+        upper.push(text.upper(name))
     }
     assert_eq(upper[0], "ALICE")
     assert_eq(upper[1], "BOB")
 }
-

@@ -1691,9 +1691,39 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     // Handle built-in properties
+    if ((obj_type->kind == XR_KIND_INTERFACE || obj_type->kind == XR_KIND_INSTANCE) &&
+        obj_type->instance.class_name && strcmp(obj_type->instance.class_name, "Iterator") == 0) {
+        XrType *elem = (obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args &&
+                        obj_type->instance.type_args[0])
+                           ? obj_type->instance.type_args[0]
+                           : xr_type_new_unknown(ctx->analyzer->isolate);
+        if (strcmp(ma->name, "hasNext") == 0)
+            return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, xr_type_new_bool(NULL),
+                                        false);
+        if (strcmp(ma->name, "next") == 0)
+            return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, elem, false);
+        if (strcmp(ma->name, "nth") == 0) {
+            XrType *params[1] = {xr_type_new_int(NULL)};
+            return xr_type_new_function(ctx->analyzer->isolate, params, 1, elem, false);
+        }
+        if (strcmp(ma->name, "iterator") == 0)
+            return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, obj_type, false);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg), "Iterator has no member '%s'", ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
     SymbolId prop_sym = xr_builtin_symbol_from_name(ma->name);
+    bool declares_legacy_named_member = false;
+    if (obj_type->kind == XR_KIND_INSTANCE && obj_type->instance.class_ref) {
+        declares_legacy_named_member =
+            xa_class_info_lookup_instance_member(obj_type->instance.class_ref, ma->name) != NULL;
+    }
     if ((prop_sym == SYMBOL_LENGTH || prop_sym == SYMBOL_SIZE || prop_sym == SYMBOL_IS_EMPTY) &&
-        xa_type_has_len_query(obj_type)) {
+        xa_type_has_len_query(obj_type) && !declares_legacy_named_member) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[192];
         snprintf(msg, sizeof(msg), "%s has no member '%s'; use len(value)%s",
@@ -1909,6 +1939,17 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    if (XR_TYPE_IS_STRING(obj_type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "string has no member '%s'; use the canonical string surface or text module",
+                 ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
     if (XR_TYPE_IS_ARRAY(obj_type)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
@@ -2056,7 +2097,24 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     IndexGetNode *ig = &node->as.index_get;
+    /*
+     * A borrowed view used only as the immediate operand of an index expression
+     * has an unambiguous, non-escaping lifetime.  Give lowered view constructors
+     * that context so the canonical `s.bytes()[i]` spelling does not require a
+     * throw-away Slice<byte> binding.
+     */
+    bool saved_view_context = ctx->allow_view_expr_for_copy;
+    if (ig->array && ig->array->type == AST_CALL_EXPR) {
+        CallExprNode *call = &ig->array->as.call_expr;
+        if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+            const char *name = call->callee->as.member_access.name;
+            if (name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
+                         strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0))
+                ctx->allow_view_expr_for_copy = true;
+        }
+    }
     XrType *container = xa_visit_infer_expr(ctx, ig->array);
+    ctx->allow_view_expr_for_copy = saved_view_context;
 
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
     xa_check_nullable_access(ctx, node, container, "index access");

@@ -1,10 +1,12 @@
+import text
+
 // AOT test: collection methods (B.5)
 
 // --- String methods ---
 var s = "  Hello World  "
-print(s.trim())           // Hello World
-print("hello".toUpperCase())  // HELLO
-print("HELLO".toLowerCase())  // hello
+print(text.trim(s))           // Hello World
+print(text.upper("hello"))  // HELLO
+print(text.lower("HELLO"))  // hello
 
 // split
 var parts = "a,b,c".split(",")
