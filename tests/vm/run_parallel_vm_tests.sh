@@ -135,6 +135,12 @@ expect_output_workers \
     $'true\ntrue\ntrue\ntrue\ntrue' \
     4
 
+expect_output_workers \
+    "parallel_plan_reduce_aggregate_vm_batch" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_reduce_aggregate_vm_batch.xr" \
+    $'true\ntrue\ntrue\ntrue\ntrue\ntrue' \
+    4
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

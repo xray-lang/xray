@@ -77,6 +77,7 @@ typedef enum XrParallelJobKind {
     XR_PARALLEL_JOB_REDUCE_I64,
     XR_PARALLEL_JOB_REDUCE_STATE_I64,
     XR_PARALLEL_JOB_REDUCE_AGG,
+    XR_PARALLEL_JOB_REDUCE_STATE_AGG,
 } XrParallelJobKind;
 
 typedef struct XrParallelSchedulerBatch {
@@ -92,6 +93,7 @@ typedef struct XrParallelSchedulerBatch {
     XrParallelReduceRangeI64Fn reduce_body;
     XrParallelReduceRangeStateI64Fn reduce_state_body;
     XrParallelReduceRangeAggFn reduce_agg_body;
+    XrParallelReduceRangeStateAggFn reduce_state_agg_body;
     int64_t reduce_partials[XR_PARALLEL_MAX_WORKERS];
     unsigned char *reduce_agg_partials;
     size_t reduce_agg_size;
@@ -241,6 +243,36 @@ static void xr_parallel_reduce_agg_run_lane(XrParallelSchedulerBatch *batch, int
     batch->reduce_valid[worker_id] = true;
 }
 
+static void xr_parallel_reduce_state_agg_run_lane(XrParallelSchedulerBatch *batch,
+                                                  int64_t worker_id) {
+    if (!batch || !batch->reduce_state_agg_body || worker_id < 0 ||
+        worker_id >= XR_PARALLEL_MAX_WORKERS || batch->reduce_agg_size == 0 ||
+        !batch->reduce_agg_partials) {
+        if (batch)
+            atomic_store_explicit(&batch->reduce_failed, true, memory_order_relaxed);
+        return;
+    }
+
+    size_t size = batch->reduce_agg_size;
+    unsigned char *local = batch->reduce_agg_partials + ((size_t) worker_id * size);
+
+    int64_t begin = 0;
+    int64_t limit = 0;
+    if (!xr_parallel_for_lane_bounds(batch->start, batch->end, batch->participants, worker_id,
+                                     &begin, &limit)) {
+        batch->reduce_valid[worker_id] = false;
+        return;
+    }
+
+    if (!batch->reduce_state_agg_body(batch->closure, batch->states, begin, limit, worker_id,
+                                      local)) {
+        atomic_store_explicit(&batch->reduce_failed, true, memory_order_relaxed);
+        batch->reduce_valid[worker_id] = false;
+        return;
+    }
+    batch->reduce_valid[worker_id] = true;
+}
+
 static void xr_parallel_scheduler_run_lane(XrParallelSchedulerBatch *batch, int64_t worker_id) {
     if (!batch)
         return;
@@ -262,6 +294,9 @@ static void xr_parallel_scheduler_run_lane(XrParallelSchedulerBatch *batch, int6
             break;
         case XR_PARALLEL_JOB_REDUCE_AGG:
             xr_parallel_reduce_agg_run_lane(batch, worker_id);
+            break;
+        case XR_PARALLEL_JOB_REDUCE_STATE_AGG:
+            xr_parallel_reduce_state_agg_run_lane(batch, worker_id);
             break;
         case XR_PARALLEL_JOB_NONE:
             break;
@@ -570,6 +605,25 @@ static bool xr_parallel_reduce_agg_run_range_sequential(int64_t start, int64_t e
     return ok;
 }
 
+static bool xr_parallel_reduce_state_agg_run_range_sequential(
+    int64_t start, int64_t end, size_t value_size, const void *initial,
+    XrParallelReduceRangeStateAggFn body, XrParallelReduceCombineAggFn combine,
+    struct xrt_closure *closure, XrValue states, void *out) {
+    if (!out || !initial || !body || !combine || value_size == 0)
+        return false;
+    memcpy(out, initial, value_size);
+    if (end <= start)
+        return true;
+    void *partial = xr_malloc(value_size);
+    if (!partial)
+        return false;
+    bool ok = body(closure, states, start, end, 0, partial);
+    if (ok)
+        combine(closure, out, partial);
+    xr_free(partial);
+    return ok;
+}
+
 bool xr_parallel_reduce_i64(const XrAotContext *ctx, int64_t start, int64_t end, int64_t workers,
                             int64_t initial, XrParallelReduceRangeI64Fn body,
                             XrParallelReduceCombineI64Fn combine, struct xrt_closure *closure,
@@ -733,6 +787,72 @@ bool xr_parallel_reduce_agg(const XrAotContext *ctx, int64_t start, int64_t end,
     batch.reduce_agg_partials = partials;
     batch.reduce_agg_size = value_size;
     batch.closure = closure;
+    bool submitted = xr_parallel_run_scheduler_batch(ctx, &batch);
+    bool ok = submitted && !atomic_load_explicit(&batch.reduce_failed, memory_order_relaxed);
+    if (ok) {
+        memcpy(out, initial, value_size);
+        for (int i = 0; i < batch.participants; i++) {
+            if (batch.reduce_valid[i]) {
+                const unsigned char *partial = partials + ((size_t) i * value_size);
+                combine(closure, out, partial);
+            }
+        }
+    }
+    xr_free(partials);
+    return ok;
+}
+
+bool xr_parallel_reduce_state_agg(const XrAotContext *ctx, int64_t start, int64_t end,
+                                  int64_t workers, size_t value_size, const void *initial,
+                                  XrParallelReduceRangeStateAggFn body,
+                                  XrParallelReduceCombineAggFn combine, struct xrt_closure *closure,
+                                  XrValue states, void *out) {
+    if (!out || !initial || !body || !combine || value_size == 0)
+        return false;
+    if (end <= start) {
+        memcpy(out, initial, value_size);
+        return true;
+    }
+
+    workers = xr_parallel_resolve_workers(ctx, workers);
+    if (workers < 0)
+        return false;
+    uint64_t count_u = (uint64_t) end - (uint64_t) start;
+    int64_t count = count_u > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count_u;
+    if (count <= 1 || workers <= 1)
+        return xr_parallel_reduce_state_agg_run_range_sequential(
+            start, end, value_size, initial, body, combine, closure, states, out);
+
+    int64_t participants = workers;
+    if (participants > count)
+        participants = count;
+    int64_t scheduler_cap = xr_parallel_scheduler_worker_cap(ctx);
+    if (scheduler_cap > 0 && participants > scheduler_cap)
+        participants = scheduler_cap;
+    if (participants > XR_PARALLEL_MAX_WORKERS)
+        participants = XR_PARALLEL_MAX_WORKERS;
+    int background_workers = (int) participants - 1;
+    if (background_workers <= 0)
+        return xr_parallel_reduce_state_agg_run_range_sequential(
+            start, end, value_size, initial, body, combine, closure, states, out);
+
+    if (value_size > SIZE_MAX / (size_t) participants)
+        return false;
+    unsigned char *partials = (unsigned char *) xr_malloc(value_size * (size_t) participants);
+    if (!partials)
+        return false;
+
+    XrParallelSchedulerBatch batch;
+    memset(&batch, 0, sizeof(batch));
+    batch.job_kind = XR_PARALLEL_JOB_REDUCE_STATE_AGG;
+    batch.start = start;
+    batch.end = end;
+    batch.participants = participants;
+    batch.reduce_state_agg_body = body;
+    batch.reduce_agg_partials = partials;
+    batch.reduce_agg_size = value_size;
+    batch.closure = closure;
+    batch.states = states;
     bool submitted = xr_parallel_run_scheduler_batch(ctx, &batch);
     bool ok = submitted && !atomic_load_explicit(&batch.reduce_failed, memory_order_relaxed);
     if (ok) {

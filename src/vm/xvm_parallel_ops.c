@@ -19,8 +19,10 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <string.h>
 
 #include "../base/xmalloc.h"
+#include "../coro/xdeep_copy.h"
 #include "../coro/xcountdown_latch.h"
 #include "../coro/xworker.h"
 #include "../coro/xyieldable.h"
@@ -193,6 +195,11 @@ static bool vm_par_lane_store_partial(XrVmParLane *lane) {
     if (lane->lane_id < 0 || lane->lane_id >= output->length)
         return false;
     XrArrayElemType elem_type = (XrArrayElemType) output->elem_type;
+    if (elem_type == XR_ELEM_ANY) {
+        ((XrValue *) output->data)[lane->lane_id] =
+            xr_deep_copy_to_transit_core(lane->batch->core, lane->partial);
+        return true;
+    }
     if (!vm_par_value_fits_elem_type(lane->partial, elem_type))
         return false;
     xr_array_set_element(output, lane->lane_id, lane->partial);
@@ -394,8 +401,8 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
 static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                               XrBcCallFrame *frame, XrInstruction *pc,
                                               XrValue *handled_slot, XrValue *batch_slot,
+                                              XrValue *materialized_output_slot,
                                               XrVmParBatch *batch, bool resume) {
-    (void) isolate;
     XrCoroutine *current = vm_get_coro(vm_ctx);
     if (!current) {
         vm_par_batch_free(batch);
@@ -420,6 +427,32 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
     bool failed = atomic_load_explicit(&batch->failed, memory_order_acquire);
     XrArray *mutated_output =
         (!failed && (batch->map_body || batch->reduce_body)) ? batch->output : NULL;
+    if (!failed && materialized_output_slot && batch->reduce_body && batch->output &&
+        batch->output->elem_type == XR_ELEM_ANY) {
+        XrArray *shared_partials = batch->output;
+        XrArray *private_partials = xr_array_with_capacity(current, shared_partials->length);
+        if (!private_partials || private_partials->capacity < shared_partials->length) {
+            vm_par_batch_free(batch);
+            *batch_slot = xr_null();
+            VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY,
+                     "parallel.reduce partial materialization failed");
+        }
+        private_partials->length = shared_partials->length;
+        if (private_partials->length > 0 && private_partials->data) {
+            memset(private_partials->data, 0, (size_t) private_partials->length * sizeof(XrValue));
+        }
+        for (int32_t idx = 0; idx < shared_partials->length; idx++) {
+            XrValue transit = xr_array_get_element(shared_partials, idx);
+            XrValue private_value = xr_deep_copy_to_coro(isolate, transit, current);
+            ((XrValue *) private_partials->data)[idx] = private_value;
+            XR_ARRAY_MARK_REFS(private_partials, private_value);
+        }
+        *materialized_output_slot = xr_value_from_array(private_partials);
+        mutated_output = private_partials;
+        if (XR_OBJ_IS_SHARED(&shared_partials->hdr) && xr_shared_decref(&shared_partials->hdr) == 0)
+            xr_shared_destroy_core(batch->core, &shared_partials->hdr);
+        batch->output = NULL;
+    }
     vm_par_batch_free(batch);
     *batch_slot = xr_null();
     if (failed) {
@@ -452,7 +485,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     XrVmParBatch *resume_batch = vm_par_batch_from_value(*batch_slot);
     if (resume_batch)
-        return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot,
+        return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, NULL,
                                      resume_batch, true);
 
     *handled_slot = xr_bool(false);
@@ -507,7 +540,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     *batch_slot = vm_par_batch_to_value(batch);
     xr_runtime_spawn_batch(runtime, batch->coros, batch->lane_count);
-    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, batch,
+    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, NULL, batch,
                                  false);
 }
 
@@ -533,7 +566,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     XrVmParBatch *resume_batch = vm_par_batch_from_value(*batch_slot);
     if (resume_batch)
-        return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot,
+        return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, NULL,
                                      resume_batch, true);
 
     *handled_slot = xr_bool(false);
@@ -593,7 +626,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     *batch_slot = vm_par_batch_to_value(batch);
     xr_runtime_spawn_batch(runtime, batch->coros, batch->lane_count);
-    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, batch,
+    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, NULL, batch,
                                  false);
 }
 
@@ -622,7 +655,7 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     XrVmParBatch *resume_batch = vm_par_batch_from_value(*batch_slot);
     if (resume_batch)
         return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot,
-                                     resume_batch, true);
+                                     partials_slot, resume_batch, true);
 
     *handled_slot = xr_bool(false);
     if (!XR_IS_INT(*workers_slot))
@@ -639,8 +672,6 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     }
 
     XrArrayElemType elem_type = vm_par_scalar_elem_type(*initial_slot);
-    if (elem_type == XR_ELEM_ANY)
-        return XR_DISP_NEXT;
 
     int64_t start = XR_TO_INT(*start_slot);
     int64_t end_excl = XR_TO_INT(*end_slot);
@@ -676,11 +707,19 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     XrCoroutine *current = vm_get_coro(vm_ctx);
     if (!current)
         return XR_DISP_NEXT;
-    XrArray *partials = xr_array_with_capacity_typed(current, lane_count, elem_type);
+    XrArray *partials =
+        elem_type == XR_ELEM_ANY
+            ? xr_array_new_shared_core(xr_isolate_get_runtime_core(isolate), lane_count)
+            : xr_array_with_capacity_typed(current, lane_count, elem_type);
     if (!partials || partials->capacity < lane_count) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.reduce partial allocation failed");
     }
     partials->length = lane_count;
+    if (elem_type == XR_ELEM_ANY) {
+        if (partials->data)
+            memset(partials->data, 0, (size_t) lane_count * sizeof(XrValue));
+        partials->contains_refs = 1;
+    }
     *partials_slot = xr_value_from_array(partials);
 
     XrVmParBatch *batch = vm_par_batch_new(
@@ -692,6 +731,6 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
 
     *batch_slot = vm_par_batch_to_value(batch);
     xr_runtime_spawn_batch(runtime, batch->coros, batch->lane_count);
-    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot, batch,
-                                 false);
+    return vm_par_wait_for_batch(isolate, vm_ctx, frame, pc, handled_slot, batch_slot,
+                                 partials_slot, batch, false);
 }
