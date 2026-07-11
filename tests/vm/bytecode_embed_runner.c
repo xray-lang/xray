@@ -7,53 +7,53 @@
  */
 
 #include "module/xbytecode_io.h"
+#include "module/xmodule.h"
 #include "xray_vm.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-// Generated from `print(7)` with stripped debug/source using XR_BC_VERSION 11.
-static const uint32_t xr_embed_smoke_size = 101;
-static const uint8_t xr_embed_smoke[101] = {
-    0x58, 0x52, 0x41, 0x59, 0x0b, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x3c, 0x6d, 0x61, 0x69, 0x6e, 0x3e,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-    0x00, 0x06, 0x00, 0x00, 0x80, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x40, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-int main(void) {
+static int run_bytecode_file_expect_line(const char *bytecode_path, const char *expected_line) {
     XrVMConfig params;
     xray_vm_config_init(&params);
 
     XrVMRuntime *iso = xray_vm_new_runtime(&params);
-    if (!iso) {
+    if (!iso)
         return 2;
-    }
+    xr_module_system_init(iso);
 
     FILE *out = tmpfile();
     if (!out) {
+        xr_module_system_free(iso);
         xray_vm_delete(iso);
         return 3;
     }
     xray_vm_set_stdout(iso, out);
 
-    int rc = xr_eval_bytecode(iso, xr_embed_smoke, xr_embed_smoke_size);
+    int rc = xr_run_bytecode_file(iso, bytecode_path);
 
     fflush(out);
     rewind(out);
-    char buf[32] = {0};
+    char buf[256] = {0};
     size_t n = fread(buf, 1, sizeof(buf) - 1, out);
     fclose(out);
+    xr_module_system_free(iso);
     xray_vm_delete(iso);
 
-    if (rc != 0) {
+    if (rc != 0)
         return 4;
-    }
-    if (n < 2 || strcmp(buf, "7\n") != 0) {
-        fprintf(stderr, "unexpected bytecode output: '%s'\n", buf);
+
+    size_t expected_len = strlen(expected_line);
+    if (n != expected_len + 1 || strncmp(buf, expected_line, expected_len) != 0 ||
+        buf[expected_len] != '\n' || buf[expected_len + 1] != '\0') {
+        fprintf(stderr, "unexpected bytecode output: '%s', expected '%s\\n'\n", buf, expected_line);
         return 5;
     }
     return 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 3)
+        return run_bytecode_file_expect_line(argv[1], argv[2]);
+    fprintf(stderr, "usage: %s <bytecode.xrc> <expected-line>\n", argv[0]);
+    return 6;
 }

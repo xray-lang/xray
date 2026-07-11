@@ -14,6 +14,7 @@
 #include "module/xbytecode_io.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/class/xclass.h"
+#include "runtime/class/xclass_descriptor.h"
 #include "runtime/class/xinstance.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
@@ -194,6 +195,74 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
+TEST(bytecode_roundtrips_class_descriptor_constants) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+
+    XrClassDescriptor *desc = xr_calloc(1, sizeof(XrClassDescriptor));
+    ASSERT_NOT_NULL(desc);
+    desc->class_name = "BytecodeClass";
+    desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
+    desc->clinit_proto_index = -1;
+    desc->super_global_index = -1;
+    desc->instance_field_count = 1;
+    desc->instance_fields = xr_calloc(1, sizeof(XrFieldDescriptorEntry));
+    ASSERT_NOT_NULL(desc->instance_fields);
+    desc->instance_fields[0].name = "value";
+    desc->instance_fields[0].type_name = "Int";
+    desc->instance_fields[0].default_value = xr_int(42);
+
+    int kidx = xr_valuearray_add(&proto->constants, XR_FROM_PTR(desc));
+    ASSERT_EQ_INT(kidx, 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    proto->maxstacksize = 1;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, kidx), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
+
+    XrValue roundtrip_val = PROTO_CONSTANT(roundtrip, 0);
+    ASSERT_TRUE(XR_IS_PTR(roundtrip_val));
+    XrClassDescriptor *roundtrip_desc = XR_TO_PTR(roundtrip_val);
+    ASSERT_NOT_NULL(roundtrip_desc);
+    ASSERT_STR_EQ(roundtrip_desc->class_name, "BytecodeClass");
+    ASSERT_EQ_INT(roundtrip_desc->clinit_proto_index, -1);
+    ASSERT_EQ_INT(roundtrip_desc->super_global_index, -1);
+    ASSERT_EQ_UINT(roundtrip_desc->descriptor_version, XR_CLASS_DESCRIPTOR_VERSION);
+    ASSERT_EQ_UINT(roundtrip_desc->instance_field_count, 1);
+    ASSERT_STR_EQ(roundtrip_desc->instance_fields[0].name, "value");
+    ASSERT_STR_EQ(roundtrip_desc->instance_fields[0].type_name, "Int");
+    ASSERT_TRUE(XR_IS_INT(roundtrip_desc->instance_fields[0].default_value));
+    ASSERT_EQ_INT(XR_TO_INT(roundtrip_desc->instance_fields[0].default_value), 42);
+
+    xr_free((void *) roundtrip_desc->instance_fields[0].name);
+    xr_free((void *) roundtrip_desc->instance_fields[0].type_name);
+    xr_free(roundtrip_desc->instance_fields);
+    xr_free((void *) roundtrip_desc->class_name);
+    xr_free(roundtrip_desc);
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_free(desc->instance_fields);
+    xr_free(desc);
     xr_vm_proto_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
@@ -425,6 +494,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
+    RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_declared_shared_count);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);

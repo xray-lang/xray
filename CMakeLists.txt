@@ -1283,9 +1283,59 @@ if(BUILD_TESTS)
     )
     target_link_libraries(bytecode_embed_runner PRIVATE xray_vm_runtime)
 
+    set(XRAY_BYTECODE_EMBED_SMOKE_SRC
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/bytecode_embed_smoke.xr)
+    set(XRAY_BYTECODE_EMBED_SMOKE_XRC
+        ${CMAKE_CURRENT_BINARY_DIR}/tests/vm/bytecode_embed_smoke.xrc)
+    set(XRAY_BYTECODE_EMBED_PARALLEL_SRC
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/bytecode_embed_parallel_import.xr)
+    set(XRAY_BYTECODE_EMBED_PARALLEL_XRC
+        ${CMAKE_CURRENT_BINARY_DIR}/tests/vm/bytecode_embed_parallel_import.xrc)
+    add_custom_command(
+        OUTPUT ${XRAY_BYTECODE_EMBED_SMOKE_XRC}
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+                ${CMAKE_CURRENT_BINARY_DIR}/tests/vm
+        COMMAND $<TARGET_FILE:xray_stdlib_bcgen> compile
+                ${XRAY_BYTECODE_EMBED_SMOKE_SRC}
+                --output ${XRAY_BYTECODE_EMBED_SMOKE_XRC}
+                --format bytecode
+                --strip-debug
+                --strip-source
+        DEPENDS
+            xray_stdlib_bcgen
+            gen-stdlib-embedded-bytecodes
+            ${XRAY_BYTECODE_EMBED_SMOKE_SRC}
+        COMMENT "Generating bytecode-only embed smoke"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${XRAY_BYTECODE_EMBED_PARALLEL_XRC}
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+                ${CMAKE_CURRENT_BINARY_DIR}/tests/vm
+        COMMAND $<TARGET_FILE:xray_stdlib_bcgen> compile
+                ${XRAY_BYTECODE_EMBED_PARALLEL_SRC}
+                --output ${XRAY_BYTECODE_EMBED_PARALLEL_XRC}
+                --format bytecode
+                --strip-debug
+                --strip-source
+        DEPENDS
+            xray_stdlib_bcgen
+            gen-stdlib-embedded-bytecodes
+            ${XRAY_BYTECODE_EMBED_PARALLEL_SRC}
+        COMMENT "Generating bytecode-only parallel import smoke"
+        VERBATIM
+    )
+    add_custom_target(bytecode_embed_xrc
+        DEPENDS
+            ${XRAY_BYTECODE_EMBED_SMOKE_XRC}
+            ${XRAY_BYTECODE_EMBED_PARALLEL_XRC})
+    add_dependencies(bytecode_embed_runner bytecode_embed_xrc)
+
     add_test(
         NAME bytecode_embed_runtime
         COMMAND $<TARGET_FILE:bytecode_embed_runner>
+                ${XRAY_BYTECODE_EMBED_SMOKE_XRC}
+                7
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(bytecode_embed_runtime PROPERTIES
@@ -1295,10 +1345,25 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME bytecode_embed_parallel_import
+        COMMAND $<TARGET_FILE:bytecode_embed_runner>
+                ${XRAY_BYTECODE_EMBED_PARALLEL_XRC}
+                4
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_embed_parallel_import PROPERTIES
+        LABELS "vm;bytecode;embed;stdlib;parallel;smoke"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME bytecode_embed_symbol_gate
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_embed_symbol_tests.sh
                 $<TARGET_FILE:bytecode_embed_runner>
                 $<TARGET_FILE:xray_vm_runtime>
+                ${XRAY_BYTECODE_EMBED_SMOKE_XRC}
+                7
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(bytecode_embed_symbol_gate PROPERTIES
