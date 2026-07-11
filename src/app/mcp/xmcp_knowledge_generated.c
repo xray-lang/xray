@@ -389,38 +389,113 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     {
+        .name = "CsvDiagnostic",
+        .signature = "CsvDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.byteOffset",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.kind",
+        .signature = ": CsvErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.record",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument",
+        .signature = "CsvDocument",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument.headers",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument.rows",
+        .signature = ": Array<Array<string>>",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport",
+        .signature = "CsvParseReport",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.delimiter",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.diagnostics",
+        .signature = ": Array<CsvDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.document",
+        .signature = ": CsvDocument",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.linebreak",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.truncated",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "defaultParseOptions",
+        .signature = "(): CsvParseOptions",
+        .summary = "",
+    },
+    {
+        .name = "defaultWriteOptions",
+        .signature = "(): CsvWriteOptions",
+        .summary = "",
+    },
+    {
         .name = "parse",
-        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .signature = "(data: string, options: CsvParseOptions? = null): CsvDocument",
         .summary = "",
     },
     {
-        .name = "parseAuto",
-        .signature = "(data: string, options: unknown = null): Array<Json>",
-        .summary = "",
-    },
-    {
-        .name = "parseDetailed",
-        .signature = "(data: string, options: unknown = null): Json",
-        .summary = "",
-    },
-    {
-        .name = "parseFile",
-        .signature = "(path: string, options: unknown = null): Array<Json>",
-        .summary = "",
-    },
-    {
-        .name = "parseTsv",
-        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .name = "parseReport",
+        .signature = "(data: string, options: CsvParseOptions? = null): CsvParseReport",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(data: unknown, options: unknown = null): string",
-        .summary = "",
-    },
-    {
-        .name = "writeFile",
-        .signature = "(path: string, data: unknown, options: unknown = null): bool",
+        .signature = "(document: CsvDocument, options: CsvWriteOptions? = null): string",
         .summary = "",
     },
 };
@@ -5361,13 +5436,28 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `csv.parse` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.parseAuto` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.parseDetailed` | `(data: string, options: unknown = null): Json` |  |\n"
-            "| `csv.parseFile` | `(path: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.parseTsv` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.stringify` | `(data: unknown, options: unknown = null): string` |  |\n"
-            "| `csv.writeFile` | `(path: string, data: unknown, options: unknown = null): bool` |  |\n"
+            "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n"
+            "| `CsvDiagnostic.byteOffset` | `: int` |  |\n"
+            "| `CsvDiagnostic.column` | `: int` |  |\n"
+            "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n"
+            "| `CsvDiagnostic.line` | `: int` |  |\n"
+            "| `CsvDiagnostic.message` | `: string` |  |\n"
+            "| `CsvDiagnostic.record` | `: int` |  |\n"
+            "| `CsvDocument` | `CsvDocument` |  |\n"
+            "| `CsvDocument.constructor` | `(): ()` |  |\n"
+            "| `CsvDocument.headers` | `: Array<string>` |  |\n"
+            "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
+            "| `CsvParseReport` | `CsvParseReport` |  |\n"
+            "| `CsvParseReport.delimiter` | `: string` |  |\n"
+            "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n"
+            "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
+            "| `CsvParseReport.linebreak` | `: string` |  |\n"
+            "| `CsvParseReport.truncated` | `: bool` |  |\n"
+            "| `csv.defaultParseOptions` | `(): CsvParseOptions` |  |\n"
+            "| `csv.defaultWriteOptions` | `(): CsvWriteOptions` |  |\n"
+            "| `csv.parse` | `(data: string, options: CsvParseOptions? = null): CsvDocument` |  |\n"
+            "| `csv.parseReport` | `(data: string, options: CsvParseOptions? = null): CsvParseReport` |  |\n"
+            "| `csv.stringify` | `(document: CsvDocument, options: CsvWriteOptions? = null): string` |  |\n"
             "",
         .symbols = _symbols_csv,
         .symbol_count = (int)(sizeof(_symbols_csv) / sizeof(_symbols_csv[0])),

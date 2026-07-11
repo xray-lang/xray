@@ -257,7 +257,7 @@ def check_generated_stdlib_api_tables(root: Path) -> list[str]:
     required = [
         '"## API\\n"',
         '`cluster.topicMatches`',
-        '`csv.parseDetailed`',
+        '`csv.parseReport`',
         '`http.requestText`',
         '`http.router`',
         '`ws.parseFrame`',

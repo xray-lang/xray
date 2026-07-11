@@ -1,27 +1,75 @@
+// Typed CSV document, diagnostics, limits, and error channel must agree in VM/AOT.
+
 import csv
+import {
+    CsvDelimiter,
+    CsvDocument,
+    CsvError,
+    CsvErrorKind,
+    CsvHeader,
+    defaultParseOptions
+} from csv
 
-var rows = csv.parse("name,age\nAlice,30\nBob,25", {header: true, dynamicTyping: true})
-print(rows.length)
-print(rows[0]["name"])
-print(rows[0]["age"])
-print(typename(rows[0]["age"]))
+var headerOptions = defaultParseOptions()
+headerOptions.header = CsvHeader.FirstRow
+var doc = csv.parse("name,age\nAlice,30\nBob,25", headerOptions)
+print(doc.headers.length)
+print(doc.headers[0])
+print(doc.rows.length)
+print(doc.rows[0][0])
+print(doc.rows[1][1])
 
-var detail = csv.parseDetailed("a,b\n1,2\n3")
-print(detail["data"].length)
-print(detail["errors"].length)
-print(detail["meta"]["columns"])
+var report = csv.parseReport("a,b\n1,2\n3")
+print(report.document.rows.length)
+print(report.diagnostics.length)
+print(report.diagnostics[0].kind == CsvErrorKind.FieldCountMismatch)
+print(report.diagnostics[0].line)
+print(report.diagnostics[0].record)
+print(report.diagnostics[0].column)
 
-var auto = csv.parseAuto("a;b;c\n1;2;3")
-print(auto[1][2])
+try {
+    csv.parse("a,b\n1")
+} catch (e: CsvError) {
+    print(match (e) {
+        CsvError.FieldCountMismatch(offset, line, record, column, message) -> record == 1,
+        _ -> false
+    })
+}
 
-var tsv = csv.parseTsv("x\ty\n4\t5")
-print(tsv[1][1])
+var autoOptions = defaultParseOptions()
+autoOptions.delimiter = CsvDelimiter.Auto
+var auto = csv.parse("a;b;c\n1;2;3", autoOptions)
+print(auto.rows[1][2])
 
-var out = csv.stringify([["a", "b"], ["hello, world", "quote \" me"]])
+var tsvOptions = defaultParseOptions()
+tsvOptions.delimiter = CsvDelimiter.Exact("\t")
+var tsv = csv.parse("x\ty\n4\t5", tsvOptions)
+print(tsv.rows[1][1])
+
+var serial = CsvDocument()
+serial.headers.push("name")
+serial.headers.push("note")
+serial.rows.push(["Alice", "hello, world"])
+serial.rows.push(["Bob", "quote \" me"])
+var out = csv.stringify(serial)
 print(out.includes("\"hello, world\""))
 print(out.includes("\"quote \"\" me\""))
+var roundtrip = csv.parse(out, headerOptions)
+print(roundtrip.rows[1][1])
 
-var dyn = csv.parse("v\n3.14x\n1e2\nNULL", {dynamicTyping: true})
-print(typename(dyn[1][0]))
-print(dyn[2][0])
-print(dyn[3][0] == null)
+var quotedComment = defaultParseOptions()
+quotedComment.commentPrefix = "#"
+var comments = csv.parse("\"# value\",x\n# ignored\ny,z", quotedComment)
+print(comments.rows.length)
+print(comments.rows[0][0])
+
+var limited = defaultParseOptions()
+limited.maxColumns = 1
+try {
+    csv.parse("a,b", limited)
+} catch (e: CsvError) {
+    print(match (e) {
+        CsvError.ColumnLimitExceeded(limit) -> limit == 1,
+        _                                   -> false
+    })
+}
