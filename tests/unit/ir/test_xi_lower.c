@@ -930,6 +930,60 @@ TEST(class_field_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_CLASS_FIELD_EVIDENCE
 }
 
+TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
+#define REQUIRE_CLASS_FIELD_INIT_EVIDENCE(cond, msg)                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr,                                                                        \
+                    "class_field_default_initializer_store_lowers_with_global_evidence_id: %s\n",  \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *main_func = lower_source_with_global_evidence("class Holder {\n"
+                                                          "    values: Array<int> = []\n"
+                                                          "}\n"
+                                                          "\n"
+                                                          "var h = Holder()\n"
+                                                          "print(h.values.length)\n",
+                                                          &ev);
+    REQUIRE_CLASS_FIELD_INIT_EVIDENCE(main_func != NULL, "source should lower");
+
+    const XgClassSummary *holder = global_evidence_find_class_by_name(&ev, "Holder");
+    REQUIRE_CLASS_FIELD_INIT_EVIDENCE(holder != NULL, "Holder evidence should be present");
+    const XgClassFieldSummary *values =
+        global_evidence_find_class_field_by_name(&ev, holder->class_id, "values");
+    REQUIRE_CLASS_FIELD_INIT_EVIDENCE(values != NULL,
+                                      "Holder.values field evidence should be present");
+
+    XiFunc *ctor = func_tree_find_func_name(main_func, "constructor");
+    REQUIRE_CLASS_FIELD_INIT_EVIDENCE(ctor != NULL, "synthetic constructor should be present");
+    uint32_t values_store_id = 0;
+    for (uint32_t b = 0; b < ctor->nblocks; b++) {
+        XiBlock *blk = ctor->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_STORE_FIELD && v->aux &&
+                strcmp((const char *) v->aux, "values") == 0)
+                values_store_id = v->xg_class_field_id;
+        }
+    }
+
+    REQUIRE_CLASS_FIELD_INIT_EVIDENCE(
+        values_store_id == values->field_id,
+        "synthetic constructor field default store should bind Holder.values field id");
+
+    xi_func_free(main_func);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_CLASS_FIELD_INIT_EVIDENCE
+}
+
 TEST(json_access_lowers_with_global_evidence_id) {
 #define REQUIRE_JSON_EVIDENCE(cond, msg)                                                           \
     do {                                                                                           \
@@ -2861,6 +2915,7 @@ int main(void) {
     run_try_catch_defer();
     run_object_literal();
     run_class_field_access_lowers_with_global_evidence_id();
+    run_class_field_default_initializer_store_lowers_with_global_evidence_id();
     run_json_access_lowers_with_global_evidence_id();
     run_json_alias_shape_access_lowers_with_global_evidence_id();
     run_json_computed_key_access_lowers_with_global_evidence_id();
