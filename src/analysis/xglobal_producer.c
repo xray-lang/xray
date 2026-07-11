@@ -3457,6 +3457,16 @@ static bool return_literal_merge_branch_locals(XgReturnObjectLiteralScan *scan,
     return true;
 }
 
+static bool return_literal_record_branch_return(XgReturnObjectLiteralScan *scan,
+                                                const XgReturnObjectLiteralScan *branch_scan,
+                                                uint32_t base_returns) {
+    if (!scan || !branch_scan)
+        return false;
+    if (branch_scan->return_count <= base_returns)
+        return true;
+    return return_literal_record(scan, branch_scan->literal);
+}
+
 static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstNode *node);
 static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
                                                 const AstNode *value,
@@ -3584,6 +3594,10 @@ static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const I
     uint32_t base_returns;
     bool then_returned;
     bool else_returned;
+    bool then_falls_through;
+    bool else_falls_through;
+    bool record_then_return;
+    bool record_else_return;
     if (!scan || !stmt || !stmt->then_branch)
         return false;
     if (!return_literal_scan_node(scan, stmt->condition))
@@ -3599,25 +3613,41 @@ static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const I
         return false;
     then_returned = then_scan.return_count > base_returns;
     else_returned = else_scan.return_count > base_returns;
+    then_falls_through = !then_scan.terminated;
+    else_falls_through = !else_scan.terminated;
+    record_then_return = then_returned;
+    record_else_return = else_returned;
     if (!then_returned && !else_returned) {
         scan->terminated = false;
         return return_literal_merge_branch_locals(scan, &then_scan, &else_scan, base_locals);
     }
-    if (then_returned && !else_returned) {
-        *scan = else_scan;
-        scan->terminated = false;
-        return return_literal_record(scan, then_scan.literal);
+
+    if (!then_falls_through && !else_falls_through) {
+        scan->nlocals = base_locals;
+        if (!return_literal_record_branch_return(scan, &then_scan, base_returns) ||
+            !return_literal_record_branch_return(scan, &else_scan, base_returns))
+            return false;
+        scan->terminated = true;
+        return true;
     }
-    if (!then_returned && else_returned) {
+
+    if (then_falls_through && else_falls_through) {
+        if (!return_literal_merge_branch_locals(scan, &then_scan, &else_scan, base_locals))
+            return false;
+    } else if (then_falls_through) {
         *scan = then_scan;
-        scan->terminated = false;
-        return return_literal_record(scan, else_scan.literal);
+        scan->nlocals = base_locals;
+        record_then_return = false;
+    } else {
+        *scan = else_scan;
+        scan->nlocals = base_locals;
+        record_else_return = false;
     }
-    scan->nlocals = base_locals;
-    if (!return_literal_record(scan, then_scan.literal) ||
-        !return_literal_record(scan, else_scan.literal))
+    scan->terminated = false;
+    if (record_then_return && !return_literal_record_branch_return(scan, &then_scan, base_returns))
         return false;
-    scan->terminated = true;
+    if (record_else_return && !return_literal_record_branch_return(scan, &else_scan, base_returns))
+        return false;
     return true;
 }
 

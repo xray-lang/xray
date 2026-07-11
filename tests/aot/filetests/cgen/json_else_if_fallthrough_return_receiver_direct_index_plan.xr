@@ -1,0 +1,14 @@
+fn makeJsonElseIfFallthroughReturnPlan(flag: bool, other: bool) -> Json {
+    if (flag) {
+        return { name: "ada", age: 1 }
+    } else if (other) {
+        return { name: "bob", age: 2 }
+    }
+    return { name: "eve", age: 3 }
+}
+
+fn jsonElseIfFallthroughReturnReceiverPlan(flag: bool, other: bool) -> int {
+    return makeJsonElseIfFallthroughReturnPlan(flag, other).age
+}
+
+print(jsonElseIfFallthroughReturnReceiverPlan(false, true))
