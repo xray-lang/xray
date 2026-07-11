@@ -56,7 +56,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 17,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 18,
 };
 
 typedef enum XgBuildProfile {
@@ -633,6 +633,19 @@ typedef struct XgEvidenceCachePayloadInfo {
     uint32_t phase;
 } XgEvidenceCachePayloadInfo;
 
+typedef enum XgModuleFlags {
+    XG_MODULE_EMBEDDED_SOURCE = 1u << 0,
+} XgModuleFlags;
+
+typedef struct XgModuleSummary {
+    XgModuleId module_id;
+    uint32_t name_id;
+    uint64_t canonical_hash;
+    uint64_t source_hash;
+    uint8_t kind;
+    uint32_t flags;
+} XgModuleSummary;
+
 typedef struct XgDeclSummary {
     XgModuleId module_id;
     uint32_t source_node_id;
@@ -1116,6 +1129,7 @@ typedef struct XgHashEqSummary {
 typedef struct XgGlobalEvidence {
     XgBuildKey key;
 
+    XgModuleSummary *modules;
     XgDeclSummary *decls;
     XgClassSummary *classes;
     XgClassFieldSummary *class_fields;
@@ -1152,6 +1166,7 @@ typedef struct XgGlobalEvidence {
     XgKeyAccessSummary *key_accesses;
     XgHashEqSummary *hash_eqs;
 
+    uint32_t nmodules;
     uint32_t ndecls;
     uint32_t nclasses;
     uint32_t nclass_fields;
@@ -1188,6 +1203,7 @@ typedef struct XgGlobalEvidence {
     uint32_t nkey_accesses;
     uint32_t nhash_eqs;
 
+    uint32_t module_cap;
     uint32_t decl_cap;
     uint32_t class_cap;
     uint32_t class_field_cap;
@@ -1270,6 +1286,7 @@ XR_FUNC const char *xg_evidence_cache_phase_name(uint32_t phase);
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key);
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);
 
+XR_FUNC bool xg_global_evidence_reserve_modules(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_decls(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_classes(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_class_fields(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -1322,6 +1339,8 @@ XR_FUNC bool xg_global_evidence_reserve_map_entries(XgGlobalEvidence *evidence, 
 XR_FUNC bool xg_global_evidence_reserve_key_accesses(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_hash_eqs(XgGlobalEvidence *evidence, uint32_t capacity);
 
+XR_FUNC XgModuleSummary *xg_global_evidence_add_module(XgGlobalEvidence *evidence,
+                                                       const XgModuleSummary *summary);
 XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
                                                    const XgDeclSummary *summary);
 XR_FUNC XgClassSummary *xg_global_evidence_add_class(XgGlobalEvidence *evidence,

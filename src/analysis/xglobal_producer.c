@@ -16,6 +16,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
+#include "../module/xstdlib_embedded.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../stdlib/xstdlib_metadata.h"
@@ -161,6 +162,12 @@ static uint32_t hash_folded32(uint64_t h) {
 
 static uint32_t hash_name32(const char *name) {
     return xg_name_id(name);
+}
+
+static uint64_t hash_text64(const char *text) {
+    if (!text || !*text)
+        return 0;
+    return xr_hash_bytes64(text, strlen(text));
 }
 
 static uint32_t producer_source_node_id(XgModuleId module_id, const AstNode *node) {
@@ -6343,6 +6350,8 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
     return true;
 }
 
+static uint64_t module_source_hash(const XrModuleSpec *spec);
+
 static uint64_t source_hash_for_graph(const XrModuleGraph *graph) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!graph)
@@ -6352,17 +6361,53 @@ static uint64_t source_hash_for_graph(const XrModuleGraph *graph) {
         const XrModuleSpec *spec = &graph->specs[idx];
         size_t len = 0;
         char *source = NULL;
+        const char *embedded = NULL;
         uint64_t module_id = (uint64_t) (ti + 1);
         h = fold_u64(h, module_id);
         if (spec->source_path)
             h = fold_bytes(h, spec->source_path, strlen(spec->source_path));
-        source = spec->source_path ? xr_file_read_all(spec->source_path, "rb", &len) : NULL;
-        if (source) {
-            h = fold_bytes(h, source, len);
-            xr_free(source);
+        if (spec->embedded_source && spec->canonical)
+            embedded = xr_get_embedded_stdlib(spec->canonical);
+        if (embedded) {
+            h = fold_bytes(h, embedded, strlen(embedded));
+        } else {
+            source = spec->source_path ? xr_file_read_all(spec->source_path, "rb", &len) : NULL;
+            if (source) {
+                h = fold_bytes(h, source, len);
+                xr_free(source);
+            }
         }
     }
     return h;
+}
+
+static uint64_t module_source_hash(const XrModuleSpec *spec) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    if (!spec)
+        return h;
+    h = fold_u64(h, (uint64_t) spec->kind);
+    if (spec->canonical)
+        h = fold_bytes(h, spec->canonical, strlen(spec->canonical));
+    if (spec->source_path)
+        h = fold_bytes(h, spec->source_path, strlen(spec->source_path));
+    return h ? h : 1;
+}
+
+static bool add_module_summary(XgGlobalEvidence *evidence, XgModuleId module_id,
+                               const XrModuleSpec *spec) {
+    XgModuleSummary row;
+    const char *name;
+    if (!evidence || !spec || module_id == XG_NO_ID)
+        return false;
+    memset(&row, 0, sizeof(row));
+    name = spec->canonical ? spec->canonical : spec->source_path;
+    row.module_id = module_id;
+    row.name_id = hash_name32(name ? name : "<memory-module>");
+    row.canonical_hash = hash_text64(spec->canonical);
+    row.source_hash = module_source_hash(spec);
+    row.kind = (uint8_t) spec->kind;
+    row.flags = spec->embedded_source ? XG_MODULE_EMBEDDED_SOURCE : 0;
+    return xg_global_evidence_add_module(evidence, &row) != NULL;
 }
 
 static uint64_t import_hash_for_graph(const XrModuleGraph *graph) {
@@ -6414,7 +6459,17 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int idx = graph->topo_order[ti];
         const XrModuleSpec *spec = &graph->specs[idx];
-        if (!add_module_ast(&producer, (XgModuleId) (ti + 1), spec->ast)) {
+        XgModuleId module_id = (XgModuleId) (ti + 1);
+        if (!add_module_summary(evidence, module_id, spec)) {
+            xr_free(producer.classes);
+            xr_free(producer.interfaces);
+            xr_free(producer.funcs);
+            xr_free(producer.stdlib_imports);
+            xr_free(producer.bodies);
+            xg_global_evidence_free(evidence);
+            return false;
+        }
+        if (!add_module_ast(&producer, module_id, spec->ast)) {
             xr_free(producer.classes);
             xr_free(producer.interfaces);
             xr_free(producer.funcs);

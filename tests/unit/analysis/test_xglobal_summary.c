@@ -582,7 +582,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=17 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=18 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -719,6 +719,12 @@ TEST(global_evidence_dump_lists_core_rows) {
                       .imported_summary_hash = 0xd,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
+    XgModuleSummary module = {.module_id = 1,
+                              .name_id = 11,
+                              .canonical_hash = 0x12345678,
+                              .source_hash = 0xabcdef,
+                              .kind = 1,
+                              .flags = XG_MODULE_EMBEDDED_SOURCE};
     XgDeclSummary decl = {.module_id = 1,
                           .source_node_id = 701,
                           .decl_id = 2,
@@ -852,6 +858,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     memcpy(stdlib_symbol.name, "path.join", 10);
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&ev, &module));
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &field));
@@ -869,17 +876,20 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=17 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=17 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=17 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=17 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=18 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=18 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=18 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=18 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=17 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
+    ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
+    ASSERT_NOT_NULL(strstr(dump, "module 0 id=1 name=11 canonical=0000000012345678 "
+                                 "source=0000000000abcdef kind=1 flags=0x1"));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 node=701 kind=class"));
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2 node=704"));

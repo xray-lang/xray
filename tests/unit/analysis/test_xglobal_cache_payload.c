@@ -13,6 +13,17 @@
 #include "../../../src/base/xmalloc.h"
 #include <string.h>
 
+static void add_sample_module_summary(XgGlobalEvidence *ev) {
+    XgModuleSummary module = {0};
+    module.module_id = 7;
+    module.name_id = xg_name_id("sample");
+    module.canonical_hash = UINT64_C(0xabc7);
+    module.source_hash = UINT64_C(0xdef7);
+    module.kind = 1;
+    module.flags = XG_MODULE_EMBEDDED_SOURCE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(ev, &module));
+}
+
 static void add_sample_body_summary(XgGlobalEvidence *ev) {
     XgDeclSummary decl = {0};
     XgBodySummary body = {0};
@@ -98,6 +109,8 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     XgDeriveSummary derive = {0};
     XgDerivedFieldSummary field = {0};
     XgDerivedMethodSummary derived_method = {0};
+
+    add_sample_module_summary(ev);
 
     decl.decl_id = 10;
     decl.module_id = 7;
@@ -553,6 +566,7 @@ TEST(cache_payload_materializes_declaration_summary) {
     ev.key.compiler_semver_hash = UINT64_C(0x1111);
     ev.key.profile_hash = UINT64_C(0x2222);
     ev.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_module_summary(&ev);
     add_sample_body_summary(&ev);
 
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_DECLARATIONS);
@@ -561,7 +575,10 @@ TEST(cache_payload_materializes_declaration_summary) {
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_DECLARATIONS);
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.nmodules, 1);
     ASSERT_EQ_UINT(materialized.ndecls, 1);
+    ASSERT_EQ_UINT(materialized.modules[0].module_id, 7);
+    ASSERT_EQ_UINT(materialized.modules[0].source_hash, UINT64_C(0xdef7));
     ASSERT_EQ_UINT(materialized.decls[0].decl_id, 1);
     ASSERT_EQ_UINT(materialized.decls[0].signature_key, 101);
 
@@ -591,6 +608,7 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     materialized_key =
         xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.nmodules, 1);
     ASSERT_EQ_UINT(materialized.ndecls, 1);
     ASSERT_EQ_UINT(materialized.nclasses, 1);
     ASSERT_EQ_UINT(materialized.nclass_fields, 1);
@@ -601,6 +619,8 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT_EQ_UINT(materialized.nderives, 1);
     ASSERT_EQ_UINT(materialized.nderived_fields, 1);
     ASSERT_EQ_UINT(materialized.nderived_methods, 1);
+    ASSERT_EQ_UINT(materialized.modules[0].module_id, 7);
+    ASSERT_EQ_UINT(materialized.modules[0].canonical_hash, UINT64_C(0xabc7));
     ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_count, 1);
     ASSERT_EQ_UINT(materialized.classes[0].field_start, 1);
     ASSERT_EQ_UINT(materialized.classes[0].field_count, 1);
@@ -701,6 +721,7 @@ TEST(cache_payload_materializes_global_evidence) {
     materialized_key =
         xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
+    ASSERT_EQ_UINT(materialized.nmodules, 1);
     ASSERT_EQ_UINT(materialized.ndecls, 2);
     ASSERT_EQ_UINT(materialized.nclasses, 1);
     ASSERT_EQ_UINT(materialized.nbodies, 1);
@@ -724,6 +745,7 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.nmap_entries, 1);
     ASSERT_EQ_UINT(materialized.nkey_accesses, 1);
     ASSERT_EQ_UINT(materialized.nhash_eqs, 1);
+    ASSERT_EQ_UINT(materialized.modules[0].flags, XG_MODULE_EMBEDDED_SOURCE);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].use_id, 91);
     ASSERT_EQ_UINT(materialized.json_shapes[0].json_shape_id, 101);
     ASSERT_EQ_UINT(materialized.record_merges[0].merge_id, 204);
