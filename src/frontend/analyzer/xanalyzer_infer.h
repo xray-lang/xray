@@ -100,10 +100,15 @@ typedef struct XaInferContext {
     XaLoopScope *loop_scope;
     int loop_depth;
 
-    // Active while inferring a `parallel.forEach` body. Captures from outside this
-    // scope are restricted so the future AOT lowering never inherits a data race.
-    bool in_parallel_for_body;
-    XaScope *parallel_for_scope;
+    // Active while inferring a stdlib `parallel.*` callback. Captures from
+    // outside this scope are restricted so hosted VM/AOT lowering never
+    // inherits a data race. pending_parallel_callback_name is set by call
+    // analysis before visiting the lambda; xa_visit_function_expr converts it
+    // into the concrete function scope after parameters are registered.
+    const char *pending_parallel_callback_name;
+    bool in_parallel_callback_body;
+    XaScope *parallel_callback_scope;
+    const char *parallel_callback_name;
 
     // Active while checking a sys.Thread.spawn body. That body runs in the OS
     // thread domain, so ThreadLocal usage is intentional there.

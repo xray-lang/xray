@@ -3521,8 +3521,27 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             ctx->flow->current_exception_target = NULL;
         }
 
+        const char *saved_pending_parallel_callback_name = ctx->pending_parallel_callback_name;
+        bool saved_in_parallel_callback_body = ctx->in_parallel_callback_body;
+        XaScope *saved_parallel_callback_scope = ctx->parallel_callback_scope;
+        const char *saved_parallel_callback_name = ctx->parallel_callback_name;
+
         // Enter function scope
         xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
+
+        if (saved_pending_parallel_callback_name) {
+            ctx->pending_parallel_callback_name = NULL;
+            ctx->in_parallel_callback_body = true;
+            ctx->parallel_callback_scope = ctx->analyzer->current_scope;
+            ctx->parallel_callback_name = saved_pending_parallel_callback_name;
+        } else if (saved_in_parallel_callback_body) {
+            // Nested lambdas are not themselves the stdlib parallel callback
+            // parameter. Do not apply the outer callback's capture contract to
+            // their bodies as if they were lane bodies.
+            ctx->in_parallel_callback_body = false;
+            ctx->parallel_callback_scope = NULL;
+            ctx->parallel_callback_name = NULL;
+        }
 
         // Register parameters in scope (with their inferred types)
         for (int i = 0; i < fn->param_count; i++) {
@@ -3584,6 +3603,11 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         }
 
         xa_analyzer_exit_scope(ctx->analyzer);
+
+        ctx->pending_parallel_callback_name = saved_pending_parallel_callback_name;
+        ctx->in_parallel_callback_body = saved_in_parallel_callback_body;
+        ctx->parallel_callback_scope = saved_parallel_callback_scope;
+        ctx->parallel_callback_name = saved_parallel_callback_name;
 
         // Drop only USED_BEFORE_ASSIGN false positives from the body visit;
         // keep every other diagnostic so genuine errors inside anonymous
