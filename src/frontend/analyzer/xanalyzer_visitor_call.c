@@ -59,12 +59,76 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
+static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                            const char *class_name, XaSymbolLinks *class_links,
+                                            XrClassInfo *class_info, XrType **type_args,
+                                            int type_arg_count) {
+    if (!ctx || !ctx->analyzer || !node || !call || !class_info || call->arg_count <= 0)
+        return;
+    XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+    XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+    XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
+    if (!ctor_type || !XR_TYPE_IS_FUNCTION(ctor_type))
+        return;
+
+    int ctor_pc = ctor_type->function.param_count;
+    XrType **ctor_params = ctor_type->function.param_types;
+    int check_count = ctor_pc < call->arg_count ? ctor_pc : call->arg_count;
+    int class_tp_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+    const char **param_names = NULL;
+    const char *param_names_buf[8] = {0};
+    if (class_tp_count > 0 && type_args && type_arg_count == class_tp_count) {
+        param_names = (class_tp_count <= 8)
+                          ? param_names_buf
+                          : xr_malloc(sizeof(const char *) * (size_t) class_tp_count);
+        if (param_names) {
+            for (int i = 0; i < class_tp_count; i++)
+                param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+        }
+    }
+
+    for (int i = 0; i < check_count; i++) {
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        if (!arg)
+            continue;
+        XrType *expected = ctor_params ? ctor_params[i] : NULL;
+        XrType *resolved = expected;
+        if (expected && param_names && type_args && type_arg_count == class_tp_count) {
+            resolved = xr_type_substitute(ctx->analyzer->isolate, expected, param_names, type_args,
+                                          type_arg_count);
+        }
+        XrType *saved_expected = ctx->expected_type;
+        if (resolved && !XR_TYPE_IS_UNKNOWN(resolved))
+            ctx->expected_type = resolved;
+        XrType *arg_type = xa_visit_infer_expr(ctx, arg);
+        ctx->expected_type = saved_expected;
+        if (!resolved || XR_TYPE_IS_UNKNOWN(resolved) || !arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
+            continue;
+        if (!xa_typecheck_assignable(resolved, arg_type)) {
+            XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Argument %d: type '%s' is not assignable to constructor parameter type '%s' "
+                     "for '%s'",
+                     i + 1, xr_type_to_string(arg_type), xr_type_to_string(resolved),
+                     class_name ? class_name : "class");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+    }
+
+    if (param_names && param_names != param_names_buf)
+        xr_free((void *) param_names);
+}
+
 static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *node,
                                                   CallExprNode *call, const char *class_name,
                                                   XaSymbolLinks *class_links,
                                                   XrClassInfo *class_info) {
     if (!ctx || !ctx->analyzer || !class_info)
         return xr_type_new_unknown(NULL);
+
+    xa_check_constructor_visibility(ctx, node, class_info);
 
     bool is_value_type = class_links && class_links->type && class_links->type->is_value_type;
     int type_param_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
@@ -94,6 +158,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                     }
                     xa_check_span_generic_class_type_args(ctx, node, class_name, resolved,
                                                           call->type_arg_count);
+                    xa_check_class_constructor_args(ctx, node, call, class_name, class_links,
+                                                    class_info, resolved, call->type_arg_count);
                     XrType *inst =
                         xr_type_new_generic_instance(ctx->analyzer->isolate, class_name, class_info,
                                                      resolved, call->type_arg_count);
@@ -142,6 +208,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                     if (all_inferred) {
                         xa_check_span_generic_class_type_args(ctx, node, class_name, inferred,
                                                               type_param_count);
+                        xa_check_class_constructor_args(ctx, node, call, class_name, class_links,
+                                                        class_info, inferred, type_param_count);
                         XrType *inst =
                             xr_type_new_generic_instance(ctx->analyzer->isolate, class_name,
                                                          class_info, inferred, type_param_count);
@@ -159,6 +227,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
         }
     }
 
+    xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info, NULL, 0);
     XrType *inst = xr_type_new_instance(ctx->analyzer->isolate, class_info);
     if (inst && is_value_type)
         inst->is_value_type = true;

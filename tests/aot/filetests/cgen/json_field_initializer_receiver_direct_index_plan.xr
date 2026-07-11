@@ -1,0 +1,13 @@
+class Holder {
+    payload: Json = { name: "ada", age: 7 }
+
+    jsonFieldInitializerReceiverPlan() -> int {
+        return this.payload.age
+    }
+}
+
+fn mainValue() -> int {
+    return Holder().jsonFieldInitializerReceiverPlan()
+}
+
+print(mainValue())

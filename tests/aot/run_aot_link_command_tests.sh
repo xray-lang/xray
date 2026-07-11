@@ -4444,6 +4444,31 @@ else
         "freestanding-profile: rejects quoted hosted stdlib imports"
 fi
 
+FREESTANDING_PARALLEL_STDLIB_SRC="$WORK/freestanding_parallel_stdlib.xr"
+cat > "$FREESTANDING_PARALLEL_STDLIB_SRC" <<'XR'
+import { forEach, Options } from parallel
+
+forEach(0..4, (i) -> {
+}, Options(2))
+XR
+FREESTANDING_PARALLEL_STDLIB_LOG="$WORK/freestanding_parallel_stdlib.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_parallel_stdlib" \
+        "$FREESTANDING_PARALLEL_STDLIB_SRC" >"$FREESTANDING_PARALLEL_STDLIB_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects parallel stdlib before script analysis"
+    sed 's/^/      /' "$FREESTANDING_PARALLEL_STDLIB_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_PARALLEL_STDLIB_LOG" \
+        "freestanding profile rejects stdlib module 'parallel'" \
+        "freestanding-profile: rejects parallel stdlib before script analysis"
+    expect_log_contains "$FREESTANDING_PARALLEL_STDLIB_LOG" \
+        "parallel uses the hosted CPU batch executor" \
+        "freestanding-profile: explains parallel hosted executor boundary"
+    expect_log_not_contains "$FREESTANDING_PARALLEL_STDLIB_LOG" \
+        "<embedded stdlib>/parallel/parallel.xr" \
+        "freestanding-profile: parallel rejection does not analyze script layer"
+fi
+
 CORE_FAST_BIN="$WORK/core_math_fast"
 CORE_FAST_LOG="$WORK/core_math_fast.log"
 case "$(uname -m 2>/dev/null)" in

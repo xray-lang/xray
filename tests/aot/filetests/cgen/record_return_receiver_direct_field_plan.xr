@@ -1,0 +1,11 @@
+type User = { name: string, age: int }
+
+fn makeRecordReturnReceiverPlan() -> User {
+    return { name: "ada", age: 7 }
+}
+
+fn recordReturnReceiverPlan() -> int {
+    return makeRecordReturnReceiverPlan().age
+}
+
+print(recordReturnReceiverPlan())

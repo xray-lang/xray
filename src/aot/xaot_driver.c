@@ -77,6 +77,31 @@ static bool xaot_str_has_suffix(const char *text, const char *suffix) {
     return text_len >= suffix_len && memcmp(text + text_len - suffix_len, suffix, suffix_len) == 0;
 }
 
+static const char *xaot_freestanding_stdlib_module_suggestion(const char *module_name) {
+    if (module_name && strcmp(module_name, "parallel") == 0) {
+        return "parallel uses the hosted CPU batch executor; freestanding code must use explicit "
+               "raw loops or a platform-specific runtime";
+    }
+    return "only prelude, math, and mem are in the initial freestanding allowlist";
+}
+
+static bool xaot_reject_freestanding_stdlib_graph(const XrModuleGraph *graph) {
+    if (!graph)
+        return true;
+    for (int i = 0; i < graph->spec_count; i++) {
+        const XrModuleSpec *spec = &graph->specs[i];
+        const char *module_name = spec->canonical;
+        if (spec->kind != XR_MOD_STDLIB || !module_name)
+            continue;
+        if (xa_freestanding_stdlib_module_allowed(module_name))
+            continue;
+        fprintf(stderr, "Error: freestanding profile rejects stdlib module '%s'; %s\n", module_name,
+                xaot_freestanding_stdlib_module_suggestion(module_name));
+        return false;
+    }
+    return true;
+}
+
 static bool xaot_evidence_cache_phase_dir(const char *cache_dir, uint32_t phase, char *out,
                                           size_t out_sz) {
     int n;
@@ -1318,6 +1343,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (graph->has_cycle) {
         fprintf(stderr, "Error: %s\n",
                 graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
+        xr_module_graph_free(graph);
+        xray_vm_delete(X);
+        return 1;
+    }
+    if (profile == XAOT_BUILD_PROFILE_FREESTANDING &&
+        !xaot_reject_freestanding_stdlib_graph(graph)) {
         xr_module_graph_free(graph);
         xray_vm_delete(X);
         return 1;
