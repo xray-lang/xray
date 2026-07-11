@@ -3596,8 +3596,14 @@ static bool return_literal_scan_if_stmt(XgReturnObjectLiteralScan *scan, const I
     else_returned = else_scan.return_count > base_returns;
     if (!then_returned && !else_returned)
         return return_literal_merge_branch_locals(scan, &then_scan, &else_scan, base_locals);
-    if (!then_returned || !else_returned)
-        return false;
+    if (then_returned && !else_returned) {
+        *scan = else_scan;
+        return return_literal_record(scan, then_scan.literal);
+    }
+    if (!then_returned && else_returned) {
+        *scan = then_scan;
+        return return_literal_record(scan, else_scan.literal);
+    }
     scan->nlocals = base_locals;
     return return_literal_record(scan, then_scan.literal) &&
            return_literal_record(scan, else_scan.literal);
