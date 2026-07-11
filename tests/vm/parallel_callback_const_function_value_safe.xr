@@ -1,0 +1,12 @@
+import parallel
+
+shared total = Atomic<int>(0)
+
+parallel.forEach(0..4, (i) -> {
+    const addOne = fn(x: int) -> int {
+        return x + 1
+    }
+    total.add(addOne(i), Ordering.Relaxed)
+}, parallel.Options(2))
+
+print(total.load(Ordering.Relaxed))

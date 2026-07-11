@@ -99,6 +99,12 @@ expect_output_workers \
     "6" \
     2
 
+expect_output_workers \
+    "parallel_callback_const_function_value_safe" \
+    "$PROJECT_DIR/tests/vm/parallel_callback_const_function_value_safe.xr" \
+    "10" \
+    2
+
 printf '\nSummary: %d passed, %d failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
     exit 1

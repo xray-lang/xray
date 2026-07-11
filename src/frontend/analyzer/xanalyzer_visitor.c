@@ -495,6 +495,12 @@ typedef struct XaParallelCallbackEffectScan {
     char feature_buf[192];
 } XaParallelCallbackEffectScan;
 
+typedef enum XaParallelFunctionValueStatus {
+    XA_PARALLEL_FN_VALUE_SAFE = 0,
+    XA_PARALLEL_FN_VALUE_EFFECT,
+    XA_PARALLEL_FN_VALUE_DYNAMIC,
+} XaParallelFunctionValueStatus;
+
 static bool xa_parallel_assert_call_name(const char *name) {
     return name && (strcmp(name, "assert") == 0 || strcmp(name, "assert_true") == 0 ||
                     strcmp(name, "assert_false") == 0 || strcmp(name, "assert_eq") == 0 ||
@@ -600,6 +606,12 @@ static bool xa_parallel_function_symbol_has_effect(XaInferContext *ctx, XaSymbol
 static bool xa_parallel_callback_body_has_effect(XaInferContext *ctx, AstNode *body,
                                                  XaSymbol **call_stack, int call_depth,
                                                  bool *out_suspend);
+static XaParallelFunctionValueStatus
+xa_parallel_function_value_symbol_status(XaInferContext *ctx, XaSymbol *sym, XaSymbol **call_stack,
+                                         int call_depth, bool *out_suspend);
+static XaParallelFunctionValueStatus
+xa_parallel_function_value_expr_status(XaInferContext *ctx, AstNode *expr, XaSymbol **call_stack,
+                                       int call_depth, bool *out_suspend);
 
 static AstNode *xa_parallel_inline_body(AstNode *expr) {
     if (!expr)
@@ -654,13 +666,22 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         callee_name = ma->name;
     }
 
-    if (callee_sym && xa_parallel_function_symbol_has_effect(ctx, callee_sym, scan->call_stack,
-                                                             scan->call_depth, &callee_suspend)) {
+    XaParallelFunctionValueStatus status = xa_parallel_function_value_symbol_status(
+        ctx, callee_sym, scan->call_stack, scan->call_depth, &callee_suspend);
+    if (status == XA_PARALLEL_FN_VALUE_EFFECT) {
         if (is_suspend)
             *is_suspend = callee_suspend;
-        snprintf(scan->feature_buf, sizeof(scan->feature_buf), "call to %s function '%s'",
-                 callee_suspend ? "suspendable" : "throwing", callee_name ? callee_name : "?");
+        const char *kind =
+            callee_sym && callee_sym->kind == XA_SYM_FUNCTION ? "function" : "function value";
+        snprintf(scan->feature_buf, sizeof(scan->feature_buf), "call to %s %s '%s'",
+                 callee_suspend ? "suspendable" : "throwing", kind,
+                 callee_name ? callee_name : "?");
         return scan->feature_buf;
+    }
+    if (status == XA_PARALLEL_FN_VALUE_DYNAMIC) {
+        if (is_suspend)
+            *is_suspend = true;
+        return "call through dynamic function value";
     }
 
     return NULL;
@@ -701,6 +722,92 @@ static bool xa_parallel_function_symbol_has_effect(XaInferContext *ctx, XaSymbol
         xa_parallel_callback_body_has_effect(ctx, body, call_stack, call_depth + 1, out_suspend);
     call_stack[call_depth] = NULL;
     return result;
+}
+
+static bool xa_parallel_symbol_has_function_type(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym)
+        return false;
+    XrType *type = xa_analyzer_get_type(ctx->analyzer, sym);
+    return type && XR_TYPE_IS_FUNCTION(type);
+}
+
+static XaParallelFunctionValueStatus
+xa_parallel_function_value_symbol_status(XaInferContext *ctx, XaSymbol *sym, XaSymbol **call_stack,
+                                         int call_depth, bool *out_suspend) {
+    if (out_suspend)
+        *out_suspend = false;
+    sym = xa_parallel_import_target_symbol(ctx, sym);
+    if (!ctx || !sym)
+        return XA_PARALLEL_FN_VALUE_SAFE;
+
+    if (sym->kind == XA_SYM_FUNCTION) {
+        return xa_parallel_function_symbol_has_effect(ctx, sym, call_stack, call_depth, out_suspend)
+                   ? XA_PARALLEL_FN_VALUE_EFFECT
+                   : XA_PARALLEL_FN_VALUE_SAFE;
+    }
+
+    if (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER)
+        return XA_PARALLEL_FN_VALUE_SAFE;
+    if (!xa_parallel_symbol_has_function_type(ctx, sym))
+        return XA_PARALLEL_FN_VALUE_SAFE;
+
+    if (sym->kind == XA_SYM_PARAMETER || !sym->is_const)
+        return XA_PARALLEL_FN_VALUE_DYNAMIC;
+    if (xa_parallel_call_stack_contains(call_stack, call_depth, sym))
+        return XA_PARALLEL_FN_VALUE_DYNAMIC;
+    if (call_depth >= 32)
+        return XA_PARALLEL_FN_VALUE_DYNAMIC;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->const_initializer)
+        return XA_PARALLEL_FN_VALUE_DYNAMIC;
+
+    call_stack[call_depth] = sym;
+    XaParallelFunctionValueStatus status = xa_parallel_function_value_expr_status(
+        ctx, links->const_initializer, call_stack, call_depth + 1, out_suspend);
+    call_stack[call_depth] = NULL;
+    return status;
+}
+
+static XaParallelFunctionValueStatus
+xa_parallel_function_value_expr_status(XaInferContext *ctx, AstNode *expr, XaSymbol **call_stack,
+                                       int call_depth, bool *out_suspend) {
+    if (out_suspend)
+        *out_suspend = false;
+    if (!ctx || !expr)
+        return XA_PARALLEL_FN_VALUE_DYNAMIC;
+
+    AstNode *inline_body = xa_parallel_inline_body(expr);
+    if (inline_body) {
+        return xa_parallel_callback_body_has_effect(ctx, inline_body, call_stack, call_depth,
+                                                    out_suspend)
+                   ? XA_PARALLEL_FN_VALUE_EFFECT
+                   : XA_PARALLEL_FN_VALUE_SAFE;
+    }
+
+    if (expr->type == AST_VARIABLE) {
+        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, expr);
+        return xa_parallel_function_value_symbol_status(ctx, sym, call_stack, call_depth,
+                                                        out_suspend);
+    }
+
+    if (expr->type == AST_MEMBER_ACCESS) {
+        XaSymbol *sym = xa_parallel_module_member_symbol(ctx, expr);
+        if (sym)
+            return xa_parallel_function_value_symbol_status(ctx, sym, call_stack, call_depth,
+                                                            out_suspend);
+        XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+        if (!type)
+            type = xa_visit_infer_expr(ctx, expr);
+        return type && XR_TYPE_IS_FUNCTION(type) ? XA_PARALLEL_FN_VALUE_DYNAMIC
+                                                 : XA_PARALLEL_FN_VALUE_SAFE;
+    }
+
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    if (!type)
+        type = xa_visit_infer_expr(ctx, expr);
+    return type && XR_TYPE_IS_FUNCTION(type) ? XA_PARALLEL_FN_VALUE_DYNAMIC
+                                             : XA_PARALLEL_FN_VALUE_SAFE;
 }
 
 static void xa_parallel_callback_report_effect(XaParallelCallbackEffectScan *scan, AstNode *site,
