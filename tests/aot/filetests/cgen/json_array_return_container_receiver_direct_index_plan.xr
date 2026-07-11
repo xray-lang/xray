@@ -1,0 +1,9 @@
+fn makeJsonArrayReturnContainerUsers() -> Array<Json> {
+    return [{ name: "ada", age: 7 }, { name: "bob", age: 8 }]
+}
+
+fn jsonArrayReturnContainerReceiverPlan() -> int {
+    return makeJsonArrayReturnContainerUsers()[0].age
+}
+
+print(jsonArrayReturnContainerReceiverPlan())

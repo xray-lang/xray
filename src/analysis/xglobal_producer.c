@@ -2935,7 +2935,8 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
             return true;
         }
     }
-    if (type->kind == XR_TREF_GENERIC && type->name && type->children && type->nchildren > 0) {
+    if ((type->kind == XR_TREF_GENERIC || type->kind == XR_TREF_NAMED) && type->name &&
+        type->children && type->nchildren > 0) {
         if (strcmp(type->name, "Array") == 0) {
             if (out_sequence_kind)
                 *out_sequence_kind = XG_SEQ_ARRAY;
@@ -2955,12 +2956,19 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
 }
 
 static const XrTypeRef *body_type_ref_sequence_elem_type_ref(const XrTypeRef *type) {
-    if (!type || type->kind != XR_TREF_GENERIC || !type->name || !type->children ||
-        type->nchildren == 0)
+    if (!type || (type->kind != XR_TREF_GENERIC && type->kind != XR_TREF_NAMED) || !type->name ||
+        !type->children || type->nchildren == 0)
         return NULL;
     if (strcmp(type->name, "Array") == 0 || strcmp(type->name, "Span") == 0)
         return type->children[0];
     return NULL;
+}
+
+static bool body_type_ref_is_json_array(const XrTypeRef *type) {
+    uint8_t sequence_kind = 0;
+    const XrTypeRef *elem_type = body_type_ref_sequence_elem_type_ref(type);
+    return body_type_ref_sequence_parts(type, &sequence_kind, NULL) &&
+           sequence_kind == XG_SEQ_ARRAY && body_type_ref_is_json(elem_type);
 }
 
 static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
@@ -3370,8 +3378,11 @@ typedef struct XgReturnObjectLiteralLocal {
     const ObjectLiteralNode *literal;
 } XgReturnObjectLiteralLocal;
 
+typedef const ObjectLiteralNode *(*XgReturnLiteralResolver)(const AstNode *node);
+
 typedef struct XgReturnObjectLiteralScan {
     XgReturnObjectLiteralLocal locals[64];
+    XgReturnLiteralResolver resolver;
     uint32_t nlocals;
     uint32_t return_count;
     const ObjectLiteralNode *literal;
@@ -3381,6 +3392,13 @@ typedef struct XgReturnObjectLiteralScan {
     bool failed;
     bool terminated;
 } XgReturnObjectLiteralScan;
+
+static const ObjectLiteralNode *return_literal_static_literal(const XgReturnObjectLiteralScan *scan,
+                                                              const AstNode *node) {
+    if (!scan || !scan->resolver)
+        return body_static_object_literal(node);
+    return scan->resolver(node);
+}
 
 static int return_literal_local_index(const XgReturnObjectLiteralScan *scan, const char *name,
                                       uint32_t symbol_id) {
@@ -3508,7 +3526,7 @@ static bool return_literal_scan_assignment(XgReturnObjectLiteralScan *scan, cons
             scan->locals[local_index].literal = literal;
             return true;
         }
-        literal = body_static_object_literal(value);
+        literal = return_literal_static_literal(scan, value);
         if (literal) {
             scan->locals[local_index].literal = literal;
             return true;
@@ -3578,7 +3596,7 @@ static bool return_literal_resolve_return_value(XgReturnObjectLiteralScan *scan,
         default:
             break;
     }
-    literal = body_static_object_literal(value);
+    literal = return_literal_static_literal(scan, value);
     if (literal) {
         *out_literal = literal;
         return true;
@@ -3784,7 +3802,7 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
         case AST_CONST_DECL:
         case AST_SHARED_DECL: {
             const AstNode *initializer = node->as.var_decl.initializer;
-            const ObjectLiteralNode *literal = body_static_object_literal(initializer);
+            const ObjectLiteralNode *literal = return_literal_static_literal(scan, initializer);
             if (literal)
                 return return_literal_push_local(scan, node->as.var_decl.name,
                                                  node->as.var_decl.symbol_id, literal);
@@ -3895,13 +3913,13 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
     }
 }
 
-static bool body_find_unique_return_object_literal(const AstNode *node,
-                                                   const ObjectLiteralNode **out_literal,
-                                                   bool *out_seen) {
+static bool body_find_unique_return_literal(const AstNode *node, XgReturnLiteralResolver resolver,
+                                            const ObjectLiteralNode **out_literal, bool *out_seen) {
     XgReturnObjectLiteralScan scan;
     if (!out_literal || !out_seen)
         return true;
     memset(&scan, 0, sizeof(scan));
+    scan.resolver = resolver ? resolver : body_static_object_literal;
     scan.literal = *out_literal;
     scan.seen = *out_seen;
     if (!return_literal_scan_node(&scan, node) || scan.failed)
@@ -3911,6 +3929,18 @@ static bool body_find_unique_return_object_literal(const AstNode *node,
     return true;
 }
 
+static bool body_find_unique_return_object_literal(const AstNode *node,
+                                                   const ObjectLiteralNode **out_literal,
+                                                   bool *out_seen) {
+    return body_find_unique_return_literal(node, body_static_object_literal, out_literal, out_seen);
+}
+
+static bool body_find_unique_return_json_array_element_literal(
+    const AstNode *node, const ObjectLiteralNode **out_literal, bool *out_seen) {
+    return body_find_unique_return_literal(node, body_static_json_array_element_literal,
+                                           out_literal, out_seen);
+}
+
 static const ObjectLiteralNode *
 body_unique_function_json_return_literal(const XgPendingBody *body) {
     const ObjectLiteralNode *literal = NULL;
@@ -3918,6 +3948,17 @@ body_unique_function_json_return_literal(const XgPendingBody *body) {
     if (!body || !body->function || !body_type_ref_is_json(body->function->return_type))
         return NULL;
     if (!body_find_unique_return_object_literal(body->body, &literal, &seen))
+        return NULL;
+    return seen ? literal : NULL;
+}
+
+static const ObjectLiteralNode *
+body_unique_function_json_array_return_literal(const XgPendingBody *body) {
+    const ObjectLiteralNode *literal = NULL;
+    bool seen = false;
+    if (!body || !body->function || !body_type_ref_is_json_array(body->function->return_type))
+        return NULL;
+    if (!body_find_unique_return_json_array_element_literal(body->body, &literal, &seen))
         return NULL;
     return seen ? literal : NULL;
 }
@@ -3943,6 +3984,10 @@ static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const
                                                       out_literal);
         case AST_FORCE_UNWRAP:
             return body_lookup_call_json_return_shape(bc, expr->as.unary.operand, out_literal);
+        case AST_AS_EXPR:
+            return body_lookup_call_json_return_shape(bc, expr->as.as_expr.expr, out_literal);
+        case AST_COMPTIME_EXPR:
+            return body_lookup_call_json_return_shape(bc, expr->as.comptime_expr.expr, out_literal);
         default:
             break;
     }
@@ -3964,6 +4009,55 @@ static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const
     return body_add_json_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
 }
 
+static XgJsonShapeId body_lookup_call_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                          const ObjectLiteralNode **out_literal) {
+    const AstNode *callee;
+    XgFuncNameRow *target;
+    const XgPendingBody *body;
+    const ObjectLiteralNode *literal;
+    const XrTypeRef *elem_type;
+    uint32_t elem_type_key;
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !expr)
+        return XG_NO_ID;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_lookup_call_sequence_json_shape(bc, expr->as.grouping, out_literal);
+        case AST_MOVE_EXPR:
+            return body_lookup_call_sequence_json_shape(bc, expr->as.move_expr.expr, out_literal);
+        case AST_UNSAFE_EXPR:
+            return body_lookup_call_sequence_json_shape(bc, expr->as.unsafe_expr.operand,
+                                                        out_literal);
+        case AST_FORCE_UNWRAP:
+            return body_lookup_call_sequence_json_shape(bc, expr->as.unary.operand, out_literal);
+        case AST_AS_EXPR:
+            return body_lookup_call_sequence_json_shape(bc, expr->as.as_expr.expr, out_literal);
+        case AST_COMPTIME_EXPR:
+            return body_lookup_call_sequence_json_shape(bc, expr->as.comptime_expr.expr,
+                                                        out_literal);
+        default:
+            break;
+    }
+    if (expr->type != AST_CALL_EXPR)
+        return XG_NO_ID;
+    callee = expr->as.call_expr.callee;
+    if (!callee || callee->type != AST_VARIABLE || !callee->as.variable.name)
+        return XG_NO_ID;
+    target = producer_lookup_func_row(bc->producer, callee->as.variable.name);
+    body = producer_find_function_body(bc->producer, target ? target->func_id : XG_NO_ID);
+    literal = body_unique_function_json_array_return_literal(body);
+    if (!literal)
+        return XG_NO_ID;
+    elem_type = body && body->function
+                    ? body_type_ref_sequence_elem_type_ref(body->function->return_type)
+                    : NULL;
+    elem_type_key = elem_type ? hash_tref32(elem_type) : hash_named_type_key32("Json", NULL, 0);
+    if (out_literal)
+        *out_literal = literal;
+    return body_add_json_shape_for_literal(bc, literal, (uint32_t) expr->line, elem_type_key);
+}
+
 static const AstNode *body_json_receiver_unwrap(const AstNode *expr) {
     while (expr) {
         switch (expr->type) {
@@ -3979,11 +4073,31 @@ static const AstNode *body_json_receiver_unwrap(const AstNode *expr) {
             case AST_FORCE_UNWRAP:
                 expr = expr->as.unary.operand;
                 break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
+            case AST_COMPTIME_EXPR:
+                expr = expr->as.comptime_expr.expr;
+                break;
             default:
                 return expr;
         }
     }
     return NULL;
+}
+
+static XgJsonShapeId body_lookup_static_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                            const ObjectLiteralNode **out_literal) {
+    const AstNode *array_expr = body_json_receiver_unwrap(expr);
+    const ObjectLiteralNode *literal = body_static_json_array_element_literal(array_expr);
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !array_expr || !literal)
+        return XG_NO_ID;
+    if (out_literal)
+        *out_literal = literal;
+    return body_add_json_shape_for_literal(bc, literal, (uint32_t) array_expr->line,
+                                           hash_named_type_key32("Json", NULL, 0));
 }
 
 static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *bc,
@@ -3997,17 +4111,28 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
                                                      const ObjectLiteralNode **out_literal) {
     XgLocalType *local;
     const AstNode *receiver = body_json_receiver_unwrap(expr);
+    const AstNode *array_expr;
     if (!bc || !receiver || receiver->type != AST_INDEX_GET)
         return XG_NO_ID;
-    local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
-    if (!local || local->sequence_elem_type_key == 0)
+    array_expr = body_json_receiver_unwrap(receiver->as.index_get.array);
+    if (!array_expr)
         return XG_NO_ID;
-    if (local->sequence_elem_json_shape_id != XG_NO_ID) {
-        if (out_literal)
-            *out_literal = local->sequence_elem_json_shape_literal;
-        return local->sequence_elem_json_shape_id;
+    local = body_lookup_local_sequence(bc, array_expr);
+    if (local && local->sequence_elem_type_key != 0) {
+        if (local->sequence_elem_json_shape_id != XG_NO_ID) {
+            if (out_literal)
+                *out_literal = local->sequence_elem_json_shape_literal;
+            return local->sequence_elem_json_shape_id;
+        }
+        return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
     }
-    return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
+    {
+        XgJsonShapeId shape_id =
+            body_lookup_static_sequence_json_shape(bc, array_expr, out_literal);
+        if (shape_id != XG_NO_ID)
+            return shape_id;
+    }
+    return body_lookup_call_sequence_json_shape(bc, array_expr, out_literal);
 }
 
 static const ClassDeclNode *producer_lookup_class_decl_node(const XgProducer *p,
@@ -4421,10 +4546,17 @@ static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *ex
             return body_expr_is_json_without_shape(bc, expr->as.unary.operand);
         case AST_CALL_EXPR:
             return body_type_ref_is_json(body_call_return_type_ref(bc, &expr->as.call_expr));
-        case AST_INDEX_GET:
-            row = body_lookup_local_sequence(bc, expr->as.index_get.array);
-            return row && row->sequence_elem_json_shape_id == XG_NO_ID &&
-                   row->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0);
+        case AST_INDEX_GET: {
+            const AstNode *array_expr;
+            array_expr = body_json_receiver_unwrap(expr->as.index_get.array);
+            row = body_lookup_local_sequence(bc, array_expr);
+            if (row)
+                return row->sequence_elem_json_shape_id == XG_NO_ID &&
+                       row->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0);
+            return array_expr && array_expr->type == AST_CALL_EXPR &&
+                   body_type_ref_is_json_array(
+                       body_call_return_type_ref(bc, &array_expr->as.call_expr));
+        }
         default:
             break;
     }
