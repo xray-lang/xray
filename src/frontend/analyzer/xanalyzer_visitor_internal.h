@@ -211,6 +211,8 @@ XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, X
 struct XrClassInfo;
 XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,
                                         struct XrClassInfo *owner);
+XR_FUNC void xa_check_constructor_visibility(XaInferContext *ctx, AstNode *node,
+                                             struct XrClassInfo *owner);
 
 // Module graph export-symbol lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's semantic export-symbol hashmap.
