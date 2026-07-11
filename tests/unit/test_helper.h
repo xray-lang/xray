@@ -18,6 +18,7 @@
 #include "xray.h"
 #include "runtime/xisolate_internal.h"
 #include "runtime/xisolate_api.h"
+#include "runtime/core/xr_runtime_core.h"
 #include "coro/xcoroutine.h"
 #include "vm/xvm_internal.h"
 
@@ -33,8 +34,15 @@ static inline XrCoroutine *xr_test_init_coro(XrVMRuntime *X) {
 
     // If main_coro already exists, return it
     XrCoroutine *existing = xr_isolate_get_main_coro(X);
-    if (existing)
+    if (existing) {
+        xr_exec_context_enter(&existing->exec_ctx);
         return existing;
+    }
+
+    /* The bootstrap closure is root-owned until the physical test task exists.
+     * Make that allocation provenance explicit instead of relying on a fixed
+     * heap fallback hidden inside the closure constructor. */
+    xr_exec_context_enter(xr_runtime_core_root_exec(X->core_rt));
 
     // Create a minimal proto for test coroutine
     XrProto *proto = (XrProto *) xr_malloc(sizeof(XrProto));
@@ -70,6 +78,11 @@ static inline XrCoroutine *xr_test_init_coro(XrVMRuntime *X) {
 
     // Set as main_coro in isolate
     X->main_coro = coro;
+
+    // Unit helpers invoke allocation APIs outside VM dispatch. Install the
+    // physical test root's execution-local allocation identity explicitly;
+    // xray_vm_delete clears it.
+    xr_exec_context_enter(&coro->exec_ctx);
 
     return coro;
 }

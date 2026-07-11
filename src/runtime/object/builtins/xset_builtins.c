@@ -26,13 +26,13 @@ XrValue xr_builtin_set_construct(XrVMRuntime *isolate, XrValue self, XrValue *ar
     (void) self;
     XR_DCHECK(isolate != NULL, "set_construct: NULL isolate");
     if (argc == 0) {
-        XrSet *set = xr_set_new(xr_current_coro(isolate));
+        XrSet *set = xr_set_new(NULL);
         return xr_value_from_set(set);
     }
 
     if (argc == 1 && XR_IS_ARRAY(args[0])) {
         XrArray *arr = XR_TO_ARRAY(args[0]);
-        XrSet *set = xr_set_from_array(xr_current_coro(isolate), arr);
+        XrSet *set = xr_set_from_array(NULL, arr);
         return xr_value_from_set(set);
     }
 
@@ -53,7 +53,7 @@ XrValue xr_builtin_set_from(XrVMRuntime *isolate, XrValue self, XrValue *args, i
     // From string (unique chars)
     if (XR_IS_STRING(source)) {
         XrString *str = XR_TO_STRING(source);
-        XrSet *set = xr_set_new(xr_current_coro(isolate));
+        XrSet *set = xr_set_new(NULL);
 
         for (size_t i = 0; i < str->length; i++) {
             char ch[2] = {str->data[i], '\0'};
@@ -67,14 +67,14 @@ XrValue xr_builtin_set_from(XrVMRuntime *isolate, XrValue self, XrValue *args, i
     // From array (dedup)
     if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
-        XrSet *set = xr_set_from_array(xr_current_coro(isolate), arr);
+        XrSet *set = xr_set_from_array(NULL, arr);
         return xr_value_from_set(set);
     }
 
     // From Set (copy)
     if (XR_IS_SET(source)) {
         XrSet *src = XR_TO_SET(source);
-        XrSet *set = xr_set_new(xr_current_coro(isolate));
+        XrSet *set = xr_set_new(NULL);
 
         if (src->entries) {
             for (uint32_t i = 0; i < src->nentries; i++) {
@@ -113,7 +113,7 @@ XrValue xr_builtin_set_range(XrVMRuntime *isolate, XrValue self, XrValue *args, 
         return xr_null();
     }
 
-    XrSet *set = xr_set_new(xr_current_coro(isolate));
+    XrSet *set = xr_set_new(NULL);
 
     for (xr_Integer i = start; i <= end; i++) {
         xr_set_add(set, xr_int(i));

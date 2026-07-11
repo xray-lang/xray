@@ -94,11 +94,10 @@ static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length
         return NULL;
 
     size_t total_size = sizeof(XrString) + length + 1;
-    XrCoroutine *coro = iso ? xr_current_coro(iso) : NULL;
-
-    XrString *str = coro ? (XrString *) xr_alloc(coro, total_size, XR_TSTRING)
-                         : (XrString *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(iso),
-                                                            total_size, XR_TSTRING);
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    XrString *str = alloc && iso && alloc->core == xr_isolate_get_runtime_core(iso)
+                        ? (XrString *) xr_alloc_context_new_object(alloc, total_size, XR_TSTRING)
+                        : NULL;
     if (!str)
         return NULL;
 
@@ -821,7 +820,7 @@ xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *su
 // split - split string into array
 XrArray *xr_string_split(XrVMRuntime *iso, XrString *str, XrString *delimiter) {
     XR_DCHECK(iso != NULL, "string_split: NULL isolate");
-    XrArray *result = xr_array_new(xr_current_coro(iso));
+    XrArray *result = xr_array_new(NULL);
 
     if (str == NULL)
         return result;
@@ -1037,7 +1036,7 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
         return str;
 
     // Use StringBuilder (replacement may change length)
-    XrStringBuilder *sb = xr_stringbuilder_new(xr_current_coro(iso));
+    XrStringBuilder *sb = xr_stringbuilder_new(NULL);
     if (!sb)
         return NULL;
 

@@ -203,7 +203,11 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
     if (!isolate)
         return NULL;
 
-    if (isolate_init_full(isolate) != 0) {
+    XrExecutionContext *previous =
+        xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
+    int init_result = isolate_init_full(isolate);
+    xr_exec_context_restore(previous);
+    if (init_result != 0) {
         isolate_cleanup_full(isolate);
         xray_vm_delete(isolate);
         return NULL;

@@ -280,6 +280,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrVMRuntime *X) {
             xr_coro_discard_uninitialized(coro);
             return NULL;
         }
+        coro->alloc_ctx.local_heap = coro->heap;
     }
 
     coro->flags |= XR_CORO_FLG_MAIN;

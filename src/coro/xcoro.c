@@ -538,6 +538,16 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
         return false;
     }
 
+    /* A task that can execute language code owns an execution-local heap from
+     * birth.  This keeps AllocationContext authoritative even before the first
+     * explicit-coro allocation; constructors must never fall through to fixed
+     * storage merely because the heap happened to be lazily unmaterialized. */
+    if (need_storage && !coro->heap) {
+        coro->heap = xr_coro_heap_create(coro);
+        if (!coro->heap)
+            return false;
+    }
+
     // Allocate ID (per-Worker batch cache to avoid atomic_fetch_add per spawn)
     {
         if (w && w->p.id_cache < w->p.id_cache_end) {
@@ -557,6 +567,12 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
             coro->id = atomic_fetch_add(&global_coro_id, 1);
         }
     }
+
+    xr_alloc_context_init(&coro->alloc_ctx, core, XR_STORAGE_EXEC_LOCAL);
+    coro->alloc_ctx.local_heap = coro->heap;
+    xr_exec_context_init(&coro->exec_ctx, core, &coro->alloc_ctx);
+    coro->exec_ctx.task = coro;
+    coro->exec_ctx.logical_root_id = (uint64_t) (uint32_t) coro->id;
 
     // Auto-register named coroutines
     if (name && sched && sched->coro_registry) {
@@ -1081,18 +1097,12 @@ void xr_coro_cancel(XrCoroutine *coro) {
      * coroutine's result slot. */
 }
 
-// xr_current_coro - Get current coroutine
+// xr_current_coro - Get the task attached to the active execution context.
 XrCoroutine *xr_current_coro(XrVMRuntime *X) {
     if (!X)
         return NULL;
-
-    XrWorker *worker = xr_current_worker();
-    if (worker && worker->m) {
-        XrCoroutine *c = atomic_load_explicit(&worker->m->current_coro, memory_order_relaxed);
-        if (c)
-            return c;
-    }
-    return NULL;
+    XrExecutionContext *ctx = xr_exec_context_current();
+    return ctx && ctx->core == xr_isolate_get_runtime_core(X) ? ctx->task : NULL;
 }
 
 // xr_scheduler_ready - Wake coroutine on an explicit scheduler.

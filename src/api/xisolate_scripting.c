@@ -400,6 +400,9 @@ void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int 
     if (isolate == NULL)
         return;
 
+    XrExecutionContext *previous =
+        xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
+
     if (isolate->core_rt) {
         xr_script_info_set(&isolate->core_rt->script_info, script_file, argc, argv);
     }
@@ -453,4 +456,6 @@ void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int 
     if (isolate->vm.builtin_count < XR_USER_GLOBALS_START) {
         isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
+
+    xr_exec_context_restore(previous);
 }

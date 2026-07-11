@@ -27,19 +27,13 @@ XrClosure *xr_closure_new(XrVMRuntime *isolate, XrProto *proto, struct XrCorouti
     int nuv = DYNARRAY_COUNT(&proto->upvalues);
     size_t size = sizeof(XrClosure) + (size_t) nuv * sizeof(XrValue);
 
-    XrClosure *closure;
-    if (coro && coro->heap) {
-        closure = (XrClosure *) xr_coro_heap_new_obj(coro->heap, XR_TFUNCTION, size);
-    } else {
-        closure = (XrClosure *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), size,
-                                                    XR_TFUNCTION);
-    }
+    XrClosure *closure = (XrClosure *) xr_alloc(coro, size, XR_TFUNCTION);
     if (closure == NULL) {
         return NULL;
     }
 
     xr_obj_header_init_type(&closure->hdr, XR_TFUNCTION);
-    if (coro && coro->heap) {
+    if (coro) {
         XR_OBJ_SET_FLAG(&closure->hdr, XR_OBJ_CYCLE_CANDIDATE);
     }
     closure->proto = proto;

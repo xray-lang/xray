@@ -12,6 +12,7 @@
 #include "../../base/xchecks.h"
 #include "../xisolate_api.h"
 #include "../core/xr_runtime_core.h"
+#include "../core/xr_exec_context.h"
 #include "../../base/xmalloc.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
@@ -341,10 +342,10 @@ void xr_enum_aggregate_init_inplace(XrEnumAggregateValue *value, XrEnumType *enu
         value->payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
 }
 
-XR_FUNC XrEnumAggregateValue *
-xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCoroutine *coro, XrEnumType *enum_type,
-                           uint32_t member_index, XrValue *args, int nargs) {
-    XR_DCHECK(core != NULL || coro != NULL, "adt_construct_core: NULL owner");
+XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct_in(XrAllocationContext *alloc,
+                                                       XrEnumType *enum_type, uint32_t member_index,
+                                                       XrValue *args, int nargs) {
+    XR_DCHECK(alloc != NULL, "adt_construct_in: NULL allocation context");
     XR_DCHECK(enum_type != NULL, "adt_construct: NULL enum_type");
     XR_DCHECK(member_index < enum_type->member_count, "adt_construct: member_index out of bounds");
     if (!xr_enum_type_ensure_adt_class(enum_type))
@@ -368,12 +369,8 @@ xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCoroutine *coro, XrEnum
     }
 
     size_t size = xr_enum_aggregate_size((uint32_t) expected_payload);
-    XrEnumAggregateValue *value = NULL;
-    if (coro) {
-        value = (XrEnumAggregateValue *) xr_alloc(coro, size, XR_TINSTANCE);
-    } else if (core) {
-        value = (XrEnumAggregateValue *) xr_fixed_heap_alloc(&core->fixed_heap, size, XR_TINSTANCE);
-    }
+    XrEnumAggregateValue *value =
+        (XrEnumAggregateValue *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE);
     if (!value) {
         if (payloads && payloads != local_payloads)
             xr_free(payloads);
@@ -402,8 +399,8 @@ XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enu
     XrEnumAggregateValue *value = enum_type->members[member_index].value;
     if (value)
         return value;
-    value = xr_enum_adt_construct_core(xr_isolate_get_runtime_core(X), NULL, enum_type,
-                                       member_index, NULL, 0);
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
+    value = xr_enum_adt_construct_in(&core->module_alloc, enum_type, member_index, NULL, 0);
     enum_type->members[member_index].value = value;
     return value;
 }
@@ -411,8 +408,10 @@ XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enu
 XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct(XrVMRuntime *X, XrEnumType *enum_type,
                                                     uint32_t member_index, XrValue *args,
                                                     int nargs) {
-    return xr_enum_adt_construct_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), enum_type,
-                                      member_index, args, nargs);
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    return alloc && alloc->core == xr_isolate_get_runtime_core(X)
+               ? xr_enum_adt_construct_in(alloc, enum_type, member_index, args, nargs)
+               : NULL;
 }
 
 bool xr_value_is_enum_aggregate(XrValue value) {

@@ -81,16 +81,18 @@ static XrEnumType *scope_task_outcome_type(XrCoroutine *coro) {
  * including the non-payload Cancelled, must use the tagged-aggregate
  * representation so ordinal-based pattern matching works uniformly across VM
  * and AOT. */
-static XrValue scope_task_outcome_value(XrCoroutine *coro, uint32_t member_index, XrValue payload,
-                                        bool has_payload) {
+static XrValue scope_task_outcome_value(XrCoroutine *coro, XrCoroutine *owner,
+                                        uint32_t member_index, XrValue payload, bool has_payload) {
     XrEnumType *enum_type = scope_task_outcome_type(coro);
     if (!enum_type || member_index >= enum_type->member_count)
         return has_payload ? payload : XR_NULL_VAL;
 
     XrValue copied = has_payload ? scope_copy_to_shared(coro, payload) : XR_NULL_VAL;
     XrValue args[1] = {copied};
-    XrEnumAggregateValue *value = xr_enum_adt_construct_core(
-        coro ? coro->core : NULL, NULL, enum_type, member_index, args, has_payload ? 1 : 0);
+    XrEnumAggregateValue *value =
+        owner ? xr_enum_adt_construct_in(&owner->alloc_ctx, enum_type, member_index, args,
+                                         has_payload ? 1 : 0)
+              : NULL;
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
@@ -111,11 +113,12 @@ static bool scope_transfer_record_child_completion_locked(XrCoroutine *coro,
         if (scope->outcomes) {
             XrValue outcome = XR_NULL_VAL;
             if (child_failed) {
-                outcome = scope_task_outcome_value(coro, 1, err, true);
+                outcome = scope_task_outcome_value(coro, scope->owner, 1, err, true);
             } else if (scope_child_cancelled(coro)) {
-                outcome = scope_task_outcome_value(coro, 2, XR_NULL_VAL, false);
+                outcome = scope_task_outcome_value(coro, scope->owner, 2, XR_NULL_VAL, false);
             } else {
-                outcome = scope_task_outcome_value(coro, 0, scope_child_result(coro), true);
+                outcome =
+                    scope_task_outcome_value(coro, scope->owner, 0, scope_child_result(coro), true);
             }
             xr_array_push(scope->outcomes, outcome);
         }

@@ -21,9 +21,10 @@
  *     objects (channels, deep-copied shared values). These are not GC'd.
  *
  * ALLOCATION PATH:
- *   xr_alloc(coro, size, type) routes to coro->heap when available,
- *   otherwise falls back to the isolate fixed heap. Most callers should
- *   resolve a coroutine via xr_current_coro(X) and pass it explicitly.
+ *   xr_alloc(coro, size, type) routes an explicit task to its local heap;
+ *   xr_alloc(NULL, ...) consumes the current AllocationContext. Callers pass
+ *   a coroutine only when task identity is semantically required.
+ *   Ordinary constructors pass NULL and consume the current AllocationContext.
  */
 
 #ifndef XHEAP_H
