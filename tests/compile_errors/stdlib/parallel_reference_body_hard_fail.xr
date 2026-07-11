@@ -1,0 +1,7 @@
+import parallel
+
+var options = parallel.Options(2)
+
+parallel.forEach(0..4, (i) -> {
+    print(i)
+}, options)

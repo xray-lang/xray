@@ -1,0 +1,2 @@
+parallel.forEach must lower to XI_PAR_*
+stdlib reference body is bootstrap-only
