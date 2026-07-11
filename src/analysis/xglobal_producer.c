@@ -4211,6 +4211,51 @@ static bool body_expr_is_this(const AstNode *expr) {
 static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
                                                      const AstNode *node);
 
+static bool ctor_scan_shapes_match(const XgJsonCtorFieldAssignScan *left,
+                                   const XgJsonCtorFieldAssignScan *right) {
+    return left && right && left->saw_assignment && right->saw_assignment &&
+           left->field_count == right->field_count && left->shape_hash == right->shape_hash;
+}
+
+static bool ctor_scan_if_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
+                                               const IfStmtNode *stmt) {
+    XgJsonCtorFieldAssignScan base;
+    XgJsonCtorFieldAssignScan then_scan;
+    XgJsonCtorFieldAssignScan else_scan;
+    if (!scan || !stmt || !stmt->then_branch) {
+        if (scan)
+            scan->failed = true;
+        return false;
+    }
+    if (!ctor_scan_node_for_json_field_assignment(scan, stmt->condition))
+        return false;
+
+    base = *scan;
+    then_scan = base;
+    else_scan = base;
+    if (!ctor_scan_node_for_json_field_assignment(&then_scan, stmt->then_branch)) {
+        scan->failed = true;
+        return false;
+    }
+    if (stmt->else_branch) {
+        if (!ctor_scan_node_for_json_field_assignment(&else_scan, stmt->else_branch)) {
+            scan->failed = true;
+            return false;
+        }
+    }
+
+    if (base.saw_assignment) {
+        *scan = base;
+        return true;
+    }
+    if (!stmt->else_branch || !ctor_scan_shapes_match(&then_scan, &else_scan)) {
+        scan->failed = true;
+        return false;
+    }
+    *scan = then_scan;
+    return true;
+}
+
 static bool ctor_scan_node_list_for_json_field_assignment(XgJsonCtorFieldAssignScan *scan,
                                                           AstNode *const *nodes, int count) {
     if (!scan || scan->failed)
@@ -4354,6 +4399,7 @@ static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *
         case AST_FORCE_UNWRAP:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.unary.operand);
         case AST_IF_STMT:
+            return ctor_scan_if_json_field_assignment(scan, &node->as.if_stmt);
         case AST_WHILE_STMT:
         case AST_FOR_STMT:
         case AST_FOR_IN_STMT:
