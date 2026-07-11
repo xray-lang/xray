@@ -1,0 +1,8 @@
+fn jsonArrayPushContainerReceiverPlan() -> int {
+    var users: Array<Json> = []
+    users.push({ name: "ada", age: 7 })
+    users.push({ name: "bob", age: 8 })
+    return users[0].age
+}
+
+print(jsonArrayPushContainerReceiverPlan())
