@@ -228,6 +228,18 @@ const XaotStoragePlan *xaot_storage_plan_find(const XaotBundle *bundle, const Xi
     return NULL;
 }
 
+const XaotCapturePlan *xaot_capture_plan_find(const XaotBundle *bundle, const XiFunc *func,
+                                              uint16_t index) {
+    if (!bundle || !func || index >= func->ncaptures)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ncapture_plans; i++) {
+        const XaotCapturePlan *plan = &bundle->capture_plans[i];
+        if (plan->func == func && plan->capture_index == index)
+            return plan;
+    }
+    return NULL;
+}
+
 const char *xaot_materialization_kind_name(uint8_t value) {
     static const char *names[] = {"inline",         "exec_local",    "module_readonly",
                                   "module_runtime", "shared_system", "reject"};
