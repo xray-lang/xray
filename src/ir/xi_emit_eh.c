@@ -63,6 +63,16 @@ static void patch_jump_to(EmitCtx *ctx, int jmp_pc, int target_pc) {
     PROTO_SET_CODE(ctx->proto, jmp_pc, CREATE_sJ(OP_JMP, target_pc - (jmp_pc + 1)));
 }
 
+static int emit_err_has_jump_if_true(EmitCtx *ctx, XiEmitReg err_has, XiEmitReg true_reg) {
+    emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, err_has, 0, 0));
+    return emit_jump_if_cmp(ctx, OP_EQ, err_has, true_reg, true);
+}
+
+static void patch_jump_list_to(EmitCtx *ctx, int *jump_pcs, int jump_count, int target_pc) {
+    for (int i = 0; i < jump_count; i++)
+        patch_jump_to(ctx, jump_pcs[i], target_pc);
+}
+
 /* ========== Exception Handling ========== */
 
 /* Throw */
@@ -511,12 +521,13 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    if (ctx->next_reg + (data->range_body ? 26 : (plan_state ? 26 : 23)) > MAX_REGS) {
+    if (ctx->next_reg + (data->range_body ? 27 : (plan_state ? 27 : 24)) > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
     XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg err_has = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
     ctx->next_reg += plan_state ? 6 : 5;
     XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
@@ -539,6 +550,8 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     ctx->next_reg += plan_state ? 4 : (data->range_body ? 4 : 3);
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
+    int err_jump_pcs[3];
+    int err_jump_count = 0;
 
     uint8_t par_flags = 0;
     if (data->inclusive_end)
@@ -642,6 +655,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), iter, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
         emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
 
         int back_jmp_pc = current_pc(ctx);
@@ -655,6 +669,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), limit, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
     } else {
         int loop_pc = current_pc(ctx);
         int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, iter, limit, false);
@@ -663,6 +678,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
         emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
 
         int back_jmp_pc = current_pc(ctx);
@@ -679,6 +695,7 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     patch_jump_to(ctx, par_handled_jmp_pc, exit_pc);
     patch_jump_to(ctx, empty_jmp_pc, exit_pc);
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
+    patch_jump_list_to(ctx, err_jump_pcs, err_jump_count, exit_pc);
 }
 
 /* xi.par.map VM fallback: execute stable lanes sequentially and collect
@@ -811,13 +828,17 @@ static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, X
     memset(&r, 0, sizeof(r));
     r.start = start;
     r.workers = workers;
-    if (!par_lane_regs_alloc(ctx, &r, 5))
+    if (!par_lane_regs_alloc(ctx, &r, 7))
         return;
+    XiEmitReg err_has = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg err_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
     XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
     ctx->next_reg += 4;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
+    int err_jump_pcs[2];
+    int err_jump_count = 0;
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, r.end_excl, end, 0));
     if (data->inclusive_end)
@@ -837,6 +858,7 @@ static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, X
     }
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.one, 1));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, 256));
+    emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, err_true, 0, 0));
 
     int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.start, r.end_excl, false);
 
@@ -853,6 +875,7 @@ static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, X
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.limit, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), r.lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 0));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, err_true);
     } else {
         int loop_pc = current_pc(ctx);
         int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, r.iter, r.limit, false);
@@ -861,6 +884,7 @@ static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, X
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), r.iter, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 0));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, err_true);
         emit_inst(ctx, CREATE_ABC(OP_ADDI, r.iter, r.iter, 1));
 
         int back_jmp_pc = current_pc(ctx);
@@ -876,6 +900,7 @@ static void emit_par_map_direct_lanes(EmitCtx *ctx, XiValue *v, XiEmitReg dst, X
     int exit_pc = current_pc(ctx);
     patch_jump_to(ctx, empty_jmp_pc, exit_pc);
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
+    patch_jump_list_to(ctx, err_jump_pcs, err_jump_count, exit_pc);
     if (data->into_result) {
         emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
     } else {
@@ -929,7 +954,8 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     memset(&r, 0, sizeof(r));
     r.start = start;
     r.workers = workers;
-    if (!par_lane_regs_alloc(ctx, &r, try_vm_parallel ? 14 : 6))
+    if (!par_lane_regs_alloc(
+            ctx, &r, try_vm_parallel ? (data->plan_state ? 19 : 16) : (data->plan_state ? 10 : 8)))
         return;
     XiEmitReg par_handled = 0;
     XiEmitReg par_true = 0;
@@ -940,6 +966,8 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         par_base = (XiEmitReg) ctx->next_reg;
         ctx->next_reg += data->plan_state ? 7 : 6;
     }
+    XiEmitReg err_has = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg err_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg map_idx = (XiEmitReg) ctx->next_reg++;
     XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
     XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
@@ -950,6 +978,8 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     ctx->next_reg += data->plan_state ? 4 : 3;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
+    int err_jump_pcs[1];
+    int err_jump_count = 0;
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, r.end_excl, end, 0));
     if (data->inclusive_end)
@@ -964,6 +994,7 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, target_array, r.count, fill_value));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.one, 1));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, r.max_participants, 256));
+    emit_inst(ctx, CREATE_ABC(OP_LOADTRUE, err_true, 0, 0));
 
     int par_handled_jmp_pc = -1;
     if (try_vm_parallel) {
@@ -1011,6 +1042,7 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
     }
+    err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, err_true);
     emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
     emit_inst(ctx, CREATE_ABC(OP_SUB, map_idx, r.iter, r.start));
     emit_inst(ctx, CREATE_ABC(OP_INDEX_SET, target_array, map_idx, item_result));
@@ -1030,6 +1062,7 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         patch_jump_to(ctx, par_handled_jmp_pc, exit_pc);
     patch_jump_to(ctx, empty_jmp_pc, exit_pc);
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
+    patch_jump_list_to(ctx, err_jump_pcs, err_jump_count, exit_pc);
     if (data->into_result)
         emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
 }
@@ -1067,12 +1100,13 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     memset(&r, 0, sizeof(r));
     r.start = start;
     r.workers = workers;
-    if (!par_lane_regs_alloc(ctx, &r, 15))
+    if (!par_lane_regs_alloc(ctx, &r, data->plan_state ? 18 : 16))
         return;
     XiEmitReg par_handled = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_true = (XiEmitReg) ctx->next_reg++;
     XiEmitReg par_base = (XiEmitReg) ctx->next_reg;
     ctx->next_reg += data->plan_state ? 9 : 8;
+    XiEmitReg err_has = (XiEmitReg) ctx->next_reg++;
     XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
     XiEmitReg state_value = 0;
     if (data->plan_state)
@@ -1081,6 +1115,8 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     ctx->next_reg += 4;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
+    int err_jump_pcs[5];
+    int err_jump_count = 0;
 
     emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, initial, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, r.end_excl, end, 0));
@@ -1114,6 +1150,7 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_LOADNULL, (XiEmitReg) (par_base + 7), 0, 0));
     }
     emit_inst(ctx, CREATE_ABC(OP_PAR_REDUCE, par_handled, par_base, par_flags));
+    err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
     int par_handled_jmp_pc = emit_jump_if_cmp(ctx, OP_EQ, par_handled, par_true, true);
 
     emit_par_participants_clamp(ctx, &r);
@@ -1129,12 +1166,14 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.limit, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), r.lane, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
         emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
 
         emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, combine_closure, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), dst, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), item_result, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, call_base, 0));
     } else {
         int loop_pc = current_pc(ctx);
@@ -1152,12 +1191,14 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), r.lane, 0));
             emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
         }
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
         emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
 
         emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, combine_closure, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), dst, 0));
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), item_result, 0));
         emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, call_base, 0));
 
         emit_inst(ctx, CREATE_ABC(OP_ADDI, r.iter, r.iter, 1));
@@ -1189,6 +1230,7 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), dst, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), item_result, 0));
     emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+    err_jump_pcs[err_jump_count++] = emit_err_has_jump_if_true(ctx, err_has, par_true);
     emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, call_base, 0));
     emit_inst(ctx, CREATE_ABC(OP_ADDI, r.lane, r.lane, 1));
 
@@ -1200,6 +1242,7 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
     patch_jump_to(ctx, fallback_done_jmp_pc, exit_pc);
     patch_jump_to(ctx, handled_exit_jmp_pc, exit_pc);
+    patch_jump_list_to(ctx, err_jump_pcs, err_jump_count, exit_pc);
 }
 
 /* Yield */

@@ -77,6 +77,7 @@ struct XrVmParBatch {
     bool reduce_body;
     _Atomic bool failed;
     _Atomic bool error_recorded;
+    bool first_error_is_value;
     XrValue first_error;
     XrVmParLane *lanes;
     XrCoroutine **coros;
@@ -178,8 +179,17 @@ static void vm_par_batch_free(XrVmParBatch *batch) {
     xr_free(batch);
 }
 
+static XrValue vm_par_take_pending_value_error(XrVMRuntime *isolate) {
+    XrVMContext *ctx = isolate ? xr_vm_current_ctx(isolate) : NULL;
+    if (!ctx || XR_IS_NULL(ctx->pending_error))
+        return xr_null();
+    XrValue error = ctx->pending_error;
+    ctx->pending_error = xr_null();
+    return error;
+}
+
 static void vm_par_batch_record_failure(XrVMRuntime *isolate, XrVmParBatch *batch, XrValue error,
-                                        const char *fallback_message) {
+                                        bool is_value_error, const char *fallback_message) {
     if (!batch)
         return;
 
@@ -188,12 +198,14 @@ static void vm_par_batch_record_failure(XrVMRuntime *isolate, XrVmParBatch *batc
                                                 memory_order_acq_rel, memory_order_acquire)) {
         XrValue exc = error;
         if (XR_IS_NULL(exc)) {
+            is_value_error = false;
             exc = (isolate && fallback_message)
                       ? xr_panic_info_new(isolate, XR_ERR_RUNTIME, fallback_message)
                       : xr_null();
-        } else if (isolate && !xr_value_is_panic_info(isolate, exc)) {
+        } else if (!is_value_error && isolate && !xr_value_is_panic_info(isolate, exc)) {
             exc = xr_panic_info_from_value(isolate, exc);
         }
+        batch->first_error_is_value = is_value_error;
         if (!XR_IS_NULL(exc))
             batch->first_error = xr_deep_copy_to_transit_core(batch->core, exc);
     }
@@ -248,13 +260,22 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         status == XR_RESUME_CANCELLED) {
         const char *fallback =
             status == XR_RESUME_CANCELLED ? "parallel lane cancelled" : "parallel lane failed";
-        vm_par_batch_record_failure(isolate, lane->batch, resume_value, fallback);
+        vm_par_batch_record_failure(isolate, lane->batch, resume_value, false, fallback);
         vm_par_lane_done(lane);
         if (result)
             *result = xr_null();
         return XR_CFUNC_DONE;
     }
     XrVmParBatch *batch = lane->batch;
+    XrValue pending_value_error = vm_par_take_pending_value_error(isolate);
+    if (!XR_IS_NULL(pending_value_error)) {
+        vm_par_batch_record_failure(isolate, batch, pending_value_error, true,
+                                    "parallel lane failed");
+        vm_par_lane_done(lane);
+        if (result)
+            *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
     if (batch->reduce_body) {
         if (lane->phase == XR_VM_PAR_LANE_COMBINE) {
             lane->partial = resume_value;
@@ -276,7 +297,7 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         }
 
         if (!batch->combine) {
-            vm_par_batch_record_failure(isolate, batch, xr_null(),
+            vm_par_batch_record_failure(isolate, batch, xr_null(), false,
                                         "parallel.reduce missing combine closure");
             vm_par_lane_done(lane);
             if (result)
@@ -296,7 +317,7 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         if (!output || output->elem_type == XR_ELEM_ANY || out_index < 0 ||
             out_index >= output->length || out_index > INT32_MAX ||
             (output->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(resume_value))) {
-            vm_par_batch_record_failure(isolate, batch, xr_null(),
+            vm_par_batch_record_failure(isolate, batch, xr_null(), false,
                                         "parallel.map lane result store failed");
             vm_par_lane_done(lane);
             if (result)
@@ -320,7 +341,7 @@ static XrCFuncResult vm_par_lane_call_next(XrVMRuntime *isolate, XrVmParLane *la
     if (atomic_load_explicit(&batch->failed, memory_order_acquire) || lane->iter >= lane->limit) {
         if (batch->reduce_body && !atomic_load_explicit(&batch->failed, memory_order_acquire) &&
             !vm_par_lane_store_partial(lane)) {
-            vm_par_batch_record_failure(isolate, batch, xr_null(),
+            vm_par_batch_record_failure(isolate, batch, xr_null(), false,
                                         "parallel.reduce partial store failed");
         }
         vm_par_lane_done(lane);
@@ -332,7 +353,7 @@ static XrCFuncResult vm_par_lane_call_next(XrVMRuntime *isolate, XrVmParLane *la
     lane->call_args[0] = xr_int(lane->iter);
     if (batch->plan_state) {
         if (!batch->states || lane->lane_id < 0 || lane->lane_id >= batch->states->length) {
-            vm_par_batch_record_failure(isolate, batch, xr_null(),
+            vm_par_batch_record_failure(isolate, batch, xr_null(), false,
                                         "parallel lane state unavailable");
             vm_par_lane_done(lane);
             if (result)
@@ -396,6 +417,7 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
     batch->reduce_body = reduce_body;
     atomic_store_explicit(&batch->failed, false, memory_order_relaxed);
     atomic_store_explicit(&batch->error_recorded, false, memory_order_relaxed);
+    batch->first_error_is_value = false;
     batch->first_error = xr_null();
 
     batch->lanes = (XrVmParLane *) xr_calloc((size_t) lane_count, sizeof(XrVmParLane));
@@ -463,6 +485,7 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
         VM_THROW(frame, pc, XR_ERR_RUNTIME, "parallel batch wait failed");
     }
     bool failed = atomic_load_explicit(&batch->failed, memory_order_acquire);
+    bool failed_with_value_error = failed && batch->first_error_is_value;
     XrValue lane_error = xr_null();
     if (failed && !XR_IS_NULL(batch->first_error)) {
         lane_error = xr_deep_copy_to_coro(isolate, batch->first_error, current);
@@ -500,6 +523,11 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
     vm_par_batch_free(batch);
     *batch_slot = xr_null();
     if (failed) {
+        if (failed_with_value_error && !XR_IS_NULL(lane_error)) {
+            vm_ctx->pending_error = lane_error;
+            *handled_slot = xr_bool(true);
+            return XR_DISP_NEXT;
+        }
         if (!XR_IS_NULL(lane_error)) {
             frame->pc = pc;
             xr_vm_unwind_with_trace(isolate, lane_error);
