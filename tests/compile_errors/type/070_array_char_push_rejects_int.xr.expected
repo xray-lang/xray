@@ -1,1 +1,1 @@
-Argument 1: type 'int' is not assignable to parameter type 'char'
+Argument 1: type 'int' is not assignable to parameter type 'rune'
