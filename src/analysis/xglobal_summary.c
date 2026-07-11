@@ -1110,6 +1110,12 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
             return "read_mem";
         case XG_BODY_MAY_CALL:
             return "call";
+        case XG_BODY_MAY_SPAWN:
+            return "spawn";
+        case XG_BODY_ACCESSES_MUTABLE_MODULE:
+            return "mutable_module";
+        case XG_BODY_OBSERVES_TASK_ID:
+            return "task_identity";
         default:
             return "unknown";
     }
@@ -1117,8 +1123,10 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
 
 XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
     static const uint32_t effects[] = {
-        XG_BODY_MAY_THROW,       XG_BODY_MAY_SUSPEND,  XG_BODY_MAY_ALLOC, XG_BODY_MAY_MUTATE,
-        XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM, XG_BODY_MAY_CALL,
+        XG_BODY_MAY_THROW,        XG_BODY_MAY_SUSPEND,     XG_BODY_MAY_ALLOC,
+        XG_BODY_MAY_MUTATE,       XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM,
+        XG_BODY_MAY_CALL,         XG_BODY_MAY_SPAWN,       XG_BODY_ACCESSES_MUTABLE_MODULE,
+        XG_BODY_OBSERVES_TASK_ID,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(effects) / sizeof(effects[0]));
@@ -1230,6 +1238,8 @@ XR_FUNC const char *xg_capability_name(uint32_t capability) {
             return "generator";
         case XG_CAP_STACKTRACE:
             return "stacktrace";
+        case XG_CAP_PARALLEL:
+            return "parallel";
         default:
             return "unknown";
     }
@@ -1244,6 +1254,7 @@ XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
         XG_CAP_TASK,         XG_CAP_ATOMIC,          XG_CAP_WORK_QUEUE,
         XG_CAP_RESULT_GROUP, XG_CAP_COUNTDOWN_LATCH, XG_CAP_SEMAPHORE,
         XG_CAP_EVENT_COUNT,  XG_CAP_GENERATOR,       XG_CAP_STACKTRACE,
+        XG_CAP_PARALLEL,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(capabilities) / sizeof(capabilities[0]));

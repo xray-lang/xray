@@ -27,6 +27,45 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
     return false;
 }
 
+static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    XaotEntryPlan expected;
+    if (!bundle || !bundle->has_entry_plan)
+        return set_error(errbuf, errbuf_len, "AOT bundle has no mandatory entry plan");
+    /* Library and plan-isolation bundles intentionally have no executable
+     * root.  Their attached plan must stay the exact zero-requirement plan;
+     * assigning a module later in a unit harness does not turn the artifact
+     * into an executable product. */
+    if (bundle->entry_plan.entry_func_id == XG_NO_ID) {
+        if (bundle->entry_plan.reachable_body_count != 0 ||
+            bundle->entry_plan.reachable_effect_bits != 0 ||
+            bundle->entry_plan.required_capability_bits != 0 ||
+            bundle->entry_plan.runtime_component_bits != 0 ||
+            bundle->entry_plan.root_representation != XAOT_ROOT_ELIDED ||
+            bundle->entry_plan.scheduler_mode != XAOT_SCHED_NONE ||
+            bundle->entry_plan.unproven_reason != XAOT_ENTRY_PROVEN)
+            return set_error(errbuf, errbuf_len, "AOT rootless entry plan is stale");
+        return true;
+    }
+    if (!xaot_entry_plan_derive(bundle, bundle->global_evidence_plan.evidence,
+                                bundle->global_evidence_plan.profile, &expected))
+        return set_error(errbuf, errbuf_len, "AOT entry plan could not be re-derived");
+    if (expected.entry_func_id != bundle->entry_plan.entry_func_id ||
+        expected.reachable_body_count != bundle->entry_plan.reachable_body_count ||
+        expected.reachable_effect_bits != bundle->entry_plan.reachable_effect_bits ||
+        expected.required_capability_bits != bundle->entry_plan.required_capability_bits ||
+        expected.provided_capability_bits != bundle->entry_plan.provided_capability_bits ||
+        expected.runtime_component_bits != bundle->entry_plan.runtime_component_bits ||
+        expected.provider_hook_bits != bundle->entry_plan.provider_hook_bits ||
+        expected.evidence != bundle->entry_plan.evidence ||
+        expected.root_representation != bundle->entry_plan.root_representation ||
+        expected.scheduler_mode != bundle->entry_plan.scheduler_mode ||
+        expected.unproven_reason != bundle->entry_plan.unproven_reason)
+        return set_error(errbuf, errbuf_len, "AOT entry plan is stale");
+    if (expected.unproven_reason != XAOT_ENTRY_PROVEN)
+        return set_error(errbuf, errbuf_len, "AOT entry plan is unproven");
+    return true;
+}
+
 static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
                                                               XgFuncId func_id);
 static XgFuncId verify_find_method_body_func_id(const XgGlobalEvidence *ev, XgMethodId method_id);
@@ -6494,5 +6533,9 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
             !verify_direct_call_ret_step(bundle, &bundle->boundary_steps[fi], errbuf, errbuf_len))
             return false;
     }
+    if (!verify_entry_plan(bundle, errbuf, errbuf_len))
+        return false;
+    if (!xaot_storage_capture_plans_verify(bundle, errbuf, errbuf_len))
+        return false;
     return true;
 }

@@ -582,7 +582,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=18 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=19 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -876,15 +876,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=18 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=18 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=18 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=18 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=19 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=19 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=19 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=19 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=18 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=19 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -11709,6 +11709,83 @@ TEST(global_evidence_producer_marks_module_init_body) {
     teardown_parser_session();
 }
 
+TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
+    XgBuildKey key = {.source_hash = 0x197,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary entry = {.func_id = 1,
+                           .module_id = 1,
+                           .kind = XG_BODY_MODULE_INIT,
+                           .effect_bits = XG_BODY_MAY_CALL | XG_BODY_MAY_SPAWN,
+                           .capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK,
+                           .callsite_start = 1,
+                           .callsite_count = 1,
+                           .body_hash = 0x101};
+    XgBodySummary reachable = {
+        .func_id = 2, .module_id = 1, .kind = XG_BODY_FUNCTION, .body_hash = 0x102};
+    XgBodySummary unreachable = {.func_id = 3,
+                                 .module_id = 1,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .effect_bits = XG_BODY_MAY_SUSPEND,
+                                 .capability_bits = XG_CAP_TIMER,
+                                 .body_hash = 0x103};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .kind = XG_CALL_DIRECT_FUNC,
+                              .static_target_func_id = 2};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    XaotTargetCapabilityProvider provider = {
+        .abi_version = XAOT_PROVIDER_ABI_VERSION,
+        .provided_capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK,
+        .hook_bits = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
+                     XAOT_PROVIDER_HOOK_PARK_WAKE,
+        .target_metadata_hash = 0x197197,
+    };
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &reachable));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &unreachable));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    init_func.xg_body_func_id = entry.func_id;
+    memset(&module, 0, sizeof(module));
+    module.path = "entry.xr";
+    module.name = "entry";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(bundle.has_entry_plan);
+    ASSERT_EQ_UINT(bundle.entry_plan.reachable_body_count, 2);
+    ASSERT_EQ_UINT(bundle.entry_plan.root_representation, XAOT_ROOT_DESCRIPTOR);
+    ASSERT_EQ_UINT(bundle.entry_plan.scheduler_mode, XAOT_SCHED_SINGLE);
+    ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_TASK) != 0);
+    ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_TIMER) == 0);
+    xaot_bundle_free(&bundle);
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(!xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_FREESTANDING));
+    xaot_bundle_free(&bundle);
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_capability_provider(&bundle, &provider));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_FREESTANDING));
+    ASSERT_EQ_UINT(bundle.entry_plan.provided_capability_bits, provider.provided_capability_bits);
+    ASSERT_EQ_UINT(bundle.entry_plan.provider_hook_bits, provider.hook_bits);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_adds_rows_and_grows);
@@ -11820,4 +11897,5 @@ RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
 RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
+RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
 TEST_MAIN_END()

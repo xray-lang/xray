@@ -56,7 +56,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 18,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 19,
 };
 
 typedef enum XgBuildProfile {
@@ -349,6 +349,7 @@ enum {
     XG_CAP_EVENT_COUNT = 1u << 18,
     XG_CAP_GENERATOR = 1u << 19,
     XG_CAP_STACKTRACE = 1u << 20,
+    XG_CAP_PARALLEL = 1u << 21,
 };
 
 enum {
@@ -374,6 +375,9 @@ enum {
     XG_BODY_MAY_CALL_NATIVE = 1u << 4,
     XG_BODY_MAY_READ_MEM = 1u << 5,
     XG_BODY_MAY_CALL = 1u << 6,
+    XG_BODY_MAY_SPAWN = 1u << 7,
+    XG_BODY_ACCESSES_MUTABLE_MODULE = 1u << 8,
+    XG_BODY_OBSERVES_TASK_ID = 1u << 9,
 };
 
 enum {
