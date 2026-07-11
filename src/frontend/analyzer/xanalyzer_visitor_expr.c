@@ -1604,11 +1604,12 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         return xr_type_new_int(NULL);
                     }
                     if (strcmp(ma->name, "toString") == 0) {
-                        if (xa_freestanding_profile_enabled(ctx->analyzer)) {
+                        if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+                            (!el->enum_info || el->enum_info->is_payload_enum)) {
                             xa_freestanding_report_unavailable(
                                 ctx, node, "enum.toString",
-                                "enum string materialization needs hosted string helpers; use "
-                                "ordinal or match in freestanding code");
+                                "payload enum string materialization still needs hosted string "
+                                "helpers; use ordinal or typed match in freestanding code");
                             return xr_type_new_unknown(NULL);
                         }
                         XrType *ret = xr_type_new_string(NULL);
