@@ -1108,8 +1108,11 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
 
 static bool xaot_bundle_add_interface_use_plan_row(XaotBundle *bundle, XgInterfaceId interface_id,
                                                    XgClassId implementor_class_id,
-                                                   XgCallsiteId use_site_id, uint32_t reason,
-                                                   uint32_t flags) {
+                                                   XgCallsiteId use_site_id,
+                                                   XgInterfaceObjectUseId object_use_id,
+                                                   XgFuncId owner_func_id, uint32_t source_span_id,
+                                                   uint32_t body_ordinal, uint32_t type_key,
+                                                   uint32_t reason, uint32_t flags) {
     XaotInterfaceUsePlan *plan;
     if (!bundle || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID || reason == 0)
         return false;
@@ -1117,7 +1120,7 @@ static bool xaot_bundle_add_interface_use_plan_row(XaotBundle *bundle, XgInterfa
         plan = &bundle->interface_use_plans[i];
         if (plan->interface_id == interface_id &&
             plan->implementor_class_id == implementor_class_id &&
-            plan->use_site_id == use_site_id) {
+            plan->use_site_id == use_site_id && plan->object_use_id == object_use_id) {
             plan->reason |= reason;
             plan->flags |= flags;
             return true;
@@ -1131,6 +1134,11 @@ static bool xaot_bundle_add_interface_use_plan_row(XaotBundle *bundle, XgInterfa
     plan->interface_id = interface_id;
     plan->implementor_class_id = implementor_class_id;
     plan->use_site_id = use_site_id;
+    plan->object_use_id = object_use_id;
+    plan->owner_func_id = owner_func_id;
+    plan->source_span_id = source_span_id;
+    plan->body_ordinal = body_ordinal;
+    plan->type_key = type_key;
     plan->reason = reason;
     plan->flags = flags;
     return true;
@@ -1140,9 +1148,9 @@ static bool xaot_bundle_add_interface_use_plan(XaotBundle *bundle,
                                                const XgInterfaceImplSummary *impl) {
     if (!bundle || !impl)
         return false;
-    return xaot_bundle_add_interface_use_plan_row(bundle, impl->interface_id,
-                                                  impl->implementor_class_id, XG_NO_ID,
-                                                  XAOT_INTERFACE_USE_REASON_IMPLEMENTS, 0);
+    return xaot_bundle_add_interface_use_plan_row(
+        bundle, impl->interface_id, impl->implementor_class_id, XG_NO_ID, XG_NO_ID, XG_NO_ID, 0, 0,
+        0, XAOT_INTERFACE_USE_REASON_IMPLEMENTS, 0);
 }
 
 static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
@@ -1155,9 +1163,10 @@ static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
         flags |= XAOT_INTERFACE_USE_NEEDS_ITABLE;
     if (!bundle || !call || call->kind != XG_CALL_INTERFACE)
         return false;
-    return xaot_bundle_add_interface_use_plan_row(bundle, call->receiver_static_interface_id,
-                                                  implementor_class_id, call->callsite_id,
-                                                  XAOT_INTERFACE_USE_REASON_VALUE, flags);
+    return xaot_bundle_add_interface_use_plan_row(
+        bundle, call->receiver_static_interface_id, implementor_class_id, call->callsite_id,
+        XG_NO_ID, call->owner_func_id, call->source_span_id, call->body_ordinal,
+        call->arg_type_key_start, XAOT_INTERFACE_USE_REASON_VALUE, flags);
 }
 
 static uint32_t xaot_interface_use_reason_from_object_use(uint32_t reason) {
@@ -1197,7 +1206,9 @@ static bool xaot_bundle_add_interface_object_use_plan(XaotBundle *bundle,
                                                              impl->implementor_class_id, i))
             continue;
         if (!xaot_bundle_add_interface_use_plan_row(
-                bundle, use->interface_id, impl->implementor_class_id, XG_NO_ID, reason, flags))
+                bundle, use->interface_id, impl->implementor_class_id, XG_NO_ID, use->use_id,
+                use->owner_func_id, use->source_span_id, use->body_ordinal, use->type_key, reason,
+                flags))
             return false;
     }
     return true;
@@ -4219,7 +4230,8 @@ xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId inte
     for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
         const XaotInterfaceUsePlan *plan = &bundle->interface_use_plans[i];
         if (plan->interface_id == interface_id &&
-            plan->implementor_class_id == implementor_class_id && plan->use_site_id == use_site_id)
+            plan->implementor_class_id == implementor_class_id &&
+            plan->use_site_id == use_site_id && plan->object_use_id == XG_NO_ID)
             return plan;
     }
     return NULL;
@@ -7046,6 +7058,10 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         print_interface_reason_bits(out, ip->reason);
         fprintf(out, " flags=");
         print_interface_flag_bits(out, ip->flags);
+        if (ip->object_use_id != XG_NO_ID) {
+            fprintf(out, " object_use=%u owner=%u span=%u ordinal=%u type=%u", ip->object_use_id,
+                    ip->owner_func_id, ip->source_span_id, ip->body_ordinal, ip->type_key);
+        }
         fprintf(out, "\n");
     }
 

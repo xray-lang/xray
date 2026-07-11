@@ -580,6 +580,11 @@ typedef struct XaotInterfaceUsePlan {
     XgInterfaceId interface_id;
     XgClassId implementor_class_id;
     XgCallsiteId use_site_id;
+    XgInterfaceObjectUseId object_use_id;
+    XgFuncId owner_func_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint32_t type_key;
     uint32_t reason;
     uint32_t flags;
 } XaotInterfaceUsePlan;
