@@ -1681,16 +1681,6 @@ static void capture_scan_function_params(XgCaptureScan *scan, const FunctionDecl
     }
 }
 
-static void capture_scan_parallel_locals(XgCaptureScan *scan, const XrParallelLocalBinding *locals,
-                                         int local_count) {
-    if (!scan || !locals)
-        return;
-    for (int i = 0; i < local_count; i++)
-        capture_scan_node(scan, locals[i].source);
-    for (int i = 0; i < local_count; i++)
-        (void) capture_push_local(scan, locals[i].name, locals[i].symbol_id);
-}
-
 static void capture_scan_node_list(XgCaptureScan *scan, AstNode *const *nodes, int count) {
     if (!scan || !nodes)
         return;
@@ -1906,54 +1896,6 @@ static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
             break;
         case AST_UNSAFE_EXPR:
             capture_scan_node(scan, node->as.unsafe_expr.operand);
-            break;
-        case AST_PARALLEL_FOR_STMT:
-            base_locals = scan->nlocals;
-            capture_scan_parallel_locals(scan, node->as.parallel_for_stmt.locals,
-                                         node->as.parallel_for_stmt.local_count);
-            capture_scan_node(scan, node->as.parallel_for_stmt.range);
-            capture_scan_node(scan, node->as.parallel_for_stmt.worker_count);
-            (void) capture_push_local(scan, node->as.parallel_for_stmt.item_name,
-                                      node->as.parallel_for_stmt.item_symbol_id);
-            (void) capture_push_local(scan, node->as.parallel_for_stmt.end_name,
-                                      node->as.parallel_for_stmt.end_symbol_id);
-            (void) capture_push_local(scan, node->as.parallel_for_stmt.worker_name,
-                                      node->as.parallel_for_stmt.worker_symbol_id);
-            capture_scan_node(scan, node->as.parallel_for_stmt.final_body);
-            capture_scan_node(scan, node->as.parallel_for_stmt.body);
-            scan->nlocals = base_locals;
-            break;
-        case AST_PARALLEL_REDUCE_EXPR:
-            base_locals = scan->nlocals;
-            capture_scan_parallel_locals(scan, node->as.parallel_reduce_expr.locals,
-                                         node->as.parallel_reduce_expr.local_count);
-            capture_scan_node(scan, node->as.parallel_reduce_expr.range);
-            capture_scan_node(scan, node->as.parallel_reduce_expr.worker_count);
-            capture_scan_node(scan, node->as.parallel_reduce_expr.initial);
-            capture_scan_node(scan, node->as.parallel_reduce_expr.combine);
-            (void) capture_push_local(scan, node->as.parallel_reduce_expr.item_name,
-                                      node->as.parallel_reduce_expr.item_symbol_id);
-            (void) capture_push_local(scan, node->as.parallel_reduce_expr.end_name,
-                                      node->as.parallel_reduce_expr.end_symbol_id);
-            (void) capture_push_local(scan, node->as.parallel_reduce_expr.worker_name,
-                                      node->as.parallel_reduce_expr.worker_symbol_id);
-            capture_scan_node(scan, node->as.parallel_reduce_expr.body);
-            scan->nlocals = base_locals;
-            break;
-        case AST_PARALLEL_COLLECT_EXPR:
-            base_locals = scan->nlocals;
-            capture_scan_parallel_locals(scan, node->as.parallel_collect_expr.locals,
-                                         node->as.parallel_collect_expr.local_count);
-            capture_scan_node(scan, node->as.parallel_collect_expr.range);
-            capture_scan_node(scan, node->as.parallel_collect_expr.worker_count);
-            capture_scan_node(scan, node->as.parallel_collect_expr.into);
-            (void) capture_push_local(scan, node->as.parallel_collect_expr.item_name,
-                                      node->as.parallel_collect_expr.item_symbol_id);
-            (void) capture_push_local(scan, node->as.parallel_collect_expr.worker_name,
-                                      node->as.parallel_collect_expr.worker_symbol_id);
-            capture_scan_node(scan, node->as.parallel_collect_expr.final_body);
-            capture_scan_node(scan, node->as.parallel_collect_expr.body);
-            scan->nlocals = base_locals;
             break;
         case AST_IF_STMT:
             capture_scan_node(scan, node->as.if_stmt.condition);
@@ -2468,6 +2410,31 @@ static uint32_t body_unknown_arg_type_key(const AstNode *expr) {
     return hash_folded32(h);
 }
 
+static const XgPendingBody *producer_find_function_body(const XgProducer *p, XgFuncId func_id) {
+    if (!p || func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < p->nbodies; i++) {
+        const XgPendingBody *body = &p->bodies[i];
+        if (body->func_id == func_id && body->function)
+            return body;
+    }
+    return NULL;
+}
+
+static const XrTypeRef *body_call_return_type_ref(XgBodyCollect *bc, const CallExprNode *call) {
+    const AstNode *callee;
+    XgFuncNameRow *target;
+    const XgPendingBody *body;
+    if (!bc || !call || !call->callee)
+        return NULL;
+    callee = call->callee;
+    if (callee->type != AST_VARIABLE || !callee->as.variable.name)
+        return NULL;
+    target = producer_lookup_func_row(bc->producer, callee->as.variable.name);
+    body = producer_find_function_body(bc->producer, target ? target->func_id : XG_NO_ID);
+    return body && body->function ? body->function->return_type : NULL;
+}
+
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
     if (!bc || !expr)
         return 0;
@@ -2525,6 +2492,11 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
                     member->object->type == AST_VARIABLE && member->object->as.variable.name &&
                     strcmp(member->object->as.variable.name, "Json") == 0)
                     return hash_tref32(call->type_args[0]);
+            }
+            {
+                const XrTypeRef *return_type = body_call_return_type_ref(bc, call);
+                if (return_type)
+                    return hash_tref32(return_type);
             }
             break;
         }
@@ -4607,6 +4579,45 @@ static void body_bind_map_shape_local_for_type_ref(XgBodyCollect *bc, const char
         key_type_key, stored_value_type_key);
 }
 
+static bool body_expr_static_map_parts(XgBodyCollect *bc, const AstNode *expr,
+                                       uint8_t *out_container_kind, uint32_t *out_key_type_key,
+                                       uint32_t *out_value_type_key) {
+    if (out_container_kind)
+        *out_container_kind = 0;
+    if (out_key_type_key)
+        *out_key_type_key = 0;
+    if (out_value_type_key)
+        *out_value_type_key = 0;
+    if (!bc || !expr)
+        return false;
+    switch (expr->type) {
+        case AST_GROUPING:
+            return body_expr_static_map_parts(bc, expr->as.grouping, out_container_kind,
+                                              out_key_type_key, out_value_type_key);
+        case AST_COMPTIME_EXPR:
+            return body_expr_static_map_parts(bc, expr->as.comptime_expr.expr, out_container_kind,
+                                              out_key_type_key, out_value_type_key);
+        case AST_MOVE_EXPR:
+            return body_expr_static_map_parts(bc, expr->as.move_expr.expr, out_container_kind,
+                                              out_key_type_key, out_value_type_key);
+        case AST_UNSAFE_EXPR:
+            return body_expr_static_map_parts(bc, expr->as.unsafe_expr.operand, out_container_kind,
+                                              out_key_type_key, out_value_type_key);
+        case AST_FORCE_UNWRAP:
+            return body_expr_static_map_parts(bc, expr->as.unary.operand, out_container_kind,
+                                              out_key_type_key, out_value_type_key);
+        case AST_AS_EXPR:
+            return body_type_ref_map_parts(expr->as.as_expr.type, out_container_kind,
+                                           out_key_type_key, out_value_type_key);
+        case AST_CALL_EXPR:
+            return body_type_ref_map_parts(body_call_return_type_ref(bc, &expr->as.call_expr),
+                                           out_container_kind, out_key_type_key,
+                                           out_value_type_key);
+        default:
+            return false;
+    }
+}
+
 static bool body_lookup_map_receiver_shape(XgBodyCollect *bc, const AstNode *expr,
                                            uint32_t source_span_id, XgLocalType *out) {
     const AstNode *unwrapped;
@@ -4623,6 +4634,19 @@ static bool body_lookup_map_receiver_shape(XgBodyCollect *bc, const AstNode *exp
     local = body_lookup_local_map_shape(bc, expr);
     if (local) {
         *out = *local;
+        return true;
+    }
+    if (body_expr_static_map_parts(bc, expr, &container_kind, &key_type_key, &value_type_key)) {
+        shape_id = body_add_map_shape_for_static_type(bc, container_kind, key_type_key,
+                                                      value_type_key, source_span_id);
+        if (shape_id == XG_NO_ID)
+            return false;
+        out->map_shape_id = shape_id;
+        out->map_container_kind = container_kind;
+        out->map_key_type_key = key_type_key;
+        out->map_value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
+        out->map_receiver_type_key =
+            body_map_receiver_type_key(container_kind, key_type_key, out->map_value_type_key);
         return true;
     }
     unwrapped = body_map_receiver_unwrap(expr);
@@ -5868,81 +5892,6 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_UNSAFE_EXPR:
             walk_body_for_calls(bc, node->as.unsafe_expr.operand);
             break;
-        case AST_PARALLEL_FOR_STMT: {
-            uint32_t base_locals = bc->nlocals;
-            uint32_t base_name_locals = bc->nname_locals;
-            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
-            bc->escape_bits |= XG_BODY_ESCAPE_CORO;
-            bc->capability_bits |= XG_CAP_COROUTINE;
-            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++) {
-                walk_body_for_calls(bc, node->as.parallel_for_stmt.locals[i].source);
-                (void) body_push_name_local(bc, node->as.parallel_for_stmt.locals[i].name,
-                                            node->as.parallel_for_stmt.locals[i].symbol_id);
-            }
-            walk_body_for_calls(bc, node->as.parallel_for_stmt.range);
-            walk_body_for_calls(bc, node->as.parallel_for_stmt.worker_count);
-            (void) body_push_name_local(bc, node->as.parallel_for_stmt.item_name,
-                                        node->as.parallel_for_stmt.item_symbol_id);
-            (void) body_push_name_local(bc, node->as.parallel_for_stmt.end_name,
-                                        node->as.parallel_for_stmt.end_symbol_id);
-            (void) body_push_name_local(bc, node->as.parallel_for_stmt.worker_name,
-                                        node->as.parallel_for_stmt.worker_symbol_id);
-            walk_body_for_calls(bc, node->as.parallel_for_stmt.final_body);
-            walk_body_for_calls(bc, node->as.parallel_for_stmt.body);
-            bc->nlocals = base_locals;
-            bc->nname_locals = base_name_locals;
-            break;
-        }
-        case AST_PARALLEL_REDUCE_EXPR: {
-            uint32_t base_locals = bc->nlocals;
-            uint32_t base_name_locals = bc->nname_locals;
-            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
-            bc->escape_bits |= XG_BODY_ESCAPE_CORO;
-            bc->capability_bits |= XG_CAP_COROUTINE;
-            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++) {
-                walk_body_for_calls(bc, node->as.parallel_reduce_expr.locals[i].source);
-                (void) body_push_name_local(bc, node->as.parallel_reduce_expr.locals[i].name,
-                                            node->as.parallel_reduce_expr.locals[i].symbol_id);
-            }
-            walk_body_for_calls(bc, node->as.parallel_reduce_expr.range);
-            walk_body_for_calls(bc, node->as.parallel_reduce_expr.worker_count);
-            walk_body_for_calls(bc, node->as.parallel_reduce_expr.initial);
-            walk_body_for_calls(bc, node->as.parallel_reduce_expr.combine);
-            (void) body_push_name_local(bc, node->as.parallel_reduce_expr.item_name,
-                                        node->as.parallel_reduce_expr.item_symbol_id);
-            (void) body_push_name_local(bc, node->as.parallel_reduce_expr.end_name,
-                                        node->as.parallel_reduce_expr.end_symbol_id);
-            (void) body_push_name_local(bc, node->as.parallel_reduce_expr.worker_name,
-                                        node->as.parallel_reduce_expr.worker_symbol_id);
-            walk_body_for_calls(bc, node->as.parallel_reduce_expr.body);
-            bc->nlocals = base_locals;
-            bc->nname_locals = base_name_locals;
-            break;
-        }
-        case AST_PARALLEL_COLLECT_EXPR: {
-            uint32_t base_locals = bc->nlocals;
-            uint32_t base_name_locals = bc->nname_locals;
-            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
-            bc->escape_bits |= XG_BODY_ESCAPE_CORO | XG_BODY_ESCAPE_CONTAINER;
-            bc->capability_bits |= XG_CAP_COROUTINE;
-            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++) {
-                walk_body_for_calls(bc, node->as.parallel_collect_expr.locals[i].source);
-                (void) body_push_name_local(bc, node->as.parallel_collect_expr.locals[i].name,
-                                            node->as.parallel_collect_expr.locals[i].symbol_id);
-            }
-            walk_body_for_calls(bc, node->as.parallel_collect_expr.range);
-            walk_body_for_calls(bc, node->as.parallel_collect_expr.worker_count);
-            walk_body_for_calls(bc, node->as.parallel_collect_expr.into);
-            (void) body_push_name_local(bc, node->as.parallel_collect_expr.item_name,
-                                        node->as.parallel_collect_expr.item_symbol_id);
-            (void) body_push_name_local(bc, node->as.parallel_collect_expr.worker_name,
-                                        node->as.parallel_collect_expr.worker_symbol_id);
-            walk_body_for_calls(bc, node->as.parallel_collect_expr.final_body);
-            walk_body_for_calls(bc, node->as.parallel_collect_expr.body);
-            bc->nlocals = base_locals;
-            bc->nname_locals = base_name_locals;
-            break;
-        }
         case AST_COMPOUND_ASSIGNMENT:
             walk_body_for_calls(bc, node->as.compound_assignment.object);
             walk_body_for_calls(bc, node->as.compound_assignment.value);

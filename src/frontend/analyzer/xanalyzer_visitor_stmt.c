@@ -1399,15 +1399,6 @@ static void xa_thread_lint_note_destructure_aliases(XaThreadHandleLintState *sta
     }
 }
 
-static void xa_thread_lint_scan_parallel_locals(XaThreadHandleLintState *states,
-                                                XrParallelLocalBinding *locals, int count,
-                                                bool can_escape) {
-    if (!locals || count <= 0)
-        return;
-    for (int i = 0; i < count; i++)
-        xa_thread_lint_scan_expr(states, locals[i].source, false, can_escape);
-}
-
 static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *states, AstNode *expr,
                                                     bool can_escape) {
     expr = xa_thread_lint_unwrap_expr(expr);
@@ -1737,34 +1728,6 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             return;
         case AST_CHANNEL_NEW:
             xa_thread_lint_scan_expr(states, expr->as.channel_new.buffer_size, false, can_escape);
-            return;
-        case AST_PARALLEL_REDUCE_EXPR:
-            xa_thread_lint_scan_parallel_locals(states, expr->as.parallel_reduce_expr.locals,
-                                                expr->as.parallel_reduce_expr.local_count,
-                                                can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false, false);
-            return;
-        case AST_PARALLEL_COLLECT_EXPR:
-            xa_thread_lint_scan_parallel_locals(states, expr->as.parallel_collect_expr.locals,
-                                                expr->as.parallel_collect_expr.local_count,
-                                                can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.into, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body, false,
-                                     false);
             return;
         case AST_MATCH_EXPR:
             xa_thread_lint_scan_match_expr(states, expr, can_escape);
@@ -2406,13 +2369,6 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_stmt(states, stmt->as.for_in_stmt.body, false);
             if (can_escape)
                 xa_thread_lint_mark_nonempty_for_in_finalizer_loop(states, stmt);
-            return;
-        case AST_PARALLEL_FOR_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.range, false, can_escape);
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.worker_count, false,
-                                     can_escape);
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.body, false, false);
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.final_body, false, false);
             return;
         case AST_BLOCK:
         case AST_PROGRAM:
@@ -3672,15 +3628,6 @@ static void xa_os_resource_lint_scan_expr_array(XaOsResourceLintState *states, A
         xa_os_resource_lint_scan_expr(states, nodes[i], return_value, can_escape);
 }
 
-static void xa_os_resource_lint_scan_parallel_locals(XaOsResourceLintState *states,
-                                                     XrParallelLocalBinding *locals, int count,
-                                                     bool can_escape) {
-    if (!locals || count <= 0)
-        return;
-    for (int i = 0; i < count; i++)
-        xa_os_resource_lint_scan_expr(states, locals[i].source, false, can_escape);
-}
-
 static XaOsResourceLintState *xa_os_resource_lint_find_alias_source(XaOsResourceLintState *states,
                                                                     AstNode *expr) {
     expr = xa_thread_lint_unwrap_expr(expr);
@@ -4583,35 +4530,6 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_expr(states, expr->as.channel_new.buffer_size, false,
                                           can_escape);
             return;
-        case AST_PARALLEL_REDUCE_EXPR:
-            xa_os_resource_lint_scan_parallel_locals(states, expr->as.parallel_reduce_expr.locals,
-                                                     expr->as.parallel_reduce_expr.local_count,
-                                                     can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false, false);
-            return;
-        case AST_PARALLEL_COLLECT_EXPR:
-            xa_os_resource_lint_scan_parallel_locals(states, expr->as.parallel_collect_expr.locals,
-                                                     expr->as.parallel_collect_expr.local_count,
-                                                     can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count,
-                                          false, can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.into, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false,
-                                          false);
-            xa_os_resource_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body, false,
-                                          false);
-            return;
         case AST_NEW_EXPR:
             xa_os_resource_lint_scan_expr_array(states, expr->as.new_expr.arguments,
                                                 expr->as.new_expr.arg_count, false, can_escape);
@@ -5106,15 +5024,6 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_stmt(states, stmt->as.for_in_stmt.body, false);
             if (can_escape)
                 xa_os_resource_lint_mark_nonempty_for_in_finalizer_loop(states, stmt);
-            return;
-        case AST_PARALLEL_FOR_STMT:
-            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.range, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.worker_count, false,
-                                          can_escape);
-            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.body, false, false);
-            xa_os_resource_lint_scan_expr(states, stmt->as.parallel_for_stmt.final_body, false,
-                                          false);
             return;
         case AST_BLOCK:
         case AST_PROGRAM:
@@ -6193,17 +6102,6 @@ static bool xa_node_array_uses_symbol_name(AstNode **nodes, int count, const cha
     return false;
 }
 
-static bool xa_parallel_locals_use_symbol_name(XrParallelLocalBinding *locals, int count,
-                                               const char *name) {
-    if (!locals || count <= 0 || !name)
-        return false;
-    for (int i = 0; i < count; i++) {
-        if (xa_node_uses_symbol_name(locals[i].source, name))
-            return true;
-    }
-    return false;
-}
-
 static bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int start_index) {
     if (!node || !name)
         return false;
@@ -6309,15 +6207,6 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
         case AST_FOR_IN_STMT:
             return xa_node_uses_symbol_name(node->as.for_in_stmt.collection, name) ||
                    xa_node_uses_symbol_name(node->as.for_in_stmt.body, name);
-        case AST_PARALLEL_FOR_STMT:
-            return xa_parallel_locals_use_symbol_name(node->as.parallel_for_stmt.locals,
-                                                      node->as.parallel_for_stmt.local_count,
-                                                      name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.range, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.worker_count, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.body, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.final_body, name);
-
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
             return xa_node_uses_symbol_name(node->as.function_decl.body, name);
@@ -6325,24 +6214,6 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
             return xa_node_uses_symbol_name(node->as.call_expr.callee, name) ||
                    xa_node_array_uses_symbol_name(node->as.call_expr.arguments,
                                                   node->as.call_expr.arg_count, name);
-        case AST_PARALLEL_REDUCE_EXPR:
-            return xa_parallel_locals_use_symbol_name(node->as.parallel_reduce_expr.locals,
-                                                      node->as.parallel_reduce_expr.local_count,
-                                                      name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.range, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.worker_count, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.initial, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.combine, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.body, name);
-        case AST_PARALLEL_COLLECT_EXPR:
-            return xa_parallel_locals_use_symbol_name(node->as.parallel_collect_expr.locals,
-                                                      node->as.parallel_collect_expr.local_count,
-                                                      name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.range, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.worker_count, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.into, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.body, name) ||
-                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.final_body, name);
         case AST_RETURN_STMT:
             return xa_node_array_uses_symbol_name(node->as.return_stmt.values,
                                                   node->as.return_stmt.value_count, name);
