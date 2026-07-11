@@ -1243,7 +1243,7 @@ fn _requestWireHeaders(headers: Json) -> Json {
         }
     }
     out["Accept-Encoding"] = "identity"
-    return out
+    return Json.encode(out)
 }
 
 fn _headersLocation(headers: Json) -> string? {
