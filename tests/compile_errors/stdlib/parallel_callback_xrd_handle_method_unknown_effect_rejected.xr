@@ -1,0 +1,7 @@
+import parallel
+import parallel_unknown_effect_native
+
+parallel.forEach(0..4, (i) -> {
+    var value = parallel_unknown_effect_native.makeBox().nativeMethod()
+    print(value + i)
+}, parallel.Options(2))

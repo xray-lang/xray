@@ -742,6 +742,45 @@ static const char *xa_parallel_module_member_unknown_effect_feature(XaInferConte
                                                    feature_buf_size);
 }
 
+static bool xa_parallel_handle_method_exists(const XaBuiltinHandle *handle,
+                                             const char *method_name) {
+    if (!handle || !method_name)
+        return false;
+    for (int i = 0; i < handle->method_count; i++) {
+        const XaBuiltinMember *method = &handle->methods[i];
+        if (method->is_method && method->name && strcmp(method->name, method_name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static const char *xa_parallel_handle_method_unknown_effect_feature(XaInferContext *ctx,
+                                                                    AstNode *callee,
+                                                                    char *feature_buf,
+                                                                    size_t feature_buf_size) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS || !feature_buf ||
+        feature_buf_size == 0)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return NULL;
+    XrType *receiver_type = xa_parallel_node_type(ctx, ma->object);
+    const char *handle_name = receiver_type && XR_TYPE_IS_INSTANCE(receiver_type)
+                                  ? receiver_type->instance.class_name
+                                  : NULL;
+    if (!handle_name)
+        return NULL;
+    const XaBuiltinHandle *handle = xa_builtin_find_handle_by_name(handle_name);
+    if (!xa_parallel_handle_method_exists(handle, ma->name))
+        return NULL;
+    const char *module_name = xa_builtin_find_handle_module(handle_name);
+    if (module_name && xa_parallel_module_has_effect_summary(module_name))
+        return NULL;
+    snprintf(feature_buf, feature_buf_size, "call to unknown-effect method '%s.%s'", handle_name,
+             ma->name);
+    return feature_buf;
+}
+
 static const char *xa_parallel_stdlib_suspend_call_feature(XaParallelCallbackEffectScan *scan,
                                                            CallExprNode *call) {
     if (!scan || !call || !call->callee)
@@ -766,6 +805,10 @@ static const char *xa_parallel_unknown_effect_call_feature(XaParallelCallbackEff
     XaInferContext *ctx = scan->ctx;
     const char *feature = xa_parallel_module_member_unknown_effect_feature(
         ctx, call->callee, scan->feature_buf, sizeof(scan->feature_buf));
+    if (feature)
+        return feature;
+    feature = xa_parallel_handle_method_unknown_effect_feature(ctx, call->callee, scan->feature_buf,
+                                                               sizeof(scan->feature_buf));
     if (feature)
         return feature;
     if (call->callee->type == AST_VARIABLE) {
