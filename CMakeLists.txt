@@ -1265,6 +1265,14 @@ if(BUILD_TESTS)
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
 
+    add_executable(xray_package_payload_fixture
+        tests/benchmarks/compiler/global_evidence_cache/package_payload_fixture.c
+    )
+    target_include_directories(xray_package_payload_fixture PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+    )
+    target_link_libraries(xray_package_payload_fixture PRIVATE xray_core)
+
     add_executable(bytecode_embed_runner
         tests/vm/bytecode_embed_runner.c
     )
@@ -1519,6 +1527,21 @@ if(BUILD_TESTS)
         LABELS "aot;cache;smoke"
         PROCESSORS ${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
         SKIP_RETURN_CODE 77
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME global_evidence_cache_package_benchmark
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_GLOBAL_EVIDENCE_BENCH_CASES=package
+                XRAY_PACKAGE_PAYLOAD_FIXTURE=$<TARGET_FILE:xray_package_payload_fixture>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/compiler/global_evidence_cache/run_benchmark.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(global_evidence_cache_package_benchmark PROPERTIES
+        LABELS "aot;cache;benchmark"
+        PROCESSORS 2
         TIMEOUT 120
     )
 
