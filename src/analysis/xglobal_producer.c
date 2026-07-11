@@ -5514,6 +5514,44 @@ static uint32_t static_data_bits_for_comptime_expr(const AstNode *expr) {
 
 static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *function);
 
+static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const XgClassSummary *receiver;
+    uint32_t class_name;
+    uint32_t method_name;
+    int argc;
+    if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
+        callee->type != AST_MEMBER_ACCESS)
+        return false;
+    receiver =
+        body_find_class_summary(bc, body_resolve_expr_class(bc, callee->as.member_access.object));
+    if (!receiver || !callee->as.member_access.name)
+        return false;
+    class_name = receiver->name_id;
+    method_name = hash_name32(callee->as.member_access.name);
+    argc = call->as.call_expr.arg_count;
+    if (class_name == hash_name32("Channel"))
+        return (method_name == hash_name32("send") && argc == 1) ||
+               (method_name == hash_name32("sendTimeout") && argc == 2) ||
+               (method_name == hash_name32("recv") && argc == 0) ||
+               (method_name == hash_name32("recvOr") && argc == 1) ||
+               (method_name == hash_name32("recvTimeout") && argc == 1);
+    if (class_name == hash_name32("Task"))
+        return (method_name == hash_name32("awaitResult") && argc == 0) ||
+               (method_name == hash_name32("awaitTimeout") && argc == 1);
+    if (class_name == hash_name32("WorkQueue"))
+        return method_name == hash_name32("pop") && (argc == 0 || argc == 1);
+    if (class_name == hash_name32("ResultGroup"))
+        return method_name == hash_name32("recv") && argc == 0;
+    if (class_name == hash_name32("CountdownLatch"))
+        return method_name == hash_name32("wait") && argc == 0;
+    if (class_name == hash_name32("Semaphore"))
+        return method_name == hash_name32("acquire") && argc == 0;
+    if (class_name == hash_name32("EventCount"))
+        return method_name == hash_name32("wait") && (argc == 1 || argc == 2);
+    return false;
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -5541,6 +5579,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR:
+            if (body_builtin_method_call_may_suspend(bc, node)) {
+                bc->effect_bits |= XG_BODY_MAY_SUSPEND;
+                bc->capability_bits |= XG_CAP_COROUTINE;
+            }
             body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);
             body_add_sequence_method_evidence(bc, node);

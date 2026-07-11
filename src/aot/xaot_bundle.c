@@ -3634,9 +3634,13 @@ static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalE
     for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];
         uint32_t body_count = 0;
-        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
-            if ((evidence->bodies[bi].capability_bits & cap) != 0)
-                body_count++;
+        if (bundle->entry_plan.entry_func_id != XG_NO_ID) {
+            body_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
+        } else {
+            for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+                if ((evidence->bodies[bi].capability_bits & cap) != 0)
+                    body_count++;
+            }
         }
         if (!xaot_bundle_add_capability_plan(bundle, cap, body_count, 0))
             return false;

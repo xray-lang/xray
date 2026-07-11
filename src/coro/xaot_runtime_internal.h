@@ -19,6 +19,7 @@ struct XrAotRuntime {
     uint32_t caps;
     struct XrRuntimeCore *core;
     struct XrRuntime *scheduler;
+    struct XrScopeContext *root_scope;
     XrValue builtins[XR_USER_GLOBALS_START];
 };
 

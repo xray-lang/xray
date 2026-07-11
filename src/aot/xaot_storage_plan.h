@@ -18,6 +18,7 @@
 
 struct XaotBundle;
 struct XiFunc;
+struct XiModule;
 
 typedef enum XaotMaterializationKind {
     XAOT_MATERIALIZE_INLINE = 0,
@@ -89,6 +90,8 @@ typedef struct XaotCapturePlan {
 XR_FUNC bool xaot_storage_capture_plans_build(struct XaotBundle *bundle);
 XR_FUNC bool xaot_storage_capture_plans_verify(const struct XaotBundle *bundle, char *errbuf,
                                                size_t errbuf_len);
+XR_FUNC const XaotStoragePlan *xaot_storage_plan_find(const struct XaotBundle *bundle,
+                                                      const struct XiModule *module, uint32_t slot);
 XR_FUNC const char *xaot_materialization_kind_name(uint8_t value);
 XR_FUNC const char *xaot_capture_action_name(uint8_t value);
 

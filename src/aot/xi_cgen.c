@@ -3850,6 +3850,15 @@ static bool cg_import_ref_value_is_dead_for_aot(XiCgenCtx *ctx, const XiFunc *ow
     return !cg_import_ref_value_use_requires_runtime_value(ctx, owner, v, 0);
 }
 
+static bool cg_aot_frame_new_can_supply_cl_arg(const XiFunc *current, const XiValue *callee,
+                                               const XiFunc *target);
+static bool cg_func_needs_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f);
+static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                         const XiValue *callee, const XiFunc *target,
+                                         bool typed_params, XiValue *const *args,
+                                         uint16_t arg_start, uint16_t nargs,
+                                         const XiValue *transfer_owner);
+
 #include "xi_cgen_dispatch_helpers.inc.c"
 
 static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char *name,
@@ -5170,6 +5179,11 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix) {
     XR_DCHECK(ctx != NULL, "emit_value_rhs: NULL ctx");
     XR_DCHECK(v != NULL, "emit_value_rhs: NULL value");
+
+    if (v->op == XI_GO) {
+        xicgen_go(ctx, out, f, v, prefix);
+        return;
+    }
 
     if (xi_op_is_coroutine(v->op)) {
         const char *op_name = xi_op_name(v->op);
