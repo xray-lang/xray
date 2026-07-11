@@ -11818,6 +11818,11 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     XiFunc init_func;
     XiFunc child;
     XiFunc *children[1];
+    XiBlock init_block;
+    XiBlock *init_blocks[1];
+    XiValue static_addr;
+    XiValue *init_values[1];
+    XrType ptr_type = {.kind = XR_KIND_POINTER, .ptr_is_mut = false};
     XiModule module;
     XiModule *modules[1];
     uint8_t slot_consts[2] = {1, 0};
@@ -11837,6 +11842,8 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     memset(&init_func, 0, sizeof(init_func));
     memset(&child, 0, sizeof(child));
     memset(&module, 0, sizeof(module));
+    memset(&init_block, 0, sizeof(init_block));
+    memset(&static_addr, 0, sizeof(static_addr));
     memset(constants, 0, sizeof(constants));
     memset(shared, 0, sizeof(shared));
 
@@ -11856,6 +11863,16 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     init_func.slot_owned_names = slot_names;
     init_func.children = children;
     init_func.nchildren = 1;
+    static_addr.id = 7;
+    static_addr.op = XI_STATIC_ADDR;
+    static_addr.type = &ptr_type;
+    static_addr.aux_int = 0;
+    init_values[0] = &static_addr;
+    init_block.values = init_values;
+    init_block.nvalues = 1;
+    init_blocks[0] = &init_block;
+    init_func.blocks = init_blocks;
+    init_func.nblocks = 1;
     constants[0].kind = XI_CONST_LITERAL_INT;
     constants[0].int_value = 42;
     shared[1].kind = XI_CONST_LITERAL_INT;
@@ -11875,10 +11892,12 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     const XaotStoragePlan *shared_state = xaot_storage_plan_find(&bundle, &module, 1);
     const XaotCapturePlan *module_capture = xaot_capture_plan_find(&bundle, &child, 0);
     const XaotCapturePlan *shared_capture = xaot_capture_plan_find(&bundle, &child, 1);
+    const XaotAddressPlan *address = xaot_address_plan_find(&bundle, &static_addr);
     ASSERT_NOT_NULL(module_const);
     ASSERT_NOT_NULL(shared_state);
     ASSERT_NOT_NULL(module_capture);
     ASSERT_NOT_NULL(shared_capture);
+    ASSERT_NOT_NULL(address);
     ASSERT_EQ_UINT(module_const->owner, XR_STORAGE_MODULE);
     ASSERT_EQ_UINT(module_const->mutability, XR_STORAGE_READONLY);
     ASSERT_EQ_UINT(module_const->address_identity, XR_ADDRESS_MODULE_STABLE);
@@ -11887,7 +11906,13 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SHARED_STABLE);
     ASSERT_EQ_UINT(module_capture->action, XR_CAPTURE_MODULE_READONLY);
     ASSERT_EQ_UINT(shared_capture->action, XR_CAPTURE_SHARED_REF);
+    ASSERT_EQ_UINT(address->provenance.storage_id, module_const_decl.decl_id);
+    ASSERT_EQ_UINT(address->provenance.owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(address->provenance.origin, XR_POINTER_ORIGIN_MODULE);
+    ASSERT_EQ_UINT(address->provenance.escape, XR_POINTER_ESCAPE_STABLE);
     ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    bundle.address_plans[0].provenance.origin = XR_POINTER_ORIGIN_STACK_BORROW;
+    ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
 }
@@ -11939,6 +11964,64 @@ TEST(global_evidence_producer_records_storage_provenance) {
     ASSERT_EQ_UINT(shared_state->materialization_kind, XR_MATERIALIZE_SHARED_SYSTEM);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
+}
+
+TEST(address_plan_rejects_owner_pointer_escape) {
+    XgBuildKey key = {.source_hash = 0x187,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary entry = {
+        .func_id = 1, .module_id = 1, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x187};
+    XrType ptr_type = {.kind = XR_KIND_POINTER, .ptr_is_mut = false};
+    XrType array_type = {.kind = XR_KIND_ARRAY};
+    XiValue owner;
+    XiValue address;
+    XiValue *address_args[1];
+    XiValue *values[1];
+    XiBlock block;
+    XiBlock *blocks[1];
+    XiFunc init;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
+    memset(&owner, 0, sizeof(owner));
+    memset(&address, 0, sizeof(address));
+    memset(&block, 0, sizeof(block));
+    memset(&init, 0, sizeof(init));
+    memset(&module, 0, sizeof(module));
+    owner.id = 1;
+    owner.type = &array_type;
+    address.id = 2;
+    address.op = XI_ARRAY_DATA_PTR;
+    address.type = &ptr_type;
+    address_args[0] = &owner;
+    address.args = address_args;
+    address.nargs = 1;
+    values[0] = &address;
+    block.kind = XI_BLOCK_RETURN;
+    block.control = &address;
+    block.values = values;
+    block.nvalues = 1;
+    blocks[0] = &block;
+    init.name = "escaping_address";
+    init.xg_body_func_id = entry.func_id;
+    init.blocks = blocks;
+    init.nblocks = 1;
+    module.name = "address";
+    module.path = "address.xr";
+    module.init = &init;
+    modules[0] = &module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_FALSE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
 }
 
 TEST_MAIN_BEGIN()
@@ -12055,4 +12138,5 @@ RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
 RUN_TEST(storage_and_capture_plans_close_owner_actions);
 RUN_TEST(global_evidence_producer_records_storage_provenance);
+RUN_TEST(address_plan_rejects_owner_pointer_escape);
 TEST_MAIN_END()

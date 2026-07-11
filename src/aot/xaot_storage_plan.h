@@ -19,6 +19,7 @@
 struct XaotBundle;
 struct XiFunc;
 struct XiModule;
+struct XiValue;
 
 typedef struct XaotStoragePlan {
     XgDeclId decl_id;
@@ -61,6 +62,21 @@ typedef struct XaotCapturePlan {
     uint32_t evidence;
 } XaotCapturePlan;
 
+enum {
+    XAOT_ADDRESS_EV_STORAGE_PLAN = 1u << 0,
+    XAOT_ADDRESS_EV_POINTER_TYPE = 1u << 1,
+    XAOT_ADDRESS_EV_LIFETIME = 1u << 2,
+    XAOT_ADDRESS_EV_ESCAPE_SCAN = 1u << 3,
+};
+
+typedef struct XaotAddressPlan {
+    const struct XiFunc *func;
+    const struct XiValue *value;
+    const struct XiValue *origin_value;
+    XrAddressProvenance provenance;
+    uint32_t evidence;
+} XaotAddressPlan;
+
 XR_FUNC bool xaot_storage_capture_plans_build(struct XaotBundle *bundle);
 XR_FUNC bool xaot_storage_capture_plans_verify(const struct XaotBundle *bundle, char *errbuf,
                                                size_t errbuf_len);
@@ -68,7 +84,11 @@ XR_FUNC const XaotStoragePlan *xaot_storage_plan_find(const struct XaotBundle *b
                                                       const struct XiModule *module, uint32_t slot);
 XR_FUNC const XaotCapturePlan *xaot_capture_plan_find(const struct XaotBundle *bundle,
                                                       const struct XiFunc *func, uint16_t index);
+XR_FUNC const XaotAddressPlan *xaot_address_plan_find(const struct XaotBundle *bundle,
+                                                      const struct XiValue *value);
 XR_FUNC const char *xaot_materialization_kind_name(uint8_t value);
 XR_FUNC const char *xaot_capture_action_name(uint8_t value);
+XR_FUNC const char *xaot_pointer_origin_name(uint8_t value);
+XR_FUNC const char *xaot_pointer_escape_name(uint8_t value);
 
 #endif /* XAOT_STORAGE_PLAN_H */

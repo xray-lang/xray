@@ -1553,6 +1553,9 @@ typedef struct XaotBundle {
     XaotModuleInitPlan *module_init_plans;
     uint32_t nmodule_init_plans;
     uint32_t module_init_plan_cap;
+    XaotAddressPlan *address_plans;
+    uint32_t naddress_plans;
+    uint32_t address_plan_cap;
     XaotTargetDataLayout target_data_layout;
     XaotFuncPlan *func_plans;
     uint32_t nfunc_plans;

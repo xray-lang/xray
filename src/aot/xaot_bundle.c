@@ -202,6 +202,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->module_init_plans = NULL;
     bundle->nmodule_init_plans = 0;
     bundle->module_init_plan_cap = 0;
+
+    xr_free(bundle->address_plans);
+    bundle->address_plans = NULL;
+    bundle->naddress_plans = 0;
+    bundle->address_plan_cap = 0;
     xr_free(bundle->class_hierarchy_plans);
     bundle->class_hierarchy_plans = NULL;
     bundle->nclass_hierarchy_plans = 0;
@@ -3815,7 +3820,8 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         return false;
     }
     if (!xaot_storage_capture_plans_build(bundle)) {
-        bundle->error_msg = "failed to derive AOT storage/capture plans";
+        if (!bundle->error_msg)
+            bundle->error_msg = "failed to derive AOT storage/capture/address plans";
         return false;
     }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
@@ -7007,6 +7013,18 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 cp->func && cp->func->name ? cp->func->name : "?", cp->capture_index,
                 xr_storage_owner_name((XrStorageOwner) cp->source_owner),
                 xaot_capture_action_name(cp->action), cp->evidence);
+    }
+    for (uint32_t ai = 0; ai < bundle->naddress_plans; ai++) {
+        const XaotAddressPlan *ap = &bundle->address_plans[ai];
+        fprintf(
+            out,
+            "address-plan %u func=%s value=%u storage=%u lifetime=%u owner=%s "
+            "mutability=%u identity=%u origin=%s escape=%s evidence=0x%x\n",
+            ai, ap->func && ap->func->name ? ap->func->name : "?", ap->value ? ap->value->id : 0,
+            ap->provenance.storage_id, ap->provenance.lifetime_id,
+            xr_storage_owner_name((XrStorageOwner) ap->provenance.owner), ap->provenance.mutability,
+            ap->provenance.address_identity, xaot_pointer_origin_name(ap->provenance.origin),
+            xaot_pointer_escape_name(ap->provenance.escape), ap->evidence);
     }
     fprintf(out, "target-data-layout pointer=%u/%u isize=%u/%u usize=%u/%u xr_value=%u/%u\n",
             bundle->target_data_layout.pointer.size, bundle->target_data_layout.pointer.align,

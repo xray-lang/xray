@@ -53,6 +53,35 @@ typedef enum XrCaptureAction {
     XR_CAPTURE_REJECT,
 } XrCaptureAction;
 
+typedef enum XrPointerOrigin {
+    XR_POINTER_ORIGIN_NONE = 0,
+    XR_POINTER_ORIGIN_NULL,
+    XR_POINTER_ORIGIN_STATIC,
+    XR_POINTER_ORIGIN_MODULE,
+    XR_POINTER_ORIGIN_STACK_BORROW,
+    XR_POINTER_ORIGIN_OWNER_BORROW,
+    XR_POINTER_ORIGIN_FOREIGN,
+} XrPointerOrigin;
+
+typedef enum XrPointerEscape {
+    XR_POINTER_ESCAPE_NONE = 0,
+    XR_POINTER_ESCAPE_LEXICAL,
+    XR_POINTER_ESCAPE_CALL_BOUND,
+    XR_POINTER_ESCAPE_STABLE,
+} XrPointerEscape;
+
+/* Canonical address proof carried by verified backend plans.  A pointer type
+ * alone never grants addressability or escape permission. */
+typedef struct XrAddressProvenance {
+    uint32_t storage_id;
+    uint32_t lifetime_id;
+    uint8_t owner;
+    uint8_t mutability;
+    uint8_t address_identity;
+    uint8_t origin;
+    uint8_t escape;
+} XrAddressProvenance;
+
 enum {
     XR_STORAGE_DEEP_READONLY = 1u << 0,
     XR_STORAGE_SHARE_SAFE = 1u << 1,
