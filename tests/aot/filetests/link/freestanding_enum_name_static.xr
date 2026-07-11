@@ -1,0 +1,24 @@
+enum FsState {
+    Ready,
+    Done
+}
+
+@c_export("xray_enum_name_static")
+fn xrayEnumNameStatic(flag: int) -> int {
+    var s = FsState.Ready
+    if (flag != 0) {
+        s = FsState.Done
+    }
+    print(s.name)
+    return s.ordinal
+}
+
+@c_export("xray_prelude_enum_name_static")
+fn xrayPreludeEnumNameStatic(flag: int) -> int {
+    var e = Endian.LE
+    if (flag != 0) {
+        e = Endian.BE
+    }
+    print(e.name)
+    return e.ordinal
+}

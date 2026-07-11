@@ -3408,13 +3408,59 @@ expect_freestanding_reject \
     "freestanding profile rejects enum methods" \
     "freestanding enums support static variants only"
 
-expect_freestanding_reject \
-    "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_name_reject.xr" \
-    "$WORK/freestanding_enum_name_reject" \
-    "$WORK/freestanding_enum_name_reject.log" \
-    "freestanding-profile/enum: rejects enum.name" \
-    "freestanding profile rejects enum.name" \
-    "use ordinal or match in freestanding code"
+FREESTANDING_ENUM_NAME_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_name_static.xr"
+FREESTANDING_ENUM_NAME_OBJ="$WORK/freestanding_enum_name_static.o"
+FREESTANDING_ENUM_NAME_LOG="$WORK/freestanding_enum_name_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ENUM_NAME_OBJ" \
+        "$FREESTANDING_ENUM_NAME_SRC" >"$FREESTANDING_ENUM_NAME_LOG" 2>&1; then
+    FREESTANDING_ENUM_NAME_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_ENUM_NAME_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ENUM_NAME_C" ]; then
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" \
+            "static const xrt_str_t _xenum_name_FsState_" \
+            "freestanding-profile/enum-name: materializes enum names as static strings"
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" \
+            "static const xrt_str_t _xenum_name_Endian_" \
+            "freestanding-profile/enum-name: materializes prelude enum names as static strings"
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xr_str_lit(&_xenum_name_FsState_" \
+            "freestanding-profile/enum-name: returns borrowed static string literal"
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xr_str_lit(&_xenum_name_Endian_" \
+            "freestanding-profile/enum-name: returns borrowed prelude static string literal"
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xrt_println" \
+            "freestanding-profile/enum-name: print path stays on freestanding print helper"
+        expect_log_not_contains "$FREESTANDING_ENUM_NAME_C" "xrt_enum_box_name" \
+            "freestanding-profile/enum-name: avoids hosted enum name helper"
+        expect_log_not_contains "$FREESTANDING_ENUM_NAME_C" "xrt_enum_box_new" \
+            "freestanding-profile/enum-name: avoids enum boxing"
+        expect_log_not_contains "$FREESTANDING_ENUM_NAME_C" "XR_TAG_ENUM" \
+            "freestanding-profile/enum-name: keeps hot enum value unboxed"
+        expect_log_not_contains "$FREESTANDING_ENUM_NAME_C" "xrt_map_new" \
+            "freestanding-profile/enum-name: avoids enum namespace map allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_NAME_C" "xrt_getprop_name" \
+            "freestanding-profile/enum-name: avoids dynamic property lookup"
+        expect_log_not_contains "$FREESTANDING_ENUM_NAME_C" "#include \"xrt.h\"" \
+            "freestanding-profile/enum-name: avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/enum-name: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ENUM_NAME_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ENUM_NAME_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_ENUM_NAME_OBJ")"
+    FREESTANDING_ENUM_NAME_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_ENUM_NAME_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(xr_hook_write|xr_hook_panic|memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_ENUM_NAME_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/enum-name: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/enum-name: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_ENUM_NAME_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/enum-name: object build failed"
+    sed 's/^/      /' "$FREESTANDING_ENUM_NAME_LOG" | sed -n '1,120p'
+fi
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_tostring_reject.xr" \

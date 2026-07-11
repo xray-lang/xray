@@ -403,6 +403,52 @@ static const XiEnumData *xicgen_adt_enum_for_type(XiCgenCtx *ctx, const XrType *
     return NULL;
 }
 
+static uint32_t xicgen_enum_name_expr_id(const XiValue *recv) {
+    return recv && recv->id ? recv->id : 1u;
+}
+
+static bool xicgen_emit_freestanding_enum_layout_name_expr(XiCgenCtx *ctx, FILE *out,
+                                                           const XiValue *recv,
+                                                           const XrEnumLayout *layout) {
+    if (!ctx || !ctx->freestanding_profile || !out || !recv || !layout || !layout->variants ||
+        layout->variant_count == 0 || !layout->is_zero_payload ||
+        cg_value_plan_storage_rep(ctx, recv) != XR_REP_I64)
+        return false;
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        if (layout->variants[i].payload_count != 0)
+            return false;
+    }
+
+    uint32_t expr_id = xicgen_enum_name_expr_id(recv);
+    char enum_buf[96];
+    sanitize_c_ident_part(enum_buf, sizeof(enum_buf), layout->name ? layout->name : "Enum");
+    fprintf(out, "({ ");
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        fprintf(out, "static const xrt_str_t _xenum_name_%s_%u_%u = ", enum_buf, (unsigned) expr_id,
+                (unsigned) i);
+        cg_emit_static_string_header_initializer(
+            out, layout->variants[i].name ? layout->variants[i].name : "");
+        fprintf(out, "; ");
+    }
+    fprintf(out, "int64_t _xenum_tag_%s_%u = ", enum_buf, (unsigned) expr_id);
+    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
+    fprintf(out, "; ");
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        if (i > 0)
+            fprintf(out, " : ");
+        fprintf(out,
+                "(_xenum_tag_%s_%u == INT64_C(%u) ? "
+                "xr_str_lit(&_xenum_name_%s_%u_%u)",
+                enum_buf, (unsigned) expr_id, (unsigned) layout->variants[i].tag, enum_buf,
+                (unsigned) expr_id, (unsigned) i);
+    }
+    fprintf(out, " : xr_str_lit(&_xenum_name_%s_%u_0)", enum_buf, (unsigned) expr_id);
+    for (uint32_t i = 0; i < layout->variant_count; i++)
+        fprintf(out, ")");
+    fprintf(out, "; })");
+    return true;
+}
+
 static bool xicgen_emit_adt_field_load(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || v->aux || v->aux_int < 0)
         return false;
@@ -6853,9 +6899,13 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     const char *field = (const char *) v->aux;
     if (field && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_ENUM) {
         const char *helper = NULL;
-        if (strcmp(field, "name") == 0)
+        if (strcmp(field, "name") == 0) {
+            const XrType *recv_type = v->args[0]->type;
+            if (xicgen_emit_freestanding_enum_layout_name_expr(ctx, out, v->args[0],
+                                                               recv_type->enum_type.layout))
+                return;
             helper = "xrt_enum_box_name";
-        else if (strcmp(field, "ordinal") == 0) {
+        } else if (strcmp(field, "ordinal") == 0) {
             if (ctx && ctx->freestanding_profile &&
                 cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_I64) {
                 const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64,
