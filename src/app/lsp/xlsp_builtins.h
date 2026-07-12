@@ -16,6 +16,7 @@
 #define XLSP_BUILTINS_H
 
 #include "../../base/xjson.h"
+#include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 
 // LSP uses unified XrTypeId directly
@@ -47,9 +48,19 @@ XR_FUNC XlspBuiltinType xlsp_builtin_type_from_name(const char *type_name);
 // Get completions for a type
 XR_FUNC XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type);
 
+// Get completions for a concrete analyzer type. This preserves receiver-specialized
+// method sets such as Array<byte> and Slice<byte>.
+XR_FUNC XrJsonValue *xlsp_builtin_get_completions_for_type(XrType *type);
+
 // Get hover info for a type method
 XR_FUNC const char *xlsp_builtin_get_hover(XlspBuiltinType type, const char *method_name, char *buf,
                                            size_t buf_size);
+
+// Get hover/signature info for a concrete analyzer type method.
+XR_FUNC const char *xlsp_builtin_get_hover_for_type(XrType *type, const char *method_name,
+                                                    char *buf, size_t buf_size);
+XR_FUNC const char *xlsp_builtin_get_signature_for_type(XrType *type, const char *method_name,
+                                                        char *buf, size_t buf_size);
 
 // Infer type from literal or constructor
 XR_FUNC XlspBuiltinType xlsp_infer_literal_type(const char *text);

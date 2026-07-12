@@ -55,6 +55,11 @@ static bool json_array_contains_label(XrJsonValue *items, const char *label) {
     return false;
 }
 
+static const char *hover_markdown_value(XrJsonValue *hover) {
+    XrJsonValue *contents = xjson_get_object(hover, "contents");
+    return contents ? xjson_get_string(contents, "value") : NULL;
+}
+
 // ============================================================================
 // Server and Document Lifecycle Tests
 // ============================================================================
@@ -284,6 +289,119 @@ TEST(completion_shared_channel_member) {
     xlsp_server_free(server);
 }
 
+TEST(completion_u8_array_registry_methods) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<byte>(0)\n"
+                          "bytes.\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///u8_array.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "appendFrom"));
+    ASSERT(json_array_contains_label(items, "repeatFrom"));
+    ASSERT(json_array_contains_label(items, "push"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_int_array_excludes_u8_registry_methods) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var ints = Array<int>(0)\n"
+                          "ints.\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///int_array.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 5};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "push"));
+    ASSERT(!json_array_contains_label(items, "appendFrom"));
+    ASSERT(!json_array_contains_label(items, "repeatFrom"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_u8_slice_registry_methods) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<byte>(4)\n"
+                          "var view: Slice<byte> = bytes[:]\n"
+                          "view.\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///u8_slice.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {2, 5};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "load"));
+    ASSERT(json_array_contains_label(items, "store"));
+    ASSERT(json_array_contains_label(items, "reinterpret"));
+    ASSERT(json_array_contains_label(items, "asBytes"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(hover_u8_array_registry_method) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<byte>(0)\n"
+                          "bytes.appendFrom(bytes[:])\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///hover_u8_array.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 8};
+    XrJsonValue *hover = xlsp_analyze_hover(server, doc, pos);
+    ASSERT(hover != NULL);
+    const char *value = hover_markdown_value(hover);
+    ASSERT(value != NULL);
+    ASSERT(strstr(value, "Array<byte>.appendFrom") != NULL);
+    ASSERT(strstr(value, "Slice<byte>") != NULL);
+
+    xjson_free(hover);
+    xlsp_server_free(server);
+}
+
+TEST(signature_help_u8_array_registry_method) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<byte>(0)\n"
+                          "bytes.appendFrom(bytes[:])\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///sig_u8_array.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 17};
+    XrJsonValue *help = xlsp_analyze_signature_help(doc, pos);
+    ASSERT(help != NULL);
+    XrJsonValue *signatures = xjson_get_array(help, "signatures");
+    ASSERT(signatures != NULL);
+    XrJsonValue *sig0 = xjson_array_get(signatures, 0);
+    ASSERT(sig0 != NULL);
+    const char *label = xjson_get_string(sig0, "label");
+    ASSERT(label != NULL);
+    ASSERT(strstr(label, "appendFrom") != NULL);
+    ASSERT(strstr(label, "Slice<byte>") != NULL);
+
+    xjson_free(help);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -419,6 +537,11 @@ int main(int argc, char **argv) {
 
     printf("\nCompletion tests:\n");
     RUN_TEST(completion_shared_channel_member);
+    RUN_TEST(completion_u8_array_registry_methods);
+    RUN_TEST(completion_int_array_excludes_u8_registry_methods);
+    RUN_TEST(completion_u8_slice_registry_methods);
+    RUN_TEST(hover_u8_array_registry_method);
+    RUN_TEST(signature_help_u8_array_registry_method);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);
