@@ -5050,6 +5050,17 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     fn_links->return_storage_scanned = true;
                     fn_links->return_storage_scan_in_progress = false;
                 }
+                if (fn_links && fn_links->return_storage_mixed) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[320];
+                    snprintf(msg, sizeof(msg),
+                             "function '%s' has mixed return storage; make every return path use "
+                             "the same storage owner or return copy-normalized local values",
+                             fn_decl->name ? fn_decl->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
             }
 
             ctx->expected_return_type = saved_expected_ret;
