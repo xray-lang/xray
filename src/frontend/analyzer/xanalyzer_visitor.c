@@ -223,14 +223,14 @@ static bool xa_type_is_byte_array_or_span(XrType *type) {
     if (!xa_type_is_span_slice_source(type))
         return false;
     XrType *elem = xa_view_source_element_type(type);
-    return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_exact_u8(elem);
 }
 
 static bool xa_type_is_byte_array_or_view(XrType *type) {
     if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_VIEW(type)))
         return false;
     XrType *elem = type->container.element_type;
-    return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_exact_u8(elem);
 }
 
 static bool xa_enum_payload_contains_by_value(XrType *type, const char *enum_name) {

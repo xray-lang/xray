@@ -1535,17 +1535,11 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
 }
 
 static bool xa_type_is_bytespan_view(XrType *type) {
-    if (!type || !XR_TYPE_IS_SPAN(type) || !type->container.element_type)
-        return false;
-    XrType *elem = type->container.element_type;
-    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_span(type);
 }
 
 static bool xa_type_is_raw_u8_ptr_view(XrType *type) {
-    if (!type || !XR_TYPE_IS_POINTER(type) || !type->container.element_type)
-        return false;
-    XrType *elem = type->container.element_type;
-    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_pointer(type);
 }
 
 static bool xa_call_is_bytespan_typed_load(CallExprNode *call, XrType *receiver_type) {
@@ -2141,10 +2135,7 @@ static bool xa_expr_needs_contextual_view_type(AstNode *expr) {
 }
 
 static bool xa_type_is_bytes_like_view_or_owner(XrType *type) {
-    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_VIEW(type) && !XR_TYPE_IS_SPAN(type)))
-        return false;
-    XrType *elem = type->container.element_type;
-    return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_array(type) || xr_type_is_u8_slice(type);
 }
 
 static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) {
