@@ -1,0 +1,11 @@
+fn publish_len() -> int {
+    owned bytes = Array<byte>(3, 0)
+    bytes[0] = 1
+    bytes[1] = 2
+    bytes[2] = 3
+
+    shared frozen = move bytes
+    return len(frozen)
+}
+
+print(publish_len())
