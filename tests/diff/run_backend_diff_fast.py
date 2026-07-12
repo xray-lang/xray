@@ -220,7 +220,7 @@ def read_args(path: Path) -> list[str]:
 
 
 def read_stdin(path: Path) -> bytes:
-    """Bytes fed to both VM and AOT stdin (matches run_backend_diff.sh's
+    """Input bytes fed to both VM and AOT stdin (matches run_backend_diff.sh's
     <case>.stdin sidecar). Absent sidecar means an empty, immediately-closed
     stdin so stdin-reading cases get EOF instead of inheriting the harness's
     stdin (which would hang the gate)."""

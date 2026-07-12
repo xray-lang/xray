@@ -37,7 +37,7 @@ typedef enum {
     XR_ELEM_COUNT
 } XrArrayElemType;
 
-/* Bytes per element for each storage type.
+/* Byte width per element for each storage type.
  * Index with XrArrayElemType. XR_ELEM_ANY uses sizeof(XrValue) = 16. */
 static const uint8_t XR_ELEM_SIZES[XR_ELEM_COUNT] = {
     16,    /* ANY (XrValue = 16-byte tagged union) */

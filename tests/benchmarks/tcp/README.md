@@ -16,7 +16,7 @@
 | 8 | **Upload** | client → server 单向上传，server discard | MB/s |
 | 9 | **Download** | server → client 单向下载 | MB/s |
 | 10 | **Proxy** | client → proxy → upstream echo | msg/s, MB/s |
-| 11 | **Bytes Path** | Xray `net.readInto` / `net.writeBytes` echo | msg/s, MB/s, sweep |
+| 11 | **Byte-array Path** | Xray `net.readInto` / `net.writeBytes` echo | msg/s, MB/s, sweep |
 | 12 | **Slow Upload** | client 写入，server 慢读 | MB/s, complete |
 | 13 | **Slow Download** | server 写入，client 慢读 | MB/s, complete |
 | 14 | **Idle Connections** | 大量空闲连接后 ping | opened, ping p99, errors |
@@ -45,7 +45,7 @@
 # 运行 Phase 0 扩展场景（message/upload/download/proxy）
 ./run_bench.sh --suite phase0
 
-# 运行 Phase 1 Bytes 路径对比（Xray string path vs Bytes path）
+# 运行 Phase 1 byte-array 路径对比（Xray string path vs byte-array path）
 ./run_bench.sh --suite phase1
 
 # 运行 Phase 4 backpressure / idle 场景
@@ -100,7 +100,7 @@ python3 compare.py results/
 xray 的 `net` 模块现在区分两条 TCP 数据路径：
 
 - `net.read` / `net.write`：把 payload 暴露为 Xray `string`，适合协议解析和文本处理。
-- `net.readInto` / `net.writeBytes`：payload 进入用户提供的可复用 `Bytes` 缓冲区，适合二进制协议热路径。
+- `net.readInto` / `net.writeBytes`：payload 进入用户提供的可复用 `Array<byte>` 缓冲区，适合二进制协议热路径。
 - `net.copy(src, dst)`：payload 留在可复用 native buffer 中，适合 proxy、relay、`net.copy(conn, conn)` echo 等不需要逐字节进入语言层的高吞吐场景。
 
-默认 echo suite 使用 `net.copy(conn, conn, 65536)`，目的是测试 TCP runtime 和调度器本身；Phase 1 suite 则用同一客户端负载对比 string path 与 Bytes path。
+默认 echo suite 使用 `net.copy(conn, conn, 65536)`，目的是测试 TCP runtime 和调度器本身；Phase 1 suite 则用同一客户端负载对比 string path 与 byte-array path。

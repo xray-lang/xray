@@ -367,7 +367,7 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
         {"replaceAll", m_replace_all, 2},
         {"repeat", m_repeat, 1},
         /* Reverse / translate */
-        /* Bytes interop */
+        /* Byte-array interop */
         {"copyBytes", m_to_bytes, 0},
         {"toString", m_to_string, 0},
         /* Iteration */

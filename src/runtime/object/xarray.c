@@ -1037,7 +1037,7 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     }
 }
 
-/* ====== Bytes Convenience Functions ====== */
+/* ====== Byte-array Convenience Functions ====== */
 
 static bool xr_array_bytes_range_ok(XrArray *arr, int64_t offset, int64_t count) {
     if (!arr || arr->elem_type != XR_ELEM_U8)
