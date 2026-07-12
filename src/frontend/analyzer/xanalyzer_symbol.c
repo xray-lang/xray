@@ -185,6 +185,8 @@ static void links_release_dynamic(XaSymbolLinks *links) {
     }
     if (links->param_escapes)
         xr_free(links->param_escapes);
+    if (links->param_storage_requirements)
+        xr_free(links->param_storage_requirements);
     if (links->c_export_symbol)
         xr_free((void *) links->c_export_symbol);
     if (links->type_param_names) {
@@ -571,6 +573,11 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         links->param_escapes = NULL;
         links->param_escape_count = 0;
     }
+    if (links->param_storage_requirements) {
+        xr_free(links->param_storage_requirements);
+        links->param_storage_requirements = NULL;
+        links->param_storage_requirement_count = 0;
+    }
     // Default-value expressions are reset together with the signature; call
     // xa_symbol_links_set_param_defaults afterwards to repopulate them.
     if (links->param_defaults) {
@@ -752,6 +759,15 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
             memcpy(dst->param_escapes, src->param_escapes,
                    (size_t) src->param_escape_count * sizeof(uint8_t));
             dst->param_escape_count = src->param_escape_count;
+        }
+    }
+    if (src->param_storage_requirements && src->param_storage_requirement_count > 0) {
+        dst->param_storage_requirements =
+            xr_malloc((size_t) src->param_storage_requirement_count * sizeof(uint8_t));
+        if (dst->param_storage_requirements) {
+            memcpy(dst->param_storage_requirements, src->param_storage_requirements,
+                   (size_t) src->param_storage_requirement_count * sizeof(uint8_t));
+            dst->param_storage_requirement_count = src->param_storage_requirement_count;
         }
     }
     dst->return_type_inferred = src->return_type_inferred;

@@ -110,6 +110,8 @@ struct XaSymbolLinks {
     int param_count;
     uint8_t *param_escapes;  // Per-parameter summary: value may be stored/returned/captured
     int param_escape_count;
+    uint8_t *param_storage_requirements;  // XrStorageOwner required by callee body per parameter
+    int param_storage_requirement_count;
     XrType *return_type;
     bool return_type_inferred;
     uint8_t return_storage_owner;  // XrStorageOwner for known owned/shared returns

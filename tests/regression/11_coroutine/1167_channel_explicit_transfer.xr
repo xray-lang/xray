@@ -12,6 +12,10 @@ fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
     }
 }
 
+fn forward_array(ch: Channel<Array<int>>, data: Array<int>) {
+    ch.send(move data)
+}
+
 @test
 fn test_channel_send_copy_preserves_source() {
     shared ch: Channel<Array<int>> = Channel(1)
@@ -72,5 +76,20 @@ fn test_channel_send_move_transfers_source() {
     assert_eq(len(got), 2)
     assert_eq(got[0], 10)
     assert_eq(got[1], 11)
+    ch.close()
+}
+
+@test
+fn test_channel_send_helper_move_transfers_owned_param() {
+    shared ch: Channel<Array<int>> = Channel(1)
+    owned xs = Array<int>(2, 0)
+    xs[0] = 12
+    xs[1] = 13
+    forward_array(ch, move xs)
+
+    var got = recv_array(ch)
+    assert_eq(len(got), 2)
+    assert_eq(got[0], 12)
+    assert_eq(got[1], 13)
     ch.close()
 }

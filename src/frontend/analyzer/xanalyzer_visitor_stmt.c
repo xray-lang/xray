@@ -7303,7 +7303,7 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
         return;
 
     XaSymbol *src_sym = xa_lookup_shared_source_symbol(ctx, source);
-    if (!src_sym || src_sym->kind != XA_SYM_VARIABLE)
+    if (!src_sym || (src_sym->kind != XA_SYM_VARIABLE && src_sym->kind != XA_SYM_PARAMETER))
         return;
 
     XrLocation loc = {
@@ -7429,7 +7429,8 @@ static void xa_check_const_owned_move_initializer_boundary(XaInferContext *ctx, 
         return;
 
     XaSymbol *root = xa_lookup_shared_source_symbol(ctx, source);
-    if (!root || root->kind != XA_SYM_VARIABLE || !root->is_owned)
+    if (!root || (root->kind != XA_SYM_VARIABLE && root->kind != XA_SYM_PARAMETER) ||
+        !root->is_owned)
         return;
 
     XrLocation loc = {
@@ -7539,7 +7540,8 @@ static void xa_check_var_owned_alias_initializer_boundary(XaInferContext *ctx, A
         return;
 
     XaSymbol *root = xa_lookup_shared_source_symbol(ctx, source);
-    if (!root || root->kind != XA_SYM_VARIABLE || !root->is_owned)
+    if (!root || (root->kind != XA_SYM_VARIABLE && root->kind != XA_SYM_PARAMETER) ||
+        !root->is_owned)
         return;
 
     XrLocation loc = {
@@ -7582,7 +7584,8 @@ static void xa_check_assignment_owned_alias_boundary(XaInferContext *ctx, AstNod
         return;
 
     XaSymbol *root = xa_lookup_shared_source_symbol(ctx, source);
-    if (!root || root->kind != XA_SYM_VARIABLE || !root->is_owned)
+    if (!root || (root->kind != XA_SYM_VARIABLE && root->kind != XA_SYM_PARAMETER) ||
+        !root->is_owned)
         return;
 
     XrLocation loc = {
@@ -8150,7 +8153,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             bool is_move = false;
             AstNode *source = xa_shared_boundary_source(ret->values[0], &is_move);
             XaSymbol *root = source ? xa_lookup_shared_source_symbol(ctx, source) : NULL;
-            if (root && root->kind == XA_SYM_VARIABLE && root->is_owned && !is_move) {
+            if (root && (root->kind == XA_SYM_VARIABLE || root->kind == XA_SYM_PARAMETER) &&
+                root->is_owned && !is_move) {
                 XrLocation loc = {.file = ctx->file_path,
                                   .line = ret->values[0]->line ? ret->values[0]->line : node->line,
                                   .column = ret->values[0]->column ? ret->values[0]->column
@@ -8162,7 +8166,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                          name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-            } else if (root && root->kind == XA_SYM_VARIABLE && root->is_owned && is_move) {
+            } else if (root && (root->kind == XA_SYM_VARIABLE || root->kind == XA_SYM_PARAMETER) &&
+                       root->is_owned && is_move) {
                 xa_record_return_storage_owner(ctx, XR_STORAGE_OWNED_SYSTEM);
             } else if (root && root->kind == XA_SYM_VARIABLE && root->is_shared) {
                 xa_record_return_storage_owner(ctx, XR_STORAGE_SHARED_SYSTEM);

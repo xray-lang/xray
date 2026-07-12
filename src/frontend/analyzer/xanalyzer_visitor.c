@@ -4958,6 +4958,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         }
                     }
                 }
+                xa_apply_param_storage_requirements_to_scope(ctx, fn_links);
             }
 
             // Set expected_return_type for return type checking.
@@ -5132,6 +5133,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrType *saved_ret = ctx->expected_return_type;
                     bool saved_is_ctor = ctx->current_method_is_constructor;
                     MethodDeclNode *md = &cls->methods[i]->as.method_decl;
+                    XaSymbol *method_sym =
+                        xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
+                    XaSymbolLinks *method_links =
+                        method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+                    xa_apply_param_storage_requirements_to_scope(ctx, method_links);
                     ctx->current_method_is_constructor = md->is_constructor;
                     if (md->return_type) {
                         ctx->expected_return_type =
@@ -5852,6 +5858,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     continue;
                 MethodDeclNode *md = &method->as.method_decl;
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+                XaSymbol *method_sym =
+                    xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
+                XaSymbolLinks *method_links =
+                    method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+                xa_apply_param_storage_requirements_to_scope(ctx, method_links);
                 XrType *saved_ret = ctx->expected_return_type;
                 ctx->expected_return_type =
                     md->return_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
