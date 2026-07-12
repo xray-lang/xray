@@ -215,6 +215,10 @@ typedef struct XiLower {
     const struct XgGlobalEvidence *global_evidence;
     uint32_t xg_module_id; /* 1-based module id; 0 means unavailable */
     uint32_t xg_next_key_access_ordinal;
+    uint32_t xg_next_sequence_access_ordinal;
+    uint32_t xg_next_capacity_op_ordinal;
+    uint32_t xg_next_bulk_op_ordinal;
+    uint32_t xg_next_encoding_op_ordinal;
 } XiLower;
 
 /* ========== API ========== */

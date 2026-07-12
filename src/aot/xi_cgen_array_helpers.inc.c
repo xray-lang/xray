@@ -3159,6 +3159,14 @@ static bool cg_array_fill_loop_match(XiCgenCtx *ctx, const XiFunc *f, const XiVa
     const char *method = (const char *) push->aux;
     if (!method || strcmp(method, "push") != 0)
         return false;
+    if (push->xg_capacity_op_id != XG_NO_ID) {
+        const XaotCapacityPlan *plan = xaot_bundle_find_capacity_plan(
+            cg_ctx_aot_bundle(ctx), (XgCapacityOpId) push->xg_capacity_op_id);
+        const uint32_t required = XAOT_CAPACITY_EV_EXACT_COUNT | XAOT_CAPACITY_EV_LOOP_APPEND;
+        if (!plan || plan->action != XAOT_CAPACITY_RESERVE_ONCE ||
+            (plan->evidence & required) != required)
+            return false;
+    }
     if (cg_array_single_block_fill_loop_match(ctx, f, push, out))
         return true;
     if (cg_array_branchy_fill_loop_match(ctx, f, push, out))
@@ -4477,6 +4485,13 @@ static bool cg_array_elem_info_is_u8(const CgArrayElemInfo *info) {
     return info && info->elem_name && strcmp(info->elem_name, "XR_ELEM_U8") == 0;
 }
 
+static bool cg_array_elem_info_is_memset_byte_pattern(const CgArrayElemInfo *info) {
+    return info && info->elem_name &&
+           (strcmp(info->elem_name, "XR_ELEM_BOOL") == 0 ||
+            strcmp(info->elem_name, "XR_ELEM_I8") == 0 ||
+            strcmp(info->elem_name, "XR_ELEM_U8") == 0);
+}
+
 static void emit_bytes_array_result_suffix(FILE *out, bool boxed) {
     if (boxed)
         fprintf(out, ", XR_TAG_ARRAY)");
@@ -4496,10 +4511,33 @@ static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
         !cg_span_value_u8_info(ctx, call->args[1], NULL))
         return false;
 
+    const XaotBulkPlan *bulk =
+        cg_required_bulk_plan(ctx, f, call, XG_BULK_COPY, "Array<byte>.appendFrom");
+    if (call->xg_bulk_op_id != XG_NO_ID && !bulk) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (bulk && bulk->action != XAOT_BULK_INLINE_MEMCPY &&
+        bulk->action != XAOT_BULK_INLINE_MEMMOVE && bulk->action != XAOT_BULK_TYPED_LOOP &&
+        bulk->action != XAOT_BULK_RUNTIME_HELPER) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
     bool value_used = call->uses != 0;
     bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
+    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+        fprintf(out, "xrt_bytes_append_from_span_slow_raw(");
+        emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+        fprintf(out, ", ");
+        emit_span_ref_expr(out, call->args[1]);
+        fprintf(out, ")");
+        emit_bytes_array_result_suffix(out, boxed);
+        return true;
+    }
     fprintf(out, "({ xrt_array_t *_dst = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, "; xr_span_t _src = ");
@@ -4508,12 +4546,23 @@ static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
             "; xrt_array_t *_res = _dst; if (XR_LIKELY(_dst && _src.length >= 0 && _src.length "
             "<= INT64_MAX - _dst->length)) { int64_t _old_length = _dst->length; int64_t "
             "_new_length = _old_length + _src.length; if (XR_LIKELY(_new_length <= "
-            "_dst->capacity && _src.guard != _dst && (_new_length == 0 || _dst->data) && "
-            "(_src.length == 0 || _src.data))) { if (_src.length > 0) { uint8_t *_dp = "
-            "(uint8_t*)_dst->data + _old_length; "
-            "xr_array_core_copy_nonoverlap_bytes(_dp, _src.data, _src.length); } _dst->length = "
-            "_new_length; } else { _res = xrt_bytes_append_from_span_slow_raw(_dst, _src); } } "
-            "else { _res = xrt_bytes_append_from_span_slow_raw(_dst, _src); } _res; })");
+            "_dst->capacity");
+    if (!bulk || bulk->action == XAOT_BULK_INLINE_MEMCPY)
+        fprintf(out, " && _src.guard != _dst");
+    fprintf(out, " && (_new_length == 0 || _dst->data) && (_src.length == 0 || _src.data))) { "
+                 "if (_src.length > 0) { uint8_t *_dp = (uint8_t*)_dst->data + _old_length; ");
+    if (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE)
+        fprintf(out, "memmove(_dp, _src.data, (size_t)_src.length);");
+    else if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
+        fprintf(out, "memcpy(_dp, _src.data, (size_t)_src.length);");
+    else if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP)
+        fprintf(out, "for (int64_t _i = 0; _i < _src.length; _i++) "
+                     "_dp[_i] = ((const uint8_t*)_src.data)[_i];");
+    else
+        fprintf(out, "xr_array_core_copy_nonoverlap_bytes(_dp, _src.data, _src.length);");
+    fprintf(out, " } _dst->length = _new_length; } else { _res = "
+                 "xrt_bytes_append_from_span_slow_raw(_dst, _src); } } else { _res = "
+                 "xrt_bytes_append_from_span_slow_raw(_dst, _src); } _res; })");
     emit_bytes_array_result_suffix(out, boxed);
     return true;
 }
@@ -4528,17 +4577,53 @@ static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
     if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]))
         return false;
 
+    const XaotBulkPlan *bulk =
+        cg_required_bulk_plan(ctx, f, call, XG_BULK_REPEAT, "Array<byte>.repeatFrom");
+    if (call->xg_bulk_op_id != XG_NO_ID && !bulk) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (bulk && bulk->action != XAOT_BULK_TYPED_LOOP && bulk->action != XAOT_BULK_RUNTIME_HELPER) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
     bool value_used = call->uses != 0;
     bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_repeat_from_tail_raw(");
-    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, call->args[1], XR_REP_I64);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, call->args[2], XR_REP_I64);
-    fprintf(out, ")");
+    if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP) {
+        fprintf(out, "({ xrt_array_t *_a = ");
+        emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+        fprintf(out, "; int64_t _distance = ");
+        emit_value_as_rep(out, call->args[1], XR_REP_I64);
+        fprintf(out, "; int64_t _count = ");
+        emit_value_as_rep(out, call->args[2], XR_REP_I64);
+        fprintf(out,
+                "; if (XR_UNLIKELY(!_a || _a->elem_type != XR_ELEM_U8)) "
+                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+                "XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG); if (XR_UNLIKELY("
+                "_a->data_storage == XR_ARRAY_DATA_BORROWED || _distance <= 0 || _count < 0 || "
+                "_distance > _a->length || _count > INT64_MAX - _a->length)) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG); int64_t _dst = _a->length; "
+                "int64_t _new_length = _dst + _count; if (_new_length > _a->capacity) "
+                "xrt_array_reserve_trusted_raw(_a, _new_length); if (XR_UNLIKELY("
+                "_new_length > _a->capacity || (_new_length > 0 && !_a->data))) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG); "
+                "xr_array_core_bytes_repeat_copy(_a->data, _dst, _distance, _count); "
+                "_a->length = _new_length; _a; })");
+    } else {
+        fprintf(out, "xrt_bytes_repeat_from_tail_raw(");
+        emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, call->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, call->args[2], XR_REP_I64);
+        fprintf(out, ")");
+    }
     emit_bytes_array_result_suffix(out, boxed);
     return true;
 }
@@ -4746,11 +4831,27 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (!cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
         return false;
 
+    const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, call, XG_BULK_FILL, "Array.fill");
+    if (call->xg_bulk_op_id != XG_NO_ID && !bulk) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (bulk && bulk->action != XAOT_BULK_INLINE_MEMSET && bulk->action != XAOT_BULK_TYPED_LOOP &&
+        bulk->action != XAOT_BULK_RUNTIME_HELPER) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
     const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED, cg_rep(call));
     fprintf(out, "({ xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-    if (info.elem_name && strcmp(info.elem_name, "XR_ELEM_ANY") != 0 &&
-        cg_array_fill_value_is_zero_bits_literal(call->args[1])) {
+    bool zero_bits = cg_array_fill_value_is_zero_bits_literal(call->args[1]);
+    bool byte_pattern = cg_array_elem_info_is_memset_byte_pattern(&info);
+    bool use_memset =
+        bulk ? bulk->action == XAOT_BULK_INLINE_MEMSET
+             : info.elem_name && strcmp(info.elem_name, "XR_ELEM_ANY") != 0 && zero_bits;
+    if (use_memset && (zero_bits || byte_pattern)) {
         fprintf(out, "; int64_t _start = ");
         if (call->nargs >= 3)
             emit_value_as_rep_ctx(ctx, out, call->args[2], XR_REP_I64);
@@ -4763,9 +4864,44 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
             fprintf(out, "_a->length");
         fprintf(out, "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
                      "if (_r.count > 0) memset((uint8_t*)_a->data + "
-                     "(size_t)_r.start * (size_t)_a->elem_size, 0, "
-                     "(size_t)_r.count * (size_t)_a->elem_size); "
+                     "(size_t)_r.start * (size_t)_a->elem_size, ");
+        if (zero_bits)
+            fprintf(out, "0");
+        else
+            emit_value_as_rep_ctx(ctx, out, call->args[1], XR_REP_I64);
+        fprintf(out, ", (size_t)_r.count * (size_t)_a->elem_size); "
                      "xr_mkptr(_a, XR_TAG_ARRAY); })");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (bulk && bulk->action == XAOT_BULK_INLINE_MEMSET) {
+        cg_ctx_set_error(ctx);
+        fprintf(out, "; ");
+        emit_codegen_abort_expr(out);
+        fprintf(out, "; })");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP && info.rep != XR_REP_TAGGED) {
+        fprintf(out, "; int64_t _start = ");
+        if (call->nargs >= 3)
+            emit_value_as_rep_ctx(ctx, out, call->args[2], XR_REP_I64);
+        else
+            fprintf(out, "0");
+        fprintf(out, "; int64_t _end = ");
+        if (call->nargs >= 4)
+            emit_value_as_rep_ctx(ctx, out, call->args[3], XR_REP_I64);
+        else
+            fprintf(out, "_a->length");
+        fprintf(out,
+                "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
+                "%s _fill = ",
+                info.ctype);
+        emit_typed_array_store_value(out, &info, call->args[1]);
+        fprintf(out,
+                "; for (int64_t _i = 0; _i < _r.count; _i++) "
+                "((%s*)_a->data)[_r.start + _i] = _fill; xr_mkptr(_a, XR_TAG_ARRAY); })",
+                info.ctype);
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }

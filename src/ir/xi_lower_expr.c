@@ -1612,8 +1612,22 @@ static struct XrType *lower_math_call_result_type(XiLower *l, const char *member
     return l->type_float;
 }
 
+static bool lower_type_has_sequence_evidence(const struct XrType *type) {
+    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_STRING(type) ||
+                    xr_type_is_named_class(type, "StringBuilder"));
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
+    XiSequenceEvidenceIds sequence_ids;
+    uint8_t sequence_access_kind = 0;
+    if (ma->name && strcmp(ma->name, "length") == 0 &&
+        lower_type_has_sequence_evidence(xi_lower_node_type(l, ma->object)))
+        sequence_access_kind = XG_SEQ_ACCESS_LENGTH;
+    XiSequenceEvidenceKinds sequence_kinds = {
+        .sequence_access_kind = sequence_access_kind,
+    };
+    xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds, &sequence_ids);
 
     const XaSelection *sel =
         l && l->analyzer && l->analyzer->selection_table
@@ -1746,6 +1760,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     v->aux = (void *) arena_strdup(l->func, ma->name);
     v->aux_int = xi_lower_method_symbol(l, ma->name);
     v->line = (uint32_t) node->line;
+    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
@@ -2060,6 +2075,14 @@ static XiValue *lower_unsafe_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
+    XiSequenceEvidenceIds sequence_ids;
+    uint8_t sequence_access_kind =
+        lower_type_has_sequence_evidence(xi_lower_node_type(l, ig->array)) ? XG_SEQ_ACCESS_INDEX_GET
+                                                                           : 0;
+    XiSequenceEvidenceKinds sequence_kinds = {
+        .sequence_access_kind = sequence_access_kind,
+    };
+    xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds, &sequence_ids);
     uint32_t key_access_ordinal =
         xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, XG_KEY_ACCESS_INDEX_GET);
     XiValue *obj = xi_lower_expr(l, ig->array);
@@ -2112,6 +2135,7 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->args[0] = obj;
     v->args[1] = idx;
     v->line = (uint32_t) node->line;
+    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
         const char *static_key = lower_static_string_key(ig->index);
         xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
@@ -2138,6 +2162,15 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
 
 static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     IndexSetNode *is_node = &node->as.index_set;
+    XiSequenceEvidenceIds sequence_ids;
+    uint8_t sequence_access_kind =
+        lower_type_has_sequence_evidence(xi_lower_node_type(l, is_node->array))
+            ? XG_SEQ_ACCESS_INDEX_SET
+            : 0;
+    XiSequenceEvidenceKinds sequence_kinds = {
+        .sequence_access_kind = sequence_access_kind,
+    };
+    xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds, &sequence_ids);
     uint32_t key_access_ordinal =
         xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, XG_KEY_ACCESS_SET);
     XiValue *obj = xi_lower_expr(l, is_node->array);
@@ -2208,6 +2241,7 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     v->args[2] = val;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
         const char *static_key = lower_static_string_key(is_node->index);
         xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
@@ -4127,6 +4161,77 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
     return *out_op != 0;
 }
 
+static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
+                                              const CallExprNode *call,
+                                              const MemberAccessNode *member,
+                                              XiSequenceEvidenceIds *out_ids) {
+    uint8_t capacity_kind = 0;
+    uint8_t bulk_kind = 0;
+    uint8_t encoding_kind = 0;
+    struct XrType *receiver_type;
+    bool is_sequence;
+    bool is_string_builder;
+    if (!out_ids)
+        return;
+    memset(out_ids, 0, sizeof(*out_ids));
+    if (!l || !node || !call || !member || !member->name || !member->object)
+        return;
+
+    if (member->object->type == AST_VARIABLE && member->object->as.variable.name &&
+        strcmp(member->object->as.variable.name, "string") == 0 &&
+        (strcmp(member->name, "fromUtf8") == 0 || strcmp(member->name, "fromUtf8Lossy") == 0) &&
+        call->arg_count == 1) {
+        XiSequenceEvidenceKinds kinds = {
+            .encoding_op_kind = XG_ENCODING_BYTES_TO_STRING,
+        };
+        xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, kinds, out_ids);
+        return;
+    }
+
+    receiver_type = xi_lower_node_type(l, member->object);
+    is_sequence = lower_type_has_sequence_evidence(receiver_type);
+    is_string_builder = xr_type_is_named_class(receiver_type, "StringBuilder");
+
+    if (is_sequence) {
+        if (strcmp(member->name, "push") == 0 && call->arg_count == 1)
+            capacity_kind = XG_CAPACITY_PUSH;
+        else if (strcmp(member->name, "append") == 0 && call->arg_count >= 1)
+            capacity_kind = XG_CAPACITY_APPEND;
+        else if (strcmp(member->name, "extend") == 0 && call->arg_count >= 1)
+            capacity_kind = XG_CAPACITY_EXTEND;
+        else if (strcmp(member->name, "reserve") == 0 && call->arg_count == 1)
+            capacity_kind = XG_CAPACITY_RESERVE;
+        else if (strcmp(member->name, "clear") == 0 && call->arg_count == 0)
+            capacity_kind = XG_CAPACITY_CLEAR;
+        else if (strcmp(member->name, "toString") == 0 && call->arg_count == 0) {
+            capacity_kind = XG_CAPACITY_TO_STRING;
+            if (is_string_builder)
+                encoding_kind = XG_ENCODING_BYTES_TO_STRING;
+        } else if (strcmp(member->name, "appendFrom") == 0 && call->arg_count >= 1) {
+            capacity_kind = XG_CAPACITY_APPEND;
+            bulk_kind = XG_BULK_COPY;
+        } else if (strcmp(member->name, "copyFrom") == 0 && call->arg_count >= 1) {
+            bulk_kind = XG_BULK_COPY;
+        } else if (strcmp(member->name, "fill") == 0 && call->arg_count >= 1) {
+            bulk_kind = XG_BULK_FILL;
+        } else if (strcmp(member->name, "compare") == 0 && call->arg_count == 1) {
+            bulk_kind = XG_BULK_COMPARE;
+        } else if (strcmp(member->name, "repeatFrom") == 0 && call->arg_count >= 2) {
+            bulk_kind = XG_BULK_REPEAT;
+        }
+    }
+    if (receiver_type && receiver_type->kind == XR_KIND_STRING &&
+        strcmp(member->name, "copyBytes") == 0 && call->arg_count == 0)
+        encoding_kind = XG_ENCODING_STRING_TO_BYTES;
+
+    XiSequenceEvidenceKinds kinds = {
+        .capacity_op_kind = capacity_kind,
+        .bulk_op_kind = bulk_kind,
+        .encoding_op_kind = encoding_kind,
+    };
+    xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, kinds, out_ids);
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -4143,6 +4248,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             if ((is_utf8_static || is_from_rune || is_join) &&
                 ((is_join && (call->arg_count == 1 || call->arg_count == 2)) ||
                  (!is_join && call->arg_count == 1))) {
+                XiSequenceEvidenceIds sequence_ids;
+                lower_take_sequence_call_evidence(l, node, call, static_ma, &sequence_ids);
                 XiValue *recv = xi_lower_emit_builtin_class(l, "String", node->line);
                 if (!recv)
                     return NULL;
@@ -4158,6 +4265,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     bool elided_full_slice = false;
                     if (is_utf8_static && i == 0 && arg_node && arg_node->type == AST_SLICE_EXPR &&
                         !arg_node->as.slice_expr.start && !arg_node->as.slice_expr.end) {
+                        XiSequenceEvidenceIds ignored_slice_ids;
+                        XiSequenceEvidenceKinds slice_kinds = {
+                            .sequence_access_kind = XG_SEQ_ACCESS_SLICE,
+                        };
+                        xi_lower_take_sequence_evidence_ids(l, (uint32_t) arg_node->line,
+                                                            slice_kinds, &ignored_slice_ids);
                         arg_node = arg_node->as.slice_expr.source;
                         elided_full_slice = true;
                     }
@@ -4186,6 +4299,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->aux_int = (int64_t) xi_lower_method_symbol(l, static_ma->name) << 1;
                 v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
                 v->line = (uint32_t) node->line;
+                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                 xi_lower_insert_err_check(l, node);
                 return v;
             }
@@ -4204,6 +4318,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * which rely on OP_INVOKE dispatch rather than GETPROP + CALL. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
+        XiSequenceEvidenceIds sequence_ids;
+        lower_take_sequence_call_evidence(l, node, call, ma, &sequence_ids);
 
         XiValue *enum_direct = lower_enum_method_direct_call(l, node, call, ma);
         if (enum_direct)
@@ -4383,6 +4499,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->aux = (void *) "array_clear";
             v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
             v->line = (uint32_t) node->line;
+            xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
             return v;
         }
 
@@ -4431,6 +4548,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->aux = (void *) "array_reserve";
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
+            xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
             return v;
         }
 
@@ -4620,6 +4738,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->args[0] = recv;
                 v->args[1] = arg_vals[0];
                 v->line = (uint32_t) node->line;
+                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                 return v;
             }
         }
@@ -4634,6 +4753,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->args[0] = recv;
                 v->args[1] = arg_vals[0];
                 v->line = (uint32_t) node->line;
+                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                 return v;
             }
         }
@@ -4648,6 +4768,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->args[0] = recv;
                 v->args[1] = arg_vals[0];
                 v->line = (uint32_t) node->line;
+                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                 return v;
             }
         }
@@ -4724,6 +4845,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->args[0] = recv;
                     v->args[1] = arg_vals[0];
                     v->line = (uint32_t) node->line;
+                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
                 if (strcmp(ma->name, "copyFrom") == 0 && n == 1) {
@@ -4734,6 +4856,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->args[0] = recv;
                     v->args[1] = arg_vals[0];
                     v->line = (uint32_t) node->line;
+                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
                 if (strcmp(ma->name, "compare") == 0 && n == 1) {
@@ -4744,6 +4867,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->args[0] = recv;
                     v->args[1] = arg_vals[0];
                     v->line = (uint32_t) node->line;
+                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
                 if (strcmp(ma->name, "commonPrefix") == 0 && n == 1) {
@@ -4766,6 +4890,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->args[2] = arg_vals[1];
                     v->args[3] = arg_vals[2];
                     v->line = (uint32_t) node->line;
+                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
             }
@@ -4850,6 +4975,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;
+        xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
         xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
@@ -7190,6 +7316,14 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_slice_expr(XiLower *l, AstNode *node) {
     SliceExprNode *sl = &node->as.slice_expr;
+    XiSequenceEvidenceIds sequence_ids;
+    uint8_t sequence_access_kind =
+        lower_type_has_sequence_evidence(xi_lower_node_type(l, sl->source)) ? XG_SEQ_ACCESS_SLICE
+                                                                            : 0;
+    XiSequenceEvidenceKinds sequence_kinds = {
+        .sequence_access_kind = sequence_access_kind,
+    };
+    xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds, &sequence_ids);
     XiValue *src = xi_lower_expr(l, sl->source);
     XiValue *start = sl->start ? xi_lower_expr(l, sl->start)
                                : xi_const_int(l->func, l->cur_block, 0, l->type_int);
@@ -7208,6 +7342,7 @@ static XiValue *lower_slice_expr(XiLower *l, AstNode *node) {
     v->args[1] = start;
     v->args[2] = end;
     v->line = (uint32_t) node->line;
+    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     return v;
 }
 

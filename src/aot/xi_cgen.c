@@ -2331,6 +2331,23 @@ static bool cg_key_access_plan_uses_builtin_hash_eq_backend(XiCgenCtx *ctx,
     return plan && plan->action == XAOT_HASH_EQ_BUILTIN_INLINE;
 }
 
+static const XaotBulkPlan *cg_required_bulk_plan(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *call, uint8_t op_kind,
+                                                 const char *label) {
+    (void) f;
+    if (!call || call->xg_bulk_op_id == XG_NO_ID)
+        return NULL;
+    const XaotBulkPlan *plan =
+        xaot_bundle_find_bulk_plan(cg_ctx_aot_bundle(ctx), (XgBulkOpId) call->xg_bulk_op_id);
+    if (!plan || plan->op_kind != op_kind) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr, "[xi_cgen] ERROR: missing or mismatched AOT bulk plan for %s (id=%u)\n",
+                label ? label : "bulk op", call->xg_bulk_op_id);
+        return NULL;
+    }
+    return plan;
+}
+
 #include "xi_cgen_class_native_helpers.inc.c"
 
 #include "xi_cgen_array_helpers.inc.c"

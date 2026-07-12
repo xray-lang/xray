@@ -6,7 +6,9 @@ fn touch(xs: Array<int>, b: Array<byte>, s: string, span: Slice<byte>, sb: Strin
     b.appendFrom(span)
     b.fill(0)
     var text = b.toString()
+    var decoded = string.fromUtf8(b[:])
     var bytes = s.copyBytes()
     sb.append(text)
+    sb.append(decoded)
     return n + first
 }

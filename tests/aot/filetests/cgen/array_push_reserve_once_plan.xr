@@ -1,0 +1,9 @@
+fn build(n: int) -> int {
+    var xs: Array<int> = []
+    for (i in 0..n) {
+        xs.push(n)
+    }
+    return len(xs)
+}
+
+print(build(8))

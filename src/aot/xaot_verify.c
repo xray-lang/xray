@@ -4754,6 +4754,13 @@ static bool verify_bulk_op_kind_valid(uint8_t kind) {
     }
 }
 
+static bool verify_bulk_elem_type_is_memset_byte(uint32_t elem_type_key) {
+    return elem_type_key == xg_synthetic_type_key(XR_TREF_BOOL) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_BOOL) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_I8) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+}
+
 static uint8_t verify_bulk_action_for(const XgBulkOpSummary *bulk) {
     if (!bulk || !verify_bulk_op_kind_valid(bulk->op_kind))
         return XAOT_BULK_REJECT;
@@ -4770,7 +4777,9 @@ static uint8_t verify_bulk_action_for(const XgBulkOpSummary *bulk) {
         case XG_BULK_COPY_WITHIN:
             return XAOT_BULK_INLINE_MEMMOVE;
         case XG_BULK_FILL:
-            return XAOT_BULK_INLINE_MEMSET;
+            return verify_bulk_elem_type_is_memset_byte(bulk->elem_type_key)
+                       ? XAOT_BULK_INLINE_MEMSET
+                       : XAOT_BULK_TYPED_LOOP;
         case XG_BULK_COMPARE:
             return XAOT_BULK_INLINE_MEMCMP;
         case XG_BULK_REPEAT:
