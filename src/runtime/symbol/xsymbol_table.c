@@ -292,6 +292,11 @@ static const char *xr_builtin_symbol_names[] = {
     "fromUtf8Lossy",
     "fromRune",
     "sliceBytes",
+    "load",
+    "store",
+    "compare",
+    "commonPrefix",
+    "reinterpret",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

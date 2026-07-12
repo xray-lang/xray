@@ -34,6 +34,20 @@ enum {
     TEST_SYM_COUNT_
 };
 
+static const char *g_method_sym_display_names[] = {
+#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) display_name,
+#include "../../src/ir/xi_method_sym.def"
+#undef XI_METHOD_SYM
+};
+
+static const char *g_builtin_receiver_method_names[] = {
+#define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
+                           type_params, effect, lowering)                                          \
+    source_name,
+#include "../../src/frontend/analyzer/xbuiltin_receiver_method.def"
+#undef XB_RECEIVER_METHOD
+};
+
 static int g_passed = 0;
 static int g_failed = 0;
 
@@ -161,6 +175,28 @@ static void test_method_sym_count(void) {
     printf("  method symbol count: %d\n", count);
 }
 
+static bool method_sym_display_name_exists(const char *name) {
+    if (!name)
+        return false;
+    for (size_t i = 0;
+         i < sizeof(g_method_sym_display_names) / sizeof(g_method_sym_display_names[0]); i++) {
+        if (strcmp(g_method_sym_display_names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void test_builtin_receiver_registry_method_symbols(void) {
+    for (size_t i = 0;
+         i < sizeof(g_builtin_receiver_method_names) / sizeof(g_builtin_receiver_method_names[0]);
+         i++) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' missing xi_method_sym.def entry",
+                 g_builtin_receiver_method_names[i]);
+        ASSERT_TRUE(method_sym_display_name_exists(g_builtin_receiver_method_names[i]), msg);
+    }
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -176,6 +212,7 @@ int main(void) {
     test_method_sym_no_dups();
     test_method_sym_names();
     test_method_sym_count();
+    test_builtin_receiver_registry_method_symbols();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;
