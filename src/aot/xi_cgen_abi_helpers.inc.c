@@ -146,11 +146,7 @@ static bool cg_value_rep_is_span_aggregate(XaotValueRep rep) {
 }
 
 static bool cg_type_is_byte_span(const XrType *type) {
-    const XrType *elem;
-    if (!type || type->kind != XR_KIND_SPAN || !type->container.element_type)
-        return false;
-    elem = type->container.element_type;
-    return elem->kind == XR_KIND_INT && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_span(type);
 }
 
 static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, uint16_t *count_out) {

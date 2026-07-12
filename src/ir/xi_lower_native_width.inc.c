@@ -192,21 +192,12 @@ static uint16_t xi_widen_op_for_elem(struct XrType *elem_type) {
     }
 }
 
-/* Get element type from a contiguous container type (Array<T>, View<T>, Span<T>, or [T; N]). */
 static struct XrType *xi_get_container_elem_type(struct XrType *container_type) {
-    if (!container_type)
-        return NULL;
-    if (container_type->kind == XR_KIND_ARRAY || container_type->kind == XR_KIND_VIEW ||
-        container_type->kind == XR_KIND_SPAN)
-        return container_type->container.element_type;
-    if (container_type->kind == XR_KIND_FIXED_ARRAY)
-        return container_type->fixed_array.element_type;
-    return NULL;
+    return (struct XrType *) xr_type_contiguous_element_type(container_type);
 }
 
 static bool xi_type_is_bytes(struct XrType *type) {
-    struct XrType *elem = xi_get_container_elem_type(type);
-    return elem && elem->kind == XR_KIND_INT && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_contiguous(type);
 }
 
 static int64_t xi_array_cfield_from_type(struct XrType *type) {

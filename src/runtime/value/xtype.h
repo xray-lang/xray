@@ -303,6 +303,16 @@ static inline bool xr_type_is_exact_u8(const XrType *type) {
     return type && type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_U8;
 }
 
+static inline const XrType *xr_type_contiguous_element_type(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN)
+        return type->container.element_type;
+    if (type->kind == XR_KIND_FIXED_ARRAY)
+        return type->fixed_array.element_type;
+    return NULL;
+}
+
 static inline bool xr_type_is_u8_array(const XrType *type) {
     return type && type->kind == XR_KIND_ARRAY && xr_type_is_exact_u8(type->container.element_type);
 }
@@ -322,6 +332,10 @@ static inline bool xr_type_is_u8_slice(const XrType *type) {
 static inline bool xr_type_is_u8_pointer(const XrType *type) {
     return type && type->kind == XR_KIND_POINTER &&
            xr_type_is_exact_u8(type->container.element_type);
+}
+
+static inline bool xr_type_is_u8_contiguous(const XrType *type) {
+    return xr_type_is_exact_u8(xr_type_contiguous_element_type(type));
 }
 
 #define XR_UNION_MAX_MEMBERS 6
