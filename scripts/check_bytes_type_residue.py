@@ -3,8 +3,10 @@
 
 By default this is an inventory tool and exits successfully. Use
 `--fail-on-public` once the public-surface categories are expected to be zero.
-Internal `XI_BYTES_*`/`OP_BYTES_*`-style names are reported separately because
-task 204 allows them to be retired in later backend-focused slices.
+Internal legacy helper names are reported separately because task 204 allows
+them to be retired in later backend-focused slices. Historical `XI_BYTES_*`
+and `OP_BYTES_*` names should now be absent; remaining hits are mostly runtime
+or CGen helper naming.
 """
 
 from __future__ import annotations

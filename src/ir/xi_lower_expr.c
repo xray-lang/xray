@@ -2991,7 +2991,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         return v;
     }
     /* Array<byte>(n) / Array<byte>(n, fill) → XI_CALL_BUILTIN with aux_int encoding
-     * the opcode OP_BYTES_NEW so the emitter produces the right instruction. */
+     * the opcode OP_BYTE_ARRAY_NEW so the emitter produces the right instruction. */
     if (strcmp(fname, "array_byte_new") == 0 && call->arg_count >= 1 && call->arg_count <= 2) {
         /* Evaluate arguments BEFORE creating CALL_BUILTIN to ensure
          * argument values appear before the call in the block. */

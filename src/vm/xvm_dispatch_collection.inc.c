@@ -1432,7 +1432,7 @@ vmcase(OP_ARRAY_RESIZE) {
         }                                                                                          \
     } while (0)
 
-#define VM_BYTES_LOAD_CASE(opcode, load_fn, width_name)                                            \
+#define VM_BYTE_SLICE_LOAD_CASE(opcode, load_fn, width_name)                                       \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
@@ -1479,7 +1479,7 @@ vmcase(OP_ARRAY_RESIZE) {
         vmbreak;                                                                                   \
     }
 
-#define VM_BYTES_STORE_CASE(opcode, store_fn, value_type, width_name)                              \
+#define VM_BYTE_SLICE_STORE_CASE(opcode, store_fn, value_type, width_name)                         \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
@@ -1529,7 +1529,7 @@ vmcase(OP_ARRAY_RESIZE) {
         vmbreak;                                                                                   \
     }
 
-#define VM_BYTES_LOAD_FLOAT_CASE(opcode, load_fn, width_name)                                      \
+#define VM_BYTE_SLICE_LOAD_FLOAT_CASE(opcode, load_fn, width_name)                                 \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
@@ -1576,7 +1576,7 @@ vmcase(OP_ARRAY_RESIZE) {
         vmbreak;                                                                                   \
     }
 
-#define VM_BYTES_STORE_FLOAT_CASE(opcode, store_fn, value_type, width_name)                        \
+#define VM_BYTE_SLICE_STORE_FLOAT_CASE(opcode, store_fn, value_type, width_name)                   \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
@@ -1626,24 +1626,26 @@ vmcase(OP_ARRAY_RESIZE) {
         vmbreak;                                                                                   \
     }
 
-VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U16, xr_array_core_bytes_load_u16, "uint16")
-VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U32, xr_array_core_bytes_load_u32, "uint32")
-VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U64, xr_array_core_bytes_load_u64, "uint64")
-VM_BYTES_LOAD_FLOAT_CASE(OP_BYTES_LOAD_F32, xr_array_core_bytes_load_f32, "float32")
-VM_BYTES_LOAD_FLOAT_CASE(OP_BYTES_LOAD_F64, xr_array_core_bytes_load_f64, "float64")
-VM_BYTES_STORE_CASE(OP_BYTES_STORE_U16, xr_array_core_bytes_store_u16, uint16_t, "uint16")
-VM_BYTES_STORE_CASE(OP_BYTES_STORE_U32, xr_array_core_bytes_store_u32, uint32_t, "uint32")
-VM_BYTES_STORE_CASE(OP_BYTES_STORE_U64, xr_array_core_bytes_store_u64, uint64_t, "uint64")
-VM_BYTES_STORE_FLOAT_CASE(OP_BYTES_STORE_F32, xr_array_core_bytes_store_f32, float, "float32")
-VM_BYTES_STORE_FLOAT_CASE(OP_BYTES_STORE_F64, xr_array_core_bytes_store_f64, double, "float64")
+VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U16, xr_array_core_bytes_load_u16, "uint16")
+VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U32, xr_array_core_bytes_load_u32, "uint32")
+VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U64, xr_array_core_bytes_load_u64, "uint64")
+VM_BYTE_SLICE_LOAD_FLOAT_CASE(OP_BYTE_SLICE_LOAD_F32, xr_array_core_bytes_load_f32, "float32")
+VM_BYTE_SLICE_LOAD_FLOAT_CASE(OP_BYTE_SLICE_LOAD_F64, xr_array_core_bytes_load_f64, "float64")
+VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U16, xr_array_core_bytes_store_u16, uint16_t, "uint16")
+VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U32, xr_array_core_bytes_store_u32, uint32_t, "uint32")
+VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U64, xr_array_core_bytes_store_u64, uint64_t, "uint64")
+VM_BYTE_SLICE_STORE_FLOAT_CASE(OP_BYTE_SLICE_STORE_F32, xr_array_core_bytes_store_f32, float,
+                               "float32")
+VM_BYTE_SLICE_STORE_FLOAT_CASE(OP_BYTE_SLICE_STORE_F64, xr_array_core_bytes_store_f64, double,
+                               "float64")
 
-#undef VM_BYTES_STORE_FLOAT_CASE
-#undef VM_BYTES_LOAD_FLOAT_CASE
-#undef VM_BYTES_STORE_CASE
-#undef VM_BYTES_LOAD_CASE
+#undef VM_BYTE_SLICE_STORE_FLOAT_CASE
+#undef VM_BYTE_SLICE_LOAD_FLOAT_CASE
+#undef VM_BYTE_SLICE_STORE_CASE
+#undef VM_BYTE_SLICE_LOAD_CASE
 #undef VM_PARSE_ENDIAN_ARG
 
-#define VM_BYTESPAN_VIEW(value, out_data, out_length, out_readonly, message)                       \
+#define VM_BYTE_SLICE_VIEW(value, out_data, out_length, out_readonly, message)                     \
     do {                                                                                           \
         XrValue _span_value = (value);                                                             \
         if (XR_IS_SPAN_REF(_span_value)) {                                                         \
@@ -1667,13 +1669,13 @@ VM_BYTES_STORE_FLOAT_CASE(OP_BYTES_STORE_F64, xr_array_core_bytes_store_f64, dou
         }                                                                                          \
     } while (0)
 
-vmcase(OP_BYTES_SPAN_FILL) {
+vmcase(OP_BYTE_SLICE_FILL) {
     int a = GETARG_A(i);
     void *dst_data = NULL;
     int64_t dst_length = 0;
     bool dst_readonly = false;
-    VM_BYTESPAN_VIEW(R(a), dst_data, dst_length, dst_readonly,
-                     "Slice<byte>.fill(value) expects Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly,
+                       "Slice<byte>.fill(value) expects Slice<byte>");
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     }
@@ -1687,7 +1689,7 @@ vmcase(OP_BYTES_SPAN_FILL) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_SPAN_COPY) {
+vmcase(OP_BYTE_SLICE_COPY) {
     int a = GETARG_A(i);
     void *dst_data = NULL;
     void *src_data = NULL;
@@ -1695,10 +1697,10 @@ vmcase(OP_BYTES_SPAN_COPY) {
     int64_t src_length = 0;
     bool dst_readonly = false;
     bool src_readonly = false;
-    VM_BYTESPAN_VIEW(R(a), dst_data, dst_length, dst_readonly,
-                     "Slice<byte>.copyFrom(src) receiver must be Slice<byte>");
-    VM_BYTESPAN_VIEW(R(a + 1), src_data, src_length, src_readonly,
-                     "Slice<byte>.copyFrom(src) source must be Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly,
+                       "Slice<byte>.copyFrom(src) receiver must be Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a + 1), src_data, src_length, src_readonly,
+                       "Slice<byte>.copyFrom(src) source must be Slice<byte>");
     (void) src_readonly;
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
@@ -1711,7 +1713,7 @@ vmcase(OP_BYTES_SPAN_COPY) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_SPAN_COMPARE) {
+vmcase(OP_BYTE_SLICE_COMPARE) {
     int a = GETARG_A(i);
     void *left_data = NULL;
     void *right_data = NULL;
@@ -1719,10 +1721,10 @@ vmcase(OP_BYTES_SPAN_COMPARE) {
     int64_t right_length = 0;
     bool left_readonly = false;
     bool right_readonly = false;
-    VM_BYTESPAN_VIEW(R(a), left_data, left_length, left_readonly,
-                     "Slice<byte>.compare(other) receiver must be Slice<byte>");
-    VM_BYTESPAN_VIEW(R(a + 1), right_data, right_length, right_readonly,
-                     "Slice<byte>.compare(other) operand must be Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly,
+                       "Slice<byte>.compare(other) receiver must be Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly,
+                       "Slice<byte>.compare(other) operand must be Slice<byte>");
     (void) left_readonly;
     (void) right_readonly;
     int64_t n = left_length < right_length ? left_length : right_length;
@@ -1745,7 +1747,7 @@ vmcase(OP_BYTES_SPAN_COMPARE) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
+vmcase(OP_BYTE_SLICE_COMMON_PREFIX) {
     int a = GETARG_A(i);
     void *left_data = NULL;
     void *right_data = NULL;
@@ -1753,10 +1755,10 @@ vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
     int64_t right_length = 0;
     bool left_readonly = false;
     bool right_readonly = false;
-    VM_BYTESPAN_VIEW(R(a), left_data, left_length, left_readonly,
-                     "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>");
-    VM_BYTESPAN_VIEW(R(a + 1), right_data, right_length, right_readonly,
-                     "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly,
+                       "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly,
+                       "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
     (void) left_readonly;
     (void) right_readonly;
     bool ok = false;
@@ -1769,13 +1771,13 @@ vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_SPAN_REPEAT) {
+vmcase(OP_BYTE_SLICE_REPEAT) {
     int a = GETARG_A(i);
     void *data = NULL;
     int64_t length = 0;
     bool readonly = false;
-    VM_BYTESPAN_VIEW(R(a), data, length, readonly,
-                     "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
+    VM_BYTE_SLICE_VIEW(R(a), data, length, readonly,
+                       "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
     if (readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     }
@@ -1791,7 +1793,7 @@ vmcase(OP_BYTES_SPAN_REPEAT) {
     vmbreak;
 }
 
-#undef VM_BYTESPAN_VIEW
+#undef VM_BYTE_SLICE_VIEW
 
 /* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
  * C is the XrFFIType width of the pointee. No bounds/null check (unsafe). */
@@ -1820,7 +1822,7 @@ vmcase(OP_PTR_COPY_NONOVERLAP) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_COPY_WITHIN) {
+vmcase(OP_BYTE_ARRAY_COPY_WITHIN) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
@@ -1837,7 +1839,7 @@ vmcase(OP_BYTES_COPY_WITHIN) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_COPY_FROM) {
+vmcase(OP_BYTE_ARRAY_COPY_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
@@ -1855,7 +1857,7 @@ vmcase(OP_BYTES_COPY_FROM) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_REPEAT_FROM) {
+vmcase(OP_BYTE_ARRAY_REPEAT_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {

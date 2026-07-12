@@ -15,7 +15,7 @@
  * startfunc label, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
- * Owns: OP_DEFER, OP_BYTES_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
+ * Owns: OP_DEFER, OP_BYTE_ARRAY_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
  *       OP_TIME_AFTER, OP_SLEEP, OP_SELECT_BLOCK dispatch.
  */
 
@@ -84,7 +84,7 @@ vmcase(OP_DEFER_RUN_TO) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_NEW) {
+vmcase(OP_BYTE_ARRAY_NEW) {
     /* R[A] = Array<byte>(R[A+1..A+B]) - create Array<uint8>
      * A = result register
      * B = argument count
