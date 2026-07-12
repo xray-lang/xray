@@ -2513,6 +2513,77 @@ static bool xicgen_verify_options_plan_for_call(XiCgenCtx *ctx, FILE *out, const
     return true;
 }
 
+static const XaotGenericBodyPlan *xicgen_find_generic_body_plan_for_call(XiCgenCtx *ctx,
+                                                                         const XiValue *v) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || !v || v->xg_callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
+        const XaotGenericBodyPlan *plan = &bundle->generic_body_plans[i];
+        if (plan->root_callsite_id == (XgCallsiteId) v->xg_callsite_id)
+            return plan;
+    }
+    return NULL;
+}
+
+static bool xicgen_generic_body_call_preflight(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *v, const XiFunc **target_io,
+                                               const char **target_prefix_io) {
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotGenericBodyPlan *plan = xicgen_find_generic_body_plan_for_call(ctx, v);
+    XgFuncId owner_func_id = f ? (XgFuncId) f->xg_body_func_id : XG_NO_ID;
+    XgFuncId desired_body_func_id = XG_NO_ID;
+    const XiFunc *target = target_io ? *target_io : NULL;
+    const char *target_prefix = target_prefix_io ? *target_prefix_io : NULL;
+    XgFuncId target_func_id;
+    if (!plan)
+        return true;
+
+    switch ((XaotGenericBodyAction) plan->action) {
+        case XAOT_GENERIC_BODY_CLONE:
+            desired_body_func_id = plan->specialized_body_func_id;
+            break;
+        case XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY:
+        case XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL:
+            desired_body_func_id = plan->origin_body_func_id;
+            break;
+        case XAOT_GENERIC_BODY_REJECT:
+            break;
+    }
+    if (desired_body_func_id != XG_NO_ID) {
+        const char *planned_prefix = NULL;
+        const XiFunc *planned_target =
+            xaot_bundle_find_body_func(bundle, desired_body_func_id, &planned_prefix);
+        if (planned_target) {
+            target = planned_target;
+            target_prefix = planned_prefix;
+        }
+    }
+
+    target_func_id = target ? (XgFuncId) target->xg_body_func_id : XG_NO_ID;
+    if (xaot_backend_contract_generic_body_call_allowed(plan, (XgCallsiteId) v->xg_callsite_id,
+                                                        owner_func_id, target_func_id, &issue)) {
+        if (target_io)
+            *target_io = target;
+        if (target_prefix_io)
+            *target_prefix_io = target_prefix;
+        return true;
+    }
+
+    if (ctx)
+        ctx->error = true;
+    fprintf(stderr,
+            "[xi_cgen] ERROR: generic body call preflight failed in '%s' at line %u: "
+            "use=%u callsite=%u owner=%u target=%u action=%u issue=%s\n",
+            f && f->name ? f->name : "?", (unsigned) v->line, (unsigned) plan->use_id,
+            v ? (unsigned) v->xg_callsite_id : 0, (unsigned) owner_func_id,
+            (unsigned) target_func_id, (unsigned) plan->action,
+            xaot_backend_contract_issue_name(issue));
+    emit_codegen_abort_expr(out);
+    return false;
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -2659,6 +2730,8 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     }
 
     if (target && !xicgen_verify_options_plan_for_call(ctx, out, v))
+        return;
+    if (target && !xicgen_generic_body_call_preflight(ctx, out, f, v, &target, &call_prefix))
         return;
 
     /* FFI: direct C-ABI call to an @extern function. Emit `c_sym(args)` with no
@@ -6118,7 +6191,15 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     if (sym < 0) {
         ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method '%s'\n", method ? method : "?");
+        XgFuncId owner_func_id = (v && v->block && v->block->func)
+                                     ? (XgFuncId) v->block->func->xg_body_func_id
+                                     : XG_NO_ID;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported AOT method '%s' "
+                "(value=%u callsite=%u method_id=%u owner=%u line=%u)\n",
+                method ? method : "?", v ? (unsigned) v->id : 0,
+                v ? (unsigned) v->xg_callsite_id : 0, v ? (unsigned) v->xg_method_id : 0,
+                (unsigned) owner_func_id, v ? (unsigned) v->line : 0);
         emit_codegen_abort_expr(out);
         return;
     }

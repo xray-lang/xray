@@ -1,9 +1,15 @@
-fn id<T>(x: T) -> T {
+fn id<T>(x: T, keep: bool) -> T {
+    if (keep) {
+        return x
+    }
     return x
 }
 
-fn wrapper() -> int {
-    return id<int>(41)
+fn wrapper(x: int) -> int {
+    if (x < 0) {
+        return x
+    }
+    return id<int>(x, true)
 }
 
-print(wrapper())
+print(wrapper(41))

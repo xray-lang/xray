@@ -2,4 +2,4 @@ contains=xaot-plan v0
 regex=generic-instantiation [0-9]+ id=[1-9][0-9]* module=[1-9][0-9]* kind=function origin_decl=[1-9][0-9]* origin_func=[1-9][0-9]* origin_method=0 origin_class=0 specialized_func=[1-9][0-9]* specialized_class=0 root_callsite=[1-9][0-9]* constraint_iface=0 name=[1-9][0-9]* type=[1-9][0-9]* type_args=[1-9][0-9]*\+1 action=specialized_body evidence=row\+types\+origin\+root\+body\+abi reason=none
 regex=generic-body-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* owner=[1-9][0-9]* origin_body=[1-9][0-9]* specialized_body=[1-9][0-9]* root_callsite=[1-9][0-9]* type=[1-9][0-9]* type_args=[1-9][0-9]*\+1 size=[1-9][0-9]* action=clone evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=none
 regex=generic-code-size-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* body_use=[1-9][0-9]* origin=[1-9][0-9]* specialized=[1-9][0-9]* count=1 threshold=64 action=allow_clone evidence=row\+inst\+body_use\+threshold reason=none
-c_contains=id_i64
+c_regex=generic_instantiation_plan_[0-9a-f]+_id_i64_[0-9]+

@@ -417,9 +417,6 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     if (plan->func->xg_body_func_id != plan->body_func_id)
         return set_error(errbuf, errbuf_len,
                          "AOT function attribute plan Xi body identity is stale");
-    if (plan->func->name && body->name_id != xg_name_id("<anonymous>") &&
-        body->name_id != xg_name_id(plan->func->name))
-        return set_error(errbuf, errbuf_len, "AOT function attribute plan body identity is stale");
     if (plan->body_effect_bits != body->effect_bits)
         return set_error(errbuf, errbuf_len, "AOT function attribute effect bits are stale");
     if (plan->body_escape_bits != body->escape_bits)

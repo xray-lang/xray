@@ -1,0 +1,34 @@
+interface Shape {
+    area() -> int
+}
+
+class Circle implements Shape {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    area() -> int {
+        return this.value * this.value
+    }
+}
+
+class Square implements Shape {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    area() -> int {
+        return this.value + this.value
+    }
+}
+
+fn score<T: Shape>(value: T) -> int {
+    return value.area()
+}
+
+print(score<Circle>(Circle(7)))
+print(score<Square>(Square(8)))
