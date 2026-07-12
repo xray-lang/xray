@@ -721,7 +721,7 @@ bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill) {
     if (!arr)
         return false;
     /* Plan through the runtime-neutral core so the VM and the AOT
-     * (src/aot/xrt_array_bytes.inc.c) agree exactly: negative lengths clamp to
+     * AOT byte-array helpers agree exactly: negative lengths clamp to
      * 0, slices (borrowed storage) keep their length, and only > INT32_MAX is
      * rejected as XR_ARRAY_CORE_RESIZE_INVALID. */
     bool can_resize = !xr_array_is_slice(arr);
@@ -1039,7 +1039,7 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
 
 /* ====== Byte-array Convenience Functions ====== */
 
-static bool xr_array_bytes_range_ok(XrArray *arr, int64_t offset, int64_t count) {
+static bool xr_byte_array_range_ok(XrArray *arr, int64_t offset, int64_t count) {
     if (!arr || arr->elem_type != XR_ELEM_U8)
         return false;
     if (offset < 0 || count < 0)
@@ -1074,10 +1074,10 @@ uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u64_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
-bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
-                                int32_t count) {
-    if (!xr_array_bytes_range_ok(arr, src_offset, count) ||
-        !xr_array_bytes_range_ok(arr, dst_offset, count))
+bool xr_byte_array_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
+                               int32_t count) {
+    if (!xr_byte_array_range_ok(arr, src_offset, count) ||
+        !xr_byte_array_range_ok(arr, dst_offset, count))
         return false;
     if (count > 0) {
         uint8_t *data = (uint8_t *) arr->data;
@@ -1086,10 +1086,10 @@ bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_of
     return true;
 }
 
-bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, int32_t dst_offset,
-                              int32_t count) {
-    if (!xr_array_bytes_range_ok(src, src_offset, count) ||
-        !xr_array_bytes_range_ok(dst, dst_offset, count))
+bool xr_byte_array_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, int32_t dst_offset,
+                             int32_t count) {
+    if (!xr_byte_array_range_ok(src, src_offset, count) ||
+        !xr_byte_array_range_ok(dst, dst_offset, count))
         return false;
     if (count > 0) {
         uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
@@ -1099,15 +1099,15 @@ bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, in
     return true;
 }
 
-bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
+bool xr_byte_array_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
     if (!arr)
         return false;
     return xr_array_core_bytes_repeat_from(arr->data, arr->length, arr->elem_type, dst_offset,
                                            distance, count);
 }
 
-bool xr_array_bytes_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
-                                     const void *src_guard) {
+bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
+                                    const void *src_guard) {
     if (!dst || dst->elem_type != XR_ELEM_U8 || xr_array_is_slice(dst))
         return false;
     if (src_length < 0 || src_length > INT32_MAX || dst->length > INT32_MAX - src_length)
@@ -1145,7 +1145,7 @@ bool xr_array_bytes_append_from_span(XrArray *dst, const void *src_data, int64_t
     return true;
 }
 
-bool xr_array_bytes_repeat_from_tail(XrArray *arr, int64_t distance, int64_t count) {
+bool xr_byte_array_repeat_from_tail(XrArray *arr, int64_t distance, int64_t count) {
     if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
         return false;
     if (distance <= 0 || count < 0 || distance > arr->length)

@@ -1832,8 +1832,8 @@ vmcase(OP_BYTE_ARRAY_COPY_WITHIN) {
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.copyFrom receiver must be Array<byte>");
-    if (!xr_array_bytes_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
-                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+    if (!xr_byte_array_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
+                                   (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.copyFrom range out of bounds");
     }
     vmbreak;
@@ -1850,8 +1850,8 @@ vmcase(OP_BYTE_ARRAY_COPY_FROM) {
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.copyFrom operands must be Slice<byte>");
-    if (!xr_array_bytes_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
-                                  (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
+    if (!xr_byte_array_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
+                                 (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.copyFrom range out of bounds");
     }
     vmbreak;
@@ -1868,8 +1868,8 @@ vmcase(OP_BYTE_ARRAY_REPEAT_FROM) {
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          "Array<byte>.repeatFrom receiver must be Array<byte>");
-    if (!xr_array_bytes_repeat_from(arr, (int32_t) XR_TO_INT(R(a + 1)),
-                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+    if (!xr_byte_array_repeat_from(arr, (int32_t) XR_TO_INT(R(a + 1)),
+                                   (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Array<byte>.repeatFrom range out of bounds");
     }
     vmbreak;

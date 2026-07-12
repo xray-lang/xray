@@ -199,7 +199,7 @@ static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, Xr
     } else if (st->kind == FILE_IO_READ_STRING) {
         r = xr_string_value(xr_string_intern(X, st->rbuf, st->off, 0));
     } else {  // FILE_IO_READ_BYTES
-        XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) st->off);
+        XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) st->off);
         if (arr) {
             memcpy(arr->data, st->rbuf, st->off);
             arr->length = (int32_t) st->off;
@@ -371,7 +371,7 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
     char *buf = io_read_file_buffer_sync(path, &read_size);
     if (!buf)
         return XR_CFUNC_DONE;
-    XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) read_size);
+    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) read_size);
     if (!arr) {
         xr_free(buf);
         return XR_CFUNC_DONE;
