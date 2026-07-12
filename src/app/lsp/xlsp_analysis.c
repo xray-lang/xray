@@ -686,12 +686,23 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
 
             // Try infer variable type for method hover (e.g., arr.push where arr is Array)
             if (!description) {
-                XlspBuiltinType var_type = xlsp_infer_variable_type(server, doc, mod_name);
-                if (var_type != XLSP_TYPE_UNKNOWN) {
-                    const char *var_hover =
-                        xlsp_builtin_get_hover(var_type, word, hover_buf, sizeof(hover_buf));
-                    if (var_hover) {
-                        description = var_hover;
+                XaSymbol *receiver_sym =
+                    analyzer ? xa_analyzer_lookup_deep(analyzer, mod_name) : NULL;
+                XrType *receiver_type =
+                    receiver_sym ? xa_analyzer_get_type(analyzer, receiver_sym) : NULL;
+                const char *var_hover =
+                    receiver_type ? xlsp_builtin_get_hover_for_type(receiver_type, word, hover_buf,
+                                                                    sizeof(hover_buf))
+                                  : NULL;
+                if (var_hover) {
+                    description = var_hover;
+                } else {
+                    XlspBuiltinType var_type = xlsp_infer_variable_type(server, doc, mod_name);
+                    if (var_type != XLSP_TYPE_UNKNOWN) {
+                        const char *bucket_hover =
+                            xlsp_builtin_get_hover(var_type, word, hover_buf, sizeof(hover_buf));
+                        if (bucket_hover)
+                            description = bucket_hover;
                     }
                 }
             }
@@ -1211,6 +1222,33 @@ static const FunctionSignature builtin_signatures[] = {
      assert_ne_param_docs, 2},
     {NULL, NULL, NULL, NULL, NULL, 0}};
 
+static int xlsp_signature_param_count(const char *label) {
+    if (!label)
+        return 0;
+    const char *open = strchr(label, '(');
+    if (!open)
+        return 0;
+    const char *p = open + 1;
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (*p == ')')
+        return 0;
+
+    int count = 1;
+    int depth = 0;
+    for (; *p; p++) {
+        if (*p == '(' || *p == '<')
+            depth++;
+        else if ((*p == ')' || *p == '>') && depth > 0)
+            depth--;
+        else if (*p == ')' && depth == 0)
+            break;
+        else if (*p == ',' && depth == 0)
+            count++;
+    }
+    return count;
+}
+
 XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) {
     if (!doc || !doc->content)
         return NULL;
@@ -1271,6 +1309,37 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
     memcpy(func_name, content + func_start, name_len);
     func_name[name_len] = '\0';
 
+    char registry_sig_label[512];
+    bool has_registry_sig = false;
+    int registry_param_count = 0;
+    XaAnalyzer *analyzer = doc->server ? doc->server->workspace_analyzer : NULL;
+
+    if (func_start > 1 && content[func_start - 1] == '.' && analyzer) {
+        uint32_t recv_end = func_start - 1;
+        uint32_t recv_start = recv_end;
+        while (recv_start > 0 &&
+               (content[recv_start - 1] == '_' ||
+                (content[recv_start - 1] >= 'a' && content[recv_start - 1] <= 'z') ||
+                (content[recv_start - 1] >= 'A' && content[recv_start - 1] <= 'Z') ||
+                (content[recv_start - 1] >= '0' && content[recv_start - 1] <= '9'))) {
+            recv_start--;
+        }
+        size_t recv_len = (size_t) (recv_end - recv_start);
+        if (recv_len > 0 && recv_len < 96) {
+            char recv_name[96];
+            memcpy(recv_name, content + recv_start, recv_len);
+            recv_name[recv_len] = '\0';
+            XaSymbol *receiver_sym = xa_analyzer_lookup_deep(analyzer, recv_name);
+            XrType *receiver_type =
+                receiver_sym ? xa_analyzer_get_type(analyzer, receiver_sym) : NULL;
+            if (xlsp_builtin_get_signature_for_type(receiver_type, func_name, registry_sig_label,
+                                                    sizeof(registry_sig_label))) {
+                has_registry_sig = true;
+                registry_param_count = xlsp_signature_param_count(registry_sig_label);
+            }
+        }
+    }
+
     // Look up signature
     const FunctionSignature *sig = NULL;
     for (int i = 0; builtin_signatures[i].name; i++) {
@@ -1287,7 +1356,18 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
     XrJsonValue *params = xjson_new_array();
     int param_count = 0;
 
-    if (sig) {
+    if (has_registry_sig) {
+        xjson_object_set(sig_info, "label", xjson_new_string(registry_sig_label));
+        for (int i = 0; i < registry_param_count; i++) {
+            XrJsonValue *param = xjson_new_object();
+            char label[32];
+            snprintf(label, sizeof(label), "arg%d", i);
+            xjson_object_set(param, "label", xjson_new_string(label));
+            xjson_array_push(params, param);
+        }
+        param_count = registry_param_count;
+        xr_free(func_name);
+    } else if (sig) {
         // Builtin function
         xjson_object_set(sig_info, "label", xjson_new_string(sig->signature));
         if (sig->documentation) {
@@ -1305,7 +1385,6 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
         xr_free(func_name);
     } else {
         // Try user-defined function from analyzer
-        XaAnalyzer *analyzer = doc->server ? doc->server->workspace_analyzer : NULL;
         XaSymbol *sym = analyzer ? xa_scope_lookup(analyzer->global_scope, func_name) : NULL;
         xr_free(func_name);
 

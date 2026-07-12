@@ -14,6 +14,7 @@
 
 #include "xlsp_builtins.h"
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
+#include "../../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../../runtime/value/xtype.h"
 #include <string.h>
 #include <stdio.h>
@@ -54,6 +55,306 @@ static XrType *create_type_for_builtin(XlspBuiltinType type) {
             return xr_type_new_task(NULL, NULL);
         default:
             return NULL;
+    }
+}
+
+typedef XaBuiltinReceiverKind XlspReceiverKind;
+typedef XaBuiltinMethodTypeKind XlspMethodTypeKind;
+typedef XaBuiltinReceiverMethodSpec XlspReceiverMethodSpec;
+
+static bool xlsp_type_is_pod_slice_elem(XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xlsp_receiver_matches(XrType *type, XlspReceiverKind receiver) {
+    switch (receiver) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(type);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return type && XR_TYPE_IS_ARRAY(type);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(type);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return type && XR_TYPE_IS_SPAN(type) && type->container.element_type &&
+                   xlsp_type_is_pod_slice_elem(type->container.element_type);
+    }
+    return false;
+}
+
+static const XlspReceiverMethodSpec *xlsp_find_receiver_method(XrType *type,
+                                                               const char *method_name) {
+    if (!type || !method_name)
+        return NULL;
+    size_t n = xa_builtin_receiver_method_count();
+    for (size_t i = 0; i < n; i++) {
+        const XlspReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (strcmp(spec->source_name, method_name) == 0 &&
+            xlsp_receiver_matches(type, spec->receiver))
+            return spec;
+    }
+    return NULL;
+}
+
+static void xlsp_type_label(XrType *type, char *buf, size_t buf_size) {
+    const char *s = type ? xr_type_to_string(type) : NULL;
+    snprintf(buf, buf_size, "%s", s ? s : "unknown");
+}
+
+static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec, char *buf,
+                                size_t buf_size) {
+    if (!spec) {
+        xlsp_type_label(type, buf, buf_size);
+        return;
+    }
+    switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            snprintf(buf, buf_size, "Array<byte>");
+            return;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            snprintf(buf, buf_size, "Slice<byte>");
+            return;
+        case XA_BUILTIN_RECEIVER_ARRAY:
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            xlsp_type_label(type, buf, buf_size);
+            return;
+    }
+    xlsp_type_label(type, buf, buf_size);
+}
+
+static void xlsp_receiver_elem_label(XrType *receiver, char *buf, size_t buf_size) {
+    XrType *elem = receiver ? receiver->container.element_type : NULL;
+    xlsp_type_label(elem, buf, buf_size);
+}
+
+static const char *xlsp_type_param_label(const XlspReceiverMethodSpec *spec) {
+    return spec && spec->type_params == XA_BUILTIN_TYPE_PARAMS_U ? "U" : "T";
+}
+
+static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec *spec,
+                                 XlspMethodTypeKind kind, char *buf, size_t buf_size) {
+    char elem[128];
+    const char *tp = xlsp_type_param_label(spec);
+    switch (kind) {
+        case XA_BUILTIN_TYPE_NONE:
+            snprintf(buf, buf_size, "()");
+            break;
+        case XA_BUILTIN_TYPE_BOOL:
+            snprintf(buf, buf_size, "bool");
+            break;
+        case XA_BUILTIN_TYPE_INT:
+            snprintf(buf, buf_size, "int");
+            break;
+        case XA_BUILTIN_TYPE_STRING:
+            snprintf(buf, buf_size, "string");
+            break;
+        case XA_BUILTIN_TYPE_U8:
+            snprintf(buf, buf_size, "byte");
+            break;
+        case XA_BUILTIN_TYPE_U8_ARRAY:
+            snprintf(buf, buf_size, "Array<byte>");
+            break;
+        case XA_BUILTIN_TYPE_U8_SLICE:
+            snprintf(buf, buf_size, "Slice<byte>");
+            break;
+        case XA_BUILTIN_TYPE_UNIT:
+            snprintf(buf, buf_size, "()");
+            break;
+        case XA_BUILTIN_TYPE_ENDIAN:
+            snprintf(buf, buf_size, "Endian");
+            break;
+        case XA_BUILTIN_TYPE_PARAM_0:
+            snprintf(buf, buf_size, "%s", tp);
+            break;
+        case XA_BUILTIN_TYPE_ARRAY_OF_PARAM_0:
+            snprintf(buf, buf_size, "Array<%s>", tp);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER:
+            xlsp_type_label(receiver, buf, buf_size);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM:
+            xlsp_receiver_elem_label(receiver, buf, buf_size);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_NULLABLE:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "%s?", elem);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_TO_BOOL_FN:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "(%s) -> bool", elem);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_BOOL_FN:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "(%s, int) -> bool", elem);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_UNIT_FN:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "(%s, int) -> ()", elem);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "(%s, int) -> %s", elem, tp);
+            break;
+        case XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "(%s, %s, int) -> %s", tp, elem, tp);
+            break;
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "(%s, %s) -> int", elem, elem);
+            break;
+        case XA_BUILTIN_TYPE_ITERATOR_OF_RECEIVER_ELEM:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "Iterator<%s>", elem);
+            break;
+        case XA_BUILTIN_TYPE_ITERATOR_OF_INDEX_RECEIVER_ELEM_TUPLE:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "Iterator<(int, %s)>", elem);
+            break;
+        case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "Array<(int, %s)>", elem);
+            break;
+        case XA_BUILTIN_TYPE_SLICE_OF_PARAM_0:
+            snprintf(buf, buf_size, "Slice<%s>", tp);
+            break;
+        case XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "Slice<%s>", elem);
+            break;
+        case XA_BUILTIN_TYPE_PTR_OF_RECEIVER_ELEM:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "RawPtr<%s>", elem);
+            break;
+        case XA_BUILTIN_TYPE_MUT_PTR_OF_RECEIVER_ELEM:
+            xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
+            snprintf(buf, buf_size, "RawMut<%s>", elem);
+            break;
+    }
+}
+
+static const char *xlsp_registry_param_name(const XlspReceiverMethodSpec *spec, int index) {
+    if (!spec || index < 0 || index >= spec->param_count)
+        return "arg";
+    XlspMethodTypeKind kind = spec->params[index];
+    if (kind == XA_BUILTIN_TYPE_ENDIAN)
+        return "endian";
+    if (kind == XA_BUILTIN_TYPE_RECEIVER_ELEM || kind == XA_BUILTIN_TYPE_U8 ||
+        kind == XA_BUILTIN_TYPE_PARAM_0)
+        return "value";
+    if (kind == XA_BUILTIN_TYPE_U8_SLICE || kind == XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM)
+        return "source";
+    if (kind == XA_BUILTIN_TYPE_INT) {
+        if (strcmp(spec->source_name, "resize") == 0)
+            return "length";
+        if (strcmp(spec->source_name, "reserve") == 0)
+            return "capacity";
+        if (strcmp(spec->source_name, "repeatFrom") == 0)
+            return index == 0 ? "offset" : (index == 1 ? "distance" : "count");
+        return index == 0 ? "index" : (index == 1 ? "start" : "end");
+    }
+    if (kind == XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN ||
+        kind == XA_BUILTIN_TYPE_RECEIVER_ELEM_TO_BOOL_FN ||
+        kind == XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_BOOL_FN ||
+        kind == XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_UNIT_FN ||
+        kind == XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN ||
+        kind == XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN)
+        return "fn";
+    if (kind == XA_BUILTIN_TYPE_RECEIVER)
+        return "array";
+    return "arg";
+}
+
+static void xlsp_build_registry_signature(XrType *receiver, const XlspReceiverMethodSpec *spec,
+                                          char *buf, size_t buf_size) {
+    int n = snprintf(buf, buf_size, "%s", spec->source_name);
+    if (spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE) {
+        n += snprintf(buf + n, buf_size > (size_t) n ? buf_size - (size_t) n : 0, "<%s>",
+                      xlsp_type_param_label(spec));
+    }
+    n += snprintf(buf + n, buf_size > (size_t) n ? buf_size - (size_t) n : 0, "(");
+    for (int i = 0; i < spec->param_count && i < 3; i++) {
+        char type_buf[160];
+        xlsp_component_label(receiver, spec, spec->params[i], type_buf, sizeof(type_buf));
+        if (i > 0)
+            n += snprintf(buf + n, buf_size > (size_t) n ? buf_size - (size_t) n : 0, ", ");
+        const char *rest = (spec->is_variadic && i == spec->param_count - 1) ? "..." : "";
+        const char *optional = i >= spec->min_params ? "?" : "";
+        n += snprintf(buf + n, buf_size > (size_t) n ? buf_size - (size_t) n : 0, "%s%s%s: %s",
+                      rest, xlsp_registry_param_name(spec, i), optional, type_buf);
+    }
+    char result_buf[160];
+    xlsp_component_label(receiver, spec, spec->result, result_buf, sizeof(result_buf));
+    snprintf(buf + n, buf_size > (size_t) n ? buf_size - (size_t) n : 0, "): %s", result_buf);
+}
+
+static bool xlsp_completion_has_label(XrJsonValue *items, const char *label) {
+    int count = xjson_array_len(items);
+    for (int i = 0; i < count; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *existing = xjson_get_string(item, "label");
+        if (existing && strcmp(existing, label) == 0)
+            return true;
+    }
+    return false;
+}
+
+static int xlsp_append_receiver_registry_completions(XrJsonValue *items, XrType *type) {
+    int added = 0;
+    size_t count = xa_builtin_receiver_method_count();
+    for (size_t i = 0; i < count; i++) {
+        const XlspReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (!xlsp_receiver_matches(type, spec->receiver) ||
+            xlsp_completion_has_label(items, spec->source_name))
+            continue;
+
+        char signature[512];
+        xlsp_build_registry_signature(type, spec, signature, sizeof(signature));
+
+        XrJsonValue *item = xjson_new_object();
+        xjson_object_set(item, "label", xjson_new_string(spec->source_name));
+        xjson_object_set(item, "kind", xjson_new_number(XLSP_KIND_METHOD));
+        xjson_object_set(item, "detail", xjson_new_string(signature));
+
+        char doc[256];
+        snprintf(doc, sizeof(doc), "receiver-specialized builtin method (%s)", spec->lowering);
+        xjson_object_set(item, "documentation", xjson_new_string(doc));
+        xjson_array_push(items, item);
+        added++;
+    }
+    return added;
+}
+
+static void xlsp_append_native_completions(XrJsonValue *items, XrType *type) {
+    const XaBuiltinMember *members = NULL;
+    int count = xa_builtin_get_members_for_type(type, &members);
+    for (int i = 0; i < count; i++) {
+        const XaBuiltinMember *m = &members[i];
+        if (!m->name || xlsp_completion_has_label(items, m->name))
+            continue;
+
+        XrJsonValue *item = xjson_new_object();
+        xjson_object_set(item, "label", xjson_new_string(m->name));
+        int kind = m->is_method ? XLSP_KIND_METHOD : XLSP_KIND_PROPERTY;
+        xjson_object_set(item, "kind", xjson_new_number(kind));
+
+        if (m->signature) {
+            char detail[256];
+            snprintf(detail, sizeof(detail), "%s%s", m->name, m->signature);
+            xjson_object_set(item, "detail", xjson_new_string(detail));
+        }
+        if (m->doc)
+            xjson_object_set(item, "documentation", xjson_new_string(m->doc));
+        xjson_array_push(items, item);
     }
 }
 
@@ -100,35 +401,19 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
 // ============================================================================
 
 XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type) {
-    XrJsonValue *items = xjson_new_array();
-
     XrType *xa_type = create_type_for_builtin(type);
     if (!xa_type)
+        return xjson_new_array();
+    return xlsp_builtin_get_completions_for_type(xa_type);
+}
+
+XrJsonValue *xlsp_builtin_get_completions_for_type(XrType *type) {
+    XrJsonValue *items = xjson_new_array();
+    if (!type)
         return items;
 
-    const XaBuiltinMember *members = NULL;
-    int count = xa_builtin_get_members_for_type(xa_type, &members);
-
-    for (int i = 0; i < count; i++) {
-        const XaBuiltinMember *m = &members[i];
-
-        XrJsonValue *item = xjson_new_object();
-        xjson_object_set(item, "label", xjson_new_string(m->name));
-        int kind = m->is_method ? XLSP_KIND_METHOD : XLSP_KIND_PROPERTY;
-        xjson_object_set(item, "kind", xjson_new_number(kind));
-
-        if (m->signature) {
-            // Build full signature: name + signature
-            char detail[256];
-            snprintf(detail, sizeof(detail), "%s%s", m->name, m->signature);
-            xjson_object_set(item, "detail", xjson_new_string(detail));
-        }
-        if (m->doc) {
-            xjson_object_set(item, "documentation", xjson_new_string(m->doc));
-        }
-        xjson_array_push(items, item);
-    }
-
+    xlsp_append_receiver_registry_completions(items, type);
+    xlsp_append_native_completions(items, type);
     return items;
 }
 
@@ -137,16 +422,53 @@ const char *xlsp_builtin_get_hover(XlspBuiltinType type, const char *method_name
     XrType *xa_type = create_type_for_builtin(type);
     if (!xa_type)
         return NULL;
+    return xlsp_builtin_get_hover_for_type(xa_type, method_name, buf, buf_size);
+}
 
-    const char *type_name = xa_builtin_get_type_name(xa_type);
-    const char *signature = xa_builtin_get_member_signature(xa_type, method_name);
-    const char *doc = xa_builtin_get_member_doc(xa_type, method_name);
+const char *xlsp_builtin_get_signature_for_type(XrType *type, const char *method_name, char *buf,
+                                                size_t buf_size) {
+    if (!type || !method_name || !buf || buf_size == 0)
+        return NULL;
 
+    const XlspReceiverMethodSpec *spec = xlsp_find_receiver_method(type, method_name);
+    if (spec) {
+        xlsp_build_registry_signature(type, spec, buf, buf_size);
+        return buf;
+    }
+
+    const char *signature = xa_builtin_get_member_signature(type, method_name);
     if (!signature)
         return NULL;
 
-    snprintf(buf, buf_size, "```xray\n%s.%s%s\n```\n\n%s", type_name ? type_name : "unknown",
-             method_name, signature, doc ? doc : "");
+    snprintf(buf, buf_size, "%s%s", method_name, signature);
+    return buf;
+}
+
+const char *xlsp_builtin_get_hover_for_type(XrType *type, const char *method_name, char *buf,
+                                            size_t buf_size) {
+    if (!type || !method_name || !buf || buf_size == 0)
+        return NULL;
+
+    char signature[512];
+    const XlspReceiverMethodSpec *spec = xlsp_find_receiver_method(type, method_name);
+    if (spec) {
+        char receiver[160];
+        xlsp_receiver_label(type, spec, receiver, sizeof(receiver));
+        xlsp_build_registry_signature(type, spec, signature, sizeof(signature));
+        snprintf(buf, buf_size, "```xray\n%s.%s\n```\n\nreceiver-specialized builtin method",
+                 receiver, signature);
+        return buf;
+    }
+
+    const char *signature_suffix = xa_builtin_get_member_signature(type, method_name);
+    const char *doc = xa_builtin_get_member_doc(type, method_name);
+    if (!signature_suffix)
+        return NULL;
+
+    char type_name[160];
+    xlsp_type_label(type, type_name, sizeof(type_name));
+    snprintf(buf, buf_size, "```xray\n%s.%s%s\n```\n\n%s", type_name, method_name, signature_suffix,
+             doc ? doc : "");
 
     return buf;
 }

@@ -631,6 +631,63 @@ static bool scan_next_binding(const char **p_io, const char *content_begin, cons
     return false;
 }
 
+static XrJsonValue *complete_builtin_constructor_rhs(const char *after) {
+    if (!after || !((*after >= 'A' && *after <= 'Z') || (*after >= 'a' && *after <= 'z')))
+        return NULL;
+
+    const char *name_start = after;
+    while ((*after >= 'a' && *after <= 'z') || (*after >= 'A' && *after <= 'Z') ||
+           (*after >= '0' && *after <= '9') || *after == '_')
+        after++;
+
+    size_t name_len = (size_t) (after - name_start);
+    char name[32];
+    if (name_len == 0 || name_len >= sizeof(name))
+        return NULL;
+    memcpy(name, name_start, name_len);
+    name[name_len] = '\0';
+
+    bool is_builtin_ctor = strcmp(name, TYPE_NAME_ARRAY) == 0 || strcmp(name, TYPE_NAME_MAP) == 0 ||
+                           strcmp(name, TYPE_NAME_SET) == 0 || strcmp(name, TYPE_NAME_CHANNEL) == 0;
+    if (!is_builtin_ctor)
+        return NULL;
+
+    const char *type_end = after;
+    while (*type_end == ' ' || *type_end == '\t')
+        type_end++;
+    if (*type_end == '<') {
+        int depth = 1;
+        type_end++;
+        while (*type_end && depth > 0) {
+            if (*type_end == '<')
+                depth++;
+            else if (*type_end == '>')
+                depth--;
+            type_end++;
+        }
+    }
+
+    const char *call_start = type_end;
+    while (*call_start == ' ' || *call_start == '\t')
+        call_start++;
+    if (*call_start != '(')
+        return NULL;
+
+    char type_buf[160];
+    size_t type_len = (size_t) (type_end - name_start);
+    if (type_len >= sizeof(type_buf))
+        type_len = sizeof(type_buf) - 1;
+    memcpy(type_buf, name_start, type_len);
+    type_buf[type_len] = '\0';
+
+    XrType *type = xa_builtin_parse_type_string(NULL, type_buf);
+    if (type)
+        return xlsp_builtin_get_completions_for_type(type);
+
+    XlspBuiltinType bt = xlsp_builtin_type_from_name(name);
+    return bt != XLSP_TYPE_UNKNOWN ? xlsp_builtin_get_completions(bt) : NULL;
+}
+
 // Step 1 of instance-member completion: scan for `var`/`const`/`shared`
 // binding assignment forms to either (a) emit a literal/constructor completion directly, or
 // (b) extract the class name for `ClassName(...)`.
@@ -675,20 +732,9 @@ static void scan_binding_assignment(XrLspDocument *doc, const char *prefix,
         }
 
         // Constructor RHS → emit typed builtin completions directly.
-        if (strncmp(after, TYPE_NAME_ARRAY, 5) == 0) {
-            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
-            return;
-        }
-        if (strncmp(after, TYPE_NAME_MAP, 3) == 0) {
-            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_MAP);
-            return;
-        }
-        if (strncmp(after, TYPE_NAME_SET, 3) == 0) {
-            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_SET);
-            return;
-        }
-        if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0) {
-            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_CHANNEL);
+        XrJsonValue *builtin_ctor_items = complete_builtin_constructor_rhs(after);
+        if (builtin_ctor_items) {
+            *early_items = builtin_ctor_items;
             return;
         }
 
@@ -966,9 +1012,15 @@ static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer, const char
         // Fall through: some instances (built-in classes) still have
         // useful completions in the builtin bucket below.
     }
+    XrJsonValue *typed_items = xlsp_builtin_get_completions_for_type(type);
+    if (typed_items && xjson_array_len(typed_items) > 0)
+        return typed_items;
+    if (typed_items)
+        xjson_free(typed_items);
+
     XlspBuiltinType bt = type_to_builtin_bucket(type);
     if (bt != XLSP_TYPE_UNKNOWN)
-        return xlsp_builtin_get_completions(bt);
+        return xlsp_builtin_get_completions_for_type(type);
     return NULL;
 }
 
