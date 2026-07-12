@@ -28,7 +28,7 @@ static int type_member_to_tid(AstNode *node) {
 }
 
 // Apply type narrowing based on condition expression
-    // Analyzes common patterns: x != null, x == null, typeof(x) == Type.xxx, truthiness
+// Analyzes common patterns: x != null, x == null, typeOf(x) == Type.xxx, truthiness
 static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, XrType *base_type,
                                          bool assume_true) {
     if (!expr || !var_name || !base_type)
@@ -56,7 +56,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
     }
 
     // Pattern: x == null, x != null
-    // Pattern: typeof(x) == Type.xxx
+    // Pattern: typeOf(x) == Type.xxx
     if (type == AST_BINARY_EQ || type == AST_BINARY_NE) {
         AstNode *left = node->as.binary.left;
         AstNode *right = node->as.binary.right;
@@ -75,25 +75,25 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
             return xa_narrow_by_null_check(base_type, is_equal, assume_true);
         }
 
-        // Check for typeof pattern: typeof(x) == Type.xxx
-        // In xray, typeof is a builtin function call: AST_CALL_EXPR
+        // Check for typeOf pattern: typeOf(x) == Type.xxx
+        // In Xray, typeOf is a builtin function call: AST_CALL_EXPR
         AstNode *typeof_operand = NULL;
         int type_id = -1;
 
-        // Check left side for typeof(x) call
+        // Check left side for typeOf(x) call
         if (left && left->type == AST_CALL_EXPR && left->as.call_expr.callee &&
             left->as.call_expr.callee->type == AST_VARIABLE &&
             left->as.call_expr.callee->as.variable.name &&
-            strcmp(left->as.call_expr.callee->as.variable.name, "typeof") == 0 &&
+            strcmp(left->as.call_expr.callee->as.variable.name, "typeOf") == 0 &&
             left->as.call_expr.arg_count == 1) {
             typeof_operand = left->as.call_expr.arguments[0];
             type_id = type_member_to_tid(right);
         }
-        // Check right side for typeof(x) call
+        // Check right side for typeOf(x) call
         else if (right && right->type == AST_CALL_EXPR && right->as.call_expr.callee &&
                  right->as.call_expr.callee->type == AST_VARIABLE &&
                  right->as.call_expr.callee->as.variable.name &&
-                 strcmp(right->as.call_expr.callee->as.variable.name, "typeof") == 0 &&
+                 strcmp(right->as.call_expr.callee->as.variable.name, "typeOf") == 0 &&
                  right->as.call_expr.arg_count == 1) {
             typeof_operand = right->as.call_expr.arguments[0];
             type_id = type_member_to_tid(left);
@@ -102,8 +102,8 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
         if (typeof_operand && type_id >= 0 && typeof_operand->type == AST_VARIABLE &&
             typeof_operand->as.variable.name &&
             strcmp(typeof_operand->as.variable.name, var_name) == 0) {
-            // typeof(x) == Type.xxx with assume_true => narrow to type
-            // typeof(x) != Type.xxx with assume_true => exclude type
+            // typeOf(x) == Type.xxx with assume_true => narrow to type
+            // typeOf(x) != Type.xxx with assume_true => exclude type
             bool effective_true = (is_equal == assume_true);
             return xa_narrow_by_typeid(base_type, (XrTypeId) type_id, effective_true);
         }
@@ -608,8 +608,8 @@ XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true) {
         case XR_TID_BOOL:
             target_kind = XR_KIND_BOOL;
             break;
-        case XR_TID_CHAR:
-            target_kind = XR_KIND_CHAR;
+        case XR_TID_RUNE:
+            target_kind = XR_KIND_RUNE;
             break;
         case XR_TID_FUNCTION:
             target_kind = XR_KIND_FUNCTION;

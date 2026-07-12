@@ -6,7 +6,7 @@
 // Test 1: basic union type variable
 
 fn to_string_value(v: int | string) -> string {
-    if (typename(v) == "int") {
+    if (typeName(v) == "int") {
         return "int"
     } else {
         return "str"
@@ -19,9 +19,9 @@ fn parse_value(s: string) -> int | string {
     return s
 }
 fn classify(v: int | string | bool) -> string {
-    if (typename(v) == "int") {
+    if (typeName(v) == "int") {
         return "number"
-    } else if (typename(v) == "string") {
+    } else if (typeName(v) == "string") {
         return "text"
     } else {
         return "flag"
@@ -41,9 +41,9 @@ class Cat {
 @test
 fn test_union_types() {
     var x: int | string = 42
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
     x = "hello"
-    assert_eq(typename(x), "string")
+    assert_eq(typeName(x), "string")
 
     // Test 2: union in function parameter
     assert_eq(to_string_value(42), "int")
@@ -51,17 +51,17 @@ fn test_union_types() {
 
     // Test 3: union return type
     var a = parse_value("42")
-    assert_eq(typename(a), "int")
+    assert_eq(typeName(a), "int")
     var b = parse_value("hello")
-    assert_eq(typename(b), "string")
+    assert_eq(typeName(b), "string")
 
     // Test 4: union with null normalizes to nullable (int | null -> int?)
     var n: int | null = 42
-    assert_eq(typename(n), "int")
+    assert_eq(typeName(n), "int")
 
     // Test 5: numeric promotion preserved (int | float -> float)
     var f: int | float = 3.14
-    assert_eq(typename(f), "float")
+    assert_eq(typeName(f), "float")
 
     // Test 6: three-member union
     assert_eq(classify(42), "number")
@@ -70,30 +70,30 @@ fn test_union_types() {
 
     // Test 7: union assignability - int is assignable to int | string
     var u: int | string = 100
-    assert_eq(typename(u), "int")
+    assert_eq(typeName(u), "int")
     u = "world"
-    assert_eq(typename(u), "string")
+    assert_eq(typeName(u), "string")
 
     // Test 8: type alias with union
     type Result = int | string
     var r: Result = 42
-    assert_eq(typename(r), "int")
+    assert_eq(typeName(r), "int")
     r = "ok"
-    assert_eq(typename(r), "string")
+    assert_eq(typeName(r), "string")
 
     // Test 9: JSON type alias as union member (non-union alias allowed)
     type User = {id: int, name: string}
     type Response = User | bool
     var resp: Response = true
-    assert_eq(typename(resp), "bool")
+    assert_eq(typeName(resp), "bool")
 
     // Test 10: nullable union member (int? | string)
     var m: int? | string = null
-    assert_eq(typename(m), "null")
+    assert_eq(typeName(m), "null")
     m = 42
-    assert_eq(typename(m), "int")
+    assert_eq(typeName(m), "int")
     m = "hi"
-    assert_eq(typename(m), "string")
+    assert_eq(typeName(m), "string")
 
     // Test 11: class instance union
 
@@ -109,8 +109,8 @@ fn test_union_types() {
 
     // Test 13: container with union element type
     var arr: Array<int | string> = [1, "hello", 2, "world"]
-    assert_eq(arr.length, 4)
-    assert_eq(typename(arr[0]), "int")
-    assert_eq(typename(arr[1]), "string")
+    assert_eq(len(arr), 4)
+    assert_eq(typeName(arr[0]), "int")
+    assert_eq(typeName(arr[1]), "string")
 }
 

@@ -2,7 +2,7 @@ struct Sample {
     x: int
     y: float
     ok: bool
-    byte: uint8
+    byte: byte
 }
 
 fn score() -> int {

@@ -84,7 +84,7 @@ fn test_nested_ranges() {
 fn test_range_array_index() {
     var arr = [10, 20, 30, 40, 50]
     var sum = 0
-    for (i in 0..arr.length) {
+    for (i in 0..len(arr)) {
         sum = sum + arr[i]
     }
     assert_eq(sum, 150)

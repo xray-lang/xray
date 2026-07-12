@@ -1,7 +1,7 @@
 import mem
 
 struct XrayMemHeader {
-    tag: uint8
+    tag: byte
     value: uint32
 }
 

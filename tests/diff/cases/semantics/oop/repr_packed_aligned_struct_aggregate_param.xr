@@ -1,7 +1,7 @@
 import mem
 
 packed struct PackedPair {
-    tag: uint8
+    tag: byte
     value: uint32
 }
 
@@ -10,7 +10,7 @@ struct AlignedWord align(16) {
 }
 
 packed struct PackedAligned align(16) {
-    tag: uint8
+    tag: byte
     value: uint32
 }
 
@@ -18,7 +18,7 @@ fn sum_packed(p: PackedPair) -> int32 {
     return p.tag as int32 + p.value as int32
 }
 
-fn make_packed(tag: uint8, value: uint32) -> PackedPair {
+fn make_packed(tag: byte, value: uint32) -> PackedPair {
     return PackedPair{tag: tag, value: value}
 }
 
@@ -34,7 +34,7 @@ fn sum_packed_aligned(p: PackedAligned) -> int32 {
     return p.tag as int32 + p.value as int32
 }
 
-fn make_packed_aligned(tag: uint8, value: uint32) -> PackedAligned {
+fn make_packed_aligned(tag: byte, value: uint32) -> PackedAligned {
     return PackedAligned{tag: tag, value: value}
 }
 

@@ -1439,6 +1439,8 @@ static const StdlibEntry stdlib_core[] = {
     {"datetime", xr_load_module_datetime},
     {"log", xr_load_module_log},
     {"encoding", xr_load_module_encoding},
+    {"text", xr_load_module_text},
+    {"strconv", xr_load_module_strconv},
     /* Pure-Xray stdlib capability probe (task 148 phase 0 item 5): pins the
      * export shapes migrated modules rely on. Tiny and permanent. */
     {"_probe", xr_load_module_probe},

@@ -1,9 +1,9 @@
-export fn sumWindow(view: ByteSpan) -> int {
+export fn sumWindow(view: Slice<byte>) -> int {
     var total = 0
     var i = 0
-    while (i < view.length) {
+    while (i < len(view)) {
         total = total + int(view[i])
         i = i + 1
     }
-    return total + view.length
+    return total + len(view)
 }

@@ -1,5 +1,5 @@
-fn makeBytes(n: int) -> Bytes {
-    var out = Bytes(0)
+fn makeBytes(n: int) -> Array<byte> {
+    var out = Array<byte>(0)
     var i = 0
     while (i < n) {
         out.push(i & 0xFF)
@@ -9,5 +9,5 @@ fn makeBytes(n: int) -> Bytes {
 }
 
 var data = makeBytes(16)
-print(data.length)
+print(len(data))
 print(data[7])

@@ -401,51 +401,50 @@ TEST(string_slice_bounds) {
     setup();
     XrString *s = xr_string_intern(X, "abcdef", 6, xr_string_hash("abcdef", 6));
 
-    XrString *slice = xr_string_slice(X, s, -3, -1);
+    XrString *slice = xr_string_slice(X, s, 3, 5);
     ASSERT_NOT_NULL(slice);
     ASSERT_STR_EQ(slice->data, "de");
 
-    slice = xr_string_slice(X, s, 2, -1);
+    slice = xr_string_slice(X, s, 2, 5);
     ASSERT_NOT_NULL(slice);
     ASSERT_STR_EQ(slice->data, "cde");
+
+    ASSERT_NULL(xr_string_slice(X, s, -1, 2));
+    ASSERT_NULL(xr_string_slice(X, s, 2, 7));
+    ASSERT_NULL(xr_string_slice(X, s, 4, 2));
     teardown();
 }
 
 TEST(string_char_at) {
     setup();
     XrString *s = xr_string_intern(X, "hello", 5, xr_string_hash("hello", 5));
-    XrString *c = xr_string_char_at(X, s, 0);
+    XrString *c = xr_string_rune_at(X, s, 0);
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->data, "h");
 
-    c = xr_string_char_at(X, s, 4);
+    c = xr_string_rune_at(X, s, 4);
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->data, "o");
     teardown();
 }
 
-TEST(string_unicode_char_and_byte_at) {
+TEST(string_unicode_rune_at) {
     setup();
     const char *text = "A你🌍";
     XrString *s = xr_string_intern(X, text, strlen(text), xr_string_hash(text, strlen(text)));
 
-    XrString *ch = xr_string_char_at_unicode(X, s, 1);
+    XrString *ch = xr_string_rune_at_unicode(X, s, 1);
     ASSERT_NOT_NULL(ch);
     ASSERT_STR_EQ(ch->data, "你");
 
-    ch = xr_string_char_at_unicode(X, s, 2);
+    ch = xr_string_rune_at_unicode(X, s, 2);
     ASSERT_NOT_NULL(ch);
     ASSERT_STR_EQ(ch->data, "🌍");
 
-    ASSERT_NULL(xr_string_char_at_unicode(X, s, 3));
-    ASSERT_EQ_INT(xr_string_char_code_at(s, 2), 127757);
-    ASSERT_EQ_INT(xr_string_char_code_at(s, 9), -1);
+    ASSERT_NULL(xr_string_rune_at_unicode(X, s, 3));
+    ASSERT_EQ_INT(xr_string_rune_code_at(s, 2), 127757);
+    ASSERT_EQ_INT(xr_string_rune_code_at(s, 9), -1);
 
-    XrString *byte = xr_string_byte_at(X, s, -1);
-    ASSERT_NOT_NULL(byte);
-    ASSERT_EQ_UINT(byte->length, 1);
-    ASSERT_EQ_UINT((unsigned char) byte->data[0], 0x8D);
-    ASSERT_NULL(xr_string_byte_at(X, s, -99));
     teardown();
 }
 
@@ -568,7 +567,7 @@ TEST(string_utf8_length) {
     // "你好" is 2 characters, 6 bytes in UTF-8
     XrString *s = xr_string_intern(X, "你好", 6, xr_string_hash("你好", 6));
     ASSERT_EQ_UINT(s->length, 6);                 // Byte length
-    ASSERT_EQ_UINT(xr_string_char_length(s), 2);  // Character length
+    ASSERT_EQ_UINT(xr_string_rune_length(s), 2);  // Character length
     teardown();
 }
 
@@ -579,7 +578,7 @@ TEST(string_utf8_mixed) {
     size_t len = strlen(text);
     XrString *s = xr_string_intern(X, text, len, xr_string_hash(text, len));
     ASSERT_EQ_UINT(s->length, 11);                // Byte length
-    ASSERT_EQ_UINT(xr_string_char_length(s), 7);  // Character length
+    ASSERT_EQ_UINT(xr_string_rune_length(s), 7);  // Character length
     teardown();
 }
 
@@ -650,7 +649,7 @@ static void run_all_tests(void) {
     RUN_TEST(string_substring_bounds);
     RUN_TEST(string_slice_bounds);
     RUN_TEST(string_char_at);
-    RUN_TEST(string_unicode_char_and_byte_at);
+    RUN_TEST(string_unicode_rune_at);
 
     RUN_TEST_SUITE("String Split");
     RUN_TEST(string_split_edges);

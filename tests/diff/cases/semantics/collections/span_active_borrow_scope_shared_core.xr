@@ -1,11 +1,11 @@
 fn main() {
-    var bytes = Bytes(0)
+    var bytes = Array<byte>(0)
     bytes.push(7)
-    var view: ByteSpan = bytes[:]
-    print(view.length)
+    var view: Slice<byte> = bytes[:]
+    print(len(view))
     print(view[0])
     bytes.push(9)
-    print(bytes.length)
+    print(len(bytes))
     print(bytes[1])
 }
 

@@ -1,10 +1,10 @@
-// anchor: array-char-compact
-var chars: Array<char> = ['b', '中', '\u{1F600}']
-print(chars.length)
-print(typename(chars[0]))
+// anchor: array-rune-compact
+var chars: Array<rune> = ['b', '中', '\u{1F600}']
+print(len(chars))
+print(typeName(chars[0]))
 print(chars[0])
-print(chars[1].ord())
-print(chars[2].ord())
+print(chars[1].toUInt32())
+print(chars[2].toUInt32())
 
 chars[0] = 'a'
 chars.push('z')
@@ -16,21 +16,21 @@ print(chars.indexOf('x'))
 print(chars.indexOf('中'))
 
 chars.resize(6, 'q')
-print(chars.length)
+print(len(chars))
 print(chars[4])
 print(chars[5])
 
 chars.sort()
 print(chars.join(""))
-print(chars[0].ord())
+print(chars[0].toUInt32())
 
-var made = Array<char>(3, 'k')
-print(made.length)
+var made = Array<rune>(3, 'k')
+print(len(made))
 print(made.join(""))
 
-var from_string: Array<char> = []
+var from_string: Array<rune> = []
 for (ch in "A中\u{1F600}") {
     from_string.push(ch)
 }
 print(from_string.join("-"))
-print(typename(from_string[2]))
+print(typeName(from_string[2]))

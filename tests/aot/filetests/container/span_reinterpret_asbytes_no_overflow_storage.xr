@@ -1,5 +1,5 @@
-fn roundtrip(words: Span<uint32>) -> int {
-    var bytes: ByteSpan = words.asBytes()
-    var words_again: Span<uint32> = bytes.reinterpret<uint32>()
-    return words_again.length
+fn roundtrip(words: Slice<uint32>) -> int {
+    var bytes: Slice<byte> = words.asBytes()
+    var words_again: Slice<uint32> = bytes.reinterpret<uint32>()
+    return len(words_again)
 }

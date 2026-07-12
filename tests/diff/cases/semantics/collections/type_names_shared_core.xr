@@ -1,20 +1,20 @@
-print(typename(0))
-print(typename(1.5))
-print(typename(true))
-print(typename(null))
-print(typename("x"))
+print(typeName(0))
+print(typeName(1.5))
+print(typeName(true))
+print(typeName(null))
+print(typeName("x"))
 
 var xs = [1, 2, 3]
-print(typename(xs))
+print(typeName(xs))
 
 var m: Map<string, int> = #{"a": 1}
-print(typename(m))
+print(typeName(m))
 
 var s = #[1, 2, 3]
-print(typename(s))
+print(typeName(s))
 
 var r = 2..6
-print(typename(r))
+print(typeName(r))
 
 var sb = StringBuilder()
-print(typename(sb))
+print(typeName(sb))

@@ -1,24 +1,24 @@
 // 0516_json_methods.xr
-// Test: Json static methods (Json.keys(), Json.has(), Json.size(), etc.)
+// Test: Json static methods plus compiler-known len(Json)
 // All Json operations use Json.xxx(obj) to avoid field name conflicts.
 
-// ===== Json.size() =====
+// ===== len(Json) =====
 @test
 fn test_json_size() {
     var obj: Json = { "name": "Alice", "age": 30 }
-    assert_eq(Json.size(obj), 2)
+    assert_eq(len(obj), 2)
     var empty: Json = {}
-    assert_eq(Json.size(empty), 0)
+    assert_eq(len(empty), 0)
 }
 
 @test
 fn test_json_size_after_add() {
     var obj: Json = { "x": 1 }
-    assert_eq(Json.size(obj), 1)
+    assert_eq(len(obj), 1)
     obj.y = 2
-    assert_eq(Json.size(obj), 2)
+    assert_eq(len(obj), 2)
     obj.z = 3
-    assert_eq(Json.size(obj), 3)
+    assert_eq(len(obj), 3)
 }
 
 // ===== Json.keys() =====
@@ -26,7 +26,7 @@ fn test_json_size_after_add() {
 fn test_json_keys() {
     var obj: Json = { "name": "Alice", "age": 30 }
     var k = Json.keys(obj)
-    assert_eq(k.length, 2)
+    assert_eq(len(k), 2)
     assert_true(k[0] == "name" || k[1] == "name")
     assert_true(k[0] == "age" || k[1] == "age")
 }
@@ -35,7 +35,7 @@ fn test_json_keys() {
 fn test_json_keys_empty() {
     var obj: Json = {}
     var k = Json.keys(obj)
-    assert_eq(k.length, 0)
+    assert_eq(len(k), 0)
 }
 
 // ===== Json.values() =====
@@ -43,7 +43,7 @@ fn test_json_keys_empty() {
 fn test_json_values() {
     var obj: Json = { "x": 10, "y": 20 }
     var v = Json.values(obj)
-    assert_eq(v.length, 2)
+    assert_eq(len(v), 2)
     assert_true(v[0] == 10 || v[1] == 10)
     assert_true(v[0] == 20 || v[1] == 20)
 }
@@ -53,21 +53,21 @@ fn test_json_values() {
 fn test_json_entries() {
     var obj: Json = { "a": 1, "b": 2 }
     var e = Json.entries(obj)
-    assert_eq(e.length, 2)
+    assert_eq(len(e), 2)
     assert_eq(e[0].0, "a")
     assert_eq(e[0].1, 1)
     assert_eq(e[1].0, "b")
     assert_eq(e[1].1, 2)
 }
 
-// ===== Json.has() =====
+// ===== Json.containsKey() =====
 @test
 fn test_json_has() {
     var obj: Json = { "name": "Alice", "age": 30 }
-    assert_true(Json.has(obj, "name"))
-    assert_true(Json.has(obj, "age"))
-    assert_eq(Json.has(obj, "email"), false)
-    assert_eq(Json.has(obj, "address"), false)
+    assert_true(Json.containsKey(obj, "name"))
+    assert_true(Json.containsKey(obj, "age"))
+    assert_eq(Json.containsKey(obj, "email"), false)
+    assert_eq(Json.containsKey(obj, "address"), false)
 }
 
 // ===== Json.get() =====
@@ -87,29 +87,29 @@ fn test_json_get_with_default() {
     assert_eq(Json.get(obj, "count", 0), 0)
 }
 
-// ===== Json.isEmpty() =====
+// ===== Json emptiness via len =====
 @test
 fn test_json_is_empty() {
     var empty: Json = {}
-    assert_true(Json.isEmpty(empty))
+    assert_true(len(empty) == 0)
     var obj: Json = { "x": 1 }
-    assert_eq(Json.isEmpty(obj), false)
+    assert_eq(len(obj) == 0, false)
 }
 
 // ===== Combined test =====
 @test
 fn test_json_methods_combined() {
     var user: Json = { "name": "Bob", "score": 100 }
-    assert_eq(Json.size(user), 2)
-    assert_true(Json.has(user, "name"))
+    assert_eq(len(user), 2)
+    assert_true(Json.containsKey(user, "name"))
     user.level = 5
-    assert_eq(Json.size(user), 3)
+    assert_eq(len(user), 3)
     assert_eq(Json.get(user, "level"), 5)
     var keys = Json.keys(user)
-    assert_eq(keys.length, 3)
+    assert_eq(len(keys), 3)
 }
 
-// ===== Json.size() avoids field name conflict =====
+// ===== len(Json) avoids field name conflict =====
 @test
 fn test_json_size_no_conflict() {
     var obj: Json = { "size": 100, "length": 200, "keys": "mykeys" }
@@ -117,8 +117,8 @@ fn test_json_size_no_conflict() {
     assert_eq(obj.size, 100)
     assert_eq(obj.length, 200)
     assert_eq(obj.keys, "mykeys")
-    // Json.size() returns actual field count
-    assert_eq(Json.size(obj), 3)
+    // len(obj) returns actual field count
+    assert_eq(len(obj), 3)
 }
 
 print("json_methods: all tests passed")

@@ -13,13 +13,13 @@ import ws
 import time
 
 var url = "ws://127.0.0.1:9001"
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     url = process.args[0]
 }
 
 fn make_text(size) {
     var s = "X"
-    while (s.length < size) {
+    while (len(s) < size) {
         s = s + s
     }
     return s.slice(0, size)
@@ -53,7 +53,7 @@ fn bench_echo(label, payload, is_binary, count) {
     var elapsed_ms = time.monotonic() - t0
     ws.close(conn)
 
-    var size = payload.length
+    var size = len(payload)
     var elapsed_sec = elapsed_ms / 1000.0
     var msg_per_sec = float(count) / elapsed_sec
     var mb_per_sec = (float(size) * float(count) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
@@ -75,7 +75,7 @@ var sizes = [64, 256, 1024, 4096]
 var counts = [3000, 3000, 2000, 1000]
 
 print("━━━ Text Echo ━━━")
-for (var i = 0; i < sizes.length; i++) {
+for (var i = 0; i < len(sizes); i++) {
     var payload = make_text(sizes[i])
     bench_echo(string(sizes[i]) + "B text", payload, false, counts[i])
     time.sleep(200)
@@ -87,8 +87,8 @@ print("━━━ Binary Echo ━━━")
 var bin_sizes = [65536, 262144, 1048576]
 var bin_counts = [300, 100, 30]
 
-for (var i = 0; i < bin_sizes.length; i++) {
-    var payload = Bytes(bin_sizes[i], 0xAB)
+for (var i = 0; i < len(bin_sizes); i++) {
+    var payload = Array<byte>(bin_sizes[i], 0xAB)
     var label = string(bin_sizes[i] / 1024) + "KB bin"
     bench_echo(label, payload, true, bin_counts[i])
     time.sleep(200)

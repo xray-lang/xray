@@ -1,3 +1,0 @@
-var bytes = Bytes(4)
-var span: ByteSpan = bytes[:]
-var view: ByteView = span[0:2]

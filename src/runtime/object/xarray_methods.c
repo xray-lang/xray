@@ -47,7 +47,7 @@ static inline XrArray *array_self(XrValue self) {
 }
 
 static bool array_accepts_value(XrVMRuntime *iso, XrArray *arr, XrValue value) {
-    if (arr && arr->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(value)) {
+    if (arr && arr->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(value)) {
         xr_runtime_error(iso, "Array<char> element must be char\n");
         return false;
     }
@@ -168,8 +168,8 @@ static XrValue m_resize(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
     XrValue fill = argc >= 2 ? args[1] : xr_null();
     if (arr->elem_type == XR_ELEM_U8 && argc < 2)
         fill = xr_int(0);
-    if (arr->elem_type == XR_ELEM_CHAR && argc < 2)
-        fill = XR_FROM_CHAR(0);
+    if (arr->elem_type == XR_ELEM_RUNE && argc < 2)
+        fill = XR_FROM_RUNE(0);
     if (!array_accepts_value(iso, arr, fill))
         return self;
     xr_array_resize(arr, XR_TO_INT(args[0]), fill);
@@ -194,13 +194,6 @@ static XrValue m_sort(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
 }
 
 /* === Query === */
-
-static XrValue m_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_array_is_empty(array_self(self)));
-}
 
 static XrValue m_includes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
@@ -412,20 +405,12 @@ static XrValue m_some(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
 
 /* === toString === */
 
-/* For ordinary arrays, return the debug representation ("[1, 2, 3]").
- * For byte arrays (Array<uint8>, i.e. Bytes), return the UTF-8 decoded
- * text — symmetric with String.toBytes(). Binary blobs that are not
- * valid UTF-8 still pass through verbatim; callers needing strict
- * validation should layer their own decoder on top. */
+/* Arrays always use the container representation ("[1, 2, 3]"). Byte arrays
+ * are binary containers too; decode them explicitly with string.fromUtf8(). */
 static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    XrArray *arr = array_self(self);
-    if (arr && arr->elem_type == XR_ELEM_U8) {
-        const char *bytes = (const char *) arr->data;
-        size_t len = (size_t) arr->length;
-        return xr_string_value(xr_string_intern(iso, bytes, len, 0));
-    }
+    (void) array_self(self);
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
@@ -503,8 +488,7 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"resize", m_resize, 1},
         {"sort", m_sort, 0},
         /* Query */
-        {"isEmpty", m_is_empty, 0},
-        {"includes", m_includes, 1},
+        {"contains", m_includes, 1},
         {"indexOf", m_index_of, 1},
         {"appendFrom", m_append_from, 1},
         {"repeatFrom", m_repeat_from, 2},

@@ -194,8 +194,6 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
         return XLSP_TYPE_MAP;
     if (strncmp(text, TYPE_NAME_SET, 3) == 0)
         return XLSP_TYPE_SET;
-    if (strncmp(text, "Bytes", 5) == 0)
-        return XLSP_TYPE_ARRAY;
     if (strncmp(text, TYPE_NAME_CHANNEL, 7) == 0)
         return XLSP_TYPE_CHANNEL;
     if (strncmp(text, TYPE_NAME_BIGINT, 6) == 0)

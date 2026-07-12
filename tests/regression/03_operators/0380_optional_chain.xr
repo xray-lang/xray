@@ -1,3 +1,5 @@
+import strconv
+
 // 0380_optional_chain.xr
 // 作者：xingleixu@gmail.com
 // 测试：可选链运算符（?.）
@@ -131,21 +133,21 @@ fn test_optional_value_with_nullish() {
 @test
 fn test_optional_method_on_value() {
     var s: string? = "42"
-    var n = s?.toInt()
+    var n = s == null ? null : strconv.parseInt(s!)
     assert_eq(n, 42)
 }
 
 @test
 fn test_optional_method_on_null() {
     var s: string? = null
-    var n = s?.toInt()
+    var n = s == null ? null : strconv.parseInt(s!)
     assert_eq(n, null)
 }
 
 @test
 fn test_optional_method_substring() {
     var s: string? = "hello world"
-    var sub = s?.substring(0, 5)
+    var sub = s?.slice(0, 5)
     assert_eq(sub, "hello")
 }
 

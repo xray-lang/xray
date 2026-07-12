@@ -2,9 +2,9 @@
 // Process field names and ordering are shared between VM, AOT runtime bridge,
 // and the freestanding AOT process map adapter.
 print(__file__.endsWith("process_schema_shared_core.xr"))
-print(__dir__.length > 0)
+print(len(__dir__) > 0)
 print(process.file.endsWith("process_schema_shared_core.xr"))
-print(process.dir.length > 0)
-print(process.args.length)
+print(len(process.dir) > 0)
+print(len(process.args))
 print(process.args[0])
 print(process.args[1])

@@ -3,7 +3,7 @@ fn worker(x: int) -> int {
 }
 
 fn sum(xs: Array<int>) -> int {
-    return xs.length
+    return len(xs)
 }
 
 shared ch: Channel<Array<int>> = Channel(1)

@@ -5,7 +5,7 @@ fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        if (scores.has("ada")) {
+        if (scores.containsKey("ada")) {
             sum = sum + scores.get("ada")
         }
         i = i + 1

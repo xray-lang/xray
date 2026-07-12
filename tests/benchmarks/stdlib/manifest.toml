@@ -5,9 +5,9 @@ governed_suites = [
   "stdlib/_probe", "stdlib/base64", "stdlib/cluster", "stdlib/compress", "stdlib/crypto",
   "stdlib/csv", "stdlib/datetime", "stdlib/encoding", "stdlib/http", "stdlib/io",
   "stdlib/log", "stdlib/math", "stdlib/mem", "stdlib/net", "stdlib/os", "stdlib/parallel",
-  "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/sync",
-  "stdlib/sys", "stdlib/test_yield", "stdlib/time", "stdlib/toml", "stdlib/url",
-  "stdlib/ws", "stdlib/xml", "stdlib/yaml",
+  "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/strconv",
+  "stdlib/sync", "stdlib/sys", "stdlib/test_yield", "stdlib/text", "stdlib/time",
+  "stdlib/toml", "stdlib/url", "stdlib/ws", "stdlib/xml", "stdlib/yaml",
 ]
 
 [[benchmark]]

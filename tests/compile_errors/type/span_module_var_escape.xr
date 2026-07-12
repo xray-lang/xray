@@ -1,3 +1,3 @@
-var bytes = Bytes(4)
-var view: ByteSpan = bytes[:]
-print(view.length)
+var bytes = Array<byte>(4)
+var view: Slice<byte> = bytes[:]
+print(len(view))

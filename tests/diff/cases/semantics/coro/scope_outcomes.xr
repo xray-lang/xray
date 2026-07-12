@@ -11,7 +11,7 @@ fn fail() -> int {
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -22,7 +22,7 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -32,7 +32,7 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn has_error(outcomes: Array<TaskOutcome>) -> bool {
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -55,7 +55,7 @@ var outcomes = supervisor scope {
     go fail()
 }
 
-print(outcomes.length)
+print(len(outcomes))
 print(count_success(outcomes))
 print(count_failed(outcomes))
 print(has_error(outcomes))

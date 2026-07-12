@@ -5,7 +5,7 @@ print(encoding.hexEncode("Hello"))
 print(encoding.hexEncode("\t"))
 var bytes = encoding.hexDecode("48656c6c6f")
 if (bytes != null) {
-    print(bytes.length)
+    print(len(bytes))
     print(bytes[0])
     print(bytes[1])
     print(bytes[2])
@@ -17,7 +17,7 @@ print(encoding.hexDecode("gg") == null)
 print(encoding.hexDecode("abc") == null)
 var emptyBytes = encoding.hexDecode("")
 if (emptyBytes != null) {
-    print(emptyBytes.length)
+    print(len(emptyBytes))
 }
 
 print(encoding.hexValid("48656c6c6f"))
@@ -38,7 +38,7 @@ print(encoding.LE)
 print(encoding.BE)
 
 var u16le = encoding.utf16Encode("AB")
-print(u16le.length)
+print(len(u16le))
 print(u16le[0])
 print(u16le[1])
 print(u16le[2])
@@ -46,7 +46,7 @@ print(u16le[3])
 print(encoding.utf16Decode(u16le))
 
 var u16be = encoding.utf16Encode("AB", encoding.BE)
-print(u16be.length)
+print(len(u16be))
 print(u16be[0])
 print(u16be[1])
 print(u16be[2])
@@ -54,11 +54,11 @@ print(u16be[3])
 print(encoding.utf16Decode(u16be, encoding.BE))
 print(encoding.utf16Decode(u16be, encoding.BE, false))
 
-var bom = Bytes(4)
+var bom = Array<byte>(4)
 bom[0] = 254
 bom[1] = 255
 bom[2] = 0
 bom[3] = 65
 print(encoding.utf16Decode(bom))
 print(encoding.utf16Decode(bom, encoding.BE, false) == "A")
-print(encoding.utf16Decode(Bytes(1)) == null)
+print(encoding.utf16Decode(Array<byte>(1)) == null)

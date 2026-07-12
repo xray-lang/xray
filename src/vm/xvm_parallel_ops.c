@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "../base/xmalloc.h"
+#include "../os/os_thread.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xcountdown_latch.h"
 #include "../coro/xparallel_executor.h"
@@ -119,14 +120,26 @@ static XrArrayElemType vm_par_scalar_elem_type(XrValue value) {
         return XR_ELEM_F64;
     if (XR_IS_BOOL(value))
         return XR_ELEM_BOOL;
-    if (XR_IS_CHAR(value))
-        return XR_ELEM_CHAR;
+    if (XR_IS_RUNE(value))
+        return XR_ELEM_RUNE;
     return XR_ELEM_ANY;
 }
 
 static void vm_par_force_single_lane_fallback(XrValue *workers_slot) {
     if (workers_slot)
         *workers_slot = xr_int(1);
+}
+
+static XrRuntime *vm_par_ensure_scheduler(XrVMRuntime *isolate) {
+    XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
+    if (!runtime) {
+        /* Parallel intrinsics are a lazy scheduler boundary. Direct roots stay
+         * taskless until an actual batch is requested, then acquire only the
+         * worker runtime needed by that operation. */
+        xray_vm_multicore_init(isolate, 0);
+        runtime = xr_isolate_get_scheduler_runtime(isolate);
+    }
+    return runtime;
 }
 
 static bool vm_par_value_fits_elem_type(XrValue value, XrArrayElemType elem_type) {
@@ -137,8 +150,8 @@ static bool vm_par_value_fits_elem_type(XrValue value, XrArrayElemType elem_type
             return XR_IS_FLOAT(value) || XR_IS_INT(value);
         case XR_ELEM_BOOL:
             return XR_IS_BOOL(value);
-        case XR_ELEM_CHAR:
-            return XR_IS_CHAR(value);
+        case XR_ELEM_RUNE:
+            return XR_IS_RUNE(value);
         default:
             return false;
     }
@@ -303,7 +316,7 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         int64_t out_index = lane->iter - batch->start;
         if (!output || output->elem_type == XR_ELEM_ANY || out_index < 0 ||
             out_index >= output->length || out_index > INT32_MAX ||
-            (output->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(resume_value))) {
+            (output->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(resume_value))) {
             vm_par_batch_record_failure(isolate, batch, xr_null(), false,
                                         "parallel.map lane result store failed");
             vm_par_lane_done(lane);
@@ -453,17 +466,20 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
                                               XrValue *materialized_output_slot,
                                               XrVmParBatch *batch, bool resume) {
     XrCoroutine *current = vm_get_coro(vm_ctx);
-    if (!current) {
-        vm_par_batch_free(batch);
-        *batch_slot = xr_null();
-        *handled_slot = xr_bool(false);
-        return XR_DISP_NEXT;
-    }
-
     bool ok = false;
-    XrCountdownLatchWaitStatus wait =
-        resume ? xr_countdown_latch_wait_resume_for_coro(current, &ok)
-               : xr_countdown_latch_wait_for_coro(batch->latch, current, &ok);
+    XrCountdownLatchWaitStatus wait;
+    if (current) {
+        wait = resume ? xr_countdown_latch_wait_resume_for_coro(current, &ok)
+                      : xr_countdown_latch_wait_for_coro(batch->latch, current, &ok);
+    } else {
+        /* Direct entry roots have no coroutine to park. The batch still owns
+         * real scheduler lanes, so let workers run and synchronously join from
+         * the taskless root instead of silently degrading to one VM lane. */
+        while (!xr_countdown_latch_try_wait(batch->latch))
+            xr_thread_yield();
+        ok = true;
+        wait = XR_COUNTDOWN_LATCH_WAIT_DONE;
+    }
     if (wait == XR_COUNTDOWN_LATCH_WAIT_BLOCKED) {
         vm_suspend_replay_current(frame, pc);
         return XR_DISP_BLOCKED;
@@ -580,7 +596,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
         return XR_DISP_NEXT;
     }
 
-    XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
+    XrRuntime *runtime = vm_par_ensure_scheduler(isolate);
     int lane_count =
         xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
     if (lane_count <= 1) {
@@ -678,7 +694,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
     if (item_count > output->length || item_count > INT32_MAX)
         return XR_DISP_NEXT;
 
-    XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
+    XrRuntime *runtime = vm_par_ensure_scheduler(isolate);
     int lane_count =
         xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
     if (lane_count <= 1) {
@@ -770,7 +786,7 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
         return XR_DISP_NEXT;
     }
 
-    XrRuntime *runtime = xr_isolate_get_scheduler_runtime(isolate);
+    XrRuntime *runtime = vm_par_ensure_scheduler(isolate);
     int lane_count =
         xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
     if (lane_count <= 1) {
@@ -796,10 +812,6 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     }
 
     XrCoroutine *current = vm_get_coro(vm_ctx);
-    if (!current) {
-        vm_par_force_single_lane_fallback(workers_slot);
-        return XR_DISP_NEXT;
-    }
     XrArray *partials =
         elem_type == XR_ELEM_ANY
             ? xr_array_new_shared_core(xr_isolate_get_runtime_core(isolate), lane_count)

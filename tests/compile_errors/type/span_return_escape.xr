@@ -1,9 +1,9 @@
-fn escaped_int_slice() -> Span<int> {
+fn escaped_int_slice() -> Slice<int> {
     var src = Array<int>(4, 0)
     src[0] = 10
     src[1] = 20
-    var view: Span<int> = src[0:2]
+    var view: Slice<int> = src[0:2]
     return view
 }
 
-print(escaped_int_slice().length)
+print(len(escaped_int_slice()))

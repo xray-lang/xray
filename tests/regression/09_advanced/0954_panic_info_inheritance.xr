@@ -60,7 +60,7 @@ fn test_subclass_stored_in_array() {
     var errors: Array<PanicInfo> = []
     errors.push(HttpError("err1", 500))
     errors.push(DbError("err2", "logs"))
-    assert_eq(errors.length, 2)
+    assert_eq(len(errors), 2)
     assert_eq(errors[0].message, "err1")
     assert_eq(errors[1].message, "err2")
 }

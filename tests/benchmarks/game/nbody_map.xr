@@ -27,7 +27,7 @@ fn offsetMomentum(bodies) {
     var py = 0.0
     var pz = 0.0
     var i = 0
-    while (i < bodies.length) {
+    while (i < len(bodies)) {
         var b = bodies[i]
         px = px + b["vx"] * b["mass"]
         py = py + b["vy"] * b["mass"]
@@ -41,7 +41,7 @@ fn offsetMomentum(bodies) {
 
 fn energy(bodies): float {
     var e = 0.0
-    var nbodies = bodies.length
+    var nbodies = len(bodies)
     var i = 0
     while (i < nbodies) {
         var bi = bodies[i]
@@ -62,7 +62,7 @@ fn energy(bodies): float {
 }
 
 fn advance(bodies, dt: float) {
-    var nbodies = bodies.length
+    var nbodies = len(bodies)
     var i = 0
     while (i < nbodies) {
         var bi = bodies[i]
@@ -96,7 +96,7 @@ fn advance(bodies, dt: float) {
 }
 
 fn main() {
-    var n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
+    var n = len(process.args) > 0 ? int(process.args[0]) ?? 500000 : 500000
     var bodies = createBodies()
     offsetMomentum(bodies)
     print(energy(bodies))

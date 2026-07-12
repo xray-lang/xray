@@ -1,2 +1,2 @@
-var bytes = Bytes.withCapacity(1)
+var bytes: Array<byte> = Array.withCapacity(1)
 bytes.pushUnchecked(7)

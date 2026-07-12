@@ -1,5 +1,5 @@
 fn lenOf(a: Array<int>) -> int {
-    return a.length
+    return len(a)
 }
 
 var xs: Array<int> = [1, 2, 3]

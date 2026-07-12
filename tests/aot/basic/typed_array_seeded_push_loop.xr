@@ -1,5 +1,5 @@
-fn copyRepeated(matchLen: int) -> Array<uint8> {
-    var out: Array<uint8> = []
+fn copyRepeated(matchLen: int) -> Array<byte> {
+    var out: Array<byte> = []
     out.push(65)
     var matchPos = 0
     var i = 0
@@ -11,6 +11,6 @@ fn copyRepeated(matchLen: int) -> Array<uint8> {
 }
 
 var copied = copyRepeated(63)
-print(copied.length)
+print(len(copied))
 print(copied[0])
 print(copied[63])

@@ -1,29 +1,29 @@
 // anchor: span-reinterpret-asbytes-shared-core
 fn main() {
     var words = Array<uint32>(2, 0)
-    var wordSpan: Span<uint32> = words[:]
-    var wordBytes: ByteSpan = wordSpan.asBytes()
-    print(wordBytes.length)
+    var wordSpan: Slice<uint32> = words[:]
+    var wordBytes: Slice<byte> = wordSpan.asBytes()
+    print(len(wordBytes))
     wordBytes.fill(1)
     print(int(words[0]))
     print(int(words[1]))
-    var bytes = Bytes(6)
-    var raw: ByteSpan = bytes[:]
+    var bytes = Array<byte>(6)
+    var raw: Slice<byte> = bytes[:]
     raw.fill(0)
-    var pairs: Span<uint16> = raw.reinterpret<uint16>()
-    print(pairs.length)
+    var pairs: Slice<uint16> = raw.reinterpret<uint16>()
+    print(len(pairs))
     pairs[1] = 30583
     print(bytes[2])
     print(bytes[3])
-    var roundtrip: ByteSpan = pairs.asBytes()
-    print(roundtrip.length)
+    var roundtrip: Slice<byte> = pairs.asBytes()
+    print(len(roundtrip))
     roundtrip.fill(9)
     print(int(pairs[0]))
     print(int(pairs[2]))
     try {
-        var badRaw: ByteSpan = raw[0:5]
-        var bad: Span<uint32> = badRaw.reinterpret<uint32>()
-        print(bad.length)
+        var badRaw: Slice<byte> = raw[0:5]
+        var bad: Slice<uint32> = badRaw.reinterpret<uint32>()
+        print(len(bad))
     } catch panic (p) {
         print(p.message)
         print(p.code)

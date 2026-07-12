@@ -10,27 +10,26 @@
  * The bodies here are thin adapters over xr_string_*() in xstring.c.
  * Each adapter:
  *   - validates the receiver via XR_DCHECK,
- *   - matches the legacy semantics (e.g. "return self on bad arg"),
+ *   - implements only the canonical string surface,
  *   - returns XrValue with explicit null/bool/int/string boxing.
  *
- * The match() body bridges into stdlib/regex; see xstring_methods.h
- * for the architectural caveat.
  */
 
 #include "xstring_methods.h"
 #include "xstring.h"
 #include "xarray.h"
-#include "xtuple.h"
+#include "xarray_vm.h"
 #include "xiterator.h"
-#include "xmap.h"
+#include "xpanic_info.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
-#include "../../../stdlib/regex/xregex.h"
-#include "../../../stdlib/regex/xregex_binding.h"
-#include <stdlib.h>
+#include "../../base/xmalloc.h"
+#include "../../base/xutf8.h"
+#include "../../vm/xvm.h"
+#include "../xerror_codes.h"
 #include <string.h>
 
 static inline XrString *str_self(XrValue self) {
@@ -38,59 +37,42 @@ static inline XrString *str_self(XrValue self) {
     return XR_TO_STRING(self);
 }
 
-/* === Indexing / extraction === */
-
-static XrValue m_char_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    XrString *str = str_self(self);
-    xr_Integer index = XR_TO_INT(args[0]);
-    if (index < 0) {
-        size_t char_len = xr_string_char_length(str);
-        index = (xr_Integer) char_len + index;
-        if (index < 0)
-            return xr_null();
-    }
-    XrString *result = xr_string_char_at_unicode(iso, str, (size_t) index);
-    return result ? xr_string_value(result) : xr_null();
-}
-
-static XrValue m_codepoint_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 1)
-        return xr_int(-1);
-    XrString *str = str_self(self);
-    size_t index = (size_t) XR_TO_INT(args[0]);
-    return xr_int(xr_string_char_code_at(str, index));
-}
-
-static XrValue m_substring(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrString *str = str_self(self);
-    if (argc < 1)
-        return xr_string_value(str);
-    xr_Integer start = XR_TO_INT(args[0]);
-    xr_Integer end = (argc >= 2) ? XR_TO_INT(args[1]) : -1;
-    XrString *result = xr_string_substring(iso, str, start, end);
-    return result ? xr_string_value(result) : xr_null();
-}
-
 static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
     xr_Integer start = XR_TO_INT(args[0]);
-    xr_Integer end = (argc >= 2) ? XR_TO_INT(args[1]) : (xr_Integer) str->length;
+    xr_Integer count = (xr_Integer) xr_string_rune_length(str);
+    xr_Integer end = (argc >= 2) ? XR_TO_INT(args[1]) : count;
+    if (start < 0 || end < start || end > count) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+                                         "string.slice rune range out of bounds");
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
     XrString *result = xr_string_slice(iso, str, start, end);
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_byte_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
+static XrValue m_slice_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
-    xr_Integer index = XR_TO_INT(args[0]);
-    XrString *result = xr_string_byte_at(iso, str, index);
-    return result ? xr_string_value(result) : xr_null();
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
+                                         "string.sliceBytes expects start and end byte offsets");
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
+    xr_Integer start = XR_TO_INT(args[0]);
+    xr_Integer end = XR_TO_INT(args[1]);
+    XrString *result = xr_string_slice_bytes(iso, str, start, end);
+    if (!result) {
+        XrValue exc = xr_panic_info_newf(
+            iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+            "string.sliceBytes byte range out of bounds or not on UTF-8 scalar boundaries");
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
+    return xr_string_value(result);
 }
 
 /* === Search === */
@@ -134,68 +116,6 @@ static XrValue m_ends_with(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     XrString *str = str_self(self);
     XrString *suffix = xr_value_to_string(iso, args[0]);
     return xr_bool(xr_string_ends_with(iso, str, suffix));
-}
-
-/* === Case / whitespace transforms === */
-
-static XrValue m_to_lower(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    XrString *result = xr_string_to_lower_case(iso, str);
-    return result ? xr_string_value(result) : xr_string_value(str);
-}
-
-static XrValue m_to_upper(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    XrString *result = xr_string_to_upper_case(iso, str);
-    return result ? xr_string_value(result) : xr_string_value(str);
-}
-
-static XrValue m_trim(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    XrString *result = xr_string_trim(iso, str);
-    return result ? xr_string_value(result) : xr_string_value(str);
-}
-
-static XrValue m_trim_start(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    XrString *result = xr_string_trim_start(iso, str);
-    return result ? xr_string_value(result) : xr_string_value(str);
-}
-
-static XrValue m_trim_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    XrString *result = xr_string_trim_end(iso, str);
-    return result ? xr_string_value(result) : xr_string_value(str);
-}
-
-static XrValue m_pad_start(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrString *str = str_self(self);
-    if (argc < 1)
-        return xr_string_value(str);
-    int64_t target_len = XR_TO_INT(args[0]);
-    XrString *pad = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(iso, args[1]) : NULL;
-    XrString *result = xr_string_pad_start(iso, str, target_len, pad);
-    return result ? xr_string_value(result) : xr_string_value(str);
-}
-
-static XrValue m_pad_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrString *str = str_self(self);
-    if (argc < 1)
-        return xr_string_value(str);
-    int64_t target_len = XR_TO_INT(args[0]);
-    XrString *pad = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(iso, args[1]) : NULL;
-    XrString *result = xr_string_pad_end(iso, str, target_len, pad);
-    return result ? xr_string_value(result) : xr_string_value(str);
 }
 
 /* === Replacement / construction === */
@@ -247,35 +167,8 @@ static XrValue m_repeat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_concat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrString *str = str_self(self);
-    if (argc < 1)
-        return xr_string_value(str);
-    XrString *result = str;
-    for (int i = 0; i < argc; i++) {
-        if (XR_IS_STRING(args[i])) {
-            XrString *other = xr_value_to_string(iso, args[i]);
-            result = xr_string_concat(iso, result, other);
-            if (!result)
-                return xr_string_value(str);
-        }
-    }
-    return xr_string_value(result);
-}
-
-/* === Reverse / translate === */
-
-static XrValue m_reverse(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    XrString *result = xr_string_reverse(iso, str);
-    return result ? xr_string_value(result) : xr_null();
-}
-
-/* str.toBytes() -> Bytes (Array<uint8>). UTF-8 encoded; round-trips with
- * Bytes.toString(). The receiver remains immutable; the result owns its
- * own backing storage. */
+/* str.copyBytes() -> Array<byte>. The receiver remains immutable; the result
+ * owns its own backing storage. Decode explicitly with string.fromUtf8(). */
 static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
@@ -291,120 +184,6 @@ static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     return xr_value_from_array(bytes);
 }
 
-static XrValue m_translate(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_MAP(args[0]))
-        return self;
-    XrString *str = str_self(self);
-    XrMap *table = XR_TO_MAP(args[0]);
-    XrString *result = xr_string_translate(iso, str, table);
-    return result ? xr_string_value(result) : xr_null();
-}
-
-/* === Predicates / classification === */
-
-static XrValue m_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_string_is_empty(iso, str_self(self)));
-}
-
-static XrValue m_is_letter(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_string_is_letter(str_self(self)));
-}
-
-static XrValue m_is_number(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_string_is_number(str_self(self)));
-}
-
-static XrValue m_is_alnum(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_string_is_alnum(str_self(self)));
-}
-
-static XrValue m_is_whitespace(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return xr_bool(xr_string_is_whitespace_str(str_self(self)));
-}
-
-/* === Conversion / Unicode === */
-
-static XrValue m_to_int(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    const char *p = str->data;
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-        p++;
-    char *end;
-    long long value = strtoll(p, &end, 10);
-    if (end == p)
-        return xr_null();
-    return xr_int((xr_Integer) value);
-}
-
-static XrValue m_to_float(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    XrString *str = str_self(self);
-    const char *p = str->data;
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-        p++;
-    char *end;
-    double value = strtod(p, &end);
-    if (end == p)
-        return xr_null();
-    return xr_float(value);
-}
-
-static XrValue m_ord(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    int32_t cp = xr_string_ord(str_self(self));
-    return cp >= 0 ? xr_int(cp) : xr_null();
-}
-
-/* === Regex bridge === */
-
-static XrValue m_match(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    XrString *str = str_self(self);
-    if (!xr_value_is_regex(args[0]))
-        return xr_null();
-    XrRegex *re = xr_value_to_regex(args[0]);
-    if (!re)
-        return xr_null();
-
-    XrMatch match;
-    if (!xr_regex_match(re, str->data, (int) str->length, &match)) {
-        return xr_null();
-    }
-    XrArray *result = xr_array_new(NULL);
-    for (int i = 0; i < match.group_count; i++) {
-        if (match.groups[i].start) {
-            size_t len = match.groups[i].end - match.groups[i].start;
-            XrString *group = xr_string_intern(iso, match.groups[i].start, len, 0);
-            xr_array_push(result, xr_string_value(group));
-        } else {
-            xr_array_push(result, xr_null());
-        }
-    }
-    return xr_value_from_array(result);
-}
-
 /* === toString === */
 
 static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -414,9 +193,138 @@ static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     return xr_string_value(str_self(self));
 }
 
+static bool string_materialize_bytes(const void *storage, int64_t length, uint8_t elem_type,
+                                     const uint8_t **data, size_t *len, uint8_t **owned) {
+    if (length < 0)
+        return false;
+    *len = (size_t) length;
+    if (elem_type == XR_ELEM_U8) {
+        *data = (const uint8_t *) storage;
+        return true;
+    }
+    if (elem_type != XR_ELEM_ANY)
+        return false;
+    uint8_t *copy = length > 0 ? (uint8_t *) xr_malloc((size_t) length) : NULL;
+    if (length > 0 && !copy)
+        return false;
+    for (int64_t i = 0; i < length; i++) {
+        XrValue value = xr_typed_get((void *) storage, (int32_t) i, elem_type);
+        if (!XR_IS_INT(value) || XR_TO_INT(value) < 0 || XR_TO_INT(value) > 255) {
+            xr_free(copy);
+            return false;
+        }
+        copy[i] = (uint8_t) XR_TO_INT(value);
+    }
+    *data = copy;
+    *owned = copy;
+    return true;
+}
+
+static bool string_bytes_arg(XrValue *args, int argc, const uint8_t **data, size_t *len,
+                             uint8_t **owned) {
+    if (argc != 1)
+        return false;
+    *owned = NULL;
+    if (XR_IS_SPAN_REF(args[0])) {
+        XrSpanView *span = XR_TO_SPAN_REF(args[0]);
+        if (!span)
+            return false;
+        return string_materialize_bytes(span->data, span->length, span->elem_type, data, len,
+                                        owned);
+    }
+    if (!XR_IS_ARRAY(args[0]))
+        return false;
+    XrArray *bytes = XR_TO_ARRAY(args[0]);
+    if (!bytes)
+        return false;
+    return string_materialize_bytes(bytes->data, bytes->length, bytes->elem_type, data, len, owned);
+}
+
+static XrValue m_from_utf8(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    const uint8_t *data = NULL;
+    size_t len = 0;
+    uint8_t *owned = NULL;
+    if (!string_bytes_arg(args, argc, &data, &len, &owned))
+        return xr_null();
+    if (!xr_utf8_validate((const char *) data, len)) {
+        xr_free(owned);
+        return xr_null();
+    }
+    XrString *result = xr_string_new(iso, (const char *) data, len);
+    xr_free(owned);
+    return result ? xr_string_value(result) : xr_null();
+}
+
+static XrValue m_from_utf8_lossy(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    const uint8_t *data = NULL;
+    size_t len = 0;
+    uint8_t *owned = NULL;
+    if (!string_bytes_arg(args, argc, &data, &len, &owned))
+        return xr_string_value(xr_string_new(iso, "", 0));
+    if (xr_utf8_validate((const char *) data, len)) {
+        XrString *result = xr_string_new(iso, (const char *) data, len);
+        xr_free(owned);
+        return result ? xr_string_value(result) : xr_null();
+    }
+
+    if (len > (SIZE_MAX - 1) / 3) {
+        xr_free(owned);
+        return xr_null();
+    }
+    char *buf = (char *) xr_malloc(len * 3 + 1);
+    if (!buf) {
+        xr_free(owned);
+        return xr_null();
+    }
+    size_t src = 0, dst = 0;
+    while (src < len) {
+        uint32_t cp = 0;
+        int consumed = xr_utf8_decode((const char *) data + src, len - src, &cp);
+        if (consumed <= 0 || !xr_unicode_is_scalar(cp)) {
+            cp = XR_UNICODE_INVALID;
+            consumed = 1;
+        }
+        char encoded[XR_UTF8_MAX_BYTES];
+        int written = xr_utf8_encode(cp, encoded);
+        memcpy(buf + dst, encoded, (size_t) written);
+        dst += (size_t) written;
+        src += (size_t) consumed;
+    }
+    XrString *result = xr_string_new(iso, buf, dst);
+    xr_free(buf);
+    xr_free(owned);
+    return result ? xr_string_value(result) : xr_null();
+}
+
+static XrValue m_from_rune(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    if (argc != 1 || !XR_IS_RUNE(args[0]))
+        return xr_null();
+    XrString *result = xr_string_from_codepoint(iso, XR_TO_RUNE(args[0]));
+    return result ? xr_string_value(result) : xr_null();
+}
+
+static XrValue m_join_static(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    if (argc < 1 || !XR_IS_ARRAY(args[0]))
+        return xr_null();
+    XrString *separator = NULL;
+    if (argc >= 2) {
+        if (!XR_IS_STRING(args[1]))
+            return xr_null();
+        separator = XR_TO_STRING(args[1]);
+    } else {
+        separator = xr_string_intern(iso, "", 0, 0);
+    }
+    XrString *result = xr_array_join(iso, XR_TO_ARRAY(args[0]), separator);
+    return result ? xr_string_value(result) : xr_null();
+}
+
 /* === Iteration === */
 
-/* Character iterator: yields each Unicode scalar as a char value. */
+/* Rune iterator: yields each Unicode scalar as a rune value. */
 static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -437,32 +345,6 @@ static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-/* Eager entries() returning Array<(int, char)>. Each element is a
- * real (index, char) tuple, matching the static signature and the
- * XI_TUPLE_GET destructuring used by `for ((i, c) in s.entries())`. */
-static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    XrString *s = str_self(self);
-    struct XrCoroutine *coro = NULL;
-    size_t n = xr_string_char_length(s);
-    XrArray *out = xr_array_with_capacity(coro, n > 0 ? (int) n : 1);
-    if (!out)
-        return xr_null();
-    for (size_t i = 0; i < n; i++) {
-        int32_t cp = xr_string_char_code_at(s, i);
-        XrTuple *pair = xr_tuple_new(coro, 2);
-        if (!pair)
-            return xr_null();
-        xr_tuple_set(pair, 0, xr_int((int64_t) i));
-        xr_tuple_set(pair, 1, cp >= 0 ? xr_char((uint32_t) cp) : xr_null());
-        xr_array_set(out, (int) i, xr_value_from_tuple(pair));
-    }
-    out->length = (int32_t) n;
-    return xr_value_from_array(out);
-}
-
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
@@ -470,53 +352,35 @@ static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
 void xr_string_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod string_methods[] = {
         /* Indexing / extraction */
-        {"charAt", m_char_at, 1},
-        {"codePointAt", m_codepoint_at, 1},
-        {"substring", m_substring, 0},
         {"slice", m_slice, 0},
-        {"byteAt", m_byte_at, 1},
+        {"sliceBytes", m_slice_bytes, 2},
         /* Search */
         {"indexOf", m_index_of, 0},
         {"lastIndexOf", m_last_index_of, 1},
-        {"includes", m_includes, 1},
+        {"contains", m_includes, 1},
         {"startsWith", m_starts_with, 1},
         {"endsWith", m_ends_with, 1},
         /* Case / whitespace */
-        {"toLowerCase", m_to_lower, 0},
-        {"toUpperCase", m_to_upper, 0},
-        {"trim", m_trim, 0},
-        {"trimStart", m_trim_start, 0},
-        {"trimEnd", m_trim_end, 0},
-        {"padStart", m_pad_start, 1},
-        {"padEnd", m_pad_end, 1},
         /* Replacement / construction */
         {"split", m_split, 0},
         {"replace", m_replace, 2},
         {"replaceAll", m_replace_all, 2},
         {"repeat", m_repeat, 1},
-        {"concat", m_concat, 0},
         /* Reverse / translate */
-        {"reverse", m_reverse, 0},
-        {"translate", m_translate, 1},
         /* Bytes interop */
-        {"toBytes", m_to_bytes, 0},
-        /* Predicates */
-        {"isEmpty", m_is_empty, 0},
-        {"isLetter", m_is_letter, 0},
-        {"isNumber", m_is_number, 0},
-        {"isAlphanumeric", m_is_alnum, 0},
-        {"isWhitespace", m_is_whitespace, 0},
-        /* Conversion / Unicode */
-        {"toInt", m_to_int, 0},
-        {"toFloat", m_to_float, 0},
-        {"ord", m_ord, 0},
-        /* Regex */
-        {"match", m_match, 1},
+        {"copyBytes", m_to_bytes, 0},
         {"toString", m_to_string, 0},
         /* Iteration */
-        {"entries", m_entries, 0},
         {"iterator", m_iterator, 0},
+        {"runes", m_iterator, 0},
         {"entriesIterator", m_entries_iterator, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeMethod string_statics[] = {
+        {"fromUtf8", m_from_utf8, 1},
+        {"fromUtf8Lossy", m_from_utf8_lossy, 1},
+        {"fromRune", m_from_rune, 1},
+        {"join", m_join_static, 1},
         {NULL, NULL, 0},
     };
     static const XrNativeTypeInfo string_info = {
@@ -524,7 +388,7 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
         .gc_type = XR_TSTRING,
         .methods = string_methods,
         .getters = NULL,
-        .static_methods = NULL,
+        .static_methods = (XrNativeMethod *) string_statics,
     };
     xr_register_native_type(isolate, &string_info);
 }

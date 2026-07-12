@@ -68,7 +68,7 @@ fn test_live_child_survives_dead_cycle() {
     assert_eq(keeper.name, "keeper")
     assert_eq(keeper.items[0], 42)
     keeper.items.push(43)
-    assert_eq(keeper.items.length, 2)
+    assert_eq(len(keeper.items), 2)
 }
 
 // ===== 3. Survivors are re-trackable across collect rounds =====

@@ -35,7 +35,7 @@ http.route("GET", "/api/hello", fn(req: Json) -> Json {
 // Echo back request body
 http.route("POST", "/api/echo", fn(req: Json) -> Json {
     var body = req.body ?? ""
-    return { echo: body, length: body.length }
+    return { echo: body, length: len(body) }
 })
 
 // Dynamic path (query params)

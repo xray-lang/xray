@@ -102,7 +102,7 @@ fn test_rapid_alloc_collect() {
     }
 
     // Verify surviving batches
-    for (var si = 0; si < survivors.length; si++) {
+    for (var si = 0; si < len(survivors); si++) {
         var batch = survivors[si]
         var expected_cycle = 15 + si
         for (var i = 0; i < 50; i++) {
@@ -174,7 +174,7 @@ fn test_generational_cross_reference() {
 
     // Verify all children survived
     for (var i = 0; i < 50; i++) {
-        assert_eq(long_lived[i]["children"].length, 10)
+        assert_eq(len(long_lived[i]["children"]), 10)
         assert_eq(long_lived[i]["children"][0], "round_0")
         assert_eq(long_lived[i]["children"][9], "round_9")
     }
@@ -242,7 +242,7 @@ fn test_instance_field_gc() {
         assert_eq(nodes[i].value, i)
         assert_eq(nodes[i].label, "node_" + string(i))
     }
-    assert_eq(nodes[0].children.length, 1)
+    assert_eq(len(nodes[0].children), 1)
     assert_eq(nodes[0].children[0].value, 1)
 }
 

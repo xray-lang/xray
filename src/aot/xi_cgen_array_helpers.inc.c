@@ -1462,7 +1462,7 @@ static void cg_emit_static_fixed_array_value(XiCgenCtx *ctx, FILE *out,
             fprintf(out, "%d", value->as.bool_val ? 1 : 0);
             return;
         case XR_CT_CHAR:
-            fprintf(out, "0x%X", (unsigned) value->as.char_val);
+            fprintf(out, "0x%X", (unsigned) value->as.rune_val);
             return;
         case XR_CT_INT:
         default:
@@ -2656,7 +2656,7 @@ static bool cg_array_value_has_fresh_owned_origin(XiCgenCtx *ctx, const XiValue 
         return true;
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        return strcmp(name, "Bytes") == 0 || strcmp(name, "array_with_capacity") == 0 ||
+        return strcmp(name, "array_byte_new") == 0 || strcmp(name, "array_with_capacity") == 0 ||
                strcmp(name, "array_filled_new") == 0;
     }
     return false;
@@ -2704,7 +2704,7 @@ static const XiValue *cg_array_single_origin(const XiValue *array_value, uint8_t
         return v;
     if (v->op == XI_CALL_BUILTIN) {
         const char *name = (const char *) v->aux;
-        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
+        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0))
             return v;
     }
     if (v->op != XI_PHI)
@@ -2786,7 +2786,7 @@ static bool cg_array_fill_origin_starts_empty(const XiValue *origin) {
     }
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        if (strcmp(name, "Bytes") == 0) {
+        if (strcmp(name, "array_byte_new") == 0) {
             if (origin->nargs == 0)
                 return true;
             return origin->nargs == 1 && cg_array_const_int_value(origin->args[0], 0);
@@ -3364,7 +3364,7 @@ static bool cg_array_is_native_local_alloc(const XiValue *value) {
         return true;
     if (strcmp(name, "array_with_capacity") == 0)
         return true;
-    if (strcmp(name, "Bytes") != 0)
+    if (strcmp(name, "array_byte_new") != 0)
         return false;
     if (v->nargs == 0)
         return true;
@@ -3406,11 +3406,8 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
             return arg_index == 0 || arg_index == 1;
         case XI_BYTES_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
-        case XI_LOAD_FIELD: {
-            const char *field = (const char *) user->aux;
-            return arg_index == 0 && field &&
-                   (strcmp(field, "length") == 0 || strcmp(field, "size") == 0);
-        }
+        case XI_LEN:
+            return arg_index == 0;
         case XI_CALL_METHOD: {
             const char *method = (const char *) user->aux;
             if (!method)
@@ -3839,6 +3836,10 @@ static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         fprintf(out, "xrt_array_new_typed_uninit(");
         emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
         fprintf(out, ", %s)", info.elem_name);
+    } else if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST) {
+        fprintf(out, "xrt_array_new_typed(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ", %s)", info.elem_name);
     } else {
         fprintf(out, "xrt_array_new_typed(%" PRId64 ", %s)", cap, info.elem_name);
     }
@@ -3855,6 +3856,10 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, "xrt_array_new_typed_uninit_ptr(");
         emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
         fprintf(out, ", %s)", info.elem_name);
+    } else if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST) {
+        fprintf(out, "xrt_array_new_typed_ptr(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ", %s)", info.elem_name);
     } else {
         fprintf(out, "xrt_array_new_typed_ptr(%" PRId64 ", %s)", cap, info.elem_name);
     }
@@ -3864,7 +3869,7 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
 static bool emit_bytes_new_native_local_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                              const XiValue *v) {
     if (!out || !v || v->op != XI_CALL_BUILTIN || !v->aux ||
-        strcmp((const char *) v->aux, "Bytes") != 0)
+        strcmp((const char *) v->aux, "array_byte_new") != 0)
         return false;
     CgArrayFillLoop fill;
     if (cg_array_fill_origin_starts_empty(v) &&
@@ -3926,10 +3931,7 @@ static void emit_class_native_array_field_box(XiCgenCtx *ctx, FILE *out, const X
 
 static bool emit_class_native_array_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                 const XiValue *v) {
-    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
-        return false;
-    const char *field = (const char *) v->aux;
-    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+    if (!v || v->op != XI_LEN || v->nargs != 1)
         return false;
     CgClassNativeFunc info;
     uint16_t idx = 0;
@@ -4189,10 +4191,7 @@ static void emit_bytes_u8_read_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
 }
 
 static bool emit_span_length_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
-        return false;
-    const char *field = (const char *) v->aux;
-    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+    if (!v || v->op != XI_LEN || v->nargs != 1)
         return false;
     if (!cg_value_plan_is_span_aggregate(ctx, v->args[0]))
         return false;
@@ -4728,7 +4727,7 @@ static bool cg_array_fill_value_is_zero_bits_literal(const XiValue *value) {
     if (!v || v->op != XI_CONST || !v->type)
         return false;
     if (v->type->kind == XR_KIND_INT || v->type->kind == XR_KIND_BOOL ||
-        v->type->kind == XR_KIND_CHAR)
+        v->type->kind == XR_KIND_RUNE)
         return v->aux_int == 0;
     if (v->type->kind == XR_KIND_FLOAT) {
         double f = 0.0;
@@ -4894,13 +4893,10 @@ static bool cg_array_class_field_value_is_elided(XiCgenCtx *ctx, const XiFunc *f
                         if (ai == 0)
                             continue;
                         return false;
-                    case XI_LOAD_FIELD: {
-                        const char *field = (const char *) v->aux;
-                        if (ai == 0 && field &&
-                            (strcmp(field, "length") == 0 || strcmp(field, "size") == 0))
+                    case XI_LEN:
+                        if (ai == 0)
                             continue;
                         return false;
-                    }
                     case XI_CALL_METHOD: {
                         const char *method = (const char *) v->aux;
                         if (ai == 0 && method &&

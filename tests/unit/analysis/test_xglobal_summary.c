@@ -10062,7 +10062,7 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
         "    var token = Token(7)\n"
         "    var values: Map<Token, int> = #{}\n"
         "    values.set(token, 99)\n"
-        "    if (values.has(token)) { return values.get(token) }\n"
+        "    if (values.containsKey(token)) { return values.get(token) }\n"
         "    return 0\n"
         "}\n"
         "print(userHashEqPlan())\n";
@@ -10251,16 +10251,16 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
 
 TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     setup_parser_session();
-    const char *source = "fn touch(xs: Array<int>, b: Bytes, s: string, span: ByteSpan, "
+    const char *source = "fn touch(xs: Array<int>, b: Array<byte>, s: string, span: Slice<byte>, "
                          "sb: StringBuilder) -> int {\n"
                          "    xs.push(1)\n"
                          "    var first = xs[0]\n"
                          "    var part = xs[0:1]\n"
-                         "    var n = xs.length\n"
+                         "    var n = len(xs)\n"
                          "    b.appendFrom(span)\n"
                          "    b.copyFrom(span)\n"
                          "    var text = b.toString()\n"
-                         "    var bytes = s.toBytes()\n"
+                         "    var bytes = s.copyBytes()\n"
                          "    return n\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -14530,8 +14530,8 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
                          "    var seen: Set<int> = #[0, 1, 2, 3, 4]\n"
                          "    var fromIndex = scores[2]\n"
                          "    var viaGet = scores.get(4)\n"
-                         "    if (scores.has(3)) {\n"
-                         "        if (seen.has(1)) { return fromIndex + viaGet }\n"
+                         "    if (scores.containsKey(3)) {\n"
+                         "        if (seen.contains(1)) { return fromIndex + viaGet }\n"
                          "    }\n"
                          "    return 0\n"
                          "}\n";
@@ -14602,8 +14602,8 @@ TEST(global_evidence_producer_records_bool_direct_map_shape) {
                          "    var scores: Map<bool, int> = #{true: 7, false: 3}\n"
                          "    var seen: Set<bool> = #[true, false]\n"
                          "    var total = scores[flag]\n"
-                         "    if (scores.has(true)) {\n"
-                         "        if (seen.has(false)) { return total }\n"
+                         "    if (scores.containsKey(true)) {\n"
+                         "        if (seen.contains(false)) { return total }\n"
                          "    }\n"
                          "    return 0\n"
                          "}\n";
@@ -14823,10 +14823,10 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                          "    var seen: Set<string> = #[\"ada\"]\n"
                          "    scores.get(\"ada\")\n"
-                         "    scores.has(\"lin\")\n"
+                         "    scores.containsKey(\"lin\")\n"
                          "    scores.delete(\"lin\")\n"
                          "    scores.set(\"ada\", 8)\n"
-                         "    seen.has(\"ada\")\n"
+                         "    seen.contains(\"ada\")\n"
                          "    seen.add(\"lin\")\n"
                          "    seen.delete(\"ada\")\n"
                          "    seen.clear()\n"
@@ -14923,7 +14923,7 @@ TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) 
                          "    seen.add(1)\n"
                          "    const read = fn() -> int {\n"
                          "        var one = scores.get(1) ?? 0\n"
-                         "        if (seen.has(1)) {\n"
+                         "        if (seen.contains(1)) {\n"
                          "            return one + scores[1]\n"
                          "        }\n"
                          "        return one\n"

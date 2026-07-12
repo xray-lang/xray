@@ -18,7 +18,7 @@ await all tasks into results
 
 var sum = 0
 i = 0
-while (i < results.length) {
+while (i < len(results)) {
     sum = sum + results[i]
     i = i + 1
 }

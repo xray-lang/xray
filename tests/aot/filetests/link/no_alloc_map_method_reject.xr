@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_map_set_reject(scores: Map<int, int>, key: int, value: int) -> int {
     scores.set(key, value)
-    return scores.length
+    return len(scores)
 }
 
 var scores: Map<int, int> = #{}

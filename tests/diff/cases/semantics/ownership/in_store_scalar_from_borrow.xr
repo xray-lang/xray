@@ -7,7 +7,7 @@ class Counter {
 }
 
 fn stashLength(data: in Array<int>, counter: ref Counter) {
-    counter.value = data.length
+    counter.value = len(data)
 }
 
 var values: Array<int> = [1, 2, 3, 4]

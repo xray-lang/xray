@@ -78,7 +78,7 @@ fn test_gcd() {
 fn test_binary_search() {
     fn binarySearch(arr: Array<int>, target: int) -> int {
         var low = 0
-        var high = arr.length - 1
+        var high = len(arr) - 1
         while (low <= high) {
             var mid = (low + high) / 2
             if (arr[mid] == target) { return mid }
@@ -103,7 +103,7 @@ fn test_binary_search() {
 @test
 fn test_bubble_sort() {
     fn bubbleSort(arr: Array<int>) -> Array<int> {
-        var n = arr.length
+        var n = len(arr)
         for (i in 0..n) {
             for (j in 0..(n - i - 1)) {
                 if (arr[j] > arr[j + 1]) {
@@ -128,9 +128,9 @@ fn test_bubble_sort() {
 fn test_reverse_string() {
     fn reverse(s: string) -> string {
         var result = ""
-        var i = s.length - 1
+        var i = len(s) - 1
         while (i >= 0) {
-            result = result + s.charAt(i)
+            result = result + s.runes().nth(i)
             i = i - 1
         }
         return result
@@ -162,23 +162,23 @@ fn test_counter_class() {
 
 @test
 fn test_stack() {
-    class Stack {
+    class Stack implements Lengthable {
         items: Array<int>
         constructor() { this.items = [] }
         push(x: int) { this.items.push(x) }
         pop() -> int? { return this.items.pop() }
-        peek() -> int { return this.items[this.items.length - 1] }
-        isEmpty() -> bool { return this.items.length == 0 }
+        peek() -> int { return this.items[len(this.items) - 1] }
+        isEmpty() -> bool { return len(this.items) == 0 }
+        operator len() -> int { return len(this.items) }
     }
     
     var s = Stack()
-    assert_eq(s.isEmpty(), true)
+    assert_eq(len(s) == 0, true)
     s.push(1)
     s.push(2)
     s.push(3)
     assert_eq(s.peek(), 3)
     assert_eq(s.pop(), 3)
     assert_eq(s.pop(), 2)
-    assert_eq(s.isEmpty(), false)
+    assert_eq(len(s) == 0, false)
 }
-

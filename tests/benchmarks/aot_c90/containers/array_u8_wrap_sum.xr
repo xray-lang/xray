@@ -1,5 +1,5 @@
 fn run(n: int) -> int {
-    var bytes: Array<uint8> = []
+    var bytes: Array<byte> = []
     var i = 0
     while (i < n) {
         bytes.push(i)
@@ -8,7 +8,7 @@ fn run(n: int) -> int {
 
     var sum = 0
     i = 0
-    while (i < bytes.length) {
+    while (i < len(bytes)) {
         sum = sum + bytes[i]
         i = i + 1
     }

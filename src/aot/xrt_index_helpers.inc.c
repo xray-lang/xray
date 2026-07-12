@@ -193,7 +193,7 @@ static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
                 size = 1;
         }
         if (char_index == target) {
-            return valid ? XR_FROM_CHAR(cp) : XR_NULL_VAL;
+            return valid ? XR_FROM_RUNE(cp) : XR_NULL_VAL;
         }
         p += size;
     }

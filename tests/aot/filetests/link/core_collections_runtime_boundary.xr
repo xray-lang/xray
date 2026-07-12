@@ -1,31 +1,33 @@
+import text
+
 fn run_collections_boundary() {
-    var label = "  alpha,beta  ".trim()
+    var label = text.trim("  alpha,beta  ")
     var parts = label.split(",")
-    print(parts.length)
+    print(len(parts))
     print(parts[0])
     print("xo".repeat(3))
     print(("pre" + "fix").startsWith("pre"))
 
     var xs: Array<int> = [1, 2, 3]
     xs.push(4)
-    print(xs.length)
+    print(len(xs))
     print(xs[2])
     print(xs.join("|"))
-    var view: Span<int> = xs[1:3]
-    print(view.length)
+    var view: Slice<int> = xs[1:3]
+    print(len(view))
 
     var scores: Map<string, int> = #{"a": 1}
     scores.set("b", 2)
     print(scores.get("b"))
-    print(scores.has("a"))
+    print(scores.containsKey("a"))
     scores.delete("a")
-    print(scores.length)
+    print(len(scores))
 
     var seen: Set<string> = #["x"]
     seen.add("y")
-    print(seen.has("y"))
+    print(seen.contains("y"))
     seen.delete("x")
-    print(seen.length)
+    print(len(seen))
 }
 
 run_collections_boundary()

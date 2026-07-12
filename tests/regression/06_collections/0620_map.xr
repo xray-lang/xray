@@ -5,19 +5,19 @@
 @test
 fn test_map_literal() {
     var m = #{"a": 1, "b": 2, "c": 3}
-    assert_eq(m.length, 3)
+    assert_eq(len(m), 3)
 }
 
 @test
 fn test_empty_map() {
     var m = #{}
-    assert_eq(m.length, 0)
+    assert_eq(len(m), 0)
 }
 
 @test
 fn test_single_entry() {
     var m = #{"key": "value"}
-    assert_eq(m.length, 1)
+    assert_eq(len(m), 1)
 }
 
 // ===== 获取 =====
@@ -47,7 +47,7 @@ fn test_set_new() {
     var m = #{}
     m.set("key", "value")
     assert_eq(m.get("key"), "value")
-    assert_eq(m.length, 1)
+    assert_eq(len(m), 1)
 }
 
 @test
@@ -55,7 +55,7 @@ fn test_set_overwrite() {
     var m = #{"key": "old"}
     m.set("key", "new")
     assert_eq(m.get("key"), "new")
-    assert_eq(m.length, 1)
+    assert_eq(len(m), 1)
 }
 
 @test
@@ -69,8 +69,8 @@ fn test_bracket_assign() {
 @test
 fn test_has_key() {
     var m = #{"a": 1, "b": 2}
-    assert_eq(m.has("a"), true)
-    assert_eq(m.has("c"), false)
+    assert_eq(m.containsKey("a"), true)
+    assert_eq(m.containsKey("c"), false)
 }
 
 // ===== 删除 =====
@@ -78,10 +78,10 @@ fn test_has_key() {
 fn test_delete() {
     var m = #{"a": 1, "b": 2, "c": 3}
     m.delete("b")
-    assert_eq(m.length, 2)
-    assert_eq(m.has("b"), false)
-    assert_eq(m.has("a"), true)
-    assert_eq(m.has("c"), true)
+    assert_eq(len(m), 2)
+    assert_eq(m.containsKey("b"), false)
+    assert_eq(m.containsKey("a"), true)
+    assert_eq(m.containsKey("c"), true)
 }
 
 @test
@@ -89,7 +89,7 @@ fn test_delete_missing() {
     var m = #{"a": 1}
     m.delete("b")
     // 不存在的键
-    assert_eq(m.length, 1)
+    assert_eq(len(m), 1)
 }
 
 // ===== 遍历 =====
@@ -110,7 +110,7 @@ fn test_collect_keys() {
     for (k, v in m) {
         keys.push(k)
     }
-    assert_eq(keys.length, 3)
+    assert_eq(len(keys), 3)
 }
 
 // ===== keys/values =====
@@ -118,14 +118,14 @@ fn test_collect_keys() {
 fn test_keys() {
     var m = #{"a": 1, "b": 2}
     var keys = m.keys()
-    assert_eq(keys.length, 2)
+    assert_eq(len(keys), 2)
 }
 
 @test
 fn test_values() {
     var m = #{"a": 1, "b": 2}
     var values = m.values()
-    assert_eq(values.length, 2)
+    assert_eq(len(values), 2)
 }
 
 // ===== 清空 =====
@@ -133,7 +133,7 @@ fn test_values() {
 fn test_clear() {
     var m = #{"a": 1, "b": 2, "c": 3}
     m.clear()
-    assert_eq(m.length, 0)
+    assert_eq(len(m), 0)
 }
 
 // ===== 不同类型的键值 =====
@@ -159,7 +159,7 @@ fn test_many_entries() {
     for (var i = 0; i < 100; i++) {
         m.set("key" + i.toString(), i)
     }
-    assert_eq(m.length, 100)
+    assert_eq(len(m), 100)
     assert_eq(m.get("key50"), 50)
 }
 
@@ -170,5 +170,5 @@ fn test_overwrite_many_times() {
         m.set("x", i)
     }
     assert_eq(m.get("x"), 9)
-    assert_eq(m.length, 1)
+    assert_eq(len(m), 1)
 }

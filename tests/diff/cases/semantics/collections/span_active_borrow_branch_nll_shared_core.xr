@@ -1,16 +1,16 @@
 fn branchAfterLastUse(flag: bool) {
-    var bytes = Bytes(0)
+    var bytes = Array<byte>(0)
     bytes.push(1)
-    var view: ByteSpan = bytes[:]
+    var view: Slice<byte> = bytes[:]
     if (flag) {
-        print(view.length)
+        print(len(view))
         bytes.push(2)
-        print(bytes.length)
+        print(len(bytes))
     } else {
         bytes.push(3)
-        print(bytes.length)
+        print(len(bytes))
     }
-    print(bytes.length)
+    print(len(bytes))
 }
 
 branchAfterLastUse(true)

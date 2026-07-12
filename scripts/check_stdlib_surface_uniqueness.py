@@ -15,14 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 
 
-KNOWN_DUPLICATE_SURFACES = {
-    (
-        "class-vm",
-        "mem_buffer_length",
-        frozenset({"mem.Buffer.get:length", "mem.Buffer.length"}),
-        "legacy Buffer length getter/method bridge",
-    ),
-}
+KNOWN_DUPLICATE_SURFACES = set()
 
 
 IGNORED_AOT_HELPERS = {

@@ -14,8 +14,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
     {"decode", XLSP_SYM_FUNCTION, "fn(data: string): string?", "standard/URL-safe input to a UTF-8 string; null on invalid input.", NULL, 0},
     {"encodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string", "URL-safe alphabet, no padding.", NULL, 0},
     {"decodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string?", "the decoder already accepts both alphabets.", NULL, 0},
-    {"encodeBytes", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>): string", "standard alphabet with padding, over raw bytes.", NULL, 0},
-    {"decodeToBytes", XLSP_SYM_FUNCTION, "fn(data: string): Array<uint8>?", "decode to raw bytes; null on invalid input.", NULL, 0},
+    {"encodeBytes", XLSP_SYM_FUNCTION, "fn(data: Array<byte>): string", "standard alphabet with padding, over raw bytes.", NULL, 0},
+    {"decodeToBytes", XLSP_SYM_FUNCTION, "fn(data: string): Array<byte>?", "decode to raw bytes; null on invalid input.", NULL, 0},
     {"isValid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "whether the input is structurally valid base64.", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 7
@@ -113,14 +113,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
 // encoding module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
     {"hexEncode", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
-    {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<uint8>?", "", NULL, 0},
+    {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<byte>?", "", NULL, 0},
     {"hexDecodeString", XLSP_SYM_FUNCTION, "fn(hex: string): string?", "", NULL, 0},
     {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
     {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
     {"utf8Count", XLSP_SYM_FUNCTION, "fn(data: string): int", "", NULL, 0},
     {"utf8ByteLength", XLSP_SYM_FUNCTION, "fn(data: string): int", "", NULL, 0},
-    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, endian?: int): Array<uint8>", "", NULL, 0},
-    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>, endian?: int, stripBom?: bool): string?", "", NULL, 0},
+    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, endian?: int): Array<byte>", "", NULL, 0},
+    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Array<byte>, endian?: int, stripBom?: bool): string?", "", NULL, 0},
     {"LE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"BE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
 };
@@ -185,7 +185,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"readDir", XLSP_SYM_FUNCTION, "fn(path: string): Array<string>", "List directory entries", NULL, 0},
     {"readDirRecursive", XLSP_SYM_FUNCTION, "fn(path: string): Array<string>", "List directory entries recursively", NULL, 0},
     {"readFile", XLSP_SYM_FUNCTION, "fn(path: string): string?", "Read entire file as string", NULL, 0},
-    {"readFileBytes", XLSP_SYM_FUNCTION, "fn(path: string): Array<uint8>?", "Read entire file as byte array", NULL, 0},
+    {"readFileBytes", XLSP_SYM_FUNCTION, "fn(path: string): Array<byte>?", "Read entire file as byte array", NULL, 0},
     {"readLines", XLSP_SYM_FUNCTION, "fn(path: string): Array<string>", "Read file as lines", NULL, 0},
     {"readStdin", XLSP_SYM_FUNCTION, "fn(): string?", "Read all data from standard input", NULL, 0},
     {"readlink", XLSP_SYM_FUNCTION, "fn(path: string): string?", "Read symlink target", NULL, 0},
@@ -199,7 +199,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"tempFile", XLSP_SYM_FUNCTION, "fn(): string?", "Create temporary file", NULL, 0},
     {"touch", XLSP_SYM_FUNCTION, "fn(path: string): bool", "Create or update file timestamp", NULL, 0},
     {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, data: string): bool", "Write string to file", NULL, 0},
-    {"writeFileBytes", XLSP_SYM_FUNCTION, "fn(path: string, data: Array<uint8>): bool", "Write byte array to file", NULL, 0},
+    {"writeFileBytes", XLSP_SYM_FUNCTION, "fn(path: string, data: Array<byte>): bool", "Write byte array to file", NULL, 0},
     {"FileStat", XLSP_SYM_CLASS, "type FileStat", "Native handle type", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 31
@@ -287,10 +287,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 // mem module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
-    {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
-    {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
-    {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
-    {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
+    {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
+    {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
+    {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
+    {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
     {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
     {"sizeOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time size in bytes of a statically laid out type T", NULL, 0},
     {"alignOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time alignment in bytes of a statically laid out type T", NULL, 0},
@@ -298,17 +298,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", NULL, 0},
     {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", NULL, 0},
     {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", NULL, 0},
-    {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
-    {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
-    {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
-    {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
+    {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: int, prot?: int): RawMut<byte>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
+    {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
+    {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
+    {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): RawMut<byte>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<unknown>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
-    {"copy", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
-    {"move", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
-    {"set", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
-    {"compare", XLSP_SYM_FUNCTION, "fn(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", NULL, 0},
-    {"volatileLoad", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
-    {"volatileStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
+    {"copy", XLSP_SYM_FUNCTION, "fn(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
+    {"move", XLSP_SYM_FUNCTION, "fn(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
+    {"set", XLSP_SYM_FUNCTION, "fn(dst: RawMut<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
+    {"compare", XLSP_SYM_FUNCTION, "fn(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", NULL, 0},
+    {"volatileLoad", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<byte>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
+    {"volatileStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<byte>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
     {"PROT_NONE", XLSP_SYM_CONSTANT, "int", "No access protection for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_READ", XLSP_SYM_CONSTANT, "int", "Readable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
@@ -322,9 +322,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"listen", XLSP_SYM_FUNCTION, "fn(port: int, backlog?: int): NetListener?", "Start listening on a port", NULL, 0},
     {"accept", XLSP_SYM_FUNCTION, "fn(listener: NetListener): NetConn?", "Accept a new connection", NULL, 0},
     {"read", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxlen?: int): string?", "Read data from connection", NULL, 0},
-    {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: Bytes, maxlen?: int): int", "Read data into a reusable Bytes buffer", NULL, 0},
+    {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", NULL, 0},
     {"write", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: string): int", "Write data to connection", NULL, 0},
-    {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Bytes): int", "Write Bytes data to connection", NULL, 0},
+    {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", NULL, 0},
     {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): Json", "Copy two TCP/TLS streams in both directions", NULL, 0},
     {"shutdownRead", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "Shut down the read side of a TCP connection", NULL, 0},
@@ -441,6 +441,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
 
+// strconv module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_strconv_symbols[] = {
+    {"parseInt", XLSP_SYM_FUNCTION, "fn(value: string): int?", "", NULL, 0},
+    {"parseFloat", XLSP_SYM_FUNCTION, "fn(value: string): float?", "", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_STRCONV_SYMBOL_COUNT 2
+
 // sync module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form (task 147 §6.5).", NULL, 0},
@@ -472,6 +479,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 16
+
+// text module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
+    {"lower", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"upper", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"trim", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"trimStart", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"trimEnd", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"reverseRunes", XLSP_SYM_FUNCTION, "fn(value: string): string", "", NULL, 0},
+    {"padStart", XLSP_SYM_FUNCTION, "fn(value: string, targetLength: int, padding?: string): string", "", NULL, 0},
+    {"padEnd", XLSP_SYM_FUNCTION, "fn(value: string, targetLength: int, padding?: string): string", "", NULL, 0},
+    {"translate", XLSP_SYM_FUNCTION, "fn(value: string, table: Map<string, string>): string", "", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_TEXT_SYMBOL_COUNT 9
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
@@ -516,7 +537,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
 // ws module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"connect", XLSP_SYM_FUNCTION, "fn(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", NULL, 0},
-    {"send", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool", "Send data over WebSocket connection", NULL, 0},
+    {"send", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", NULL, 0},
     {"recv", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", NULL, 0},
     {"close", XLSP_SYM_FUNCTION, "fn(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", NULL, 0},
     {"ping", XLSP_SYM_FUNCTION, "fn(conn: WsConn): bool", "Send a ping frame", NULL, 0},
@@ -530,15 +551,15 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"parseUpgradeResponse", XLSP_SYM_FUNCTION, "fn(response: string, secKey: string, protocols?: Array<string>?, allowDeflate?: bool): ParsedUpgradeResponse?", "", NULL, 0},
     {"parseUrl", XLSP_SYM_FUNCTION, "fn(url: string): WsUrl?", "", NULL, 0},
     {"isValidCloseCode", XLSP_SYM_FUNCTION, "fn(code: int): bool", "", NULL, 0},
-    {"parseClosePayload", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>): ClosePayload?", "", NULL, 0},
-    {"maskPayload", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, key: Array<uint8>): Array<uint8>", "", NULL, 0},
-    {"parseFrame", XLSP_SYM_FUNCTION, "fn(raw: Array<uint8>, expectMasked?: bool, enforceMask?: bool, allowRsv1?: bool, maxPayloadBytes?: int): ParsedFrame?", "", NULL, 0},
-    {"frame", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, opcode?: int, mask?: bool): Array<uint8>", "", NULL, 0},
-    {"textFrame", XLSP_SYM_FUNCTION, "fn(data: string, mask?: bool): Array<uint8>", "", NULL, 0},
-    {"binaryFrame", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>, mask?: bool): Array<uint8>", "", NULL, 0},
-    {"closeFrame", XLSP_SYM_FUNCTION, "fn(code?: int, reason?: string, mask?: bool): Array<uint8>", "", NULL, 0},
-    {"pingFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<uint8>?, mask?: bool): Array<uint8>", "", NULL, 0},
-    {"pongFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<uint8>?, mask?: bool): Array<uint8>", "", NULL, 0},
+    {"parseClosePayload", XLSP_SYM_FUNCTION, "fn(payload: Array<byte>): ClosePayload?", "", NULL, 0},
+    {"maskPayload", XLSP_SYM_FUNCTION, "fn(payload: Array<byte>, key: Array<byte>): Array<byte>", "", NULL, 0},
+    {"parseFrame", XLSP_SYM_FUNCTION, "fn(raw: Array<byte>, expectMasked?: bool, enforceMask?: bool, allowRsv1?: bool, maxPayloadBytes?: int): ParsedFrame?", "", NULL, 0},
+    {"frame", XLSP_SYM_FUNCTION, "fn(payload: Array<byte>, opcode?: int, mask?: bool): Array<byte>", "", NULL, 0},
+    {"textFrame", XLSP_SYM_FUNCTION, "fn(data: string, mask?: bool): Array<byte>", "", NULL, 0},
+    {"binaryFrame", XLSP_SYM_FUNCTION, "fn(data: Array<byte>, mask?: bool): Array<byte>", "", NULL, 0},
+    {"closeFrame", XLSP_SYM_FUNCTION, "fn(code?: int, reason?: string, mask?: bool): Array<byte>", "", NULL, 0},
+    {"pingFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<byte>?, mask?: bool): Array<byte>", "", NULL, 0},
+    {"pongFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<byte>?, mask?: bool): Array<byte>", "", NULL, 0},
     {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Native handle type", NULL, 0},
     {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Native handle type", NULL, 0},
     {"ParsedFrame", XLSP_SYM_CLASS, "type ParsedFrame", "Class type", NULL, 0},
@@ -594,8 +615,10 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
     {"runtime", "runtime standard library module", g_xlsp_stdlib_runtime_symbols, GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT},
+    {"strconv", "strconv standard library module", g_xlsp_stdlib_strconv_symbols, GEN_XLSP_STDLIB_STRCONV_SYMBOL_COUNT},
     {"sync", "sync standard library module", g_xlsp_stdlib_sync_symbols, GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT},
     {"sys", "sys standard library module", g_xlsp_stdlib_sys_symbols, GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT},
+    {"text", "text standard library module", g_xlsp_stdlib_text_symbols, GEN_XLSP_STDLIB_TEXT_SYMBOL_COUNT},
     {"time", "time standard library module", g_xlsp_stdlib_time_symbols, GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT},
     {"toml", "toml standard library module", g_xlsp_stdlib_toml_symbols, GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT},
     {"url", "url standard library module", g_xlsp_stdlib_url_symbols, GEN_XLSP_STDLIB_URL_SYMBOL_COUNT},

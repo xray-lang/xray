@@ -58,7 +58,7 @@ fn test_data_transformation() {
 fn test_dynamic_form() {
     fn createFormData<T>(fields: Array<string>, values: Array<T>) -> Json {
         var form: Json = {}
-        for (i in 0..fields.length) {
+        for (i in 0..len(fields)) {
             form[fields[i]] = values[i]
         }
         return form

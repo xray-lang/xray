@@ -6,6 +6,6 @@ class Base {
 
 class Child extends Base {
     run(value: string) -> int {
-        return value.length
+        return len(value)
     }
 }

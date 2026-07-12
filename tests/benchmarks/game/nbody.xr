@@ -78,7 +78,7 @@ fn offsetMomentum(bodies: Array<Body>) {
     var px = 0.0
     var py = 0.0
     var pz = 0.0
-    for (var i = 0; i < bodies.length; i++) {
+    for (var i = 0; i < len(bodies); i++) {
         var b = bodies[i]
         px = px + b.vx * b.mass
         py = py + b.vy * b.mass
@@ -98,7 +98,7 @@ fn offsetMomentum(bodies: Array<Body>) {
 */
 fn energy(bodies: Array<Body>): float {
     var e = 0.0
-    var nbodies = bodies.length
+    var nbodies = len(bodies)
     for (var i = 0; i < nbodies; i++) {
         var bi = bodies[i]
         // 动能
@@ -126,7 +126,7 @@ fn energy(bodies: Array<Body>): float {
 ** 3. 更新位置
 */
 fn advance(bodies: Array<Body>, dt: float) {
-    var nbodies = bodies.length
+    var nbodies = len(bodies)
     // 计算引力并更新速度
     for (var i = 0; i < nbodies; i++) {
         var bi = bodies[i]
@@ -159,7 +159,7 @@ fn advance(bodies: Array<Body>, dt: float) {
 // 主程序
 fn main() {
     // 迭代次数（从命令行读取，默认 500000）
-    var n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
+    var n = len(process.args) > 0 ? int(process.args[0]) ?? 500000 : 500000
     // 创建天体系统
     var bodies = createBodies()
     // 初始化：调整动量使系统质心静止

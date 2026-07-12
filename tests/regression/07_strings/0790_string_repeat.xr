@@ -10,7 +10,7 @@
 @test
 fn test_string_repeat() {
     var line = "=" * 50
-    assert_eq(line.length, 50)
+    assert_eq(len(line), 50)
 
     var stars = "*" * 10
     assert_eq(stars, "**********")
@@ -42,7 +42,7 @@ fn test_string_repeat() {
 
     // 表达式中使用
     var header = "+" + "-" * 20 + "+"
-    assert_eq(header.length, 22)
+    assert_eq(len(header), 22)
 
     // 打印分隔线
 }

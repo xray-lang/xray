@@ -401,10 +401,13 @@ prepare_package_payload_case() {
         return 1
     fi
     mkdir -p "$pkg_dir"
+    # The synthetic payload below intentionally contains module identity and a
+    # link dependency only. Keep its source declaration-free so the payload is
+    # a complete description of the package rather than relying on the native
+    # producer to repair missing declaration/storage evidence.
     cat >"$pkg_src" <<'XR_EOF'
-fn package_value() -> int {
-    return 5
-}
+// Synthetic package represented entirely by package_payload_fixture.
+0
 XR_EOF
     real_pkg_src="$(realpath_portable "$pkg_src")"
     "$PACKAGE_PAYLOAD_FIXTURE" "$cache/aot/native" "codex/pkg" "$real_pkg_src" >/dev/null

@@ -1,10 +1,10 @@
 fn launch(data: in Array<int>) {
     var task = go fn(owned: Array<int>) -> int {
         owned.push(5)
-        return owned.length
+        return len(owned)
     }(copy(data))
     print(await task)
-    print(data.length)
+    print(len(data))
 }
 
 var values: Array<int> = [1, 2, 3, 4]

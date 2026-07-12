@@ -3,7 +3,7 @@ fn clearLocal() -> int {
     a.push(1)
     a.push(2)
     a.clear()
-    return a.length
+    return len(a)
 }
 
 print(clearLocal())

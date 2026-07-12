@@ -1,11 +1,11 @@
 @no_alloc
 fn xray_no_alloc_json_values_reject(value: Json) -> int {
-    return value.values().length
+    return len(value.values())
 }
 
 @no_alloc
 fn xray_no_alloc_json_entries_reject(value: Json) -> int {
-    return value.entries().length
+    return len(value.entries())
 }
 
 @no_alloc
@@ -25,7 +25,7 @@ fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
 
 @no_alloc
 fn xray_no_alloc_range_values_reject(value: Range) -> int {
-    return value.values().length
+    return len(value.values())
 }
 
 var xray_no_alloc_json_range_obj: Json = { answer: 42, label: "edge" }

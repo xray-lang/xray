@@ -6,50 +6,50 @@
 fn test_int_annotation() {
     var x: int = 42
     assert_eq(x, 42)
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
 }
 
 @test
 fn test_float_annotation() {
     var x: float = 3.14
     assert_eq(x > 3, true)
-    assert_eq(typename(x), "float")
+    assert_eq(typeName(x), "float")
 }
 
 @test
 fn test_string_annotation() {
     var s: string = "hello"
     assert_eq(s, "hello")
-    assert_eq(typename(s), "string")
+    assert_eq(typeName(s), "string")
 }
 
 @test
 fn test_bool_annotation() {
     var flag: bool = true
     assert_eq(flag, true)
-    assert_eq(typename(flag), "bool")
+    assert_eq(typeName(flag), "bool")
 }
 
 // ===== 集合类型注解 =====
 @test
 fn test_array_annotation() {
     var arr: Array<int> = [1, 2, 3]
-    assert_eq(arr.length, 3)
-    assert_eq(typename(arr), "Array")
+    assert_eq(len(arr), 3)
+    assert_eq(typeName(arr), "Array")
 }
 
 @test
 fn test_map_annotation() {
     var m: Map<string, int> = #{"a": 1}
     assert_eq(m.get("a"), 1)
-    assert_eq(typename(m), "Map")
+    assert_eq(typeName(m), "Map")
 }
 
 @test
 fn test_set_annotation() {
     var s: Set<int> = #[1, 2, 3]
-    assert_eq(s.length, 3)
-    assert_eq(typename(s), "Set")
+    assert_eq(len(s), 3)
+    assert_eq(typeName(s), "Set")
 }
 
 // ===== 函数参数类型注解 =====

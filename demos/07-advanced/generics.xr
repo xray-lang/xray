@@ -59,17 +59,17 @@ class Stack<T> {
     push(item: T) { this.items.push(item) }
 
     pop() -> T? {
-        if (this.items.length == 0) { return null }
+        if (len(this.items) == 0) { return null }
         return this.items.pop()
     }
 
     peek() -> T? {
-        if (this.items.length == 0) { return null }
-        return this.items[this.items.length - 1]
+        if (len(this.items) == 0) { return null }
+        return this.items[len(this.items) - 1]
     }
 
-    size() -> int { return this.items.length }
-    isEmpty() -> bool { return this.items.length == 0 }
+    size() -> int { return len(this.items) }
+    isEmpty() -> bool { return len(this.items) == 0 }
 }
 
 var stack = Stack<int>()

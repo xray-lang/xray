@@ -1,13 +1,13 @@
 // AOT test: array operations
 var arr = [1, 2, 3]
-print(arr.length)       // 3
+print(len(arr))       // 3
 print(arr[0])           // 1
 print(arr[1])           // 2
 print(arr[2])           // 3
 
 // Push
 arr.push(4)
-print(arr.length)       // 4
+print(len(arr))       // 4
 print(arr[3])           // 4
 
 // Modify element
@@ -17,7 +17,7 @@ print(arr[0])           // 10
 // Sum via loop with dynamic indexing
 var total = 0
 var i = 0
-while (i < arr.length) {
+while (i < len(arr)) {
     total = total + arr[i]
     i = i + 1
 }

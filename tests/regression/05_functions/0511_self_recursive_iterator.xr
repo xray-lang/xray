@@ -7,7 +7,7 @@
 @test
 fn test_recursive_sum_with_forin() {
     fn sum_list(arr: Array<int>, idx: int) -> int {
-        if (idx >= arr.length) {
+        if (idx >= len(arr)) {
             return 0
         }
         return arr[idx] + sum_list(arr, idx + 1)
@@ -29,7 +29,7 @@ fn test_recursive_flatten() {
     }
     var nested = [[1, 2], [3, 4], [5, 6]]
     var flat = flatten(nested)
-    assert_eq(flat.length, 6)
+    assert_eq(len(flat), 6)
     assert_eq(flat[0], 1)
     assert_eq(flat[5], 6)
 }
@@ -50,7 +50,7 @@ fn test_recursive_fibonacci() {
 fn test_recursive_with_array_iteration() {
     fn count_nested(arr: Array<int>, depth: int) -> int {
         if (depth <= 0) {
-            return arr.length
+            return len(arr)
         }
         var total = 0
         for (v in arr) {

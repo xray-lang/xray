@@ -9,4 +9,4 @@ class Point {
 }
 
 var p = Point(3, 4)
-print(typename(p))
+print(typeName(p))

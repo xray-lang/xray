@@ -1,0 +1,40 @@
+@test
+fn test_utf8_conversion_surface() {
+    var ascii: Array<byte> = [104, 105]
+    var unicode: Array<byte> = [104, 195, 169]
+    var invalid: Array<byte> = [255]
+
+    assert_eq(string.fromUtf8(ascii[:]), "hi")
+    assert_eq(string.fromUtf8(unicode[:]), "hé")
+    assert_eq(string.fromUtf8(invalid[:]), null)
+
+    var mixed: Array<byte> = [65, 255, 66]
+    assert_eq(string.fromUtf8Lossy(mixed[:]), "A�B")
+    assert_eq(ascii.toString(), "[104, 105]")
+
+    assert_eq(string.fromRune('é'), "é")
+    assert_eq(string.fromRune('🙂'), "🙂")
+    assert_eq(string.join(["a", "β", "中"], "|"), "a|β|中")
+    assert_eq(string.join(["a", "β", "中"]), "aβ中")
+
+    var s = "Aé中"
+    assert_eq(s.sliceBytes(0, 1), "A")
+    assert_eq(s.sliceBytes(1, 3), "é")
+    assert_eq(s.sliceBytes(3, 6), "中")
+
+    var caught_mid_scalar = false
+    try {
+        s.sliceBytes(2, 3)
+    } catch panic (p) {
+        caught_mid_scalar = true
+    }
+    assert_eq(caught_mid_scalar, true)
+
+    var caught_oob = false
+    try {
+        s.sliceBytes(0, 7)
+    } catch panic (p) {
+        caught_oob = true
+    }
+    assert_eq(caught_oob, true)
+}

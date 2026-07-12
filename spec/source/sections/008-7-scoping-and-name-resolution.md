@@ -90,17 +90,17 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-var big_buffer = Bytes(1024 * 1024)
+var big_buffer = Array<byte>(1024 * 1024)
 
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
 
-var t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
-print(big_buffer.length)  // 编译错误：move 后访问
+print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
 **move 使用场景**：`move` 作为**实参前缀**出现在调用位置（参见 §10.8）：
@@ -138,7 +138,7 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
-    return data.length
+    return len(data)
 }(copy(arr))
 print(arr)                  // [1, 2, 3] 未变
 
@@ -148,9 +148,9 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// 方法 3：move 转移普通局部 var 的所有权
-var big = Bytes(1024)
-var t3 = go fn(b: Bytes) -> int {
+// 方法 3：move 转移所有权
+var big = Array<byte>(1024)
+var t3 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
@@ -274,17 +274,17 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-var big_buffer = Bytes(1024 * 1024)
+var big_buffer = Array<byte>(1024 * 1024)
 
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(big_buffer)             // compile error: owned heap value cannot cross bare
 
-var t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
-print(big_buffer.length)  // compile error: accessed after move
+print(len(big_buffer))    // compile error: accessed after move
 ```
 
 **`move` usage**: `move` appears as an **argument prefix** at call sites (see §10.8):
@@ -322,7 +322,7 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
-    return data.length
+    return len(data)
 }(copy(arr))
 print(arr)                  // [1, 2, 3] unchanged
 
@@ -332,9 +332,9 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// Pattern 3: move ownership from an ordinary local var
-var big = Bytes(1024)
-var t3 = go fn(b: Bytes) -> int {
+// Pattern 3: move ownership
+var big = Array<byte>(1024)
+var t3 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point

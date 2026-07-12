@@ -75,7 +75,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
+- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -323,7 +323,7 @@ var outcomes = supervisor scope {
     go failing("error2")
     go ok()
 }
-print(outcomes.length)               // 3（每个子协程一个 outcome）
+print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ```
 
 **通用语义**：
@@ -339,18 +339,18 @@ MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 `move` 是**实参修饰前缀**（不是 `go` 的选项）。它把可重新绑定的局部 `var` 值所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。`const` 和 `shared` 绑定都不能作为 `move` 源。
 
 ```xray @id=coro-move-transfer
-var buf = Bytes(1024 * 1024)
+var buf = Array<byte>(1024 * 1024)
 
 // 移交给协程
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
-// print(buf.length)
+// print(len(buf))
 
 // 移交给 channel
-shared ch = Channel<Bytes>(1)
-var payload = Bytes(4096)
+shared ch = Channel<Array<byte>>(1)
+var payload = Array<byte>(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -451,7 +451,7 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 | `Atomic<T>` 必须声明为 `shared`，禁止 `move` | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
-- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Bytes` / 不可变对象 / `move` 移交。
+- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Array<byte>` / 不可变对象 / `move` 移交。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -534,7 +534,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
+- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -782,7 +782,7 @@ var outcomes = supervisor scope {
     go failing("error2")
     go ok()
 }
-print(outcomes.length)               // 3 (one outcome per child)
+print(len(outcomes))                 // 3 (one outcome per child)
 ```
 
 **General semantics**:
@@ -798,18 +798,18 @@ MoveExpr ::= 'move' Identifier        // only at call-argument position
 `move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a rebindable local `var` value from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error. `const` and `shared` bindings cannot be used as `move` sources.
 
 ```xray @id=coro-move-transfer
-var buf = Bytes(1024 * 1024)
+var buf = Array<byte>(1024 * 1024)
 
 // hand off to a coroutine
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
-// print(buf.length)
+// print(len(buf))
 
 // hand off to a channel
-shared ch = Channel<Bytes>(1)
-var payload = Bytes(4096)
+shared ch = Channel<Array<byte>>(1)
+var payload = Array<byte>(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
@@ -910,7 +910,7 @@ xray uses the type system to **eliminate most data races at compile time**:
 | `Atomic<T>` must be declared as `shared`; `move` prohibited | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
-- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Bytes` / immutable objects, or transfer ownership via `move`.
+- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Array<byte>` / immutable objects, or transfer ownership via `move`.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 

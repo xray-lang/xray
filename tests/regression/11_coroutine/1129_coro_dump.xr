@@ -10,14 +10,14 @@ fn worker(c: Channel<int>) -> string {
 fn test_coro_dump() {
     print("test1: Coro.stats()")
     var stats = Coro.stats()
-    print("stats keys:", stats.keys().length)
+    print("stats keys:", len(stats.keys()))
 
     print("test2: Coro.dump()")
     Coro.dump()
 
     print("test3: Coro.stalled()")
     var stalled = Coro.stalled()
-    print("stalled:", stalled.length)
+    print("stalled:", len(stalled))
 
     print("test4: with coroutines")
     shared ch = Channel(1)

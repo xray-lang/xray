@@ -10,47 +10,26 @@
 
 @native
 class string {
-    length: int
-    byteLength: int
-    charAt(index: int) -> string
-    codePointAt(index: int) -> int
-    byteAt(index: int) -> string?
-    ord() -> int?
-    concat(...strings: string) -> string
-    includes(search: string) -> bool
+    static fromUtf8(bytes: Slice<byte>) -> string?
+    static fromUtf8Lossy(bytes: Slice<byte>) -> string
+    static fromRune(value: rune) -> string
+    static join(parts: Array<string>, separator?: string) -> string
+    contains(search: string) -> bool
     indexOf(search: string, start?: int) -> int
     lastIndexOf(search: string) -> int
     slice(start: int, end?: int) -> string
-    substring(start: int, end?: int) -> string
-    isEmpty() -> bool
-    toLowerCase() -> string
-    toUpperCase() -> string
-    toInt() -> int?
-    toFloat() -> float?
+    sliceBytes(start: int, end: int) -> string
     toString() -> string
-    trim() -> string
-    trimStart() -> string
-    trimEnd() -> string
     split(separator: string, limit?: int) -> Array<string>
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
     repeat(count: int) -> string
-    reverse() -> string
     startsWith(search: string) -> bool
     endsWith(search: string) -> bool
-    padStart(length: int, pad?: string) -> string
-    padEnd(length: int, pad?: string) -> string
-    match(pattern: Regex) -> Array<string>?
-    // Owned UTF-8 byte bridge — round-trips with Bytes.toString().
-    toBytes() -> Bytes
+    // Owned UTF-8 byte bridge.
+    copyBytes() -> Array<byte>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
-    bytes() -> ByteSpan
-    translate(table: Map<string, string>) -> string
-    // Iteration protocol — iterator() yields each character, while
-    // entriesIterator() yields (charIndex, character) tuples. Both
-    // are used by for-in lowering and may be called directly.
-    iterator() -> Iterator<char>
-    entriesIterator() -> Iterator<(int, char)>
-    entries() -> Array<(int, char)>
+    bytes() -> Slice<byte>
+    runes() -> Iterator<rune>
 }

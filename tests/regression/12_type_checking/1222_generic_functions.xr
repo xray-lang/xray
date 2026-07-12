@@ -9,14 +9,14 @@ fn makePair<A, B>(a: A, b: B) -> (A, B) {
     return (a, b)
 }
 fn first<T>(arr: Array<T>) -> T? {
-    if (arr.length > 0) {
+    if (len(arr) > 0) {
         return arr[0]
     }
     return null
 }
 fn last<T>(arr: Array<T>) -> T? {
-    if (arr.length > 0) {
-        return arr[arr.length - 1]
+    if (len(arr) > 0) {
+        return arr[len(arr) - 1]
     }
     return null
 }
@@ -71,7 +71,7 @@ fn test_generic_functions() {
     })
     assert_eq(doubled, 10)
     var length = apply("hello", fn(s) {
-        return s.length
+        return len(s)
     })
     assert_eq(length, 5)
 
@@ -80,7 +80,7 @@ fn test_generic_functions() {
     // Test 7: Wrap
     var intArr = wrap(42)
     assert_eq(intArr[0], 42)
-    assert_eq(intArr.length, 1)
+    assert_eq(len(intArr), 1)
     var strArr = wrap("test")
     assert_eq(strArr[0], "test")
 

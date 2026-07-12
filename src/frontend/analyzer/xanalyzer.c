@@ -90,7 +90,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     XrType *t_float = xr_type_new_float(NULL);
     XrType *t_string = xr_type_new_string(NULL);
     XrType *t_bool = xr_type_new_bool(NULL);
-    XrType *t_char = xr_type_new_char(NULL);
+    XrType *t_char = xr_type_new_rune(NULL);
 
     // Test framework: fn(...any) -> void
     XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
@@ -119,9 +119,9 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "string", fn_to_string);
     XrType *fn_to_bool = xr_type_new_function(analyzer->isolate, &p_any, 1, t_bool, false);
     register_builtin_func(analyzer, "bool", fn_to_bool);
-    // char(n): construct a Unicode scalar char from an int codepoint.
-    XrType *fn_to_char = xr_type_new_function(analyzer->isolate, &p_any, 1, t_char, false);
-    register_builtin_func(analyzer, "char", fn_to_char);
+    // rune(n): checked Unicode scalar construction.
+    XrType *fn_to_rune = xr_type_new_function(analyzer->isolate, &p_any, 1, t_char, false);
+    register_builtin_func(analyzer, "rune", fn_to_rune);
 
     // Type constructors: fn(...any) -> Container
     XrType *fn_array = xr_type_new_function(analyzer->isolate, NULL, 0,
@@ -136,13 +136,6 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
                                           xr_type_new_set(analyzer->isolate, p_any), true);
     fn_set->function.min_params = 0;
     register_builtin_func(analyzer, "Set", fn_set);
-    XrType *fn_bytes = xr_type_new_function(
-        analyzer->isolate, NULL, 0,
-        xr_type_new_array(analyzer->isolate,
-                          xr_type_new_int_width(analyzer->isolate, XR_NATIVE_U8)),
-        true);
-    fn_bytes->function.min_params = 0;
-    register_builtin_func(analyzer, "Bytes", fn_bytes);
     XrType *fn_weakmap = xr_type_new_function(
         analyzer->isolate, NULL, 0, xr_type_new_map(analyzer->isolate, p_any, p_any), true);
     fn_weakmap->function.min_params = 0;
@@ -152,12 +145,15 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     fn_weakset->function.min_params = 0;
     register_builtin_func(analyzer, "WeakSet", fn_weakset);
 
-    // typeof: fn(any) -> int (returns stable XrTypeId for fast Type.xxx comparison)
+    // typeOf: fn(any) -> int (returns stable XrTypeId for fast Type.xxx comparison)
     XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
-    register_builtin_func(analyzer, "typeof", fn_typeof);
-    // typename: fn(any) -> string (cold/debug type display name)
+    register_builtin_func(analyzer, "typeOf", fn_typeof);
+    // typeName: fn(any) -> string (cold/debug type display name)
     XrType *fn_typename = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
-    register_builtin_func(analyzer, "typename", fn_typename);
+    register_builtin_func(analyzer, "typeName", fn_typename);
+    // len: compiler-known query; operand support is checked by xa_visit_call.
+    XrType *fn_len = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
+    register_builtin_func(analyzer, "len", fn_len);
     // chr: fn(int) -> string
     XrType *fn_chr = xr_type_new_function(analyzer->isolate, &t_int, 1, t_string, false);
     register_builtin_func(analyzer, "chr", fn_chr);

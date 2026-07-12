@@ -144,7 +144,7 @@
   :native-type XR_NATIVE_BOOL
   :storage-rep XR_REP_I64)
 
-(define-aot-rep char
+(define-aot-rep rune
   :c-type "uint32_t"
   :size 4
   :align 4

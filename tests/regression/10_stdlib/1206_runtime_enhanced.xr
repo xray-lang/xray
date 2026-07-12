@@ -64,7 +64,7 @@ fn test_mem_disable_prevents_gc() {
     // Automatic cycle collection must not have run while disabled
     var after_count = runtime.info()["cycleCollections"]
     assert_eq(before_count, after_count)
-    assert(arr.length == 500)
+    assert(len(arr) == 500)
     runtime.enableCycleCollection()
 }
 
@@ -78,7 +78,7 @@ fn test_mem_info_keys() {
     assert(info["liveObjects"] >= 0)
     // Automatic cycle collector state
     assert(info["cycleCollections"] >= 0)
-    assert_eq(typename(info["cycleCollectionEnabled"]), "bool")
+    assert_eq(typeName(info["cycleCollectionEnabled"]), "bool")
     assert(info["finalizerCount"] >= 0)
     // Region block stats
     assert(info["blocks"] >= 0)
@@ -132,7 +132,7 @@ fn test_mem_live_objects_tracks_alloc() {
     // back as `before`. The touch below extends arr's lifetime across the
     // measurement so the just-allocated objects are still counted.
     var after = runtime.liveObjects()
-    assert(arr.length == 10)
+    assert(len(arr) == 10)
     assert(after > before)
 }
 

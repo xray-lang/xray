@@ -39,8 +39,8 @@ static XrTypeKind type_member_to_kind(const char *name) {
         return XR_KIND_STRING;
     if (strcmp(name, "bool") == 0)
         return XR_KIND_BOOL;
-    if (strcmp(name, "char") == 0)
-        return XR_KIND_CHAR;
+    if (strcmp(name, "rune") == 0)
+        return XR_KIND_RUNE;
     if (strcmp(name, "null") == 0)
         return XR_KIND_NULL;
     if (strcmp(name, "Array") == 0)
@@ -75,7 +75,7 @@ static const char *kind_to_type_member(XrTypeKind kind) {
             return "Type.string";
         case XR_KIND_BOOL:
             return "Type.bool";
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             return "Type.char";
         case XR_KIND_NULL:
             return "Type.null";

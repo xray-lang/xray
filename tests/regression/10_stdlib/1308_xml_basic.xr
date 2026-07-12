@@ -16,7 +16,7 @@ fn test_parse_children() {
     var data = "<root><item>Hello</item></root>"
     var doc: Json = xml.parse(data) ?? {}
     var children = doc["children"]
-    assert_eq(children.length, 1)
+    assert_eq(len(children), 1)
     assert_eq(children[0]["tag"], "item")
 }
 
@@ -55,7 +55,7 @@ fn test_parse_deep_nesting() {
 fn test_parse_multiple_children() {
     var data = "<list><item>1</item><item>2</item><item>3</item></list>"
     var doc: Json = xml.parse(data) ?? {}
-    assert_eq(doc["children"].length, 3)
+    assert_eq(len(doc["children"]), 3)
 }
 
 // ===== Create element =====
@@ -73,7 +73,7 @@ fn test_parse_empty_element() {
     var data = "<empty/>"
     var doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "empty")
-    assert_eq(doc["children"].length, 0)
+    assert_eq(len(doc["children"]), 0)
 }
 
 // ===== Comments =====
@@ -82,7 +82,7 @@ fn test_parse_empty_element() {
 fn test_parse_preserve_comments() {
     var data = "<root><!-- comment --><item/></root>"
     var doc: Json = xml.parse(data, { preserveComments: true }) ?? {}
-    assert_eq(doc["children"].length, 2)
+    assert_eq(len(doc["children"]), 2)
 }
 
 // ===== Stringify =====

@@ -50,5 +50,5 @@ fn run(maxDepth: int) {
 }
 
 // 从命令行读取深度参数，默认 16
-var maxDepth = process.args.length > 0 ? int(process.args[0]) ?? 16 : 16
+var maxDepth = len(process.args) > 0 ? int(process.args[0]) ?? 16 : 16
 run(maxDepth)

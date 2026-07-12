@@ -1,4 +1,4 @@
-fn narrow(x: uint8) -> uint8 {
+fn narrow(x: byte) -> byte {
     return x + 1
 }
 

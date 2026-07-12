@@ -546,7 +546,7 @@ XR_FUNC XrValue xr_aot_result_group_close(const XrAotContext *ctx, XrValue group
 XR_FUNC XrValue xr_aot_result_group_close_sync(XrValue group_value);
 XR_FUNC void xr_aot_result_group_close_void(const XrAotContext *ctx, XrValue group_value);
 XR_FUNC void xr_aot_result_group_close_void_sync(XrValue group_value);
-XR_FUNC XrValue xr_aot_result_group_length(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_ready_count(const XrAotContext *ctx, XrValue group_value);
 XR_FUNC XrValue xr_aot_result_group_pending_count(const XrAotContext *ctx, XrValue group_value);
 XR_FUNC XrValue xr_aot_result_group_batch_size(const XrAotContext *ctx, XrValue group_value);
 XR_FUNC XrValue xr_aot_result_group_is_closed(const XrAotContext *ctx, XrValue group_value);

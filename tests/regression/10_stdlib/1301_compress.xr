@@ -212,7 +212,7 @@ fn test_gzip_repeated_pattern() {
     }
     var compressed = compress.gzip(data) ?? ""
     // Repeated data should compress well
-    assert((compressed ?? "").length < data.length)
+    assert(len((compressed ?? "")) < len(data))
     var decompressed = compress.gunzip(compressed) ?? ""
     assert_eq(decompressed, data)
 }

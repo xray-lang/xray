@@ -19,7 +19,7 @@ fn xray_no_alloc_bool_tostring_reject(value: bool) -> string {
 }
 
 @no_alloc
-fn xray_no_alloc_char_tostring_reject(value: char) -> string {
+fn xray_no_alloc_char_tostring_reject(value: rune) -> string {
     return value.toString()
 }
 

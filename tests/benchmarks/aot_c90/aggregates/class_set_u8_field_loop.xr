@@ -1,8 +1,8 @@
 class ByteSetBag {
-    values: Set<uint8>
+    values: Set<byte>
 
     constructor() {
-        var values: Set<uint8> = #[]
+        var values: Set<byte> = #[]
         this.values = values
     }
 
@@ -12,7 +12,7 @@ class ByteSetBag {
             this.values.add(i)
             i = i + 1
         }
-        return this.values.length
+        return len(this.values)
     }
 
     scan(n: int, rounds: int) -> int {
@@ -21,7 +21,7 @@ class ByteSetBag {
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                if (this.values.has(i)) {
+                if (this.values.contains(i)) {
                     hits = hits + i
                 }
                 i = i + 1
@@ -40,7 +40,7 @@ class ByteSetBag {
             }
             i = i + 2
         }
-        return removed + this.values.length
+        return removed + len(this.values)
     }
 }
 

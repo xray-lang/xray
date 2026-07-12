@@ -25,7 +25,7 @@ fn slow() -> int {
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -36,7 +36,7 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -47,7 +47,7 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 
 fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Cancelled -> { count = count + 1 }
             _ -> {}
@@ -57,7 +57,7 @@ fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn has_failed_msg(outcomes: Array<TaskOutcome>, expected: string) -> bool {
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -81,7 +81,7 @@ fn test_outcomes_collected() {
         go failing1()
         go failing2()
     }
-    assert_eq(outcomes.length, 3)
+    assert_eq(len(outcomes), 3)
     assert_eq(count_success(outcomes), 1)
     assert_eq(count_failed(outcomes), 2)
     assert(has_failed_msg(outcomes, "error1"), "Failed payload should preserve error1 enum")
@@ -93,7 +93,7 @@ fn test_all_success() {
         go ok()
         go ok()
     }
-    assert_eq(outcomes.length, 2)
+    assert_eq(len(outcomes), 2)
     assert_eq(count_success(outcomes), 2)
     assert_eq(count_failed(outcomes), 0)
 }
@@ -102,7 +102,7 @@ fn test_single_error() {
     var outcomes = supervisor scope {
         go failing1()
     }
-    assert_eq(outcomes.length, 1)
+    assert_eq(len(outcomes), 1)
     assert_eq(count_failed(outcomes), 1)
     assert(has_failed_msg(outcomes, "error1"), "single failure should keep enum payload")
 }
@@ -112,7 +112,7 @@ fn test_cancelled_child() {
         var task = go slow()
         task.cancel()
     }
-    assert_eq(outcomes.length, 1)
+    assert_eq(len(outcomes), 1)
     assert_eq(count_cancelled(outcomes), 1)
 }
 

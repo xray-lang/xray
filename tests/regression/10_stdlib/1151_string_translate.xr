@@ -1,32 +1,34 @@
-// 1151_string_translate.xr - String.translate (Unicode-aware codepoint mapping)
+import text
+
+// 1151_string_translate.xr - text.translate (Unicode-aware scalar mapping)
 
 @test
 fn test_translate_basic_ascii() {
     var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
-    assert_eq("ACGT".translate(COMP), "TGCA")
-    assert_eq("AAAA".translate(COMP), "TTTT")
-    assert_eq("CCCC".translate(COMP), "GGGG")
-    assert_eq("".translate(COMP), "")
+    assert_eq(text.translate("ACGT", COMP), "TGCA")
+    assert_eq(text.translate("AAAA", COMP), "TTTT")
+    assert_eq(text.translate("CCCC", COMP), "GGGG")
+    assert_eq(text.translate("", COMP), "")
 }
 
 @test
 fn test_translate_partial() {
     var partial = #{"A": "X"}
-    assert_eq("ABCD".translate(partial), "XBCD")
-    assert_eq("AAAA".translate(partial), "XXXX")
+    assert_eq(text.translate("ABCD", partial), "XBCD")
+    assert_eq(text.translate("AAAA", partial), "XXXX")
 }
 
 @test
 fn test_translate_unicode() {
     var cnTable = #{"你": "我", "好": "坏"}
-    assert_eq("你好".translate(cnTable), "我坏")
-    assert_eq("你好你".translate(cnTable), "我坏我")
+    assert_eq(text.translate("你好", cnTable), "我坏")
+    assert_eq(text.translate("你好你", cnTable), "我坏我")
 }
 
 @test
 fn test_translate_empty_table() {
     var empty = #{}
-    assert_eq("ABC".translate(empty), "ABC")
+    assert_eq(text.translate("ABC", empty), "ABC")
 }
 
 @test
@@ -34,6 +36,6 @@ fn test_translate_with_reverse() {
     // Byte-level reverse used to live on String; now reverse() is
     // Unicode-aware and round-trips through translate for ASCII data.
     var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
-    assert_eq("ACGTACGT".reverse().translate(COMP), "ACGTACGT")
-    assert_eq("AACC".reverse().translate(COMP), "GGTT")
+    assert_eq(text.translate(text.reverseRunes("ACGTACGT"), COMP), "ACGTACGT")
+    assert_eq(text.translate(text.reverseRunes("AACC"), COMP), "GGTT")
 }

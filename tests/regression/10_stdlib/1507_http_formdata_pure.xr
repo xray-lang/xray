@@ -11,8 +11,8 @@ fn test_formdata_text_build() {
 
     var built = form.build()
     assert(built.contentType.startsWith("multipart/form-data; boundary=----XrayFormBoundary"))
-    assert(built.body.includes("Content-Disposition: form-data; name=\"name\"\r\n\r\n"))
-    assert(built.body.includes("\r\n\r\nXray\r\n"))
+    assert(built.body.contains("Content-Disposition: form-data; name=\"name\"\r\n\r\n"))
+    assert(built.body.contains("\r\n\r\nXray\r\n"))
     assert(built.body.endsWith("--\r\n"))
 }
 
@@ -26,9 +26,9 @@ fn test_formdata_file_build() {
     assert(form.appendFile("upload", path))
 
     var built = form.build()
-    assert(built.body.includes("name=\"upload\"; filename=\"upload.txt\""))
-    assert(built.body.includes("Content-Type: text/plain\r\n\r\n"))
-    assert(built.body.includes("\r\n\r\nfile-data\r\n"))
+    assert(built.body.contains("name=\"upload\"; filename=\"upload.txt\""))
+    assert(built.body.contains("Content-Type: text/plain\r\n\r\n"))
+    assert(built.body.contains("\r\n\r\nfile-data\r\n"))
 }
 
 @test

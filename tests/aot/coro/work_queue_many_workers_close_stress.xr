@@ -1,7 +1,7 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-var WORKERS = process.args.length > 0 ? (int(process.args[0]) ?? 8) : 8
-var TASKS = process.args.length > 1 ? (int(process.args[1]) ?? 320) : 320
-var ITERS = process.args.length > 2 ? (int(process.args[2]) ?? 10) : 10
+var WORKERS = len(process.args) > 0 ? (int(process.args[0]) ?? 8) : 8
+var TASKS = len(process.args) > 1 ? (int(process.args[1]) ?? 320) : 320
+var ITERS = len(process.args) > 2 ? (int(process.args[2]) ?? 10) : 10
 
 if (WORKERS < 1) {
     WORKERS = 1
@@ -51,7 +51,7 @@ queue.close()
 
 var actual = 0
 w = 0
-while (w < workers.length) {
+while (w < len(workers)) {
     var subtotal: int = await workers[w]
     actual = actual + subtotal
     w = w + 1

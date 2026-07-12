@@ -1,1 +1,1 @@
-View has no member 'push'; use length/size or indexed access
+Span view has no member 'push'; use len(view) or indexed access

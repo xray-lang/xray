@@ -27,7 +27,7 @@ fn put(table: ref Map<string, int>, key: string, value: int) {
 }
 
 fn hasKey(table: in Map<string, int>, key: string) -> bool {
-    return table.has(key)
+    return table.containsKey(key)
 }
 
 fn setBox(box: ref Box, value: int) {

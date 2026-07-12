@@ -1,4 +1,4 @@
-fn readRaw(src: ByteSpan) -> int {
+fn readRaw(src: Slice<byte>) -> int {
     var value16: uint16 = 0
     var value32: uint32 = 0
     var value64: uint64 = 0
@@ -11,7 +11,7 @@ fn readRaw(src: ByteSpan) -> int {
     return int(value16) + int(value32) + int(value64)
 }
 
-var bytes = Bytes.withCapacity(8)
+var bytes: Array<byte> = Array.withCapacity(8)
 unsafe {
     bytes.push(1)
     bytes.push(2)
@@ -23,5 +23,5 @@ unsafe {
     bytes.push(8)
 }
 
-var view: ByteSpan = bytes[:]
+var view: Slice<byte> = bytes[:]
 print(readRaw(view))

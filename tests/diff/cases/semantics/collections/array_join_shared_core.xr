@@ -15,7 +15,7 @@ floats[1] = -0.0
 floats[2] = 2.25
 print(floats.join(","))
 
-var bytes = Bytes(3, 0)
+var bytes = Array<byte>(3, 0)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 255

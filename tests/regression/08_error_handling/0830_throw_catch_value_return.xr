@@ -112,7 +112,7 @@ fn safe_div(a: int, b: int) -> int {
     fn process(input: string) -> int {
         if (input == "closed") { throw IoErr.Closed }
         if (input == "bad") { throw ParseErr.Invalid }
-        return input.length
+        return len(input)
     }
 
     var r1 = 0

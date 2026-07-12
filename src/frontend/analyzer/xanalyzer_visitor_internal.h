@@ -122,6 +122,30 @@ static inline bool xa_type_has_fixed_layout_data_object(const XrType *type) {
            type->instance.class_ref && type->instance.class_ref->struct_layout;
 }
 
+/* Types whose freestanding top-level const representation is materialized as
+ * stable native data. Addressability and declaration validation must share
+ * this predicate so RawPtr.of cannot reject storage the backend guarantees. */
+static inline bool xa_type_supports_const_static_data_object(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+        case XR_KIND_STRING:
+        case XR_KIND_NULL:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_TUPLE:
+            return true;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return xa_type_has_fixed_layout_data_object(type);
+        default:
+            return false;
+    }
+}
+
 static inline void xa_freestanding_report_tagged_type_unavailable(XaInferContext *ctx,
                                                                   AstNode *node, const XrType *type,
                                                                   const char *context) {

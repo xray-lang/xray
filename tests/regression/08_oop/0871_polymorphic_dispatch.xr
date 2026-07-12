@@ -77,7 +77,7 @@ fn test_monomorphic_dispatch() {
 fn test_polymorphic_dispatch() {
     var animals = [Dog("Rex"), Cat("Whiskers"), Dog("Buddy")]
     var results: Array<string> = []
-    for (var i = 0; i < animals.length; i++) {
+    for (var i = 0; i < len(animals); i++) {
         results.push(animals[i].speak())
     }
     assert_eq(results[0], "Rex says woof")
@@ -90,7 +90,7 @@ fn test_polymorphic_dispatch() {
 fn test_megamorphic_dispatch() {
     var animals = [Dog("D"), Cat("C"), Bird("B")]
     var total_legs = 0
-    for (var i = 0; i < animals.length; i++) {
+    for (var i = 0; i < len(animals); i++) {
         total_legs += animals[i].legs()
     }
     assert_eq(total_legs, 10)  // 4 + 4 + 2
@@ -104,7 +104,7 @@ fn test_virtual_dispatch_with_state() {
     for (var i = 0; i < 5; i++) {
         results.push(dog.speak())
     }
-    assert_eq(results.length, 5)
+    assert_eq(len(results), 5)
     for (var i = 0; i < 5; i++) {
         assert_eq(results[i], "Max says woof")
     }

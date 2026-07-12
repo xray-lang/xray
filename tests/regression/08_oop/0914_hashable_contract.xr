@@ -37,12 +37,12 @@ fn test_class_hashable_map_set_key() {
     var token = Token(7)
     var values: Map<Token, int> = #{}
     values.set(token, 99)
-    assert(values.has(token))
+    assert(values.containsKey(token))
     assert_eq(values.get(token), 99)
 
     var seen: Set<Token> = #[]
     seen.add(token)
-    assert(seen.has(token))
+    assert(seen.contains(token))
 }
 
 @test

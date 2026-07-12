@@ -218,13 +218,13 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.6 类型名（保留）
 
-`int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `char`
+`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`float` `float32` `float64` `bool` `string` `rune`
 
 `unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
+> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
 > 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
 
 #### 1.5.7 字面量关键字
@@ -318,7 +318,7 @@ null
 
 #### 1.6.5 字符串字面量
 
-xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `char` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
+xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `rune` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
 
 ##### 普通字符串（双引号）
 
@@ -336,7 +336,7 @@ Interpolation ::= '${' Expression '}'
 
 - 字符串可跨行；行结尾包含在字符串中。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
-- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / char 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
+- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / rune 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
 ```xray
 "hello"
@@ -365,23 +365,23 @@ r"C:\path\to\file"          // 字面量包含两个反斜杠
 r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
 ```
 
-#### 1.6.6 `char` 字面量
+#### 1.6.6 `rune` 字面量
 
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
 
-- `'a'` 的类型是 `char`，表示一个 Unicode scalar value。
+- `'a'` 的类型是 `rune`，表示一个 Unicode scalar value。
 - 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
 - 字面量必须恰好包含一个 scalar；`''`、`'ab'`、`'🇨🇳'`、`'é'` 均编译失败。
 - 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
-- char 字面量不支持 `${...}` 插值。
+- rune 字面量不支持 `${...}` 插值。
 
 ```xray
-var a: char = 'a'
-var zh: char = '中'
-var smile: char = '\u{1F600}'
+var a: rune = 'a'
+var zh: rune = '中'
+var smile: rune = '\u{1F600}'
 ```
 
 ##### 反引号字符串（非法）
@@ -511,16 +511,16 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
 5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
-6. **最小类型身份**：`typeof` / `typename` / `is` / `as`；默认没有运行时 `Reflect` 模块。
+6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
 
 | 类别 | 示例 |
 |--|--|
-| Primitive | `int`、`float`、`bool`、`string`、`char`、`()`（Unit，无返回值） |
-| 精确整数 | `int8`、`int16`、`int32`、`int64`、`uint8`..`uint64` |
+| Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
+| 精确整数 | `int8`、`int16`、`int32`、`int64`、`byte`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Array<byte>`（即 `Array<byte>`） |
 | 定长布局 | `[T; N]` |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
@@ -544,13 +544,13 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int16` | `[-32768, 32767]` | — |
 | `int32` | `[-2³¹, 2³¹-1]` | — |
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
-| `uint8`..`uint64` | 无符号对应 | — |
+| `byte`..`uint64` | 无符号对应 | — |
 
 - 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
-- 静态类型为 `uint8`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`byte + byte -> byte`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
+- 静态类型为 `byte`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
-- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: uint8 = 255 + 1` 得到 `0`。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: byte = 255 + 1` 得到 `0`。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
@@ -573,7 +573,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `bool` | 允许 | 直接布尔判断 |
 | `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `char` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
+| `int` / `float` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
@@ -592,31 +592,31 @@ if (flag != null) { }    // OK
 // if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
 var s = ""
-if (!s.isEmpty()) { }    // OK
+if (len(s) != 0) { }     // OK
 // if (s) { }            // 编译错误
 ```
 
 #### 2.3.4 `string`
 
-不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `char`，切片返回 `string`。丰富方法集见 §14.5。
+不可变且始终合法的 UTF-8 字符串。`len(s)` 以 O(1) 返回 Unicode scalar 数量，`len(s.bytes())` 以 O(1) 返回 UTF-8 byte 数量。默认迭代元素是 `rune`；整数下标与 slice operator 均不适用于 string，显式访问见 §14.5。
 
 底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
 
-#### 2.3.5 `char`
+#### 2.3.5 `rune`
 
-`char` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
+`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
 
 ```xray
-var a: char = 'a'
+var a: rune = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typename(a))        // "char"
-print(int(smile))         // 128512
+print(typeName(a))        // "rune"
+print(smile.toUInt32())   // 128512
 ```
 
-- char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
-- 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
+- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
+- 显式转换：`int(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
 #### 2.3.6 Unit `()`（无返回值）
@@ -647,8 +647,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -676,7 +676,7 @@ var c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
-`Array<char>` 保留 `char` 元素身份，读出时得到 `char`，写入时只接受 `char`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_CHAR` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+`Array<rune>` 保留 `rune` 元素身份，读出时得到 `rune`，写入时只接受 `rune`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_RUNE` / `uint32_t[]`），不会退化成 `Array<uint32>`。
 
 #### 2.4.1.1 定长数组 `[T; N]`
 
@@ -685,32 +685,32 @@ var c: Array<string> = []         // 显式空数组
 当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
 
 ```xray
-var bytes: [uint8; 4] = [1, 2, 3, 4]
-var zero: [uint8; 64] = [0; 64]
+var bytes: [byte; 4] = [1, 2, 3, 4]
+var zero: [byte; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
 
-定长数组支持 `length`/`size`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Span<T>` 时通过切片产生借用视图：
+定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
 
 ```xray
-var data: [uint8; 4] = [5, 6, 7, 8]
-var view: Span<uint8> = data[1:4]
+var data: [byte; 4] = [5, 6, 7, 8]
+var view: Slice<byte> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [uint8; 4]
-    payload: [uint8; 128]
+    magic: [byte; 4]
+    payload: [byte; 128]
 }
 
-var key: [uint8; 4] = [1, 2, 3, 4]
+var key: [byte; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> uint8 {
+fn first(packet: Packet) -> byte {
     return packet.magic[0]
 }
 ```
@@ -719,7 +719,7 @@ fn first(packet: Packet) -> uint8 {
 
 - `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
 - `Array<T>`：动态长度、可增长、堆上容器。
-- `Span<T>`：借用连续存储的视图，不拥有数据。
+- `Slice<T>`：借用连续存储的视图，不拥有数据。
 
 旧的 `[N]T` 语法不属于 Xray 语言。
 
@@ -764,13 +764,13 @@ var s: Set<int> = #[1, 2, 3]
 shared ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Bytes`
+#### 2.4.5 `Array<byte>`
 
-类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
+类型化字节缓冲。语义等价 `Array<byte>`，但底层是连续内存。
 
 ```xray
-var buf = Bytes(1024)
-var init = Bytes([72, 101, 108, 108, 111])
+var buf = Array<byte>(1024)
+var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` 与对象字面量
@@ -783,7 +783,7 @@ var init = Bytes([72, 101, 108, 108, 111])
 // Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
-typename(user)                            // "Record"
+typeName(user)                            // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -861,7 +861,7 @@ var z: int = null       // 编译错误：null 不是 int
 var v = x ?? 0
 
 // 2. 可选链
-var len = name?.length    // 若 name 为 null，结果为 null
+var nameLen = name == null ? null : len(name!)
 
 // 3. 强制解包
 var v: int = x!           // 若 x 为 null，运行时抛 NullError
@@ -1008,11 +1008,11 @@ if (v is User) {
 
 仅作类型守卫；不改变值。
 
-### 2.11 typeof / typename / Type 枚举
+### 2.11 typeOf / typeName / Type 枚举
 
 ```xray
-typeof(value)     // 返回 Type 枚举值（int 表示）
-typename(value)   // 返回类型名字符串
+typeOf(value)     // 返回 Type 枚举值（int 表示）
+typeName(value)   // 返回类型名字符串
 ```
 
 `Type` 枚举成员：
@@ -1027,8 +1027,8 @@ typename(value)   // 返回类型名字符串
 
 Xray 默认只保留最小类型身份层：
 
-- `typeof(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
-- `typename(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- `typeOf(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
+- `typeName(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
 - 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
@@ -1092,8 +1092,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 `unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `RawPtr<T>` / `RawMut<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
@@ -1111,7 +1111,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
@@ -1145,7 +1145,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
-- `char` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
+- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
 
 #### 3.3.2 位运算
 
@@ -1155,7 +1155,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
 - `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
 - bool 不参与位运算（用 `&&` `||`）。
-- `char` 不参与位运算；需要码点时显式写 `int(c)`。
+- `rune` 不参与位运算；需要码点时显式写 `int(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -1230,7 +1230,7 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray
-var len = name?.length          // null 时返回 null
+var nameLen = name == null ? null : len(name!)
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
 ```
@@ -1317,7 +1317,7 @@ for (i in 0..=n) { print(i) }
 - 类型 `Range`（仅 int 范围）。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
 - `a..=b` 是闭区间 `[a, b]`：两端都包含。
-- `for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
+- `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
 - 主要用途：`for-in` 循环、模式匹配中的范围判定。
 
 #### 展开 `...`
@@ -1398,7 +1398,7 @@ var obj = { users }              // shorthand
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 - 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
 
-#### Bytes `Bytes(...)`
+#### Array<byte> `Array<byte>(...)`
 
 详见 §2.4.5 与 §14.5。
 
@@ -1451,12 +1451,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // 返回 char
+str[i]                  // 返回 rune
 ```
 
 - `Array` 索引：`int`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
-- `string` 索引：按 Unicode scalar 下标访问，返回 `char`。
+- `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
 
 #### 切片
@@ -1470,12 +1470,13 @@ arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全切片（浅拷贝）
-str[0:5]                // 字符串切片
+var view: Slice<int> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
-- `Array` 与 `string` 切片统一支持负索引：负数先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
-- 切片返回新对象，不修改原数组。
+- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
+- string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
+- 切片是目标类型为 `Slice<T>` 的 scoped borrowed view，不修改 owner。
 
 ### 3.12 匿名函数与 Lambda
 
@@ -1566,7 +1567,7 @@ var m = Map<string, int>()
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<byte>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
@@ -1585,7 +1586,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
-- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / char 字面量。
+- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / rune 字面量。
 - 表达式类型必须可转为字符串（实现 `toString()` 或为基本类型）。
 
 ### 3.16 `yield` 语句
@@ -1721,7 +1722,7 @@ ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression
 // 形式 A：直接两标识符（更常见）
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
 for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
-for (i, c in "hello") { print("${i}:${c}") }     // string → (index, char)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 
 // 形式 B：元组括号包裹（与 .entries() 配合）
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
@@ -1735,7 +1736,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | `char` | (index, char) |
+| `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
 | Enum 类型 | 具体 enum 值 | — |
 | 自定义 `Iterator<T>` | T | — |
@@ -2140,8 +2141,8 @@ greet()                   // 必须显式调用
 `@extern("C")` 声明外部 C ABI 函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
 var p = unsafe { malloc(4) }
@@ -2162,14 +2163,14 @@ unsafe {
 
 ```xray
 @extern("C") fn bsearch(
-    key: RawPtr<uint8>,
-    base: RawPtr<uint8>,
+    key: RawPtr<byte>,
+    base: RawPtr<byte>,
     count: uintsize,
     size: uintsize,
-    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
-) -> RawPtr<uint8>
+    cmp: CFn<(RawPtr<byte>, RawPtr<byte>) -> int32>
+) -> RawPtr<byte>
 
-fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+fn zeroCmp(a: RawPtr<byte>, b: RawPtr<byte>) -> int32 {
     return 0
 }
 
@@ -2551,7 +2552,7 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 
@@ -2850,7 +2851,7 @@ match (msg) {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Bytes),
+    DataReceived(bytes: Array<byte>),
     Error(code: int, message: string),
 }
 
@@ -3034,17 +3035,17 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-var big_buffer = Bytes(1024 * 1024)
+var big_buffer = Array<byte>(1024 * 1024)
 
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
 
-var t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
-print(big_buffer.length)  // 编译错误：move 后访问
+print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
 **move 使用场景**：`move` 作为**实参前缀**出现在调用位置（参见 §10.8）：
@@ -3082,7 +3083,7 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
-    return data.length
+    return len(data)
 }(copy(arr))
 print(arr)                  // [1, 2, 3] 未变
 
@@ -3092,9 +3093,9 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// 方法 3：move 转移普通局部 var 的所有权
-var big = Bytes(1024)
-var t3 = go fn(b: Bytes) -> int {
+// 方法 3：move 转移所有权
+var big = Array<byte>(1024)
+var t3 = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
@@ -3383,7 +3384,7 @@ fn fetch(url: string) -> string {
     defer conn.close()                       // 无论后续如何，conn 一定关闭
 
     var data = conn.read()
-    if (data.isEmpty()) {
+    if (len(data) == 0) {
         throw FetchErr.Empty                 // defer 仍执行
     }
     return data
@@ -3652,7 +3653,7 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 **性能影响**：
 - 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
 - class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
-- 内置特化容器（`Array<int>`、`Bytes`）进一步避免装箱开销。
+- 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
 **当前缓项**：
@@ -3701,7 +3702,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 
 ### 9.7 泛型与类型身份
 
-由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typename` 的冷路径名字表提供：
+由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typeName` 的冷路径名字表提供：
 
 ```xray
 class Container<T> {
@@ -3709,7 +3710,7 @@ class Container<T> {
 }
 var c = Container<int>()
 print(c is Container<int>)     // true
-print(typename(c))             // "Container<int>" when type names are enabled
+print(typeName(c))             // "Container<int>" when type names are enabled
 ```
 
 结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
@@ -3785,7 +3786,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
+- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -4033,7 +4034,7 @@ var outcomes = supervisor scope {
     go failing("error2")
     go ok()
 }
-print(outcomes.length)               // 3（每个子协程一个 outcome）
+print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ```
 
 **通用语义**：
@@ -4049,18 +4050,18 @@ MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 `move` 是**实参修饰前缀**（不是 `go` 的选项）。它把可重新绑定的局部 `var` 值所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。`const` 和 `shared` 绑定都不能作为 `move` 源。
 
 ```xray
-var buf = Bytes(1024 * 1024)
+var buf = Array<byte>(1024 * 1024)
 
 // 移交给协程
-var t = go fn(b: Bytes) -> int {
+var t = go fn(b: Array<byte>) -> int {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
-// print(buf.length)
+// print(len(buf))
 
 // 移交给 channel
-shared ch = Channel<Bytes>(1)
-var payload = Bytes(4096)
+shared ch = Channel<Array<byte>>(1)
+var payload = Array<byte>(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -4161,7 +4162,7 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 | `Atomic<T>` 必须声明为 `shared`，禁止 `move` | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
-- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Bytes` / 不可变对象 / `move` 移交。
+- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Array<byte>` / 不可变对象 / `move` 移交。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -4476,11 +4477,11 @@ fn oldAPI() { return }
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `int(x)` | `(value) -> int` | 转为 int；`char` 转为 Unicode scalar code point；字符串解析失败抛异常 |
+| `int(x)` | `(value) -> int` | 转为 int；`rune` 转为 Unicode scalar code point；字符串解析失败抛异常 |
 | `float(x)` | `(value) -> float` | 转为 float |
-| `string(x)` | `(value) -> string` | 转为字符串；`char` 转为单 scalar 字符串 |
+| `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
-| `char(n)` | `(int) -> char` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(T) -> T` | 深拷贝，保留运行时类型 |
 
@@ -4488,16 +4489,16 @@ fn oldAPI() { return }
 
 | 函数 / 表达式 | 签名 | 说明 |
 |---|---|---|
-| `typeof(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
-| `typename(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
+| `typeOf(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
+| `typeName(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
 ```xray
 var x = 42
-print(typeof(x) == Type.int)    // true
-print(typename(x))              // "int"
+print(typeOf(x) == Type.int)    // true
+print(typeName(x))              // "int"
 print(x is int)                 // true
-// typeof(x) == "int"           // compile error: use Type.int or typename(x)
+// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
 ```
 
 ### 13.4 协程
@@ -4595,60 +4596,55 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 |--|--|--|
 | `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
 
-### 14.4.1 `char` 方法
+### 14.4.1 `rune` 方法
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
 | `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
-| `ord()` | `() -> int` | 返回 Unicode scalar code point |
+| `toUInt32()` | `() -> uint32` | 返回 Unicode scalar code point |
 | `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
 | `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
 | `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
 | `isWhitespace()` | `() -> bool` | 是否为空白字符 |
 
-`char` 是独立原始类型，不继承整数方法；需要码点时显式使用 `ord()` 或 `int(c)`。
+`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。
 
 ### 14.5 `string` 方法
 
 | 成员 | 类型 / 说明 |
 |--|--|
-| `length` / `size` | Unicode scalar 数量属性 |
-| `charAt(i)` | 返回指定 Unicode scalar 位置的单 scalar 字符串 |
-| `charCodeAt(i)` | 返回指定 Unicode scalar 位置的码点 |
-| `concat(...others)` | 拼接字符串 |
-| `includes(s)` | 是否包含子串 |
-| `indexOf(s)` / `lastIndexOf(s)` | 查找子串 |
-| `slice(start, end?)` / `substring(start, end?)` / `substr(start, len?)` | 子串 |
-| `toLowerCase()` / `toUpperCase()` | 大小写转换 |
-| `trim()` / `trimStart()` / `trimEnd()` | 去空白 |
+| `len(s)` | O(1) Unicode scalar 数量 |
+| `bytes()` / `copyBytes()` | 借用的 `Slice<byte>` / 独立的 `Array<byte>` |
+| `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 返回 `null` |
+| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<byte>`，非法序列替换为 U+FFFD |
+| `contains(s)` | 是否包含子串 |
+| `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
+| `slice(start, end?)` | 按 rune ordinal 取得 owned string；范围必须合法 |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
 | `repeat(n)` | 重复 |
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
-| `padStart(len, pad?)` / `padEnd(len, pad?)` | 填充 |
-| `match(pattern)` | 正则匹配 |
-| `iterator()` | `() -> Iterator<char>` |
-| `entriesIterator()` | `() -> Iterator<(int, char)>` |
-| `entries()` | `() -> Array<(int, char)>` |
+| `toString()` | 返回自身 |
 
-字符串下标表达式 `s[i]` 返回 `char`；`charAt(i)` 保留 JavaScript 风格的字符串返回值。`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
+string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
-### 14.6 `Bytes`
+### 14.6 `Array<byte>`
 
-`Bytes` 是 prelude 类型，构造由 `Bytes(n)` / `Bytes(n, fill)` 等内置路径处理。字符串转换和编码类操作优先使用 `encoding` / `base64` 模块。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
+`Array<byte>` 是 prelude 类型，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
 
 ### 14.7 `Array<T>` 方法
 
 | 成员 | 类型/说明 |
 |--|--|
-| `length` | `int` 属性 |
+| `len(arr)` | `int` 全局查询 |
 | `arr[i]` / `arr[i] = v` | 下标读写 |
 | `push(x)` / `pop()` | 尾部增删 |
 | `shift()` / `unshift(x)` | 头部增删 |
 | `slice(start?, end?)` | 切片 |
 | `splice(start, deleteCount, ...items)` | 原地增删 |
 | `concat(...arrays)` | 拼接 |
-| `indexOf(x)` / `includes(x)` | 查找 |
+| `indexOf(x)` / `contains(x)` | 查找 |
 | `join(sep?)` | 拼接为字符串 |
 | `reverse()` / `sort(cmp?)` | 原地重排 |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 函数式处理 |
@@ -4662,10 +4658,10 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 | 成员 | 类型/说明 |
 |--|--|
-| `length` | `int` 属性 |
+| `len(m)` | `int` 全局查询 |
 | `m[k]` / `m[k] = v` | 下标读写 |
 | `get(k)` / `set(k, v)` | 读取/写入 |
-| `has(k)` / `delete(k)` / `clear()` | 查询与删除 |
+| `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
 | `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
@@ -4676,8 +4672,8 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 | 成员 | 类型/说明 |
 |--|--|
-| `length` | `int` 属性 |
-| `add(x)` / `has(x)` / `delete(x)` | 插入、查询、删除 |
+| `len(set)` | `int` 全局查询 |
+| `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
 | `clear()` | 清空 |
 | `values()` | 返回 `Array<T>` |
 | `forEach(fn)` | 遍历 |
@@ -4707,10 +4703,9 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | 静态函数 | 说明 |
 |--|--|
 | `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | Object 字段枚举 |
-| `Json.has(obj, key)` | 字段存在性 |
+| `Json.containsKey(obj, key)` | 字段存在性 |
 | `Json.get(obj, key, default?)` | 字段读取，不存在返回 default 或 null |
-| `Json.size(obj)` | 字段数量 |
-| `Json.isEmpty(obj)` | 是否为空 |
+| `len(obj)` | Object / Array / String variant 的元素数量；scalar 抛 TypeError |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验 |
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
@@ -4719,7 +4714,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 ### 14.12 `Range`
 
-`a..b` 是半开区间 `[a, b)`，用于表达式和 `for-in`。常见成员为 `start`、`end`、`length`、`includes(x)`、`toArray()`、`toString()`。
+`a..b` 是半开区间 `[a, b)`，用于表达式和 `for-in`。常见成员为 `start`、`end`、`contains(x)`、`toArray()`、`toString()`；元素数量使用 `len(range)`。
 
 ### 14.13 `DateTime`
 
@@ -4750,7 +4745,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 | 方法 | 说明 |
 |--|--|
-| `length` | 当前长度属性 |
+| `len(builder)` | 当前 rune 数量 |
 | `append(s)` | 追加并返回自身 |
 | `toString()` | 输出字符串 |
 | `clear()` | 清空并返回自身 |
@@ -4798,7 +4793,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
+> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Array<byte>` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -4827,7 +4822,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 `net` 的 TCP API 明确区分三类数据路径：
 
 - `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Bytes` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<byte>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
 - `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
 
 设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
@@ -4926,7 +4921,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
 
-- **Descriptor（8 字节）**：`tag: uint8`、`flags: uint8`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Descriptor（8 字节）**：`tag: byte`、`flags: byte`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
 - **Payload（8 字节）**：`int64` / `double` / 指针三选一，按 `tag` 解释。
 - **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
 - **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
@@ -4936,13 +4931,13 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `int` | `XR_TAG_I64` + 64-bit signed payload |
 | `float` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
-| `char` | `XR_TAG_CHAR` + Unicode scalar payload |
+| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Bytes` | `XR_TAG_PTR` + bytes heap object |
+| `Array<byte>` | `XR_TAG_PTR` + bytes heap object |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
-Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `XR_ELEM_CHAR`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_CHAR`，store 时拒绝非 `char` 值，因此不会与 `Array<uint32>` 混淆。
+Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<uint32>` 混淆。
 
 ### 16.2 内存分配
 
@@ -5232,7 +5227,7 @@ Bytecode  →  AOT (machine code)
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 数组 / 字符串 / Bytes 越界 |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 数组 / 字符串 / Array<byte> 越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 
 #### 内存与栈 (E044x)
@@ -5635,7 +5630,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
-| `char` | §2.3.5 |
+| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -5680,7 +5675,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `uint8`..`uint64` | §2.3.1 |
+| `byte`..`uint64` | §2.3.1 |
 | `union` | §5.4 |
 | `unsafe` | §3.2 |
 | `var` | §5.1 |
@@ -5809,8 +5804,8 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **AOT** | Ahead-of-Time 编译：构建时预编译为机器码 |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
-| **Bytes** | 字节缓冲类型（见 §2.4.5） |
-| **char** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `uint32` 别名（见 §2.3.5） |
+| **Array<byte>** | 字节缓冲类型（见 §2.4.5） |
+| **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `uint32` 别名（见 §2.3.5） |
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
@@ -5835,7 +5830,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
 | **condition expression** | 控制流条件：必须是 `bool` 或 `T?` 存在性（`T != bool`）；见 §2.3.3 |
-| **grapheme cluster** | 用户感知字符，可能由多个 Unicode scalar 组成；当前 `string.length` / 索引 / 迭代按 Unicode scalar，不按 grapheme cluster |
+| **grapheme cluster** | 用户感知字符，可能由多个 Unicode scalar 组成；`len(string)` / rune 迭代按 Unicode scalar，不按 grapheme cluster |
 | **union** | 联合类型 `A \| B` |
 | **Unicode scalar value** | 合法 Unicode 码位，范围 `U+0000..U+10FFFF` 且不包含 surrogate 区间 `U+D800..U+DFFF` |
 | **upvalue** | 闭包捕获的外层变量 |

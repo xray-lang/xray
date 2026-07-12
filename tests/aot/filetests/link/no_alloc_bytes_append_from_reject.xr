@@ -1,9 +1,9 @@
 @no_alloc
-fn xray_no_alloc_bytes_append_from_reject(dst: Bytes, src: ByteSpan) -> int {
+fn xray_no_alloc_bytes_append_from_reject(dst: Array<byte>, src: Slice<byte>) -> int {
     dst.appendFrom(src)
-    return dst.length
+    return len(dst)
 }
 
-var dst = Bytes.withCapacity(8)
-var src = Bytes(2, 65)
+var dst: Array<byte> = Array.withCapacity(8)
+var src = Array<byte>(2, 65)
 print(xray_no_alloc_bytes_append_from_reject(dst, src[:]))

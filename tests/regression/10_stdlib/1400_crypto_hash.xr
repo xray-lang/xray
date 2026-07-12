@@ -119,11 +119,11 @@ fn test_sha256_long_string() {
 @test
 fn test_hash_lengths() {
     // MD5 始终返回 32 字符
-    assert_eq(crypto.md5("test").length, 32)
+    assert_eq(len(crypto.md5("test")), 32)
     
     // SHA1 始终返回 40 字符
-    assert_eq(crypto.sha1("test").length, 40)
+    assert_eq(len(crypto.sha1("test")), 40)
     
     // SHA256 始终返回 64 字符
-    assert_eq(crypto.sha256("test").length, 64)
+    assert_eq(len(crypto.sha256("test")), 64)
 }

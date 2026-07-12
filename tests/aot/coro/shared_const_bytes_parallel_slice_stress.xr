@@ -1,8 +1,8 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-var WORKERS = process.args.length > 0 ? (int(process.args[0]) ?? 8) : 8
-var SIZE = process.args.length > 1 ? (int(process.args[1]) ?? 1048576) : 1048576
-var ITERS = process.args.length > 2 ? (int(process.args[2]) ?? 10) : 10
-var BLOCK = process.args.length > 3 ? (int(process.args[3]) ?? 32768) : 32768
+var WORKERS = len(process.args) > 0 ? (int(process.args[0]) ?? 8) : 8
+var SIZE = len(process.args) > 1 ? (int(process.args[1]) ?? 1048576) : 1048576
+var ITERS = len(process.args) > 2 ? (int(process.args[2]) ?? 10) : 10
+var BLOCK = len(process.args) > 3 ? (int(process.args[3]) ?? 32768) : 32768
 
 if (WORKERS < 1) {
     WORKERS = 1
@@ -17,8 +17,8 @@ if (BLOCK < 1) {
     BLOCK = 1
 }
 
-fn makeBytes(n: int) -> Bytes {
-    var out = Bytes(0)
+fn makeBytes(n: int) -> Array<byte> {
+    var out = Array<byte>(0)
     var i = 0
     while (i < n) {
         out.push((i * 31 + (i >> 3) + 17) & 0xFF)
@@ -36,17 +36,17 @@ fn blockCountFor(size: int, blockSize: int) -> int {
 
 fn blockLenAt(size: int, blockSize: int, index: int) -> int {
     var start = index * blockSize
-    var len = size - start
-    if (len > blockSize) {
+    var count = size - start
+    if (count > blockSize) {
         return blockSize
     }
-    return len
+    return count
 }
 
-fn checksum(span: ByteSpan) -> int {
+fn checksum(span: Slice<byte>) -> int {
     var h = 2166136261
     var i = 0
-    while (i < span.length) {
+    while (i < len(span)) {
         var b = 0
         unsafe {
             b = int(span.get(i))
@@ -69,7 +69,7 @@ fn unpackCount(bits: int) -> int {
     return bits & 0xFFFFFFFF
 }
 
-fn worker(src: Bytes, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
+fn worker(src: Array<byte>, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
     var sum = 0
     var count = 0
     while (true) {
@@ -79,8 +79,8 @@ fn worker(src: Bytes, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
         }
         var index = item
         var start = index * blockSize
-        var len = blockLenAt(src.length, blockSize, index)
-        var chunk: ByteSpan = src[start:start + len]
+        var count = blockLenAt(len(src), blockSize, index)
+        var chunk: Slice<byte> = src[start:start + count]
         sum = (sum + checksum(chunk)) & 0xFFFFFFFF
         count = count + 1
     }
@@ -88,7 +88,7 @@ fn worker(src: Bytes, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
 }
 
 var src = makeBytes(SIZE)
-var blocks = blockCountFor(src.length, BLOCK)
+var blocks = blockCountFor(len(src), BLOCK)
 shared sharedSrc = copy(src)
 shared queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
 
@@ -115,7 +115,7 @@ queue.close()
 var actualCount = 0
 var actualSum = 0
 w = 0
-while (w < tasks.length) {
+while (w < len(tasks)) {
     var packedBits: int = await tasks[w]
     actualCount = actualCount + unpackCount(packedBits)
     actualSum = (actualSum + unpackSum(packedBits)) & 0xFFFFFFFF

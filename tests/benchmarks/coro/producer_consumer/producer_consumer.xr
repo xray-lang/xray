@@ -8,13 +8,13 @@ var CONSUMERS = 10
 // 消费者数量
 var ITEMS = 100000
 // 总生产数量
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     PRODUCERS = int(process.args[0]) ?? PRODUCERS
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     CONSUMERS = int(process.args[1]) ?? CONSUMERS
 }
-if (process.args.length > 2) {
+if (len(process.args) > 2) {
     ITEMS = int(process.args[2]) ?? ITEMS
 }
 print("=== 生产者消费者测试 ===")

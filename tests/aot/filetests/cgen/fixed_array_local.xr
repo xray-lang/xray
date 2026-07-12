@@ -1,15 +1,15 @@
-fn first(key: [uint8; 4]) -> int {
+fn first(key: [byte; 4]) -> int {
     return key[0]
 }
 
-fn at(key: [uint8; 4], i: int) -> int {
+fn at(key: [byte; 4], i: int) -> int {
     return key[i]
 }
 
 fn run() -> int {
-    var key: [uint8; 4] = [1, 2, 3, 4]
+    var key: [byte; 4] = [1, 2, 3, 4]
     key[1] = 9
-    return key.length + first(key) + key[1] + at(key, 2)
+    return len(key) + first(key) + key[1] + at(key, 2)
 }
 
 print(run())

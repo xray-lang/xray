@@ -544,6 +544,7 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
 
 // Compile any character .
 static bool compile_any(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
+    c->prog->has_any_scalar = true;
     int id = emit_any_byte(c, node->any_dotall, 0);
     if (id < 0)
         return false;

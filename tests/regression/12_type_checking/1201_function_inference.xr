@@ -8,7 +8,7 @@ fn test_implicit_return_int() {
     }
     var result = add(2, 3)
     assert_eq(result, 5)
-    assert_eq(typename(result), "int")
+    assert_eq(typeName(result), "int")
 }
 
 @test
@@ -18,7 +18,7 @@ fn test_implicit_return_string() {
     }
     var result = greet("World")
     assert_eq(result, "Hello, World")
-    assert_eq(typename(result), "string")
+    assert_eq(typeName(result), "string")
 }
 
 @test
@@ -28,7 +28,7 @@ fn test_explicit_return_type() {
     }
     var result = double(5)
     assert_eq(result, 10)
-    assert_eq(typename(result), "int")
+    assert_eq(typeName(result), "int")
 }
 
 @test
@@ -152,7 +152,7 @@ fn test_filter_inference() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(evens.length, 2)
+    assert_eq(len(evens), 2)
     assert_eq(evens[0], 2)
     assert_eq(evens[1], 4)
 }

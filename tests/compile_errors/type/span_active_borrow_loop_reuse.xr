@@ -1,9 +1,9 @@
 fn run() {
-    var bytes = Bytes(0)
+    var bytes = Array<byte>(0)
     bytes.push(1)
-    var view: ByteSpan = bytes[:]
+    var view: Slice<byte> = bytes[:]
     for (var i = 0; i < 2; i++) {
-        print(view.length)
+        print(len(view))
         bytes.push(2)
     }
 }

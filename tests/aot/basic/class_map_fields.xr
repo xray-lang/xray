@@ -16,7 +16,7 @@ class ScoreBag {
     }
 
     contains(name: string) -> bool {
-        return this.scores.has(name)
+        return this.scores.containsKey(name)
     }
 
     remove(name: string) -> bool {

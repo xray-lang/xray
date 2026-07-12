@@ -2,11 +2,11 @@ fn worker(m: Map<string, Array<int>>) -> int {
     var xs = m.get("items")!
     xs.push(99)
     Coro.yield()
-    return xs.length
+    return len(xs)
 }
 
 var m: Map<string, Array<int>> = #{"items": [1, 2]}
 var task = go worker(copy(m))
 var child_len = await task
 print(child_len)
-print(m.get("items")!.length)
+print(len(m.get("items")!))

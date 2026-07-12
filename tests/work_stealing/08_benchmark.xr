@@ -30,7 +30,7 @@ fn benchmark_throughput(coro_count, work_size) {
         }
         tasks.push(task)
     }
-    for (var i = 0; i < tasks.length; i++) {
+    for (var i = 0; i < len(tasks); i++) {
         await tasks[i]
     }
     var elapsed = time.monotonic() - start
@@ -82,7 +82,7 @@ fn benchmark_speedup(work_size) {
         tasks.push(task)
     }
     var parallel_sum = 0
-    for (var i = 0; i < tasks.length; i++) {
+    for (var i = 0; i < len(tasks); i++) {
         var value = await tasks[i]
         parallel_sum = parallel_sum + value
     }
@@ -95,7 +95,7 @@ print("
 [基准1] 协程吞吐量测试")
 print("─────────────────────────────────────")
 var configs = [{ "count": 100, "work": 100 }, { "count": 500, "work": 100 }, { "count": 1000, "work": 100 }, { "count": 100, "work": 1000 }]
-for (var i = 0; i < configs.length; i++) {
+for (var i = 0; i < len(configs); i++) {
     var cfg = configs[i]
     var result = benchmark_throughput(cfg.count, cfg.work)
     var throughput = float(result.count) / (float(result.elapsed) / 1000)

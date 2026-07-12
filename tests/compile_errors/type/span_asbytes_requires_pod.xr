@@ -1,3 +1,3 @@
 var values = ["a", "b"]
-var view: Span<string> = values[:]
-var raw: ByteSpan = view.asBytes()
+var view: Slice<string> = values[:]
+var raw: Slice<byte> = view.asBytes()

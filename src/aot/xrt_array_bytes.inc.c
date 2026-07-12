@@ -42,8 +42,8 @@ static inline int xrt_array_fill_value_is_zero_bits(XrValue value, uint8_t etype
             return XR_IS_FALSE(value) || XR_IS_NULL(value) ||
                    (XR_IS_INT(value) && XR_TO_INT(value) == 0) ||
                    (XR_IS_FLOAT(value) && XR_TO_FLOAT(value) == 0.0);
-        case XR_ELEM_CHAR:
-            return XR_IS_CHAR(value) && XR_TO_CHAR(value) == 0;
+        case XR_ELEM_RUNE:
+            return XR_IS_RUNE(value) && XR_TO_RUNE(value) == 0;
         default:
             return 0;
     }
@@ -874,10 +874,10 @@ static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v, int64_t s
         case XR_ELEM_U32:
             XRT_FILL_LOOP(uint32_t, xr_value_to_int64_coerce(v));
             return 1;
-        case XR_ELEM_CHAR:
-            if (!XR_IS_CHAR(v))
+        case XR_ELEM_RUNE:
+            if (!XR_IS_RUNE(v))
                 return 1;
-            XRT_FILL_LOOP(uint32_t, XR_TO_CHAR(v));
+            XRT_FILL_LOOP(uint32_t, XR_TO_RUNE(v));
             return 1;
         case XR_ELEM_I64:
             XRT_FILL_LOOP(int64_t, xr_value_to_int64_coerce(v));
@@ -982,10 +982,10 @@ static inline int64_t xrt_array_indexof_typed_fast(xrt_array_t *a, XrValue v, in
             int64_t needle = v.i;
             XRT_INDEXOF_LOOP(uint32_t);
         }
-        case XR_ELEM_CHAR: {
-            if (v.tag != XR_TAG_CHAR)
+        case XR_ELEM_RUNE: {
+            if (v.tag != XR_TAG_RUNE)
                 return -1;
-            int64_t needle = (int64_t) XR_TO_CHAR(v);
+            int64_t needle = (int64_t) XR_TO_RUNE(v);
             XRT_INDEXOF_LOOP(uint32_t);
         }
         case XR_ELEM_I64: {

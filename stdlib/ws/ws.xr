@@ -1,3 +1,5 @@
+import text
+
 // ws - pure-Xray WebSocket protocol helpers.
 //
 // TCP/TLS readiness, connection registries, HTTP accept-loop integration, and
@@ -20,7 +22,7 @@ class ParsedFrame {
     rsv1: bool
     opcode: int
     masked: bool
-    payload: Array<uint8>
+    payload: Array<byte>
     consumedBytes: int
 
     constructor(
@@ -28,7 +30,7 @@ class ParsedFrame {
         rsv1: bool,
         opcode: int,
         masked: bool,
-        payload: Array<uint8>,
+        payload: Array<byte>,
         consumedBytes: int
     ) {
         this.fin = fin
@@ -99,17 +101,17 @@ class ParsedUpgradeRequest {
 }
 
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
-    if (pos < 0 || pos + prefix.length > s.length) { return false }
-    for (var i = 0; i < prefix.length; i++) {
-        if (s.charAt(pos + i) != prefix.charAt(i)) { return false }
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    for (var i = 0; i < len(prefix); i++) {
+        if (s.runes().nth(pos + i) != prefix.runes().nth(i)) { return false }
     }
     return true
 }
 
 fn _indexOfFrom(s: string, needle: string, start: int) -> int {
-    if (needle.length == 0) { return start }
+    if (len(needle) == 0) { return start }
     var i = start
-    while (i + needle.length <= s.length) {
+    while (i + len(needle) <= len(s)) {
         if (_startsWithAt(s, i, needle)) { return i }
         i = i + 1
     }
@@ -118,36 +120,36 @@ fn _indexOfFrom(s: string, needle: string, start: int) -> int {
 
 fn _trim(s: string) -> string {
     var start = 0
-    var end = s.length
+    var end = len(s)
     while (start < end) {
-        var c = s.charAt(start)
-        if (c != " " && c != "\t") { break }
+        var c = s.runes().nth(start)
+        if (c != ' ' && c != '\t') { break }
         start = start + 1
     }
     while (end > start) {
-        var c = s.charAt(end - 1)
-        if (c != " " && c != "\t" && c != "\r" && c != "\n") { break }
+        var c = s.runes().nth(end - 1)
+        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') { break }
         end = end - 1
     }
     return s.slice(start, end)
 }
 
-fn _hexNibble(c: string) -> int {
-    var n = c.ord()!
+fn _hexNibble(c: rune) -> int {
+    var n = c.toUInt32()
     if (n >= 48 && n <= 57) { return n - 48 }
     if (n >= 65 && n <= 70) { return n - 55 }
     if (n >= 97 && n <= 102) { return n - 87 }
     return -1
 }
 
-fn _hexBytes(hex: string) -> Bytes? {
-    if (hex.length % 2 != 0) { return null }
-    var out = Bytes(hex.length / 2)
+fn _hexBytes(hex: string) -> Array<byte>? {
+    if (len(hex) % 2 != 0) { return null }
+    var out = Array<byte>(len(hex) / 2)
     var oi = 0
     var i = 0
-    while (i + 1 < hex.length) {
-        var hi = _hexNibble(hex.charAt(i))
-        var lo = _hexNibble(hex.charAt(i + 1))
+    while (i + 1 < len(hex)) {
+        var hi = _hexNibble(hex.runes().nth(i))
+        var lo = _hexNibble(hex.runes().nth(i + 1))
         if (hi < 0 || lo < 0) { return null }
         out[oi] = ((hi << 4) | lo) & 255
         oi = oi + 1
@@ -156,8 +158,8 @@ fn _hexBytes(hex: string) -> Bytes? {
     return out
 }
 
-fn _isDigit(c: string) -> bool {
-    var n = c.ord()!
+fn _isDigit(c: rune) -> bool {
+    var n = c.toUInt32()
     return n >= 48 && n <= 57
 }
 
@@ -165,9 +167,9 @@ fn _parsePort(s: string, start: int, end: int) -> int {
     if (start >= end) { return -1 }
     var n = 0
     for (var i = start; i < end; i++) {
-        var c = s.charAt(i)
+        var c = s.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        n = n * 10 + (c.ord()! - 48)
+        n = n * 10 + (c.toUInt32() - 48)
         if (n > 65535) { return -1 }
     }
     if (n <= 0) { return -1 }
@@ -178,7 +180,7 @@ fn _isContinuationByte(b: int) -> bool {
     return b >= 0x80 && b <= 0xBF
 }
 
-fn _validUtf8Bytes(data: Bytes, start: int, end: int) -> bool {
+fn _validUtf8Bytes(data: Array<byte>, start: int, end: int) -> bool {
     var i = start
     while (i < end) {
         var b = data[i] & 255
@@ -236,30 +238,30 @@ fn _validUtf8Bytes(data: Bytes, start: int, end: int) -> bool {
     return true
 }
 
-fn _bytesToString(data: Bytes, start: int, end: int) -> string {
+fn _bytesToString(data: Array<byte>, start: int, end: int) -> string {
     if (start >= end) { return "" }
-    var out = Bytes(end - start)
+    var out = Array<byte>(end - start)
     for (var i = start; i < end; i++) {
         out[i - start] = data[i]
     }
     return out.toString()
 }
 
-fn _randomBytes(n: int) -> Bytes {
+fn _randomBytes(n: int) -> Array<byte> {
     var b = _hexBytes(crypto.randomBytes(n))
-    if (b == null) { return Bytes(0) }
+    if (b == null) { return Array<byte>(0) }
     return b!
 }
 
 fn _header(headers: string, name: string) -> string? {
-    var target = name.toLowerCase()
+    var target = text.lower(name)
     var start = 0
-    while (start < headers.length) {
+    while (start < len(headers)) {
         var end = _indexOfFrom(headers, "\r\n", start)
-        if (end < 0) { end = headers.length }
+        if (end < 0) { end = len(headers) }
         var line = headers.slice(start, end)
         var colon = line.indexOf(":")
-        if (colon > 0 && line.slice(0, colon).toLowerCase() == target) {
+        if (colon > 0 && text.lower(line.slice(0, colon)) == target) {
             return _trim(line.slice(colon + 1))
         }
         start = end + 2
@@ -268,12 +270,12 @@ fn _header(headers: string, name: string) -> string? {
 }
 
 fn _headerHasToken(value: string, token: string) -> bool {
-    var needle = token.toLowerCase()
+    var needle = text.lower(token)
     var start = 0
-    while (start <= value.length) {
+    while (start <= len(value)) {
         var comma = _indexOfFrom(value, ",", start)
-        var end = comma >= 0 ? comma : value.length
-        if (_trim(value.slice(start, end)).toLowerCase() == needle) { return true }
+        var end = comma >= 0 ? comma : len(value)
+        if (text.lower(_trim(value.slice(start, end))) == needle) { return true }
         if (comma < 0) { break }
         start = comma + 1
     }
@@ -281,15 +283,15 @@ fn _headerHasToken(value: string, token: string) -> bool {
 }
 
 fn _headerHasElementToken(value: string, token: string) -> bool {
-    var needle = token.toLowerCase()
+    var needle = text.lower(token)
     var start = 0
-    while (start <= value.length) {
+    while (start <= len(value)) {
         var comma = _indexOfFrom(value, ",", start)
-        var end = comma >= 0 ? comma : value.length
+        var end = comma >= 0 ? comma : len(value)
         var item = _trim(value.slice(start, end))
         var semi = item.indexOf(";")
         if (semi >= 0) { item = _trim(item.slice(0, semi)) }
-        if (item.toLowerCase() == needle) { return true }
+        if (text.lower(item) == needle) { return true }
         if (comma < 0) { break }
         start = comma + 1
     }
@@ -298,13 +300,13 @@ fn _headerHasElementToken(value: string, token: string) -> bool {
 
 fn _parseStatusCode(line: string) -> int {
     if (!_startsWithAt(line, 0, "HTTP/1.1 ")) { return -1 }
-    if (line.length < 12) { return -1 }
-    if (line.length > 12 && line.charAt(12) != " ") { return -1 }
+    if (len(line) < 12) { return -1 }
+    if (len(line) > 12 && line.runes().nth(12) != ' ') { return -1 }
     var code = 0
     for (var i = 9; i < 12; i++) {
-        var c = line.charAt(i)
+        var c = line.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        code = code * 10 + (c.ord()! - 48)
+        code = code * 10 + (c.toUInt32() - 48)
     }
     return code
 }
@@ -317,24 +319,24 @@ fn _firstLine(s: string) -> string {
 }
 
 fn _containsString(values: Array<string>, value: string) -> bool {
-    for (var i = 0; i < values.length; i++) {
+    for (var i = 0; i < len(values); i++) {
         if (values[i] == value) { return true }
     }
     return false
 }
 
 fn _originAllowed(origin: string?, allowedOrigins: Array<string>?) -> bool {
-    if (allowedOrigins == null || allowedOrigins!.length == 0) { return true }
-    for (var i = 0; i < allowedOrigins!.length; i++) {
+    if (allowedOrigins == null || len(allowedOrigins!) == 0) { return true }
+    for (var i = 0; i < len(allowedOrigins!); i++) {
         if (allowedOrigins![i] == "*") { return true }
     }
-    if (origin == null || origin!.length == 0) { return false }
+    if (origin == null || len(origin!) == 0) { return false }
     return _containsString(allowedOrigins!, origin!)
 }
 
 fn _validSecKey(secKey: string) -> bool {
     var raw = base64.decodeToBytes(secKey)
-    return raw != null && raw!.length == 16
+    return raw != null && len(raw!) == 16
 }
 
 fn _hasCrLf(s: string) -> bool {
@@ -365,7 +367,7 @@ fn randomKey() -> string {
 fn _pickSubprotocol(headers: string, serverProtocols: Array<string>) -> string? {
     var offered = _header(headers, "Sec-WebSocket-Protocol")
     if (offered == null) { return null }
-    for (var i = 0; i < serverProtocols.length; i++) {
+    for (var i = 0; i < len(serverProtocols); i++) {
         if (_headerHasToken(offered!, serverProtocols[i])) {
             return serverProtocols[i]
         }
@@ -384,14 +386,14 @@ fn parseUpgradeRequest(
     var versionStart = _indexOfFrom(line, " ", 4)
     if (versionStart <= 4) { return null }
     var target = line.slice(4, versionStart)
-    if (target.length == 0 || target.charAt(0) != "/") { return null }
-    if (line.slice(versionStart + 1, line.length) != "HTTP/1.1") { return null }
+    if (len(target) == 0 || target.runes().nth(0) != '/') { return null }
+    if (line.slice(versionStart + 1, len(line)) != "HTTP/1.1") { return null }
 
     var upgrade = _header(request, "Upgrade")
     var connection = _header(request, "Connection")
     var secKey = _header(request, "Sec-WebSocket-Key")
     var version = _header(request, "Sec-WebSocket-Version")
-    if (upgrade == null || upgrade!.toLowerCase() != "websocket") { return null }
+    if (upgrade == null || text.lower(upgrade!) != "websocket") { return null }
     if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
     if (secKey == null || !_validSecKey(secKey!)) { return null }
     if (version == null || _trim(version!) != "13") { return null }
@@ -421,7 +423,7 @@ fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = fal
     out.append("Sec-WebSocket-Accept: ")
     out.append(acceptKey(secKey))
     out.append("\r\n")
-    if (protocol != null && protocol!.length > 0) {
+    if (protocol != null && len(protocol!) > 0) {
         out.append("Sec-WebSocket-Protocol: ")
         out.append(protocol!)
         out.append("\r\n")
@@ -440,7 +442,7 @@ fn clientHandshakeRequest(
     deflate: bool = true
 ) -> string? {
     if (!_validSecKey(secKey) || _hasCrLf(secKey)) { return null }
-    if (url.path.length == 0 || url.path.charAt(0) != "/" || _hasCrLf(url.path)) { return null }
+    if (len(url.path) == 0 || url.path.runes().nth(0) != '/' || _hasCrLf(url.path)) { return null }
     if (_hasCrLf(url.host)) { return null }
 
     var out = StringBuilder()
@@ -462,10 +464,10 @@ fn clientHandshakeRequest(
         out.append("client_no_context_takeover; server_no_context_takeover\r\n")
     }
 
-    if (protocols != null && protocols!.length > 0) {
+    if (protocols != null && len(protocols!) > 0) {
         out.append("Sec-WebSocket-Protocol: ")
-        for (var i = 0; i < protocols!.length; i++) {
-            if (protocols![i].length == 0 || _hasCrLf(protocols![i])) { return null }
+        for (var i = 0; i < len(protocols!); i++) {
+            if (len(protocols![i]) == 0 || _hasCrLf(protocols![i])) { return null }
             if (i > 0) { out.append(", ") }
             out.append(protocols![i])
         }
@@ -486,7 +488,7 @@ fn parseUpgradeResponse(
     if (statusCode != 101) { return null }
 
     var upgrade = _header(response, "Upgrade")
-    if (upgrade == null || upgrade!.toLowerCase() != "websocket") { return null }
+    if (upgrade == null || text.lower(upgrade!) != "websocket") { return null }
 
     var connection = _header(response, "Connection")
     if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
@@ -498,7 +500,7 @@ fn parseUpgradeResponse(
     var selected = _header(response, "Sec-WebSocket-Protocol")
     if (selected != null) {
         var p = _trim(selected!)
-        if (p.length == 0) { return null }
+        if (len(p) == 0) { return null }
         if (protocols != null && !_containsString(protocols!, p)) { return null }
         protocol = p
     }
@@ -518,7 +520,7 @@ fn parseUrl(url: string) -> WsUrl? {
 
     var secure = false
     var pos = 0
-    var lower = url.toLowerCase()
+    var lower = text.lower(url)
     if (_startsWithAt(lower, 0, "wss://")) {
         secure = true
         pos = 6
@@ -529,19 +531,19 @@ fn parseUrl(url: string) -> WsUrl? {
     }
 
     var host = ""
-    if (pos < url.length && url.charAt(pos) == "[") {
+    if (pos < len(url) && url.runes().nth(pos) == '[') {
         var endBracket = _indexOfFrom(url, "]", pos + 1)
         if (endBracket < 0 || endBracket == pos + 1) { return null }
         host = url.slice(pos + 1, endBracket)
         pos = endBracket + 1
-        if (pos < url.length) {
-            var c = url.charAt(pos)
+        if (pos < len(url)) {
+            var c = url.runes().nth(pos)
             if (c != ":" && c != "/" && c != "?") { return null }
         }
     } else {
         var hostStart = pos
-        while (pos < url.length) {
-            var c = url.charAt(pos)
+        while (pos < len(url)) {
+            var c = url.runes().nth(pos)
             if (c == ":" || c == "/" || c == "?") { break }
             pos = pos + 1
         }
@@ -550,11 +552,11 @@ fn parseUrl(url: string) -> WsUrl? {
     }
 
     var port = secure ? 443 : 80
-    if (pos < url.length && url.charAt(pos) == ":") {
+    if (pos < len(url) && url.runes().nth(pos) == ':') {
         var portStart = pos + 1
         pos = portStart
-        while (pos < url.length) {
-            var c = url.charAt(pos)
+        while (pos < len(url)) {
+            var c = url.runes().nth(pos)
             if (c == "/" || c == "?") { break }
             pos = pos + 1
         }
@@ -563,12 +565,12 @@ fn parseUrl(url: string) -> WsUrl? {
     }
 
     var path = "/"
-    if (pos < url.length) {
-        var c = url.charAt(pos)
+    if (pos < len(url)) {
+        var c = url.runes().nth(pos)
         if (c == "/") {
-            path = url.slice(pos, url.length)
+            path = url.slice(pos, len(url))
         } else if (c == "?") {
-            path = "/" + url.slice(pos, url.length)
+            path = "/" + url.slice(pos, len(url))
         } else {
             return null
         }
@@ -583,21 +585,21 @@ fn isValidCloseCode(code: int) -> bool {
         code == 1011 || (code >= 3000 && code <= 4999)
 }
 
-fn parseClosePayload(payload: Bytes) -> ClosePayload? {
-    if (payload.length > 125 || payload.length == 1) { return null }
-    if (payload.length == 0) { return ClosePayload(1005, "") }
+fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
+    if (len(payload) > 125 || len(payload) == 1) { return null }
+    if (len(payload) == 0) { return ClosePayload(1005, "") }
 
     var codeHi: int = payload[0] & 255
     var codeLo: int = payload[1] & 255
     var code = (codeHi << 8) | codeLo
     if (!isValidCloseCode(code)) { return null }
-    if (!_validUtf8Bytes(payload, 2, payload.length)) { return null }
+    if (!_validUtf8Bytes(payload, 2, len(payload))) { return null }
 
-    return ClosePayload(code, _bytesToString(payload, 2, payload.length))
+    return ClosePayload(code, _bytesToString(payload, 2, len(payload)))
 }
 
-fn _copyInto(dst: Bytes, off: int, src: Bytes) {
-    for (var i = 0; i < src.length; i++) {
+fn _copyInto(dst: Array<byte>, off: int, src: Array<byte>) {
+    for (var i = 0; i < len(src); i++) {
         dst[off + i] = src[i]
     }
 }
@@ -607,23 +609,23 @@ fn _validOpcode(opcode: int) -> bool {
         opcode == _OP_CLOSE || opcode == _OP_PING || opcode == _OP_PONG
 }
 
-fn maskPayload(payload: Bytes, key: Bytes) -> Bytes {
-    var out = Bytes(payload.length)
-    if (key.length < 4) { return out }
-    for (var i = 0; i < payload.length; i++) {
+fn maskPayload(payload: Array<byte>, key: Array<byte>) -> Array<byte> {
+    var out = Array<byte>(len(payload))
+    if (len(key) < 4) { return out }
+    for (var i = 0; i < len(payload); i++) {
         out[i] = (payload[i] ^ key[i % 4]) & 255
     }
     return out
 }
 
 fn parseFrame(
-    raw: Bytes,
+    raw: Array<byte>,
     expectMasked: bool = false,
     enforceMask: bool = false,
     allowRsv1: bool = false,
     maxPayloadBytes: int = 67108864
 ) -> ParsedFrame? {
-    if (raw.length < 2) { return null }
+    if (len(raw) < 2) { return null }
 
     var first: int = raw[0] & 255
     var second: int = raw[1] & 255
@@ -647,14 +649,14 @@ fn parseFrame(
     if (control && payloadLen > 125) { return null }
 
     if (payloadLen == 126) {
-        if (raw.length < 4) { return null }
+        if (len(raw) < 4) { return null }
         var lenHi: int = raw[2] & 255
         var lenLo: int = raw[3] & 255
         payloadLen = (lenHi << 8) | lenLo
         if (payloadLen < 126) { return null }
         offset = 4
     } else if (payloadLen == 127) {
-        if (raw.length < 10) { return null }
+        if (len(raw) < 10) { return null }
         if ((raw[2] & 128) != 0) { return null }
         var n = 0
         for (var i = 0; i < 8; i++) {
@@ -669,12 +671,12 @@ fn parseFrame(
 
     var maskStart = offset
     if (maskMode == 1) {
-        if (raw.length < offset + 4) { return null }
+        if (len(raw) < offset + 4) { return null }
         offset = offset + 4
     }
 
-    if (raw.length < offset + payloadLen) { return null }
-    var payload = Bytes(payloadLen)
+    if (len(raw) < offset + payloadLen) { return null }
+    var payload = Array<byte>(payloadLen)
     for (var i = 0; i < payloadLen; i++) {
         var b = raw[offset + i] & 255
         if (maskMode == 1) {
@@ -686,27 +688,27 @@ fn parseFrame(
     return ParsedFrame(fin, rsv1, opcode, maskMode == 1, payload, offset + payloadLen)
 }
 
-fn frame(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true) -> Bytes {
+fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true) -> Array<byte> {
     var ext = 0
-    if (payload.length > 65535) { ext = 8 }
-    else if (payload.length > 125) { ext = 2 }
+    if (len(payload) > 65535) { ext = 8 }
+    else if (len(payload) > 125) { ext = 2 }
     var maskLen = mask ? 4 : 0
     var headerLen = 2 + ext + maskLen
-    var out = Bytes(headerLen + payload.length)
+    var out = Array<byte>(headerLen + len(payload))
     out[0] = (128 | (opcode & 15)) & 255
     if (ext == 8) {
         out[1] = (mask ? 128 : 0) | 127
-        var n = payload.length
+        var n = len(payload)
         for (var i = 7; i >= 0; i = i - 1) {
             out[2 + i] = n & 255
             n = n >> 8
         }
     } else if (ext == 2) {
         out[1] = (mask ? 128 : 0) | 126
-        out[2] = (payload.length >> 8) & 255
-        out[3] = payload.length & 255
+        out[2] = (len(payload) >> 8) & 255
+        out[3] = len(payload) & 255
     } else {
-        out[1] = (mask ? 128 : 0) | payload.length
+        out[1] = (mask ? 128 : 0) | len(payload)
     }
 
     var body = payload
@@ -719,30 +721,30 @@ fn frame(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true) -> Bytes {
     return out
 }
 
-fn textFrame(data: string, mask: bool = true) -> Bytes {
-    return frame(data.toBytes(), _OP_TEXT, mask)
+fn textFrame(data: string, mask: bool = true) -> Array<byte> {
+    return frame(data.copyBytes(), _OP_TEXT, mask)
 }
 
-fn binaryFrame(data: Bytes, mask: bool = true) -> Bytes {
+fn binaryFrame(data: Array<byte>, mask: bool = true) -> Array<byte> {
     return frame(data, _OP_BINARY, mask)
 }
 
-fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Bytes {
-    var reasonBytes = reason.toBytes()
-    var payload = Bytes(2 + reasonBytes.length)
+fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Array<byte> {
+    var reasonBytes = reason.copyBytes()
+    var payload = Array<byte>(2 + len(reasonBytes))
     payload[0] = (code >> 8) & 255
     payload[1] = code & 255
     _copyInto(payload, 2, reasonBytes)
     return frame(payload, _OP_CLOSE, mask)
 }
 
-fn pingFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
-    var payload = data != null ? data! : Bytes(0)
+fn pingFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
+    var payload = data != null ? data! : Array<byte>(0)
     return frame(payload, _OP_PING, mask)
 }
 
-fn pongFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
-    var payload = data != null ? data! : Bytes(0)
+fn pongFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
+    var payload = data != null ? data! : Array<byte>(0)
     return frame(payload, _OP_PONG, mask)
 }
 

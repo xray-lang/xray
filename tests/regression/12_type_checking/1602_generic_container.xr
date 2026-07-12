@@ -3,7 +3,7 @@
 // Array element type propagation
 
 fn getFirst<T>(arr: Array<T>) -> T? {
-    if (arr.length > 0) {
+    if (len(arr) > 0) {
         return arr[0]
     }
     return null

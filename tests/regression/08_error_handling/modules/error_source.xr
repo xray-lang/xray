@@ -14,8 +14,8 @@ export fn validate(s: string) -> string {
     if (s == "") {
         throw ValidationErr.Empty
     }
-    if (s.length > 100) {
-        throw ValidationErr.TooLong(s.length)
+    if (len(s) > 100) {
+        throw ValidationErr.TooLong(len(s))
     }
     return s
 }

@@ -76,7 +76,7 @@ typedef enum XrTypeKind {
     XR_KIND_FIXED_ARRAY,  // Fixed-length array: [T; N] (compile-time length)
     XR_KIND_POINTER,      // FFI raw pointer: RawPtr<T> (const) / RawMut<T> (mut). Address-
                           // width integer at the value level, invisible to the GC.
-    XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
+    XR_KIND_RUNE,         // Unicode scalar value. Immediate value (tag XR_TAG_RUNE), not
                           // a uint32; appended last to keep existing kind values stable.
     XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
     XR_KIND_SPAN,         // Scoped borrowed value view over contiguous storage.
@@ -90,7 +90,7 @@ static inline bool xr_kind_is_numeric(XrTypeKind k) {
 }
 static inline bool xr_kind_is_primitive(XrTypeKind k) {
     return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING || k == XR_KIND_BOOL ||
-           k == XR_KIND_CHAR;
+           k == XR_KIND_RUNE;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
     return k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_MAP || k == XR_KIND_SET ||
@@ -268,7 +268,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_FLOAT(t) ((t)->kind == XR_KIND_FLOAT)
 #define XR_TYPE_IS_STRING(t) ((t)->kind == XR_KIND_STRING)
 #define XR_TYPE_IS_BOOL(t) ((t)->kind == XR_KIND_BOOL)
-#define XR_TYPE_IS_CHAR(t) ((t)->kind == XR_KIND_CHAR)
+#define XR_TYPE_IS_RUNE(t) ((t)->kind == XR_KIND_RUNE)
 #define XR_TYPE_IS_NULL(t) ((t)->kind == XR_KIND_NULL)
 #define XR_TYPE_IS_NUMERIC(t) (xr_kind_is_numeric((t)->kind))
 #define XR_TYPE_IS_PRIMITIVE(t) (xr_kind_is_primitive((t)->kind))
@@ -316,7 +316,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
             return XR_REP_F64;
         case XR_KIND_UNIT:
             return XR_REP_VOID;
-        /* char keeps the tagged representation so the XR_TAG_CHAR identity
+        /* char keeps the tagged representation so the XR_TAG_RUNE identity
          * survives across slots, print and typeof. A raw u32 rep is a future
          * AOT optimization, not needed for correctness. */
         case XR_KIND_STRING:
@@ -378,7 +378,7 @@ XR_FUNC XrType *xr_type_new_int(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_float(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_string(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_bool(XrVMRuntime *X);
-XR_FUNC XrType *xr_type_new_char(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_rune(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_null(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_unknown(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_never(XrVMRuntime *X);
@@ -694,7 +694,7 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
         case XR_KIND_FLOAT:
         case XR_KIND_STRING:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             return true;
         case XR_KIND_UNION:
             for (int i = 0; i < type->union_type.member_count; i++) {

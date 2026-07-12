@@ -1,16 +1,16 @@
 @no_alloc
 fn xray_no_alloc_map_set_inplace_methods_ok(values: Map<int, int>, seen: Set<int>) -> int {
     var first = values.get(1) ?? 0
-    var had_two = values.has(2)
+    var had_two = values.containsKey(2)
     var removed_two = values.delete(2)
     values.clear()
 
-    var had_seen = seen.has(1)
+    var had_seen = seen.contains(1)
     var removed_seen = seen.delete(1)
     seen.clear()
 
     return first + (had_two ? 1 : 0) + (removed_two ? 1 : 0) + (had_seen ? 1 : 0) +
-        (removed_seen ? 1 : 0) + values.length + seen.length
+        (removed_seen ? 1 : 0) + len(values) + len(seen)
 }
 
 var xray_no_alloc_map_set_inplace_map: Map<int, int> = #{1: 7, 2: 9}

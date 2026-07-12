@@ -44,11 +44,11 @@ fn test_single_thread_long_concat() {
     // 测试长字符串拼接（使用 XrStrBuf 路径）
     var base = "x".repeat(100)
     var result = base + base
-    assert_eq(result.length, 200)
+    assert_eq(len(result), 200)
     
     // 验证内容正确
-    assert_eq(result.charAt(0), "x")
-    assert_eq(result.charAt(199), "x")
+    assert_eq(result.runes().nth(0), 'x')
+    assert_eq(result.runes().nth(199), 'x')
 }
 
 // ===== 多核模式测试 =====
@@ -102,11 +102,11 @@ fn test_multicore_concurrent_long_concat() {
     // 验证每个结果的长度和内容
     for (var i = 0; i < n; i++) {
         var id_str = string(i)
-        var expected_len = 50 + 1 + id_str.length + 1 + 50
-        assert_eq(results[i].length, expected_len)
+        var expected_len = 50 + 1 + len(id_str) + 1 + 50
+        assert_eq(len(results[i]), expected_len)
         
         // 验证包含正确的 id
-        assert_eq(results[i].includes("_" + string(i) + "_"), true)
+        assert_eq(results[i].contains("_" + string(i) + "_"), true)
     }
 }
 
@@ -175,7 +175,7 @@ fn test_property_concurrent_concat_correctness() {
         var expected_parts = count
         var actual_parts = 0
         for (var j = 0; j < count; j++) {
-            if (results[i].includes("s" + string(i) + "_" + string(j) + "_")) {
+            if (results[i].contains("s" + string(i) + "_" + string(j) + "_")) {
                 actual_parts = actual_parts + 1
             }
         }

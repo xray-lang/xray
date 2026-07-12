@@ -10,16 +10,13 @@ fn test_slice_basic() {
     assert_eq(s.slice(0, 11), "Hello World")
 }
 
-// ===== Negative index =====
+// ===== Invalid ranges are rejected =====
 
 @test
 fn test_slice_negative() {
     var s = "Hello World"
-    assert_eq(s.slice(-5), "World")
-    assert_eq(s.slice(-5, -1), "Worl")
-    assert_eq(s.slice(0, -1), "Hello Worl")
-    assert_eq(s.slice(-3, -1), "rl")
-    assert_eq(s.slice(-1), "d")
+    assert_throws(fn() { s.slice(-1) })
+    assert_throws(fn() { s.slice(0, -1) })
 }
 
 // ===== Single argument =====
@@ -36,9 +33,8 @@ fn test_slice_single_arg() {
 @test
 fn test_slice_boundary() {
     var s = "Hello World"
-    assert_eq(s.slice(0, 100), "Hello World")
-    assert_eq(s.slice(-100), "Hello World")
-    assert_eq(s.slice(5, 2), "")
+    assert_throws(fn() { s.slice(0, 100) })
+    assert_throws(fn() { s.slice(5, 2) })
 }
 
 // ===== Empty string =====
@@ -46,7 +42,7 @@ fn test_slice_boundary() {
 @test
 fn test_slice_empty() {
     assert_eq("".slice(0), "")
-    assert_eq("".slice(-1), "")
+    assert_throws(fn() { "".slice(-1) })
 }
 
 // ===== Practical example =====
@@ -54,6 +50,6 @@ fn test_slice_empty() {
 @test
 fn test_slice_extension() {
     var path = "/home/user/file.txt"
-    assert_eq(path.slice(-4), ".txt")
-    assert_eq(path.slice(0, -4), "/home/user/file")
+    assert_eq(path.slice(len(path) - 4), ".txt")
+    assert_eq(path.slice(0, len(path) - 4), "/home/user/file")
 }

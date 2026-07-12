@@ -9,7 +9,7 @@ print(fixed.head.status)
 print(fixed.body)
 print(fixed.consumedBytes)
 print(fixed.getHeader("x-trace")!)
-print(fixed.trailers.entries().length)
+print(len(fixed.trailers.entries()))
 print("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nX-Trace: one\r\n\r\nhelloextra".slice(fixed.consumedBytes))
 
 var chunked = parseResponseText(
@@ -28,7 +28,7 @@ print(closeBody.consumedBytes)
 
 var unicodeBody = parseResponseText("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\néxtrail")!
 print(unicodeBody.body)
-print(unicodeBody.body.byteLength)
+print(len(unicodeBody.body.bytes()))
 print(unicodeBody.consumedBytes)
 
 var unicodeChunk = parseResponseText(
@@ -36,7 +36,7 @@ var unicodeChunk = parseResponseText(
     "2\r\né\r\n0\r\n\r\n"
 )!
 print(unicodeChunk.body)
-print(unicodeChunk.body.byteLength)
+print(len(unicodeChunk.body.bytes()))
 
 var noBody = parseResponseText("HTTP/1.1 204 No Content\r\n\r\nleft")!
 print(noBody.body == "")

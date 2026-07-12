@@ -1,6 +1,6 @@
 struct Pair {
     left: int
-    right: uint8
+    right: byte
     ok: bool
 }
 

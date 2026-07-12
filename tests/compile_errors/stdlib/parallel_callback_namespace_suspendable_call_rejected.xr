@@ -5,4 +5,4 @@ var values = parallel.map(0..4, (i) -> {
     return lib.importedSuspends()
 }, parallel.Options(2))
 
-print(values.length)
+print(len(values))

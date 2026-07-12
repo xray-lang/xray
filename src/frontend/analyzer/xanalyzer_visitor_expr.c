@@ -92,7 +92,7 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             return true;
         default:
             return false;
@@ -115,8 +115,7 @@ static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, A
     const char *type_name = object->as.variable.name;
     if (!type_name)
         return NULL;
-    if (strcmp(type_name, "Bytes") != 0 && strcmp(type_name, "Array") != 0 &&
-        strcmp(type_name, "StringBuilder") != 0)
+    if (strcmp(type_name, "Array") != 0 && strcmp(type_name, "StringBuilder") != 0)
         return NULL;
 
     char feature[160];
@@ -139,12 +138,6 @@ static bool xa_freestanding_reject_string_member(XaInferContext *ctx, AstNode *n
         ctx, node, feature,
         "string literals may be passed or printed, but string member access needs hosted helpers");
     return true;
-}
-
-static bool xa_type_has_collection_size_alias(XrType *type) {
-    return type &&
-           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
-            XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET || type->kind == XR_KIND_FIXED_ARRAY);
 }
 
 static bool xa_array_repeat_count_const_expr(XaInferContext *ctx, AstNode *node, int *out,
@@ -175,16 +168,19 @@ static bool xa_array_repeat_count_const_expr(XaInferContext *ctx, AstNode *node,
 }
 
 static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
-    if (!type)
-        return false;
-    if (sym == SYMBOL_LENGTH) {
-        return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
-               XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
-               type->kind == XR_KIND_FIXED_ARRAY;
-    }
-    if (sym == SYMBOL_SIZE)
-        return xa_type_has_collection_size_alias(type);
+    (void) sym;
+    (void) type;
     return false;
+}
+
+static bool xa_type_has_len_query(XrType *type) {
+    return type &&
+           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
+            XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
+            type->kind == XR_KIND_FIXED_ARRAY || type->kind == XR_KIND_CHANNEL ||
+            xr_type_is_named_class(type, "StringBuilder") ||
+            xr_type_is_named_class(type, "Buffer") || xr_type_is_named_class(type, "WorkQueue") ||
+            xr_type_is_named_class(type, "ResultGroup"));
 }
 
 static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrType *type,
@@ -193,7 +189,7 @@ static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrTy
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[192];
-    snprintf(msg, sizeof(msg), "Span view has no member '%s'; use length/size or indexed access",
+    snprintf(msg, sizeof(msg), "Span view has no member '%s'; use len(view) or indexed access",
              name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
@@ -205,7 +201,7 @@ static void xa_report_view_member_error(XaInferContext *ctx, AstNode *node, XrTy
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[192];
-    snprintf(msg, sizeof(msg), "View has no member '%s'; use length/size or indexed access", name);
+    snprintf(msg, sizeof(msg), "View has no member '%s'; use len(view) or indexed access", name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -598,8 +594,6 @@ static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *obje
         return NULL;
     const char *type_name = object->as.variable.name;
     XrVMRuntime *X = ctx->analyzer->isolate;
-    if (strcmp(type_name, "Bytes") == 0)
-        return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_bytes(X));
     if (strcmp(type_name, "Array") == 0) {
         XrType *elem = xr_type_new_unknown(X);
         return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_array(X, elem));
@@ -867,14 +861,14 @@ static void xa_check_span_view_closure_capture(XaInferContext *ctx, AstNode *nod
     xa_check_span_value_escape(ctx, node, type, "capture Span view in closure");
 }
 
-// Check if an AST node is a typeof() call, return the argument variable name
+// Check if an AST node is a typeOf() call, return the argument variable name
 const char *get_typeof_arg_name(AstNode *node) {
     if (!node || node->type != AST_CALL_EXPR)
         return NULL;
     CallExprNode *call = &node->as.call_expr;
     if (!call->callee || call->callee->type != AST_VARIABLE)
         return NULL;
-    if (strcmp(call->callee->as.variable.name, "typeof") != 0)
+    if (strcmp(call->callee->as.variable.name, "typeOf") != 0)
         return NULL;
     if (call->arg_count != 1 || !call->arguments[0])
         return NULL;
@@ -1205,7 +1199,7 @@ static bool xa_node_is_typeof_call(AstNode *node) {
         return false;
     CallExprNode *call = &node->as.call_expr;
     return call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
-           strcmp(call->callee->as.variable.name, "typeof") == 0;
+           strcmp(call->callee->as.variable.name, "typeOf") == 0;
 }
 
 static bool xa_node_is_string_literal(AstNode *node) {
@@ -1221,7 +1215,7 @@ static void xa_check_removed_typeof_string_compare(XaInferContext *ctx, AstNode 
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                               "typeof() returns TypeId; compare with Type.xxx or use typename() "
+                               "typeOf() returns TypeId; compare with Type.xxx or use typeName() "
                                "for debug strings",
                                &loc);
 }
@@ -1708,9 +1702,48 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     // Handle built-in properties
+    if ((obj_type->kind == XR_KIND_INTERFACE || obj_type->kind == XR_KIND_INSTANCE) &&
+        obj_type->instance.class_name && strcmp(obj_type->instance.class_name, "Iterator") == 0) {
+        XrType *elem = (obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args &&
+                        obj_type->instance.type_args[0])
+                           ? obj_type->instance.type_args[0]
+                           : xr_type_new_unknown(ctx->analyzer->isolate);
+        if (strcmp(ma->name, "hasNext") == 0)
+            return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, xr_type_new_bool(NULL),
+                                        false);
+        if (strcmp(ma->name, "next") == 0)
+            return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, elem, false);
+        if (strcmp(ma->name, "nth") == 0) {
+            XrType *params[1] = {xr_type_new_int(NULL)};
+            return xr_type_new_function(ctx->analyzer->isolate, params, 1, elem, false);
+        }
+        if (strcmp(ma->name, "iterator") == 0)
+            return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, obj_type, false);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg), "Iterator has no member '%s'", ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
     SymbolId prop_sym = xr_builtin_symbol_from_name(ma->name);
-    if (xa_symbol_is_collection_length(prop_sym, obj_type))
-        return xr_type_new_int(NULL);
+    bool declares_legacy_named_member = false;
+    if (obj_type->kind == XR_KIND_INSTANCE && obj_type->instance.class_ref) {
+        declares_legacy_named_member =
+            xa_class_info_lookup_instance_member(obj_type->instance.class_ref, ma->name) != NULL;
+    }
+    if ((prop_sym == SYMBOL_LENGTH || prop_sym == SYMBOL_SIZE || prop_sym == SYMBOL_IS_EMPTY) &&
+        xa_type_has_len_query(obj_type) && !declares_legacy_named_member) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "%s has no member '%s'; use len(value)%s",
+                 xr_type_to_string(obj_type), ma->name ? ma->name : "?",
+                 prop_sym == SYMBOL_IS_EMPTY ? " == 0" : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
     if (prop_sym == SYMBOL_CAPACITY && XR_TYPE_IS_ARRAY(obj_type)) {
         return xr_type_new_int(NULL);
     }
@@ -1800,7 +1833,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
         snprintf(msg, sizeof(msg),
-                 "Fixed array has no member '%s'; use length/size or indexed access", ma->name);
+                 "Fixed array has no member '%s'; use len(value) or indexed access", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_unknown(NULL);
@@ -1915,6 +1948,17 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 type_str++;
             return xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
         }
+    }
+
+    if (XR_TYPE_IS_STRING(obj_type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "string has no member '%s'; use the canonical string surface or text module",
+                 ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
     }
 
     if (XR_TYPE_IS_ARRAY(obj_type)) {
@@ -2064,7 +2108,24 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     IndexGetNode *ig = &node->as.index_get;
+    /*
+     * A borrowed view used only as the immediate operand of an index expression
+     * has an unambiguous, non-escaping lifetime.  Give lowered view constructors
+     * that context so the canonical `s.bytes()[i]` spelling does not require a
+     * throw-away Slice<byte> binding.
+     */
+    bool saved_view_context = ctx->allow_view_expr_for_copy;
+    if (ig->array && ig->array->type == AST_CALL_EXPR) {
+        CallExprNode *call = &ig->array->as.call_expr;
+        if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+            const char *name = call->callee->as.member_access.name;
+            if (name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
+                         strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0))
+                ctx->allow_view_expr_for_copy = true;
+        }
+    }
     XrType *container = xa_visit_infer_expr(ctx, ig->array);
+    ctx->allow_view_expr_for_copy = saved_view_context;
 
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
     xa_check_nullable_access(ctx, node, container, "index access");
@@ -2110,16 +2171,13 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return container->map.value_type;
     }
     if (XR_TYPE_IS_STRING(container)) {
-        if (xa_freestanding_profile_enabled(ctx->analyzer)) {
-            xa_freestanding_report_unavailable(
-                ctx, node, "string index access",
-                "string literals may be passed or printed, but string indexing needs hosted "
-                "helpers");
-            return xr_type_new_unknown(NULL);
-        }
-        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
-            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
-        return xr_type_new_char(NULL);  // string[i] => char
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "string does not support integer indexing or slice syntax; use runes(), bytes(), or "
+            "slice(start, end)",
+            &loc);
+        return xr_type_new_unknown(NULL);
     }
 
     // Json subscript access: json["key"] → Json (or nullable schema field type if known).
@@ -2298,6 +2356,16 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     ArrayLiteralNode *arr = &node->as.array_literal;
+    if (arr->is_fixed_bytes_literal) {
+        XrType *byte_type = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U8);
+        XrType *saved_expected = ctx->expected_type;
+        for (int i = 0; i < arr->count; i++) {
+            ctx->expected_type = byte_type;
+            xa_visit_infer_expr(ctx, arr->elements[i]);
+        }
+        ctx->expected_type = saved_expected;
+        return xr_type_new_fixed_array(ctx->analyzer->isolate, byte_type, arr->count);
+    }
     if (arr->is_repeat) {
         int repeat_count = 0;
         const char *repeat_err = NULL;
@@ -2822,8 +2890,6 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                 if (strcmp(cn, "WeakSet") == 0)
                     bt->is_weak = true;
             }
-        } else if (strcmp(cn, "Bytes") == 0) {
-            bt = xr_type_new_bytes(X);
         } else if (strcmp(cn, "Channel") == 0) {
             XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new(X, XR_KIND_CHANNEL);

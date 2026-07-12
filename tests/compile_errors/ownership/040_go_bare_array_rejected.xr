@@ -1,5 +1,5 @@
 fn worker(xs: Array<int>) -> int {
-    return xs.length
+    return len(xs)
 }
 
 var xs = [1, 2, 3]

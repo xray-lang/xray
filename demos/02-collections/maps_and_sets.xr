@@ -11,11 +11,11 @@ print("scores: ${scores}")
 var alice_score = scores.get("alice")
 print("alice: ${alice_score}")
 scores.set("dave", 88)
-var has_bob = scores.has("bob")
+var has_bob = scores.containsKey("bob")
 print("has bob: ${has_bob}")
 scores.delete("bob")
 print("after delete bob: ${scores}")
-print("length: ${scores.length}")
+print("length: ${len(scores)}")
 
 // Keys, values
 print("keys: ${scores.keys()}")
@@ -28,14 +28,14 @@ scores.forEach((key: string, val: int) -> {
 
 // Empty map
 var empty = #{}
-print("empty map length: ${empty.length}")
+print("empty map length: ${len(empty)}")
 
 // === Set (unique elements) ===
 var colors = #[1, 2, 3, 2, 1]
-print("set: ${colors}, length: ${colors.length}")
+print("set: ${colors}, length: ${len(colors)}")
 
 colors.add(4)
-print("has 3: ${colors.has(3)}")
+print("has 3: ${colors.contains(3)}")
 colors.delete(1)
 print("after delete 1: ${colors}")
 

@@ -263,8 +263,8 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         case XR_KIND_BOOL:
             emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
             break;
-        case XR_KIND_CHAR:
-            emit_inst(ctx, CREATE_ABC(OP_TOCHAR, dst, src, 0));
+        case XR_KIND_RUNE:
+            emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, src, 0));
             break;
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
@@ -411,8 +411,8 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
             return;
         }
-        if (tid == XR_TID_CHAR) {
-            emit_inst(ctx, CREATE_ABC(OP_TOCHAR, dst, src, 0));
+        if (tid == XR_TID_RUNE) {
+            emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, src, 0));
             return;
         }
     }
@@ -512,4 +512,15 @@ XR_FUNC void xi_emit_typeid(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 XR_FUNC void xi_emit_typename(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     xi_emit_type_query(ctx, v, dst, OP_TYPENAME);
+}
+
+XR_FUNC void xi_emit_len(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_LEN, dst, src, (uint8_t) (v->aux_int != 0)));
 }

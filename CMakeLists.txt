@@ -613,6 +613,8 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/encoding/*.c"
     "stdlib/base64/*.c"
     "stdlib/url/*.c"
+    "stdlib/text/*.c"
+    "stdlib/strconv/*.c"
 )
 set(STDLIB_SRC ${STDLIB_CORE_SRC})
 

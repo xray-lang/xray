@@ -488,6 +488,7 @@ typedef enum {
     XI_ASSERT_THROWS, /* args[0]=fn; aux=loc_string; emits try-catch sequence */
     XI_TYPEID,        /* args[0]=value; result=int XrTypeId */
     XI_TYPENAME,      /* args[0]=value; result=string typename */
+    XI_LEN,           /* args[0]=value; aux_int: dynamic lookup may throw */
     XI_GET_BUILTIN,   /* aux=name_string; aux_int=global_index; loads runtime global */
 
     /* Cross-module import reference (resolved at cgen time).

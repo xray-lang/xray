@@ -1,0 +1,11 @@
+// Built-in Unicode scalar type. A rune is always a valid Unicode scalar value.
+
+@native
+class rune {
+    toUInt32() -> uint32
+    toString() -> string
+    isLetter() -> bool
+    isNumber() -> bool
+    isAlphanumeric() -> bool
+    isWhitespace() -> bool
+}

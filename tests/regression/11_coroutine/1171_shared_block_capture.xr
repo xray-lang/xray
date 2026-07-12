@@ -3,9 +3,9 @@ fn test_shared_block_capture() {
     shared payload = [1, 2, 3]
     var t = go fn() -> int {
         payload.push(4)
-        return payload.length
+        return len(payload)
     }()
 
     assert_eq(await t, 4)
-    assert_eq(payload.length, 4)
+    assert_eq(len(payload), 4)
 }

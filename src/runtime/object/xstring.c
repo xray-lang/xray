@@ -89,7 +89,7 @@ static inline void string_finish_runtime(XrString *str, const char *chars, size_
 }
 
 // Allocate string object on coroutine heap (shared by runtime-local paths)
-static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length) {
+static XrString *string_alloc_uninit(XrVMRuntime *iso, size_t length) {
     if (length > UINT32_MAX)
         return NULL;
 
@@ -102,10 +102,20 @@ static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length
         return NULL;
 
     str->length = (uint32_t) length;
+    str->rune_length = 0;
+    str->data[length] = '\0';
+    return str;
+}
+
+static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length) {
+    if (length > 0 && (!chars || !xr_utf8_validate(chars, length)))
+        return NULL;
+    XrString *str = string_alloc_uninit(iso, length);
+    if (!str)
+        return NULL;
+    str->rune_length = (uint32_t) xr_utf8_strlen(chars ? chars : "", length);
     if (chars)
         memcpy(str->data, chars, length);
-    str->data[length] = '\0';
-
     return str;
 }
 
@@ -130,12 +140,13 @@ XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b) {
     if (len > UINT32_MAX)
         return NULL;
 
-    XrString *str = string_alloc(iso, NULL, len);
+    XrString *str = string_alloc_uninit(iso, len);
     if (!str)
         return NULL;
     memcpy(str->data, a->data, a->length);
     memcpy(str->data + a->length, b->data, b->length);
     str->data[len] = '\0';
+    str->rune_length = a->rune_length + b->rune_length;
     string_finish_runtime(str, str->data, len, 0);
     return str;
 }
@@ -157,6 +168,10 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         xr_log_warning("string", "string_intern_core: chars is NULL");
         return NULL;
     }
+    if (!xr_utf8_validate(chars, length)) {
+        xr_log_warning("string", "string_intern_core: invalid UTF-8");
+        return NULL;
+    }
 
     if (hash == 0)
         hash = string_hash_nonzero(chars, length);
@@ -169,6 +184,7 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         XrString *str = (XrString *) xr_sysheap_alloc_shared(heap, total_size, XR_TSTRING);
         if (str) {
             str->length = (uint32_t) length;
+            str->rune_length = (uint32_t) xr_utf8_strlen(chars, length);
             str->hash = hash;
             memcpy(str->data, chars, length);
             str->data[length] = '\0';
@@ -239,6 +255,7 @@ XrString *xr_string_clone_shared_core(XrRuntimeCore *core, XrString *str) {
     if (!shared)
         return NULL;
     shared->length = str->length;
+    shared->rune_length = str->rune_length;
     shared->hash = str->hash ? str->hash : string_hash_nonzero(str->data, str->length);
     memcpy(shared->data, str->data, length);
     shared->data[length] = '\0';
@@ -379,7 +396,7 @@ int xr_string_compare(XrString *a, XrString *b) {
 /* ========== String Basic Methods ========== */
 
 // charAt - get character at position (supports negative index)
-XrString *xr_string_char_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
+XrString *xr_string_rune_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
     XR_DCHECK(iso != NULL, "string_char_at: NULL isolate");
     if (str == NULL || str->length == 0)
         return NULL;
@@ -420,39 +437,31 @@ XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start,
     return xr_string_new(iso, &str->data[start], len);
 }
 
-// slice - slice with negative index support
+// Rune-ordinal half-open slice. Invalid or reversed ranges are rejected.
 XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
     if (!iso || !str)
         return NULL;
+    xr_Integer count = (xr_Integer) xr_string_rune_length(str);
+    if (start < 0 || end < start || end > count)
+        return NULL;
+    return xr_string_substring_by_char(iso, str, (size_t) start, (size_t) end);
+}
 
-    xr_Integer len = (xr_Integer) str->length;
+static bool string_byte_boundary(XrString *str, xr_Integer offset) {
+    if (!str || offset < 0 || (uint64_t) offset > (uint64_t) str->length)
+        return false;
+    return offset == 0 || (uint32_t) offset == str->length ||
+           (((unsigned char) str->data[offset] & 0xC0u) != 0x80u);
+}
 
-    // Handle negative index: count from end
-    if (start < 0) {
-        start = len + start;
-        if (start < 0)
-            start = 0;
-    }
-    if (end < 0) {
-        end = len + end;
-        if (end < 0)
-            end = 0;
-    }
-
-    // Bounds check
-    if (start > len)
-        start = len;
-    if (end > len)
-        end = len;
-
-    // start > end returns empty string
-    if (start >= end) {
-        return xr_string_new(iso, "", 0);
-    }
-
-    // Extract substring
-    size_t slice_len = (size_t) (end - start);
-    return xr_string_new(iso, &str->data[start], slice_len);
+XrString *xr_string_slice_bytes(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
+    if (!iso || !str)
+        return NULL;
+    if (start < 0 || end < start || (uint64_t) end > (uint64_t) str->length)
+        return NULL;
+    if (!string_byte_boundary(str, start) || !string_byte_boundary(str, end))
+        return NULL;
+    return xr_string_new(iso, str->data + start, (size_t) (end - start));
 }
 
 // indexOf - find substring position
@@ -1043,7 +1052,7 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
     size_t pos = 0;
     while (pos < str->length) {
         // Get current UTF-8 char length
-        size_t char_len = xr_utf8_char_size((unsigned char) str->data[pos]);
+        size_t char_len = xr_utf8_rune_size((unsigned char) str->data[pos]);
         if (char_len == 0 || pos + char_len > str->length) {
             // Invalid UTF-8, treat as single byte
             char_len = 1;
@@ -1075,37 +1084,37 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
 /* ========== Unicode / UTF-8 Support ========== */
 
 // charLength - get character count
-size_t xr_string_char_length(XrString *str) {
+size_t xr_string_rune_length(XrString *str) {
     if (!str)
         return 0;
-    return xr_utf8_strlen(str->data, str->length);
+    return str->rune_length;
 }
 
 // charCodeAt - get Unicode codepoint at char index
-int32_t xr_string_char_code_at(XrString *str, size_t index) {
+int32_t xr_string_rune_code_at(XrString *str, size_t index) {
     if (!str)
         return -1;
 
     uint32_t cp;
-    if (xr_utf8_char_at(str->data, str->length, index, &cp, NULL)) {
+    if (xr_utf8_rune_at(str->data, str->length, index, &cp, NULL)) {
         return (int32_t) cp;
     }
     return -1;  // Index out of bounds
 }
 
 // charAtUnicode - get char by Unicode char index
-XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t index) {
+XrString *xr_string_rune_at_unicode(XrVMRuntime *iso, XrString *str, size_t index) {
     if (!iso || !str)
         return NULL;
 
     uint32_t cp;
     size_t pos;
-    if (!xr_utf8_char_at(str->data, str->length, index, &cp, &pos)) {
+    if (!xr_utf8_rune_at(str->data, str->length, index, &cp, &pos)) {
         return NULL;  // Index out of bounds
     }
 
     // Get byte length of this char
-    int char_size = xr_utf8_char_size((uint8_t) str->data[pos]);
+    int char_size = xr_utf8_rune_size((uint8_t) str->data[pos]);
     if (pos + char_size > str->length) {
         return NULL;  // Incomplete char
     }
@@ -1124,7 +1133,7 @@ XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t st
         return NULL;
 
     size_t byte_start, byte_end;
-    if (!xr_utf8_char_range(str->data, str->length, start, end, &byte_start, &byte_end)) {
+    if (!xr_utf8_rune_range(str->data, str->length, start, end, &byte_start, &byte_end)) {
         return NULL;
     }
 

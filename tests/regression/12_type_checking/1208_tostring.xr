@@ -61,8 +61,8 @@ fn test_tostring() {
     assert(js.indexOf("name") >= 0)
     assert(js.indexOf("Alice") >= 0)
 
-    // === 8. Bytes toString (Bytes is Array<uint8>) ===
-    var buf = Bytes(3, 0)
+    // === 8. Array<byte> toString (Array<byte> is Array<byte>) ===
+    var buf = Array<byte>(3, 0)
     assert_eq(string(buf), "[0, 0, 0]")
 
     // === 9. Channel toString ===

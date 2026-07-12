@@ -10,7 +10,7 @@ fn run(n: int) -> int {
 
     var sum = 0
     i = 0
-    while (i < mapped.length) {
+    while (i < len(mapped)) {
         sum = sum + mapped[i]
         i = i + 1
     }

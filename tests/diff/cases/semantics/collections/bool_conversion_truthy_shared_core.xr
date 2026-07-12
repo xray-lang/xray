@@ -32,7 +32,7 @@ var fullSet: Set<string> = #["x"]
 show("empty-set", bool(emptySet))
 show("full-set", bool(fullSet))
 
-var emptyTypedSet: Set<uint8> = #[]
-var fullTypedSet: Set<uint8> = #[7]
+var emptyTypedSet: Set<byte> = #[]
+var fullTypedSet: Set<byte> = #[7]
 show("empty-typed-set", bool(emptyTypedSet))
 show("full-typed-set", bool(fullTypedSet))

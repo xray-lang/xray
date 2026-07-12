@@ -77,15 +77,15 @@ typedef struct {
 
 static const KwExpect kKnownKeywords[] = {
     /* None of the uppercase native type names are lexer keywords any
-     * more: Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+     * more: Array / BigInt / Array<byte> / Channel / DateTime / Json / Map /
      * Range / Regex / Set / StringBuilder all resolve through the
      * prelude registry as plain identifiers. */
     {"as", TK_AS},
     {"await", TK_AWAIT},
     {"bool", TK_BOOL},
     {"break", TK_BREAK},
+    {"byte", TK_UINT8},
     {"catch", TK_CATCH},
-    {"char", TK_CHAR},
     {"class", TK_CLASS},
     {"comptime", TK_COMPTIME},
     {"const", TK_CONST},
@@ -119,8 +119,11 @@ static const KwExpect kKnownKeywords[] = {
     {"new", TK_NEW},
     {"null", TK_NULL},
     {"operator", TK_OPERATOR},
+    {"packed", TK_PACKED},
     {"private", TK_PRIVATE},
+    {"protected", TK_PROTECTED},
     {"return", TK_RETURN},
+    {"rune", TK_RUNE},
     {"scope", TK_SCOPE},
     {"select", TK_SELECT},
     {"shared", TK_SHARED},
@@ -137,6 +140,8 @@ static const KwExpect kKnownKeywords[] = {
     {"uint16", TK_UINT16},
     {"uint32", TK_UINT32},
     {"uint64", TK_UINT64},
+    {"union", TK_UNION},
+    {"unsafe", TK_UNSAFE},
     {"var", TK_VAR},
     {"while", TK_WHILE},
     {"yield", TK_YIELD},
@@ -154,8 +159,8 @@ TEST(every_keyword_recognised) {
     }
 }
 
-TEST(removed_oop_modifiers_are_identifiers) {
-    static const char *removed[] = {"abstract", "override"};
+TEST(removed_keywords_are_identifiers) {
+    static const char *removed[] = {"abstract", "char", "override"};
     int n = (int) (sizeof(removed) / sizeof(removed[0]));
     for (int i = 0; i < n; i++) {
         Token t = scan_one(removed[i]);
@@ -202,6 +207,7 @@ static const char *kPrefixIdentifiers[] = {
     "asynchronous",
     "ask",
     "ascend",
+    "bytecode",
     "letter",
     "lettuce",
     "comptimeValue",
@@ -221,10 +227,13 @@ static const char *kPrefixIdentifiers[] = {
     "newline",
     "nullable",
     "publicly",
+    "packedValue",
+    "protectedValue",
     "returns",
     "returner",
     "scopes",
     "scoped",
+    "runeValue",
     "trying",
     "trycatch",
     "true_value",
@@ -253,6 +262,8 @@ static const char *kPrefixIdentifiers[] = {
     "float64x",
     "uint8x",
     "uint16x",
+    "unionValue",
+    "unsafeValue",
     "public",
     "publicValue",
     "unknown",
@@ -350,7 +361,7 @@ TEST(keyword_then_punctuation) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("L-01 / L-08 keyword recognition");
 RUN_TEST(every_keyword_recognised);
-RUN_TEST(removed_oop_modifiers_are_identifiers);
+RUN_TEST(removed_keywords_are_identifiers);
 RUN_TEST(keyword_prefix_identifiers_are_TK_NAME);
 RUN_TEST(keywords_are_case_sensitive);
 RUN_TEST(keyword_with_underscore_suffix_is_identifier);

@@ -23,7 +23,7 @@ fn run() {
     await all tasks into results
     var sum = 0
     i = 0
-    while (i < results.length) {
+    while (i < len(results)) {
         sum = sum + results[i]
         i = i + 1
     }
@@ -40,11 +40,11 @@ fn run() {
     await all tasks into results
     sum = 0
     i = 0
-    while (i < results.length) {
+    while (i < len(results)) {
         sum = sum + results[i]
         i = i + 1
     }
-    print(results.length)
+    print(len(results))
     print(sum)
 
     var boolTasks: Array<Task<bool>> = []
@@ -61,7 +61,7 @@ fn run() {
     await all boolTasks into boolResults
     var trueCount = 0
     i = 0
-    while (i < boolResults.length) {
+    while (i < len(boolResults)) {
         if (boolResults[i]) {
             trueCount = trueCount + 1
         }

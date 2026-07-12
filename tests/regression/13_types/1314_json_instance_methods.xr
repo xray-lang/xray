@@ -6,7 +6,7 @@
 fn test_keys() {
     var obj: Json = { name: "Alice", age: 30 }
     var k = obj.keys()
-    assert_eq(k.length, 2)
+    assert_eq(len(k), 2)
     assert_true(k[0] == "name" || k[1] == "name")
     assert_true(k[0] == "age" || k[1] == "age")
 }
@@ -14,7 +14,7 @@ fn test_keys() {
 @test
 fn test_keys_empty() {
     var obj: Json = {}
-    assert_eq(obj.keys().length, 0)
+    assert_eq(len(obj.keys()), 0)
 }
 
 // ===== values() =====
@@ -22,7 +22,7 @@ fn test_keys_empty() {
 fn test_values() {
     var obj: Json = { x: 10, y: 20 }
     var v = obj.values()
-    assert_eq(v.length, 2)
+    assert_eq(len(v), 2)
     assert_true(v[0] == 10 || v[1] == 10)
     assert_true(v[0] == 20 || v[1] == 20)
 }
@@ -31,28 +31,28 @@ fn test_values() {
 @test
 fn test_has() {
     var obj: Json = { name: "Alice", age: 30 }
-    assert_true(obj.has("name"))
-    assert_true(obj.has("age"))
-    assert_eq(obj.has("email"), false)
+    assert_true(Json.containsKey(obj, "name"))
+    assert_true(Json.containsKey(obj, "age"))
+    assert_eq(Json.containsKey(obj, "email"), false)
 }
 
 // ===== Combined =====
 @test
 fn test_combined() {
     var data: Json = { a: 1, b: "two", c: true }
-    assert_eq(data.keys().length, 3)
-    assert_eq(data.values().length, 3)
-    assert_true(data.has("a"))
-    assert_eq(data.has("z"), false)
+    assert_eq(len(data.keys()), 3)
+    assert_eq(len(data.values()), 3)
+    assert_true(Json.containsKey(data, "a"))
+    assert_eq(Json.containsKey(data, "z"), false)
 }
 
 // ===== Parsed Json =====
 @test
 fn test_parsed_json() {
     var data = Json.parse("{\"x\": 1, \"y\": 2}")
-    assert_true(data.has("x"))
-    assert_eq(data.keys().length, 2)
-    assert_eq(data.values().length, 2)
+    assert_true(Json.containsKey(data, "x"))
+    assert_eq(len(data.keys()), 2)
+    assert_eq(len(data.values()), 2)
 }
 
 print("json_instance_methods: all tests passed")

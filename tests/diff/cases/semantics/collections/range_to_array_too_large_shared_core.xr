@@ -2,7 +2,7 @@
 var huge = 0..10000001
 
 try {
-    print(huge.toArray().length)
+    print(len(huge.toArray()))
 } catch panic (p) {
     print(p.message)
     print(p.code)

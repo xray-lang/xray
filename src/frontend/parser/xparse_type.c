@@ -144,7 +144,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             return xr_tref_string(parser->compiler_session);
         case XR_TREF_BOOL:
             return xr_tref_bool(parser->compiler_session);
-        case XR_TREF_CHAR:
+        case XR_TREF_RUNE:
             return xr_tref_char(parser->compiler_session);
         case XR_TREF_UNIT:
             return xr_tref_unit(parser->compiler_session);
@@ -354,7 +354,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return xr_tref_string(parser->compiler_session);
     if (xr_parser_match(parser, TK_BOOL))
         return xr_tref_bool(parser->compiler_session);
-    if (xr_parser_match(parser, TK_CHAR))
+    if (xr_parser_match(parser, TK_RUNE))
         return xr_tref_char(parser->compiler_session);
     if (xr_parser_match(parser, TK_NULL))
         return xr_tref_null(parser->compiler_session);

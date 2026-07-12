@@ -1,14 +1,14 @@
-fn readWhileOwnerGrows(view: ByteSpan, owner: Bytes) -> int {
+fn readWhileOwnerGrows(view: Slice<byte>, owner: Array<byte>) -> int {
     var before = int(view[0])
     var i = 0
     while (i < 4096) {
         owner.push(i & 0xFF)
         i = i + 1
     }
-    return before + int(view[0]) + view.length
+    return before + int(view[0]) + len(view)
 }
 
-var bytes = Bytes(4)
+var bytes = Array<byte>(4)
 bytes[0] = 1
 bytes[1] = 2
 bytes[2] = 3

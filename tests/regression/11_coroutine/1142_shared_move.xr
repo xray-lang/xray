@@ -95,7 +95,7 @@ fn test_normal_copy() {
     // Explicit copy: coroutine gets a deep copy
     var task = go fn(data: Array<int>) {
         data.push(4)  // does not affect original
-        return data.length
+        return len(data)
     }(copy(arr))
 
     var result = await task

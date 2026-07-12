@@ -1,1 +1,1 @@
-Fixed array has no member 'push'; use length/size or indexed access
+Fixed array has no member 'push'; use len(value) or indexed access

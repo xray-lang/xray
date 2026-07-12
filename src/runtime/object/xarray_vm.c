@@ -182,8 +182,8 @@ static int xr_value_compare_default(XrValue a, XrValue b) {
             return cmp;
         return (la > lb) - (la < lb);
     }
-    if (XR_IS_CHAR(a) && XR_IS_CHAR(b)) {
-        uint32_t ca = XR_TO_CHAR(a), cb = XR_TO_CHAR(b);
+    if (XR_IS_RUNE(a) && XR_IS_RUNE(b)) {
+        uint32_t ca = XR_TO_RUNE(a), cb = XR_TO_RUNE(b);
         return (ca > cb) - (ca < cb);
     }
     if (XR_IS_BOOL(a) && XR_IS_BOOL(b)) {
@@ -393,7 +393,7 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
         case XR_ELEM_U32:
             TYPED_SORT(uint32_t, arr, n);
             break;
-        case XR_ELEM_CHAR:
+        case XR_ELEM_RUNE:
             TYPED_SORT(uint32_t, arr, n);
             break;
         case XR_ELEM_I64:
@@ -437,9 +437,9 @@ struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrS
         } else if (XR_IS_BOOL(val)) {
             const char *s = XR_TO_BOOL(val) ? "true" : "false";
             xr_strbuf_append_cstr(sb, s, strlen(s));
-        } else if (XR_IS_CHAR(val)) {
+        } else if (XR_IS_RUNE(val)) {
             char buf[XR_UTF8_MAX_BYTES];
-            int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+            int n = xr_utf8_encode(XR_TO_RUNE(val), buf);
             if (n > 0)
                 xr_strbuf_append_cstr(sb, buf, (size_t) n);
         } else if (XR_IS_NULL(val)) {

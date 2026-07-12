@@ -1,15 +1,15 @@
-fn appendThenRead(src: Bytes) -> int {
-    var out = Bytes.withCapacity(8)
+fn appendThenRead(src: Array<byte>) -> int {
+    var out: Array<byte> = Array.withCapacity(8)
     out.appendFrom(src[0:2])
 
-    var tail: uint8 = 0
+    var tail: byte = 0
     unsafe {
         tail = src.get(2)
     }
-    return int(tail) + out.length
+    return int(tail) + len(out)
 }
 
-var src = Bytes(3)
+var src = Array<byte>(3)
 src[0] = 11
 src[1] = 22
 src[2] = 33

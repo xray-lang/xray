@@ -57,7 +57,7 @@ fn make_ok(id: int) -> int {
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -68,7 +68,7 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
     var count = 0
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -78,12 +78,12 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn failed_payloads_valid(outcomes: Array<TaskOutcome>) -> bool {
-    for (var i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < len(outcomes); i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
                     RaceErr.Msg(msg) -> {
-                        if (!msg.includes("err_")) {
+                        if (!msg.contains("err_")) {
                             return false
                         }
                     }
@@ -109,7 +109,7 @@ fn test_supervisor_no_lost_updates() {
                 go make_ok(i)
             }
         }
-        assert_eq(outcomes.length, FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
+        assert_eq(len(outcomes), FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
         assert_eq(count_failed(outcomes), FAILING_PER_SCOPE)
         assert_eq(count_success(outcomes), SUCCEEDING_PER_SCOPE)
     }
@@ -126,7 +126,7 @@ fn test_supervisor_no_torn_pushes() {
                 go make_failing(i)
             }
         }
-        assert_eq(outcomes.length, FAILING_PER_SCOPE)
+        assert_eq(len(outcomes), FAILING_PER_SCOPE)
         assert_eq(count_failed(outcomes), FAILING_PER_SCOPE)
         assert(failed_payloads_valid(outcomes), "failed payloads must stay intact")
     }
@@ -152,7 +152,7 @@ fn test_linked_first_error_deterministic() {
         }
         assert(caught, "linked scope must propagate child error")
         // Accept any err_<n>; we do not depend on a specific winner.
-        assert(msg.includes("err_"), "first_error must be a child error")
+        assert(msg.contains("err_"), "first_error must be a child error")
     }
 }
 
@@ -165,7 +165,7 @@ fn test_supervisor_all_success() {
                 go make_ok(i)
             }
         }
-        assert_eq(outcomes.length, FAILING_PER_SCOPE)
+        assert_eq(len(outcomes), FAILING_PER_SCOPE)
         assert_eq(count_success(outcomes), FAILING_PER_SCOPE)
         assert_eq(count_failed(outcomes), 0)
     }

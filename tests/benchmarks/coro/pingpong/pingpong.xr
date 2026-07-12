@@ -4,7 +4,7 @@
 import time
 var N = 1000000
 // 默认100万次
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
 print("=== Pingpong 测试 ===")

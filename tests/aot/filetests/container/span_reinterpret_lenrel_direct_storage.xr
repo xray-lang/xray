@@ -1,10 +1,10 @@
-fn roundtrip(words: Span<uint32>) -> int {
-    var bytes: ByteSpan = words.asBytes()
-    var words_again: Span<uint32> = bytes.reinterpret<uint32>()
-    return words_again.length
+fn roundtrip(words: Slice<uint32>) -> int {
+    var bytes: Slice<byte> = words.asBytes()
+    var words_again: Slice<uint32> = bytes.reinterpret<uint32>()
+    return len(words_again)
 }
 
-fn rawBytes(raw: ByteSpan) -> int {
-    var bytes_again: Span<uint8> = raw.reinterpret<uint8>()
-    return bytes_again.length
+fn rawBytes(raw: Slice<byte>) -> int {
+    var bytes_again: Slice<byte> = raw.reinterpret<byte>()
+    return len(bytes_again)
 }

@@ -48,7 +48,7 @@ fn test_derive_json_stringify() {
 fn test_derive_json_encode() {
     var user = User("Ada", 42)
     var encoded = Json.encode(user)
-    assert_eq(typename(encoded), "Json")
+    assert_eq(typeName(encoded), "Json")
     assert_eq(encoded.name, "Ada")
     assert_eq(encoded.age, 42)
 }
@@ -67,7 +67,7 @@ fn test_json_requires_explicit_derive() {
         Json.encode(user)
     } catch panic (e) {
         caught = true
-        assert(string(e).includes("does not derive Json"))
+        assert(string(e).contains("does not derive Json"))
     }
     assert(caught)
 }
@@ -82,7 +82,7 @@ fn test_derive_flags_are_independent() {
         Json.encode(inspect_only)
     } catch panic (e) {
         inspect_json_caught = true
-        assert(string(e).includes("does not derive Json"))
+        assert(string(e).contains("does not derive Json"))
     }
     assert(inspect_json_caught)
 

@@ -101,7 +101,7 @@ layer = "L1"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/mem/mem.c"
-public_native = ["Buffer", "Buffer.asSpan", "Buffer.get:length", "Buffer.length", "Buffer.ptr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addressOf", "alignOf", "alloc", "allocAligned", "allocZeroed", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "copy", "fence", "fromAddress", "move", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "set", "sizeOf", "volatileLoad", "volatileStore"]
+public_native = ["Buffer", "Buffer.asSpan", "Buffer.ptr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addressOf", "alignOf", "alloc", "allocAligned", "allocZeroed", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "copy", "fence", "fromAddress", "move", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "set", "sizeOf", "volatileLoad", "volatileStore"]
 perf_suite = "stdlib/mem"
 
 [[module]]
@@ -198,6 +198,30 @@ public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
 perf_suite = "stdlib/encoding"
+
+[[module]]
+name = "text"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/text/text.xr"
+loader = "stdlib/text/text.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/text"
+
+[[module]]
+name = "strconv"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/strconv/strconv.xr"
+loader = "stdlib/strconv/strconv.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/strconv"
 
 [[module]]
 name = "_probe"

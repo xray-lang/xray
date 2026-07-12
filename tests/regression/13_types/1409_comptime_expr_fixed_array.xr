@@ -3,8 +3,8 @@ const COUNT = comptime SCALE + 2
 
 @test
 fn test_comptime_expr_feeds_static_int_positions() {
-    var bytes: [uint8; COUNT] = [3; COUNT]
-    assert_eq(bytes.length, 34)
+    var bytes: [byte; COUNT] = [3; COUNT]
+    assert_eq(len(bytes), 34)
     assert_eq(bytes[0], 3)
     assert_eq(bytes[33], 3)
 

@@ -27,7 +27,7 @@
 
 #define TYPE_NAME_INT "int"
 #define TYPE_NAME_INT8 "int8"
-#define TYPE_NAME_UINT8 "uint8"
+#define TYPE_NAME_UINT8 "byte"
 #define TYPE_NAME_INT16 "int16"
 #define TYPE_NAME_UINT16 "uint16"
 #define TYPE_NAME_INT32 "int32"
@@ -41,7 +41,7 @@
 #define TYPE_NAME_FLOAT64 "float64"
 #define TYPE_NAME_STRING "string"
 #define TYPE_NAME_BOOL "bool"
-#define TYPE_NAME_CHAR "char"
+#define TYPE_NAME_RUNE "rune"
 #define TYPE_NAME_NULL "null"
 #define TYPE_NAME_VOID "void"
 #define TYPE_NAME_UNIT "()"
@@ -54,11 +54,11 @@
 #define TYPE_NAME_SET "Set"
 #define TYPE_NAME_WEAKMAP "WeakMap"
 #define TYPE_NAME_WEAKSET "WeakSet"
-#define TYPE_NAME_BYTES "Bytes"
-#define TYPE_NAME_SPAN "Span"
-#define TYPE_NAME_BYTESPAN "ByteSpan"
-#define TYPE_NAME_VIEW "View"
-#define TYPE_NAME_BYTEVIEW "ByteView"
+#define TYPE_NAME_BYTES "Array<byte>"
+#define TYPE_NAME_SPAN "Slice"
+#define TYPE_NAME_BYTESPAN "Slice<byte>"
+#define TYPE_NAME_VIEW "Slice"
+#define TYPE_NAME_BYTEVIEW "Slice<byte>"
 
 /* ========== Runtime Types ========== */
 
@@ -185,7 +185,7 @@ typedef enum {
     XR_TID_WEAKSET,  // 44
     // char and Record are runtime-visible scalar/struct names outside the
     // concurrency block.
-    XR_TID_CHAR,
+    XR_TID_RUNE,
     XR_TID_RECORD,
     XR_TID_COUNT
 } XrTypeId;

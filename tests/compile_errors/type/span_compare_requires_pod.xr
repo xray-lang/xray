@@ -1,5 +1,5 @@
 var left = ["a", "b"]
 var right = ["a", "c"]
-var leftSpan: Span<string> = left[:]
-var rightSpan: Span<string> = right[:]
+var leftSpan: Slice<string> = left[:]
+var rightSpan: Slice<string> = right[:]
 leftSpan.compare(rightSpan)

@@ -1,2 +1,2 @@
-var bytes = Bytes(0)
-var view: ByteView = bytes
+var bytes = Array<byte>(0)
+var view: Slice<byte> = bytes

@@ -135,15 +135,9 @@ TEST(intmap_clear) {
 
 TEST(intmap_reserved_keys) {
     XrIntMap *map = xr_intmap_new();
-    int v = 1;
 
-    // XR_INTMAP_EMPTY and XR_INTMAP_TOMBSTONE are reserved
-    xr_intmap_set(map, XR_INTMAP_EMPTY, &v);
-    ASSERT_EQ_UINT(map->count, 0);  // should be rejected
-
-    xr_intmap_set(map, XR_INTMAP_TOMBSTONE, &v);
-    ASSERT_EQ_UINT(map->count, 0);  // should be rejected
-
+    // Reserved sentinels are programmer errors for set() and trip XR_DCHECK in
+    // debug builds; lookup operations still report them as absent.
     ASSERT_FALSE(xr_intmap_has(map, XR_INTMAP_EMPTY));
     ASSERT_FALSE(xr_intmap_has(map, XR_INTMAP_TOMBSTONE));
     ASSERT_NULL(xr_intmap_get(map, XR_INTMAP_EMPTY));
@@ -224,9 +218,6 @@ TEST(intmap_set_returns_status) {
     int v = 77;
 
     ASSERT_TRUE(xr_intmap_set(map, 1, &v));
-    // Reserved sentinel keys are rejected
-    ASSERT_FALSE(xr_intmap_set(map, XR_INTMAP_EMPTY, &v));
-    ASSERT_FALSE(xr_intmap_set(map, XR_INTMAP_TOMBSTONE, &v));
     ASSERT_EQ_UINT(map->count, 1);
 
     xr_intmap_free(map);

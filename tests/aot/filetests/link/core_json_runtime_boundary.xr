@@ -7,4 +7,4 @@ var obj: Json = {
 print(obj.name)
 print(obj.count)
 print(obj.ok)
-print(typename(obj))
+print(typeName(obj))

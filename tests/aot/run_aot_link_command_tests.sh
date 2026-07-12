@@ -68,11 +68,15 @@ object_has_weak_symbol() {
     local sym="$2"
     local dump="$3"
     if nm -m "$obj" >"$dump" 2>/dev/null; then
-        grep -E "weak external.*_?${sym}$" "$dump" >/dev/null
+        grep -E "weak external.*_?${sym}$" "$dump" >/dev/null ||
+            sed -E 's/_[[:xdigit:]]{16}_/_/g' "$dump" |
+                grep -E "weak external.*_?${sym}$" >/dev/null
         return $?
     fi
     if nm -g "$obj" >"$dump" 2>/dev/null; then
-        grep -Eq "[[:space:]][WwVv][[:space:]]+_?${sym}$" "$dump"
+        grep -Eq "[[:space:]][WwVv][[:space:]]+_?${sym}$" "$dump" ||
+            sed -E 's/_[[:xdigit:]]{16}_/_/g' "$dump" |
+                grep -Eq "[[:space:]][WwVv][[:space:]]+_?${sym}$"
         return $?
     fi
     return 1
@@ -206,7 +210,20 @@ expect_log_contains() {
     local log="$1"
     local needle="$2"
     local name="$3"
-    if grep -Fq -- "$needle" "$log"; then
+    if grep -Fq -- "$needle" "$log" ||
+       sed -E 's/_[[:xdigit:]]{16}_/_/g' "$log" | grep -Fq -- "$needle"; then
+        record_pass "$name"
+    else
+        record_fail "$name"
+        sed 's/^/      /' "$log" | sed -n '1,80p'
+    fi
+}
+
+expect_log_matches() {
+    local log="$1"
+    local pattern="$2"
+    local name="$3"
+    if grep -Eq -- "$pattern" "$log"; then
         record_pass "$name"
     else
         record_fail "$name"
@@ -218,7 +235,8 @@ expect_log_not_contains() {
     local log="$1"
     local needle="$2"
     local name="$3"
-    if grep -Fq -- "$needle" "$log"; then
+    if grep -Fq -- "$needle" "$log" ||
+       sed -E 's/_[[:xdigit:]]{16}_/_/g' "$log" | grep -Fq -- "$needle"; then
         record_fail "$name"
         sed 's/^/      /' "$log" | sed -n '1,80p'
     else
@@ -1729,7 +1747,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "[1] = XR_FROM_FLOAT(0x1p-1)," \
             "freestanding-profile/shared-literals-static: initializes float shared slot statically"
         expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
-            "[2] = XR_FROM_CHAR(UINT32_C(65))," \
+            "[2] = XR_FROM_RUNE(UINT32_C(65))," \
             "freestanding-profile/shared-literals-static: initializes char shared slot statically"
         expect_log_contains "$FREESTANDING_SHARED_LITERALS_C" \
             "[3] = XR_NULL_VAL," \
@@ -1741,7 +1759,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "xrt_shared[1] = XR_FROM_FLOAT(0x1p-1)" \
             "freestanding-profile/shared-literals-static: elides module-init float write"
         expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
-            "xrt_shared[2] = XR_FROM_CHAR(UINT32_C(65))" \
+            "xrt_shared[2] = XR_FROM_RUNE(UINT32_C(65))" \
             "freestanding-profile/shared-literals-static: elides module-init char write"
         expect_log_not_contains "$FREESTANDING_SHARED_LITERALS_C" \
             "xrt_shared[3] = XR_NULL_VAL" \
@@ -2076,8 +2094,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" \
             "XRT_ATTR_SECTION(\"__DATA,.xr_count\") XRT_ATTR_USED" \
             "freestanding-profile/top-var-scalar-attrs: emits section/used attrs on mutable scalar data"
-        expect_log_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" \
-            "_xctscalar_freestanding_top_var_scalar_attrs_0 =" \
+        expect_log_matches "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" \
+            "_xctscalar_freestanding_top_var_scalar_attrs_[[:xdigit:]]+_0 =" \
             "freestanding-profile/top-var-scalar-attrs: writes scalar directly"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "xrt_shared[0]" \
             "freestanding-profile/top-var-scalar-attrs: avoids shared-slot storage"
@@ -2766,7 +2784,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         printf '%s\n' "$FREESTANDING_STATIC_IMPORT_C_FILES" |
             while IFS= read -r cfile; do
                 if [ -f "$cfile" ] &&
-                   grep -Fq 'extern const int64_t xray_const__freestanding_static_data_lib_MAGIC' "$cfile"; then
+                   sed -E 's/_[[:xdigit:]]{16}_/_/g' "$cfile" |
+                       grep -Fq 'extern const int64_t xray_const__freestanding_static_data_lib_MAGIC'; then
                     printf '%s\n' "$cfile"
                     break
                 fi
@@ -3332,20 +3351,20 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     FREESTANDING_TOP_VAR_WEAK_C="$(sed -n 's/^Kept C source: //p' \
         "$FREESTANDING_TOP_VAR_WEAK_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_WEAK_C" ]; then
-        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
-            "struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE" \
+        expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "struct \\{ int64_t value; int64_t limit; \\} xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE" \
             "freestanding-profile/top-var-weak: emits stable weak aggregate data symbol"
-        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
-            "int64_t xray_var_freestanding_top_var_weak_static_TICKS" \
+        expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "int64_t xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_TICKS" \
             "freestanding-profile/top-var-weak: emits stable weak scalar data symbol"
         expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
             "XRT_ATTR_SECTION(\"__DATA,.xr_weak_state\") XRT_ATTR_WEAK XRT_ATTR_USED" \
             "freestanding-profile/top-var-weak: preserves section/weak/used attrs"
-        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
-            "xray_var_freestanding_top_var_weak_static_STATE.value =" \
+        expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE.value =" \
             "freestanding-profile/top-var-weak: writes weak aggregate directly"
-        expect_log_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
-            "xray_var_freestanding_top_var_weak_static_TICKS =" \
+        expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
+            "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_TICKS =" \
             "freestanding-profile/top-var-weak: writes weak scalar directly"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_WEAK_C" \
             "static struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE" \
@@ -3381,7 +3400,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     fi
     FREESTANDING_TOP_VAR_WEAK_NM="$WORK/freestanding_top_var_weak_static.nm"
     if object_has_weak_symbol "$FREESTANDING_TOP_VAR_WEAK_OBJ" \
-            "xray_var_freestanding_top_var_weak_static_STATE" \
+            "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE" \
             "$FREESTANDING_TOP_VAR_WEAK_NM"; then
         record_pass "freestanding-profile/top-var-weak: weak aggregate data symbol is external"
     else
@@ -3389,7 +3408,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         sed 's/^/      /' "$FREESTANDING_TOP_VAR_WEAK_NM" | sed -n '1,80p'
     fi
     if object_has_weak_symbol "$FREESTANDING_TOP_VAR_WEAK_OBJ" \
-            "xray_var_freestanding_top_var_weak_static_TICKS" \
+            "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_TICKS" \
             "$FREESTANDING_TOP_VAR_WEAK_NM"; then
         record_pass "freestanding-profile/top-var-weak: weak scalar data symbol is external"
     else
@@ -3662,17 +3681,17 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_STRING_MEMBER_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string.toBytes" \
+        "freestanding profile rejects string.copyBytes" \
         "freestanding-profile: rejects hosted string-to-Bytes bridge"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string.byteLength" \
-        "freestanding-profile: rejects hosted string property helper"
+        "freestanding profile rejects string.bytes" \
+        "freestanding-profile: rejects hosted string byte-view helper"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string index access" \
-        "freestanding-profile: rejects hosted string index helper"
+        "string does not support integer indexing or slice syntax" \
+        "freestanding-profile: rejects string index syntax"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
-        "freestanding profile rejects string slice expression" \
-        "freestanding-profile: rejects hosted string slice helper"
+        "string does not support integer indexing or slice syntax" \
+        "freestanding-profile: rejects string slice syntax"
 fi
 
 FREESTANDING_BYTES_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_bytes_static_reject.xr"
@@ -3684,11 +3703,11 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_BYTES_STATIC_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \
-        "freestanding profile rejects Bytes.withCapacity" \
-        "freestanding-profile: rejects Bytes.withCapacity"
+        "freestanding profile rejects Array.withCapacity" \
+        "freestanding-profile: rejects Array.withCapacity"
     expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \
-        "freestanding profile rejects Bytes.fromString" \
-        "freestanding-profile: rejects Bytes.fromString"
+        "freestanding profile rejects class construction" \
+        "freestanding-profile: rejects heap Array<byte> construction"
 fi
 
 FREESTANDING_BUILTIN_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_builtin_reject.xr"
@@ -3703,14 +3722,14 @@ else
         "freestanding profile rejects builtin string()" \
         "freestanding-profile: rejects builtin string conversion"
     expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
-        "freestanding profile rejects builtin typename()" \
-        "freestanding-profile: rejects builtin typename"
+        "freestanding profile rejects builtin typeName()" \
+        "freestanding-profile: rejects builtin typeName"
     expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
         "freestanding profile rejects builtin copy()" \
         "freestanding-profile: rejects builtin copy"
     expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
-        "freestanding profile rejects builtin char()" \
-        "freestanding-profile: rejects builtin char conversion"
+        "freestanding profile rejects builtin rune()" \
+        "freestanding-profile: rejects builtin rune conversion"
     expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
         "freestanding profile rejects builtin chr()" \
         "freestanding-profile: rejects builtin chr conversion"

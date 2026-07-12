@@ -15,5 +15,5 @@ var arr: Array<int> = []
 for (i in 0..5) {
     arr.push(i * i)
 }
-print(arr.length)
+print(len(arr))
 print(arr[4])

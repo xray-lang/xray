@@ -1,2 +1,2 @@
-var bytes = Bytes(8)
+var bytes = Array<byte>(8)
 bytes.repeatFrom(1, 1, 1)

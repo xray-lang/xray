@@ -6,10 +6,10 @@ var N = 1000
 // 工作协程数量
 var TASKS = 100000
 // 任务数量
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     TASKS = int(process.args[1]) ?? TASKS
 }
 print("=== Fanout 测试 ===")

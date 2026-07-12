@@ -610,15 +610,16 @@ TEST(index_access) {
 
 TEST(member_access) {
     XiFunc *f = lower_source("var arr = [1, 2, 3]\n"
-                             "var n = arr.length\n"
+                             "var n = len(arr)\n"
                              "print(n)\n");
     assert(f != NULL);
-    int found_load_field = 0;
+    int found_len = 0;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_LOAD_FIELD)
-            found_load_field = 1;
+        XiValue *v = f->entry->values[i];
+        if (v->op == XI_LEN)
+            found_len = 1;
     }
-    assert(found_load_field && "should have LOAD_FIELD op");
+    assert(found_len && "should lower len() as a compiler-known builtin");
     xi_func_free(f);
 }
 
@@ -655,9 +656,9 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("var src = Bytes(8)\n"
-                             "var view: ByteSpan = src\n"
-                             "var dst = Bytes.withCapacity(8)\n"
+    XiFunc *f = lower_source("var src = Array<byte>(8)\n"
+                             "var view: Slice<byte> = src\n"
+                             "var dst = Array<byte>(0)\n"
                              "var h = view.load<uint16>(0, Endian.LE)\n"
                              "var a = view.load<uint32>(0, Endian.LE)\n"
                              "var b = view.load<uint64>(0, Endian.LE)\n"
@@ -668,10 +669,11 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "print(a)\n"
                              "print(b)\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16) && "load<uint16> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_STORE_U16) && "store<uint16> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16) && "load<uint16> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTES_STORE_U16) &&
+           "store<uint16> should lower to Array<byte> op");
     assert(func_tree_find_method(f, "appendFrom") &&
            "appendFrom should remain an explicit method call");
     assert(func_tree_find_method(f, "repeatFrom") &&
@@ -716,22 +718,21 @@ TEST(for_in_loop) {
     assert(f != NULL);
     /* Should have: entry, cond, body, incr, exit blocks (loop structure) */
     assert(f->nblocks >= 4);
-    /* Array for-in is desugared to index-based loop:
-     *   LOAD_FIELD(.length), INDEX_GET, LT, ADD (increment) */
-    int found_load_field = 0, found_index_get = 0, found_lt = 0;
+    /* Array for-in is desugared to an index-based loop with canonical len(). */
+    int found_len = 0, found_index_get = 0, found_lt = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             uint16_t op = blk->values[i]->op;
-            if (op == XI_LOAD_FIELD)
-                found_load_field = 1;
+            if (op == XI_LEN)
+                found_len = 1;
             if (op == XI_INDEX_GET)
                 found_index_get = 1;
             if (op == XI_LT)
                 found_lt = 1;
         }
     }
-    assert(found_load_field && "should have LOAD_FIELD for .length");
+    assert(found_len && "should use canonical len builtin");
     assert(found_index_get && "should have INDEX_GET for coll[idx]");
     assert(found_lt && "should have LT for idx < len");
     xi_func_free(f);
@@ -948,7 +949,7 @@ TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
                                                           "}\n"
                                                           "\n"
                                                           "var h = Holder()\n"
-                                                          "print(h.values.length)\n",
+                                                          "print(len(h.values))\n",
                                                           &ev);
     REQUIRE_CLASS_FIELD_INIT_EVIDENCE(main_func != NULL, "source should lower");
 
@@ -1581,11 +1582,11 @@ TEST(map_set_method_key_access_lowers_with_global_evidence_id) {
                                           "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                                           "    var seen: Set<string> = #[\"ada\"]\n"
                                           "    scores.get(\"ada\")\n"
-                                          "    scores.has(\"lin\")\n"
+                                          "    scores.containsKey(\"lin\")\n"
                                           "    scores.delete(\"lin\")\n"
                                           "    scores.set(\"ada\", 8)\n"
                                           "    scores.clear()\n"
-                                          "    seen.has(\"ada\")\n"
+                                          "    seen.contains(\"ada\")\n"
                                           "    seen.add(\"lin\")\n"
                                           "    seen.delete(\"ada\")\n"
                                           "    seen.clear()\n"
@@ -1887,7 +1888,7 @@ TEST(direct_await_go_one_shot) {
 }
 
 TEST(go_arg_transfer_modes) {
-    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                    "var xs = [1, 2]\n"
                                    "var task = go worker(copy(xs))\n"
                                    "print(await task)\n");
@@ -1901,7 +1902,7 @@ TEST(go_arg_transfer_modes) {
            "go boundary copy(...) must not lower to a separate copy op before GO");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                    "shared xs: Array<int> = [1, 2]\n"
                                    "var task = go worker(move xs)\n"
                                    "print(await task)\n");
@@ -1914,7 +1915,7 @@ TEST(go_arg_transfer_modes) {
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                     "shared xs: Array<int> = [1, 2]\n"
                                     "var task = go worker(xs)\n"
                                     "print(await task)\n");
@@ -2162,12 +2163,12 @@ TEST(unresolved_struct_literal_does_not_lower_to_json) {
 
 TEST(struct_field_store_narrows_native_width) {
     XiFunc *f = lower_source("struct Sample {\n"
-                             "    byte: uint8\n"
+                             "    octet: byte\n"
                              "}\n"
                              "fn run() -> int {\n"
-                             "    var p = Sample{byte: 300}\n"
-                             "    p.byte = p.byte + 1\n"
-                             "    return p.byte\n"
+                             "    var p = Sample{octet: 300}\n"
+                             "    p.octet = p.octet + 1\n"
+                             "    return p.octet\n"
                              "}\n"
                              "print(run())\n");
     assert(f != NULL);

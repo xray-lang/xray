@@ -1,7 +1,7 @@
 // anchor: bytespan-signed-load-store-shared-core
 fn main() {
-    var bytes = Bytes(24)
-    var view: ByteSpan = bytes[:]
+    var bytes = Array<byte>(24)
+    var view: Slice<byte> = bytes[:]
     view.store<int16>(0, -2, Endian.LE)
     view.store<int16>(2, -3, Endian.BE)
     view.store<int32>(4, -12345678, Endian.LE)

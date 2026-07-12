@@ -273,7 +273,7 @@ TEST(xfmt_string_control_byte_hex_escape) {
 
 /* ========== char literals ========== */
 
-TEST(xfmt_char_literal_roundtrip) {
+TEST(xfmt_rune_literal_roundtrip) {
     setup();
     AstNode *prog =
         xr_parse(xr_compiler_session_current_for_isolate(X), "var c: char = '\\u{1F600}'\n");
@@ -281,14 +281,14 @@ TEST(xfmt_char_literal_roundtrip) {
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
     ASSERT_NOT_NULL(init);
-    ASSERT_EQ_INT(init->type, AST_LITERAL_CHAR);
-    ASSERT_EQ_INT(init->as.literal.raw_value.char_val, 0x1F600);
+    ASSERT_EQ_INT(init->type, AST_LITERAL_RUNE);
+    ASSERT_EQ_INT(init->as.literal.raw_value.rune_val, 0x1F600);
     xr_program_destroy(prog);
     xr_program_destroy(r);
     teardown();
 }
 
-TEST(xfmt_char_literal_named_escape) {
+TEST(xfmt_rune_literal_named_escape) {
     setup();
     AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X), "var c = '\\n'\n");
     ASSERT_NOT_NULL(prog);
@@ -311,8 +311,8 @@ RUN_TEST(xfmt_string_backslash_and_newline);
 RUN_TEST(xfmt_string_control_byte_hex_escape);
 
 RUN_TEST_SUITE("xfmt_literal - char round-trip");
-RUN_TEST(xfmt_char_literal_roundtrip);
-RUN_TEST(xfmt_char_literal_named_escape);
+RUN_TEST(xfmt_rune_literal_roundtrip);
+RUN_TEST(xfmt_rune_literal_named_escape);
 
 RUN_TEST_SUITE("xfmt_literal - template no backticks");
 RUN_TEST(xfmt_template_no_backticks);

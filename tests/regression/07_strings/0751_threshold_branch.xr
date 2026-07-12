@@ -23,10 +23,10 @@ fn test_threshold_boundary_exact_63() {
     var b = "b".repeat(32)
     var result = a + b
     
-    assert_eq(result.length, 63)
+    assert_eq(len(result), 63)
     assert_eq(result, a + b)
-    assert_eq(result.substring(0, 31), a)
-    assert_eq(result.substring(31, 63), b)
+    assert_eq(result.slice(0, 31), a)
+    assert_eq(result.slice(31, 63), b)
 }
 
 @test
@@ -38,10 +38,10 @@ fn test_threshold_boundary_exact_64() {
     var b = "b".repeat(32)
     var result = a + b
     
-    assert_eq(result.length, 64)
+    assert_eq(len(result), 64)
     assert_eq(result, a + b)
-    assert_eq(result.substring(0, 32), a)
-    assert_eq(result.substring(32, 64), b)
+    assert_eq(result.slice(0, 32), a)
+    assert_eq(result.slice(32, 64), b)
 }
 
 @test
@@ -53,10 +53,10 @@ fn test_threshold_boundary_exact_65() {
     var b = "b".repeat(32)
     var result = a + b
     
-    assert_eq(result.length, 65)
+    assert_eq(len(result), 65)
     assert_eq(result, a + b)
-    assert_eq(result.substring(0, 33), a)
-    assert_eq(result.substring(33, 65), b)
+    assert_eq(result.slice(0, 33), a)
+    assert_eq(result.slice(33, 65), b)
 }
 
 // ===== 属性测试：阈值分支正确性 =====
@@ -85,7 +85,7 @@ fn test_property_threshold_branch_below() {
         [0, 63]     // 63
     ]
     
-    for (var i = 0; i < test_lengths.length; i++) {
+    for (var i = 0; i < len(test_lengths); i++) {
         var len_a = test_lengths[i][0]
         var len_b = test_lengths[i][1]
         var a = "a".repeat(len_a)
@@ -96,14 +96,14 @@ fn test_property_threshold_branch_below() {
         assert_eq(len_a + len_b < 64, true)
         
         // 验证结果长度
-        assert_eq(result.length, len_a + len_b)
+        assert_eq(len(result), len_a + len_b)
         
         // 验证内容正确性
         if (len_a > 0) {
-            assert_eq(result.substring(0, len_a), a)
+            assert_eq(result.slice(0, len_a), a)
         }
         if (len_b > 0) {
-            assert_eq(result.substring(len_a, len_a + len_b), b)
+            assert_eq(result.slice(len_a, len_a + len_b), b)
         }
     }
 }
@@ -131,7 +131,7 @@ fn test_property_threshold_branch_at_and_above() {
         [100, 1]    // 101
     ]
     
-    for (var i = 0; i < test_lengths.length; i++) {
+    for (var i = 0; i < len(test_lengths); i++) {
         var len_a = test_lengths[i][0]
         var len_b = test_lengths[i][1]
         var a = "a".repeat(len_a)
@@ -142,14 +142,14 @@ fn test_property_threshold_branch_at_and_above() {
         assert_eq(len_a + len_b >= 64, true)
         
         // 验证结果长度
-        assert_eq(result.length, len_a + len_b)
+        assert_eq(len(result), len_a + len_b)
         
         // 验证内容正确性
         if (len_a > 0) {
-            assert_eq(result.substring(0, len_a), a)
+            assert_eq(result.slice(0, len_a), a)
         }
         if (len_b > 0) {
-            assert_eq(result.substring(len_a, len_a + len_b), b)
+            assert_eq(result.slice(len_a, len_a + len_b), b)
         }
     }
 }
@@ -166,7 +166,7 @@ fn test_threshold_continuity() {
     for (var total_len = 60; total_len <= 70; total_len++) {
         var half = total_len / 2
         var splits = [0, 1, half, total_len - 1, total_len]
-        for (var si = 0; si < splits.length; si++) {
+        for (var si = 0; si < len(splits); si++) {
             var len_a = int(splits[si])
             if (len_a < 0 || len_a > total_len) { continue }
             var len_b = total_len - len_a
@@ -175,14 +175,14 @@ fn test_threshold_continuity() {
             var result = a + b
             
             // 验证结果长度
-            assert_eq(result.length, total_len)
+            assert_eq(len(result), total_len)
             
             // 验证内容
             if (len_a > 0) {
-                assert_eq(result.substring(0, len_a), a)
+                assert_eq(result.slice(0, len_a), a)
             }
             if (len_b > 0) {
-                assert_eq(result.substring(len_a, total_len), b)
+                assert_eq(result.slice(len_a, total_len), b)
             }
         }
     }
@@ -199,15 +199,15 @@ fn test_threshold_with_varied_content_below() {
     var strings_a = ["hello", "world", "test", "abc", "12345"]
     var strings_b = ["foo", "bar", "baz", "xyz", "67890"]
     
-    for (var i = 0; i < strings_a.length; i++) {
-        for (var j = 0; j < strings_b.length; j++) {
+    for (var i = 0; i < len(strings_a); i++) {
+        for (var j = 0; j < len(strings_b); j++) {
             var a = strings_a[i]
             var b = strings_b[j]
             var result = a + b
             
             // 这些组合都 < 64
-            assert_eq(a.length + b.length < 64, true)
-            assert_eq(result.length, a.length + b.length)
+            assert_eq(len(a) + len(b) < 64, true)
+            assert_eq(len(result), len(a) + len(b))
             assert_eq(result, a + b)
         }
     }
@@ -222,14 +222,14 @@ fn test_threshold_with_varied_content_above() {
     var long_prefix = "prefix_".repeat(10)  // 70 字符
     var strings = ["a", "ab", "abc", "test", "hello world"]
     
-    for (var i = 0; i < strings.length; i++) {
+    for (var i = 0; i < len(strings); i++) {
         var a = long_prefix
         var b = strings[i]
         var result = a + b
         
         // 这些组合都 >= 64
-        assert_eq(a.length + b.length >= 64, true)
-        assert_eq(result.length, a.length + b.length)
+        assert_eq(len(a) + len(b) >= 64, true)
+        assert_eq(len(result), len(a) + len(b))
         assert_eq(result.startsWith(a), true)
         assert_eq(result.endsWith(b), true)
     }
@@ -247,7 +247,7 @@ fn test_concurrent_threshold_boundary() {
         var a = "a".repeat(len_a)
         var b = "b".repeat(len_b)
         var result = a + b
-        return result.length
+        return len(result)
     }
     
     // 测试边界附近的长度组合
@@ -261,7 +261,7 @@ fn test_concurrent_threshold_boundary() {
     ]
     
     var tasks: Array<Task> = []
-    for (var i = 0; i < test_cases.length; i++) {
+    for (var i = 0; i < len(test_cases); i++) {
         var len_a = test_cases[i][0]
         var len_b = test_cases[i][1]
         tasks.push(go concat_task(len_a, len_b))
@@ -269,7 +269,7 @@ fn test_concurrent_threshold_boundary() {
     
     var results = await all tasks
     
-    for (var i = 0; i < results.length; i++) {
+    for (var i = 0; i < len(results); i++) {
         var expected_len = test_cases[i][0] + test_cases[i][1]
         assert_eq(results[i], expected_len)
     }
@@ -284,7 +284,7 @@ fn test_threshold_empty_strings() {
     // 空字符串拼接（总长度 = 0，< 64）
     
     var result = "" + ""
-    assert_eq(result.length, 0)
+    assert_eq(len(result), 0)
     assert_eq(result, "")
 }
 
@@ -317,8 +317,7 @@ fn test_threshold_single_char() {
     // 单字符 + 长字符串（总长度 >= 64）
     var long_str = "x".repeat(63)
     var result = "a" + long_str
-    assert_eq(result.length, 64)
-    assert_eq(result.charAt(0), "a")
-    assert_eq(result.substring(1, 64), long_str)
+    assert_eq(len(result), 64)
+    assert_eq(result.runes().nth(0), 'a')
+    assert_eq(result.slice(1, 64), long_str)
 }
-

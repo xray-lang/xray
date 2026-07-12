@@ -6,10 +6,10 @@ var N = 8
 // 并行度
 var SIZE = 10000000
 // 数组大小（1000万）
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     SIZE = int(process.args[1]) ?? SIZE
 }
 print("=== 并行求和测试 ===")

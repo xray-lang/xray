@@ -62,5 +62,5 @@ fn test_parse_quoted_strings() {
 fn test_stringify() {
     var config: Json = {"name": "xray", "version": 1}
     var result = yaml.stringify(config)
-    assert(result.length > 0)
+    assert(len(result) > 0)
 }

@@ -477,7 +477,7 @@ static bool array_builtin_is_fresh_storage(const XiValue *value) {
     if (!value || value->op != XI_CALL_BUILTIN || !value->aux)
         return false;
     name = (const char *) value->aux;
-    return strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0 ||
+    return strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0 ||
            strcmp(name, "array_with_capacity") == 0 || strcmp(name, "array_filled_new") == 0;
 }
 
@@ -788,7 +788,7 @@ static const XiValue *prepare_array_single_origin(const XiValue *array_value, ui
         return value;
     if (value->op == XI_CALL_BUILTIN) {
         const char *name = (const char *) value->aux;
-        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
+        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0))
             return value;
     }
     if (value->op != XI_PHI)
@@ -1416,7 +1416,7 @@ static bool prepare_array_is_native_local_alloc(const XaotBundle *bundle, const 
         return true;
     if (strcmp(name, "array_with_capacity") == 0)
         return true;
-    if (strcmp(name, "Bytes") != 0)
+    if (strcmp(name, "array_byte_new") != 0)
         return false;
     if (target->nargs == 0)
         return true;
@@ -1458,11 +1458,8 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
             return arg_index == 0 || arg_index == 1;
         case XI_BYTES_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
-        case XI_LOAD_FIELD: {
-            const char *field = (const char *) user->aux;
-            return arg_index == 0 && field &&
-                   (strcmp(field, "length") == 0 || strcmp(field, "size") == 0);
-        }
+        case XI_LEN:
+            return arg_index == 0;
         case XI_CALL_METHOD: {
             const char *method = (const char *) user->aux;
             if (!method)
@@ -1615,10 +1612,7 @@ static bool prepare_array_length_value_matches(const XaotBundle *bundle, const X
                                                const XiValue *length_value,
                                                const XiValue *array_value) {
     const XiValue *value = unwrap_identity_value(length_value);
-    if (!value || value->op != XI_LOAD_FIELD || value->nargs < 1)
-        return false;
-    const char *field = (const char *) value->aux;
-    if (!field || (strcmp(field, "length") != 0 && strcmp(field, "size") != 0))
+    if (!value || value->op != XI_LEN || value->nargs != 1)
         return false;
     return prepare_array_values_share_storage(bundle, func, value->args[0], array_value);
 }
@@ -2339,13 +2333,10 @@ static bool prepare_alias_array_uses_are_cache_local(const XaotBundle *bundle, c
                         if (cur != fill_push || argi != 0)
                             return false;
                         break;
-                    case XI_LOAD_FIELD: {
-                        const char *field = (const char *) cur->aux;
-                        if (argi != 0 || !field ||
-                            (strcmp(field, "length") != 0 && strcmp(field, "size") != 0))
+                    case XI_LEN:
+                        if (argi != 0)
                             return false;
                         break;
-                    }
                     case XI_RETAIN:
                     case XI_RELEASE:
                         if (argi != 0)
@@ -2798,13 +2789,10 @@ static bool prepare_array_native_local_data_cacheable(const XaotBundle *bundle, 
                             return false;
                         has_index_use = true;
                         break;
-                    case XI_LOAD_FIELD: {
-                        const char *field = (const char *) cur->aux;
-                        if (argi != 0 || !field ||
-                            (strcmp(field, "length") != 0 && strcmp(field, "size") != 0))
+                    case XI_LEN:
+                        if (argi != 0)
                             return false;
                         break;
-                    }
                     case XI_RETAIN:
                     case XI_RELEASE:
                         if (argi != 0)

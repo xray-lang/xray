@@ -58,6 +58,11 @@ static inline xrt_buffer_object_t *xrt_buffer_obj_ptr(XrValue v) {
     return xrt_buffer_is(v) ? (xrt_buffer_object_t *) v.ptr : NULL;
 }
 
+static inline int64_t xrt_buffer_length(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
+    return buf ? buf->length : 0;
+}
+
 static inline XrValue xrt_buffer_box(xrt_buffer_object_t *buf) {
     return buf ? xr_mkptr(buf, XR_TAG_BUFFER) : XR_NULL_VAL;
 }

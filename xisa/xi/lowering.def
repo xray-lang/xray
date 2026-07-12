@@ -180,6 +180,12 @@
   :vm-bytecode (driver xi_emit_typename)
   :aot-c (driver xicgen_typename))
 
+(lower xi.len
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_len)
+  :aot-c (driver xicgen_len))
+
 (lower xi.get.builtin
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -702,7 +708,7 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_json_decode)
-  :aot-c (reject xicgen_reject_unsupported))
+  :aot-c (driver xicgen_json_decode))
 
 (lower xi.agg.new
   :match ()

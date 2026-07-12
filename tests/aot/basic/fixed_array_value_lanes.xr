@@ -1,10 +1,10 @@
 struct Holder {
     names: [string; 2]
-    blocks: [[uint8; 2]; 2]
+    blocks: [[byte; 2]; 2]
 }
 
-var zero: [uint8; 4] = [0; 4]
-print(zero.length)
+var zero: [byte; 4] = [0; 4]
+print(len(zero))
 print(zero[3])
 
 var names: [string; 2] = ["a", "b"]

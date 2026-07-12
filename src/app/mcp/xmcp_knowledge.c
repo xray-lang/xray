@@ -365,12 +365,47 @@ void xmcp_knowledge_search_stdlib_matches(XmcpKnowledge *kb, const char *query,
     bool direct_module_known = direct && knowledge_has_module(kb, direct_module);
     const char *effective_query = query;
     const char *effective_filter = module_filter;
+    char contextual_query[XMCP_QUERY_SYMBOL_MAX] = {0};
+    char contextual_module[XMCP_QUERY_MODULE_MAX] = {0};
     if (direct_module_known && (!module_filter || module_filter[0] == '\0' ||
                                 strcasecmp(module_filter, direct_module) == 0)) {
         effective_query = direct_symbol;
         effective_filter = direct_module;
     } else if (direct_module_known) {
         return;
+    } else {
+        char raw_tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX] = {{0}};
+        int raw_count = split_query_tokens(query, raw_tokens);
+        int module_token = -1;
+        for (int ti = 0; ti < raw_count; ti++) {
+            if (!knowledge_has_module(kb, raw_tokens[ti]))
+                continue;
+            if (module_token >= 0) {
+                module_token = -1;
+                break;
+            }
+            module_token = ti;
+        }
+        if (module_token >= 0 && raw_count > 1) {
+            snprintf(contextual_module, sizeof(contextual_module), "%s", raw_tokens[module_token]);
+            if (module_filter && module_filter[0] != '\0' &&
+                strcasecmp(module_filter, contextual_module) != 0)
+                return;
+            size_t used = 0;
+            for (int ti = 0; ti < raw_count; ti++) {
+                if (ti == module_token)
+                    continue;
+                int written = snprintf(contextual_query + used, sizeof(contextual_query) - used,
+                                       "%s%s", used ? " " : "", raw_tokens[ti]);
+                if (written < 0 || (size_t) written >= sizeof(contextual_query) - used)
+                    break;
+                used += (size_t) written;
+            }
+            if (used > 0) {
+                effective_query = contextual_query;
+                effective_filter = contextual_module;
+            }
+        }
     }
 
     char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX] = {{0}};

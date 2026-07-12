@@ -19,16 +19,16 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
 5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
-6. **最小类型身份**：`typeof` / `typename` / `is` / `as`；默认没有运行时 `Reflect` 模块。
+6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
 
 | 类别 | 示例 |
 |--|--|
-| Primitive | `int`、`float`、`bool`、`string`、`char`、`()`（Unit，无返回值） |
-| 精确整数 | `int8`、`int16`、`int32`、`int64`、`uint8`..`uint64` |
+| Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
+| 精确整数 | `int8`、`int16`、`int32`、`int64`、`byte`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Array<byte>`（即 `Array<byte>`） |
 | 定长布局 | `[T; N]` |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
@@ -52,13 +52,13 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int16` | `[-32768, 32767]` | — |
 | `int32` | `[-2³¹, 2³¹-1]` | — |
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
-| `uint8`..`uint64` | 无符号对应 | — |
+| `byte`..`uint64` | 无符号对应 | — |
 
 - 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
-- 静态类型为 `uint8`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`byte + byte -> byte`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
+- 静态类型为 `byte`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
-- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: uint8 = 255 + 1` 得到 `0`。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: byte = 255 + 1` 得到 `0`。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
@@ -81,7 +81,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `bool` | 允许 | 直接布尔判断 |
 | `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `char` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
+| `int` / `float` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
@@ -100,31 +100,31 @@ if (flag != null) { }    // OK
 // if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
 var s = ""
-if (!s.isEmpty()) { }    // OK
+if (len(s) != 0) { }     // OK
 // if (s) { }            // 编译错误
 ```
 
 #### 2.3.4 `string`
 
-不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `char`，切片返回 `string`。丰富方法集见 §14.5。
+不可变且始终合法的 UTF-8 字符串。`len(s)` 以 O(1) 返回 Unicode scalar 数量，`len(s.bytes())` 以 O(1) 返回 UTF-8 byte 数量。默认迭代元素是 `rune`；整数下标与 slice operator 均不适用于 string，显式访问见 §14.5。
 
 底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
 
-#### 2.3.5 `char`
+#### 2.3.5 `rune`
 
-`char` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
+`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
 
 ```xray
-var a: char = 'a'
+var a: rune = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typename(a))        // "char"
-print(int(smile))         // 128512
+print(typeName(a))        // "rune"
+print(smile.toUInt32())   // 128512
 ```
 
-- char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
-- 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
+- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
+- 显式转换：`int(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
 #### 2.3.6 Unit `()`（无返回值）
@@ -155,8 +155,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -184,7 +184,7 @@ var c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
-`Array<char>` 保留 `char` 元素身份，读出时得到 `char`，写入时只接受 `char`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_CHAR` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+`Array<rune>` 保留 `rune` 元素身份，读出时得到 `rune`，写入时只接受 `rune`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_RUNE` / `uint32_t[]`），不会退化成 `Array<uint32>`。
 
 #### 2.4.1.1 定长数组 `[T; N]`
 
@@ -193,32 +193,32 @@ var c: Array<string> = []         // 显式空数组
 当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
 
 ```xray
-var bytes: [uint8; 4] = [1, 2, 3, 4]
-var zero: [uint8; 64] = [0; 64]
+var bytes: [byte; 4] = [1, 2, 3, 4]
+var zero: [byte; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
 
-定长数组支持 `length`/`size`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Span<T>` 时通过切片产生借用视图：
+定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
 
 ```xray
-var data: [uint8; 4] = [5, 6, 7, 8]
-var view: Span<uint8> = data[1:4]
+var data: [byte; 4] = [5, 6, 7, 8]
+var view: Slice<byte> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [uint8; 4]
-    payload: [uint8; 128]
+    magic: [byte; 4]
+    payload: [byte; 128]
 }
 
-var key: [uint8; 4] = [1, 2, 3, 4]
+var key: [byte; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> uint8 {
+fn first(packet: Packet) -> byte {
     return packet.magic[0]
 }
 ```
@@ -227,7 +227,7 @@ fn first(packet: Packet) -> uint8 {
 
 - `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
 - `Array<T>`：动态长度、可增长、堆上容器。
-- `Span<T>`：借用连续存储的视图，不拥有数据。
+- `Slice<T>`：借用连续存储的视图，不拥有数据。
 
 旧的 `[N]T` 语法不属于 Xray 语言。
 
@@ -272,13 +272,13 @@ var s: Set<int> = #[1, 2, 3]
 shared ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Bytes`
+#### 2.4.5 `Array<byte>`
 
-类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
+类型化字节缓冲。语义等价 `Array<byte>`，但底层是连续内存。
 
 ```xray
-var buf = Bytes(1024)
-var init = Bytes([72, 101, 108, 108, 111])
+var buf = Array<byte>(1024)
+var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` 与对象字面量
@@ -291,7 +291,7 @@ var init = Bytes([72, 101, 108, 108, 111])
 // Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
-typename(user)                            // "Record"
+typeName(user)                            // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -369,7 +369,7 @@ var z: int = null       // 编译错误：null 不是 int
 var v = x ?? 0
 
 // 2. 可选链
-var len = name?.length    // 若 name 为 null，结果为 null
+var nameLen = name == null ? null : len(name!)
 
 // 3. 强制解包
 var v: int = x!           // 若 x 为 null，运行时抛 NullError
@@ -516,11 +516,11 @@ if (v is User) {
 
 仅作类型守卫；不改变值。
 
-### 2.11 typeof / typename / Type 枚举
+### 2.11 typeOf / typeName / Type 枚举
 
 ```xray
-typeof(value)     // 返回 Type 枚举值（int 表示）
-typename(value)   // 返回类型名字符串
+typeOf(value)     // 返回 Type 枚举值（int 表示）
+typeName(value)   // 返回类型名字符串
 ```
 
 `Type` 枚举成员：
@@ -535,8 +535,8 @@ typename(value)   // 返回类型名字符串
 
 Xray 默认只保留最小类型身份层：
 
-- `typeof(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
-- `typename(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- `typeOf(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
+- `typeName(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
 - 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
@@ -559,16 +559,16 @@ Xray is statically typed; every expression has a determined type at compile time
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
 5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
-6. **Minimal type identity**: `typeof`, `typename`, `is`, and `as`; there is no default runtime `Reflect` module.
+6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `char`, `()` (Unit, no return value) |
-| Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
+| Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
+| Sized integers | `int8`, `int16`, `int32`, `int64`, `byte`..`uint64` |
 | Sized floats | `float32`, `float64` |
-| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Array<byte>` (equivalent to `Array<byte>`) |
 | Fixed layout | `[T; N]` |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
 | Error-handling prelude | `PanicInfo` (see §8) |
@@ -592,13 +592,13 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int16` | `[-32768, 32767]` | — |
 | `int32` | `[-2³¹, 2³¹-1]` | — |
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
-| `uint8`..`uint64` | unsigned counterparts | — |
+| `byte`..`uint64` | unsigned counterparts | — |
 
 - Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`var x: int8 = 200` is rejected at compile time).
-- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
-- Values with static type `uint8`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`byte + byte -> byte`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- Values with static type `byte`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
-- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: uint8 = 255 + 1` evaluates to `0`.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: byte = 255 + 1` evaluates to `0`.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
@@ -621,7 +621,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `char` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
+| `int` / `float` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -640,31 +640,31 @@ if (flag != null) { }    // OK
 // if (flag) { }         // compile error: bare bool? cannot be a condition
 
 var s = ""
-if (!s.isEmpty()) { }    // OK
+if (len(s) != 0) { }     // OK
 // if (s) { }            // compile error
 ```
 
 #### 2.3.4 `string`
 
-Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
+Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
 Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
 
-#### 2.3.5 `char`
+#### 2.3.5 `rune`
 
-`char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
+`rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
 
 ```xray
-var a: char = 'a'
+var a: rune = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typename(a))        // "char"
-print(int(smile))         // 128512
+print(typeName(a))        // "rune"
+print(smile.toUInt32())   // 128512
 ```
 
-- A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
-- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
-- Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
+- `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
+- Explicit conversions: `int(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
 #### 2.3.6 Unit `()` (no return value)
@@ -695,8 +695,8 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -724,7 +724,7 @@ var c: Array<string> = []         // explicit empty array
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
-`Array<char>` preserves the `char` element identity: reads return `char`, and writes accept only `char`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_CHAR` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_RUNE` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
 
 #### 2.4.1.1 Fixed Arrays `[T; N]`
 
@@ -733,32 +733,32 @@ The `T` in `Array<T>` must be determinable at compile time. An empty `[]` withou
 The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
 
 ```xray
-var bytes: [uint8; 4] = [1, 2, 3, 4]
-var zero: [uint8; 64] = [0; 64]
+var bytes: [byte; 4] = [1, 2, 3, 4]
+var zero: [byte; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
 
-Fixed arrays support `length`/`size`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Span<T>`:
+Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
 
 ```xray
-var data: [uint8; 4] = [5, 6, 7, 8]
-var view: Span<uint8> = data[1:4]
+var data: [byte; 4] = [5, 6, 7, 8]
+var view: Slice<byte> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [uint8; 4]
-    payload: [uint8; 128]
+    magic: [byte; 4]
+    payload: [byte; 128]
 }
 
-var key: [uint8; 4] = [1, 2, 3, 4]
+var key: [byte; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> uint8 {
+fn first(packet: Packet) -> byte {
     return packet.magic[0]
 }
 ```
@@ -767,7 +767,7 @@ fn first(packet: Packet) -> uint8 {
 
 - `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
 - `Array<T>`: dynamic length, growable, heap-backed container.
-- `Span<T>`: borrowed view over contiguous storage; it does not own data.
+- `Slice<T>`: borrowed view over contiguous storage; it does not own data.
 
 The old `[N]T` syntax is not part of the Xray language.
 
@@ -812,13 +812,13 @@ Inter-coroutine communication channel. Named channel handles **must** be created
 shared ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Bytes`
+#### 2.4.5 `Array<byte>`
 
-Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
+Typed byte buffer. Semantically equivalent to `Array<byte>`, but stored as contiguous memory.
 
 ```xray
-var buf = Bytes(1024)
-var init = Bytes([72, 101, 108, 108, 111])
+var buf = Array<byte>(1024)
+var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` and Object Literals
@@ -831,7 +831,7 @@ The key difference between an **object literal** `{ field: value, ... }` and a M
 // Record/Json object literal: identifier or string key + colon ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // default type is sealed Record
-typename(user)                            // "Record"
+typeName(user)                            // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -909,7 +909,7 @@ var z: int = null       // compile error: null is not int
 var v = x ?? 0
 
 // 2. Optional chaining
-var len = name?.length    // null if name is null
+var nameLen = name == null ? null : len(name!)
 
 // 3. Force unwrap
 var v: int = x!           // throws NullError at runtime if x is null
@@ -1062,11 +1062,11 @@ if (v is User) {
 
 Acts only as a type guard; does not change the value.
 
-### 2.11 typeof / typename / Type Enum
+### 2.11 typeOf / typeName / Type Enum
 
 ```xray
-typeof(value)     // returns a Type enum value (an int representation)
-typename(value)   // returns the type name as a string
+typeOf(value)     // returns a Type enum value (an int representation)
+typeName(value)   // returns the type name as a string
 ```
 
 `Type` enum members:
@@ -1081,8 +1081,8 @@ Full list: see `XrTypeId` in `src/runtime/value/xtype_names.h`.
 
 Xray keeps only the minimal type identity layer by default:
 
-- `typeof(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
-- `typename(x)` returns a debug/logging type-name string and is a cold-path capability.
+- `typeOf(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
+- `typeName(x)` returns a debug/logging type-name string and is a cold-path capability.
 - Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 

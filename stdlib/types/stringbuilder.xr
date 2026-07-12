@@ -2,8 +2,7 @@
 
 @native
 class StringBuilder {
-    length: int
-    append(value: string | char | int | float | bool | null) -> StringBuilder
+    append(value: string | rune | int | float | bool | null) -> StringBuilder
     toString() -> string
     clear() -> StringBuilder
 }

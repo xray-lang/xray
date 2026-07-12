@@ -1,3 +1,3 @@
 const N = 65536
-var key: [uint8; N] = [0; 65536]
-print(key.length)
+var key: [byte; N] = [0; 65536]
+print(len(key))

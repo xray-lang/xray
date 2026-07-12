@@ -1,5 +1,5 @@
 export fn forEach(range: Range, body: (int) -> ()) {
-    for (offset in 0..range.length) {
+    for (offset in 0..len(range)) {
         body(range[offset])
     }
 }

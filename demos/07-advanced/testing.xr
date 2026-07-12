@@ -1,3 +1,5 @@
+import text
+
 // Demo: Testing
 // @test functions, assertions, test lifecycle
 //
@@ -16,19 +18,19 @@ fn test_arithmetic() {
 @test
 fn test_strings() {
     var s = "Hello, World!"
-    assert_eq(s.length, 13)
+    assert_eq(len(s), 13)
     assert_true(s.startsWith("Hello"))
     assert_true(s.endsWith("!"))
-    assert_eq(s.toLowerCase(), "hello, world!")
+    assert_eq(text.lower(s), "hello, world!")
 }
 
 @test
 fn test_arrays() {
     var arr = [1, 2, 3, 4, 5]
-    assert_eq(arr.length, 5)
+    assert_eq(len(arr), 5)
     assert_eq(arr[0], 1)
-    assert_true(arr.includes(3))
-    assert_false(arr.includes(99))
+    assert_true(arr.contains(3))
+    assert_false(arr.contains(99))
 }
 
 @test

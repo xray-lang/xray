@@ -7,10 +7,10 @@ class Box<T> {
 }
 
 fn bad() {
-    var bytes = Bytes(4)
-    var view: ByteSpan = bytes[:]
+    var bytes = Array<byte>(4)
+    var view: Slice<byte> = bytes[:]
     var box = Box(view)
-    print(box.value.length)
+    print(len(box.value))
 }
 
 bad()

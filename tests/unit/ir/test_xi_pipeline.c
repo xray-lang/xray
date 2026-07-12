@@ -465,15 +465,14 @@ TEST(e2e_ternary) {
 /* ========== Logical Short-Circuit ========== */
 
 TEST(e2e_short_circuit) {
-    /* Short-circuit AND/OR produce conditional jumps, not BAND/BOR */
+    /* Pure boolean operands may be speculated eagerly as BAND/BOR. */
     XrProto *p = compile_source("var a = true\nvar b = false\n"
                                 "if (a && b) { print(1) }\n"
                                 "if (a || b) { print(2) }",
                                 NULL);
     assert(p != NULL);
-    /* Should NOT have BAND/BOR — these are logical ops with short-circuit */
-    assert(!has_opcode(p, OP_BAND) && "&& should not emit BAND");
-    assert(!has_opcode(p, OP_BOR) && "|| should not emit BOR");
+    assert(has_opcode(p, OP_BAND) && "pure && should use eager BAND");
+    assert(has_opcode(p, OP_BOR) && "pure || should use eager BOR");
     xr_vm_proto_free(p);
 }
 

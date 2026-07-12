@@ -4,59 +4,59 @@
 @test
 fn test_int_literal() {
     var x = 42
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
 }
 
 @test
 fn test_float_literal() {
     var x = 3.14
-    assert_eq(typename(x), "float")
+    assert_eq(typeName(x), "float")
 }
 
 @test
 fn test_string_literal() {
     var x = "hello"
-    assert_eq(typename(x), "string")
+    assert_eq(typeName(x), "string")
 }
 
 @test
 fn test_bool_literal() {
     var x = true
     var y = false
-    assert_eq(typename(x), "bool")
-    assert_eq(typename(y), "bool")
+    assert_eq(typeName(x), "bool")
+    assert_eq(typeName(y), "bool")
 }
 
 @test
 fn test_null_literal() {
     var x = null
-    assert_eq(typename(x), "null")
+    assert_eq(typeName(x), "null")
 }
 
 // ===== Array Inference =====
 @test
 fn test_array_int() {
     var arr = [1, 2, 3]
-    assert_eq(typename(arr), "Array")
-    assert_eq(arr.length, 3)
+    assert_eq(typeName(arr), "Array")
+    assert_eq(len(arr), 3)
 }
 
 @test
 fn test_array_string() {
     var arr = ["a", "b", "c"]
-    assert_eq(typename(arr), "Array")
+    assert_eq(typeName(arr), "Array")
 }
 
 @test
 fn test_array_empty() {
     var arr: Array<int> = []
-    assert_eq(typename(arr), "Array")
+    assert_eq(typeName(arr), "Array")
 }
 
 @test
 fn test_array_nested() {
     var arr = [[1, 2], [3, 4]]
-    assert_eq(typename(arr), "Array")
+    assert_eq(typeName(arr), "Array")
     assert_eq(arr[0][0], 1)
 }
 
@@ -64,22 +64,22 @@ fn test_array_nested() {
 @test
 fn test_map_basic() {
     var m = #{"a": 1, "b": 2}
-    assert_eq(typename(m), "Map")
+    assert_eq(typeName(m), "Map")
     assert_eq(m.get("a"), 1)
 }
 
 @test
 fn test_map_empty() {
     var m = #{}
-    assert_eq(typename(m), "Map")
+    assert_eq(typeName(m), "Map")
 }
 
 // ===== Set Inference =====
 @test
 fn test_set_basic() {
     var s = #[1, 2, 3]
-    assert_eq(typename(s), "Set")
-    assert_eq(s.length, 3)
+    assert_eq(typeName(s), "Set")
+    assert_eq(len(s), 3)
 }
 
 // ===== Binary Expression Inference =====
@@ -91,7 +91,7 @@ fn test_arithmetic_int() {
     var diff = a - b
     var prod = a * b
     var quot = a / b
-    assert_eq(typename(sum), "int")
+    assert_eq(typeName(sum), "int")
     assert_eq(sum, 13)
 }
 
@@ -100,7 +100,7 @@ fn test_arithmetic_float() {
     var a = 10.0
     var b = 3.0
     var result = a / b
-    assert_eq(typename(result), "float")
+    assert_eq(typeName(result), "float")
 }
 
 @test
@@ -109,7 +109,7 @@ fn test_arithmetic_mixed() {
     var b = 3.0
     var result = a + b
     // int + float = float
-    assert_eq(typename(result), "float")
+    assert_eq(typeName(result), "float")
 }
 
 @test
@@ -117,7 +117,7 @@ fn test_string_concat() {
     var a = "hello"
     var b = " world"
     var result = a + b
-    assert_eq(typename(result), "string")
+    assert_eq(typeName(result), "string")
     assert_eq(result, "hello world")
 }
 
@@ -126,7 +126,7 @@ fn test_comparison() {
     var a = 10
     var b = 20
     var result = a < b
-    assert_eq(typename(result), "bool")
+    assert_eq(typeName(result), "bool")
     assert_eq(result, true)
 }
 
@@ -136,15 +136,15 @@ fn test_logical() {
     var b = false
     var and_result = a && b
     var or_result = a || b
-    assert_eq(typename(and_result), "bool")
-    assert_eq(typename(or_result), "bool")
+    assert_eq(typeName(and_result), "bool")
+    assert_eq(typeName(or_result), "bool")
 }
 
 // ===== Ternary Expression Inference =====
 @test
 fn test_ternary_same_type() {
     var x = true ? 1 : 2
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
     assert_eq(x, 1)
 }
 
@@ -161,8 +161,8 @@ fn test_ternary_different_types() {
 @test
 fn test_reassignment() {
     var x = 10
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
     x = 20
-    assert_eq(typename(x), "int")
+    assert_eq(typeName(x), "int")
     assert_eq(x, 20)
 }

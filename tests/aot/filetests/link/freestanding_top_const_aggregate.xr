@@ -4,13 +4,13 @@ import mem
 @weak
 @used
 const TABLE: [int; 4] = comptime [2, 4, 6, 8]
-const BYTES: [uint8; 4] = comptime [1, 3, 5, 7]
+const BYTES: [byte; 4] = comptime [1, 3, 5, 7]
 const WEIGHTS: [float; 3] = comptime [1.5, 2.5, 3.5]
 
 @section("__DATA,.xray_matrix")
 @weak
 @used
-const MATRIX: [[uint8; 4]; 2] = comptime [
+const MATRIX: [[byte; 4]; 2] = comptime [
     [1, 2, 3, 4],
     [5, 6, 7, 8],
 ]
@@ -40,7 +40,7 @@ struct PlainHeader {
 const PLAIN_HEADER = PlainHeader{magic: TABLE[0], flags: TABLE[1]}
 
 struct Packet {
-    bytes: [uint8; 4]
+    bytes: [byte; 4]
     base: int
 }
 
@@ -131,7 +131,7 @@ const ENTRIES: [Entry; 2] = comptime [
 ]
 
 struct Row {
-    samples: [uint8; 4]
+    samples: [byte; 4]
     weight: int
 }
 
@@ -175,7 +175,7 @@ const LABEL_GROUPS: [LabelGroup; 2] = comptime [
 ]
 
 packed struct PackedPair {
-    tag: uint8
+    tag: byte
     value: uint32
 }
 
@@ -184,7 +184,7 @@ struct AlignedWord align(16) {
 }
 
 packed struct PackedAligned align(16) {
-    tag: uint8
+    tag: byte
     value: uint32
 }
 
@@ -199,7 +199,7 @@ union I32Bits {
 
 union U32Bytes {
     u: uint32
-    b: [uint8; 4]
+    b: [byte; 4]
 }
 
 const BITS = comptime I32Bits{i: -1}
@@ -458,7 +458,7 @@ fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
 @c_export("xray_top_const_static_addr")
 fn xray_top_const_static_addr() -> int {
     return mem.addressOf(RawPtr<[int; 4]>.of(TABLE)) +
-        mem.addressOf(RawPtr<[[uint8; 4]; 2]>.of(MATRIX)) +
+        mem.addressOf(RawPtr<[[byte; 4]; 2]>.of(MATRIX)) +
         mem.addressOf(RawPtr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
         mem.addressOf(RawPtr<Header>.of(HEADER)) +
         mem.addressOf(RawPtr<[Outer; 2]>.of(GROUPS)) +

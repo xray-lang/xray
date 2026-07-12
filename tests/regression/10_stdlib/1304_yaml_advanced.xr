@@ -32,7 +32,7 @@ fn test_literal_block() {
     var data = "text: |\n  line one\n  line two\n  line three"
     var obj = yaml.parse(data)
     var text = obj["text"]
-    assert(text.length > 0)
+    assert(len(text) > 0)
     assert(text.indexOf("line one") >= 0)
     assert(text.indexOf("line two") >= 0)
 }
@@ -42,9 +42,9 @@ fn test_literal_block_strip() {
     var data = "text: |-\n  hello\n  world"
     var obj = yaml.parse(data)
     var text = string(obj["text"])
-    assert(text.length > 0)
+    assert(len(text) > 0)
     // Strip mode: no trailing newline
-    assert(text[text.length - 1] != "\n")
+    assert(text[len(text) - 1] != "\n")
 }
 
 @test
@@ -52,7 +52,7 @@ fn test_literal_block_keep() {
     var data = "text: |+\n  hello\n  world\n\n\n"
     var obj = yaml.parse(data)
     var text = string(obj["text"])
-    assert(text.length > 0)
+    assert(len(text) > 0)
     // Keep mode: trailing newlines preserved
 }
 
@@ -63,7 +63,7 @@ fn test_folded_block() {
     var data = "text: >\n  line one\n  line two\n  line three"
     var obj = yaml.parse(data)
     var text = string(obj["text"])
-    assert(text.length > 0)
+    assert(len(text) > 0)
     // Folded: newlines become spaces
     assert(text.indexOf(" ") >= 0)
 }
@@ -73,8 +73,8 @@ fn test_folded_block_strip() {
     var data = "text: >-\n  hello\n  world"
     var obj = yaml.parse(data)
     var text = string(obj["text"])
-    assert(text.length > 0)
-    assert(text[text.length - 1] != "\n")
+    assert(len(text) > 0)
+    assert(text[len(text) - 1] != "\n")
 }
 
 // ===== Multi-document =====
@@ -84,7 +84,7 @@ fn test_parse_all() {
     // parseAll splits on document end marker '...'
     var data = "first: 1\n...\nsecond: 2\n...\nthird: 3"
     var docs = yaml.parseAll(data)
-    assert(docs.length >= 1)
+    assert(len(docs) >= 1)
     assert_eq(docs[0]["first"], 1)
 }
 
@@ -93,7 +93,7 @@ fn test_parse_all_single() {
     // Single document with --- header
     var data = "---\na: 1\nb: 2"
     var docs = yaml.parseAll(data)
-    assert(docs.length >= 1)
+    assert(len(docs) >= 1)
     assert_eq(docs[0]["a"], 1)
     assert_eq(docs[0]["b"], 2)
 }
@@ -178,17 +178,17 @@ fn test_empty_value() {
 
 @test
 fn test_unicode_escape() {
-    var data = "char: \"\\u0041\""
+    var data = "rune: \"\\u0041\""
     var obj = yaml.parse(data)
-    assert_eq(obj["char"], "A")
+    assert_eq(obj["rune"], "A")
 }
 
 @test
 fn test_unicode_escape_multibyte() {
-    var data = "char: \"\\u00E9\""
+    var data = "rune: \"\\u00E9\""
     var obj = yaml.parse(data)
     // U+00E9 = é (2-byte UTF-8)
-    assert(obj["char"].length > 0)
+    assert(len(obj["rune"]) > 0)
 }
 
 // ===== Escape sequences in double-quoted strings =====
@@ -207,7 +207,7 @@ fn test_escape_sequences() {
 fn test_stringify_json() {
     var config: Json = {name: "xray", version: 1, debug: false}
     var result = yaml.stringify(config)
-    assert(result.length > 0)
+    assert(len(result) > 0)
     // Roundtrip: parse the stringified result
     var parsed = yaml.parse(result)
     assert_eq(parsed["name"], "xray")
@@ -225,7 +225,7 @@ fn test_stringify_nested_json() {
         features: ["auth", "logging"]
     }
     var result = yaml.stringify(data)
-    assert(result.length > 0)
+    assert(len(result) > 0)
 }
 
 @test
@@ -245,7 +245,7 @@ fn test_stringify_json_roundtrip() {
 fn test_stringify_map() {
     var m: Json = {"key1": "val1", "key2": 42}
     var result = yaml.stringify(m)
-    assert(result.length > 0)
+    assert(len(result) > 0)
 }
 
 // ===== Error robustness =====

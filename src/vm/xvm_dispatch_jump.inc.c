@@ -32,40 +32,33 @@ vmcase(OP_JMP) {
     ** infinite loops from starving other coroutines.
     ** Performance impact < 3%, enables fair scheduling.
     ** Also serves as GC safe point for per-coroutine GC. */
-    if (offset < 0 && vm_ctx && vm_ctx->current_coro) {
-        XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
-        xr_worker_bump_heartbeat(vm_worker);
-
-        /* GC safe point: check and trigger GC at loop back-edge.
-        ** Stack is consistent here (between instructions). */
-        VM_GC_SAFEPOINT();
-
+    if (offset < 0) {
         /* Host-supplied wall-clock deadline. Checked here (back-edge) so a
-        ** tight infinite loop in user code cannot wedge the embedder. The
-        ** deadline is opt-in: when no deadline is armed the call is a
-        ** single load + compare and the branch predictor pins it firmly
-        ** to "no". */
+        ** tight infinite loop cannot wedge either a coroutine or a taskless
+        ** direct root. */
         if (XR_UNLIKELY(xr_isolate_check_deadline(isolate))) {
             xr_runtime_error(isolate, "execution deadline exceeded");
             frame->pc = pc - 1;
             return XR_VM_RUNTIME_ERROR;
         }
 
-        if (xr_coro_consume_reds(coro, 1) <= 0) {
-            if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
-                return XR_VM_CANCELLED;
-            }
-            xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
-            /* Embedders that did not boot the multicore runtime (e.g. the
-             * minimal MCP runner, embedded REPLs, unit tests) have no
-             * scheduler to resume a yielded main coroutine — returning
-             * XR_VM_YIELD here would abandon execution mid-loop. In that
-             * mode just refill the budget and keep running; the deadline
-             * check above is the only thing that bounds tight loops, and
-             * it is sufficient because it is checked on every back-edge. */
-            if (XR_LIKELY(isolate->vm.scheduler != NULL)) {
-                frame->pc = pc - 1;
-                return XR_VM_YIELD;
+        if (vm_ctx && vm_ctx->current_coro) {
+            XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
+            xr_worker_bump_heartbeat(vm_worker);
+
+            /* GC safe point: check and trigger GC at loop back-edge.
+            ** Stack is consistent here (between instructions). */
+            VM_GC_SAFEPOINT();
+
+            if (xr_coro_consume_reds(coro, 1) <= 0) {
+                if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
+                    return XR_VM_CANCELLED;
+                }
+                xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
+                if (XR_LIKELY(isolate->vm.scheduler != NULL)) {
+                    frame->pc = pc - 1;
+                    return XR_VM_YIELD;
+                }
             }
         }
     }

@@ -1,10 +1,10 @@
-fn make_bytes() -> Bytes {
-    var b = Bytes(0)
+fn make_bytes() -> Array<byte> {
+    var b = Array<byte>(0)
     b.push(1)
     b.push(2)
     b.push(3)
     return b
 }
 
-var view: ByteSpan = make_bytes()[0:2]
-print(view.length)
+var view: Slice<byte> = make_bytes()[0:2]
+print(len(view))

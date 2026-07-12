@@ -6,6 +6,6 @@ fn build_array() -> Array<int> {
 
 var task = go build_array()
 var xs = await task
-print(xs.length)
+print(len(xs))
 xs.push(3)
-print(xs.length)
+print(len(xs))

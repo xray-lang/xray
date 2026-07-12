@@ -17,16 +17,16 @@ fn test_range_end_property() {
 }
 
 @test
-fn test_range_length_property() {
+fn test_range_count() {
     // 半开区间 [1, 10) 的元素数 = 9
     var r = 1..10
-    assert_eq(r.length, 9)
+    assert_eq(r.count(), 9)
 }
 
 @test
-fn test_range_length_empty() {
+fn test_range_count_empty() {
     var r = 5..5
-    assert_eq(r.length, 0)
+    assert_eq(r.count(), 0)
 }
 
 @test
@@ -36,7 +36,7 @@ fn test_range_length_matches_iteration() {
     for (i in 0..7) {
         count = count + 1
     }
-    assert_eq(count, (0..7).length)
+    assert_eq(count, (0..7).count())
 }
 
 // ===== includes —— 半开区间 [start, end) =====
@@ -44,36 +44,36 @@ fn test_range_length_matches_iteration() {
 @test
 fn test_includes_start() {
     // start 端点包含
-    assert_eq((1..10).includes(1), true)
+    assert_eq((1..10).contains(1), true)
 }
 
 @test
 fn test_includes_end_exclusive() {
     // end 端点不包含 (核心修复点)
-    assert_eq((1..10).includes(10), false)
+    assert_eq((1..10).contains(10), false)
 }
 
 @test
 fn test_includes_last_iterated() {
     // 最后被迭代的值 (end - 1) 必须包含
-    assert_eq((1..10).includes(9), true)
+    assert_eq((1..10).contains(9), true)
 }
 
 @test
 fn test_includes_below_start() {
-    assert_eq((1..10).includes(0), false)
+    assert_eq((1..10).contains(0), false)
 }
 
 @test
 fn test_includes_above_end() {
-    assert_eq((1..10).includes(100), false)
+    assert_eq((1..10).contains(100), false)
 }
 
 @test
 fn test_includes_empty_range() {
     var r = 5..5
-    assert_eq(r.includes(5), false)
-    assert_eq(r.includes(4), false)
+    assert_eq(r.contains(5), false)
+    assert_eq(r.contains(4), false)
 }
 
 // ===== includes 与 for-in 必须语义一致 =====
@@ -89,7 +89,7 @@ fn test_includes_matches_iteration() {
                 by_for = true
             }
         }
-        assert_eq((0..5).includes(i), by_for)
+        assert_eq((0..5).contains(i), by_for)
         i = i + 1
     }
 }

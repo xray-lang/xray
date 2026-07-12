@@ -2,11 +2,10 @@
 
 @native
 class Map<K: Hashable, V> {
-    length: int
-    size: int
     get(key: K) -> V?
     set(key: K, value: V)
-    has(key: K) -> bool
+    containsKey(key: K) -> bool
+    containsValue(value: V) -> bool
     delete(key: K) -> bool
     clear()
     keys() -> Array<K>

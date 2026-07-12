@@ -5,7 +5,7 @@ fn worker(ch: Channel<Array<int>>) -> int {
     }
     xs.push(99)
     Coro.yield()
-    return xs.length
+    return len(xs)
 }
 
 shared ch = Channel<Array<int>>(1)
@@ -14,5 +14,5 @@ ch.send(copy(xs))
 var task = go worker(ch)
 var child_len = await task
 print(child_len)
-print(xs.length)
+print(len(xs))
 ch.close()

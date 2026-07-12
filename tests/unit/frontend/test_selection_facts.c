@@ -442,28 +442,17 @@ TEST(selection_table_has_entries_after_analysis) {
     return ok;
 }
 
-TEST(builtin_method_has_selection) {
+TEST(builtin_call_has_no_member_selection) {
     AnalysisResult r = analyze("var arr = [1, 2, 3]\n"
-                               "var n = arr.length\n"
+                               "var n = len(arr)\n"
                                "print(n)\n");
     if (!r.program)
         return false;
 
     AstNode *ma = find_member_access(r.program);
-    bool ok = false;
-    if (ma) {
-        const XaSelection *sel = xa_analyzer_get_selection(r.analyzer, ma);
-        if (sel) {
-            printf("    builtin selection kind=%d\n", sel->kind);
-            ok = true;
-        } else {
-            /* Builtin members may not yet be tracked — record as info */
-            printf("    no selection for arr.length (builtin not tracked yet)\n");
-            ok = true;
-        }
-    } else {
-        fprintf(stderr, "    no AST_MEMBER_ACCESS found\n");
-    }
+    bool ok = ma == NULL;
+    if (!ok)
+        fprintf(stderr, "    canonical len(arr) unexpectedly contains member access\n");
 
     cleanup(&r);
     return ok;
@@ -529,7 +518,7 @@ int main(void) {
     run_method_call_has_selection();
     run_enum_member_has_selection();
     run_selection_table_has_entries_after_analysis();
-    run_builtin_method_has_selection();
+    run_builtin_call_has_no_member_selection();
     run_parallel_selective_alias_call_plan_recorded();
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);

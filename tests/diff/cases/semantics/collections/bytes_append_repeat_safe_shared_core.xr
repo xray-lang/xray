@@ -1,29 +1,29 @@
-var src = Bytes(0)
+var src = Array<byte>(0)
 src.push(65)
 src.push(66)
 src.push(67)
 src.push(68)
 src.push(69)
 
-var out = Bytes(0)
+var out = Array<byte>(0)
 out.appendFrom(src[1:4])
-print(out.length)
+print(len(out))
 print(out.toString())
 
 out.repeatFrom(3, 6)
-print(out.length)
+print(len(out))
 print(out.toString())
 
-var alias = Bytes(0)
+var alias = Array<byte>(0)
 alias.push(88)
 alias.push(89)
 alias.appendFrom(alias[0:2])
-print(alias.length)
+print(len(alias))
 print(alias.toString())
 
 try {
     out.repeatFrom(0, 1)
 } catch panic (p: PanicInfo) {
     print(p.code)
-    print(p.message.includes("range/grow"))
+    print(p.message.contains("range/grow"))
 }

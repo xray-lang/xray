@@ -556,7 +556,7 @@ static bool enum_payload_type_predicate_supported(XiCgenCtx *ctx, const XrType *
         case XR_KIND_POINTER:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_STRING:
         case XR_KIND_NULL:
         case XR_KIND_UNIT:
@@ -596,8 +596,8 @@ static bool emit_enum_payload_type_predicate_nonnull(XiCgenCtx *ctx, FILE *out, 
         case XR_KIND_BOOL:
             fprintf(out, "XR_IS_BOOL(%s)", value_expr);
             return true;
-        case XR_KIND_CHAR:
-            fprintf(out, "XR_IS_CHAR(%s)", value_expr);
+        case XR_KIND_RUNE:
+            fprintf(out, "XR_IS_RUNE(%s)", value_expr);
             return true;
         case XR_KIND_STRING:
             fprintf(out, "XR_IS_STR(%s)", value_expr);

@@ -12,8 +12,8 @@ fn mapSetTypedLocalReceiverPlan(value: int) -> int {
     scores.set(1, value)
     scores[2] = value
     seen.add(1)
-    var hasOne = scores.has(1)
-    var sawOne = seen.has(1)
+    var hasOne = scores.containsKey(1)
+    var sawOne = seen.contains(1)
     var one = scores.get(1) ?? 0
     var two = scores[2]
     scores.delete(1)

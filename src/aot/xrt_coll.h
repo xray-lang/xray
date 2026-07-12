@@ -197,7 +197,7 @@ static inline void xrt_array_ensure_storage(xrt_array_t *a) {
 
 static inline void xrt_array_check_store_or_abort(const xrt_array_t *a, XrValue val,
                                                   const char *where) {
-    if (XR_UNLIKELY(a && a->elem_type == XR_ELEM_CHAR && val.tag != XR_TAG_CHAR)) {
+    if (XR_UNLIKELY(a && a->elem_type == XR_ELEM_RUNE && val.tag != XR_TAG_RUNE)) {
         fprintf(stderr, "%s: Array<char> element must be char\n", where);
         abort();
     }
@@ -1157,9 +1157,9 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
         memcpy(sb->buf + sb->len, tmp, (size_t) n);
         sb->len += n;
         sb->buf[sb->len] = 0;
-    } else if (val.tag == XR_TAG_CHAR) {
+    } else if (val.tag == XR_TAG_RUNE) {
         char tmp[4];
-        int n = xrt_char_utf8_encode(XR_TO_CHAR(val), tmp);
+        int n = xrt_rune_utf8_encode(XR_TO_RUNE(val), tmp);
         if (n > 0) {
             xrt_strbuf_grow(sb, n);
             memcpy(sb->buf + sb->len, tmp, (size_t) n);
@@ -1256,8 +1256,8 @@ static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
     } else if (val.tag == XR_TAG_BOOL) {
         part->a = val.i ? "true" : "false";
         part->alen = val.i ? 4u : 5u;
-    } else if (val.tag == XR_TAG_CHAR) {
-        uint32_t cp = XR_TO_CHAR(val);
+    } else if (val.tag == XR_TAG_RUNE) {
+        uint32_t cp = XR_TO_RUNE(val);
         int n = 0;
         if (cp <= 0x7Fu) {
             part->scratch[n++] = (char) cp;
@@ -1425,7 +1425,7 @@ static inline uint64_t xrt_hash_value(XrValue v) {
     switch (tag) {
         case XR_TAG_I64:
         case XR_TAG_BOOL:
-        case XR_TAG_CHAR:
+        case XR_TAG_RUNE:
             return xr_hash_core_mix_u64((uint64_t) v.i);
         case XR_TAG_F64:
             return xrt_hash_f64(v.f);
@@ -1982,6 +1982,36 @@ static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_typed(m))
         return xrt_map_has_typed(m, key);
     return xrt_map_find_entry(m, key, xrt_hash32_value(key), xrt_value_type_tag(key)) >= 0;
+}
+
+static inline int xrt_map_has_value(xrt_map_t *m, XrValue value) {
+    if (!m)
+        return 0;
+    if (xrt_map_is_boolmap(m)) {
+        XrValue keys[2] = {XR_FROM_BOOL(0), XR_FROM_BOOL(1)};
+        for (int i = 0; i < 2; i++) {
+            if (xrt_map_has(m, keys[i]) && xrt_eq(xrt_map_get(m, keys[i]), value))
+                return 1;
+        }
+        return 0;
+    }
+    if (xrt_map_is_typed(m)) {
+        for (int64_t i = 0; i < m->order_len; i++) {
+            int64_t slot = m->order[i];
+            if (slot >= 0 && slot < m->cap && xrt_map_slot_is_full(m, slot) &&
+                xrt_eq(xrt_map_slot_value(m, slot), value))
+                return 1;
+        }
+        return 0;
+    }
+    if (m->flags & XR_MAP_FLAG_DUMMY)
+        return 0;
+    for (uint32_t i = 0; i < m->nentries; i++) {
+        XrMapEntry *entry = &m->entries[i];
+        if (entry->key_tt != XR_MAP_ENTRY_NIL_KEY && xrt_eq(entry->value, value))
+            return 1;
+    }
+    return 0;
 }
 
 static inline int xrt_map_has_prehashed(xrt_map_t *m, XrValue key, uint32_t hash) {
@@ -3226,7 +3256,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         uint32_t cp = 0;
         int ok = xrt_iter_utf8_decode_scalar(xr_str_data(it->coll), xr_str_len(it->coll),
                                              &it->cursor, &cp);
-        XrValue ch = ok ? XR_FROM_CHAR(cp) : XR_NULL_VAL;
+        XrValue ch = ok ? XR_FROM_RUNE(cp) : XR_NULL_VAL;
         if (it->kind == XRT_ITER_KEYS)
             return XR_FROM_INT(char_index);
         if (it->kind == XRT_ITER_PAIRS) {
@@ -3644,7 +3674,7 @@ static int xrt_json_parse_string_value(xrt_json_parser_t *p, XrValue *out) {
                             goto bad_string;
                         uint32_t full =
                             0x10000u + ((uint32_t) (cp - 0xD800) << 10) + (uint32_t) (low - 0xDC00);
-                        int n = xrt_char_utf8_encode(full, buf + len);
+                        int n = xrt_rune_utf8_encode(full, buf + len);
                         if (n <= 0)
                             goto bad_string;
                         len += (size_t) n;
@@ -3652,7 +3682,7 @@ static int xrt_json_parse_string_value(xrt_json_parser_t *p, XrValue *out) {
                     } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
                         goto bad_string;
                     } else {
-                        int n = xrt_char_utf8_encode((uint32_t) cp, buf + len);
+                        int n = xrt_rune_utf8_encode((uint32_t) cp, buf + len);
                         if (n <= 0)
                             goto bad_string;
                         len += (size_t) n;
@@ -3999,9 +4029,9 @@ static inline XrValue xrt_json_encode_value(XrValue val, int depth) {
             return val;
         case XR_TAG_F64:
             return isfinite(val.f) ? val : XR_NULL_VAL;
-        case XR_TAG_CHAR: {
+        case XR_TAG_RUNE: {
             char buf[4];
-            int n = xrt_char_utf8_encode(XR_TO_CHAR(val), buf);
+            int n = xrt_rune_utf8_encode(XR_TO_RUNE(val), buf);
             if (n <= 0)
                 return XR_NULL_VAL;
             XrValue out = xrt_str_alloc((size_t) n);
@@ -4213,9 +4243,9 @@ static void xrt_json_stringify_value(xrt_strbuf_t *sb, XrValue val, int depth) {
         case XR_TAG_STR_ARC:
             xrt_json_stringify_string(sb, xr_str_data(val), (size_t) xr_str_len(val));
             return;
-        case XR_TAG_CHAR: {
+        case XR_TAG_RUNE: {
             char buf[4];
-            int n = xrt_char_utf8_encode(XR_TO_CHAR(val), buf);
+            int n = xrt_rune_utf8_encode(XR_TO_RUNE(val), buf);
             if (n > 0)
                 xrt_json_stringify_string(sb, buf, (size_t) n);
             else
@@ -4522,6 +4552,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             XrValue dstv = xrt_str_alloc((size_t) src->len);
             xrt_str_t *dst = (xrt_str_t *) dstv.ptr;
             dst->hash = src->hash;
+            dst->rune_len = src->rune_len;
             memcpy(xr_str_buf(dstv), src->data, (size_t) src->len);
             return dstv;
         }

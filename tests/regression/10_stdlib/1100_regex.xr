@@ -25,13 +25,13 @@ fn test_instance_methods() {
     assert_eq(re.findGroup("abc123 xyz456", 2), "123")
 
     var all = re.findAll("abc123 xyz456")
-    assert_eq(all.length, 2)
+    assert_eq(len(all), 2)
 
     assert_eq(re.replace("abc123 xyz456", "N"), "N xyz456")
 
     var comma = regex.compile(",\\s*")
     var parts = comma.split("a, b, c")
-    assert_eq(parts.length, 3)
+    assert_eq(len(parts), 3)
     assert_eq(parts[2], "c")
 }
 
@@ -85,7 +85,7 @@ fn test_replace_all() {
 fn test_split() {
     var re = regex.compile(",\\s*")
     var parts = regex.split(re, "a, b, c, d")
-    assert_eq(parts.length, 4)
+    assert_eq(len(parts), 4)
     assert_eq(parts[0], "a")
     assert_eq(parts[1], "b")
     assert_eq(parts[3], "d")
@@ -95,8 +95,8 @@ fn test_split() {
 @test
 fn test_escape() {
     var escaped = regex.escape("a.b*c?")
-    assert(escaped.includes("\\."))
-    assert(escaped.includes("\\*"))
+    assert(escaped.contains("\\."))
+    assert(escaped.contains("\\*"))
 }
 
 // @test isValid

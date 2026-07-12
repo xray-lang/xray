@@ -1,8 +1,8 @@
 const N = 1 << 3
 
 fn run() -> int {
-    var key: [uint8; N] = [0; N]
-    return key.length + key[0]
+    var key: [byte; N] = [0; N]
+    return len(key) + key[0]
 }
 
 print(run())

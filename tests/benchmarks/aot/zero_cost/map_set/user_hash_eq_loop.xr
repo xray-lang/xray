@@ -24,8 +24,8 @@ fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        if (values.has(token)) {
-            if (seen.has(token)) {
+        if (values.containsKey(token)) {
+            if (seen.contains(token)) {
                 sum = sum + values.get(token)
             }
         }

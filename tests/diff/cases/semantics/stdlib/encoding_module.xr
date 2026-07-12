@@ -11,7 +11,7 @@ print(encoding.hexDecode("gg") == null)
 
 var hb = encoding.hexDecode("48656c6c6f")
 print(hb != null)
-print(hb!.length)
+print(len(hb!))
 print(hb![0])
 print(hb![4])
 
@@ -23,7 +23,7 @@ print(encoding.LE)
 print(encoding.BE)
 
 var u = encoding.utf16Encode("AB")
-print(u.length)
+print(len(u))
 print(u[0])
 print(u[1])
 print(encoding.utf16Decode(u))

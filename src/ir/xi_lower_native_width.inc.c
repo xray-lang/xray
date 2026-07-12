@@ -119,7 +119,7 @@ static void xi_lower_check_map_method_args(XiLower *l, AstNode *node, const char
                                            XiValue *recv, XiValue **args, int n) {
     if (!recv || !recv->type || !XR_TYPE_IS_MAP(recv->type) || !method)
         return;
-    if (n == 1 && (strcmp(method, "get") == 0 || strcmp(method, "has") == 0 ||
+    if (n == 1 && (strcmp(method, "get") == 0 || strcmp(method, "containsKey") == 0 ||
                    strcmp(method, "delete") == 0)) {
         args[0] = xi_lower_checktype_for_type(l, node, args[0], recv->type->map.key_type);
         return;
@@ -134,7 +134,7 @@ static void xi_lower_narrow_map_method_args(XiLower *l, AstNode *node, const cha
                                             XiValue *recv, XiValue **args, int n) {
     if (!recv || !recv->type || !XR_TYPE_IS_MAP(recv->type) || !method)
         return;
-    if (n == 1 && (strcmp(method, "get") == 0 || strcmp(method, "has") == 0 ||
+    if (n == 1 && (strcmp(method, "get") == 0 || strcmp(method, "containsKey") == 0 ||
                    strcmp(method, "delete") == 0)) {
         args[0] = xi_lower_narrow_for_static_type(l, node, args[0], recv->type->map.key_type);
         return;
@@ -149,7 +149,8 @@ static void xi_lower_narrow_set_method_args(XiLower *l, AstNode *node, const cha
                                             XiValue *recv, XiValue **args, int n) {
     if (!recv || !recv->type || !XR_TYPE_IS_SET(recv->type) || !method || n != 1)
         return;
-    if (strcmp(method, "add") == 0 || strcmp(method, "has") == 0 || strcmp(method, "delete") == 0)
+    if (strcmp(method, "add") == 0 || strcmp(method, "contains") == 0 ||
+        strcmp(method, "delete") == 0)
         args[0] =
             xi_lower_narrow_for_static_type(l, node, args[0], recv->type->container.element_type);
 }
@@ -158,7 +159,8 @@ static void xi_lower_check_set_method_args(XiLower *l, AstNode *node, const char
                                            XiValue *recv, XiValue **args, int n) {
     if (!recv || !recv->type || !XR_TYPE_IS_SET(recv->type) || !method || n != 1)
         return;
-    if (strcmp(method, "add") == 0 || strcmp(method, "has") == 0 || strcmp(method, "delete") == 0)
+    if (strcmp(method, "add") == 0 || strcmp(method, "contains") == 0 ||
+        strcmp(method, "delete") == 0)
         args[0] = xi_lower_checktype_for_type(l, node, args[0], recv->type->container.element_type);
 }
 
