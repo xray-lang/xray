@@ -13,6 +13,7 @@
 #include "xaot_class_native.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_coro_analyze.h"
 #include "../ir/xi_escape.h"
@@ -213,6 +214,47 @@ static const XiValue *unwrap_identity_value(const XiValue *v) {
         v = v->args[0];
     }
     return v;
+}
+
+static bool prepare_builtin_receiver_pod_span_elem(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool prepare_builtin_receiver_registry_matches(const XrType *receiver_type,
+                                                      XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver_type);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver_type);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+                   prepare_builtin_receiver_pod_span_elem(receiver_type->container.element_type);
+    }
+    return false;
+}
+
+static bool prepare_call_method_matches_receiver_registry_id(const XiValue *call,
+                                                             XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    const XiValue *v = unwrap_identity_value(call);
+    if (!spec || !v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux ||
+        v->nargs < 1 || !v->args[0])
+        return false;
+    return strcmp((const char *) v->aux, spec->source_name) == 0 &&
+           prepare_builtin_receiver_registry_matches(v->args[0]->type, spec->receiver);
 }
 
 static bool same_value(const XiValue *a, const XiValue *b) {
@@ -1205,10 +1247,9 @@ static bool prepare_array_unrotated_branchy_fill_loop_match(const XaotBundle *bu
 
 static bool prepare_array_fill_loop_match(const XaotBundle *bundle, const XiFunc *func,
                                           const XiValue *push, PrepareArrayFillLoop *out) {
-    if (!push || push->op != XI_CALL_METHOD || push->nargs != 2 || !push->block)
-        return false;
-    const char *method = (const char *) push->aux;
-    if (!method || strcmp(method, "push") != 0)
+    if (!push || push->op != XI_CALL_METHOD || push->nargs != 2 || !push->block ||
+        !prepare_call_method_matches_receiver_registry_id(push,
+                                                          XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH))
         return false;
     if (prepare_array_single_block_fill_loop_match(bundle, func, push, out))
         return true;
@@ -1456,14 +1497,17 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_LEN:
             return arg_index == 0;
         case XI_CALL_METHOD: {
-            const char *method = (const char *) user->aux;
-            if (!method)
-                return false;
-            if (arg_index == 0 &&
-                (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
-                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0))
+            if (arg_index == 0 && (prepare_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
+                                   prepare_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
+                                   prepare_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
+                                   prepare_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM)))
                 return true;
-            if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
+            if (arg_index == 1 && prepare_call_method_matches_receiver_registry_id(
+                                      user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM))
                 return true;
             return false;
         }
@@ -1851,21 +1895,20 @@ static bool prepare_span_access_kind_for_value(const XiValue *value, uint8_t *ou
             *out_kind = XAOT_SPAN_ACCESS_REINTERPRET;
             return true;
         case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT: {
-            const char *method = value->aux ? (const char *) value->aux : NULL;
-            if (!method || value->nargs != 2 || !value->args[0] || !value->args[0]->type ||
-                value->args[0]->type->kind != XR_KIND_SPAN)
+        case XI_CALL_METHOD_DIRECT:
+            if (value->nargs != 2)
                 return false;
-            if (strcmp(method, "copyFrom") == 0) {
+            if (prepare_call_method_matches_receiver_registry_id(
+                    value, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM)) {
                 *out_kind = XAOT_SPAN_ACCESS_BYTE_COPY;
                 return true;
             }
-            if (strcmp(method, "commonPrefix") == 0) {
+            if (prepare_call_method_matches_receiver_registry_id(
+                    value, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX)) {
                 *out_kind = XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX;
                 return true;
             }
             return false;
-        }
         default:
             return false;
     }
