@@ -14,6 +14,7 @@
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_incremental.h"
+#include "../../base/xstorage.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include <stdlib.h>
@@ -51,6 +52,8 @@ XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstN
 XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line);
 XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNode *node);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);
+XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,
+                                                          XaSymbolLinks *links);
 XR_FUNC XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **tp_names,
                                             int tp_count);
 XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
@@ -173,6 +176,7 @@ XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
 XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
 XR_FUNC bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node);
+XR_FUNC XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node);
 XR_FUNC void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
                                             AstNode *arg_node, XrType *arg_type,
                                             const char *boundary_label);

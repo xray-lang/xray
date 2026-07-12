@@ -3837,7 +3837,7 @@ bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
     return sym && sym->is_shared;
 }
 
-static XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node) {
+XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node) {
     if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_MOVE_EXPR)
         return NULL;
     AstNode *inner = arg_node->as.move_expr.expr;

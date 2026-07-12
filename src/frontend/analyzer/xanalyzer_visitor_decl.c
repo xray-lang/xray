@@ -347,6 +347,7 @@ typedef struct XaParamEscapeSummary {
     const char **param_names;
     int param_count;
     uint8_t *escapes;
+    uint8_t *storage_requirements;
     XrType *return_type;
     const char *aliases[128];
     int alias_slot[128];
@@ -428,12 +429,15 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
 }
 
 static bool xa_summary_method_stores_argument(const char *method_name, int slot);
+static bool xa_summary_call_requires_owned_move_argument(XaParamEscapeSummary *summary,
+                                                         AstNode *callee, int slot);
 static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee);
 static XrClassInfo *xa_type_class_info(XrType *type);
 static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, XrType *type);
 static XaSymbol *xa_receiver_method_symbol_for_call(XrClassInfo *receiver_info, AstNode *object,
                                                     const char *method_name);
 static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr);
+static void xa_summary_mark_owned_move_requirement(XaParamEscapeSummary *summary, AstNode *expr);
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node);
 
 static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, XrType *type) {
@@ -509,17 +513,32 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
                 xa_summary_mark_expr(summary, call->arguments[i]);
         }
     }
+    if (fn_links && fn_links->param_storage_requirements) {
+        for (int i = 0; i < call->arg_count && i < fn_links->param_storage_requirement_count; i++) {
+            if (fn_links->param_storage_requirements[i] == XR_STORAGE_OWNED_SYSTEM)
+                xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
+        }
+    }
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         const char *method_name = call->callee->as.member_access.name;
         for (int i = 0; i < call->arg_count; i++) {
             if (xa_summary_method_stores_argument(method_name, i))
                 xa_summary_mark_expr(summary, call->arguments[i]);
+            if (xa_summary_call_requires_owned_move_argument(summary, call->callee, i))
+                xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
         }
         XaSymbolLinks *method_links = xa_summary_receiver_method_links(summary, call->callee);
         if (method_links && method_links->param_escapes) {
             for (int i = 0; i < call->arg_count && i < method_links->param_escape_count; i++) {
                 if (method_links->param_escapes[i])
                     xa_summary_mark_expr(summary, call->arguments[i]);
+            }
+        }
+        if (method_links && method_links->param_storage_requirements) {
+            for (int i = 0;
+                 i < call->arg_count && i < method_links->param_storage_requirement_count; i++) {
+                if (method_links->param_storage_requirements[i] == XR_STORAGE_OWNED_SYSTEM)
+                    xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
             }
         }
     }
@@ -713,6 +732,18 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
     }
 }
 
+static void xa_summary_mark_owned_move_requirement(XaParamEscapeSummary *summary, AstNode *expr) {
+    if (!summary || !expr || expr->type != AST_MOVE_EXPR || !summary->storage_requirements)
+        return;
+    int slot = xa_summary_expr_root_param_slot(summary, expr->as.move_expr.expr);
+    if (slot < 0 || slot >= summary->param_count)
+        return;
+    XrType *param_type = summary->param_types ? summary->param_types[slot] : NULL;
+    if (!xa_boundary_transfer_type_needs_explicit(param_type))
+        return;
+    summary->storage_requirements[slot] = XR_STORAGE_OWNED_SYSTEM;
+}
+
 static bool xa_summary_method_stores_argument(const char *method_name, int slot) {
     if (!method_name || slot < 0)
         return false;
@@ -723,6 +754,53 @@ static bool xa_summary_method_stores_argument(const char *method_name, int slot)
         slot == 0)
         return true;
     return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
+}
+
+static XrType *xa_summary_expr_type(XaParamEscapeSummary *summary, AstNode *node) {
+    if (!summary || !node)
+        return NULL;
+    switch (node->type) {
+        case AST_VARIABLE: {
+            int slot = xa_summary_param_slot(summary, node->as.variable.name);
+            if (slot >= 0 && slot < summary->param_count && summary->param_types)
+                return summary->param_types[slot];
+            XaSymbol *sym = summary->ctx
+                                ? xa_lookup_visible_symbol(summary->ctx, node->as.variable.name)
+                                : NULL;
+            XaSymbolLinks *links = sym ? xa_analyzer_get_links(summary->ctx->analyzer, sym) : NULL;
+            return links ? links->type : NULL;
+        }
+        case AST_MEMBER_ACCESS: {
+            XrClassInfo *owner_info =
+                xa_summary_expr_class_info(summary, node->as.member_access.object);
+            if (!owner_info)
+                return NULL;
+            XaSymbol *member = xa_class_info_lookup_member(owner_info, node->as.member_access.name);
+            return member ? member->links.type : NULL;
+        }
+        case AST_GROUPING:
+            return xa_summary_expr_type(summary, node->as.grouping);
+        case AST_FORCE_UNWRAP:
+            return xa_summary_expr_type(summary, node->as.unary.operand);
+        case AST_MOVE_EXPR:
+            return xa_summary_expr_type(summary, node->as.move_expr.expr);
+        case AST_AS_EXPR:
+            return xa_summary_expr_type(summary, node->as.as_expr.expr);
+        default:
+            return NULL;
+    }
+}
+
+static bool xa_summary_call_requires_owned_move_argument(XaParamEscapeSummary *summary,
+                                                         AstNode *callee, int slot) {
+    if (!summary || !callee || callee->type != AST_MEMBER_ACCESS || slot != 0)
+        return false;
+    const char *method_name = callee->as.member_access.name;
+    XrType *receiver_type = xa_summary_expr_type(summary, callee->as.member_access.object);
+    if (!receiver_type || receiver_type->kind != XR_KIND_CHANNEL)
+        return false;
+    return strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
+           strcmp(method_name, "sendTimeout") == 0;
 }
 
 static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee) {
@@ -889,6 +967,8 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
             AstNode *arg = call->arguments[i];
             if (xa_summary_method_stores_argument(method_name, i))
                 xa_summary_mark_expr(summary, arg);
+            if (xa_summary_call_requires_owned_move_argument(summary, call->callee, i))
+                xa_summary_mark_owned_move_requirement(summary, arg);
             xa_summary_walk(summary, arg);
         }
         XaSymbolLinks *method_links = xa_summary_receiver_method_links(summary, call->callee);
@@ -896,6 +976,13 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
             for (int i = 0; i < call->arg_count && i < method_links->param_escape_count; i++) {
                 if (method_links->param_escapes[i])
                     xa_summary_mark_expr(summary, call->arguments[i]);
+            }
+        }
+        if (method_links && method_links->param_storage_requirements) {
+            for (int i = 0;
+                 i < call->arg_count && i < method_links->param_storage_requirement_count; i++) {
+                if (method_links->param_storage_requirements[i] == XR_STORAGE_OWNED_SYSTEM)
+                    xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
             }
         }
         xa_summary_walk(summary, call->callee);
@@ -907,6 +994,12 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
         for (int i = 0; i < call->arg_count && i < fn_links->param_escape_count; i++) {
             if (fn_links->param_escapes[i])
                 xa_summary_mark_expr(summary, call->arguments[i]);
+        }
+    }
+    if (fn_links && fn_links->param_storage_requirements) {
+        for (int i = 0; i < call->arg_count && i < fn_links->param_storage_requirement_count; i++) {
+            if (fn_links->param_storage_requirements[i] == XR_STORAGE_OWNED_SYSTEM)
+                xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
         }
     }
     xa_summary_walk(summary, call->callee);
@@ -985,6 +1078,16 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
         case AST_CALL_EXPR:
             xa_summary_walk_call(summary, node);
             break;
+        case AST_GO_EXPR: {
+            AstNode *spawned = node->as.go_expr.expr;
+            if (spawned && spawned->type == AST_CALL_EXPR) {
+                CallExprNode *call = &spawned->as.call_expr;
+                for (int i = 0; i < call->arg_count; i++)
+                    xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
+            }
+            xa_summary_walk(summary, spawned);
+            break;
+        }
         case AST_FUNCTION_EXPR:
             xa_summary_walk_function_expr(summary, node);
             break;
@@ -1093,12 +1196,17 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
     if (!links || param_count <= 0 || !body)
         return false;
     uint8_t *escapes = xr_calloc((size_t) param_count, sizeof(uint8_t));
-    if (!escapes)
+    uint8_t *storage_requirements = xr_calloc((size_t) param_count, sizeof(uint8_t));
+    if (!escapes || !storage_requirements) {
+        xr_free(escapes);
+        xr_free(storage_requirements);
         return false;
+    }
     XaParamEscapeSummary summary = {.param_types = param_types,
                                     .param_names = param_names,
                                     .param_count = param_count,
                                     .escapes = escapes,
+                                    .storage_requirements = storage_requirements,
                                     .return_type = return_type,
                                     .ctx = ctx,
                                     .receiver_info = receiver_info};
@@ -1113,11 +1221,47 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
             }
         }
     }
+    if (!changed) {
+        changed = links->param_storage_requirement_count != param_count ||
+                  !links->param_storage_requirements;
+    }
+    if (!changed) {
+        for (int i = 0; i < param_count; i++) {
+            if (links->param_storage_requirements[i] != storage_requirements[i]) {
+                changed = true;
+                break;
+            }
+        }
+    }
     if (links->param_escapes)
         xr_free(links->param_escapes);
+    if (links->param_storage_requirements)
+        xr_free(links->param_storage_requirements);
     links->param_escapes = escapes;
     links->param_escape_count = param_count;
+    links->param_storage_requirements = storage_requirements;
+    links->param_storage_requirement_count = param_count;
     return changed;
+}
+
+void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx, XaSymbolLinks *links) {
+    if (!ctx || !ctx->analyzer || !links || !links->param_storage_requirements ||
+        !links->param_names)
+        return;
+    int count = links->param_count < links->param_storage_requirement_count
+                    ? links->param_count
+                    : links->param_storage_requirement_count;
+    for (int i = 0; i < count; i++) {
+        if (links->param_storage_requirements[i] != XR_STORAGE_OWNED_SYSTEM ||
+            !links->param_names[i])
+            continue;
+        XaSymbol *param =
+            xa_scope_lookup_local(ctx->analyzer->current_scope, links->param_names[i]);
+        if (!param || param->kind != XA_SYM_PARAMETER)
+            continue;
+        param->is_owned = true;
+        param->is_rebindable = false;
+    }
 }
 
 static bool xa_expr_roots_at_this(AstNode *node) {

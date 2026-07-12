@@ -2890,6 +2890,37 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
                                &loc);
 }
 
+static void xa_check_owned_storage_param_arg(XaInferContext *ctx, AstNode *call_node,
+                                             XaSymbolLinks *callee_links, const char *callee_name,
+                                             AstNode *arg_node, XrType *arg_type, int slot) {
+    if (!ctx || !call_node || !callee_links || !callee_links->param_storage_requirements ||
+        slot < 0 || slot >= callee_links->param_storage_requirement_count ||
+        callee_links->param_storage_requirements[slot] != XR_STORAGE_OWNED_SYSTEM)
+        return;
+    if (!xa_boundary_transfer_type_needs_explicit(arg_type))
+        return;
+    XaSymbol *move_source = xa_boundary_move_source_symbol(ctx, arg_node);
+    if (move_source && move_source->is_owned)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
+                      .column =
+                          arg_node && arg_node->column ? arg_node->column : call_node->column};
+    const char *source_name = move_source && move_source->name ? move_source->name : NULL;
+    char msg[320];
+    if (source_name) {
+        snprintf(msg, sizeof(msg),
+                 "argument %d for '%s' requires move of an owned source; declare '%s' with owned",
+                 slot + 1, callee_name ? callee_name : "callee", source_name);
+    } else {
+        snprintf(msg, sizeof(msg), "argument %d for '%s' requires move of an owned source",
+                 slot + 1, callee_name ? callee_name : "callee");
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
 static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
                                                  XaSymbolLinks *fn_links, XrType **arg_types,
                                                  int arg_count) {
@@ -3886,6 +3917,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
                                    ? effective_arg_types[direct_slot]
                                    : xa_visit_infer_expr(ctx, arg_node);
+            xa_check_owned_storage_param_arg(ctx, node, escape_links, escape_name, arg_node,
+                                             arg_type, direct_slot);
             xa_check_borrowed_escaping_param_arg(ctx, node, escape_links, escape_name, arg_node,
                                                  arg_type, direct_slot);
             direct_slot++;
