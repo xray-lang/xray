@@ -328,6 +328,10 @@ typedef enum {
     XA_BUILTIN_TYPE_RECEIVER,
     XA_BUILTIN_TYPE_RECEIVER_ELEM,
     XA_BUILTIN_TYPE_RECEIVER_ELEM_NULLABLE,
+    XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN,
+    XA_BUILTIN_TYPE_ITERATOR_OF_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_ITERATOR_OF_INDEX_RECEIVER_ELEM_TUPLE,
+    XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE,
     XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM,
 } XaBuiltinMethodTypeKind;
 
@@ -415,6 +419,37 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
                                ? xr_type_copy(X, receiver->container.element_type)
                                : xr_type_new_unknown(X);
             return xr_type_make_nullable(X, elem);
+        }
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN: {
+            XrType *elem = receiver && receiver->container.element_type
+                               ? receiver->container.element_type
+                               : xr_type_new_unknown(X);
+            XrType *params[2] = {elem, elem};
+            return xr_type_new_function(X, params, 2, xr_type_new_int(X), false);
+        }
+        case XA_BUILTIN_TYPE_ITERATOR_OF_RECEIVER_ELEM: {
+            XrType *elem = receiver && receiver->container.element_type
+                               ? receiver->container.element_type
+                               : xr_type_new_unknown(X);
+            XrType *args[1] = {elem};
+            return xr_type_new_generic_instance(X, "Iterator", NULL, args, 1);
+        }
+        case XA_BUILTIN_TYPE_ITERATOR_OF_INDEX_RECEIVER_ELEM_TUPLE: {
+            XrType *elem = receiver && receiver->container.element_type
+                               ? receiver->container.element_type
+                               : xr_type_new_unknown(X);
+            XrType *tuple_elems[2] = {xr_type_new_int(X), elem};
+            XrType *pair = xr_type_new_tuple(X, tuple_elems, 2);
+            XrType *args[1] = {pair ? pair : xr_type_new_unknown(X)};
+            return xr_type_new_generic_instance(X, "Iterator", NULL, args, 1);
+        }
+        case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE: {
+            XrType *elem = receiver && receiver->container.element_type
+                               ? receiver->container.element_type
+                               : xr_type_new_unknown(X);
+            XrType *tuple_elems[2] = {xr_type_new_int(X), elem};
+            XrType *pair = xr_type_new_tuple(X, tuple_elems, 2);
+            return xr_type_new_array(X, pair ? pair : xr_type_new_unknown(X));
         }
         case XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM:
             return xr_type_new_span(X, receiver && receiver->container.element_type
