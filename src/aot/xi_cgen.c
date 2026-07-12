@@ -4245,30 +4245,111 @@ static const char *cg_no_alloc_stdlib_alloc_detail(XiCgenCtx *ctx, const char *m
     return cg_no_alloc_generated_stdlib_alloc_detail(ctx, module, name);
 }
 
-static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
+typedef enum {
+    XA_BUILTIN_RECEIVER_U8_ARRAY,
+    XA_BUILTIN_RECEIVER_ARRAY,
+    XA_BUILTIN_RECEIVER_U8_SLICE,
+    XA_BUILTIN_RECEIVER_POD_SLICE,
+} CgBuiltinReceiverKind;
+
+typedef enum {
+    XA_BUILTIN_ALLOCATION_NO_HEAP,
+    XA_BUILTIN_ALLOCATION_MAY_HEAP,
+} CgBuiltinMethodAllocation;
+
+static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
+                                                 CgBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver_type);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver_type);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+                   cg_builtin_receiver_pod_span_elem(receiver_type->container.element_type);
+    }
+    return false;
+}
+
+static const char *cg_builtin_receiver_registry_detail(XiCgenCtx *ctx,
+                                                       CgBuiltinReceiverKind receiver,
+                                                       const char *method_name) {
+    switch (receiver) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return cg_no_alloc_owned_stdlib_detail(ctx, "Array<byte>", method_name);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return cg_no_alloc_owned_stdlib_detail(ctx, "Array", method_name);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return cg_no_alloc_owned_stdlib_detail(ctx, "Slice<byte>", method_name);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return cg_no_alloc_owned_stdlib_detail(ctx, "Slice", method_name);
+    }
+    return NULL;
+}
+
+static const char *cg_no_alloc_receiver_registry_alloc_detail(XiCgenCtx *ctx,
+                                                              const XrType *receiver_type,
+                                                              const char *method_name) {
+    if (!ctx || !receiver_type || !method_name)
+        return NULL;
+    static const struct {
+        CgBuiltinReceiverKind receiver;
+        const char *method_name;
+        CgBuiltinMethodAllocation allocation;
+    } registry_methods[] = {
+#define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
+                           type_params, effect, allocation, unsafe_requirement, lowering)          \
+    {receiver, source_name, allocation},
+#define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
+                                    min_params, type_params, effect, allocation,                   \
+                                    unsafe_requirement, lowering)                                  \
+    {receiver, source_name, allocation},
+#include "../frontend/analyzer/xbuiltin_receiver_method.def"
+#undef XB_RECEIVER_VARIADIC_METHOD
+#undef XB_RECEIVER_METHOD
+    };
+    for (size_t i = 0; i < sizeof(registry_methods) / sizeof(registry_methods[0]); i++) {
+        if (registry_methods[i].allocation != XA_BUILTIN_ALLOCATION_MAY_HEAP)
+            continue;
+        if (strcmp(method_name, registry_methods[i].method_name) != 0)
+            continue;
+        if (!cg_builtin_receiver_registry_matches(receiver_type, registry_methods[i].receiver))
+            continue;
+        return cg_builtin_receiver_registry_detail(ctx, registry_methods[i].receiver, method_name);
+    }
+    return NULL;
+}
+
+static const char *cg_no_alloc_method_alloc_detail(XiCgenCtx *ctx, const XrType *receiver_type,
                                                    const char *method_name) {
     if (!receiver_type || !method_name)
         return NULL;
+    const char *registry_detail =
+        cg_no_alloc_receiver_registry_alloc_detail(ctx, receiver_type, method_name);
+    if (registry_detail)
+        return registry_detail;
     static const struct {
         XrTypeKind kind;
         const char *class_name;
         const char *method_name;
         const char *detail;
     } allocating_methods[] = {
-        {XR_KIND_ARRAY, NULL, "push", "Array.push"},
-        {XR_KIND_ARRAY, NULL, "reserve", "Array.reserve"},
-        {XR_KIND_ARRAY, NULL, "resize", "Array.resize"},
-        {XR_KIND_ARRAY, NULL, "unshift", "Array.unshift"},
-        {XR_KIND_ARRAY, NULL, "concat", "Array.concat"},
-        {XR_KIND_ARRAY, NULL, "join", "Array.join"},
-        {XR_KIND_ARRAY, NULL, "toString", "Array.toString"},
-        {XR_KIND_ARRAY, NULL, "map", "Array.map"},
-        {XR_KIND_ARRAY, NULL, "filter", "Array.filter"},
-        {XR_KIND_ARRAY, NULL, "entries", "Array.entries"},
-        {XR_KIND_ARRAY, NULL, "iterator", "Array.iterator"},
-        {XR_KIND_ARRAY, NULL, "entriesIterator", "Array.entriesIterator"},
-        {XR_KIND_ARRAY, NULL, "appendFrom", "Array<byte>.appendFrom"},
-        {XR_KIND_ARRAY, NULL, "repeatFrom", "Array<byte>.repeatFrom"},
         {XR_KIND_UNKNOWN, "Buffer", "resize", "Buffer.resize"},
         {XR_KIND_MAP, NULL, "set", "Map.set"},
         {XR_KIND_MAP, NULL, "keys", "Map.keys"},
@@ -4356,7 +4437,7 @@ static bool cg_no_alloc_value_is_null(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_NULL;
 }
 
-static const char *cg_no_alloc_method_call_alloc_detail(const XiValue *v) {
+static const char *cg_no_alloc_method_call_alloc_detail(XiCgenCtx *ctx, const XiValue *v) {
     if (!v || !v->aux || v->nargs < 1)
         return NULL;
     const char *method = (const char *) v->aux;
@@ -4364,7 +4445,7 @@ static const char *cg_no_alloc_method_call_alloc_detail(const XiValue *v) {
     if (receiver_type && receiver_type->kind == XR_KIND_ARRAY && strcmp(method, "sort") == 0 &&
         v->nargs >= 2 && !cg_no_alloc_value_is_null(v->args[1]))
         return "Array.sort";
-    return cg_no_alloc_method_alloc_detail(receiver_type, method);
+    return cg_no_alloc_method_alloc_detail(ctx, receiver_type, method);
 }
 
 static const char *cg_no_alloc_slice_alloc_detail(const XiValue *v) {
@@ -4497,7 +4578,7 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
     }
 
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
-        const char *detail = cg_no_alloc_method_call_alloc_detail(v);
+        const char *detail = cg_no_alloc_method_call_alloc_detail(ctx, v);
         if (detail) {
             if (kind_out)
                 *kind_out = "method";

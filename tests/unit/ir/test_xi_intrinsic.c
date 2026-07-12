@@ -42,10 +42,11 @@ static const char *g_method_sym_display_names[] = {
 
 static const char *g_builtin_receiver_method_names[] = {
 #define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
-                           type_params, effect, lowering)                                          \
+                           type_params, effect, allocation, unsafe_requirement, lowering)          \
     source_name,
 #define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
-                                    min_params, type_params, effect, lowering)                     \
+                                    min_params, type_params, effect, allocation,                   \
+                                    unsafe_requirement, lowering)                                  \
     source_name,
 #include "../../src/frontend/analyzer/xbuiltin_receiver_method.def"
 #undef XB_RECEIVER_VARIADIC_METHOD
