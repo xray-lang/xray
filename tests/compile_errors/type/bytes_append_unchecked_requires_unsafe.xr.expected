@@ -1,1 +1,1 @@
-Bytes has no member 'appendFromUnchecked'
+Array<byte> has no member 'appendFromUnchecked'

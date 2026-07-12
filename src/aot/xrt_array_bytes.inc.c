@@ -286,131 +286,134 @@ static inline int64_t xrt_endian_arg(XrValue value) {
 static inline int64_t xrt_span_bytes_load_u16_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<uint16>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<uint16>() expects Slice<byte>");
     bool ok = false;
     uint16_t value =
         xr_array_core_bytes_load_u16(span.data, span.length, span.elem_type, off, endian, &ok);
     if (!ok)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.load<uint16>() offset out of bounds");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "Slice<byte>.load<uint16>() offset out of bounds");
     return (int64_t) value;
 }
 
 static inline int64_t xrt_span_bytes_load_u32_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<uint32>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<uint32>() expects Slice<byte>");
     bool ok = false;
     uint32_t value =
         xr_array_core_bytes_load_u32(span.data, span.length, span.elem_type, off, endian, &ok);
     if (!ok)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.load<uint32>() offset out of bounds");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "Slice<byte>.load<uint32>() offset out of bounds");
     return (int64_t) value;
 }
 
 static inline int64_t xrt_span_bytes_load_u64_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<uint64>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<uint64>() expects Slice<byte>");
     bool ok = false;
     uint64_t value =
         xr_array_core_bytes_load_u64(span.data, span.length, span.elem_type, off, endian, &ok);
     if (!ok)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.load<uint64>() offset out of bounds");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "Slice<byte>.load<uint64>() offset out of bounds");
     return (int64_t) value;
 }
 
 static inline double xrt_span_bytes_load_f32_checked_raw(xr_span_t span, int64_t off,
                                                          int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<float32>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<float32>() expects Slice<byte>");
     bool ok = false;
     float value =
         xr_array_core_bytes_load_f32(span.data, span.length, span.elem_type, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.load<float32>() offset out of bounds");
+                        "Slice<byte>.load<float32>() offset out of bounds");
     return (double) value;
 }
 
 static inline double xrt_span_bytes_load_f64_checked_raw(xr_span_t span, int64_t off,
                                                          int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<float64>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<float64>() expects Slice<byte>");
     bool ok = false;
     double value =
         xr_array_core_bytes_load_f64(span.data, span.length, span.elem_type, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.load<float64>() offset out of bounds");
+                        "Slice<byte>.load<float64>() offset out of bounds");
     return value;
 }
 
 static inline void xrt_span_bytes_store_u16_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.store<uint16>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<uint16>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_store_u16(span.data, span.length, span.elem_type, off,
                                        (uint16_t) value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.store<uint16>() offset out of bounds");
+                        "Slice<byte>.store<uint16>() offset out of bounds");
 }
 
 static inline void xrt_span_bytes_store_u32_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.store<uint32>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<uint32>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_store_u32(span.data, span.length, span.elem_type, off,
                                        (uint32_t) value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.store<uint32>() offset out of bounds");
+                        "Slice<byte>.store<uint32>() offset out of bounds");
 }
 
 static inline void xrt_span_bytes_store_u64_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.store<uint64>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<uint64>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_store_u64(span.data, span.length, span.elem_type, off,
                                        (uint64_t) value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.store<uint64>() offset out of bounds");
+                        "Slice<byte>.store<uint64>() offset out of bounds");
 }
 
 static inline void xrt_span_bytes_store_f32_checked_raw(xr_span_t span, int64_t off, double value,
                                                         int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.store<float32>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<float32>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_store_f32(span.data, span.length, span.elem_type, off, (float) value,
                                        endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.store<float32>() offset out of bounds");
+                        "Slice<byte>.store<float32>() offset out of bounds");
 }
 
 static inline void xrt_span_bytes_store_f64_checked_raw(xr_span_t span, int64_t off, double value,
                                                         int64_t endian) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.store<float64>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<float64>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_store_f64(span.data, span.length, span.elem_type, off, value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.store<float64>() offset out of bounds");
+                        "Slice<byte>.store<float64>() offset out of bounds");
 }
 
 static inline xr_span_t xrt_span_bytes_fill_checked_raw(xr_span_t span, int64_t value) {
     if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.fill(value) expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.fill(value) expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (span.length > 0 && !span.data)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.fill(value) range out of bounds");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.fill(value) range out of bounds");
     if (span.length > 0)
         memset(span.data, (uint8_t) value, (size_t) span.length);
     return span;
@@ -418,27 +421,32 @@ static inline xr_span_t xrt_span_bytes_fill_checked_raw(xr_span_t span, int64_t 
 
 static inline xr_span_t xrt_span_bytes_copy_checked_raw(xr_span_t dst, xr_span_t src) {
     if (dst.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.copyFrom(src) receiver must be ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice<byte>.copyFrom(src) receiver must be Slice<byte>");
     if (src.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.copyFrom(src) source must be ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice<byte>.copyFrom(src) source must be Slice<byte>");
     if (xrt_span_is_readonly(dst))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_copy_from(dst.data, dst.length, dst.elem_type, src.data, src.length,
                                        src.elem_type, 0, 0, src.length, false))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.copyFrom(src) range out of bounds");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "Slice<byte>.copyFrom(src) range out of bounds");
     return dst;
 }
 
 static inline int64_t xrt_span_bytes_compare_checked_raw(xr_span_t left, xr_span_t right) {
     if (left.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) receiver must be ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice<byte>.compare(other) receiver must be Slice<byte>");
     if (right.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) operand must be ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice<byte>.compare(other) operand must be Slice<byte>");
     int64_t n = left.length < right.length ? left.length : right.length;
     int cmp = 0;
     if (n > 0) {
         if (!left.data || !right.data)
-            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) span has no data");
+            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.compare(other) span has no data");
         cmp = memcmp(left.data, right.data, (size_t) n);
     }
     if (cmp < 0)
@@ -455,15 +463,15 @@ static inline int64_t xrt_span_bytes_compare_checked_raw(xr_span_t left, xr_span
 static inline int64_t xrt_span_bytes_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
     if (left.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.commonPrefix(other) receiver must be ByteSpan");
+                        "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>");
     if (right.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.commonPrefix(other) operand must be ByteSpan");
+                        "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
     bool ok = false;
     int64_t prefix = xr_array_core_bytes_common_prefix(
         left.data, left.length, left.elem_type, right.data, right.length, right.elem_type, &ok);
     if (!ok)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefix(other) span has no data");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.commonPrefix(other) span has no data");
     return prefix;
 }
 
@@ -471,13 +479,13 @@ static inline xr_span_t xrt_span_bytes_repeat_from_checked_raw(xr_span_t span, i
                                                                int64_t distance, int64_t count) {
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.repeatFrom(dstOffset, distance, count) expects ByteSpan");
+                        "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
     if (xrt_span_is_readonly(span))
         xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     if (!xr_array_core_bytes_repeat_from(span.data, span.length, span.elem_type, dst_offset,
                                          distance, count))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds");
+                        "Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds");
     return span;
 }
 
@@ -501,8 +509,9 @@ static inline xr_span_t xrt_byte_span_from_value(XrValue recv, const char *messa
 static inline XrValue xrt_span_bytes_load_u16_value(XrValue recv, XrValue off_value,
                                                     XrValue endian_value) {
     if (!XR_IS_INT(off_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.load<uint16>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.load<uint16>() expects Slice<byte>");
     int64_t value = xrt_span_bytes_load_u16_checked_raw(span, XR_TO_INT(off_value),
                                                         xrt_endian_arg(endian_value));
     return XR_FROM_INT(value);
@@ -511,8 +520,9 @@ static inline XrValue xrt_span_bytes_load_u16_value(XrValue recv, XrValue off_va
 static inline XrValue xrt_span_bytes_load_u32_value(XrValue recv, XrValue off_value,
                                                     XrValue endian_value) {
     if (!XR_IS_INT(off_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.load<uint32>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.load<uint32>() expects Slice<byte>");
     int64_t value = xrt_span_bytes_load_u32_checked_raw(span, XR_TO_INT(off_value),
                                                         xrt_endian_arg(endian_value));
     return XR_FROM_INT(value);
@@ -521,8 +531,9 @@ static inline XrValue xrt_span_bytes_load_u32_value(XrValue recv, XrValue off_va
 static inline XrValue xrt_span_bytes_load_u64_value(XrValue recv, XrValue off_value,
                                                     XrValue endian_value) {
     if (!XR_IS_INT(off_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.load<uint64>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.load<uint64>() expects Slice<byte>");
     int64_t value = xrt_span_bytes_load_u64_checked_raw(span, XR_TO_INT(off_value),
                                                         xrt_endian_arg(endian_value));
     return XR_FROM_INT(value);
@@ -531,8 +542,9 @@ static inline XrValue xrt_span_bytes_load_u64_value(XrValue recv, XrValue off_va
 static inline XrValue xrt_span_bytes_load_f32_value(XrValue recv, XrValue off_value,
                                                     XrValue endian_value) {
     if (!XR_IS_INT(off_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.load<float32>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.load<float32>() expects Slice<byte>");
     double value = xrt_span_bytes_load_f32_checked_raw(span, XR_TO_INT(off_value),
                                                        xrt_endian_arg(endian_value));
     return XR_FROM_FLOAT(value);
@@ -541,8 +553,9 @@ static inline XrValue xrt_span_bytes_load_f32_value(XrValue recv, XrValue off_va
 static inline XrValue xrt_span_bytes_load_f64_value(XrValue recv, XrValue off_value,
                                                     XrValue endian_value) {
     if (!XR_IS_INT(off_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.load<float64>() expects ByteSpan");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.load<float64>() expects Slice<byte>");
     double value = xrt_span_bytes_load_f64_checked_raw(span, XR_TO_INT(off_value),
                                                        xrt_endian_arg(endian_value));
     return XR_FROM_FLOAT(value);
@@ -552,8 +565,9 @@ static inline void xrt_span_bytes_store_u16_value(XrValue recv, XrValue off_valu
                                                   XrValue endian_value) {
     if (!XR_IS_INT(off_value) || !XR_IS_INT(value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.store<T>() expects integer offset and value");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.store<uint16>() expects ByteSpan");
+                        "Slice<byte>.store<T>() expects integer offset and value");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.store<uint16>() expects Slice<byte>");
     xrt_span_bytes_store_u16_checked_raw(span, XR_TO_INT(off_value), XR_TO_INT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -562,8 +576,9 @@ static inline void xrt_span_bytes_store_u32_value(XrValue recv, XrValue off_valu
                                                   XrValue endian_value) {
     if (!XR_IS_INT(off_value) || !XR_IS_INT(value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.store<T>() expects integer offset and value");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.store<uint32>() expects ByteSpan");
+                        "Slice<byte>.store<T>() expects integer offset and value");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.store<uint32>() expects Slice<byte>");
     xrt_span_bytes_store_u32_checked_raw(span, XR_TO_INT(off_value), XR_TO_INT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -572,8 +587,9 @@ static inline void xrt_span_bytes_store_u64_value(XrValue recv, XrValue off_valu
                                                   XrValue endian_value) {
     if (!XR_IS_INT(off_value) || !XR_IS_INT(value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.store<T>() expects integer offset and value");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.store<uint64>() expects ByteSpan");
+                        "Slice<byte>.store<T>() expects integer offset and value");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.store<uint64>() expects Slice<byte>");
     xrt_span_bytes_store_u64_checked_raw(span, XR_TO_INT(off_value), XR_TO_INT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -582,8 +598,9 @@ static inline void xrt_span_bytes_store_f32_value(XrValue recv, XrValue off_valu
                                                   XrValue endian_value) {
     if (!XR_IS_INT(off_value) || !XR_IS_FLOAT(value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.store<T>() expects integer offset and float value");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.store<float32>() expects ByteSpan");
+                        "Slice<byte>.store<T>() expects integer offset and float value");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.store<float32>() expects Slice<byte>");
     xrt_span_bytes_store_f32_checked_raw(span, XR_TO_INT(off_value), XR_TO_FLOAT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -592,8 +609,9 @@ static inline void xrt_span_bytes_store_f64_value(XrValue recv, XrValue off_valu
                                                   XrValue endian_value) {
     if (!XR_IS_INT(off_value) || !XR_IS_FLOAT(value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.store<T>() expects integer offset and float value");
-    xr_span_t span = xrt_byte_span_from_value(recv, "ByteSpan.store<float64>() expects ByteSpan");
+                        "Slice<byte>.store<T>() expects integer offset and float value");
+    xr_span_t span =
+        xrt_byte_span_from_value(recv, "Slice<byte>.store<float64>() expects Slice<byte>");
     xrt_span_bytes_store_f64_checked_raw(span, XR_TO_INT(off_value), XR_TO_FLOAT(value),
                                          xrt_endian_arg(endian_value));
 }

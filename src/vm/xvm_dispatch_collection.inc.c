@@ -928,7 +928,7 @@ vmcase(OP_ARRAY_SETC) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Bytes, typed array support constant index assignment");
+                     "only Array, typed array support constant index assignment");
 }
 
 vmcase(OP_ARRAY_PUSH) {
@@ -1123,7 +1123,7 @@ vmcase(OP_SPAN_AS_BYTES) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.asBytes() missing Span frame slot");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.asArray<byte>() missing Span frame slot");
     }
     void *data = NULL;
     int64_t length = 0;
@@ -1134,14 +1134,15 @@ vmcase(OP_SPAN_AS_BYTES) {
     uint32_t reserved = 0;
     void *guard = NULL;
     VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
-                 "Span.asBytes() expects Span");
+                 "Span.asArray<byte>() expects Span");
     (void) elem_tid;
     (void) contains_refs;
     if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.asBytes() requires POD Span element type");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Span.asArray<byte>() requires POD Span element type");
     }
     if (length < 0 || (elem_size > 0 && length > INT64_MAX / (int64_t) elem_size)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.asBytes() byte length overflow");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.asArray<byte>() byte length overflow");
     }
     XrSpanView *span = VM_SPAN_SLOT(R(c));
     span->data = data;
@@ -1325,7 +1326,7 @@ vmcase(OP_SPAN_REINTERPRET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) || !XR_IS_INT(R(c + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.reinterpret<T>() missing metadata");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.reinterpret<T>() missing metadata");
     }
     uint8_t target_elem_type = (uint8_t) XR_TO_INT(R(c + 1));
     uint8_t target_elem_size = (uint8_t) XR_TO_INT(R(c + 2));
@@ -1333,11 +1334,11 @@ vmcase(OP_SPAN_REINTERPRET) {
     if (target_elem_type == XR_ELEM_ANY || target_elem_type >= XR_ELEM_COUNT ||
         target_elem_size == 0) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "ByteSpan.reinterpret<T>() requires POD target type");
+                         "Slice<byte>.reinterpret<T>() requires POD target type");
     }
     if (XR_ELEM_SIZES[target_elem_type] != target_elem_size) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "ByteSpan.reinterpret<T>() target metadata mismatch");
+                         "Slice<byte>.reinterpret<T>() target metadata mismatch");
     }
     void *data = NULL;
     int64_t length = 0;
@@ -1348,20 +1349,20 @@ vmcase(OP_SPAN_REINTERPRET) {
     uint32_t reserved = 0;
     void *guard = NULL;
     VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
-                 "ByteSpan.reinterpret<T>() expects ByteSpan");
+                 "Slice<byte>.reinterpret<T>() expects Slice<byte>");
     (void) elem_tid;
     (void) contains_refs;
     if (elem_type != XR_ELEM_U8 || elem_size != 1) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "ByteSpan.reinterpret<T>() expects ByteSpan receiver");
+                         "Slice<byte>.reinterpret<T>() expects Slice<byte> receiver");
     }
     if (length < 0) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "ByteSpan.reinterpret<T>() byte length overflow");
+                         "Slice<byte>.reinterpret<T>() byte length overflow");
     }
     if (length % (int64_t) target_elem_size != 0) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "ByteSpan.reinterpret<T>() length is not divisible by target size");
+                         "Slice<byte>.reinterpret<T>() length is not divisible by target size");
     }
     XrSpanView *span = VM_SPAN_SLOT(R(c));
     span->data = data;
@@ -1423,7 +1424,7 @@ vmcase(OP_ARRAY_RESIZE) {
             XrEnumAggregateValue *_endian_enum = xr_value_to_enum_aggregate(_endian_value);        \
             (out_endian) = (int64_t) _endian_enum->member_index;                                   \
         } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan load/store expects Endian");          \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte> load/store expects Endian");       \
         }                                                                                          \
         if ((out_endian) < XR_ENDIAN_NATIVE || (out_endian) > XR_ENDIAN_BE) {                      \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid Endian value");                        \
@@ -1436,7 +1437,8 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _recv = R(a + 1);                                                                  \
         XrValue _offset = R(a + 2);                                                                \
         if (!XR_IS_INT(_offset)) {                                                                 \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "Slice<byte>.load<T>() expects integer offset");                      \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
@@ -1447,7 +1449,7 @@ vmcase(OP_ARRAY_RESIZE) {
             XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
             if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
             }                                                                                      \
             _data = _span->data;                                                                   \
             _length = _span->length;                                                               \
@@ -1456,21 +1458,21 @@ vmcase(OP_ARRAY_RESIZE) {
             XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
             if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
             }                                                                                      \
             _data = _arr->data;                                                                    \
             _length = _arr->length;                                                                \
             _elem_type = _arr->elem_type;                                                          \
         } else {                                                                                   \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "ByteSpan.load<" width_name ">() expects ByteSpan");                  \
+                             "Slice<byte>.load<" width_name ">() expects Slice<byte>");            \
         }                                                                                          \
         bool _ok = false;                                                                          \
         uint64_t _value =                                                                          \
             (uint64_t) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);     \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "ByteSpan.load<" width_name ">() offset out of bounds");              \
+                             "Slice<byte>.load<" width_name ">() offset out of bounds");           \
         }                                                                                          \
         R(a) = xr_int((xr_Integer) _value);                                                        \
         vmbreak;                                                                                   \
@@ -1484,7 +1486,7 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _value = R(a + 3);                                                                 \
         if (!XR_IS_INT(_offset) || !XR_IS_INT(_value)) {                                           \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "ByteSpan.store<T>() expects integer offset and value");              \
+                             "Slice<byte>.store<T>() expects integer offset and value");           \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
@@ -1495,7 +1497,7 @@ vmcase(OP_ARRAY_RESIZE) {
             XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
             if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
             }                                                                                      \
             if ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                  \
                 VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");   \
@@ -1507,20 +1509,20 @@ vmcase(OP_ARRAY_RESIZE) {
             XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
             if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
             }                                                                                      \
             _data = _arr->data;                                                                    \
             _length = _arr->length;                                                                \
             _elem_type = _arr->elem_type;                                                          \
         } else {                                                                                   \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "ByteSpan.store<" width_name ">() expects ByteSpan");                 \
+                             "Slice<byte>.store<" width_name ">() expects Slice<byte>");           \
         }                                                                                          \
         bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
                             (value_type) XR_TO_INT(_value), _endian);                              \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "ByteSpan.store<" width_name ">() offset out of bounds");             \
+                             "Slice<byte>.store<" width_name ">() offset out of bounds");          \
         }                                                                                          \
         R(a) = xr_null();                                                                          \
         vmbreak;                                                                                   \
@@ -1532,7 +1534,8 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _recv = R(a + 1);                                                                  \
         XrValue _offset = R(a + 2);                                                                \
         if (!XR_IS_INT(_offset)) {                                                                 \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "Slice<byte>.load<T>() expects integer offset");                      \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
@@ -1543,7 +1546,7 @@ vmcase(OP_ARRAY_RESIZE) {
             XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
             if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
             }                                                                                      \
             _data = _span->data;                                                                   \
             _length = _span->length;                                                               \
@@ -1552,21 +1555,21 @@ vmcase(OP_ARRAY_RESIZE) {
             XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
             if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
             }                                                                                      \
             _data = _arr->data;                                                                    \
             _length = _arr->length;                                                                \
             _elem_type = _arr->elem_type;                                                          \
         } else {                                                                                   \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "ByteSpan.load<" width_name ">() expects ByteSpan");                  \
+                             "Slice<byte>.load<" width_name ">() expects Slice<byte>");            \
         }                                                                                          \
         bool _ok = false;                                                                          \
         double _value =                                                                            \
             (double) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);       \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "ByteSpan.load<" width_name ">() offset out of bounds");              \
+                             "Slice<byte>.load<" width_name ">() offset out of bounds");           \
         }                                                                                          \
         R(a) = xr_float(_value);                                                                   \
         vmbreak;                                                                                   \
@@ -1580,7 +1583,7 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _value = R(a + 3);                                                                 \
         if (!XR_IS_INT(_offset) || !XR_IS_FLOAT(_value)) {                                         \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "ByteSpan.store<T>() expects integer offset and float value");        \
+                             "Slice<byte>.store<T>() expects integer offset and float value");     \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
@@ -1591,7 +1594,7 @@ vmcase(OP_ARRAY_RESIZE) {
             XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
             if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
             }                                                                                      \
             if ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                  \
                 VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");   \
@@ -1603,20 +1606,20 @@ vmcase(OP_ARRAY_RESIZE) {
             XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
             if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
             }                                                                                      \
             _data = _arr->data;                                                                    \
             _length = _arr->length;                                                                \
             _elem_type = _arr->elem_type;                                                          \
         } else {                                                                                   \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "ByteSpan.store<" width_name ">() expects ByteSpan");                 \
+                             "Slice<byte>.store<" width_name ">() expects Slice<byte>");           \
         }                                                                                          \
         bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
                             (value_type) XR_TO_FLOAT(_value), _endian);                            \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "ByteSpan.store<" width_name ">() offset out of bounds");             \
+                             "Slice<byte>.store<" width_name ">() offset out of bounds");          \
         }                                                                                          \
         R(a) = xr_null();                                                                          \
         vmbreak;                                                                                   \
@@ -1669,15 +1672,16 @@ vmcase(OP_BYTES_SPAN_FILL) {
     int64_t dst_length = 0;
     bool dst_readonly = false;
     VM_BYTESPAN_VIEW(R(a), dst_data, dst_length, dst_readonly,
-                     "ByteSpan.fill(value) expects ByteSpan");
+                     "Slice<byte>.fill(value) expects Slice<byte>");
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     }
     if (!XR_IS_INT(R(a + 1))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.fill(value) expects integer byte value");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Slice<byte>.fill(value) expects integer byte value");
     }
     if (!xr_array_core_bytes_fill_value(dst_data, dst_length, R(a + 1))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.fill(value) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.fill(value) range out of bounds");
     }
     vmbreak;
 }
@@ -1691,16 +1695,17 @@ vmcase(OP_BYTES_SPAN_COPY) {
     bool dst_readonly = false;
     bool src_readonly = false;
     VM_BYTESPAN_VIEW(R(a), dst_data, dst_length, dst_readonly,
-                     "ByteSpan.copyFrom(src) receiver must be ByteSpan");
+                     "Slice<byte>.copyFrom(src) receiver must be Slice<byte>");
     VM_BYTESPAN_VIEW(R(a + 1), src_data, src_length, src_readonly,
-                     "ByteSpan.copyFrom(src) source must be ByteSpan");
+                     "Slice<byte>.copyFrom(src) source must be Slice<byte>");
     (void) src_readonly;
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     }
     if (!xr_array_core_bytes_copy_from(dst_data, dst_length, XR_ELEM_U8, src_data, src_length,
                                        XR_ELEM_U8, 0, 0, src_length, false)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.copyFrom(src) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "Slice<byte>.copyFrom(src) range out of bounds");
     }
     vmbreak;
 }
@@ -1714,16 +1719,16 @@ vmcase(OP_BYTES_SPAN_COMPARE) {
     bool left_readonly = false;
     bool right_readonly = false;
     VM_BYTESPAN_VIEW(R(a), left_data, left_length, left_readonly,
-                     "ByteSpan.compare(other) receiver must be ByteSpan");
+                     "Slice<byte>.compare(other) receiver must be Slice<byte>");
     VM_BYTESPAN_VIEW(R(a + 1), right_data, right_length, right_readonly,
-                     "ByteSpan.compare(other) operand must be ByteSpan");
+                     "Slice<byte>.compare(other) operand must be Slice<byte>");
     (void) left_readonly;
     (void) right_readonly;
     int64_t n = left_length < right_length ? left_length : right_length;
     int cmp = 0;
     if (n > 0) {
         if (!left_data || !right_data) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) span has no data");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.compare(other) span has no data");
         }
         cmp = memcmp(left_data, right_data, (size_t) n);
     }
@@ -1748,16 +1753,16 @@ vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
     bool left_readonly = false;
     bool right_readonly = false;
     VM_BYTESPAN_VIEW(R(a), left_data, left_length, left_readonly,
-                     "ByteSpan.commonPrefix(other) receiver must be ByteSpan");
+                     "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>");
     VM_BYTESPAN_VIEW(R(a + 1), right_data, right_length, right_readonly,
-                     "ByteSpan.commonPrefix(other) operand must be ByteSpan");
+                     "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
     (void) left_readonly;
     (void) right_readonly;
     bool ok = false;
     int64_t prefix = xr_array_core_bytes_common_prefix(left_data, left_length, XR_ELEM_U8,
                                                        right_data, right_length, XR_ELEM_U8, &ok);
     if (!ok) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefix(other) span has no data");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.commonPrefix(other) span has no data");
     }
     R(a) = xr_int(prefix);
     vmbreak;
@@ -1769,18 +1774,18 @@ vmcase(OP_BYTES_SPAN_REPEAT) {
     int64_t length = 0;
     bool readonly = false;
     VM_BYTESPAN_VIEW(R(a), data, length, readonly,
-                     "ByteSpan.repeatFrom(dstOffset, distance, count) expects ByteSpan");
+                     "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
     if (readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
     }
     if (!XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) || !XR_IS_INT(R(a + 3))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "ByteSpan.repeatFrom(dstOffset, distance, count) expects integers");
+                         "Slice<byte>.repeatFrom(dstOffset, distance, count) expects integers");
     }
     if (!xr_array_core_bytes_repeat_from(data, length, XR_ELEM_U8, XR_TO_INT(R(a + 1)),
                                          XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds");
+                         "Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds");
     }
     vmbreak;
 }
@@ -1819,14 +1824,14 @@ vmcase(OP_BYTES_COPY_WITHIN) {
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Bytes.copyWithin expects integer offsets and count");
+                         "Slice<byte>.copyFrom expects integer offsets and count");
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyWithin receiver must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.copyFrom receiver must be Array<byte>");
     if (!xr_array_bytes_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
                                     (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyWithin range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.copyFrom range out of bounds");
     }
     vmbreak;
 }
@@ -1835,15 +1840,16 @@ vmcase(OP_BYTES_COPY_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom expects Bytes and integer ranges");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Slice<byte>.copyFrom expects Slice<byte> and integer ranges");
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom operands must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.copyFrom operands must be Slice<byte>");
     if (!xr_array_bytes_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
                                   (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyFrom range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.copyFrom range out of bounds");
     }
     vmbreak;
 }
@@ -1853,14 +1859,15 @@ vmcase(OP_BYTES_REPEAT_FROM) {
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Bytes.repeatFrom expects integer offsets and count");
+                         "Array<byte>.repeatFrom expects integer offsets and count");
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.repeatFrom receiver must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Array<byte>.repeatFrom receiver must be Array<byte>");
     if (!xr_array_bytes_repeat_from(arr, (int32_t) XR_TO_INT(R(a + 1)),
                                     (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.repeatFrom range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Array<byte>.repeatFrom range out of bounds");
     }
     vmbreak;
 }
@@ -2250,7 +2257,7 @@ vmcase(OP_INDEX_GET) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Map, Json, String, Bytes, typed array support indexing");
+                     "only Array, Map, Json, String, typed array support indexing");
 }
 
 vmcase(OP_INDEX_SET) {
@@ -2402,7 +2409,7 @@ vmcase(OP_INDEX_SET) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Map, Json, Bytes, typed array support index assignment");
+                     "only Array, Map, Json, typed array support index assignment");
 }
 
 vmcase(OP_SLICE) {

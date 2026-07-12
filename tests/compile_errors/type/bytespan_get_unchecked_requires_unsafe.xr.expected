@@ -1,1 +1,1 @@
-ByteSpan.get() must be inside an unsafe block
+Slice<byte>.get() must be inside an unsafe block

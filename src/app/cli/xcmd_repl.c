@@ -85,7 +85,7 @@ static const char *const k_repl_keywords[] = {
     "super",     "extends",     "implements",   "static",    "private",
     "final",     "operator",    "void",         "int",       "float",
     "string",    "bool",        "Array",        "Map",       "Set",
-    "Json",      "Channel",     "Bytes",        "BigInt",    "StringBuilder",
+    "Json",      "Channel",     "Array<byte>",  "BigInt",    "StringBuilder",
     "PanicInfo", "Regex",       "print",        "dump",      "typeof",
     "assert",    "assert_true", "assert_false", "assert_eq", "assert_ne",
     "copy",      "chr",         "Coro",         "CoroPool",  NULL,
@@ -291,7 +291,7 @@ static void print_help_types(ReplState *state) {
     printf("  Map         #{\"a\": 1, \"b\": 2}\n");
     printf("  Set         #[1, 2, 3]\n");
     printf("  Json        {name: \"xray\", version: 1}\n");
-    printf("  Bytes       Bytes(1024)\n");
+    printf("  Array<byte> Array<byte>(1024, 0)\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Annotations:\n");
     printf("  var x: int = 1\n");

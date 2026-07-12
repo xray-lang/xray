@@ -21,9 +21,9 @@
 #define XR_ERROR_CORE_DIVISION_BY_ZERO_MSG "division by zero"
 #define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
 #define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
-#define XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG "Bytes(n): n must be integer or array"
+#define XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG "Array<byte>(length, fill) expects integers"
 #define XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG                                           \
-    "Bytes(n, value): both args must be integers"
+    "Array<byte>(length, fill): both args must be integers"
 #define XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG "slice bounds must be integers"
 #define XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG "Array capacity must be an integer"
 #define XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG "Array.reserve(capacity) expects an integer"
@@ -31,30 +31,41 @@
 #define XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG "Array.resize(length, fill) expects integer length"
 #define XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG "Array.resize failed"
 #define XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG "cannot push to array slice"
-#define XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG "Bytes.loadU16LE(offset) expects Bytes and integer"
-#define XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG "Bytes.loadU16LE receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG "Bytes.loadU16LE offset out of bounds"
-#define XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG "Bytes.loadU32LE(offset) expects Bytes and integer"
-#define XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG "Bytes.loadU32LE receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG "Bytes.loadU32LE offset out of bounds"
-#define XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG "Bytes.loadU64LE(offset) expects Bytes and integer"
-#define XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG "Bytes.loadU64LE receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG "Bytes.loadU64LE offset out of bounds"
+#define XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG                                                   \
+    "Slice<byte>.load<uint16>(offset) expects Slice<byte> and integer"
+#define XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG                                                  \
+    "Slice<byte>.load<uint16>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG "Slice<byte>.load<uint16>() offset out of bounds"
+#define XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG                                                   \
+    "Slice<byte>.load<uint32>(offset) expects Slice<byte> and integer"
+#define XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG                                                  \
+    "Slice<byte>.load<uint32>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG "Slice<byte>.load<uint32>() offset out of bounds"
+#define XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG                                                   \
+    "Slice<byte>.load<uint64>(offset) expects Slice<byte> and integer"
+#define XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG                                                  \
+    "Slice<byte>.load<uint64>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG "Slice<byte>.load<uint64>() offset out of bounds"
 #define XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG                                                \
-    "Bytes.copyWithin expects integer offsets and count"
-#define XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG "Bytes.copyWithin receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG "Bytes.copyWithin range out of bounds"
-#define XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG "Bytes.copyFrom expects Bytes and integer ranges"
-#define XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG "Bytes.copyFrom operands must be Bytes"
-#define XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG "Bytes.copyFrom range out of bounds"
-#define XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG "Bytes.appendFrom(src) expects ByteSpan"
+    "Slice<byte>.copyFrom expects integer offsets and count"
+#define XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG                                               \
+    "Slice<byte>.copyFrom receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG "Slice<byte>.copyFrom range out of bounds"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG                                                  \
+    "Slice<byte>.copyFrom expects Slice<byte> and integer ranges"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG                                                 \
+    "Slice<byte>.copyFrom operands must be Slice<byte>"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG "Slice<byte>.copyFrom range out of bounds"
+#define XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG                                                \
+    "Array<byte>.appendFrom(src) expects Slice<byte>"
 #define XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG                                               \
-    "Bytes.appendFrom receiver/source must use byte storage"
-#define XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG "Bytes.appendFrom range/grow failed"
+    "Array<byte>.appendFrom receiver/source must use byte storage"
+#define XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG "Array<byte>.appendFrom range/grow failed"
 #define XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG                                                \
-    "Bytes.repeatFrom(distance, count) expects integers"
-#define XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG "Bytes.repeatFrom receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG "Bytes.repeatFrom range/grow failed"
+    "Array<byte>.repeatFrom(distance, count) expects integers"
+#define XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG                                               \
+    "Array<byte>.repeatFrom receiver must be Array<byte>"
+#define XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG "Array<byte>.repeatFrom range/grow failed"
 #define XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG "Range.toArray range too large"
 
 typedef struct XrErrorCoreMessageView {

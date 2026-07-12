@@ -85,7 +85,7 @@ vmcase(OP_DEFER_RUN_TO) {
 }
 
 vmcase(OP_BYTES_NEW) {
-    /* R[A] = Bytes(R[A+1..A+B]) - create Array<uint8>
+    /* R[A] = Array<byte>(R[A+1..A+B]) - create Array<uint8>
      * A = result register
      * B = argument count
      * C = storage_mode (0=normal, 1=shared)
@@ -124,12 +124,12 @@ vmcase(OP_BYTES_NEW) {
         fill_value = arg2;
         has_fill = true;
     } else {
-        VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "Bytes() requires 0, 1 or 2 arguments");
+        VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "Array<byte>() requires 0, 1 or 2 arguments");
     }
 
     XrArray *arr = NULL;
     if (len > INT32_MAX) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Bytes length exceeds VM allocation limit");
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array<byte> length exceeds VM allocation limit");
     }
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // Shared: allocate on system heap

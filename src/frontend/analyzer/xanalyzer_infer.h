@@ -122,7 +122,7 @@ typedef struct XaInferContext {
     // thread domain, so ThreadLocal usage is intentional there.
     int os_thread_body_depth;
 
-    // Active local Span/ByteSpan views keyed by the owning mutable container.
+    // Active local Span/Slice<byte> views keyed by the owning mutable container.
     // Used to reject owner grow/free mutations while borrowed views are live.
     XaActiveSpanBorrow *active_span_borrows;
 

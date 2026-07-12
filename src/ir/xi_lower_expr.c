@@ -2990,7 +2990,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return v;
     }
-    /* Bytes(n) / Bytes(n, fill) → XI_CALL_BUILTIN with aux_int encoding
+    /* Array<byte>(n) / Array<byte>(n, fill) → XI_CALL_BUILTIN with aux_int encoding
      * the opcode OP_BYTES_NEW so the emitter produces the right instruction. */
     if (strcmp(fname, "array_byte_new") == 0 && call->arg_count >= 1 && call->arg_count <= 2) {
         /* Evaluate arguments BEFORE creating CALL_BUILTIN to ensure
@@ -4334,7 +4334,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return NULL;
             struct XrType *result_type = xi_lower_node_type(l, node);
             if (!result_type && strcmp(ma->object->as.variable.name, "array_byte_new") == 0)
-                result_type = xr_type_new_bytes(NULL);
+                result_type = xr_type_new_u8_array(NULL);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 1);
             if (!v)
                 return NULL;
@@ -4527,7 +4527,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             strcmp(ma->name, "bytes") == 0 && n == 0) {
             struct XrType *bytespan_type = result_type;
             if (!bytespan_type || xi_lower_type_is_unknown(bytespan_type))
-                bytespan_type = xr_type_new_bytespan(l->isolate);
+                bytespan_type = xr_type_new_u8_slice(l->isolate);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, bytespan_type, 1);
             if (!v)
                 return NULL;
@@ -6675,7 +6675,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
         /* Exception: no special handling needed — it is a regular class with a
          * primitive constructor registered in core->panicInfoClass. Falls through
          * to the generic class-instantiation path below. */
-        /* new Bytes() / new Bytes(n) / new Bytes(n, fill) */
+        /* new Array<byte>() / new Array<byte>(n) / new Array<byte>(n, fill) */
         if (strcmp(cname, "array_byte_new") == 0 && arg_count <= 2) {
             int n = (int) arg_count;
             XiValue *arg_vals[2];

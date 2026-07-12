@@ -1642,7 +1642,7 @@ static XrType *xa_bytespan_reinterpret_return_type(XaInferContext *ctx, AstNode 
         .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
     if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
-                                   "ByteSpan.reinterpret<T>() expects exactly one type argument",
+                                   "Slice<byte>.reinterpret<T>() expects exactly one type argument",
                                    &loc);
         return xr_type_new_unknown(NULL);
     }
@@ -1650,7 +1650,7 @@ static XrType *xa_bytespan_reinterpret_return_type(XaInferContext *ctx, AstNode 
     if (!xa_type_is_pod_span_elem(target)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                                   "ByteSpan.reinterpret<T>() requires POD T", &loc);
+                                   "Slice<byte>.reinterpret<T>() requires POD T", &loc);
         return xr_type_new_unknown(NULL);
     }
     return xr_type_new_span(ctx->analyzer->isolate, target);
@@ -2126,7 +2126,7 @@ static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) 
     XrType *result = NULL;
     if (XR_TYPE_IS_SPAN(arg_type) || XR_TYPE_IS_VIEW(arg_type)) {
         if (xa_type_is_bytes_like_view_or_owner(arg_type)) {
-            result = xr_type_new_bytes(ctx->analyzer->isolate);
+            result = xr_type_new_u8_array(ctx->analyzer->isolate);
         } else {
             XrType *elem = arg_type->container.element_type ? arg_type->container.element_type
                                                             : xr_type_new_unknown(NULL);
@@ -2962,7 +2962,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 operand->as.call_expr.callee->as.member_access.name &&
                 strcmp(operand->as.call_expr.callee->as.member_access.name, "bytes") == 0;
             ctx->expected_type =
-                is_string_bytes ? xr_type_new_bytespan(ctx->analyzer->isolate)
+                is_string_bytes ? xr_type_new_u8_slice(ctx->analyzer->isolate)
                                 : xr_type_new_span(ctx->analyzer->isolate,
                                                    xr_type_new_unknown(ctx->analyzer->isolate));
             ctx->allow_view_expr_for_copy = true;
@@ -3997,10 +3997,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     if (xa_call_is_bytespan_typed_load(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "ByteSpan.load<T>()", true);
+        return_type = xa_load_le_return_type(ctx, node, call, "Slice<byte>.load<T>()", true);
 
     if (xa_call_is_bytespan_typed_store(call, callee_obj_type)) {
-        (void) xa_bytes_typed_type_arg(ctx, node, call, "ByteSpan.store<T>()", true);
+        (void) xa_bytes_typed_type_arg(ctx, node, call, "Slice<byte>.store<T>()", true);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 

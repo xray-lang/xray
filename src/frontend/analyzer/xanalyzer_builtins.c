@@ -988,9 +988,6 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                strncmp(s, TYPE_NAME_BUFFER, strlen(TYPE_NAME_BUFFER)) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = TYPE_NAME_BUFFER;
-    } else if (base_len == strlen(TYPE_NAME_BYTESPAN) &&
-               strncmp(s, TYPE_NAME_BYTESPAN, strlen(TYPE_NAME_BYTESPAN)) == 0) {
-        type = xr_type_new_bytespan(X);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
         type = xr_type_new_never(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_NULL, 4) == 0) {

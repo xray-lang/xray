@@ -162,7 +162,7 @@ typedef enum {
     TK_FLOAT32,  // float32
     TK_FLOAT64,  // float64
     // None of the uppercase native type names are lexer keywords any
-    // more. Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+    // more. Array / BigInt / Channel / DateTime / Json / Map /
     // Range / Regex / Set / StringBuilder all reach the parser as plain
     // TK_NAME tokens and resolve through the prelude symbol table — see
     // stdlib/prelude/prelude.h. Channel additionally gets a contextual

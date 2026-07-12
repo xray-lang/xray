@@ -179,33 +179,36 @@
     _(ARRAY_CLEAR, FMT_A, KOP_A_INOUT, "R[A]:Array.clear()")                                       \
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
-    _(BYTES_LOAD_U16, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint16>(R[A+1], R[A+2], R[A+3])")    \
-    _(BYTES_LOAD_U32, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint32>(R[A+1], R[A+2], R[A+3])")    \
-    _(BYTES_LOAD_U64, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint64>(R[A+1], R[A+2], R[A+3])")    \
-    _(BYTES_LOAD_F32, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<float32>(R[A+1], R[A+2], R[A+3])")   \
-    _(BYTES_LOAD_F64, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<float64>(R[A+1], R[A+2], R[A+3])")   \
+    _(BYTES_LOAD_U16, FMT_A, KOP_A_USE, "R[A] = Slice<byte>.load<uint16>(R[A+1], R[A+2], R[A+3])") \
+    _(BYTES_LOAD_U32, FMT_A, KOP_A_USE, "R[A] = Slice<byte>.load<uint32>(R[A+1], R[A+2], R[A+3])") \
+    _(BYTES_LOAD_U64, FMT_A, KOP_A_USE, "R[A] = Slice<byte>.load<uint64>(R[A+1], R[A+2], R[A+3])") \
+    _(BYTES_LOAD_F32, FMT_A, KOP_A_USE,                                                            \
+      "R[A] = Slice<byte>.load<float32>(R[A+1], R[A+2], R[A+3])")                                  \
+    _(BYTES_LOAD_F64, FMT_A, KOP_A_USE,                                                            \
+      "R[A] = Slice<byte>.load<float64>(R[A+1], R[A+2], R[A+3])")                                  \
     _(BYTES_STORE_U16, FMT_A, KOP_A_INOUT,                                                         \
-      "ByteSpan.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
+      "Slice<byte>.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
     _(BYTES_STORE_U32, FMT_A, KOP_A_INOUT,                                                         \
-      "ByteSpan.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
+      "Slice<byte>.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
     _(BYTES_STORE_U64, FMT_A, KOP_A_INOUT,                                                         \
-      "ByteSpan.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
+      "Slice<byte>.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
     _(BYTES_STORE_F32, FMT_A, KOP_A_INOUT,                                                         \
-      "ByteSpan.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
+      "Slice<byte>.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
     _(BYTES_STORE_F64, FMT_A, KOP_A_INOUT,                                                         \
-      "ByteSpan.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
+      "Slice<byte>.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
     _(BYTES_SPAN_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                    \
     _(BYTES_SPAN_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                \
     _(BYTES_SPAN_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                         \
     _(BYTES_SPAN_COMMON_PREFIX, FMT_A, KOP_A_USE, "R[A] = R[A].commonPrefix(R[A+1])")              \
     _(BYTES_SPAN_REPEAT, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
-    _(SPAN_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asBytes(), C=slot")                        \
+    _(SPAN_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<byte>(), C=slot")                  \
     _(SPAN_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                          \
     _(SPAN_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                      \
     _(SPAN_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                               \
     _(SPAN_REINTERPRET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].reinterpret<T>(), C=slot/meta")         \
     _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Span R[B]")          \
-    _(STRING_BYTES_SPAN, FMT_ABC, KOP_ABC_BIN, "R[A] = borrowed ByteSpan of string R[B], C=slot")  \
+    _(STRING_BYTES_SPAN, FMT_ABC, KOP_ABC_BIN,                                                     \
+      "R[A] = borrowed Slice<byte> of string R[B], C=slot")                                        \
     _(BYTES_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")            \
     _(BYTES_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")        \
     _(BYTES_REPEAT_FROM, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
@@ -330,7 +333,7 @@
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
     _(DEFER_MARK, FMT_A, KOP_A_LOAD, "R[A] = defer mark")                                          \
     _(DEFER_RUN_TO, FMT_A, KOP_A_USE, "run defers down to mark R[A]")                              \
-    _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Bytes(B args)")                                   \
+    _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Array<byte>(B args)")                             \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
     _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \
     _(SLEEP, FMT_A, KOP_A_USE, "time.sleep(R[A]) ms")                                              \

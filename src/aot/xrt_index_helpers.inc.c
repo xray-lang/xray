@@ -239,7 +239,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
             return xrt_json_get_name_owned(obj, xr_str_data(key));
         xrt_type_no_index("Json object only supports string keys");
     }
-    xrt_type_no_index("only Array, Map, Json, String, Bytes, typed array support indexing");
+    xrt_type_no_index("only Array, Map, Json, String, typed array support indexing");
 }
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
@@ -273,6 +273,6 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
          * keys `{ [k]: v }` and object spread). */
         xrt_json_set_name(obj, xr_str_data(key), val);
     } else {
-        xrt_type_no_index("only Array, Map, Json, Bytes, typed array support index assignment");
+        xrt_type_no_index("only Array, Map, Json, typed array support index assignment");
     }
 }

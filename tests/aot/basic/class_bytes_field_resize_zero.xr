@@ -1,8 +1,8 @@
 class ScratchBytes {
-    out: Bytes
+    out: Array<byte>
 
     constructor() {
-        this.out = Bytes.withCapacity(4)
+        this.out = Array.withCapacity(4)
     }
 
     resetThenWrite() -> int {

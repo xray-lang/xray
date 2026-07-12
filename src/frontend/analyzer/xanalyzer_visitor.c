@@ -270,7 +270,7 @@ static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
     if (!elem)
         elem = xr_type_new_unknown(NULL);
     if (xa_type_is_byte_array_or_span(src))
-        return xr_type_new_bytespan(ctx->analyzer->isolate);
+        return xr_type_new_u8_slice(ctx->analyzer->isolate);
     return xr_type_new_span(ctx->analyzer->isolate, elem);
 }
 
@@ -282,7 +282,7 @@ static XrType *xa_storage_view_type_from_source(XaInferContext *ctx, XrType *src
     XrType *elem =
         src->container.element_type ? src->container.element_type : xr_type_new_unknown(NULL);
     if (xa_type_is_byte_array_or_view(src))
-        return xr_type_new_byteview(ctx->analyzer->isolate);
+        return xr_type_new_u8_view(ctx->analyzer->isolate);
     return xr_type_new_view(ctx->analyzer->isolate, elem);
 }
 

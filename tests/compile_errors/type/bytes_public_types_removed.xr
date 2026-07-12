@@ -1,0 +1,3 @@
+var bytes: Bytes
+var span: ByteSpan
+var view: ByteView
