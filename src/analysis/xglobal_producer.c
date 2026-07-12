@@ -28,6 +28,8 @@ enum {
     XG_SMALL_MAP_LITERAL_MAX = 4
 };
 
+#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000003)
+
 typedef struct XgClassNameRow {
     XgModuleId module_id;
     const char *name;
@@ -2171,6 +2173,10 @@ static bool body_function_expr_captures_current_locals(XgBodyCollect *bc,
     return scan.has_capture;
 }
 
+static const XgClassFieldSummary *
+body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32_t field_name_id);
+static const XgClassSummary *body_find_class_summary(XgBodyCollect *bc, XgClassId class_id);
+
 static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr) {
     const AstNode *callee;
     if (!bc || !expr)
@@ -2189,6 +2195,13 @@ static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr)
             return XG_NO_ID;
         case AST_AS_EXPR:
             return producer_lookup_class_from_tref(bc->producer, expr->as.as_expr.type);
+        case AST_MEMBER_ACCESS: {
+            XgClassId receiver_class = body_resolve_expr_class(bc, expr->as.member_access.object);
+            const char *field_name = expr->as.member_access.name;
+            const XgClassFieldSummary *field = body_find_class_field_in_hierarchy(
+                bc, receiver_class, field_name ? hash_name32(field_name) : 0);
+            return field ? field->target_class_id : XG_NO_ID;
+        }
         case AST_GROUPING:
             return body_resolve_expr_class(bc, expr->as.grouping);
         default:
@@ -2204,10 +2217,52 @@ static XgInterfaceId body_resolve_expr_interface(XgBodyCollect *bc, const AstNod
             return body_lookup_local_interface(bc, expr->as.variable.name);
         case AST_AS_EXPR:
             return producer_lookup_interface_from_tref(bc->producer, expr->as.as_expr.type);
+        case AST_MEMBER_ACCESS: {
+            XgClassId receiver_class = body_resolve_expr_class(bc, expr->as.member_access.object);
+            const char *field_name = expr->as.member_access.name;
+            const XgClassFieldSummary *field = body_find_class_field_in_hierarchy(
+                bc, receiver_class, field_name ? hash_name32(field_name) : 0);
+            return field ? field->target_interface_id : XG_NO_ID;
+        }
         case AST_GROUPING:
             return body_resolve_expr_interface(bc, expr->as.grouping);
         default:
             return XG_NO_ID;
+    }
+}
+
+static uint32_t body_resolve_expr_nominal_name_id(XgBodyCollect *bc, const AstNode *expr) {
+    const XgClassSummary *cls = body_find_class_summary(bc, body_resolve_expr_class(bc, expr));
+    if (cls && cls->name_id != 0)
+        return cls->name_id;
+    if (!bc || !expr)
+        return 0;
+    switch (expr->type) {
+        case AST_VARIABLE: {
+            XgLocalType *local = body_find_local(bc, expr->as.variable.name);
+            return local && local->nominal_name ? hash_name32(local->nominal_name) : 0;
+        }
+        case AST_MEMBER_ACCESS: {
+            XgClassId receiver_class = body_resolve_expr_class(bc, expr->as.member_access.object);
+            const char *field_name = expr->as.member_access.name;
+            const XgClassFieldSummary *field = body_find_class_field_in_hierarchy(
+                bc, receiver_class, field_name ? hash_name32(field_name) : 0);
+            return field ? field->target_name_id : 0;
+        }
+        case AST_NEW_EXPR:
+            return expr->as.new_expr.class_name ? hash_name32(expr->as.new_expr.class_name) : 0;
+        case AST_CALL_EXPR:
+            return expr->as.call_expr.callee && expr->as.call_expr.callee->type == AST_VARIABLE
+                       ? hash_name32(expr->as.call_expr.callee->as.variable.name)
+                       : 0;
+        case AST_AS_EXPR:
+            return expr->as.as_expr.type && expr->as.as_expr.type->name
+                       ? hash_name32(expr->as.as_expr.type->name)
+                       : 0;
+        case AST_GROUPING:
+            return body_resolve_expr_nominal_name_id(bc, expr->as.grouping);
+        default:
+            return 0;
     }
 }
 
@@ -2438,6 +2493,17 @@ static uint32_t body_capabilities_for_builtin_member_constructor(const MemberAcc
     if (!body_member_receiver_is_module(member, "sync"))
         return 0;
     return body_capabilities_for_builtin_constructor(member->name);
+}
+
+static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg_count) {
+    if (!name)
+        return false;
+    if (arg_count == 1 &&
+        (strcmp(name, "int") == 0 || strcmp(name, "float") == 0 || strcmp(name, "bool") == 0 ||
+         strcmp(name, "rune") == 0 || strcmp(name, "string") == 0 || strcmp(name, "typeOf") == 0 ||
+         strcmp(name, "typeName") == 0))
+        return true;
+    return false;
 }
 
 static XgClassId body_parent_class_id(XgBodyCollect *bc) {
@@ -7065,11 +7131,20 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
         XgFuncNameRow *target = producer_lookup_func_row(bc->producer, callee_name);
+        XgClassNameRow *class_row = producer_lookup_class_row(bc->producer, callee_name);
+        XgClassSummary *class_summary =
+            class_row && class_row->summary_index < bc->evidence->nclasses
+                ? &bc->evidence->classes[class_row->summary_index]
+                : NULL;
+        XgMethodSummary *constructor =
+            class_summary ? producer_find_class_method_by_name(bc->evidence, class_summary,
+                                                               hash_name32("constructor"), true)
+                          : NULL;
         uint32_t callee_name_id = hash_name32(callee_name);
         generic_name = callee_name;
         if (target)
             generic_origin_decl_id = target->decl_id;
-        if (producer_lookup_class(bc->producer, callee->as.variable.name) != XG_NO_ID)
+        if (class_row)
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
         if (callee_name && strcmp(callee_name, "typename") == 0)
@@ -7094,6 +7169,22 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.static_target_func_id = target->func_id;
             if ((target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0)
                 generic_origin_func_id = target->func_id;
+        } else if (constructor) {
+            row.kind = XG_CALL_METHOD;
+            row.receiver_static_class_id = class_row->class_id;
+            row.method_id = constructor->method_id;
+            row.method_name_id = constructor->name_id;
+            row.method_signature_key = constructor->signature_key;
+            generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_class_id = class_row->class_id;
+            generic_origin_method_id = constructor->method_id;
+        } else if (body_global_builtin_call_is_leaf_intrinsic(callee_name,
+                                                              call->as.call_expr.arg_count)) {
+            row.kind = XG_CALL_NATIVE;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
+            if (strcmp(callee_name, "typeName") == 0)
+                bc->metadata_use_bits |= XG_METADATA_TYPENAME;
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
@@ -7406,7 +7497,7 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
     if (!bc || !bc->producer || !node || !fn || !fn->body)
         return;
     child_func_id = producer_next_func_id(bc->producer);
-    name = fn->name ? fn->name : "<anonymous>";
+    name = fn->name && fn->name[0] ? fn->name : "<anonymous>";
     signature_key = hash_function_signature(fn);
     source_node_id = producer_unique_body_source_node_id(
         bc->producer, bc->module_id, producer_source_node_id(bc->module_id, node), child_func_id,
@@ -7427,25 +7518,15 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
 
 static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
     const AstNode *callee;
-    const XgClassSummary *receiver;
     uint32_t class_name;
     uint32_t method_name;
     int argc;
     if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
         callee->type != AST_MEMBER_ACCESS)
         return false;
-    receiver =
-        body_find_class_summary(bc, body_resolve_expr_class(bc, callee->as.member_access.object));
-    if (receiver) {
-        class_name = receiver->name_id;
-    } else if (callee->as.member_access.object->type == AST_VARIABLE) {
-        XgLocalType *local = body_find_local(bc, callee->as.member_access.object->as.variable.name);
-        if (!local || !local->nominal_name)
-            return false;
-        class_name = hash_name32(local->nominal_name);
-    } else {
+    class_name = body_resolve_expr_nominal_name_id(bc, callee->as.member_access.object);
+    if (class_name == 0)
         return false;
-    }
     if (!callee->as.member_access.name)
         return false;
     method_name = hash_name32(callee->as.member_access.name);
@@ -8906,7 +8987,7 @@ XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
     }
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash;
-    key.compiler_semver_hash = UINT64_C(0x0000017200000001);
+    key.compiler_semver_hash = XG_COMPILER_SEMVER_HASH;
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
     key.module_id = 1;
@@ -8922,7 +9003,7 @@ XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleG
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
-    key.compiler_semver_hash = UINT64_C(0x0000017200000001);
+    key.compiler_semver_hash = XG_COMPILER_SEMVER_HASH;
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);

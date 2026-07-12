@@ -27,6 +27,7 @@ static const XiFunc *cg_coro_resolve_callee_cb(void *ud, const XiFunc *current,
 static const XiFunc *cg_coro_resolve_method_cb(void *ud, const XiFunc *current,
                                                const XiValue *call) {
     XiCgenCtx *ctx = (XiCgenCtx *) ud;
+    const XaotBundle *bundle;
     if (!ctx || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT))
         return NULL;
     const char *method = (const char *) call->aux;
@@ -36,6 +37,19 @@ static const XiFunc *cg_coro_resolve_method_cb(void *ud, const XiFunc *current,
             cg_resolve_module_member_call(ctx, current, call, method);
         if (module_call.func)
             return module_call.func;
+    }
+    bundle = cg_ctx_aot_bundle(ctx);
+    if (bundle) {
+        const XaotMethodDispatchPlan *plan =
+            xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, call);
+        if (plan && plan->target_count == 1 && plan->target_start != 0 &&
+            plan->target_start - 1 < bundle->ndispatch_target_cases) {
+            const XaotDispatchTargetCase *target =
+                &bundle->dispatch_target_cases[plan->target_start - 1];
+            const XiFunc *func = xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+            if (func)
+                return func;
+        }
     }
     const char *method_prefix = NULL;
     return cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
@@ -77,12 +91,10 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    if (bundle && bundle->has_entry_plan &&
-        bundle->entry_plan.root_representation == XR_ROOT_DESCRIPTOR &&
-        bundle->entry_module < bundle->nmodules && bundle->modules[bundle->entry_module] &&
-        bundle->modules[bundle->entry_module]->init == f)
-        return false;
+    XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
     bool is_module_init = false;
+    if (xi_coro_func_is_suspendable(f, &resolver))
+        return true;
     if (bundle && f) {
         for (uint32_t i = 0; i < bundle->nmodules; i++) {
             if (bundle->modules[i] && bundle->modules[i]->init == f) {
@@ -98,10 +110,12 @@ static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
             uint32_t effects = body->effect_bits;
             if (body->func_id != f->xg_body_func_id)
                 continue;
-            (void) xg_body_effects_compose_closed_world_calls(evidence, body, &effects);
-            return (effects & XG_BODY_MAY_SUSPEND) != 0;
+            if (xg_body_effects_compose_closed_world_calls(evidence, body, &effects))
+                return (effects & XG_BODY_MAY_SUSPEND) != 0;
+            if ((body->effect_bits & XG_BODY_MAY_CALL) == 0)
+                return (body->effect_bits & XG_BODY_MAY_SUSPEND) != 0;
+            break;
         }
     }
-    XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
-    return xi_coro_func_is_suspendable(f, &resolver);
+    return false;
 }

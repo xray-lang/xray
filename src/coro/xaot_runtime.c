@@ -169,6 +169,7 @@ void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
 
 typedef struct XrAotStringView {
     int64_t len;
+    int64_t rune_len;
     uint32_t hash;
     uint32_t flags;
     char *data;
@@ -833,7 +834,9 @@ bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime) {
     atomic_init(&scope->count, 0);
     atomic_init(&scope->cancel_requested, false);
     atomic_init(&scope->child_lock, false);
-    scope->mode = XR_SCOPE_LINKED;
+    /* Root descriptor waits for top-level children without changing ordinary
+     * `go` error isolation. Explicit linked/supervisor scopes carry policy. */
+    scope->mode = XR_SCOPE_WAIT;
     scope->first_error = XR_NULL_VAL;
     runtime->root_scope = scope;
     runtime->scheduler->current_scope = scope;

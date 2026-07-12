@@ -81,6 +81,14 @@ typedef struct XaInferContext {
     // reporting `var x = x` as an unresolved self-reference when no outer x exists.
     uint32_t initializing_symbol_id;
 
+    // Active only while inferring the source operand of `move x`. Repeated
+    // inference of the same AST can leave a moved mark on x from the previous
+    // visit; the current move operand is still the operation that performs the
+    // transfer, not a post-move use.
+    const AstNode *current_move_source_node;
+    uint32_t current_move_source_symbol_id;
+    bool current_move_source_allows_stale_mark;
+
     // Generic type inference context (for callback parameters)
     // e.g., arr.map(x => x+1) - element_type is int, so x: int
     XrType *callback_element_type;      // Element type for callback first param

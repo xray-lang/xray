@@ -57,6 +57,10 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->imports);
     xr_free(ctx->xmod_ref_funcs);
     xr_free(ctx->xmod_ref_prefixes);
+    for (int i = 0; i < ctx->nemitted_funcs; i++)
+        xr_free(ctx->emitted_func_names ? ctx->emitted_func_names[i] : NULL);
+    xr_free(ctx->emitted_funcs);
+    xr_free(ctx->emitted_func_names);
     xr_free(ctx->cell_vars);
     xr_free(ctx->cell_release_vars);
     xr_free(ctx->cell_heap_capture_vars);

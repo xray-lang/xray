@@ -2752,6 +2752,7 @@ skip_interfaces:
     // Enter class scope
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
     ctx->analyzer->current_scope->class_symbol = sym;
+    info->scope = ctx->analyzer->current_scope;
 
     // Collect fields
     for (int i = 0; i < cls->field_count; i++) {

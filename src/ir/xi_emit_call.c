@@ -54,6 +54,31 @@ static void emit_channel_method_transfer_annotation(EmitCtx *ctx, const XiValue 
     emit_inst(ctx, CREATE_ABx(OP_NOP, 6, (uint32_t) mode));
 }
 
+static bool emit_call_scratch_window(EmitCtx *ctx, uint32_t width, XiEmitReg *base_out) {
+    if (!base_out || width == 0) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+    if (ctx->max_reg + width > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+    *base_out = (XiEmitReg) ctx->max_reg;
+    ctx->max_reg += width;
+    return true;
+}
+
+static void emit_copy_call_results(EmitCtx *ctx, XiEmitReg dst, XiEmitReg base, int nresults) {
+    if (dst == NO_REG || nresults <= 0)
+        return;
+    for (int r = 0; r < nresults; r++) {
+        XiEmitReg from = (XiEmitReg) (base + (uint16_t) r);
+        XiEmitReg to = (XiEmitReg) (dst + (uint16_t) r);
+        if (from != to)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, to, from, 0));
+    }
+}
+
 /* Function call: args[0]=callee, args[1..n]=params
  * aux_int bits 0-7: flags (1=self_call)
  * aux_int bits 8-15: nresults (0 means 1) */
@@ -68,21 +93,6 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (nresults == 0)
         nresults = 1;
 
-    /* Account for arg and result registers in maxstacksize */
-    {
-        uint32_t span = (uint32_t) nargs + 1;
-        uint32_t result_count = (uint32_t) nresults;
-        if (result_count > span)
-            span = result_count;
-        uint32_t call_top = (uint32_t) dst + span;
-        if (call_top > MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        if (call_top > ctx->max_reg)
-            ctx->max_reg = call_top;
-    }
-
     /* Reserve result registers so the allocator won't reuse them */
     uint32_t result_top = (uint32_t) dst + (uint32_t) nresults;
     if (result_top > MAX_REGS) {
@@ -96,6 +106,18 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     if (self_call) {
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            (void) reg_of(ctx, v->args[a]);
+            if (ctx->status != XI_EMIT_OK)
+                return;
+        }
+        uint32_t width = (uint32_t) nargs + 1;
+        if ((uint32_t) nresults > width)
+            width = (uint32_t) nresults;
+        XiEmitReg base = NO_REG;
+        if (!emit_call_scratch_window(ctx, width, &base))
+            return;
+
         /* Recursive self-call: OP_CALLSELF uses frame->closure.
          * nresults == 0 signals tail call (reuse current frame). */
         int self_nresults = (v->flags & XI_FLAG_TAIL) ? 0 : nresults;
@@ -103,24 +125,37 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
             if (ctx->status != XI_EMIT_OK)
                 return;
-            XiEmitReg target = (XiEmitReg) (dst + a);
+            XiEmitReg target = (XiEmitReg) (base + a);
             if (arg_reg != target) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
         }
-        emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs, (uint8_t) self_nresults));
+        emit_inst(ctx, CREATE_ABC(OP_CALLSELF, base, nargs, (uint8_t) self_nresults));
+        emit_copy_call_results(ctx, dst, base, nresults);
     } else {
+        for (uint16_t a = 0; a < v->nargs; a++) {
+            (void) reg_of(ctx, v->args[a]);
+            if (ctx->status != XI_EMIT_OK)
+                return;
+        }
+        uint32_t width = (uint32_t) nargs + 1;
+        if ((uint32_t) nresults > width)
+            width = (uint32_t) nresults;
+        XiEmitReg base = NO_REG;
+        if (!emit_call_scratch_window(ctx, width, &base))
+            return;
+
         XiEmitReg callee = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        if (callee != dst) {
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+        if (callee != base) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, base, callee, 0));
         }
         for (uint16_t a = 1; a < v->nargs; a++) {
             XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
             if (ctx->status != XI_EMIT_OK)
                 return;
-            XiEmitReg target = (XiEmitReg) (dst + a);
+            XiEmitReg target = (XiEmitReg) (base + a);
             if (arg_reg != target) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
@@ -129,7 +164,8 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             (v->flags & XI_FLAG_TAIL)
                 ? OP_TAILCALL
                 : (emit_callee_is_plain_closure(ctx, v->args[0]) ? OP_CALL_STATIC : OP_CALL);
-        emit_inst(ctx, CREATE_ABC(call_op, dst, nargs, (uint8_t) nresults));
+        emit_inst(ctx, CREATE_ABC(call_op, base, nargs, (uint8_t) nresults));
+        emit_copy_call_results(ctx, dst, base, nresults);
     }
 }
 
@@ -142,33 +178,32 @@ XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     uint16_t nargs = (uint16_t) (v->nargs - 1);
 
-    {
-        uint32_t span = (uint32_t) nargs + 1;
-        uint32_t call_top = (uint32_t) dst + span;
-        if (call_top > MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        (void) reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
             return;
-        }
-        if (call_top > ctx->max_reg)
-            ctx->max_reg = call_top;
     }
+    XiEmitReg base = NO_REG;
+    if (!emit_call_scratch_window(ctx, (uint32_t) nargs + 1, &base))
+        return;
 
     XiEmitReg callee = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    if (callee != dst) {
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+    if (callee != base) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, base, callee, 0));
     }
     for (uint16_t a = 1; a < v->nargs; a++) {
         XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        XiEmitReg target = (XiEmitReg) (dst + a);
+        XiEmitReg target = (XiEmitReg) (base + a);
         if (arg_reg != target) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
         }
     }
-    emit_inst(ctx, CREATE_ABC(OP_TAILCALL, dst, nargs, 1));
+    emit_inst(ctx, CREATE_ABC(OP_TAILCALL, base, nargs, 1));
+    emit_copy_call_results(ctx, dst, base, 1);
 }
 
 /* Method call: args[0]=receiver, args[1..n]=params, aux=method name
@@ -183,32 +218,30 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        (void) reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+    }
+    XiEmitReg base = NO_REG;
+    if (!emit_call_scratch_window(ctx, (uint32_t) nargs + 2, &base))
+        return;
+
     XiEmitReg recv = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    /* R[base+1] = receiver */
+    if (recv != (XiEmitReg) (base + 1))
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), recv, 0));
 
-    /* Account for: dst, dst+1 (recv), dst+2..dst+1+nargs */
-    {
-        uint32_t call_top = (uint32_t) dst + nargs + 2;
-        if (call_top > MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        if (call_top > ctx->max_reg)
-            ctx->max_reg = call_top;
-    }
-
-    /* R[dst+1] = receiver */
-    if (recv != (XiEmitReg) (dst + 1))
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (dst + 1), recv, 0));
-
-    /* R[dst+2...] = user arguments */
+    /* R[base+2...] = user arguments */
     for (uint16_t a = 1; a < v->nargs; a++) {
         XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        XiEmitReg target = (XiEmitReg) (dst + 1 + a);
+        XiEmitReg target = (XiEmitReg) (base + 1 + a);
         if (arg_reg != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
@@ -223,7 +256,8 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         uint16_t ci_arg = 0;
         if (!xi_emit_const_index_to_c(ctx, ci, &ci_arg))
             return;
-        emit_inst(ctx, CREATE_ABC(OP_SUPERINVOKE, dst, ci_arg, nargs));
+        emit_inst(ctx, CREATE_ABC(OP_SUPERINVOKE, base, ci_arg, nargs));
+        emit_copy_call_results(ctx, dst, base, 1);
     } else {
         int sym = add_symbol(ctx, method_name);
         if (ctx->status != XI_EMIT_OK)
@@ -233,7 +267,8 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
         OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
         emit_channel_method_transfer_annotation(ctx, v);
-        emit_inst(ctx, CREATE_ABC(invoke_op, dst, sym_arg, nargs));
+        emit_inst(ctx, CREATE_ABC(invoke_op, base, sym_arg, nargs));
+        emit_copy_call_results(ctx, dst, base, 1);
     }
 }
 
@@ -242,29 +277,28 @@ XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        (void) reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+    }
+    XiEmitReg base = NO_REG;
+    if (!emit_call_scratch_window(ctx, (uint32_t) nargs + 2, &base))
+        return;
+
     XiEmitReg recv = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint16_t nargs = (uint16_t) (v->nargs - 1);
-
-    {
-        uint32_t call_top = (uint32_t) dst + nargs + 2;
-        if (call_top > MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        if (call_top > ctx->max_reg)
-            ctx->max_reg = call_top;
-    }
-
-    if (recv != (XiEmitReg) (dst + 1))
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (dst + 1), recv, 0));
+    if (recv != (XiEmitReg) (base + 1))
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), recv, 0));
 
     for (uint16_t a = 1; a < v->nargs; a++) {
         XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        XiEmitReg target = (XiEmitReg) (dst + 1 + a);
+        XiEmitReg target = (XiEmitReg) (base + 1 + a);
         if (arg_reg != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
@@ -275,7 +309,8 @@ XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
     uint16_t method_arg = 0;
     if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &method_arg))
         return;
-    emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, dst, method_arg, c));
+    emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, base, method_arg, c));
+    emit_copy_call_results(ctx, dst, base, 1);
 }
 
 static void emit_builtin_bytes_load_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op) {

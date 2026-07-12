@@ -161,6 +161,7 @@ XR_FUNC size_t xr_global_pool_sweep(XrGlobalStringPool *pool);
 
 // Create non-interned string (for large or one-shot data like HTTP body, WS message)
 XR_FUNC XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length);
+XR_FUNC XrString *xr_string_new_raw_bytes(XrVMRuntime *iso, const char *bytes, size_t length);
 
 XR_FUNC XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b);
 XR_FUNC XrString *xr_string_from_int(XrVMRuntime *iso, xr_Integer i);

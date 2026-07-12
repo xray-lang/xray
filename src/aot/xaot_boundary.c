@@ -319,6 +319,19 @@ static const XiFunc *resolve_method_target(const XaotBundle *bundle, const XiVal
     return NULL;
 }
 
+static const XiFunc *resolve_dispatch_plan_target(const XaotBundle *bundle, const XiValue *call) {
+    const XaotMethodDispatchPlan *plan;
+    const XaotDispatchTargetCase *target;
+    if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT))
+        return NULL;
+    plan = xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, call);
+    if (!plan || plan->target_count != 1 || plan->target_start == 0 ||
+        plan->target_start - 1 >= bundle->ndispatch_target_cases)
+        return NULL;
+    target = &bundle->dispatch_target_cases[plan->target_start - 1];
+    return xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+}
+
 XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle *bundle,
                                                                const XiFunc *current,
                                                                const XiValue *call,
@@ -336,6 +349,9 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
         const XiFunc *target = resolve_module_member_target(bundle, current, call);
         if (target && first_arg_out)
             *first_arg_out = 1;
+        if (target)
+            return target;
+        target = resolve_dispatch_plan_target(bundle, call);
         if (target)
             return target;
         return resolve_method_target(bundle, call);

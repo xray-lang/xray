@@ -11,11 +11,11 @@
  *   POSIX: Thin wrapper over open_memstream(3). The libc-malloc'd
  *          buffer is copied into an xr_malloc'd region at close so
  *          callers always release with xr_free().
- *   Windows: open_memstream() is missing from the MSVC CRT and there
- *          is no fopencookie/funopen equivalent to hook fclose. The
- *          backing store is tmpfile() (auto-deleted on close); at
- *          close time the file is rewound and read back into an
- *          xr_malloc'd buffer.
+ *   Windows/macOS fallback: use tmpfile() as an auto-deleted backing store;
+ *          at close time the file is rewound and read back into an
+ *          xr_malloc'd buffer.  macOS open_memstream has shown stale-buffer
+ *          behavior on large generated C buffers unless queried repeatedly,
+ *          so the file-backed path is the deterministic implementation there.
  */
 
 #include "xmemstream.h"
@@ -25,11 +25,11 @@
 
 #include "xmalloc.h"
 
-#if defined(_WIN32) || defined(XR_OS_WINDOWS)
-#define XR_MEMSTREAM_WINDOWS 1
+#if defined(_WIN32) || defined(XR_OS_WINDOWS) || defined(__APPLE__)
+#define XR_MEMSTREAM_TMPFILE 1
 #endif
 
-#ifdef XR_MEMSTREAM_WINDOWS
+#ifdef XR_MEMSTREAM_TMPFILE
 
 XR_FUNC FILE *xr_open_memstream(char **outbuf, size_t *outsize) {
     if (!outbuf || !outsize)
@@ -86,7 +86,7 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
     return (rc == 0) ? 0 : -1;
 }
 
-#else /* POSIX */
+#else /* POSIX open_memstream */
 
 XR_FUNC FILE *xr_open_memstream(char **outbuf, size_t *outsize) {
     if (!outbuf || !outsize)
@@ -104,8 +104,17 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
             *outsize = 0;
         return -1;
     }
-    /* fclose finalizes the open_memstream buffer pointed to by
+    /* fflush/fclose finalize the open_memstream buffer pointed to by
      * *outbuf / *outsize (libc-malloc'd). */
+    if (fflush(stream) != 0) {
+        fclose(stream);
+        if (*outbuf) {
+            free(*outbuf); /* xr:allow-raw-alloc libc open_memstream */
+            *outbuf = NULL;
+        }
+        *outsize = 0;
+        return -1;
+    }
     if (fclose(stream) != 0) {
         if (*outbuf) {
             free(*outbuf); /* xr:allow-raw-alloc libc open_memstream */
@@ -136,4 +145,4 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
     return 0;
 }
 
-#endif /* XR_MEMSTREAM_WINDOWS */
+#endif /* XR_MEMSTREAM_TMPFILE */

@@ -1495,9 +1495,13 @@ static void xicgen_len(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
-        fprintf(out, "XR_TO_INT(xrt_len_value(");
+        fprintf(out, "({ XrValue _xr_len_value = ");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", %d))", v->aux_int != 0 ? 1 : 0);
+        fprintf(out,
+                "; _xr_len_value.tag == XR_TAG_RANGE ? "
+                "xrt_range_length_ptr((const xrt_range_t *)_xr_len_value.ptr) : "
+                "XR_TO_INT(xrt_len_value(_xr_len_value, %d)); })",
+                v->aux_int != 0 ? 1 : 0);
     }
     emit_conversion_suffix(out, suffix);
 }
@@ -3489,6 +3493,13 @@ static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     (void) prefix;
     XR_DCHECK(v->nargs >= 3, "xicgen_slice: need source, start, and end");
     if (cg_value_plan_is_span_aggregate(ctx, v)) {
+        fprintf(out, "({ XrValue _xr_slice_start = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, "; XrValue _xr_slice_end = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, "; if (!XR_IS_INT(_xr_slice_start) || !XR_IS_INT(_xr_slice_end)) "
+                     "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+                     "XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG); ");
         if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
             fprintf(out, "xrt_span_from_span_slice(");
             emit_vref(out, v->args[0]);
@@ -3496,11 +3507,7 @@ static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
             fprintf(out, "xrt_span_from_array_slice(");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         }
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        fprintf(out, ")");
+        fprintf(out, ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end)); })");
         return;
     }
     fprintf(out, "xrt_slice(");
@@ -5436,9 +5443,9 @@ static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *
                                                                              : XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (is_try_recv) {
-        fprintf(out, "xr_aot_chan_try_recv_sync(");
+        fprintf(out, "xr_aot_bridge_value_to_xrt(xr_aot_chan_try_recv_sync(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, "))");
     } else if (is_close) {
         fprintf(out, "xr_aot_chan_close_sync(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
@@ -7540,6 +7547,39 @@ static void xicgen_emit_map_ptr_from_tagged(XiCgenCtx *ctx, FILE *out, const XiV
     fprintf(out, ").ptr)");
 }
 
+static bool xicgen_emit_map_index_get_builtin_hash_eq(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                      const XaotKeyAccessPlan *plan) {
+    if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_MAP ||
+        !cg_key_access_plan_uses_builtin_hash_eq_backend(ctx, plan))
+        return false;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_map_get_owned(");
+    xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool xicgen_emit_map_index_set_builtin_hash_eq(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                      const XaotKeyAccessPlan *plan) {
+    if (!v || v->nargs < 3 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_MAP ||
+        !cg_key_access_plan_uses_builtin_hash_eq_backend(ctx, plan))
+        return false;
+    fprintf(out, "xrt_map_set(");
+    xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ")");
+    return true;
+}
+
 static bool xicgen_emit_map_index_get_prehashed(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                 const XaotKeyAccessPlan *plan) {
     if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
@@ -7695,6 +7735,8 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     if (xicgen_emit_map_index_get_user_hash_eq(ctx, out, v, key_plan))
         return;
+    if (xicgen_emit_map_index_get_builtin_hash_eq(ctx, out, v, key_plan))
+        return;
     if (xicgen_emit_map_index_get_prehashed(ctx, out, v, key_plan))
         return;
     if (xicgen_emit_map_index_get_small_scan(ctx, out, v, key_plan))
@@ -7750,6 +7792,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     if (emit_class_native_array_index_set_expr(ctx, out, f, v))
         return;
     if (xicgen_emit_map_index_set_user_hash_eq(ctx, out, v, key_plan))
+        return;
+    if (xicgen_emit_map_index_set_builtin_hash_eq(ctx, out, v, key_plan))
         return;
     if (xicgen_emit_map_index_set_prehashed(ctx, out, v, key_plan))
         return;
@@ -8327,13 +8371,15 @@ static void xicgen_emit_byte_span_operand(XiCgenCtx *ctx, FILE *out, const XiVal
 static bool xicgen_emit_byte_span_expr(XiCgenCtx *ctx, FILE *out, const XiValue *arg) {
     const XiValue *slice = xicgen_stack_slice_source_value(arg);
     if (slice && xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
-        fprintf(out, "xrt_span_from_span_slice(");
+        fprintf(out, "({ XrValue _xr_slice_start = ");
+        emit_value_as_rep_ctx(ctx, out, slice->args[1], XR_REP_TAGGED);
+        fprintf(out, "; XrValue _xr_slice_end = ");
+        emit_value_as_rep_ctx(ctx, out, slice->args[2], XR_REP_TAGGED);
+        fprintf(out, "; if (!XR_IS_INT(_xr_slice_start) || !XR_IS_INT(_xr_slice_end)) "
+                     "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+                     "XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG); xrt_span_from_span_slice(");
         emit_span_ref_expr(out, slice->args[0]);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, slice->args[1], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, slice->args[2], XR_REP_I64);
-        fprintf(out, ")");
+        fprintf(out, ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end)); })");
         return true;
     }
     if (cg_span_value_u8_info(ctx, arg, NULL)) {

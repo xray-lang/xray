@@ -7077,6 +7077,82 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_CLOSURE);
     ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
+    uint32_t composed_effects = UINT32_MAX;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) == 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics) {
+    setup_parser_session();
+    const char *source = "fn caller(x: uint32) -> int { return int(x) }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(ev.ndecls, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
+    ASSERT_EQ_UINT(ev.callsites[0].method_name_id, xg_name_id("int"));
+    ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL) != 0);
+    ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+
+    uint32_t composed_effects = UINT32_MAX;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) == 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_composes_recursive_direct_call_effects) {
+    setup_parser_session();
+    const char *source = "fn fib(n: int) -> int {\n"
+                         "    if (n < 2) { return n }\n"
+                         "    return fib(n - 1)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *fib = evidence_find_body_by_name(&ev, "fib");
+    ASSERT_NOT_NULL(fib);
+    ASSERT_TRUE((fib->effect_bits & XG_BODY_MAY_CALL) != 0);
+
+    uint32_t composed_effects = UINT32_MAX;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, fib, &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) == 0);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -7447,6 +7523,115 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
     xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
+    setup_parser_session();
+    const char *source = "class Router {\n"
+                         "    value: int\n"
+                         "    constructor() { this.value = 1 }\n"
+                         "}\n"
+                         "var router = Router()\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+
+    const XgBodySummary *module_init = NULL;
+    XgClassId router_class_id = XG_NO_ID;
+    XgMethodId router_ctor_id = XG_NO_ID;
+    uint32_t constructor_name_id = xg_name_id("constructor");
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        if (ev.bodies[i].kind == XG_BODY_MODULE_INIT) {
+            module_init = &ev.bodies[i];
+            break;
+        }
+    }
+    for (uint32_t i = 0; i < ev.nclasses; i++) {
+        if (ev.classes[i].name_id == xg_name_id("Router"))
+            router_class_id = ev.classes[i].class_id;
+    }
+    for (uint32_t i = 0; i < ev.nmethods; i++) {
+        if (ev.methods[i].owner_class_id == router_class_id &&
+            ev.methods[i].name_id == constructor_name_id)
+            router_ctor_id = ev.methods[i].method_id;
+    }
+    ASSERT_NOT_NULL(module_init);
+    ASSERT_TRUE(router_class_id != XG_NO_ID);
+    ASSERT_TRUE(router_ctor_id != XG_NO_ID);
+
+    uint32_t constructor_calls = 0;
+    for (uint32_t i = 0; i < ev.ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev.callsites[i];
+        if (call->owner_func_id != module_init->func_id)
+            continue;
+        ASSERT_EQ_UINT(call->kind, XG_CALL_METHOD);
+        ASSERT_EQ_UINT(call->receiver_static_class_id, router_class_id);
+        ASSERT_EQ_UINT(call->method_id, router_ctor_id);
+        ASSERT_EQ_UINT(call->method_name_id, constructor_name_id);
+        ASSERT_TRUE(call->method_signature_key != 0);
+        constructor_calls++;
+    }
+    ASSERT_EQ_UINT(constructor_calls, 1);
+
+    uint32_t composed_effects = module_init->effect_bits;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, module_init, &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) == 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_names_go_block_body_anonymous) {
+    setup_parser_session();
+    const char *source = "var ready = false\n"
+                         "go {\n"
+                         "    ready = true\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+
+    uint32_t anonymous_bodies = 0;
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        ASSERT_TRUE(ev.bodies[i].name_id != 0);
+        if (ev.bodies[i].kind == XG_BODY_FUNCTION &&
+            ev.bodies[i].name_id == xg_name_id("<anonymous>"))
+            anonymous_bodies++;
+    }
+    ASSERT_EQ_UINT(anonymous_bodies, 1);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -15335,6 +15520,64 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
     teardown_parser_session();
 }
 
+TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
+    setup_parser_session();
+    const char *source = "class Barrier {\n"
+                         "    _latch: CountdownLatch\n"
+                         "    constructor(parties: int) {\n"
+                         "        this._latch = CountdownLatch(parties)\n"
+                         "    }\n"
+                         "    wait() -> bool {\n"
+                         "        this._latch.done()\n"
+                         "        return this._latch.wait()\n"
+                         "    }\n"
+                         "}\n"
+                         "var b = Barrier(1)\n"
+                         "print(b.wait())\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+
+    const XgBodySummary *wait_body = evidence_find_body_by_name(&ev, "wait");
+    ASSERT_NOT_NULL(wait_body);
+    ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_SUSPEND) != 0);
+    ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
+
+    uint32_t wait_effects = 0;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, wait_body, &wait_effects));
+    ASSERT_TRUE((wait_effects & XG_BODY_MAY_SUSPEND) != 0);
+
+    const XgBodySummary *init_body = NULL;
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        if (ev.bodies[i].kind == XG_BODY_MODULE_INIT) {
+            init_body = &ev.bodies[i];
+            break;
+        }
+    }
+    ASSERT_NOT_NULL(init_body);
+    uint32_t init_effects = 0;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, init_body, &init_effects));
+    ASSERT_TRUE((init_effects & XG_BODY_MAY_SUSPEND) != 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_module_init_body) {
     setup_parser_session();
     const char *source = "fn inc(x: int) -> int { return x + 1 }\n"
@@ -15770,10 +16013,14 @@ RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);
 RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
+RUN_TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics);
+RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_seeds_xi_ids_during_lowering);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
+RUN_TEST(global_evidence_producer_resolves_module_init_constructor_callsite);
+RUN_TEST(global_evidence_producer_names_go_block_body_anonymous);
 RUN_TEST(global_evidence_producer_fills_callsite_argument_type_keys);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_read_mem_effect);
@@ -15918,6 +16165,7 @@ RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
+RUN_TEST(global_evidence_composes_field_receiver_runtime_wait_effects);
 RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
 RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);

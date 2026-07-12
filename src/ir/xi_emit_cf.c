@@ -74,24 +74,24 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
      * The non-fused path keeps OP_CMP_* before the RELEASE and stays correct. */
     if (xi_own_type_is_rc(ctrl->args[0]->type) || xi_own_type_is_rc(ctrl->args[1]->type))
         return false;
-    /* Ensure no other value in this block uses the comparison result */
-    for (uint32_t i = 0; i < blk->nvalues; i++) {
-        XiValue *v = blk->values[i];
-        if (v == ctrl)
-            continue;
-        for (uint16_t a = 0; a < v->nargs; a++) {
-            if (v->args[a] == ctrl)
-                return false;
-        }
-    }
-    /* Ensure no phi anywhere in the function references this comparison.
-     * The && short-circuit pattern creates phis two hops away
-     * (IF → skip → merge), so checking only direct successors is
-     * insufficient. Walking all blocks is O(n) but n is small. */
+    /* Ensure no other value or terminator in the function references this
+     * comparison.  Fusion turns the compare into a branch-only opcode, so it is
+     * legal only when the current block's control is the sole consumer. */
     XiFunc *f = blk->func;
     XR_DCHECK(f != NULL, "block must belong to a function");
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *b = f->blocks[bi];
+        if (b != blk && b->control == ctrl)
+            return false;
+        for (uint32_t i = 0; i < b->nvalues; i++) {
+            XiValue *v = b->values[i];
+            if (v == ctrl)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] == ctrl)
+                    return false;
+            }
+        }
         for (XiPhi *phi = b->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 if (phi->value.args[a] == ctrl)

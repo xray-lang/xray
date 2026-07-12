@@ -738,9 +738,9 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->declared_type = src->declared_type;
     dst->type_computed = src->type_computed;
     dst->is_definitely_assigned = src->is_definitely_assigned;
-    dst->move_state = src->move_state;
-    dst->moved_line = src->moved_line;
-    dst->moved_column = src->moved_column;
+    dst->move_state = XA_MOVE_NOT_MOVED;
+    dst->moved_line = 0;
+    dst->moved_column = 0;
 
     xa_symbol_links_set_function_sig(dst, src->param_types, src->param_names, src->param_count,
                                      src->return_type);

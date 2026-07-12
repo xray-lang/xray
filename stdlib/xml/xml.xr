@@ -1,5 +1,3 @@
-import "text" as textutil
-
 // xml - pure-Xray XML parser and writer.
 //
 // XML is an L4 format module: the public parse/stringify/node-builder
@@ -71,9 +69,21 @@ fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     return s.slice(pos, pos + len(prefix)) == prefix
 }
 
+fn _asciiFold(c: string) -> int {
+    if (len(c) == 0) { return -1 }
+    var o = c.runes().nth(0).toUInt32()
+    if (o >= 65 && o <= 90) { return o + 32 }
+    return o
+}
+
 fn _startsWithAtIgnoreCase(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + len(prefix) > len(s)) { return false }
-    return textutil.lower(s.slice(pos, pos + len(prefix))) == textutil.lower(prefix)
+    for (var i = 0; i < len(prefix); i++) {
+        if (_asciiFold(s.slice(pos + i, (pos + i) + 1)) != _asciiFold(prefix.slice(i, (i) + 1))) {
+            return false
+        }
+    }
+    return true
 }
 
 fn _isWhitespace(c: string) -> bool {

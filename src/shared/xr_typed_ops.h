@@ -14,7 +14,7 @@
  * Dependency: caller must include their own XrValue header first, providing:
  *   XrValue, XR_FROM_INT/XR_TO_INT, XR_FROM_FLOAT/XR_TO_FLOAT,
  *   XR_FROM_RUNE/XR_TO_RUNE, XR_IS_RUNE,
- *   XR_IS_INT/XR_IS_FLOAT/XR_IS_NULL/XR_IS_FALSE,
+ *   XR_IS_INT/XR_IS_FLOAT/XR_IS_BOOL/XR_IS_NULL/XR_IS_FALSE,
  *   xr_value_to_int64_coerce, xr_value_to_f64_coerce
  *
  * Then include xr_elem_type.h (for XrArrayElemType).
@@ -59,6 +59,34 @@ static inline XrValue xr_typed_get(void *data, int32_t index, uint8_t elem_type)
             return XR_FROM_RUNE(((uint32_t *) data)[index]);
         default:
             return XR_NULL_VAL;
+    }
+}
+
+static inline bool xr_typed_value_is_numeric_like(XrValue value) {
+    return XR_IS_INT(value) || XR_IS_FLOAT(value) || XR_IS_BOOL(value);
+}
+
+static inline bool xr_typed_value_is_storable(XrValue value, uint8_t elem_type) {
+    switch (elem_type) {
+        case XR_ELEM_ANY:
+            return true;
+        case XR_ELEM_BOOL:
+            return xr_typed_value_is_numeric_like(value) || XR_IS_NULL(value);
+        case XR_ELEM_RUNE:
+            return XR_IS_RUNE(value);
+        case XR_ELEM_I8:
+        case XR_ELEM_U8:
+        case XR_ELEM_I16:
+        case XR_ELEM_U16:
+        case XR_ELEM_I32:
+        case XR_ELEM_U32:
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+        case XR_ELEM_F32:
+        case XR_ELEM_F64:
+            return xr_typed_value_is_numeric_like(value);
+        default:
+            return false;
     }
 }
 

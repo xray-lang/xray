@@ -1,4 +1,3 @@
-// anchor: slice-array-string-negative-parity
 fn main() {
     var arr = [1, 2, 3, 4]
     var str = "abcd"

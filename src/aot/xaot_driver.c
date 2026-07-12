@@ -1165,14 +1165,8 @@ static bool xaot_fast_test_build_enabled(void) {
 }
 
 static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *features) {
-    return features && !features->need_coro && !features->need_channel && !features->need_scope &&
-           !features->need_timer && !features->need_netpoll && !features->need_deep_copy &&
-           !features->need_task && !features->need_atomic && !features->need_work_queue &&
-           !features->need_result_group && !features->need_countdown_latch &&
-           !features->need_semaphore && !features->need_event_count && !features->need_generator &&
-           !features->need_parallel && !features->need_stacktrace && !features->need_instanceof &&
-           features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
-           features->n_extern_dylibs == 0;
+    (void) features;
+    return false;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget *target,

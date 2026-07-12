@@ -118,11 +118,18 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     }
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *body;
+        uint32_t effect_bits;
         if (!reachable[i])
             continue;
         body = &evidence->bodies[i];
+        effect_bits = body->effect_bits;
+        if (!xg_body_effects_compose_closed_world_calls(evidence, body, &effect_bits)) {
+            out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
+            xr_free(reachable);
+            return true;
+        }
         out->reachable_body_count++;
-        out->reachable_effect_bits |= body->effect_bits;
+        out->reachable_effect_bits |= effect_bits;
         out->required_capability_bits |= body->capability_bits;
     }
     xr_free(reachable);

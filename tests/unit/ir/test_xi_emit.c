@@ -373,6 +373,59 @@ TEST(emit_if_then_else) {
     xi_func_free(f);
 }
 
+TEST(emit_reused_cmp_control_materializes_bool) {
+    /* A compare used by more than one block control must produce a bool value.
+     * Branch fusion is valid only when the current block's control is the
+     * compare's sole consumer. */
+    XiFunc *f = make_func("reused_cmp", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *gt = xi_binary(f, entry, XI_GT, &stub_bool, a, zero);
+
+    XiBlock *then_once = xi_block_new(f);
+    then_once->sealed = true;
+    XiBlock *merge = xi_block_new(f);
+    merge->sealed = true;
+    XiBlock *then_b = xi_block_new(f);
+    then_b->sealed = true;
+    XiBlock *else_b = xi_block_new(f);
+    else_b->sealed = true;
+
+    xi_block_set_if(entry, gt, then_once, merge);
+    xi_block_set_jump(then_once, merge);
+    xi_block_set_if(merge, gt, then_b, else_b);
+
+    XiValue *one = xi_const_int(f, then_b, 1, &stub_int);
+    xi_block_set_return(then_b, one);
+    XiValue *two = xi_const_int(f, else_b, 2, &stub_int);
+    xi_block_set_return(else_b, two);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_cmp = false;
+    uint32_t cmp_reg = 0;
+    int tests_of_cmp = 0;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        OpCode op = GET_OPCODE(inst);
+        if (op == OP_CMP_LT) {
+            found_cmp = true;
+            cmp_reg = GETARG_A(inst);
+        } else if (op == OP_TEST && found_cmp && GETARG_A(inst) == cmp_reg) {
+            tests_of_cmp++;
+        }
+    }
+    assert(found_cmp && "reused compare must emit a materialized CMP_* bool");
+    assert(tests_of_cmp == 2 && "both branches should test the same materialized compare");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_jump_fallthrough) {
     /* entry -> b1 -> return; test that unnecessary JMP is elided */
     XiFunc *f = make_func("test", &stub_int);
@@ -1141,6 +1194,7 @@ int main(void) {
 
     /* Control flow */
     run_emit_if_then_else();
+    run_emit_reused_cmp_control_materializes_bool();
     run_emit_jump_fallthrough();
 
     /* Copy / Move */

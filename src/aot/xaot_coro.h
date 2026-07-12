@@ -25,6 +25,7 @@ XR_FUNC XrString *xr_string_intern_core(struct XrRuntimeCore *core, const char *
 typedef struct XrAotRuntimeStringView {
     XrObjHeader hdr;
     uint32_t length;
+    uint32_t rune_length;
     uint32_t hash;
     char data[];
 } XrAotRuntimeStringView;
@@ -120,6 +121,9 @@ static inline XrValue xr_aot_bridge_string_to_xrt(XrValue value) {
         return XR_NULL_VAL;
 
     XrValue dst = xrt_str_alloc((size_t) src->length);
+    xrt_str_t *hdr = xr_str_hdr(dst);
+    hdr->hash = src->hash;
+    hdr->rune_len = (int64_t) src->rune_length;
     char *data = xr_str_buf(dst);
     memcpy(data, src->data, (size_t) src->length);
     data[src->length] = '\0';

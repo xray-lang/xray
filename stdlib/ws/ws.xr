@@ -538,13 +538,13 @@ fn parseUrl(url: string) -> WsUrl? {
         pos = endBracket + 1
         if (pos < len(url)) {
             var c = url.runes().nth(pos)
-            if (c != ":" && c != "/" && c != "?") { return null }
+            if (c != ':' && c != '/' && c != '?') { return null }
         }
     } else {
         var hostStart = pos
         while (pos < len(url)) {
             var c = url.runes().nth(pos)
-            if (c == ":" || c == "/" || c == "?") { break }
+            if (c == ':' || c == '/' || c == '?') { break }
             pos = pos + 1
         }
         if (pos == hostStart) { return null }
@@ -557,7 +557,7 @@ fn parseUrl(url: string) -> WsUrl? {
         pos = portStart
         while (pos < len(url)) {
             var c = url.runes().nth(pos)
-            if (c == "/" || c == "?") { break }
+            if (c == '/' || c == '?') { break }
             pos = pos + 1
         }
         port = _parsePort(url, portStart, pos)
@@ -567,9 +567,9 @@ fn parseUrl(url: string) -> WsUrl? {
     var path = "/"
     if (pos < len(url)) {
         var c = url.runes().nth(pos)
-        if (c == "/") {
+        if (c == '/') {
             path = url.slice(pos, len(url))
-        } else if (c == "?") {
+        } else if (c == '?') {
             path = "/" + url.slice(pos, len(url))
         } else {
             return null

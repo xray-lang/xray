@@ -43,9 +43,18 @@ static bool xi_lower_is_builtin_call(const XiValue *v, const char *name) {
            strcmp((const char *) v->aux, name) == 0;
 }
 
-static void xi_lower_rewrite_shared_store_copy(XiValue *val) {
-    if (xi_lower_is_builtin_call(val, "copy"))
-        val->aux = (void *) "to_shared";
+static XiValue *xi_lower_wrap_shared_store_copy(XiLower *l, XiValue *val) {
+    if (!l || !val || !xi_lower_is_builtin_call(val, "copy"))
+        return val;
+    XiValue *shared = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                   val->type ? val->type : l->type_any, 1);
+    if (!shared)
+        return val;
+    shared->args[0] = val;
+    shared->aux = (void *) "to_shared";
+    shared->flags |= XI_FLAG_SIDE_EFFECT;
+    shared->line = val->line;
+    return shared;
 }
 
 static struct XrType *xi_lower_param_type(XiLower *l, XrParamNode *param) {
@@ -237,7 +246,7 @@ XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiVal
             store->flags |= XI_FLAG_SIDE_EFFECT;
         }
     } else {
-        xi_lower_rewrite_shared_store_copy(val);
+        val = xi_lower_wrap_shared_store_copy(l, val);
         store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
         if (store) {
             store->args[0] = val;
@@ -1167,7 +1176,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     if (!ret_type)
         ret_type = l.type_unit;
 
-    l.func = xi_func_new(fdecl->name ? fdecl->name : "<anonymous>", ret_type);
+    l.func = xi_func_new(fdecl->name && fdecl->name[0] ? fdecl->name : "<anonymous>", ret_type);
     if (!l.func) {
         xi_lower_cleanup(&l);
         return NULL;
