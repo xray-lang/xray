@@ -67,6 +67,7 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core,
     ctx->dst_fixed_heap = dst_fixed_heap ? dst_fixed_heap : &core->fixed_heap;
     ctx->dst_heap = NULL;
     ctx->to_transit = false;
+    ctx->dst_storage_mode = XR_OBJ_STORAGE_NORMAL;
     ctx->share_existing_shared = true;
     ctx->buckets = NULL;
     ctx->bucket_count = 0;
@@ -106,6 +107,11 @@ static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t typ
 static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type) {
     if (ctx->to_transit) {
         return copy_ctx_alloc_transit(ctx, size, type);
+    }
+    if (ctx->dst_storage_mode == XR_OBJ_STORAGE_SHARED ||
+        ctx->dst_storage_mode == XR_OBJ_STORAGE_OWNED) {
+        XrSystemHeap *heap = ctx->core ? ctx->core->sys_heap : NULL;
+        return heap ? xr_sysheap_alloc_storage(heap, size, type, ctx->dst_storage_mode) : NULL;
     }
     if (ctx->dst_heap) {
         return xr_coro_heap_new_obj(ctx->dst_heap, type, size);
@@ -1119,6 +1125,42 @@ XrValue xr_deep_copy_explicit_to_coro(struct XrVMRuntime *X, XrValue value,
                                       struct XrCoroutine *dst_coro) {
     XR_DCHECK(X != NULL, "deep_copy_explicit_to_coro: NULL isolate");
     return xr_deep_copy_explicit_to_coro_core(xr_isolate_get_runtime_core(X), value, dst_coro);
+}
+
+XrValue xr_deep_copy_explicit_to_storage_core(XrRuntimeCore *core, XrValue value,
+                                              uint8_t storage_mode) {
+    XR_DCHECK(core != NULL, "deep_copy_explicit_to_storage_core: NULL runtime core");
+    if (storage_mode != XR_OBJ_STORAGE_SHARED && storage_mode != XR_OBJ_STORAGE_OWNED)
+        return xr_deep_copy_explicit_to_coro_core(core, value, NULL);
+    if (!XR_IS_PTR(value) && !XR_IS_ARRAY_REF(value))
+        return value;
+
+    if (XR_IS_PTR(value)) {
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        if (!obj)
+            return value;
+        uint8_t type = XR_OBJ_GET_TYPE(obj);
+        if (type >= XR_OBJ_TYPE_MAX || !xr_obj_deep_copy_ops[type]) {
+            if (XR_OBJ_IS_SHARED(obj))
+                xr_shared_retain(obj);
+            return value;
+        }
+    }
+
+    XrCopyContext ctx;
+    xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
+    ctx.share_existing_shared = false;
+    ctx.dst_storage_mode = storage_mode;
+    XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    xr_copy_context_cleanup(&ctx);
+    return result;
+}
+
+XrValue xr_deep_copy_explicit_to_storage(struct XrVMRuntime *X, XrValue value,
+                                         uint8_t storage_mode) {
+    XR_DCHECK(X != NULL, "deep_copy_explicit_to_storage: NULL isolate");
+    return xr_deep_copy_explicit_to_storage_core(xr_isolate_get_runtime_core(X), value,
+                                                 storage_mode);
 }
 
 XrValue xr_deep_copy_to_coro_counted_core(XrRuntimeCore *core, XrValue value,

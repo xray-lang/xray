@@ -2462,7 +2462,8 @@ static bool cg_class_native_shared_copy_wrapper(const XiValue *v) {
     if (!v || v->op != XI_CALL_BUILTIN || !v->aux || v->nargs != 1)
         return false;
     const char *name = (const char *) v->aux;
-    return strcmp(name, "copy") == 0 || strcmp(name, "to_shared") == 0;
+    return strcmp(name, "copy") == 0 || strcmp(name, "copy_shared") == 0 ||
+           strcmp(name, "copy_owned") == 0 || strcmp(name, "to_shared") == 0;
 }
 
 typedef struct {

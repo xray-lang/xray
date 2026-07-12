@@ -34,6 +34,20 @@ fn test_owned_copy_initializer() {
 }
 
 @test
+fn test_shared_copy_initializer() {
+    var source = Array<byte>(2, 0)
+    source[0] = 1
+    source[1] = 2
+
+    shared frozen = copy(source)
+    source[0] = 9
+
+    assert_eq(len(frozen), 2)
+    assert_eq(frozen[0], 1)
+    assert_eq(frozen[1], 2)
+}
+
+@test
 fn test_owned_move_to_shared_ref_free_array() {
     owned bytes = Array<byte>(3, 0)
     bytes[0] = 10

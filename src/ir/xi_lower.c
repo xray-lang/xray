@@ -46,15 +46,8 @@ static bool xi_lower_is_builtin_call(const XiValue *v, const char *name) {
 static XiValue *xi_lower_wrap_shared_store_copy(XiLower *l, XiValue *val) {
     if (!l || !val || !xi_lower_is_builtin_call(val, "copy"))
         return val;
-    XiValue *shared = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
-                                   val->type ? val->type : l->type_any, 1);
-    if (!shared)
-        return val;
-    shared->args[0] = val;
-    shared->aux = (void *) "to_shared";
-    shared->flags |= XI_FLAG_SIDE_EFFECT;
-    shared->line = val->line;
-    return shared;
+    val->aux = (void *) "copy_shared";
+    return val;
 }
 
 static struct XrType *xi_lower_param_type(XiLower *l, XrParamNode *param) {

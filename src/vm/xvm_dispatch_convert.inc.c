@@ -327,6 +327,7 @@ vmcase(OP_TOBOOL) {
 vmcase(OP_COPY) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    int storage_mode = GETARG_C(i);
     XrValue _src = R(b);
     if (XR_IS_SPAN_REF(_src)) {
         XrSpanView *span = XR_TO_SPAN_REF(_src);
@@ -334,8 +335,22 @@ vmcase(OP_COPY) {
             span->elem_type >= XR_ELEM_COUNT || (span->length > 0 && !span->data)) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy length exceeds VM array limit");
         }
-        XrArray *arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, (int32_t) span->length,
-                                                    (XrArrayElemType) span->elem_type);
+        XrArray *arr = NULL;
+        if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_OWNED) {
+            arr = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+                                                       sizeof(XrArray), XR_TARRAY,
+                                                       (uint8_t) storage_mode);
+            if (arr) {
+                xr_array_init_inplace(arr, span->length > 0 ? (int) span->length : 0,
+                                      span->elem_type);
+                XR_OBJ_SET_STORAGE(&arr->hdr, storage_mode);
+                if (storage_mode == XR_OBJ_STORAGE_SHARED)
+                    xr_shared_set_refc(&arr->hdr, 1);
+            }
+        } else {
+            arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, (int32_t) span->length,
+                                               (XrArrayElemType) span->elem_type);
+        }
         if (!arr)
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy failed");
         arr->elem_tid = span->elem_tid;
@@ -360,8 +375,9 @@ vmcase(OP_COPY) {
     if (XR_IS_PTR(_src) && XR_HEAP_TYPE(_src) == XR_TINSTANCE) {
         XrInstance *_inst = (XrInstance *) XR_TO_PTR(_src);
         XrClass *_cls = _inst->klass;
-        if ((_cls->flags & (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) ==
-            (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) {
+        if (storage_mode == XR_OBJ_STORAGE_NORMAL &&
+            (_cls->flags & (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) ==
+                (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) {
             XrInstance *_new = xr_instance_clone(isolate, _inst);
             if (_new) {
                 R(a) = XR_FROM_PTR(_new);
@@ -369,7 +385,10 @@ vmcase(OP_COPY) {
             }
         }
     }
-    R(a) = xr_deep_copy_explicit_to_coro(isolate, _src, (XrCoroutine *) vm_ctx->current_coro);
+    if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_OWNED)
+        R(a) = xr_deep_copy_explicit_to_storage(isolate, _src, (uint8_t) storage_mode);
+    else
+        R(a) = xr_deep_copy_explicit_to_coro(isolate, _src, (XrCoroutine *) vm_ctx->current_coro);
     vmbreak;
 }
 
