@@ -3874,8 +3874,8 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     return true;
 }
 
-static bool emit_bytes_new_native_local_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                             const XiValue *v) {
+static bool emit_byte_array_new_native_local_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiValue *v) {
     if (!out || !v || v->op != XI_CALL_BUILTIN || !v->aux ||
         strcmp((const char *) v->aux, "array_byte_new") != 0)
         return false;
@@ -4183,21 +4183,6 @@ static void emit_span_array_view_ptr_expr(FILE *out, const XiValue *value) {
     fprintf(out, ")");
 }
 
-static bool cg_bytes_u8_read_info(XiCgenCtx *ctx, const XiFunc *f, const XiValue *value,
-                                  CgArrayElemInfo *out) {
-    return cg_array_value_u8_unchecked_info(ctx, f, value, out, CG_ARRAY_STORAGE_READ) ||
-           cg_span_value_u8_info(ctx, value, out);
-}
-
-static void emit_bytes_u8_read_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                        const XiValue *value, const char *prefix) {
-    if (cg_span_value_u8_info(ctx, value, NULL)) {
-        emit_span_array_view_ptr_expr(out, value);
-        return;
-    }
-    emit_typed_array_ptr_expr(ctx, out, f, value, prefix);
-}
-
 static bool emit_span_length_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_LEN || v->nargs != 1)
         return false;
@@ -4457,7 +4442,7 @@ static bool emit_typed_array_resize_zero_expr(XiCgenCtx *ctx, FILE *out, const X
     return true;
 }
 
-static void emit_bytes_array_result_suffix(FILE *out, bool boxed);
+static void emit_byte_array_result_suffix(FILE *out, bool boxed);
 
 static bool emit_typed_array_reserve_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const char *prefix, const XiValue *call) {
@@ -4477,7 +4462,7 @@ static bool emit_typed_array_reserve_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[1], XR_REP_I64);
     fprintf(out, ")");
-    emit_bytes_array_result_suffix(out, boxed);
+    emit_byte_array_result_suffix(out, boxed);
     return true;
 }
 
@@ -4492,17 +4477,17 @@ static bool cg_array_elem_info_is_memset_byte_pattern(const CgArrayElemInfo *inf
             strcmp(info->elem_name, "XR_ELEM_U8") == 0);
 }
 
-static void emit_bytes_array_result_suffix(FILE *out, bool boxed) {
+static void emit_byte_array_result_suffix(FILE *out, bool boxed) {
     if (boxed)
         fprintf(out, ", XR_TAG_ARRAY)");
 }
 
-static bool cg_bytes_unchecked_int_arg(const XiValue *arg) {
+static bool cg_byte_array_unchecked_int_arg(const XiValue *arg) {
     return arg && arg->type && arg->type->kind == XR_KIND_INT;
 }
 
-static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                        const char *prefix, const XiValue *call) {
+static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const char *prefix, const XiValue *call) {
     CgArrayElemInfo dst_info;
     if (!call || call->nargs != 2)
         return false;
@@ -4535,7 +4520,7 @@ static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
         fprintf(out, ", ");
         emit_span_ref_expr(out, call->args[1]);
         fprintf(out, ")");
-        emit_bytes_array_result_suffix(out, boxed);
+        emit_byte_array_result_suffix(out, boxed);
         return true;
     }
     fprintf(out, "({ xrt_array_t *_dst = ");
@@ -4563,18 +4548,19 @@ static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
     fprintf(out, " } _dst->length = _new_length; } else { _res = "
                  "xrt_bytes_append_from_span_slow_raw(_dst, _src); } } else { _res = "
                  "xrt_bytes_append_from_span_slow_raw(_dst, _src); } _res; })");
-    emit_bytes_array_result_suffix(out, boxed);
+    emit_byte_array_result_suffix(out, boxed);
     return true;
 }
 
-static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                        const char *prefix, const XiValue *call) {
+static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const char *prefix, const XiValue *call) {
     CgArrayElemInfo info;
     if (!call || call->nargs != 3)
         return false;
     if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
         return false;
-    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]))
+    if (!cg_byte_array_unchecked_int_arg(call->args[1]) ||
+        !cg_byte_array_unchecked_int_arg(call->args[2]))
         return false;
 
     const XaotBulkPlan *bulk =
@@ -4624,7 +4610,7 @@ static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
         emit_value_as_rep(out, call->args[2], XR_REP_I64);
         fprintf(out, ")");
     }
-    emit_bytes_array_result_suffix(out, boxed);
+    emit_byte_array_result_suffix(out, boxed);
     return true;
 }
 
@@ -4674,7 +4660,8 @@ static bool cg_array_call_is_bytes_repeat_trusted_nothrow(XiCgenCtx *ctx, const 
     return cg_method_name_is(v, "repeatFrom", XRT_SYM_REPEATFROM) && v->nargs == 3 &&
            cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
-           cg_bytes_unchecked_int_arg(v->args[1]) && cg_bytes_unchecked_int_arg(v->args[2]);
+           cg_byte_array_unchecked_int_arg(v->args[1]) &&
+           cg_byte_array_unchecked_int_arg(v->args[2]);
 }
 
 static bool cg_array_bytes_load_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,

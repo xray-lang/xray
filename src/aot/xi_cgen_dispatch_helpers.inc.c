@@ -3944,7 +3944,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_array_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_byte_new") == 0) {
         if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR) {
-            if (!emit_bytes_new_native_local_expr(ctx, out, f, v)) {
+            if (!emit_byte_array_new_native_local_expr(ctx, out, f, v)) {
                 if (v->nargs == 0) {
                     fprintf(out, "(xrt_array_t*)xrt_bytes_new_len(0).ptr");
                 } else if (v->nargs == 1) {
@@ -4181,10 +4181,10 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
         emit_typed_array_resize_zero_expr(ctx, out, f, prefix, v))
         return true;
     if (nargs == 1 && method && strcmp(method, "appendFrom") == 0 &&
-        emit_bytes_append_from_expr(ctx, out, f, prefix, v))
+        emit_byte_array_append_from_expr(ctx, out, f, prefix, v))
         return true;
     if (nargs == 2 && method && strcmp(method, "repeatFrom") == 0 &&
-        emit_bytes_repeat_from_expr(ctx, out, f, prefix, v))
+        emit_byte_array_repeat_from_expr(ctx, out, f, prefix, v))
         return true;
     if (method && strcmp(method, "fill") == 0 && nargs >= 1 && nargs <= 3 &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))
