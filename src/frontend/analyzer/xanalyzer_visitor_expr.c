@@ -324,9 +324,12 @@ typedef enum {
     XA_BUILTIN_TYPE_UNIT,
     XA_BUILTIN_TYPE_ENDIAN,
     XA_BUILTIN_TYPE_PARAM_0,
+    XA_BUILTIN_TYPE_ARRAY_OF_PARAM_0,
     XA_BUILTIN_TYPE_RECEIVER_ELEM_TO_BOOL_FN,
     XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_BOOL_FN,
     XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_UNIT_FN,
+    XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN,
+    XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN,
     XA_BUILTIN_TYPE_SLICE_OF_PARAM_0,
     XA_BUILTIN_TYPE_RECEIVER,
     XA_BUILTIN_TYPE_RECEIVER_ELEM,
@@ -343,6 +346,7 @@ typedef enum {
 typedef enum {
     XA_BUILTIN_TYPE_PARAMS_NONE,
     XA_BUILTIN_TYPE_PARAMS_T,
+    XA_BUILTIN_TYPE_PARAMS_U,
 } XaBuiltinMethodTypeParams;
 
 typedef enum {
@@ -417,6 +421,9 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
             return xr_type_new_enum(X, "Endian");
         case XA_BUILTIN_TYPE_PARAM_0:
             return type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0);
+        case XA_BUILTIN_TYPE_ARRAY_OF_PARAM_0:
+            return xr_type_new_array(X,
+                                     type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0));
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_TO_BOOL_FN: {
             XrType *elem = receiver && receiver->container.element_type
                                ? receiver->container.element_type
@@ -437,6 +444,22 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
                                : xr_type_new_unknown(X);
             XrType *params[2] = {elem, xr_type_new_int(X)};
             return xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
+        }
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN: {
+            XrType *elem = receiver && receiver->container.element_type
+                               ? receiver->container.element_type
+                               : xr_type_new_unknown(X);
+            XrType *params[2] = {elem, xr_type_new_int(X)};
+            return xr_type_new_function(
+                X, params, 2, type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0), false);
+        }
+        case XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN: {
+            XrType *acc = type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0);
+            XrType *elem = receiver && receiver->container.element_type
+                               ? receiver->container.element_type
+                               : xr_type_new_unknown(X);
+            XrType *params[3] = {acc, elem, xr_type_new_int(X)};
+            return xr_type_new_function(X, params, 3, acc, false);
         }
         case XA_BUILTIN_TYPE_SLICE_OF_PARAM_0:
             return xr_type_new_span(X,
@@ -515,8 +538,9 @@ static XrType *xa_builtin_receiver_method_type(XaInferContext *ctx, XrType *rece
             continue;
 
         XrVMRuntime *X = ctx->analyzer->isolate;
-        XrType *type_param0 = spec->type_params == XA_BUILTIN_TYPE_PARAMS_T
-                                  ? xr_type_new_type_param(X, "T", 0)
+        const char *type_param0_name = spec->type_params == XA_BUILTIN_TYPE_PARAMS_U ? "U" : "T";
+        XrType *type_param0 = spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE
+                                  ? xr_type_new_type_param(X, type_param0_name, 0)
                                   : NULL;
         XrType *params[3] = {NULL, NULL, NULL};
         for (int p = 0; p < spec->param_count && p < 3; p++)
@@ -525,8 +549,8 @@ static XrType *xa_builtin_receiver_method_type(XaInferContext *ctx, XrType *rece
         XrType *ret = xa_builtin_method_component_type(ctx, spec->result, receiver, type_param0);
         XrType *fn = xr_type_new_function(X, spec->param_count > 0 ? params : NULL,
                                           spec->param_count, ret, spec->is_variadic);
-        if (fn && spec->type_params == XA_BUILTIN_TYPE_PARAMS_T) {
-            const char *names[1] = {"T"};
+        if (fn && spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE) {
+            const char *names[1] = {type_param0_name};
             xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
         }
         if (fn)
