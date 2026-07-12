@@ -67,6 +67,7 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core,
     ctx->dst_fixed_heap = dst_fixed_heap ? dst_fixed_heap : &core->fixed_heap;
     ctx->dst_heap = NULL;
     ctx->to_transit = false;
+    ctx->share_existing_shared = true;
     ctx->buckets = NULL;
     ctx->bucket_count = 0;
     ctx->objects_copied = 0;
@@ -110,6 +111,20 @@ static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type
         return xr_coro_heap_new_obj(ctx->dst_heap, type, size);
     }
     return xr_fixed_heap_alloc(ctx->dst_fixed_heap, size, type);
+}
+
+static bool xr_deep_copy_share_sticky_singleton(XrObjHeader *obj) {
+    if (!obj || !XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) ||
+        !xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
+        return false;
+    switch (XR_OBJ_GET_TYPE(obj)) {
+        case XR_TCLASS:
+        case XR_TENUM_TYPE:
+        case XR_TENUM_CTOR:
+            return true;
+        default:
+            return false;
+    }
 }
 
 XrValue xr_deep_copy_string_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
@@ -808,10 +823,9 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
      * XrEnumCtor.enum_name, which lives OUTSIDE the instance field array) make
      * a structural field-copy both wrong and corrupting. Share by pointer; the
      * sticky RC makes any cross-coroutine retain/drop a no-op. */
-    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) &&
-        xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
+    if (xr_deep_copy_share_sticky_singleton(obj))
         return value;
-    if (XR_OBJ_IS_SHARED(obj)) {
+    if (XR_OBJ_IS_SHARED(obj) && ctx->share_existing_shared) {
         /* TRANSIT graphs are never pointer-shared: the receive side must
          * materialize a private copy, so fall through to the per-type copy. */
         if (!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
@@ -1063,6 +1077,48 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
 XrValue xr_deep_copy_to_coro(struct XrVMRuntime *X, XrValue value, struct XrCoroutine *dst_coro) {
     XR_DCHECK(X != NULL, "deep_copy_to_coro: NULL isolate");
     return xr_deep_copy_to_coro_core(xr_isolate_get_runtime_core(X), value, dst_coro);
+}
+
+XrValue xr_deep_copy_explicit_to_coro_core(XrRuntimeCore *core, XrValue value,
+                                           struct XrCoroutine *dst_coro) {
+    if (!core && dst_coro)
+        core = dst_coro->core;
+    XR_DCHECK(core != NULL, "deep_copy_explicit_to_coro_core: NULL runtime core");
+    if (XR_IS_ARRAY_REF(value)) {
+        XrCopyContext ctx;
+        xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
+        ctx.share_existing_shared = false;
+        if (dst_coro)
+            ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
+        XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+        xr_copy_context_cleanup(&ctx);
+        return result;
+    }
+    if (!XR_IS_PTR(value))
+        return value;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return value;
+    uint8_t type = XR_OBJ_GET_TYPE(obj);
+    if (type >= XR_OBJ_TYPE_MAX || !xr_obj_deep_copy_ops[type]) {
+        if (XR_OBJ_IS_SHARED(obj))
+            xr_shared_retain(obj);
+        return value;
+    }
+    XrCopyContext ctx;
+    xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
+    ctx.share_existing_shared = false;
+    if (dst_coro)
+        ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
+    XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    xr_copy_context_cleanup(&ctx);
+    return result;
+}
+
+XrValue xr_deep_copy_explicit_to_coro(struct XrVMRuntime *X, XrValue value,
+                                      struct XrCoroutine *dst_coro) {
+    XR_DCHECK(X != NULL, "deep_copy_explicit_to_coro: NULL isolate");
+    return xr_deep_copy_explicit_to_coro_core(xr_isolate_get_runtime_core(X), value, dst_coro);
 }
 
 XrValue xr_deep_copy_to_coro_counted_core(XrRuntimeCore *core, XrValue value,
@@ -1364,8 +1420,7 @@ XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {
     /* Immortal fixed-heap singletons (enum descriptors, classes) are global
      * and already coroutine-independent; a structural copy would corrupt their
      * native C-struct members. Share by pointer (see xr_deep_copy_with_ctx). */
-    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) &&
-        xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
+    if (xr_deep_copy_share_sticky_singleton(obj))
         return value;
     // Already shared: no-op (do NOT incref — caller already owns the reference)
     if (XR_OBJ_IS_SHARED(obj))

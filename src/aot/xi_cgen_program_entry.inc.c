@@ -179,6 +179,16 @@ static bool cg_entry_uses_resumable_frame(XiCgenCtx *ctx) {
     return bundle->entry_plan.root_representation == XR_ROOT_RESUMABLE_FRAME;
 }
 
+static bool cg_entry_init_uses_resumable_frame(XiCgenCtx *ctx, XiModule **modules, int n,
+                                               int entry_index) {
+    if (cg_entry_uses_resumable_frame(ctx))
+        return true;
+    if (!modules || entry_index < 0 || entry_index >= n || !modules[entry_index] ||
+        !modules[entry_index]->init)
+        return false;
+    return cg_func_needs_aot_coro_ctx(ctx, modules[entry_index]->init);
+}
+
 static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     if (!bundle || !bundle->has_entry_plan) {
@@ -379,7 +389,9 @@ static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **module
                                     int entry_index) {
     CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_modules(modules, n);
     uint32_t runtime_caps = cg_runtime_caps_from_entry_plan(ctx);
-    bool entry_is_coro = cg_entry_uses_resumable_frame(ctx);
+    bool entry_is_coro = cg_entry_init_uses_resumable_frame(ctx, modules, n, entry_index);
+    if (entry_is_coro)
+        runtime_caps |= XR_AOT_CAP_CORO;
     if (entry_is_coro || cg_runtime_caps_need_runtime(runtime_caps)) {
         fprintf(out, "/* --shared: runtime-backed bundle; no load-time init emitted. */\n");
         return;
@@ -404,10 +416,12 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     XR_DCHECK(n > 0, "xi_cgen_main: no modules");
     XR_DCHECK(entry_index >= 0 && entry_index < n, "xi_cgen_main: bad entry_index");
 
-    bool entry_is_coro = cg_entry_uses_resumable_frame(ctx);
+    bool entry_is_coro = cg_entry_init_uses_resumable_frame(ctx, modules, n, entry_index);
     bool entry_has_descriptor = cg_entry_uses_root_descriptor(ctx);
     CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_modules(modules, n);
     uint32_t runtime_caps = cg_runtime_caps_from_entry_plan(ctx);
+    if (entry_is_coro)
+        runtime_caps |= XR_AOT_CAP_CORO;
     bool entry_needs_runtime =
         entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
@@ -481,6 +495,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
     /* Reset function name counter for each compilation unit */
     ctx->fname_counter = 0;
+    cg_reset_emitted_funcs(ctx);
 
     XiModule *single_module[1] = {module};
     ctx->all_modules = single_module;
@@ -535,9 +550,11 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     if (ctx->emit_main) {
         CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_func(main_func);
         const char *entry_source_path = cg_entry_source_path(ctx, single_module, 1, 0);
-        bool entry_is_coro = cg_entry_uses_resumable_frame(ctx);
+        bool entry_is_coro = cg_entry_init_uses_resumable_frame(ctx, single_module, 1, 0);
         bool entry_has_descriptor = cg_entry_uses_root_descriptor(ctx);
         uint32_t runtime_caps = cg_runtime_caps_from_entry_plan(ctx);
+        if (entry_is_coro)
+            runtime_caps |= XR_AOT_CAP_CORO;
         bool entry_needs_runtime =
             entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
         if (entry_needs_runtime)
@@ -626,6 +643,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
      * symbols.  Cross-module-visible functions use order-independent names
      * (see emit_fname), so the counter is reset per translation unit. */
     ctx->fname_counter = 0;
+    cg_reset_emitted_funcs(ctx);
 
     /* Every unit references cross-module symbols by name, so all module IR must
      * be lowered before any unit is emitted.  cg_prepare_func_tree_for_cgen is

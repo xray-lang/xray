@@ -41,6 +41,14 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr",
     "tests/diff/cases/semantics/concurrency/once_compose.xr",
     "tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr",
+    # The hosted parallel module uses runtime-backed worker/task state. These
+    # cases are the explicit positive coverage for that API surface, so the
+    # coroutine runtime archive is expected.
+    "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr",
+    "tests/diff/cases/semantics/stdlib/parallel_for_each_vm_batch.xr",
+    "tests/diff/cases/semantics/stdlib/parallel_map_vm_batch.xr",
+    "tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr",
+    "tests/diff/cases/semantics/stdlib/parallel_reduce_vm_batch.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
     # hosted `sync` module is a pure-Xray script module that also exports
     # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles
@@ -53,6 +61,8 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/stdlib/sys_thread_const_function_value.xr",
     "tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr",
     "tests/diff/cases/semantics/stdlib/sys_threadlocal_basic.xr",
+    "tests/diff/cases/semantics/stdlib/sys_threadlocal_nullable.xr",
+    "tests/diff/cases/semantics/stdlib/sys_signal_on_signal.xr",
     "tests/diff/cases/semantics/modules/xmod_coro.xr",
     "tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr",
     "tests/diff/cases/semantics/ownership/move_into_go.xr",

@@ -586,6 +586,10 @@ struct XiCgenCtx {
     const char **xmod_ref_prefixes;
     int n_xmod_refs;
     int xmod_refs_cap;
+    const XiFunc **emitted_funcs;
+    char **emitted_func_names;
+    int nemitted_funcs;
+    int emitted_funcs_cap;
     bool *cell_vars;
     bool *cell_release_vars;
     bool *cell_heap_capture_vars;
@@ -802,6 +806,79 @@ static bool cg_reserve_imports(XiCgenCtx *ctx, int need) {
     memset(&ni[ctx->imports_cap], 0, (size_t) (nc - ctx->imports_cap) * sizeof(*ni));
     ctx->imports = ni;
     ctx->imports_cap = nc;
+    return true;
+}
+
+static bool cg_reserve_emitted_funcs(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->emitted_funcs_cap)
+        return true;
+    int nc = ctx->emitted_funcs_cap > 0 ? ctx->emitted_funcs_cap : 64;
+    while (nc < need)
+        nc *= 2;
+    const XiFunc **items =
+        (const XiFunc **) xr_realloc(ctx->emitted_funcs, (size_t) nc * sizeof(*items));
+    if (!items) {
+        ctx->error = true;
+        return false;
+    }
+    ctx->emitted_funcs = items;
+    char **names = (char **) xr_realloc(ctx->emitted_func_names, (size_t) nc * sizeof(*names));
+    if (!names) {
+        ctx->error = true;
+        return false;
+    }
+    memset(&items[ctx->emitted_funcs_cap], 0,
+           (size_t) (nc - ctx->emitted_funcs_cap) * sizeof(*items));
+    memset(&names[ctx->emitted_funcs_cap], 0,
+           (size_t) (nc - ctx->emitted_funcs_cap) * sizeof(*names));
+    ctx->emitted_func_names = names;
+    ctx->emitted_funcs_cap = nc;
+    return true;
+}
+
+static bool cg_func_c_name(XiCgenCtx *ctx, const char *prefix, const XiFunc *f, char *buf,
+                           size_t bufsz);
+
+static void cg_reset_emitted_funcs(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->nemitted_funcs; i++) {
+        xr_free(ctx->emitted_func_names ? ctx->emitted_func_names[i] : NULL);
+        if (ctx->emitted_func_names)
+            ctx->emitted_func_names[i] = NULL;
+        if (ctx->emitted_funcs)
+            ctx->emitted_funcs[i] = NULL;
+    }
+    ctx->nemitted_funcs = 0;
+}
+
+static bool cg_mark_func_emitted(XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
+    if (!ctx || !f)
+        return false;
+    char cname[384];
+    bool have_cname = cg_func_c_name(ctx, prefix, f, cname, sizeof(cname));
+    for (int i = 0; i < ctx->nemitted_funcs; i++) {
+        if (ctx->emitted_funcs[i] == f)
+            return false;
+        if (have_cname && ctx->emitted_func_names && ctx->emitted_func_names[i] &&
+            strcmp(ctx->emitted_func_names[i], cname) == 0)
+            return false;
+        const XiFunc *seen = ctx->emitted_funcs[i];
+        if (seen && f->cgen_id > 0 && seen->cgen_id == f->cgen_id &&
+            ((seen->name == f->name) ||
+             (seen->name && f->name && strcmp(seen->name, f->name) == 0)))
+            return false;
+    }
+    if (!cg_reserve_emitted_funcs(ctx, ctx->nemitted_funcs + 1))
+        return false;
+    char *saved_name = have_cname ? xr_strdup(cname) : NULL;
+    if (have_cname && !saved_name) {
+        ctx->error = true;
+        return false;
+    }
+    int slot = ctx->nemitted_funcs++;
+    ctx->emitted_funcs[slot] = f;
+    ctx->emitted_func_names[slot] = saved_name;
     return true;
 }
 
@@ -1397,6 +1474,34 @@ static void cg_note_xmod_ref(XiCgenCtx *ctx, const XiFunc *f, const char *prefix
     ctx->n_xmod_refs++;
 }
 
+static bool cg_func_c_name(XiCgenCtx *ctx, const char *prefix, const XiFunc *f, char *buf,
+                           size_t bufsz) {
+    if (!ctx || !f || !buf || bufsz == 0)
+        return false;
+
+    bool have_prefix = prefix && prefix[0];
+    if (ctx->extern_linkage && have_prefix && cg_func_stable_cname(ctx, f, prefix, buf, bufsz))
+        return true;
+
+    char prefix_buf[128];
+    if (have_prefix)
+        sanitize_c_ident_part(prefix_buf, sizeof(prefix_buf), prefix);
+
+    const char *raw = f->name ? f->name : "anon";
+    char name_buf[128];
+    sanitize_c_ident_part(name_buf, sizeof(name_buf), raw);
+
+    XiFunc *mf = (XiFunc *) (uintptr_t) f;
+    if (mf->cgen_id == 0)
+        mf->cgen_id = ++ctx->fname_counter;
+
+    if (have_prefix)
+        snprintf(buf, bufsz, "%s_%s_%d", prefix_buf, name_buf, f->cgen_id);
+    else
+        snprintf(buf, bufsz, "fn_%s_%d", name_buf, f->cgen_id);
+    return true;
+}
+
 /* Write the C name for a function.
  *
  * Single-module / file-static mode: prefix_funcname_id, where the numeric id is
@@ -1411,9 +1516,6 @@ static void emit_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFu
     XR_DCHECK(f != NULL, "emit_fname: NULL func");
 
     bool have_prefix = prefix && prefix[0];
-    char prefix_buf[128];
-    if (have_prefix)
-        sanitize_c_ident_part(prefix_buf, sizeof(prefix_buf), prefix);
 
     /* Record cross-module references so the unit forward-declares only the
      * imports it uses (114): a reference is cross-module when its owning prefix
@@ -1422,27 +1524,9 @@ static void emit_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFu
         ctx->module->name && strcmp(prefix, ctx->module->name) != 0)
         cg_note_xmod_ref(ctx, f, prefix);
 
-    if (ctx->extern_linkage && have_prefix) {
-        char stable[384];
-        if (cg_func_stable_cname(ctx, f, prefix, stable, sizeof(stable))) {
-            fprintf(out, "%s", stable);
-            return;
-        }
-    }
-
-    const char *raw = f->name ? f->name : "anon";
-    char buf[128];
-    sanitize_c_ident_part(buf, sizeof(buf), raw);
-
-    /* Assign a stable unique ID on first use (cgen_id == 0 means unassigned) */
-    XiFunc *mf = (XiFunc *) (uintptr_t) f; /* cast away const for cgen_id write */
-    if (mf->cgen_id == 0)
-        mf->cgen_id = ++ctx->fname_counter;
-
-    if (have_prefix)
-        fprintf(out, "%s_%s_%d", prefix_buf, buf, f->cgen_id);
-    else
-        fprintf(out, "fn_%s_%d", buf, f->cgen_id);
+    char cname[384];
+    if (cg_func_c_name(ctx, prefix, f, cname, sizeof(cname)))
+        fprintf(out, "%s", cname);
 }
 
 static void emit_fname_suffix(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFunc *f,
@@ -2233,17 +2317,18 @@ static bool cg_class_native_field_plan_has_release_drop(XiCgenCtx *ctx, const Xi
 #include "xi_cgen_class_helpers.inc.c"
 static bool cg_has_exception_handling(const XiFunc *f);
 
-static const XaotHashEqPlan *
-cg_key_access_direct_user_hash_eq_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *key_plan) {
+static const XaotHashEqPlan *cg_key_access_hash_eq_plan(XiCgenCtx *ctx,
+                                                        const XaotKeyAccessPlan *key_plan) {
     if (!key_plan || key_plan->action != XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP)
         return NULL;
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    const XaotHashEqPlan *plan =
-        bundle ? xaot_bundle_find_hash_eq_plan(bundle, key_plan->key_type_key) : NULL;
-    if (!plan || plan->action != XAOT_HASH_EQ_DIRECT_CALL || plan->hash_func_id == XG_NO_ID ||
-        plan->eq_func_id == XG_NO_ID)
-        return NULL;
-    return plan;
+    return bundle ? xaot_bundle_find_hash_eq_plan(bundle, key_plan->key_type_key) : NULL;
+}
+
+static bool cg_key_access_plan_uses_builtin_hash_eq_backend(XiCgenCtx *ctx,
+                                                            const XaotKeyAccessPlan *key_plan) {
+    const XaotHashEqPlan *plan = cg_key_access_hash_eq_plan(ctx, key_plan);
+    return plan && plan->action == XAOT_HASH_EQ_BUILTIN_INLINE;
 }
 
 #include "xi_cgen_class_native_helpers.inc.c"
@@ -5238,6 +5323,24 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, "xr_aot_chan_is_closed_sync(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
+
+    if (v->op == XI_CHAN_TRY_SEND) {
+        if (v->nargs < 2) {
+            fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_SEND missing operands\n");
+            emit_codegen_abort_expr(out);
+            ctx->error = true;
+            return;
+        }
+        XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, rep);
+        fprintf(out, "xr_aot_chan_try_send_ready_transfer(%s, ", xicgen_aot_context_expr(ctx, f));
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", %u)", (unsigned) xi_chan_send_transfer_mode(v));
         emit_conversion_suffix(out, suffix);
         return;
     }
@@ -8834,6 +8937,30 @@ static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {
         cg_func_reach_collect_tree(ctx, f->children[i]);
 }
 
+static void cg_func_reach_mark_root(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return;
+    cg_func_reach_collect_tree(ctx, f);
+    CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, f, true);
+    if (memo) {
+        memo->reachable = true;
+        memo->state = 2;
+    }
+}
+
+static void cg_func_reach_mark_hash_eq_roots(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!ctx || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nhash_eq_plans; i++) {
+        const XaotHashEqPlan *plan = &bundle->hash_eq_plans[i];
+        if (plan->action != XAOT_HASH_EQ_DIRECT_CALL)
+            continue;
+        cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, plan->hash_func_id, NULL));
+        cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, plan->eq_func_id, NULL));
+    }
+}
+
 /* Compute executable function reachability as a monotonic fixed point over the
  * resolved call/reference graph.  The previous per-target recursive query
  * cached provisional negative answers while callers were still in the
@@ -8854,6 +8981,7 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
     } else if (ctx->module && ctx->module->init) {
         cg_func_reach_collect_tree(ctx, ctx->module->init);
     }
+    cg_func_reach_mark_hash_eq_roots(ctx);
 
     bool changed;
     do {
@@ -8898,6 +9026,8 @@ static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *t
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
+    if (!cg_mark_func_emitted(ctx, f, prefix))
+        return;
     /* Emit nested children first. A parent function can become unreachable
      * after inlining while one of its nested closure bodies is still referenced
      * from reachable code. */

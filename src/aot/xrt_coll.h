@@ -195,11 +195,15 @@ static inline void xrt_array_ensure_storage(xrt_array_t *a) {
     xrt_array_storage_promotion_lock_release();
 }
 
+static inline void xrt_throw_error(int code, const char *message);
+
 static inline void xrt_array_check_store_or_abort(const xrt_array_t *a, XrValue val,
                                                   const char *where) {
-    if (XR_UNLIKELY(a && a->elem_type == XR_ELEM_RUNE && val.tag != XR_TAG_RUNE)) {
-        fprintf(stderr, "%s: Array<char> element must be char\n", where);
-        abort();
+    (void) where;
+    if (XR_UNLIKELY(a && !xr_typed_value_is_storable(val, a->elem_type))) {
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, a->elem_type == XR_ELEM_RUNE
+                                                  ? "Array<char> element must be char"
+                                                  : "typed array element must be numeric");
     }
 }
 
@@ -996,8 +1000,10 @@ static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
 }
 
 static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end_value) {
-    int64_t start = xr_value_to_int64_coerce(start_value);
-    int64_t end = xr_value_to_int64_coerce(end_value);
+    if (!XR_IS_INT(start_value) || !XR_IS_INT(end_value))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);
+    int64_t start = XR_TO_INT(start_value);
+    int64_t end = XR_TO_INT(end_value);
     if (XR_IS_ARRAY(source))
         return xrt_array_slice_view(source, start, end);
     if (XR_IS_STR(source)) {

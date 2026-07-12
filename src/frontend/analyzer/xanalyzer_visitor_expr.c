@@ -702,9 +702,17 @@ static bool xa_type_is_nullable_non_bool(XrType *type) {
     return base && !XR_TYPE_IS_BOOL(base);
 }
 
+static bool xa_class_info_same_identity(struct XrClassInfo *a, struct XrClassInfo *b) {
+    if (!a || !b)
+        return false;
+    if (a == b)
+        return true;
+    return a->scope && b->scope && a->scope == b->scope;
+}
+
 static bool xa_class_info_is_subclass_of(struct XrClassInfo *sub, struct XrClassInfo *base) {
     for (struct XrClassInfo *c = sub; c; c = c->base) {
-        if (c == base)
+        if (xa_class_info_same_identity(c, base))
             return true;
     }
     return false;
@@ -721,7 +729,7 @@ XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSy
     bool ok = false;
     if (access) {
         if (member->is_private)
-            ok = (owner != NULL && access == owner);
+            ok = xa_class_info_same_identity(access, owner);
         else
             ok = (owner != NULL && xa_class_info_is_subclass_of(access, owner));
     }
@@ -969,8 +977,13 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
                                    XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
     }
 
-    // Use-after-move check: moved variables cannot be accessed
-    if (links && links->move_state == XA_MOVE_MOVED) {
+    // Use-after-move check: moved variables cannot be accessed. A direct
+    // `move x` source is allowed to read x when this exact move expression is
+    // being re-inferred after an earlier visit already marked it moved.
+    bool is_current_move_source = ctx->current_move_source_node == node &&
+                                  ctx->current_move_source_symbol_id == sym->id &&
+                                  ctx->current_move_source_allows_stale_mark;
+    if (links && links->move_state == XA_MOVE_MOVED && !is_current_move_source) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         snprintf(msg, sizeof(msg), "Variable '%s' used after move (moved at line %u)", name,
@@ -4077,20 +4090,30 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (!inner)
         return xr_type_new_unknown(NULL);
 
-    // Reset move_state before visiting inner variable so that re-analysis
-    // passes do not trigger false "used after move" on the move expr itself.
     XaSymbol *move_sym = NULL;
     if (inner->type == AST_VARIABLE) {
         move_sym = xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
-        if (move_sym) {
-            XaSymbolLinks *lnk = xa_analyzer_get_links(ctx->analyzer, move_sym);
-            if (lnk)
-                lnk->move_state = XA_MOVE_NOT_MOVED;
-        }
     }
 
     // Infer type of the variable being moved
+    const AstNode *saved_move_source_node = ctx->current_move_source_node;
+    uint32_t saved_move_source_symbol_id = ctx->current_move_source_symbol_id;
+    bool saved_move_source_allows_stale_mark = ctx->current_move_source_allows_stale_mark;
+    ctx->current_move_source_node = NULL;
+    ctx->current_move_source_symbol_id = 0;
+    ctx->current_move_source_allows_stale_mark = false;
+    if (move_sym) {
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, move_sym);
+        ctx->current_move_source_node = inner;
+        ctx->current_move_source_symbol_id = move_sym->id;
+        ctx->current_move_source_allows_stale_mark = links && links->move_state == XA_MOVE_MOVED &&
+                                                     links->moved_line == (uint32_t) node->line &&
+                                                     links->moved_column == (uint32_t) node->column;
+    }
     XrType *var_type = xa_visit_infer_expr(ctx, inner);
+    ctx->current_move_source_node = saved_move_source_node;
+    ctx->current_move_source_symbol_id = saved_move_source_symbol_id;
+    ctx->current_move_source_allows_stale_mark = saved_move_source_allows_stale_mark;
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
 

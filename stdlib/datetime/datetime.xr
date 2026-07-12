@@ -276,8 +276,8 @@ fn parse(s: string, format: string = "ISO8601") -> DateTime? {
         day = 1
         timeStart = 0
     } else {
-        var sep = "-"
-        if (s.contains("/")) { sep = "/" }
+        var sep: rune = '-'
+        if (s.contains("/")) { sep = '/' }
         var d = _parseDateAt(s, 0, sep)
         if (d == null) { return null }
         year = d!.year
@@ -451,7 +451,7 @@ fn _parseNDigits(s: string, start: int, count: int) -> int? {
     return out
 }
 
-fn _parseDateAt(s: string, start: int, sep: string) -> DateTimeParts? {
+fn _parseDateAt(s: string, start: int, sep: rune) -> DateTimeParts? {
     var y = _parseNDigits(s, start, 4)
     if (y == null) { return null }
     if (start + 4 >= len(s) || s.runes().nth(start + 4) != sep) { return null }
@@ -483,11 +483,11 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
     var i = timeStart
     while (i < len(s)) {
         var ch = s.runes().nth(i)
-        if (ch == ".") {
+        if (ch == '.') {
             dot = i
             break
         }
-        if (ch == "Z" || ch == "+" || ch == "-") { break }
+        if (ch == 'Z' || ch == '+' || ch == '-') { break }
         i = i + 1
     }
     if (dot < 0 || dot + 1 >= len(s)) { return 0 }
@@ -511,7 +511,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
 fn _findTimeSeparator(s: string) -> int {
     for (var i = 0; i < len(s); i++) {
         var ch = s.runes().nth(i)
-        if (ch == "T" || ch == " ") { return i }
+        if (ch == 'T' || ch == ' ') { return i }
     }
     return -1
 }
@@ -519,7 +519,7 @@ fn _findTimeSeparator(s: string) -> int {
 fn _findTimezoneStart(s: string, start: int) -> int {
     for (var i = start; i < len(s); i++) {
         var ch = s.runes().nth(i)
-        if (ch == "Z" || ch == "+" || ch == "-") { return i }
+        if (ch == 'Z' || ch == '+' || ch == '-') { return i }
     }
     return -1
 }

@@ -41,15 +41,19 @@
 
 #define VM_ARRAY_CHECK_STORABLE(arr, val)                                                          \
     do {                                                                                           \
-        if ((arr)->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(val)) {                                \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array<char> element must be char");            \
+        if (!xr_typed_value_is_storable((val), (arr)->elem_type)) {                                \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (arr)->elem_type == XR_ELEM_RUNE                \
+                                                       ? "Array<char> element must be char"        \
+                                                       : "typed array element must be numeric");   \
         }                                                                                          \
     } while (0)
 
 #define VM_SPAN_CHECK_STORABLE(span, val)                                                          \
     do {                                                                                           \
-        if ((span)->elem_type == XR_ELEM_RUNE && !XR_IS_RUNE(val)) {                               \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span<char> element must be char");             \
+        if (!xr_typed_value_is_storable((val), (span)->elem_type)) {                               \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (span)->elem_type == XR_ELEM_RUNE               \
+                                                       ? "Span<char> element must be char"         \
+                                                       : "typed span element must be numeric");    \
         }                                                                                          \
     } while (0)
 
@@ -2412,6 +2416,9 @@ vmcase(OP_SLICE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrValue source = R(b);
+    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);
+    }
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 

@@ -1048,7 +1048,8 @@ XR_FUNC const char *xr_compress_error_str(XrCompressError err) {
 static XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
     if (!s)
         return xr_null();
-    return xrs_string_value_n(X, s, len);
+    XrString *str = xr_string_new_raw_bytes(X, s, len);
+    return str ? xr_string_value(str) : xr_null();
 }
 
 static int compress_level_arg(XrValue *args, int nargs) {

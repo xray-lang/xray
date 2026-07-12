@@ -342,7 +342,8 @@ vmcase(OP_COPY) {
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *items = (XrValue *) span->data;
             for (int64_t idx = 0; idx < span->length; idx++)
-                xr_array_push(arr, xr_deep_copy_to_coro(isolate, items[idx], VM_CURRENT_CORO));
+                xr_array_push(arr,
+                              xr_deep_copy_explicit_to_coro(isolate, items[idx], VM_CURRENT_CORO));
             arr->contains_refs = span->contains_refs;
         } else {
             if (span->length > 0) {
@@ -368,7 +369,7 @@ vmcase(OP_COPY) {
             }
         }
     }
-    R(a) = xr_deep_copy_to_coro(isolate, _src, (XrCoroutine *) vm_ctx->current_coro);
+    R(a) = xr_deep_copy_explicit_to_coro(isolate, _src, (XrCoroutine *) vm_ctx->current_coro);
     vmbreak;
 }
 

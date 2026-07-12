@@ -119,6 +119,25 @@ static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length
     return str;
 }
 
+static uint32_t string_rune_count_lossy(const char *chars, size_t length) {
+    if (!chars || length == 0)
+        return 0;
+    const unsigned char *p = (const unsigned char *) chars;
+    const unsigned char *end = p + length;
+    uint32_t count = 0;
+    while (p < end) {
+        unsigned char b = *p;
+        size_t width = (b < 0x80u)              ? 1u
+                       : ((b & 0xE0u) == 0xC0u) ? 2u
+                       : ((b & 0xF0u) == 0xE0u) ? 3u
+                       : ((b & 0xF8u) == 0xF0u) ? 4u
+                                                : 1u;
+        p += width <= (size_t) (end - p) ? width : 1u;
+        count++;
+    }
+    return count;
+}
+
 // Create coroutine-local string. Hash is computed eagerly so equality and
 // map/set hashing never write into a string after it has been shared.
 XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length) {
@@ -127,6 +146,20 @@ XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length) {
     XrString *str = string_alloc(iso, chars, length);
     if (!str)
         return NULL;
+    string_finish_runtime(str, str->data, length, 0);
+    return str;
+}
+
+XrString *xr_string_new_raw_bytes(XrVMRuntime *iso, const char *bytes, size_t length) {
+    XR_DCHECK(iso != NULL, "string_new_raw_bytes: NULL isolate");
+    XR_DCHECK(length == 0 || bytes != NULL, "string_new_raw_bytes: NULL bytes with length > 0");
+    XrString *str = string_alloc_uninit(iso, length);
+    if (!str)
+        return NULL;
+    if (bytes && length > 0)
+        memcpy(str->data, bytes, length);
+    str->data[length] = '\0';
+    str->rune_length = string_rune_count_lossy(str->data, length);
     string_finish_runtime(str, str->data, length, 0);
     return str;
 }

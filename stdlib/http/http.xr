@@ -59,7 +59,7 @@ fn _parseIntStrict(s: string) -> int? {
     if (i >= len(t)) { return null }
     var out = 0
     while (i < len(t)) {
-        var c = t.runes().nth(i).toUInt32()
+        var c = int(t.runes().nth(i).toUInt32())
         if (c < 48 || c > 57) { return null }
         out = out * 10 + (c - 48)
         i = i + 1
@@ -1357,7 +1357,7 @@ fn _byteCrlfIndex(raw: string, start: int) -> int {
     var bytes: Slice<byte> = raw.bytes()
     var pos = start
     while (pos + 1 < len(bytes)) {
-        if (bytes[pos] == '\r' && bytes[pos + 1] == '\n') {
+        if (bytes[pos] == 13 && bytes[pos + 1] == 10) {
             return pos
         }
         pos = pos + 1
@@ -1376,8 +1376,8 @@ fn _byteSlice(raw: string, start: int, end: int) -> string? {
 fn _byteCrlfAt(raw: string, pos: int) -> bool {
     var bytes: Slice<byte> = raw.bytes()
     return pos + 1 < len(bytes) &&
-           bytes[pos] == '\r' &&
-           bytes[pos + 1] == '\n'
+           bytes[pos] == 13 &&
+           bytes[pos + 1] == 10
 }
 
 fn _responseAllowsBody(status: int) -> bool {

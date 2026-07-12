@@ -914,13 +914,24 @@ static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan 
         memset(out, 0, sizeof(*out));
     if (!key_plan || key_plan->action != XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP)
         return false;
-    const XaotHashEqPlan *hash_plan = cg_key_access_direct_user_hash_eq_plan(ctx, key_plan);
-    if (!out || !hash_plan) {
+    const XaotHashEqPlan *hash_plan = cg_key_access_hash_eq_plan(ctx, key_plan);
+    if (hash_plan && hash_plan->action == XAOT_HASH_EQ_BUILTIN_INLINE)
+        return false;
+    if (!hash_plan || hash_plan->action != XAOT_HASH_EQ_DIRECT_CALL || !out) {
         cg_ctx_set_error(ctx);
         fprintf(stderr,
                 "[xi_cgen] ERROR: specialized key-access plan for %s requires direct "
                 "Hash/Eq backend evidence (key_access=%u type=%u)\n",
                 site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key);
+        return false;
+    }
+    if (hash_plan->hash_func_id == XG_NO_ID || hash_plan->eq_func_id == XG_NO_ID) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: specialized key-access plan for %s has incomplete "
+                "Hash/Eq direct targets (key_access=%u type=%u hash_func=%u eq_func=%u)\n",
+                site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key,
+                hash_plan->hash_func_id, hash_plan->eq_func_id);
         return false;
     }
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
@@ -950,6 +961,82 @@ static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan 
     out->hash_prefix = hash_prefix;
     out->eq_prefix = eq_prefix;
     return true;
+}
+
+static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
+                                                      const XiValue *recv, const XiValue *v,
+                                                      const XaotKeyAccessPlan *key_plan, uint8_t op,
+                                                      uint16_t nargs) {
+    if (!cg_key_access_plan_uses_builtin_hash_eq_backend(ctx, key_plan) || !recv || !v ||
+        v->nargs < 2)
+        return false;
+    if (op == XG_KEY_ACCESS_GET) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_map_get_owned(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+        const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_map_has" : "xrt_map_delete";
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_SET && nargs == 2 && v->nargs >= 3) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_map_set(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
+}
+
+static void cg_emit_local_set_recv(FILE *out, const XiValue *recv);
+
+static bool cg_emit_tagged_set_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
+                                                      const XiValue *recv, const XiValue *v,
+                                                      const XaotKeyAccessPlan *key_plan,
+                                                      uint8_t op) {
+    if (!cg_key_access_plan_uses_builtin_hash_eq_backend(ctx, key_plan) || !recv || !v ||
+        v->nargs < 2)
+        return false;
+    if (op == XG_KEY_ACCESS_ADD) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_set_add(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+        const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_set_has" : "xrt_set_delete";
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
 }
 
 static bool cg_emit_user_hash_eq_direct_args(XiCgenCtx *ctx, FILE *out,
@@ -1135,6 +1222,12 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
     }
+    if (ctx && ctx->error) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (cg_emit_tagged_map_builtin_hash_eq_method(ctx, out, recv, v, key_plan, op, nargs))
+        return true;
     if (emit_key_access_abort_expr_if_needed(ctx, out))
         return true;
     if (!cg_key_access_plan_is_prehashed_lookup(key_plan))
@@ -1780,6 +1873,12 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
     }
+    if (ctx && ctx->error) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (cg_emit_tagged_set_builtin_hash_eq_method(ctx, out, recv, v, key_plan, op))
+        return true;
     if (emit_key_access_abort_expr_if_needed(ctx, out))
         return true;
     if (!cg_key_access_plan_is_prehashed_lookup(key_plan))

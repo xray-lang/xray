@@ -2421,8 +2421,15 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         }
         if (body->module_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence body has no module id");
-        if (body->name_id == 0)
-            return set_error(errbuf, errbuf_len, "AOT global evidence body has no name id");
+        if (body->name_id == 0) {
+            char detail[192];
+            snprintf(detail, sizeof(detail),
+                     "AOT global evidence body has no name id (func=%u module=%u kind=%u "
+                     "span=%u decl=%u class=%u method=%u)",
+                     body->func_id, body->module_id, (unsigned) body->kind, body->source_span_id,
+                     body->owner_decl_id, body->owner_class_id, body->owner_method_id);
+            return set_error(errbuf, errbuf_len, detail);
+        }
         switch ((XgBodyKind) body->kind) {
             case XG_BODY_MODULE_INIT:
                 if (body->source_node_id != 0 || body->owner_decl_id != XG_NO_ID ||

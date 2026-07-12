@@ -2922,11 +2922,6 @@ static XiValue *stmt_wrap_to_shared(XiLower *l, XiValue *value, int line) {
     if (value->op == XI_CALL_BUILTIN && value->aux &&
         strcmp((const char *) value->aux, "to_shared") == 0)
         return value;
-    if (value->op == XI_CALL_BUILTIN && value->aux &&
-        strcmp((const char *) value->aux, "copy") == 0) {
-        value->aux = (void *) "to_shared";
-        return value;
-    }
     XiValue *shared = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
                                    value->type ? value->type : l->type_any, 1);
     if (!shared)

@@ -2548,8 +2548,10 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "RawPtr/RawMut hot locals must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
            "RawPtr memcpy must use native pointer locals directly");
-    assert(count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
-           count_between(fn, fn_end, "xr_mkptr(") == 0 &&
+    const char *slice_call = strstr(fn, "xrt_span_from_array_slice(");
+    assert(slice_call != NULL && "test should still exercise Slice<byte> ptr() after array slice");
+    assert(count_between(fn, slice_call, "XR_TO_INT(") == 0 &&
+           count_between(fn, fn_end, "XR_TAG_PTR") == 0 &&
            "RawPtr/RawMut locals must stay in native address representation");
     assert(count_between(fn, fn_end, "xrt_release(") == 1 &&
            "the owning Array<byte> must be released exactly once; raw pointers add no ARC");
@@ -7021,6 +7023,8 @@ TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
     assert(!had_error && "AOT channel tryRecv should generate");
     assert(contains(code, "xr_aot_chan_try_recv_sync(") &&
            "descriptor-root tryRecv must use the synchronous Recv<T> enum bridge");
+    assert(contains(code, "xr_aot_bridge_value_to_xrt(xr_aot_chan_try_recv_sync(") &&
+           "descriptor-root tryRecv must bridge the full Recv<T> enum into AOT layout");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "nonblocking tryRecv must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
@@ -7048,6 +7052,8 @@ TEST(cgen_descriptor_select_try_recv_uses_ready_bit) {
     assert(!had_error && "AOT select tryRecv should generate");
     assert(contains(code, "xr_aot_chan_try_recv_sync(") &&
            "descriptor-root select probe must use the synchronous AOT Recv enum bridge");
+    assert(contains(code, "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_") &&
+           "descriptor-root select probe must bridge the Recv payload");
     assert(contains(code, " = xr_aot_recv_is_value(") &&
            "select readiness must use the positive Recv.Value status projection");
 

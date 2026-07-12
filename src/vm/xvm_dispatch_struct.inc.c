@@ -63,6 +63,7 @@ vmcase(OP_TARRAY_SET) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          idx, arr->length);
     }
+    VM_ARRAY_CHECK_STORABLE(arr, R(c));
     if (xr_typed_set(arr->data, idx, R(c), arr->elem_type)) {
         XR_ARRAY_MARK_REFS(arr, R(c));
     }
@@ -81,6 +82,7 @@ vmcase(OP_TARRAY_PUSH) {
         xr_array_grow(arr);
     }
     int32_t idx = arr->length++;
+    VM_ARRAY_CHECK_STORABLE(arr, R(b));
     if (xr_typed_set(arr->data, idx, R(b), arr->elem_type)) {
         XR_ARRAY_MARK_REFS(arr, R(b));
     }

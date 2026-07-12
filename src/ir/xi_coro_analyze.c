@@ -225,14 +225,9 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
             const XiValue *v = blk->values[vi];
             if (!v)
                 continue;
-            /* NOTE(1157): XI_CHAN_NEW never yields (pure shared system-heap
-             * allocation), so in principle it should not force coroutine
-             * codegen — but narrowing it requires a full ownership protocol
-             * for ADT results built by the chan *_sync helpers in a no-coro
-             * context (today they allocate on the isolate fixed_heap, which
-             * xrt_release must never free → teardown UAF). Keep CHAN_NEW
-             * suspendable until that protocol lands (see task 151 follow-up). */
-            if (xi_op_is_coroutine(v->op))
+            if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
+                v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
+                v->op == XI_SCOPE_EXIT)
                 return true;
             /* Only *suspension points* (calls that may yield the coroutine)
              * make a function suspendable. Constructing a coroutine-aware

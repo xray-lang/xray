@@ -2003,8 +2003,13 @@ static XrValue aot_builtin_adt_value(const XrAotContext *ctx, int builtin_index,
     XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
     if (!type || !xr_enum_type_has_payloads(type))
         return xr_null();
-    XrAllocationContext *alloc =
-        ctx && ctx->coro ? &ctx->coro->alloc_ctx : xr_alloc_context_current();
+    XrAllocationContext *alloc = ctx && ctx->coro ? &ctx->coro->alloc_ctx : NULL;
+    if (!alloc)
+        alloc = xr_alloc_context_current();
+    if (!alloc) {
+        XrRuntimeCore *core = aot_context_runtime_core(ctx);
+        alloc = core ? &core->root_alloc : NULL;
+    }
     XrEnumAggregateValue *value =
         alloc ? xr_enum_adt_construct_in(alloc, type, member_index, args, nargs) : NULL;
     return value ? XR_FROM_PTR(value) : xr_null();

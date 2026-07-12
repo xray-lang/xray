@@ -19,6 +19,7 @@
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
+#include "../../base/xhashmap.h"
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
@@ -42,6 +43,25 @@ static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
         if (defaults[i])
             xa_visit_infer_expr(ctx, defaults[i]);
     }
+}
+
+static void xa_reset_symbol_move_state_cb(const char *key, void *value, void *userdata) {
+    (void) key;
+    (void) userdata;
+    XaSymbol *sym = (XaSymbol *) value;
+    if (!sym)
+        return;
+    sym->links.move_state = XA_MOVE_NOT_MOVED;
+    sym->links.moved_line = 0;
+    sym->links.moved_column = 0;
+}
+
+static void xa_reset_scope_move_states(XaScope *scope) {
+    if (!scope)
+        return;
+    xr_hashmap_foreach((XrHashMap *) scope->symbols, xa_reset_symbol_move_state_cb, NULL);
+    for (int i = 0; i < scope->child_count; i++)
+        xa_reset_scope_move_states(scope->children[i]);
 }
 
 XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr) {
@@ -5041,7 +5061,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->current_class_name = cls->name;
             ctx->current_class_info = NULL;
             {
-                XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, cls->name);
+                XaSymbol *class_sym =
+                    cls->symbol_id
+                        ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id)
+                        : NULL;
+                if (!class_sym)
+                    class_sym = xa_scope_lookup(ctx->analyzer->current_scope, cls->name);
+                if (!class_sym)
+                    class_sym = xa_scope_lookup(ctx->analyzer->global_scope, cls->name);
+                ctx->analyzer->current_scope->class_symbol = class_sym;
                 if (class_sym) {
                     XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, class_sym);
                     if (cl)
@@ -6300,6 +6328,8 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     XaInferContext *ctx = xa_infer_context_new(analyzer);
     if (!ctx)
         return;
+
+    xa_reset_scope_move_states(analyzer->global_scope);
 
     // Pass 1: Collect all symbols
     xa_visit_collect(ctx, ast);
