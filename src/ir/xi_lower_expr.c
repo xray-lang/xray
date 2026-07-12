@@ -28,6 +28,7 @@
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_parallel_call_plan.h"
 #include "../frontend/analyzer/xa_selection.h"
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/lexer/xlex.h"
 #include "../runtime/class/xclass_system.h"
@@ -1957,6 +1958,29 @@ static bool xi_type_is_pod_span_elem(struct XrType *type) {
     }
 }
 
+static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_type,
+                                                       XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver_type);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver_type && XR_TYPE_IS_ARRAY(receiver_type);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver_type);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver_type && XR_TYPE_IS_SPAN(receiver_type) &&
+                   xi_type_is_pod_span_elem(receiver_type->container.element_type);
+    }
+    return false;
+}
+
+static bool xi_lower_receiver_method_matches(struct XrType *receiver_type, const char *method,
+                                             XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    return spec && method && strcmp(method, spec->source_name) == 0 &&
+           xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver);
+}
+
 static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
     if (!xi_type_is_pod_span_elem(type))
         return XR_ELEM_ANY;
@@ -3881,12 +3905,13 @@ static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *n
 static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
                                             MemberAccessNode *ma, XiValue *recv,
                                             struct XrType *result_type) {
-    if (!xi_type_is_bytes(recv->type) || !ma->name || !call->type_args || !call->type_args[0] ||
-        call->type_arg_count != 1)
+    if (!ma->name || !call->type_args || !call->type_args[0] || call->type_arg_count != 1)
         return NULL;
 
-    bool byte_slice_typed_load = strcmp(ma->name, "load") == 0;
-    bool byte_slice_typed_store = strcmp(ma->name, "store") == 0;
+    bool byte_slice_typed_load = xi_lower_receiver_method_matches(
+        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD);
+    bool byte_slice_typed_store = xi_lower_receiver_method_matches(
+        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE);
     int n = call->arg_count;
     if ((!byte_slice_typed_load || (n != 1 && n != 2)) &&
         (!byte_slice_typed_store || (n != 2 && n != 3)))
@@ -4693,8 +4718,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
-            strcmp(ma->name, "asBytes") == 0 && n == 0) {
+        if (recv->type && n == 0 &&
+            xi_lower_receiver_method_matches(recv->type, ma->name,
+                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_AS_BYTES)) {
             struct XrType *elem = recv->type->container.element_type;
             if (xi_type_is_pod_span_elem(elem)) {
                 XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_AS_BYTES, result_type, 1);
@@ -4706,8 +4732,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
-            strcmp(ma->name, "fill") == 0 && n == 1 && !xi_type_is_bytes(recv->type)) {
+        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
+            xi_lower_receiver_method_matches(recv->type, ma->name,
+                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL)) {
             struct XrType *elem = recv->type->container.element_type;
             if (xi_type_is_pod_span_elem(elem)) {
                 XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_FILL, recv->type, 2);
@@ -4721,8 +4748,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
-            strcmp(ma->name, "copyFrom") == 0 && n == 1 && !xi_type_is_bytes(recv->type)) {
+        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
+            xi_lower_receiver_method_matches(recv->type, ma->name,
+                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM)) {
             struct XrType *elem = recv->type->container.element_type;
             if (xi_type_is_pod_span_elem(elem)) {
                 XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_COPY, recv->type, 2);
@@ -4736,8 +4764,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
-            strcmp(ma->name, "compare") == 0 && n == 1 && !xi_type_is_bytes(recv->type)) {
+        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
+            xi_lower_receiver_method_matches(recv->type, ma->name,
+                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE)) {
             struct XrType *elem = recv->type->container.element_type;
             if (xi_type_is_pod_span_elem(elem)) {
                 XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_COMPARE, l->type_int, 2);
@@ -4804,8 +4833,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
 
             if (XR_TYPE_IS_SPAN(recv->type)) {
-                if (strcmp(ma->name, "reinterpret") == 0 && n == 0 && call->type_arg_count == 1 &&
-                    call->type_args && call->type_args[0]) {
+                if (n == 0 && call->type_arg_count == 1 && call->type_args && call->type_args[0] &&
+                    xi_lower_receiver_method_matches(
+                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REINTERPRET)) {
                     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
                     if (xi_type_is_pod_span_elem(target)) {
                         XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_REINTERPRET,
@@ -4818,7 +4848,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                         return v;
                     }
                 }
-                if (strcmp(ma->name, "fill") == 0 && n == 1) {
+                if (n == 1 && xi_lower_receiver_method_matches(
+                                  recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL)) {
                     XiValue *v =
                         xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_FILL, recv->type, 2);
                     if (!v)
@@ -4829,7 +4860,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
-                if (strcmp(ma->name, "copyFrom") == 0 && n == 1) {
+                if (n == 1 &&
+                    xi_lower_receiver_method_matches(
+                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM)) {
                     XiValue *v =
                         xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COPY, recv->type, 2);
                     if (!v)
@@ -4840,7 +4873,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
-                if (strcmp(ma->name, "compare") == 0 && n == 1) {
+                if (n == 1 &&
+                    xi_lower_receiver_method_matches(recv->type, ma->name,
+                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE)) {
                     XiValue *v =
                         xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMPARE, l->type_int, 2);
                     if (!v)
@@ -4851,7 +4886,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
                     return v;
                 }
-                if (strcmp(ma->name, "commonPrefix") == 0 && n == 1) {
+                if (n == 1 &&
+                    xi_lower_receiver_method_matches(
+                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX)) {
                     XiValue *v = xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMMON_PREFIX,
                                               l->type_int, 2);
                     if (!v)
@@ -4861,7 +4898,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->line = (uint32_t) node->line;
                     return v;
                 }
-                if (strcmp(ma->name, "repeatFrom") == 0 && n == 3) {
+                if (n == 3 &&
+                    xi_lower_receiver_method_matches(
+                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM)) {
                     XiValue *v =
                         xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_REPEAT, recv->type, 4);
                     if (!v)
