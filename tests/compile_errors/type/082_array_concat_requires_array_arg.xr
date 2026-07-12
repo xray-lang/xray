@@ -1,0 +1,2 @@
+var xs = [1, 2]
+var bad = xs.concat(3)

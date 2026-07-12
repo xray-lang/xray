@@ -10,10 +10,15 @@
  * X-Macro format:
  *   XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2,
  *                      param_count, min_params, type_params, effect, lowering)
+ *   XB_RECEIVER_VARIADIC_METHOD(...) uses the same fields and marks the
+ *                      final parameter as variadic rest input.
  */
 
 #ifndef XB_RECEIVER_METHOD
 #error "Define XB_RECEIVER_METHOD before including xbuiltin_receiver_method.def"
+#endif
+#ifndef XB_RECEIVER_VARIADIC_METHOD
+#error "Define XB_RECEIVER_VARIADIC_METHOD before including xbuiltin_receiver_method.def"
 #endif
 
 /* --- Array<U8> methods --- */
@@ -72,6 +77,11 @@ XB_RECEIVER_METHOD(ARRAY_RESIZE, "resize", XA_BUILTIN_RECEIVER_ARRAY,
                    XA_BUILTIN_TYPE_RECEIVER, XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_RECEIVER_ELEM,
                    XA_BUILTIN_TYPE_NONE, 2, 2, XA_BUILTIN_TYPE_PARAMS_NONE,
                    XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "array.resize")
+XB_RECEIVER_VARIADIC_METHOD(ARRAY_CONCAT, "concat", XA_BUILTIN_RECEIVER_ARRAY,
+                            XA_BUILTIN_TYPE_RECEIVER, XA_BUILTIN_TYPE_RECEIVER,
+                            XA_BUILTIN_TYPE_NONE, XA_BUILTIN_TYPE_NONE, 1, 0,
+                            XA_BUILTIN_TYPE_PARAMS_NONE, XA_BUILTIN_EFFECT_READS_RECEIVER,
+                            "array.concat")
 XB_RECEIVER_METHOD(ARRAY_REVERSE, "reverse", XA_BUILTIN_RECEIVER_ARRAY,
                    XA_BUILTIN_TYPE_RECEIVER, XA_BUILTIN_TYPE_NONE, XA_BUILTIN_TYPE_NONE,
                    XA_BUILTIN_TYPE_NONE, 0, 0, XA_BUILTIN_TYPE_PARAMS_NONE,
