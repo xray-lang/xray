@@ -12,8 +12,8 @@ assert_eq(len(cstr), 3)
 assert_eq(cstr[2], 0)
 
 fn sliceLen() -> int {
-    var owned: Array<byte> = [1, 2, 3]
-    var borrowed: Slice<byte> = owned[0:2]
+    var buffer: Array<byte> = [1, 2, 3]
+    var borrowed: Slice<byte> = buffer[0:2]
     return len(borrowed)
 }
 

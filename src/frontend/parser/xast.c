@@ -324,14 +324,17 @@ AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *
     return node;
 }
 
-// Create variable declaration node with storage mode
-// storage_mode: 0=normal, 1=shared
+// Create variable declaration node with storage mode.
 AstNode *xr_ast_var_decl_with_mode(XrCompilerSession *session, const char *name,
                                    AstNode *initializer, bool is_const, uint8_t storage_mode,
                                    int line) {
-    AstNodeType type = storage_mode == XR_STORAGE_SHARED
-                           ? AST_SHARED_DECL
-                           : (is_const ? AST_CONST_DECL : AST_VAR_DECL);
+    AstNodeType type = AST_VAR_DECL;
+    if (storage_mode == XR_STORAGE_SHARED)
+        type = AST_SHARED_DECL;
+    else if (storage_mode == XR_STORAGE_OWNED)
+        type = AST_OWNED_DECL;
+    else if (is_const)
+        type = AST_CONST_DECL;
     AstNode *node = alloc_node(session, type, line);
     node->as.var_decl.name = ast_strdup(session, name);
     node->as.var_decl.initializer = initializer;
@@ -1455,6 +1458,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "ConstDecl";
         case AST_SHARED_DECL:
             return "SharedDecl";
+        case AST_OWNED_DECL:
+            return "OwnedDecl";
         case AST_VARIABLE:
             return "Variable";
         case AST_ASSIGNMENT:
@@ -1679,6 +1684,7 @@ void xr_ast_print(AstNode *node, int indent) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             printf("%*s  name: %s\n", indent * 2, "", node->as.var_decl.name);
             if (node->as.var_decl.initializer != NULL) {
                 printf("%*s  initializer:\n", indent * 2, "");

@@ -2296,6 +2296,7 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xa_thread_lint_note_var_alias(states, &stmt->as.var_decl);
             xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
@@ -4943,6 +4944,7 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xa_os_resource_lint_note_var_alias(states, &stmt->as.var_decl);
             xa_os_resource_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
@@ -6095,7 +6097,7 @@ static bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int 
         if (!stmt)
             continue;
         if ((stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL ||
-             stmt->type == AST_SHARED_DECL) &&
+             stmt->type == AST_SHARED_DECL || stmt->type == AST_OWNED_DECL) &&
             stmt->as.var_decl.name && strcmp(stmt->as.var_decl.name, name) == 0) {
             return xa_node_uses_symbol_name(stmt->as.var_decl.initializer, name);
         }
@@ -6155,6 +6157,7 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return xa_node_uses_symbol_name(node->as.var_decl.initializer, name);
         case AST_ASSIGNMENT:
             return xa_node_uses_symbol_name(node->as.assignment.value, name);
@@ -6813,6 +6816,36 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
                                &loc);
 }
 
+static void xa_check_owned_initializer_boundary(XaInferContext *ctx, AstNode *decl_node,
+                                                XrType *init_type) {
+    if (!ctx || !decl_node || decl_node->type != AST_OWNED_DECL)
+        return;
+    VarDeclNode *var = &decl_node->as.var_decl;
+    if (!var->initializer || xa_call_is_copy_builtin(var->initializer))
+        return;
+    if (!xa_type_needs_borrow_escape_guard(init_type))
+        return;
+
+    bool is_move = false;
+    AstNode *source = xa_shared_boundary_source(var->initializer, &is_move);
+    if (!source || is_move)
+        return;
+
+    XaSymbol *src_sym = xa_lookup_shared_source_symbol(ctx, source);
+    if (!src_sym || src_sym->kind != XA_SYM_VARIABLE)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = var->initializer->line, .column = var->initializer->column};
+    const char *src_name = source->as.variable.name ? source->as.variable.name : "?";
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "owned binding from existing reference value '%s' requires move %s or copy(%s)",
+             src_name, src_name, src_name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static void xa_check_const_initializer_alias_boundary(XaInferContext *ctx, AstNode *decl_node,
                                                       XrType *init_type) {
     if (!ctx || !decl_node || decl_node->type != AST_CONST_DECL)
@@ -6902,6 +6935,12 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                   "mutable module storage in the current freestanding slice");
     }
 
+    if (node->type == AST_OWNED_DECL && xa_is_module_level_scope(ctx->analyzer)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   "module owned declaration is not supported", &loc);
+    }
+
     // Variable declarations must have a type annotation or initializer.
     if (!var->initializer && !links->declared_type) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -6930,6 +6969,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
         xa_check_shared_initializer_boundary(ctx, node, init_type);
+        xa_check_owned_initializer_boundary(ctx, node, init_type);
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
@@ -7102,13 +7142,13 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     // Check immutable binding assignment
-    if (sym->is_const || sym->is_shared || !sym->is_rebindable) {
+    if (sym->is_const || sym->is_shared || sym->is_owned || !sym->is_rebindable) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
-        snprintf(msg, sizeof(msg),
-                 sym->is_shared ? "Cannot assign to shared binding '%s'"
-                                : "Cannot assign to const '%s'",
-                 assign->name);
+        const char *fmt = sym->is_shared  ? "Cannot assign to shared binding '%s'"
+                          : sym->is_owned ? "Cannot assign to owned binding '%s'"
+                                          : "Cannot assign to const '%s'";
+        snprintf(msg, sizeof(msg), fmt, assign->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
                                    msg, &loc);
         return;

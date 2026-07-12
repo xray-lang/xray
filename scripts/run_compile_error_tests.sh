@@ -17,6 +17,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 TEST_DIR="${PROJECT_ROOT}/tests/compile_errors"
 XRAY_BIN="${PROJECT_ROOT}/build/xray"
+XRAY_TEST_TYPEPATH="${TEST_DIR}/stdlib${XRAY_TYPEPATH:+:${XRAY_TYPEPATH}}"
 
 # 检查可执行文件
 if [ ! -f "${XRAY_BIN}" ]; then
@@ -44,7 +45,7 @@ for test_file in $(find "${TEST_DIR}" -name "*.xr" -type f | sort); do
     printf "[%3d] %-45s ... " "${total}" "${test_name}"
 
     # 运行编译器（期望失败）
-    raw_output=$(timeout 3 "${XRAY_BIN}" "${test_file}" 2>&1)
+    raw_output=$(XRAY_TYPEPATH="${XRAY_TEST_TYPEPATH}" timeout 3 "${XRAY_BIN}" "${test_file}" 2>&1)
     exit_code=$?
     # strip ANSI escape sequences for matching
     output=$(echo "$raw_output" | sed $'s/\x1b\\[[0-9;]*m//g')

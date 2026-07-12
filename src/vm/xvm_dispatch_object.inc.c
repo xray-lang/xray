@@ -119,7 +119,7 @@ vmcase(OP_CLINIT_CALL) {
 
 vmcase(OP_SET_STORAGE_CTX) {
     /* OP_SET_STORAGE_CTX: set storage mode context
-    ** A = storage mode (0=normal, 1=shared)
+    ** A = storage mode (0=normal, 1=shared, 2=owned)
     **
     ** For class instance shared support
     ** Set before constructor call, OP_INVOKE reads this context
@@ -293,7 +293,7 @@ vmcase(OP_NEWJSON) {
     /* OP_NEWJSON: create Json object
     ** A = destination register
     ** B = Shape constant index
-    ** C = storage mode (0=normal, 1=shared)
+    ** C = storage mode (0=normal, 1=shared, 2=owned)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -303,10 +303,10 @@ vmcase(OP_NEWJSON) {
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     XrJson *json;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // shared: allocate on system heap
+        // System storage: allocate on system heap
         size_t size = xr_json_size(cls);
-        json = (XrJson *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), size,
-                                                  XR_TINSTANCE);
+        json = (XrJson *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate), size,
+                                                   XR_TINSTANCE, storage_mode);
         if (json) {
             xr_json_init_inplace(json, cls);
             XR_OBJ_SET_STORAGE(&json->hdr, storage_mode);

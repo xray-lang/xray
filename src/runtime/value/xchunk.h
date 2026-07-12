@@ -204,7 +204,7 @@ XR_FUNC int xr_valuearray_add(ValueArray *array, XrValue value);
 
 typedef struct UpvalInfo {
     uint16_t index;            // SRC_REG: register number; SRC_UPVAL: enclosing upval index
-    uint8_t storage_mode;      // 0=normal, 1=shared
+    uint8_t storage_mode;      // 0=normal, 1=shared, 2=owned
     uint8_t is_const;          // const variable flag
     uint8_t slot_type;         // XrSlotType: storage class for GC traversal
     uint8_t source;            // UPVAL_SRC_REG or UPVAL_SRC_UPVAL

@@ -146,6 +146,8 @@ void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
 
     if (node->type == AST_SHARED_DECL) {
         xfmt_write_str(ctx, "shared ");
+    } else if (node->type == AST_OWNED_DECL) {
+        xfmt_write_str(ctx, "owned ");
     } else {
         xfmt_write_str(ctx, decl->is_const ? "const " : "var ");
     }

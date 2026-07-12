@@ -56,6 +56,7 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             visit_node(node->as.var_decl.initializer, v);
             break;
 
@@ -449,6 +450,7 @@ static void visit_node(AstNode *node, XaAstVisitor *v) {
             break;
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             call_callback(v->visit_const_decl, node, v);
             break;
         case AST_CLASS_DECL:
@@ -550,6 +552,7 @@ static void decl_visitor(AstNode *node, void *ctx) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
         case AST_UNION_DECL:

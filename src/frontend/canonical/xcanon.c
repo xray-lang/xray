@@ -632,6 +632,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             canon_node(ctx, node->as.var_decl.initializer);
             break;
 

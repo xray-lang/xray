@@ -84,7 +84,8 @@ static const XlspDocEntry keyword_docs[] = {
 static const XlspDocEntry builtin_docs[] = {
     {"print", "```xray\nprint(value, ...)\n```\n\nPrints values to stdout."},
     {"typeof", "```xray\ntypeof(value): int\n```\n\nReturns the stable TypeId for a value."},
-    {"typename", "```xray\ntypename(value): string\n```\n\nReturns the debug/display type name of a value."},
+    {"typename",
+     "```xray\ntypename(value): string\n```\n\nReturns the debug/display type name of a value."},
     {"assert", "```xray\nassert(condition, message?)\n```\n\nAsserts that condition is true."},
     {"assert_true", "```xray\nassert_true(value)\n```\n\nAsserts that value is truthy."},
     {"assert_false", "```xray\nassert_false(value)\n```\n\nAsserts that value is falsy."},
@@ -779,6 +780,7 @@ static void symbol_extract_visitor(AstNode *node, void *ctx) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             if (node->as.var_decl.name) {
                 int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
                 symbol_table_add(table, node->as.var_decl.name, kind, node->line - 1, 0,
@@ -1013,7 +1015,8 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL: {
+        case AST_SHARED_DECL:
+        case AST_OWNED_DECL: {
             int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
             if (sym)
@@ -1194,8 +1197,8 @@ static const FunctionSignature builtin_signatures[] = {
     {"print", "print(value, ...)", "Prints values to stdout", print_params, print_param_docs, 2},
     {"typeof", "typeof(value): int", "Returns stable TypeId for value", typeof_params,
      typeof_param_docs, 1},
-    {"typename", "typename(value): string", "Returns debug/display type name of value", typeof_params,
-     typeof_param_docs, 1},
+    {"typename", "typename(value): string", "Returns debug/display type name of value",
+     typeof_params, typeof_param_docs, 1},
     {"assert", "assert(condition, message?)", "Asserts condition is true", assert_params,
      assert_param_docs, 2},
     {"assert_true", "assert_true(value)", "Asserts value is truthy", assert_one_params,

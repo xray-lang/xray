@@ -2524,6 +2524,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                     sym->is_protected = export_sym->is_protected;
                     sym->is_override = export_sym->is_override;
                     sym->is_shared = export_sym->is_shared;
+                    sym->is_owned = export_sym->is_owned;
                     sym->is_builtin = export_sym->is_builtin;
                     sym->mutates_receiver = export_sym->mutates_receiver;
                     sym->passing_mode = export_sym->passing_mode;
@@ -2716,6 +2717,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xa_visit_collect_var_decl(ctx, node);
             break;
         case AST_IMPORT_STMT:
@@ -4591,6 +4593,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xa_visit_var_decl_stmt(ctx, node);
             break;
         case AST_ASSIGNMENT:
@@ -4603,14 +4606,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (id_sym)
                 id->symbol_id = id_sym->id;
             xa_parallel_capture_check(ctx, node, id_sym, true);
-            if (id_sym && (id_sym->is_const || id_sym->is_shared || !id_sym->is_rebindable)) {
+            if (id_sym && (id_sym->is_const || id_sym->is_shared || id_sym->is_owned ||
+                           !id_sym->is_rebindable)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[128];
-                snprintf(msg, sizeof(msg),
-                         id_sym->is_shared ? "Cannot modify shared binding '%s'"
-                                           : "Cannot modify const '%s'",
-                         id->name);
+                const char *fmt = id_sym->is_shared  ? "Cannot modify shared binding '%s'"
+                                  : id_sym->is_owned ? "Cannot modify owned binding '%s'"
+                                                     : "Cannot modify const '%s'";
+                snprintf(msg, sizeof(msg), fmt, id->name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
@@ -4663,14 +4667,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 (xa_type_contains_float(ca_target_type) || xa_type_contains_float(ca_value_type))) {
                 xa_report_float_modulo_error(ctx, node, ca_target_type, ca_value_type);
             }
-            if (ca_sym && (ca_sym->is_const || ca_sym->is_shared || !ca_sym->is_rebindable)) {
+            if (ca_sym && (ca_sym->is_const || ca_sym->is_shared || ca_sym->is_owned ||
+                           !ca_sym->is_rebindable)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[128];
-                snprintf(msg, sizeof(msg),
-                         ca_sym->is_shared ? "Cannot assign to shared binding '%s'"
-                                           : "Cannot assign to const '%s'",
-                         ca->name);
+                const char *fmt = ca_sym->is_shared  ? "Cannot assign to shared binding '%s'"
+                                  : ca_sym->is_owned ? "Cannot assign to owned binding '%s'"
+                                                     : "Cannot assign to const '%s'";
+                snprintf(msg, sizeof(msg), fmt, ca->name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
@@ -6098,6 +6103,7 @@ static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, X
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xa_collect_error_sources_expr(analyzer, node->as.var_decl.initializer, out);
             break;
         case AST_DESTRUCTURE_DECL:

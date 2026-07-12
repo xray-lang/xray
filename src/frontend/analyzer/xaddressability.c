@@ -68,7 +68,7 @@ static XaAddressability classify_variable(XaInferContext *ctx, AstNode *expr, bo
     } else {
         result.kind = XA_ADDRESS_STACK_LOCAL;
         result.lifetime = XA_ADDRESS_LIFETIME_LEXICAL;
-        result.storage_owner = XR_STORAGE_EXEC_LOCAL;
+        result.storage_owner = symbol->is_owned ? XR_STORAGE_OWNED_SYSTEM : XR_STORAGE_EXEC_LOCAL;
         result.address_identity = XR_ADDRESS_LEXICAL;
     }
 

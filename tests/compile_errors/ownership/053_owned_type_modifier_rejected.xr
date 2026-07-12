@@ -1,0 +1,5 @@
+fn main() {
+    var ch: Channel<owned Array<byte>> = Channel(1)
+}
+
+main()

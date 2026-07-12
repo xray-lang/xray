@@ -58,14 +58,36 @@ typedef struct XrClass XrClass;
 #define XR_OBJ_GET_TYPE(obj) ((XrObjType) ((obj)->type))
 #define XR_OBJ_SET_TYPE(obj, t) ((obj)->type = (uint16_t) (t))
 
-/* ========== Shared Storage Mode (uses extra field bit 0) ========== */
+/* ========== Runtime Storage Mode ==========
+ *
+ * bit 0  = shared system heap
+ * bit 15 = owned system heap
+ * normal has neither bit set. The split avoids AOT bump/stack/native and mmap
+ * flags while still exposing a compact 0/1/2 mode to bytecode and IR. */
 
 #define XR_OBJ_STORAGE_NORMAL 0
 #define XR_OBJ_STORAGE_SHARED 1
+#define XR_OBJ_STORAGE_OWNED 2
 
-#define XR_OBJ_GET_STORAGE(obj) ((obj)->extra & 0x01)
-#define XR_OBJ_SET_STORAGE(obj, m) ((obj)->extra = ((obj)->extra & ~0x01) | ((m) & 0x01))
+#define XR_OBJ_STORAGE_SHARED_BIT 0x0001u
+#define XR_OBJ_STORAGE_OWNED_BIT 0x8000u
+#define XR_OBJ_STORAGE_MODE_MASK (XR_OBJ_STORAGE_SHARED_BIT | XR_OBJ_STORAGE_OWNED_BIT)
+
+#define XR_OBJ_GET_STORAGE(obj)                                                                    \
+    (((obj)->extra & XR_OBJ_STORAGE_OWNED_BIT)                                                     \
+         ? XR_OBJ_STORAGE_OWNED                                                                    \
+         : (((obj)->extra & XR_OBJ_STORAGE_SHARED_BIT) ? XR_OBJ_STORAGE_SHARED                     \
+                                                       : XR_OBJ_STORAGE_NORMAL))
+#define XR_OBJ_SET_STORAGE(obj, m)                                                                 \
+    do {                                                                                           \
+        (obj)->extra = (uint16_t) ((obj)->extra & ~(uint16_t) XR_OBJ_STORAGE_MODE_MASK);           \
+        if ((m) == XR_OBJ_STORAGE_SHARED)                                                          \
+            (obj)->extra |= XR_OBJ_STORAGE_SHARED_BIT;                                             \
+        else if ((m) == XR_OBJ_STORAGE_OWNED)                                                      \
+            (obj)->extra |= XR_OBJ_STORAGE_OWNED_BIT;                                              \
+    } while (0)
 #define XR_OBJ_IS_SHARED(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_SHARED)
+#define XR_OBJ_IS_OWNED(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_OWNED)
 
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*
@@ -79,8 +101,8 @@ typedef struct XrClass XrClass;
 
 /* ========== RC Memory-Model Flags (extra field bits 1-4) ==========
  *
- * Bit 0 = storage(shared), bit 13 = mmap (above). Bits 1-4 carry the RC
- * object-model flags.
+ * Bit 0 = shared storage, bit 15 = owned storage, bit 13 = mmap (above).
+ * Bits 1-4 carry the RC object-model flags.
  *
  *   REGION   - object lives in a per-coroutine region: dup/drop are no-ops,
  *              freed in bulk when the coroutine ends.

@@ -489,6 +489,7 @@ static const char *get_export_decl_name(AstNode *decl) {
             return decl->as.class_decl.name;
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
         case AST_VAR_DECL:
             return decl->as.var_decl.name;
         case AST_ENUM_DECL:

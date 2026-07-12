@@ -591,6 +591,11 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return NULL;
     }
 
+    if (xr_parser_check(parser, TK_OWNED)) {
+        xr_parser_error(parser, "attributes cannot annotate owned bindings");
+        return NULL;
+    }
+
     // @test fn ..., @native fn ..., @extern("C") fn ..., @c_export("sym") fn ...
     if (xr_parser_match(parser, TK_FN)) {
         if (derive_flags != 0) {
@@ -2023,6 +2028,10 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
     if (xr_parser_match(parser, TK_SHARED)) {
         return xr_parse_shared_declaration(parser);
+    }
+
+    if (xr_parser_match(parser, TK_OWNED)) {
+        return xr_parse_owned_declaration(parser);
     }
 
     // Code block

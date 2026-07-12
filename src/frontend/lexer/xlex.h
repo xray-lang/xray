@@ -93,6 +93,7 @@ typedef enum {
     TK_CONST,                   // const
     TK_COMPTIME,                // comptime - force compile-time expression evaluation
     TK_SHARED,       // shared - stable shared/system-owned identity with lexical visibility
+    TK_OWNED,        // owned - unique mutable system-owned identity with move transfer
     TK_IF,           // if
     TK_ELSE,         // else
     TK_WHILE,        // while

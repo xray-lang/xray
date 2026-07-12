@@ -1,7 +1,7 @@
 fn launch(data: in Array<int>) {
-    var task = go fn(owned: Array<int>) -> int {
-        owned.push(5)
-        return len(owned)
+    var task = go fn(buffer: Array<int>) -> int {
+        buffer.push(5)
+        return len(buffer)
     }(copy(data))
     print(await task)
     print(len(data))

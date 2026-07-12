@@ -1,0 +1,6 @@
+fn main() {
+    var source = Array<int>()
+    owned buffer = source
+}
+
+main()

@@ -234,7 +234,7 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                 if (!decl)
                     return;  // param or loop var — always safe (arg-passed/local)
                 if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL &&
-                    decl->type != AST_SHARED_DECL)
+                    decl->type != AST_SHARED_DECL && decl->type != AST_OWNED_DECL)
                     return;
                 VarDeclNode *vd = &decl->as.var_decl;
                 if (decl->type == AST_SHARED_DECL) {

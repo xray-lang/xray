@@ -75,6 +75,7 @@ static AstNode *find_member_access(AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return find_member_access(node->as.var_decl.initializer);
         case AST_EXPR_STMT:
             return find_member_access(node->as.expr_stmt);
@@ -133,6 +134,7 @@ static AstNode *find_enum_access(AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return find_enum_access(node->as.var_decl.initializer);
         case AST_EXPR_STMT:
             return find_enum_access(node->as.expr_stmt);
@@ -173,6 +175,7 @@ static AstNode *find_call_with_variable_callee(AstNode *node, const char *name) 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return find_call_with_variable_callee(node->as.var_decl.initializer, name);
         case AST_EXPR_STMT:
             return find_call_with_variable_callee(node->as.expr_stmt, name);

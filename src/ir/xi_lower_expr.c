@@ -6558,7 +6558,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             if (!v)
                 return NULL;
             v->args[0] = cap;
-            /* Encode key_kind and value_tid: C = (key_kind<<7)|(vtid<<2)|flags */
+            /* Encode key_kind/value_tid/storage: C = (key_kind<<8)|(vtid<<3)|flags */
             if (XR_TYPE_IS_MAP(result_type)) {
                 uint8_t vtid = 0, key_kind = 0;
                 if (result_type->map.value_type)
@@ -6570,7 +6570,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                     else if (ktid == XR_TID_INT)
                         key_kind = 2;
                 }
-                v->aux_int = (int64_t) ((key_kind << 7) | ((vtid & 0x1F) << 2));
+                v->aux_int = (int64_t) ((key_kind << 8) | ((vtid & 0x1F) << 3));
             } else {
                 v->aux_int = 0;
             }
@@ -6583,7 +6583,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             if (!v)
                 return NULL;
             v->args[0] = cap;
-            v->aux_int = 0x02; /* weak flag in C field bit 1 */
+            v->aux_int = 0x04; /* weak flag in C field bit 2 */
             v->line = (uint32_t) node->line;
             return v;
         }
@@ -6643,10 +6643,10 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             if (!v)
                 return NULL;
             v->args[0] = cap;
-            /* Encode elem_tid from explicit type param: B = (tid<<2)|flags */
+            /* Encode elem_tid from explicit type param: B = (tid<<3)|flags */
             if (result_type->kind == XR_KIND_SET && result_type->container.element_type) {
                 uint8_t tid = xr_type_to_tid(result_type->container.element_type);
-                v->aux_int = (int64_t) ((tid & 0x1F) << 2);
+                v->aux_int = (int64_t) ((tid & 0x1F) << 3);
             } else {
                 v->aux_int = 0;
             }
@@ -6659,7 +6659,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             if (!v)
                 return NULL;
             v->args[0] = cap;
-            v->aux_int = 0x02; /* weak flag in B field bit 1 */
+            v->aux_int = 0x04; /* weak flag in B field bit 2 */
             v->line = (uint32_t) node->line;
             return v;
         }

@@ -483,8 +483,9 @@ const XaotAddressPlan *xaot_address_plan_find(const XaotBundle *bundle, const Xi
 }
 
 const char *xaot_materialization_kind_name(uint8_t value) {
-    static const char *names[] = {"inline",         "exec_local",    "module_readonly",
-                                  "module_runtime", "shared_system", "reject"};
+    static const char *names[] = {"inline",         "exec_local",   "module_readonly",
+                                  "module_runtime", "owned_system", "shared_system",
+                                  "reject"};
     return value < sizeof(names) / sizeof(names[0]) ? names[value] : "invalid";
 }
 

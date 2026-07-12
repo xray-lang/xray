@@ -1,7 +1,7 @@
 fn make(data: in Array<int>) -> () -> int {
-    var owned = copy(data)
+    var snapshot = copy(data)
     return fn() -> int {
-        return len(owned)
+        return len(snapshot)
     }
 }
 

@@ -104,7 +104,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL: {
+        case AST_SHARED_DECL:
+        case AST_OWNED_DECL: {
             const char *name = node->as.var_decl.name;
             if (name) {
                 XrLspSymbolKind kind =

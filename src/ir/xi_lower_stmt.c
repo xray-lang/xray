@@ -2890,30 +2890,41 @@ static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
     }
 }
 
-static bool stmt_mark_value_shared_alloc(XiValue *v) {
+static bool stmt_mark_value_storage_alloc(XiValue *v, uint8_t storage_mode) {
     if (!v)
         return false;
     switch (v->op) {
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
         case XI_SET_NEW:
-            v->aux_int |= 0x01;
+            v->aux_int = (v->aux_int & ~(int64_t) 0x03) | (int64_t) (storage_mode & 0x03);
             return true;
         case XI_JSON_NEW:
-            xi_json_set_storage_mode(v, XR_STORAGE_SHARED);
+            xi_json_set_storage_mode(v, storage_mode);
             return true;
         case XI_CHAN_NEW:
             return true;
+        case XI_CALL_BUILTIN:
+            if (v->aux && strcmp((const char *) v->aux, "array_with_capacity") == 0) {
+                v->aux_int = (v->aux_int & ~(int64_t) 0x03) | (int64_t) (storage_mode & 0x03);
+                return true;
+            }
+            if (v->aux && strcmp((const char *) v->aux, "StringBuilder") == 0) {
+                v->aux_int = storage_mode & 0x03;
+                return true;
+            }
+            return false;
         default:
             return false;
     }
 }
 
-static void stmt_mark_shared_allocs_in_range(XiBlock *block, uint32_t begin) {
+static void stmt_mark_storage_allocs_in_range(XiBlock *block, uint32_t begin,
+                                              uint8_t storage_mode) {
     if (!block || begin > block->nvalues)
         return;
     for (uint32_t i = begin; i < block->nvalues; i++)
-        stmt_mark_value_shared_alloc(block->values[i]);
+        stmt_mark_value_storage_alloc(block->values[i], storage_mode);
 }
 
 static XiValue *stmt_wrap_to_shared(XiLower *l, XiValue *value, int line) {
@@ -2943,7 +2954,7 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
         return init_val;
 
     if (stmt_shared_init_direct_alloc_safe(init)) {
-        stmt_mark_shared_allocs_in_range(init_block, init_begin);
+        stmt_mark_storage_allocs_in_range(init_block, init_begin, XR_STORAGE_SHARED);
         return init_val;
     }
 
@@ -2954,6 +2965,14 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
         return init_val;
 
     return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
+}
+
+static XiValue *stmt_lower_owned_initializer(XiLower *l, AstNode *decl, XiValue *init_val,
+                                             XiBlock *init_block, uint32_t init_begin) {
+    if (!l || !decl || !init_val || decl->as.var_decl.storage_mode != XR_STORAGE_OWNED)
+        return init_val;
+    stmt_mark_storage_allocs_in_range(init_block, init_begin, XR_STORAGE_OWNED);
+    return init_val;
 }
 
 static XiFunc *stmt_static_function_value_target(XiValue *value) {
@@ -3087,13 +3106,13 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         } else if (init_val->op == XI_SET_NEW && type->kind == XR_KIND_SET &&
                    type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
-            init_val->aux_int =
-                (int64_t) (((tid & 0x1F) << 2) | ((uint8_t) init_val->aux_int & 0x03));
+            uint8_t flags = (uint8_t) (init_val->aux_int & 0x07);
+            init_val->aux_int = (int64_t) (((tid & 0x1F) << 3) | flags);
         } else if (init_val->op == XI_CHAN_NEW && type->kind == XR_KIND_CHANNEL &&
                    type->container.element_type) {
             init_val->aux_int = xr_type_to_tid(type->container.element_type);
         } else if (init_val->op == XI_MAP_NEW && XR_TYPE_IS_MAP(type)) {
-            uint8_t flags = (uint8_t) (init_val->aux_int & 0x03);
+            uint8_t flags = (uint8_t) (init_val->aux_int & 0x07);
             uint8_t value_tid = 0, key_kind = 0;
             if (type->map.value_type)
                 value_tid = xr_type_to_tid(type->map.value_type);
@@ -3104,10 +3123,11 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                 else if (ktid == XR_TID_INT)
                     key_kind = 2;
             }
-            init_val->aux_int = (int64_t) ((key_kind << 7) | ((value_tid & 0x1F) << 2) | flags);
+            init_val->aux_int = (int64_t) ((key_kind << 8) | ((value_tid & 0x1F) << 3) | flags);
         }
     }
     init_val = stmt_lower_shared_initializer(l, node, init_val, init_block, init_begin);
+    init_val = stmt_lower_owned_initializer(l, node, init_val, init_block, init_begin);
     /* When the initializer comes from a different variable, insert an
      * explicit copy so the new variable gets its own SSA value.  Without
      * this, both variables map to the same physical register and
@@ -3702,6 +3722,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             lower_var_decl(l, node);
             break;
 
@@ -3851,6 +3872,7 @@ static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {
             case AST_VAR_DECL:
             case AST_CONST_DECL:
             case AST_SHARED_DECL:
+            case AST_OWNED_DECL:
                 name = s->as.var_decl.name;
                 sid = s->as.var_decl.symbol_id;
                 type = xi_lower_node_type(l, s);
