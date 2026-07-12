@@ -1,0 +1,2 @@
+owned nested: Array<Array<int>> = [[1]]
+shared frozen = move nested

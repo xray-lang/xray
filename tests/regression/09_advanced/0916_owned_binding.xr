@@ -32,3 +32,18 @@ fn test_owned_copy_initializer() {
     assert_eq(len(buffer), 1)
     assert_eq(buffer[0], 3)
 }
+
+@test
+fn test_owned_move_to_shared_ref_free_array() {
+    owned bytes = Array<byte>(3, 0)
+    bytes[0] = 10
+    bytes[1] = 20
+    bytes[2] = 30
+
+    shared frozen = move bytes
+
+    assert_eq(len(frozen), 3)
+    assert_eq(frozen[0], 10)
+    assert_eq(frozen[1], 20)
+    assert_eq(frozen[2], 30)
+}

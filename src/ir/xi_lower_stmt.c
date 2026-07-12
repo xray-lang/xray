@@ -2961,7 +2961,10 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
     if (stmt_call_is_named_builtin(init, "copy"))
         return stmt_wrap_to_shared(l, init_val, init->line);
 
-    if (init->type == AST_VARIABLE || init->type == AST_MOVE_EXPR)
+    if (init->type == AST_MOVE_EXPR)
+        return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
+
+    if (init->type == AST_VARIABLE)
         return init_val;
 
     return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
