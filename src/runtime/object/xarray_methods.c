@@ -296,14 +296,15 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
 /* === Construction (returns new array) === */
 
 static XrValue m_concat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     XrArray *arr = array_self(self);
     int total = (int) arr->length;
     for (int i = 0; i < argc; i++) {
         total += XR_IS_ARRAY(args[i]) ? (int) XR_TO_ARRAY(args[i])->length : 1;
     }
-    XrArray *result = xr_array_with_capacity(xr_current_coro(iso), total);
+    XrArray *result = xr_array_with_capacity(NULL, total);
     if (!result)
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+        return xr_value_from_array(xr_array_new(NULL));
     for (int32_t j = 0; j < arr->length; j++) {
         XrValue elem = xr_array_get_element(arr, j);
         xr_rc_retain_value(elem);
@@ -348,19 +349,19 @@ static XrValue m_foreach(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
 
 static XrValue m_filter(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+        return xr_value_from_array(xr_array_new(NULL));
     struct XrClosure *cb = array_callback(iso, args[0], "filter");
     if (!cb)
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+        return xr_value_from_array(xr_array_new(NULL));
     return xr_value_from_array(xr_array_filter(iso, array_self(self), cb));
 }
 
 static XrValue m_map(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+        return xr_value_from_array(xr_array_new(NULL));
     struct XrClosure *cb = array_callback(iso, args[0], "map");
     if (!cb)
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+        return xr_value_from_array(xr_array_new(NULL));
     return xr_value_from_array(xr_array_map(iso, array_self(self), cb));
 }
 
@@ -434,10 +435,11 @@ static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
  * fast index-based for-in path, but exposed so users can drive
  * iteration manually (Iterator<T> is part of the public protocol). */
 static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
-    XrIterator *iter = xr_iterator_new_from_array(xr_current_coro(iso), arr);
+    XrIterator *iter = xr_iterator_new_from_array(NULL, arr);
     if (iter)
         iter->mode = XR_ITER_MODE_VALUES;
     return iter ? xr_value_from_iterator(iter) : xr_null();
@@ -446,10 +448,11 @@ static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
 /* Lazy entries iterator used by `for (i, e in arr)` lowering.
  * Yields (index, element) tuples one at a time. */
 static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
-    XrIterator *iter = xr_iterator_new_from_array(xr_current_coro(iso), arr);
+    XrIterator *iter = xr_iterator_new_from_array(NULL, arr);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
@@ -458,10 +461,11 @@ static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
  * `.0` / `.1` access and `for ((i, e) in arr.entries())` destructures
  * via XI_TUPLE_GET, exactly as the static signature implies. */
 static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
-    struct XrCoroutine *coro = xr_current_coro(iso);
+    struct XrCoroutine *coro = NULL;
     int32_t n = arr->length;
     XrArray *out = xr_array_with_capacity(coro, n > 0 ? n : 1);
     if (!out)

@@ -1995,8 +1995,10 @@ static XrValue aot_builtin_adt_value(const XrAotContext *ctx, int builtin_index,
     XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
     if (!type || !xr_enum_type_has_payloads(type))
         return xr_null();
-    XrEnumAggregateValue *value = xr_enum_adt_construct_core(
-        aot_context_runtime_core(ctx), ctx ? ctx->coro : NULL, type, member_index, args, nargs);
+    XrAllocationContext *alloc =
+        ctx && ctx->coro ? &ctx->coro->alloc_ctx : xr_alloc_context_current();
+    XrEnumAggregateValue *value =
+        alloc ? xr_enum_adt_construct_in(alloc, type, member_index, args, nargs) : NULL;
     return value ? XR_FROM_PTR(value) : xr_null();
 }
 
@@ -2574,7 +2576,7 @@ static XrAotSpawnResult aot_spawn_common(const XrAotContext *ctx, const XrAotCor
         return result;
     }
 
-    if (scope && parent) {
+    if (scope) {
         if (!xr_coro_set_parent_scope(child, scope)) {
             if (!defer_batch)
                 (void) xr_coro_set_pending_spawn(parent, NULL);

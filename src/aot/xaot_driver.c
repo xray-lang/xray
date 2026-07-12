@@ -828,6 +828,9 @@ static void features_apply_capability_plan(XaotFeatureSet *fs, uint32_t capabili
         case XG_CAP_STACKTRACE:
             fs->need_stacktrace = true;
             break;
+        case XG_CAP_PARALLEL:
+            fs->need_parallel = true;
+            break;
         default:
             break;
     }
@@ -851,35 +854,6 @@ static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotB
             features_add_stdlib_module(fs, plan->name);
         else if (plan->kind == XG_LINK_DEP_STDLIB_SYMBOL)
             features_apply_stdlib_symbol(fs, plan->name);
-    }
-}
-
-static bool xaot_func_contains_parallel_op(const XiFunc *func) {
-    if (!func)
-        return false;
-    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
-        const XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values ? blk->values[vi] : NULL;
-            if (!v)
-                continue;
-            if (v->op == XI_PAR_FOR || v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE)
-                return true;
-        }
-    }
-    return false;
-}
-
-static void features_apply_parallel_ops(XaotFeatureSet *fs, const XaotBundle *bundle) {
-    if (!fs || !bundle)
-        return;
-    for (uint32_t i = 0; i < bundle->nfunc_plans; i++) {
-        if (xaot_func_contains_parallel_op(bundle->func_plans[i].func)) {
-            fs->need_parallel = true;
-            return;
-        }
     }
 }
 
@@ -1179,7 +1153,9 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget *target,
-                                XaotLinkManifest *manifest, bool freestanding_profile) {
+                                XaotLinkManifest *manifest, bool freestanding_profile,
+                                const XaotTargetCapabilityProvider *provider,
+                                const XrEntryPlan *entry_plan) {
     bool ok = false;
     bool fast_test;
 
@@ -1213,8 +1189,29 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
 #endif
     }
 
-    if (!add_runtime_cap_manifest_entries(features, manifest))
+    if (provider && provider->abi_version != 0) {
+        char provider_abi[64];
+        char provider_caps[64];
+        char provider_hooks[64];
+        char provider_target_hash[96];
+        snprintf(provider_abi, sizeof(provider_abi), "XRAY_PROVIDER_ABI=%u", provider->abi_version);
+        snprintf(provider_caps, sizeof(provider_caps), "XRAY_PROVIDER_REQUIRED_CAPS=0x%x",
+                 entry_plan ? entry_plan->required_capability_bits : 0);
+        snprintf(provider_hooks, sizeof(provider_hooks), "XRAY_PROVIDER_REQUIRED_HOOKS=0x%x",
+                 entry_plan ? entry_plan->provider_hook_bits : 0);
+        snprintf(provider_target_hash, sizeof(provider_target_hash),
+                 "XRAY_PROVIDER_TARGET_METADATA_HASH=0x%llxULL",
+                 (unsigned long long) provider->target_metadata_hash);
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE,
+                                           "XRAY_TARGET_RUNTIME_PROVIDER=1") ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_abi) ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_caps) ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_hooks) ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_target_hash))
+            goto done;
+    } else if (!add_runtime_cap_manifest_entries(features, manifest)) {
         goto done;
+    }
 
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
@@ -1694,9 +1691,15 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         fprintf(stderr, "Error: failed to set AOT target data layout\n");
         goto fail_free_ir;
     }
+    if (options->capability_provider &&
+        !xaot_bundle_set_capability_provider(&aot_bundle, options->capability_provider)) {
+        fprintf(stderr, "Error: invalid AOT target capability provider\n");
+        goto fail_free_ir;
+    }
     if (!xaot_bundle_set_global_evidence(&aot_bundle, &global_evidence,
                                          global_evidence.key.profile)) {
-        fprintf(stderr, "Error: failed to attach global evidence plan\n");
+        fprintf(stderr, "Error: failed to attach global evidence plan: %s\n",
+                aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
@@ -1839,9 +1842,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
     features_apply_link_dependency_plans(&features, &aot_bundle);
-    features_apply_parallel_ops(&features, &aot_bundle);
     if (!build_link_manifest(&features, options->target, &link_manifest,
-                             profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
+                             profile == XAOT_BUILD_PROFILE_FREESTANDING,
+                             options->capability_provider, &aot_bundle.entry_plan)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");
         goto fail_free_ir;
     }

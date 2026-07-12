@@ -79,11 +79,11 @@ struct XrVMRuntime {
     // script metadata, weak registry, and extension type registry.
     XrRuntimeCore *core_rt;
 
-    // Main coroutine (RC heap architecture)
-    // - All coroutines (including main) use XrCoroHeap + XrCoroHeap
-    // - Main coroutine: large heap (4MB), deferred cycle collection
-    // - O(1) heap release on program exit
-    struct XrCoroutine *main_coro;  // Main coroutine (owns large RC heap)
+    // Entry execution state
+    // - Scheduler-backed tasks use XrCoroHeap; direct roots use ExecutionContext
+    // - A physical root task exists only for descriptor/resumable entry plans
+    // - Owner-specific teardown releases task and direct-root allocations
+    struct XrCoroutine *main_coro;  // EntryPlan physical scheduler root
     struct XrTask *deferred_tasks;  // Runtime-owned Task shells awaiting isolate teardown
     size_t deferred_task_count;
     _Atomic size_t sys_thread_count;  // Running VM sys.Thread entries using this isolate

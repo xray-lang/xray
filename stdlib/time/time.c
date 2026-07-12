@@ -146,6 +146,5 @@ XR_FUNC XrModule *xr_load_module_time(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_time_generated(isolate, module);
 
-    module->loaded = true;
     return module;
 }

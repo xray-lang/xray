@@ -272,6 +272,8 @@ XR_FUNC XrAotGenDriveKind xr_aot_gen_drive(struct XrCoroutine *coro, XrValue *ou
                                            bool *out_error_is_value);
 
 XR_FUNC XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame);
+XR_FUNC bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime);
+XR_FUNC bool xr_aot_root_descriptor_end(XrAotRuntime *runtime);
 
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                       void *frame, int link_mode, bool fire_and_forget,

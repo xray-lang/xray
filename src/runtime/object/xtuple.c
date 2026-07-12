@@ -17,6 +17,7 @@
 #include "../value/xvalue_hash.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../mem/xcoro_heap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
@@ -78,9 +79,8 @@ XrClass *xr_get_or_create_tuple_class(XrVMRuntime *X, uint16_t arity) {
 /* ========== Allocation ========== */
 
 XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
-    XR_DCHECK(coro != NULL, "xr_tuple_new: NULL coro");
-    XrVMRuntime *X = xr_coro_vm_owner(coro);
-    XR_DCHECK(X != NULL, "xr_tuple_new: coroutine has no VM owner");
+    XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
+    XR_DCHECK(X != NULL, "xr_tuple_new: no execution owner");
 
     XrClass *cls = xr_get_or_create_tuple_class(X, element_count);
     if (!cls)
@@ -107,7 +107,6 @@ XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
 }
 
 XrTuple *xr_tuple_from_values(struct XrCoroutine *coro, const XrValue *values, uint16_t count) {
-    XR_DCHECK(coro != NULL, "xr_tuple_from_values: NULL coro");
     XR_DCHECK(count == 0 || values != NULL,
               "xr_tuple_from_values: NULL values with non-zero count");
 

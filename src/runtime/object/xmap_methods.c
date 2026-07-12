@@ -93,33 +93,37 @@ static XrValue xr_map_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args
 }
 
 static XrValue xr_map_method_keys(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
     if (map_is_weak(m))
         return XR_NOTFOUND;
-    return xr_value_from_array(xr_map_keys(xr_current_coro(iso), m));
+    return xr_value_from_array(xr_map_keys(NULL, m));
 }
 
 static XrValue xr_map_method_values(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
     if (map_is_weak(m))
         return XR_NOTFOUND;
-    return xr_value_from_array(xr_map_values(xr_current_coro(iso), m));
+    return xr_value_from_array(xr_map_values(NULL, m));
 }
 
 static XrValue xr_map_method_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
     if (map_is_weak(m))
         return XR_NOTFOUND;
-    return xr_value_from_array(xr_map_entries(xr_current_coro(iso), m));
+    return xr_value_from_array(xr_map_entries(NULL, m));
 }
 
 static XrValue xr_map_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
@@ -129,7 +133,7 @@ static XrValue xr_map_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *a
      * It yields each key K, matching the analyzer's item-type inference
      * (which already binds the loop variable to map.key_type). Use
      * m.values() / m.entries() for the other projections. */
-    XrIterator *iter = xr_iterator_keys_from_map(xr_current_coro(iso), m);
+    XrIterator *iter = xr_iterator_keys_from_map(NULL, m);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 

@@ -23,19 +23,13 @@
 XrCell *xr_cell_new(XrVMRuntime *isolate, struct XrCoroutine *coro) {
     XR_DCHECK(isolate != NULL, "cell_new: NULL isolate");
 
-    XrCell *cell;
-    if (coro && coro->heap) {
-        cell = (XrCell *) xr_coro_heap_new_obj(coro->heap, XR_TCELL, XR_CELL_SIZE);
-    } else {
-        cell = (XrCell *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), XR_CELL_SIZE,
-                                              XR_TCELL);
-    }
+    XrCell *cell = (XrCell *) xr_alloc(coro, XR_CELL_SIZE, XR_TCELL);
     if (cell == NULL) {
         return NULL;
     }
 
     xr_obj_header_init_type(&cell->hdr, XR_TCELL);
-    if (coro && coro->heap) {
+    if (coro) {
         XR_OBJ_SET_FLAG(&cell->hdr, XR_OBJ_CYCLE_CANDIDATE);
     }
     cell->value = xr_null();

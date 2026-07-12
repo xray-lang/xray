@@ -20,8 +20,11 @@
 
 XrBoundMethod *xr_bound_method_new(XrVMRuntime *isolate, XrValue receiver, MethodHandler handler) {
     XR_DCHECK(isolate != NULL, "bound_method_new: NULL isolate");
-    XrBoundMethod *bm = (XrBoundMethod *) xr_fixed_heap_alloc(
-        xr_isolate_get_fixed_heap(isolate), sizeof(XrBoundMethod), XR_TBOUND_METHOD);
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    XrBoundMethod *bm = alloc && alloc->core == xr_isolate_get_runtime_core(isolate)
+                            ? (XrBoundMethod *) xr_alloc_context_new_object(
+                                  alloc, sizeof(XrBoundMethod), XR_TBOUND_METHOD)
+                            : NULL;
     if (bm == NULL) {
         return NULL;
     }

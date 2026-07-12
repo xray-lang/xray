@@ -360,7 +360,7 @@ static bool direct_parse_array(JsonDirectParser *p, XrValue *out) {
         return false;
     p->pos++;
 
-    XrArray *arr = xr_array_new(xr_current_coro(p->X));
+    XrArray *arr = xr_array_new(NULL);
     if (!arr)
         return false;
     XrValue arr_value = xr_value_from_array(arr);
@@ -400,7 +400,7 @@ static bool direct_parse_object(JsonDirectParser *p, XrValue *out) {
         return false;
     p->pos++;
 
-    XrJson *json = xr_json_new(xr_current_coro(p->X));
+    XrJson *json = xr_json_new(NULL);
     if (!json)
         return false;
     XrValue obj_value = xr_json_value(json);
@@ -981,7 +981,7 @@ static void stringify_value(JsonWriter *w, XrValue val) {
 }
 
 static void encode_array(JsonEncoder *e, XrArray *arr, XrValue *out) {
-    XrArray *copy = xr_array_with_capacity(xr_current_coro(e->isolate), arr ? arr->length : 0);
+    XrArray *copy = xr_array_with_capacity(NULL, arr ? arr->length : 0);
     if (!copy) {
         encode_error(e, "out of memory while encoding Array to JSON");
         *out = xr_null();
@@ -1001,7 +1001,7 @@ static void encode_array(JsonEncoder *e, XrArray *arr, XrValue *out) {
 
 static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_fields,
                                  XrValue *out) {
-    XrJson *json = xr_json_new(xr_current_coro(e->isolate));
+    XrJson *json = xr_json_new(NULL);
     if (!json) {
         encode_error(e, "out of memory while encoding object to JSON");
         *out = xr_null();
@@ -1033,7 +1033,7 @@ static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_
 }
 
 static void encode_map(JsonEncoder *e, XrMap *map, XrValue *out) {
-    XrJson *json = xr_json_new(xr_current_coro(e->isolate));
+    XrJson *json = xr_json_new(NULL);
     if (!json) {
         encode_error(e, "out of memory while encoding Map to JSON");
         *out = xr_null();
@@ -1071,7 +1071,7 @@ static void encode_map(JsonEncoder *e, XrMap *map, XrValue *out) {
 }
 
 static void encode_set(JsonEncoder *e, XrSet *set, XrValue *out) {
-    XrArray *arr = xr_array_with_capacity(xr_current_coro(e->isolate), set ? (int) set->count : 0);
+    XrArray *arr = xr_array_with_capacity(NULL, set ? (int) set->count : 0);
     if (!arr) {
         encode_error(e, "out of memory while encoding Set to JSON");
         *out = xr_null();
@@ -1499,7 +1499,7 @@ XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int arg
 // Returns Json: {value: parsed result, error: error message or null}
 XrValue xr_json_fn_try_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) self;
-    XrJson *result = xr_json_new(xr_current_coro(X));
+    XrJson *result = xr_json_new(NULL);
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         xr_json_set_by_key(

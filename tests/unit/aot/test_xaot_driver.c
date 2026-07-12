@@ -56,6 +56,118 @@ static bool add_package_link_dependency(XgGlobalEvidence *package, XgModuleId mo
     return xg_global_evidence_add_link_dependency(package, &dep) != NULL;
 }
 
+static bool add_package_function_storage_decls(XgGlobalEvidence *package, XgModuleId module_id,
+                                               const char *source_path) {
+    FILE *f;
+    long size;
+    char *source;
+    char *cursor;
+    if (!package || !source_path || !(f = fopen(source_path, "rb")))
+        return false;
+    if (fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
+    source = (char *) xr_malloc((size_t) size + 1);
+    if (!source || fread(source, 1, (size_t) size, f) != (size_t) size) {
+        xr_free(source);
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+    source[size] = '\0';
+    cursor = source;
+    while ((cursor = strstr(cursor, "fn ")) != NULL) {
+        char name[128];
+        size_t len = 0;
+        XgDeclSummary decl;
+        cursor += 3;
+        while ((cursor[len] == '_' || (cursor[len] >= 'a' && cursor[len] <= 'z') ||
+                (cursor[len] >= 'A' && cursor[len] <= 'Z') ||
+                (len > 0 && cursor[len] >= '0' && cursor[len] <= '9')) &&
+               len + 1 < sizeof(name))
+            len++;
+        if (len == 0)
+            continue;
+        memcpy(name, cursor, len);
+        name[len] = '\0';
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.decl_id = package->ndecls + 1;
+        decl.source_node_id = xg_stable_source_node_id(module_id, 1, decl.decl_id, 1);
+        decl.kind = XG_DECL_FUNC;
+        decl.name_id = xg_name_id(name);
+        decl.source_span_id = decl.decl_id;
+        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+        if (!xg_global_evidence_add_decl(package, &decl)) {
+            xr_free(source);
+            return false;
+        }
+        {
+            XgBodySummary body;
+            memset(&body, 0, sizeof(body));
+            body.func_id = package->nbodies + 1;
+            body.module_id = module_id;
+            body.source_node_id = decl.source_node_id;
+            body.owner_decl_id = decl.decl_id;
+            body.name_id = decl.name_id;
+            body.source_span_id = decl.source_span_id;
+            body.kind = XG_BODY_FUNCTION;
+            body.body_hash = (uint64_t) decl.name_id + 1;
+            if (!xg_global_evidence_add_body(package, &body)) {
+                xr_free(source);
+                return false;
+            }
+        }
+        cursor += len;
+    }
+    cursor = source;
+    while ((cursor = strstr(cursor, "import \"")) != NULL) {
+        char *line_end = strchr(cursor, '\n');
+        char *as = strstr(cursor, "\" as ");
+        char name[128];
+        size_t len = 0;
+        XgDeclSummary decl;
+        if (!as || (line_end && as >= line_end)) {
+            cursor += 8;
+            continue;
+        }
+        as += 5;
+        while ((as[len] == '_' || (as[len] >= 'a' && as[len] <= 'z') ||
+                (as[len] >= 'A' && as[len] <= 'Z') ||
+                (len > 0 && as[len] >= '0' && as[len] <= '9')) &&
+               len + 1 < sizeof(name))
+            len++;
+        if (len == 0) {
+            cursor = as;
+            continue;
+        }
+        memcpy(name, as, len);
+        name[len] = '\0';
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.decl_id = package->ndecls + 1;
+        decl.source_node_id = xg_stable_source_node_id(module_id, 2, decl.decl_id, 1);
+        decl.kind = XG_DECL_GLOBAL;
+        decl.name_id = xg_name_id(name);
+        decl.source_span_id = decl.decl_id;
+        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+        if (!xg_global_evidence_add_decl(package, &decl)) {
+            xr_free(source);
+            return false;
+        }
+        cursor = as + len;
+    }
+    xr_free(source);
+    return true;
+}
+
 static bool write_file_text(const char *path, const char *text) {
     FILE *f = fopen(path, "w");
     if (!f)
@@ -108,6 +220,7 @@ static char *make_package_payload_for_source(const char *canonical, const char *
         return NULL;
     xg_global_evidence_init(&package, key);
     if (!xg_global_evidence_add_module(&package, &module) ||
+        !add_package_function_storage_decls(&package, module.module_id, source_path) ||
         !add_package_link_dependency(&package, module.module_id)) {
         xg_global_evidence_free(&package);
         return NULL;
@@ -146,7 +259,8 @@ static char *make_package_payload_for_ordered_sources(const char *const *canonic
     for (uint32_t i = 0; i < count; i++) {
         XgModuleSummary module;
         if (!xg_module_summary_from_module_spec(&module, i + 1, &specs[i]) ||
-            !xg_global_evidence_add_module(&package, &module))
+            !xg_global_evidence_add_module(&package, &module) ||
+            !add_package_function_storage_decls(&package, module.module_id, source_paths[i]))
             goto done;
     }
     if (!add_package_link_dependency(&package, 1))
@@ -335,6 +449,64 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     passed++;
 }
 
+static bool manifest_has_define(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_defines; i++) {
+        if (manifest->defines[i] && strcmp(manifest->defines[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void test_driver_validates_freestanding_runtime_provider(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    XaotTargetCapabilityProvider provider = {
+        .abi_version = XAOT_PROVIDER_ABI_VERSION,
+        .provided_capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK,
+        .hook_bits = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
+                     XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_EXECUTOR_PUMP,
+        .target_metadata_hash = 0x197195,
+    };
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-provider-%ld.xr", (long) getpid());
+    ASSERT_TRUE(write_file_text(source_path, "fn worker() -> int {\n"
+                                             "    return 1\n"
+                                             "}\n"
+                                             "await go worker()\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    provider.hook_bits &= ~XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    options.capability_provider = &provider;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    provider.hook_bits |= XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.link_manifest.n_runtime_objects == 0);
+    ASSERT_TRUE(result.link_manifest.n_runtime_caps == 0);
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_TARGET_RUNTIME_PROVIDER=1"));
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_PROVIDER_ABI=1"));
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest,
+                                    "XRAY_PROVIDER_TARGET_METADATA_HASH=0x197195ULL"));
+    xaot_build_result_free(&result);
+
+    xaot_target_free(&target);
+    unlink(source_path);
+    passed++;
+}
+
 static void test_driver_auto_discovers_package_summary_payloads(void) {
     char root[PATH_MAX];
     char home_dir[PATH_MAX];
@@ -515,6 +687,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
 int main(void) {
     test_driver_consumes_imported_summary_payload_set();
     test_driver_rejects_invalid_imported_summary_payload_set();
+    test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();
     test_driver_auto_discovers_package_dependency_summary_payload();

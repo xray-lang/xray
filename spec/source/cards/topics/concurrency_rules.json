@@ -13,7 +13,7 @@
   "sections": [
     {
       "heading": "Sharing model",
-      "markdown": "- `shared` creates a stable, non-rebindable identity on the global heap\n- `shared` values may be captured by `go` closures and passed across coroutine boundaries directly\n- `move` is for explicit ownership transfer of rebindable local `var` values, not for `shared` bindings\n- ordinary local variables cannot be captured by `go` closures; pass data explicitly with parameters, `copy(...)`, `move`, or `shared`\n- `go { ... }` is a zero-argument block form; pass local data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`"
+      "markdown": "- `shared` creates a stable, non-rebindable identity owned by the shared/system owner\n- every cross-execution boundary consumes the same provenance-based capture plan\n- inline values, published module-readonly values, and shared identities may cross directly\n- execution-local graphs require explicit `copy(...)` or `move` from a rebindable local `var`; module-mutable state and short-lived views/pointers are rejected\n- `go { ... }` is a zero-argument block form; pass owned local data with `go fn(x: T) -> R { ... }(copy(arg))`, `move arg`, or `go worker(arg)` as appropriate"
     },
     {
       "heading": "await all",

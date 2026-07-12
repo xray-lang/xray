@@ -122,6 +122,27 @@ TEST(globals_dict_missing_key_returns_null) {
     xray_vm_delete(iso);
 }
 
+TEST(sync_root_elides_coroutine_with_ordinary_allocation) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    ASSERT_NULL(iso->main_coro);
+
+    XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                     "var xs = [1, 2, 3]\nvar n = xs.length\n");
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_execute(iso, proto), 0);
+    ASSERT_NULL(iso->main_coro);
+
+    XrString *name = xr_compile_time_intern(iso, "n", 1);
+    ASSERT_NOT_NULL(name);
+    XrValue value = xr_global_dict_get(iso->vm.globals, name);
+    ASSERT_TRUE(XR_IS_INT(value));
+    ASSERT_EQ_INT((int) XR_TO_INT(value), 3);
+
+    xr_free_code(iso, proto);
+    xray_vm_delete(iso);
+}
+
 /* ========== Profile Invariants ========== */
 
 TEST(repl_profile_clears_each_call) {
@@ -701,6 +722,7 @@ RUN_TEST(globals_dict_initialized_with_isolate);
 RUN_TEST(globals_dict_set_get_round_trip);
 RUN_TEST(globals_dict_overwrite_keeps_count);
 RUN_TEST(globals_dict_missing_key_returns_null);
+RUN_TEST(sync_root_elides_coroutine_with_ordinary_allocation);
 
 RUN_TEST_SUITE("REPL Profile");
 RUN_TEST(repl_profile_clears_each_call);

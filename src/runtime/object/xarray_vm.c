@@ -49,9 +49,9 @@ XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *c
     XR_DCHECK(callback != NULL, "xr_array_map: NULL callback");
     uint8_t elem_tid = array_map_result_tid(callback);
     XrArrayElemType elem_type = xr_tid_to_elem_type(elem_tid);
-    XrArray *result = xr_array_with_capacity_typed(xr_current_coro(iso), arr->length, elem_type);
+    XrArray *result = xr_array_with_capacity_typed(NULL, arr->length, elem_type);
     if (!result)
-        return xr_array_new(xr_current_coro(iso));
+        return xr_array_new(NULL);
     result->elem_tid = elem_tid;
 
     for (int i = 0; i < arr->length; i++) {
@@ -67,8 +67,8 @@ XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *c
 XrArray *xr_array_filter(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_filter: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_filter: NULL callback");
-    XrArray *result = xr_array_with_capacity_typed(xr_current_coro(iso), arr->length,
-                                                   (XrArrayElemType) arr->elem_type);
+    XrArray *result =
+        xr_array_with_capacity_typed(NULL, arr->length, (XrArrayElemType) arr->elem_type);
 
     for (int i = 0; i < arr->length; i++) {
         XrValue elem = xr_array_get_element(arr, i);

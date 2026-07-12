@@ -9,6 +9,7 @@
  */
 
 #include "xinstance.h"
+#include "../core/xr_exec_context.h"
 #include "../core/xr_runtime_core.h"
 #include "../mem/xalloc_unified.h"
 #include "../mem/xheap.h"
@@ -19,18 +20,18 @@
 
 #include <string.h>
 
-XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass *cls) {
+XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
     XR_DCHECK(cls != NULL, "Class must not be NULL");
+    XR_DCHECK(X != NULL, "Runtime must not be NULL");
 
     const char *class_name = cls->name ? cls->name : "<unnamed>";
 
     size_t size = xr_instance_size(cls);
-    XrInstance *inst = NULL;
-    if (coro) {
-        inst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
-    } else if (core) {
-        inst = (XrInstance *) xr_fixed_heap_alloc(&core->fixed_heap, size, XR_TINSTANCE);
-    }
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
+    XrInstance *inst = alloc && alloc->core == core
+                           ? (XrInstance *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE)
+                           : NULL;
 
     if (!inst) {
         xr_log_warning("instance", "failed to allocate instance of class %s", class_name);
@@ -46,10 +47,6 @@ XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass
     }
 
     return inst;
-}
-
-XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
-    return xr_instance_new_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), cls);
 }
 
 void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
@@ -118,13 +115,11 @@ XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src) {
 
     uint32_t field_count = xr_class_instance_field_count(cls);
     size_t size = xr_instance_size(cls);
-    XrInstance *dst = NULL;
-    XrCoroutine *coro = xr_current_coro(X);
-    if (coro) {
-        dst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
-    } else {
-        dst = (XrInstance *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X), size, XR_TINSTANCE);
-    }
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
+    XrInstance *dst = alloc && alloc->core == core
+                          ? (XrInstance *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE)
+                          : NULL;
     if (!dst)
         return NULL;
 

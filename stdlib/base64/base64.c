@@ -201,6 +201,5 @@ XR_FUNC XrModule *xr_load_module_base64(XrVMRuntime *isolate) {
         return NULL;
 
     module->requires_script = true;
-    module->loaded = true;
     return module;
 }

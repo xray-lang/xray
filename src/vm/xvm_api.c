@@ -18,8 +18,15 @@
 #include "../coro/xworker.h"
 #include "../coro/xcoroutine.h"
 #include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xheap.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
+
+static XrArray *vm_api_root_array_new(XrVMRuntime *isolate) {
+    return xr_array_with_capacity_in(&isolate->core_rt->root_alloc, 4, XR_ELEM_ANY);
+}
 
 /* ========== VM Context Helper ========== */
 
@@ -38,9 +45,6 @@ XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
                 return xr_coro_vm_ctx(coro);
             return machine_ctx;
         }
-    }
-    if (isolate->main_coro) {
-        return xr_coro_vm_ctx((XrCoroutine *) isolate->main_coro);
     }
     return &isolate->vm_ctx;
 }
@@ -202,7 +206,7 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
         // Collect extra arguments into rest array (matches OP_CALL vararg path)
         int extra = nargs > proto->numparams ? nargs - proto->numparams : 0;
         XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
-        XrArray *rest = xr_array_new(coro);
+        XrArray *rest = coro ? xr_array_new(coro) : vm_api_root_array_new(isolate);
         if (extra > 0) {
             for (int j = 0; j < extra; j++) {
                 xr_array_push(rest, func_base[proto->numparams + j]);
@@ -264,7 +268,7 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
 
 /*
 ** Execute function prototype
-** Uses main coroutine's vm_ctx uniformly
+** Uses the current execution context; a pure logical root has no coroutine.
 */
 XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_interpret_proto: NULL isolate");
@@ -275,8 +279,7 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     if (proto == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
-    XrCoroutine *main_coro = (XrCoroutine *) isolate->main_coro;
-    XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
+    XrClosure *closure = xr_closure_new(isolate, proto, NULL);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
@@ -320,17 +323,22 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
 
+    XrExecutionContext *previous =
+        xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
+
     if (!xr_vm_bind_proto_shared_slots(isolate, proto)) {
+        xr_exec_context_restore(previous);
         return XR_VM_RUNTIME_ERROR;
     }
 
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    // Create module closure on current coroutine's Region heap (if any).
-    XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
-    XrClosure *closure = xr_closure_new(isolate, proto, coro);
+    // Module initialization owns its closure independently of any physical
+    // task whose VM stack happens to host the nested dispatch.
+    XrClosure *closure = xr_closure_new(isolate, proto, NULL);
     if (closure == NULL) {
+        xr_exec_context_restore(previous);
         return XR_VM_RUNTIME_ERROR;
     }
 
@@ -343,6 +351,7 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     // above the current stack_top. prepare_entry uses ctx->stack_top as the
     // baseline for "extra_stack" computation.
     if (!xr_vm_prepare_entry(ctx, proto->maxstacksize)) {
+        xr_exec_context_restore(previous);
         return XR_VM_RUNTIME_ERROR;
     }
 
@@ -382,6 +391,7 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     ctx->frame_count = saved_frame_count;
     ctx->stack_top = ctx->stack + saved_top_offset;
 
+    xr_exec_context_restore(previous);
     return result;
 }
 

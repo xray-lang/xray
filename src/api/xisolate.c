@@ -90,11 +90,6 @@ XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
     xr_script_info_set(&isolate->core_rt->script_info, isolate->params.script_file,
                        isolate->params.script_argc, isolate->params.script_argv);
 
-    // --- VM main coroutine ---
-    isolate->main_coro = xr_coro_create_bootstrap(isolate);
-    if (!isolate->main_coro)
-        goto fail;
-
     // --- Core: globals table ---
     isolate->globals = xr_globals_create(64);
     if (!isolate->globals)
@@ -117,7 +112,9 @@ XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
     xray_vm_enter(isolate);
     return isolate;
 
+#if XR_ENABLE_VM_PROFILER
 fail_after_vm:
+#endif
     xr_vm_cleanup(isolate);
 fail:
     if (isolate->globals)
@@ -132,6 +129,10 @@ fail:
 void xray_vm_delete(XrVMRuntime *isolate) {
     if (!isolate)
         return;
+
+    XrExecutionContext *active_exec = xr_exec_context_current();
+    if (active_exec && active_exec->core == isolate->core_rt)
+        xr_exec_context_restore(NULL);
 
     bool teardown_stats = isolate_teardown_stats_enabled();
     uint64_t teardown_start_ns = xr_time_monotonic_ns();

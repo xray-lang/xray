@@ -27,6 +27,37 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
     return false;
 }
 
+static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    XrEntryPlan expected;
+    XaotBundle root_view;
+    if (!bundle || !bundle->has_entry_plan)
+        return set_error(errbuf, errbuf_len, "AOT bundle has no mandatory entry plan");
+    root_view = *bundle;
+    if ((bundle->entry_plan.evidence & XR_ENTRY_EV_ARTIFACT_ROOT_SET) == 0) {
+        root_view.modules = NULL;
+        root_view.nmodules = 0;
+        root_view.entry_module = 0;
+    }
+    if (!xaot_entry_plan_derive(&root_view, bundle->global_evidence_plan.evidence,
+                                bundle->global_evidence_plan.profile, &expected))
+        return set_error(errbuf, errbuf_len, "AOT entry plan could not be re-derived");
+    if (expected.entry_func_id != bundle->entry_plan.entry_func_id ||
+        expected.reachable_body_count != bundle->entry_plan.reachable_body_count ||
+        expected.reachable_effect_bits != bundle->entry_plan.reachable_effect_bits ||
+        expected.required_capability_bits != bundle->entry_plan.required_capability_bits ||
+        expected.provided_capability_bits != bundle->entry_plan.provided_capability_bits ||
+        expected.runtime_component_bits != bundle->entry_plan.runtime_component_bits ||
+        expected.provider_hook_bits != bundle->entry_plan.provider_hook_bits ||
+        expected.evidence != bundle->entry_plan.evidence ||
+        expected.root_representation != bundle->entry_plan.root_representation ||
+        expected.scheduler_mode != bundle->entry_plan.scheduler_mode ||
+        expected.unproven_reason != bundle->entry_plan.unproven_reason)
+        return set_error(errbuf, errbuf_len, "AOT entry plan is stale");
+    if (expected.unproven_reason != XR_ENTRY_PROVEN)
+        return set_error(errbuf, errbuf_len, "AOT entry plan is unproven");
+    return true;
+}
+
 static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
                                                               XgFuncId func_id);
 static XgFuncId verify_find_method_body_func_id(const XgGlobalEvidence *ev, XgMethodId method_id);
@@ -2224,12 +2255,41 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         if (decl->module_id == XG_NO_ID || decl->source_node_id == 0)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence declaration source identity is missing");
+        if (decl->storage_owner == XR_STORAGE_NONE) {
+            if (decl->storage_flags != 0 || decl->storage_mutability != XR_STORAGE_READONLY ||
+                decl->address_identity != XR_ADDRESS_NONE ||
+                decl->materialization_kind != XR_MATERIALIZE_INLINE)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence non-storage declaration has provenance");
+        } else if (decl->storage_owner == XR_STORAGE_MODULE) {
+            if (decl->address_identity != XR_ADDRESS_MODULE_STABLE ||
+                (decl->materialization_kind != XR_MATERIALIZE_MODULE_READONLY &&
+                 decl->materialization_kind != XR_MATERIALIZE_MODULE_RUNTIME))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence module storage provenance is stale");
+        } else if (decl->storage_owner == XR_STORAGE_SHARED_SYSTEM) {
+            if (decl->address_identity != XR_ADDRESS_SHARED_STABLE ||
+                decl->materialization_kind != XR_MATERIALIZE_SHARED_SYSTEM)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence shared storage provenance is stale");
+        } else if (decl->storage_owner == XR_STORAGE_FOREIGN) {
+            if (decl->address_identity != XR_ADDRESS_FOREIGN)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence foreign storage provenance is stale");
+        } else {
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence declaration storage owner is invalid");
+        }
         for (uint32_t j = i + 1; j < ev->ndecls; j++) {
             const XgDeclSummary *other = &ev->decls[j];
             if (other->module_id == decl->module_id &&
                 other->source_node_id == decl->source_node_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence declaration source identity is duplicated");
+            if (decl->storage_owner != XR_STORAGE_NONE && other->storage_owner != XR_STORAGE_NONE &&
+                other->module_id == decl->module_id && other->name_id == decl->name_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence storage identity is duplicated");
         }
     }
     for (uint32_t i = 0; i < ev->ncallsites; i++) {
@@ -2874,10 +2934,13 @@ static uint32_t verify_metadata_profile_action(uint32_t profile, uint32_t metada
     return XAOT_CAPABILITY_ACTION_LINK;
 }
 
-static uint32_t verify_capability_profile_action(uint32_t profile, uint32_t capability) {
+static uint32_t verify_capability_profile_action(const XaotBundle *bundle, uint32_t capability) {
+    uint32_t profile = bundle->global_evidence_plan.profile;
     if (capability == XG_CAP_INSTANCEOF)
         return XAOT_CAPABILITY_ACTION_ALLOW;
     if (profile == XG_BUILD_FREESTANDING) {
+        if ((bundle->target_provider.provided_capability_bits & capability) != 0)
+            return XAOT_CAPABILITY_ACTION_LINK;
         switch (capability) {
             case XG_CAP_NATIVE:
             case XG_CAP_EXTERN:
@@ -5913,9 +5976,13 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         uint32_t transfer_count;
         uint32_t expected_evidence = 0;
         const XaotCapabilityPlan *plan;
-        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
-            if ((ev->bodies[bi].capability_bits & cap) != 0)
-                body_count++;
+        if ((bundle->entry_plan.evidence & XR_ENTRY_EV_ARTIFACT_ROOT_SET) != 0) {
+            body_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
+        } else {
+            for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+                if ((ev->bodies[bi].capability_bits & cap) != 0)
+                    body_count++;
+            }
         }
         transfer_count = verify_capability_transfer_count(bundle, cap);
         plan = xaot_bundle_find_capability_plan(bundle, cap);
@@ -5939,8 +6006,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (plan->evidence != expected_evidence ||
             plan->unproven_reason != XAOT_CAPABILITY_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT capability plan lacks evidence");
-        if (plan->profile_action !=
-            verify_capability_profile_action(bundle->global_evidence_plan.profile, cap))
+        if (plan->profile_action != verify_capability_profile_action(bundle, cap))
             return set_error(errbuf, errbuf_len,
                              "AOT capability profile action does not re-derive");
     }
@@ -6340,6 +6406,37 @@ static bool verify_func_allocation_plans_recursive(const XaotBundle *bundle, con
     return true;
 }
 
+static const XiFunc *verify_spawn_capture_target(const XiValue *callee) {
+    while (callee && (callee->op == XI_BOX || callee->op == XI_COPY || callee->op == XI_MOVE) &&
+           callee->nargs > 0)
+        callee = callee->args[0];
+    if (callee && callee->op == XI_CLOSURE_NEW && callee->aux)
+        return (const XiFunc *) callee->aux;
+    if (callee && callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW && callee->aux)
+        return (const XiFunc *) callee->aux;
+    return NULL;
+}
+
+static bool verify_spawn_capture_materialization(const XaotBundle *bundle, const XiValue *site,
+                                                 char *errbuf, size_t errbuf_len) {
+    const XiFunc *target;
+    if (!site || (site->op != XI_GO && site->op != XI_THREAD_SPAWN) || site->nargs == 0)
+        return true;
+    target = verify_spawn_capture_target(site->args[0]);
+    if (!target)
+        return true;
+    for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
+        const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
+        if (!plan)
+            return set_error(errbuf, errbuf_len,
+                             "AOT cross-execution capture has no materialization plan");
+        if (plan->action == XR_CAPTURE_REJECT || plan->action == XR_CAPTURE_MOVE)
+            return set_error(errbuf, errbuf_len,
+                             "AOT cross-execution capture materialization is rejected");
+    }
+    return true;
+}
+
 static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
                                                  uint32_t *out_count, char *errbuf,
                                                  size_t errbuf_len) {
@@ -6359,6 +6456,8 @@ static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const
             if (!site)
                 continue;
             if (site->op == XI_GO || site->op == XI_THREAD_SPAWN) {
+                if (!verify_spawn_capture_materialization(bundle, site, errbuf, errbuf_len))
+                    return false;
                 for (uint16_t ai = 1; ai < site->nargs; ai++) {
                     XaotTransferPlan derived;
                     uint16_t transfer_index = (uint16_t) (ai - 1);
@@ -6504,5 +6603,9 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
             !verify_direct_call_ret_step(bundle, &bundle->boundary_steps[fi], errbuf, errbuf_len))
             return false;
     }
+    if (!verify_entry_plan(bundle, errbuf, errbuf_len))
+        return false;
+    if (!xaot_storage_capture_plans_verify(bundle, errbuf, errbuf_len))
+        return false;
     return true;
 }

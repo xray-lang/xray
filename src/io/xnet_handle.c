@@ -34,17 +34,8 @@ static void *alloc_handle(struct XrVMRuntime *X, size_t size) {
      * NetConn / NetListener must be shareable across coroutines (go accept
      * → go serve). Allocate on the system shared heap like Channel.
      */
-    if (xr_isolate_get_sys_heap(X)) {
-        return xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), size, XR_TINSTANCE);
-    }
-    struct XrCoroutine *coro = xr_current_coro(X);
-    void *obj = NULL;
-    if (coro) {
-        obj = xr_alloc(coro, size, (uint8_t) XR_TINSTANCE);
-    } else {
-        obj = xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X), size, (uint8_t) XR_TINSTANCE);
-    }
-    return obj;
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    return heap ? xr_sysheap_alloc_shared(heap, size, XR_TINSTANCE) : NULL;
 }
 
 /* ========== Constructors ========== */

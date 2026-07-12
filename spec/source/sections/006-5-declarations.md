@@ -59,7 +59,7 @@ shared PRIMES = [2, 3, 5, 7, 11]
 shared counter = Atomic(0)
 ```
 
-- 存储在**全局堆**，refcount 管理。
+- 由 **shared/system owner** 直接物化并持有稳定共享身份；具体堆布局不是语言语义。
 - 绑定名不可重新赋值，也不能作为 `move` 源。
 - 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
 - `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
@@ -907,7 +907,7 @@ shared PRIMES = [2, 3, 5, 7, 11]
 shared counter = Atomic(0)
 ```
 
-- Stored on the **global heap**, refcount-managed.
+- Materialized directly under the **shared/system owner** as a stable shared identity; the concrete heap layout is not language semantics.
 - The binding name cannot be reassigned and cannot be used as a `move` source.
 - It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
 - Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.

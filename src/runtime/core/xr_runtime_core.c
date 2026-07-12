@@ -48,11 +48,25 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
     if (!xr_sysheap_init(core->sys_heap, NULL))
         goto fail;
 
+    xr_alloc_context_init(&core->root_alloc, core, XR_STORAGE_EXEC_LOCAL);
+    xr_alloc_context_init(&core->module_alloc, core, XR_STORAGE_MODULE);
+    xr_alloc_context_init(&core->shared_alloc, core, XR_STORAGE_SHARED_SYSTEM);
+    xr_exec_context_init(&core->root_exec, core, &core->root_alloc);
+    xr_exec_context_init(&core->module_exec, core, &core->module_alloc);
+
     return core;
 
 fail:
     xr_runtime_core_delete(core);
     return NULL;
+}
+
+XrExecutionContext *xr_runtime_core_root_exec(XrRuntimeCore *core) {
+    return core ? &core->root_exec : NULL;
+}
+
+XrExecutionContext *xr_runtime_core_module_exec(XrRuntimeCore *core) {
+    return core ? &core->module_exec : NULL;
 }
 
 void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core) {

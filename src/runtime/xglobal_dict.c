@@ -12,12 +12,16 @@
 #include "object/xmap.h"
 #include "object/xstring.h"
 #include "../base/xchecks.h"
+#include "mem/xheap.h"
+#include "xisolate_api.h"
 
-void xr_global_dict_init(XrGlobalDict *gd, struct XrCoroutine *coro) {
+void xr_global_dict_init(XrGlobalDict *gd, struct XrVMRuntime *isolate) {
     XR_DCHECK(gd != NULL, "xr_global_dict_init: NULL dict");
-    XR_DCHECK(coro != NULL, "xr_global_dict_init: NULL coro (need a GC heap host)");
-    gd->map = xr_map_with_capacity(coro, 16);
+    XR_DCHECK(isolate != NULL, "xr_global_dict_init: NULL isolate");
+    gd->map =
+        (XrMap *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), sizeof(XrMap), XR_TMAP);
     XR_CHECK(gd->map != NULL, "xr_global_dict_init: map allocation failed");
+    xr_map_init_inplace(gd->map, 16);
 }
 
 void xr_global_dict_destroy(XrGlobalDict *gd) {

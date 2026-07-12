@@ -65,6 +65,19 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
     }
 }
 
+XR_FUNC XrCaptureAction xi_capture_cross_execution_action(const XiCapture *capture) {
+    if (!capture)
+        return XR_CAPTURE_REJECT;
+    if (capture->capture_kind == XI_CAPTURE_SHARED || capture->is_shared)
+        return XR_CAPTURE_SHARED_REF;
+    if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
+        return capture->is_mutable ? XR_CAPTURE_REJECT : XR_CAPTURE_MODULE_READONLY;
+    if (capture->needs_cell || capture->is_mutable || capture->is_reassigned ||
+        capture->capture_kind == XI_CAPTURE_BY_IMM_REF)
+        return XR_CAPTURE_REJECT;
+    return xi_own_type_is_rc(capture->type) ? XR_CAPTURE_DEEP_COPY : XR_CAPTURE_INLINE_VALUE;
+}
+
 /* Whether a projection (field / element read) of this type could yield a heap
  * reference, so its owner must stay live until the projection's last use. Only
  * the fixed scalar value types are pure copies that never alias the owner;

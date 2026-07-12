@@ -173,7 +173,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 |--|--|
 | `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
-| `shared` | 共享身份绑定（全局堆存储，词法作用域照常） |
+| `shared` | 共享身份绑定（由 shared/system owner 持有，词法作用域照常） |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -1522,7 +1522,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
-- 捕获规则：见 §7.4 闭包捕获。**`go` 协程闭包对普通 `var` / `const` 局部引用值的捕获是编译错误**——必须显式 `shared`、`copy(...)`、`move`、或参数传递。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、module-readonly 与 shared identity 可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move` 或改用 `shared`。
 
 ### 3.13 `match` 表达式
 
@@ -1963,7 +1963,7 @@ shared PRIMES = [2, 3, 5, 7, 11]
 shared counter = Atomic(0)
 ```
 
-- 存储在**全局堆**，refcount 管理。
+- 由 **shared/system owner** 直接物化并持有稳定共享身份；具体堆布局不是语言语义。
 - 绑定名不可重新赋值，也不能作为 `move` 源。
 - 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
 - `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
@@ -3057,16 +3057,18 @@ print(big_buffer.length)  // 编译错误：move 后访问
 
 "保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
 
-`go` 启动的协程**不能直接捕获**外层作用域的可变变量；数据必须通过**参数传递**进入协程。普通局部引用值必须显式 `copy(...)` 或 `move`；`shared` 绑定是稳定共享身份，可直接跨协程使用：
+所有跨 execution 边界（`go` 闭包、`go` 实参、Channel send、deferred task、线程入口和导出 callback）消费同一个已验证 capture plan。合法性由值的 **storage owner、provenance、可变性与类型表示**共同决定，不由 `var` / `const` 关键字单独决定：
 
-| 变量种类 | 跨协程传递规则 |
-|---|---|
-| 普通 `var` / `const`（局部） | 引用型 owned heap 值作为实参时必须显式 `copy(...)` 或 `move`；不能被闭包捕获修改 |
-| 函数参数 | ✅ 完全自由（已经是拷贝 / move 进来的） |
-| `shared` | ✅ 可直接跨协程传递/捕获；绑定不可重新赋值，也不能 `move` |
-| `Channel<T>` | ✅ 可被闭包捕获（生命周期由 channel 自身管理） |
-| `this` / 闭包 upvalue（可变） | ❌ 不能跨协程；必须通过参数显式传递 |
-| 全局 `import` 的函数/类 | ✅ 不可变定义，可自由引用 |
+| Capture action | 适用值 | 边界行为 |
+|---|---|---|
+| inline value | 标量、不可变小值 | 直接复制位表示 |
+| deep copy | 显式 `copy(x)` 的 owned graph | 在目标 execution owner 中物化独立图 |
+| move | 显式 `move x` 的可转移局部 `var` | 转移所有权并静态废弃源绑定 |
+| module readonly | 已冻结并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
+| shared ref | `shared`、Channel、Task、Atomic 等稳定共享身份 | 保留 shared/system owner 的引用 |
+| reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
+
+因此，局部 `const` 若只含 inline 值可以直接跨界；若它仍指向 execution-local graph，则仍需显式 `copy(...)`，且因为 `const` 不能作为 move 源，不能写成 `move constValue`。模块级 `const` 只有在完成冻结与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
 
 ```xray
 var local = 0
@@ -3076,12 +3078,12 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 #### 正确姿势
 
 ```xray
-// 方法 1：作为参数传值（普通变量自动深拷贝）
+// 方法 1：显式复制 owned graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
     return data.length
-}(arr)
+}(copy(arr))
 print(arr)                  // [1, 2, 3] 未变
 
 // 方法 2：shared 零拷贝只读（可被捕获）
@@ -3090,8 +3092,8 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// 方法 3：move 转移所有权
-shared big = Bytes(1024)
+// 方法 3：move 转移普通局部 var 的所有权
+var big = Bytes(1024)
 var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
@@ -3114,8 +3116,10 @@ Xray 采用多层内存管理：
 
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
-| 全局堆（`shared`） | refcount | refcount 变 0 |
-| 局部堆（一般对象） | 引用计数 + 循环引用回收 | 最后引用释放；强引用环由 cycle collector 回收 |
+| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 freeze + publish | 模块卸载 |
+| 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
+| 共享存储（`shared`） | shared/system owner + refcount | 最后共享引用释放 |
+| execution-local heap（一般局部对象） | execution owner + 引用计数 + 循环引用回收 | execution 结束或最后引用释放；强引用环由 cycle collector 回收 |
 | 栈（`struct` 值、本地） | RAII | 作用域退出 |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
@@ -3767,7 +3771,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 module-readonly 值和 shared/system owner 身份可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -4072,7 +4076,7 @@ xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所�
 | 原语 | 形态 | 说明 |
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `shared` | 稳定共享身份 | 存储在全局堆，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
+| `shared` | 稳定共享身份 | 由 shared/system owner 持有，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
@@ -4148,7 +4152,9 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 | 规则 | 强制 |
 |--|--|
-| `go` 闭包不能捕获普通 `var` / `const` 局部引用值 | ✅ |
+| 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
+| execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
+| 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
 | `shared` 绑定可直接跨协程传递/捕获，且不能重新赋值或 `move` | ✅ |
 | `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
 | Channel 跨协程传值 | ✅ |
@@ -4156,6 +4162,14 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
 - 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Bytes` / 不可变对象 / `move` 移交。
+
+### 10.12 逻辑根任务与可达运行时能力
+
+程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
+
+runtime capability 只从 executable entry、共享库导出和 `@c_export` 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
+
+Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
 
 ---
 
@@ -4934,18 +4948,20 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 
 | 区域 | 用途 |
 |--|--|
-| **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared` / `shared`，引用计数 |
-| **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
+| **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
+| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
+| **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
+| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，引用计数 |
+| **execution owner** | root、task 或直接入口的局部 RC 对象图；不要求存在物理 coroutine identity |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
 ### 16.3 内存模型
 
-- 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
+- 默认 **per-execution reference counting**。AllocationContext 显式选择 module、shared/system 或 execution owner；普通分配不以 `current_coro` 作为唯一入口。最后一个强引用释放时，对象进入对应 owner 的释放路径。
 - **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
 - **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 只报告当前协程堆的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 ExecutionContext 的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 

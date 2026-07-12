@@ -105,14 +105,15 @@ xr_enum_zero_payload_value(struct XrVMRuntime *X, XrEnumType *enum_type, uint32_
 /* Construct an enum aggregate value. Logical field 0 is the tag; logical
  * fields 1..N are payloads. Runtime storage is XrEnumAggregateValue, not
  * generic XrInstance fields. */
-struct XrCoroutine;
+struct XrAllocationContext;
 XR_FUNC size_t xr_enum_aggregate_size(uint32_t payload_count);
 XR_FUNC void xr_enum_aggregate_init_inplace(XrEnumAggregateValue *value, XrEnumType *enum_type,
                                             uint32_t member_index, const XrValue *payloads,
                                             uint32_t payload_count);
-XR_FUNC struct XrEnumAggregateValue *
-xr_enum_adt_construct_core(struct XrRuntimeCore *core, struct XrCoroutine *coro,
-                           XrEnumType *enum_type, uint32_t member_index, XrValue *args, int nargs);
+XR_FUNC struct XrEnumAggregateValue *xr_enum_adt_construct_in(struct XrAllocationContext *alloc,
+                                                              XrEnumType *enum_type,
+                                                              uint32_t member_index, XrValue *args,
+                                                              int nargs);
 XR_FUNC struct XrEnumAggregateValue *xr_enum_adt_construct(struct XrVMRuntime *X,
                                                            XrEnumType *enum_type,
                                                            uint32_t member_index, XrValue *args,

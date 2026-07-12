@@ -76,7 +76,7 @@ XrValue xr_panic_info_new(XrVMRuntime *X, XrErrorCode code, const char *message)
     }
     inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg ? XR_FROM_PTR(msg) : xr_null();
 
-    XrArray *stack = xr_array_new(xr_current_coro(X));
+    XrArray *stack = xr_array_new(NULL);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
     inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();
@@ -111,7 +111,7 @@ XrValue xr_panic_info_from_error(XrVMRuntime *X, XrError *error) {
     inst->fields[PANIC_INFO_FIELD_MESSAGE] =
         error->message ? XR_FROM_PTR(error->message) : xr_null();
 
-    XrArray *stack = xr_array_new(xr_current_coro(X));
+    XrArray *stack = xr_array_new(NULL);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
     inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();
@@ -170,7 +170,7 @@ XrValue xr_panic_info_get_stacktrace(XrVMRuntime *X, XrValue exception) {
     if (XR_IS_ARRAY(v))
         return v;
     // Lazily create the stack array if it was nulled out (defensive).
-    XrArray *stack = xr_array_new(xr_current_coro(X));
+    XrArray *stack = xr_array_new(NULL);
     if (!stack)
         return xr_null();
     XrValue av = xr_value_from_array(stack);
@@ -198,7 +198,7 @@ void xr_panic_info_add_frame(XrVMRuntime *X, XrValue exception, const char *func
     if (XR_IS_ARRAY(stack_val)) {
         stack = (XrArray *) XR_TO_PTR(stack_val);
     } else {
-        stack = xr_array_new(xr_current_coro(X));
+        stack = xr_array_new(NULL);
         if (!stack)
             return;
         inst->fields[PANIC_INFO_FIELD_STACK] = xr_value_from_array(stack);
@@ -239,7 +239,7 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
     inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg_str ? XR_FROM_PTR(msg_str) : xr_null();
 
     // stack: Array<string> — fresh empty array per instance
-    XrArray *stack = xr_array_new(xr_current_coro(X));
+    XrArray *stack = xr_array_new(NULL);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
     // cause: Exception? = null

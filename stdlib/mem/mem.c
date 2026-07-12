@@ -423,6 +423,5 @@ XR_FUNC XrModule *xr_load_module_mem(XrVMRuntime *isolate) {
     xr_stdlib_vm_register_buffer_class_generated(isolate);
     xr_stdlib_vm_bind_mem_generated(isolate, module);
 
-    module->loaded = true;
     return module;
 }

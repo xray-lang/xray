@@ -10,6 +10,7 @@
  */
 
 #include "xi_emit_internal.h"
+#include "xi_own.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
@@ -740,7 +741,8 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         } else {
             uv_index = cap->index;
         }
-        xr_vm_proto_add_upvalue(child_proto, uv_index, 0, 0, 0, cap->source, cap->type);
+        xr_vm_proto_add_upvalue(child_proto, uv_index, 0, 0, 0, cap->source,
+                                (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
     /* Cell wrapping for mutable captures (emit once per value).
@@ -1147,7 +1149,8 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
         } else {
             uv_idx = cap->index;
         }
-        xr_vm_proto_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source, cap->type);
+        xr_vm_proto_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source,
+                                (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
     xi_emit_attach_ir(child_proto, child);

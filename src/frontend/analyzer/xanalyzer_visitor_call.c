@@ -22,6 +22,7 @@
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xa_parallel_call_plan.h"
+#include "xaddressability.h"
 #include "xtype_ref_resolve.h"
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -249,18 +250,6 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     return inst;
 }
 
-static XaSymbol *xa_raw_pointer_of_arg_symbol(XaInferContext *ctx, AstNode *arg) {
-    if (!ctx || !ctx->analyzer || !arg || arg->type != AST_VARIABLE)
-        return NULL;
-    uint32_t sid = arg->as.variable.symbol_id;
-    if (sid != 0) {
-        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, sid);
-        if (sym)
-            return sym;
-    }
-    return arg->as.variable.name ? xa_lookup_visible_symbol(ctx, arg->as.variable.name) : NULL;
-}
-
 static bool xa_rawmut_type_is_mutable_static_object(XrType *type) {
     return type && (xa_type_has_fixed_layout_data_object(type) ||
                     (!type->is_nullable &&
@@ -269,47 +258,13 @@ static bool xa_rawmut_type_is_mutable_static_object(XrType *type) {
                       type->kind == XR_KIND_BOOL || type->kind == XR_KIND_CHAR)));
 }
 
-static bool xa_rawmut_symbol_is_local_mutable_static_object(XaSymbol *sym, XrType *sym_type) {
-    return sym && sym->kind == XA_SYM_VARIABLE && !sym->is_const && sym->scope &&
-           sym->scope->kind == XA_SCOPE_GLOBAL && !sym->is_shared && !sym->is_imported &&
-           xa_rawmut_type_is_mutable_static_object(sym_type);
-}
-
-static bool xa_rawmut_of_static_field_arg(XaInferContext *ctx, AstNode *arg) {
-    if (!ctx || !ctx->analyzer || !arg || arg->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &arg->as.member_access;
-    if (!ma->object || ma->object->type != AST_VARIABLE || !ma->name)
-        return false;
-
-    XaSymbol *base = xa_raw_pointer_of_arg_symbol(ctx, ma->object);
-    XrType *base_type = base ? xa_analyzer_get_type(ctx->analyzer, base) : NULL;
-    if (!xa_rawmut_symbol_is_local_mutable_static_object(base, base_type) ||
-        !xa_type_has_fixed_layout_data_object(base_type))
-        return false;
-
-    uint32_t offset = 0;
-    if (!xr_type_has_static_field_offset(base_type, ma->name, &offset))
-        return false;
-    (void) offset;
-
-    XrType *field_type = xa_analyzer_get_node_type(ctx->analyzer, arg);
-    if (!field_type)
-        field_type = xa_visit_infer_expr(ctx, arg);
-    return xr_type_has_static_layout(field_type, NULL, NULL);
-}
-
 static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *node,
                                                CallExprNode *call, XrType *ptr_type) {
     if (!ctx || !ctx->analyzer || !node || !call || !ptr_type ||
         !xa_freestanding_profile_enabled(ctx->analyzer))
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-    bool valid_arg_shape =
-        call->arg_count == 1 && call->arguments && call->arguments[0] &&
-        (call->arguments[0]->type == AST_VARIABLE ||
-         (ptr_type->ptr_is_mut && call->arguments[0]->type == AST_MEMBER_ACCESS));
-    if (!valid_arg_shape) {
+    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             ptr_type->ptr_is_mut
@@ -319,12 +274,16 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
         return;
     }
     AstNode *arg = call->arguments[0];
-    XaSymbol *sym = xa_raw_pointer_of_arg_symbol(ctx, arg);
+    XaAddressability address = xa_classify_addressability(ctx, arg, ptr_type->ptr_is_mut);
+    XaSymbol *sym = address.base_symbol;
     XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
     if (ptr_type->ptr_is_mut) {
         XrType *sym_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
         if (arg->type == AST_MEMBER_ACCESS) {
-            if (!xa_rawmut_of_static_field_arg(ctx, arg)) {
+            XrType *base_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
+            if (address.kind != XA_ADDRESS_FIELD || address.rejection != XA_ADDRESS_OK || !sym ||
+                sym->is_const || sym->is_shared || sym->is_imported ||
+                !xa_type_has_fixed_layout_data_object(base_type)) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                     "RawMut.of can only take a field of a top-level mutable aggregate static "
@@ -333,20 +292,30 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
             }
             return;
         }
-        if (!xa_rawmut_symbol_is_local_mutable_static_object(sym, sym_type)) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "RawMut.of can only take the name of a top-level mutable scalar or aggregate "
-                "static object",
-                &aloc);
+        if (address.kind != XA_ADDRESS_MODULE_STATIC || address.rejection != XA_ADDRESS_OK ||
+            !sym || sym->is_const || sym->is_shared || sym->is_imported ||
+            !xa_rawmut_type_is_mutable_static_object(sym_type)) {
+            char message[256];
+            snprintf(message, sizeof(message),
+                     "RawMut.of classified this expression as %s (%s); only a top-level mutable "
+                     "scalar or aggregate static object has stable mutable storage",
+                     xa_address_kind_name(address.kind),
+                     xa_address_reject_reason_name(address.rejection));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       message, &aloc);
         }
         return;
     }
-    if (!sym || sym->kind != XA_SYM_VARIABLE || !sym->is_const || !sym->scope ||
-        sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_shared) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "RawPtr.of can only take the name of a top-level const static object", &aloc);
+    if (address.kind != XA_ADDRESS_MODULE_STATIC || address.rejection != XA_ADDRESS_OK || !sym ||
+        sym->kind != XA_SYM_VARIABLE || !sym->is_const || sym->is_shared) {
+        char message[256];
+        snprintf(message, sizeof(message),
+                 "RawPtr.of classified this expression as %s (%s); only a top-level const "
+                 "static object has stable readonly storage",
+                 xa_address_kind_name(address.kind),
+                 xa_address_reject_reason_name(address.rejection));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   message, &aloc);
     }
 }
 
@@ -1505,8 +1474,6 @@ static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) 
 
 static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node,
                                               CallExprNode *call) {
-    xa_freestanding_report_unavailable(ctx, node, "sys.Thread.spawn", "OS threads are hosted-only");
-
     int body_index = xa_thread_spawn_body_arg_index(call);
     if (body_index < 0 || !call->arguments[body_index]) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1525,7 +1492,6 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
     ctx->os_thread_body_depth = saved_os_thread_body_depth;
     if (body && body->type == AST_CALL_EXPR)
         xa_check_spawn_call_boundary_args(ctx, node, &body->as.call_expr);
-    check_coro_capture(ctx, body, node->line);
     xa_check_thread_spawn_sync_body(ctx, body);
 
     XrType *result_type = xr_type_new_unit(NULL);

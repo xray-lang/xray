@@ -25,17 +25,26 @@ void xr_fixed_heap_init(XrFixedHeap *heap, struct XrVMRuntime *isolate) {
 
 void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
     XR_DCHECK(heap != NULL, "fixed_heap_cleanup: NULL heap");
-    XrFixedHeapObjectNode *node = heap->objects;
     XrRuntimeCore *core = heap->isolate ? xr_isolate_get_runtime_core(heap->isolate) : NULL;
-    while (node != NULL) {
-        XrFixedHeapObjectNode *next = node->next;
+
+    /* Fixed-lifetime objects can reference one another.  Run every destructor
+     * while the complete object graph is still addressable; their sticky RC
+     * makes nested drops no-ops, while side buffers and native resources are
+     * released exactly once.  Freeing each object immediately after its own
+     * destructor made later container destructors dereference already-freed
+     * children and rendered teardown order observable. */
+    for (XrFixedHeapObjectNode *node = heap->objects; node != NULL; node = node->next) {
         XrObjHeader *obj = node->obj;
         uint8_t type = XR_OBJ_GET_TYPE(obj);
         XrObjDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
-        if (destroy != NULL) {
+        if (destroy != NULL)
             destroy(obj, NULL);
-        }
-        xr_free(obj);
+    }
+
+    XrFixedHeapObjectNode *node = heap->objects;
+    while (node != NULL) {
+        XrFixedHeapObjectNode *next = node->next;
+        xr_free(node->obj);
         xr_free(node);
         node = next;
     }

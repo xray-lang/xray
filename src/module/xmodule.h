@@ -19,6 +19,7 @@
 
 #include "../base/xforward_decl.h"
 #include "../runtime/value/xvalue.h"
+#include <stdatomic.h>
 #include "../base/xhashmap.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include <stdbool.h>
@@ -48,6 +49,13 @@ typedef enum {
 
 #define XR_EXPORT_CONST 0x01
 
+typedef enum XrModuleState {
+    XR_MODULE_NEW = 0,
+    XR_MODULE_INITIALIZING,
+    XR_MODULE_PUBLISHED,
+    XR_MODULE_FAILED,
+} XrModuleState;
+
 typedef void (*XrModuleNativeHandleDestroy)(void *handle);
 
 typedef struct XrModule {
@@ -68,8 +76,11 @@ typedef struct XrModule {
     uint16_t export_count;
     uint16_t export_capacity;
 
-    bool loaded;
-    bool loading;
+    /* Module state is the publication boundary. Export arrays and every
+     * module-owned readonly graph reachable from them are written only while
+     * INITIALIZING, then made visible by the PUBLISHED release-store. Readers
+     * must observe PUBLISHED with acquire semantics before touching exports. */
+    _Atomic uint8_t state; /* XrModuleState */
 
     /* Pure-Xray stdlib module: the stdlib/<name>/<name>.xr script layer
      * provides all exports, so a missing script file is a hard load
@@ -85,13 +96,15 @@ typedef struct XrModule {
 /* ========== Inline O(1) Export Access ========== */
 
 static inline XrValue xr_module_get_sym(XrModule *m, SymbolId sym) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return xr_null();
     if (m->symbol_to_index) {
         if (sym < m->min_symbol || sym > m->max_symbol)
             return xr_null();
         int32_t idx = m->symbol_to_index[sym - m->min_symbol];
         return (idx >= 0) ? m->export_values[idx] : xr_null();
     }
-    // Fallback: linear scan (during loading or before index built)
+    // Fallback: linear scan when a published module has no sparse index.
     for (uint16_t i = 0; i < m->export_count; i++) {
         if (m->export_symbols[i] == sym)
             return m->export_values[i];
@@ -99,24 +112,9 @@ static inline XrValue xr_module_get_sym(XrModule *m, SymbolId sym) {
     return xr_null();
 }
 
-static inline void xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
-    if (m->symbol_to_index) {
-        if (sym < m->min_symbol || sym > m->max_symbol)
-            return;
-        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
-        if (idx >= 0)
-            m->export_values[idx] = val;
-        return;
-    }
-    for (uint16_t i = 0; i < m->export_count; i++) {
-        if (m->export_symbols[i] == sym) {
-            m->export_values[i] = val;
-            return;
-        }
-    }
-}
-
 static inline bool xr_module_is_const_sym(XrModule *m, SymbolId sym) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return false;
     if (m->symbol_to_index) {
         if (sym < m->min_symbol || sym > m->max_symbol)
             return false;
@@ -131,6 +129,8 @@ static inline bool xr_module_is_const_sym(XrModule *m, SymbolId sym) {
 }
 
 static inline bool xr_module_has_sym(XrModule *m, SymbolId sym) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return false;
     if (m->symbol_to_index) {
         if (sym < m->min_symbol || sym > m->max_symbol)
             return false;
@@ -139,6 +139,30 @@ static inline bool xr_module_has_sym(XrModule *m, SymbolId sym) {
     for (uint16_t i = 0; i < m->export_count; i++) {
         if (m->export_symbols[i] == sym)
             return true;
+    }
+    return false;
+}
+
+/* Mutable module exports keep their stable module-owned slot after
+ * publication. This does not grant cross-execution synchronization: the
+ * analyzer rejects unsynchronized module-var access at such boundaries. */
+static inline bool xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return false;
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol)
+            return false;
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
+        if (idx < 0 || (m->export_flags[idx] & XR_EXPORT_CONST) != 0)
+            return false;
+        m->export_values[idx] = val;
+        return true;
+    }
+    for (uint16_t i = 0; i < m->export_count; i++) {
+        if (m->export_symbols[i] == sym && (m->export_flags[i] & XR_EXPORT_CONST) == 0) {
+            m->export_values[i] = val;
+            return true;
+        }
     }
     return false;
 }
@@ -248,6 +272,10 @@ XR_FUNC void xr_module_add_export_sym(struct XrVMRuntime *isolate, XrModule *mod
 XR_FUNC XrValue xr_module_get_export(struct XrVMRuntime *isolate, XrModule *module,
                                      const char *name);
 XR_FUNC void xr_module_build_export_index(XrModule *module);
+XR_FUNC XrModuleState xr_module_state(const XrModule *module);
+XR_FUNC bool xr_module_begin_initialization(XrModule *module);
+XR_FUNC bool xr_module_publish(XrModule *module);
+XR_FUNC void xr_module_fail(XrModule *module);
 XR_FUNC void xr_module_free(XrModule *module);
 
 /* ========== Resolver Access ========== */

@@ -172,7 +172,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 |--|--|
 | `var` | mutable variable declaration |
 | `const` | immutable variable declaration |
-| `shared` | shared identity binding (global-heap storage, ordinary lexical scope) |
+| `shared` | shared identity binding (owned by the shared/system owner, ordinary lexical scope) |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
@@ -1527,7 +1527,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
-- Capture rules: see §7.4 closure capture. **A `go` coroutine closure cannot capture ordinary local `var` / `const` reference values** — pass them explicitly via `shared`, `copy(...)`, `move`, or parameters.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline, module-readonly, and shared identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments or through `shared`.
 
 ### 3.13 `match` Expression
 
@@ -1970,7 +1970,7 @@ shared PRIMES = [2, 3, 5, 7, 11]
 shared counter = Atomic(0)
 ```
 
-- Stored on the **global heap**, refcount-managed.
+- Materialized directly under the **shared/system owner** as a stable shared identity; the concrete heap layout is not language semantics.
 - The binding name cannot be reassigned and cannot be used as a `move` source.
 - It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
 - Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.
@@ -3064,16 +3064,18 @@ print(big_buffer.length)  // compile error: accessed after move
 
 "Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
 
-A coroutine launched by `go` **cannot directly capture** mutable variables from the outer scope; data must enter the coroutine through **parameter passing**. Plain local reference values must use explicit `copy(...)` or `move`; `shared` bindings are stable shared identities and may cross coroutine boundaries directly:
+Every cross-execution boundary (`go` closure, `go` argument, Channel send, deferred task, thread entry, and exported callback) consumes the same verified capture plan. Legality is determined jointly by the value's **storage owner, provenance, mutability, and type representation**, never by the `var` / `const` keyword alone:
 
-| Variable kind | Cross-coroutine transfer rule |
-|---|---|
-| Plain `var` / `const` (local) | Owned heap values must use explicit `copy(...)` or `move` when passed as arguments; cannot be captured and mutated by closures |
-| Function parameters | ✅ Fully free (already copied / moved in) |
-| `shared` | ✅ May be passed/captured across coroutines directly; the binding cannot be reassigned or moved |
-| `Channel<T>` | ✅ May be captured by closures (lifetime managed by the channel itself) |
-| `this` / mutable closure upvalues | ❌ Cannot cross coroutines; must be passed explicitly through parameters |
-| Globally imported functions/classes | ✅ Immutable definitions, freely referenceable |
+| Capture action | Values | Boundary behavior |
+|---|---|---|
+| inline value | scalars and small immutable values | copy the bits directly |
+| deep copy | owned graph under explicit `copy(x)` | materialize an independent graph in the destination execution owner |
+| move | transferable local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| module readonly | frozen and published module values | retain the module-readonly owner; do not copy into a root/task heap |
+| shared ref | `shared`, Channel, Task, Atomic, and other stable shared identities | retain a reference owned by the shared/system owner |
+| reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
+
+Consequently, a local `const` containing only inline values may cross directly. If it still points at an execution-local graph, it requires explicit `copy(...)`; because a `const` cannot be a move source, `move constValue` is invalid. A module-level `const` becomes module-readonly only after freeze-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
 
 ```xray
 var local = 0
@@ -3083,12 +3085,12 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 #### Recommended patterns
 
 ```xray
-// Pattern 1: pass by value (plain variables are deep-copied)
+// Pattern 1: explicitly copy an owned graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
     return data.length
-}(arr)
+}(copy(arr))
 print(arr)                  // [1, 2, 3] unchanged
 
 // Pattern 2: shared, zero-copy read-only (capturable)
@@ -3097,8 +3099,8 @@ var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
-// Pattern 3: move ownership
-shared big = Bytes(1024)
+// Pattern 3: move ownership from an ordinary local var
+var big = Bytes(1024)
 var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
@@ -3121,8 +3123,10 @@ Xray uses a layered memory management strategy:
 
 | Storage | Mechanism | Reclamation |
 |--|--|--|
-| Global heap (`shared`) | refcount | when refcount reaches 0 |
-| Local heap (general objects) | reference counting + cycle collection | when the last reference is released; strong cycles are reclaimed by the cycle collector |
+| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by freeze + publish | at module unload |
+| Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
+| Shared storage (`shared`) | shared/system owner + reference counting | when the last shared reference is released |
+| Execution-local heap (ordinary local objects) | execution owner + reference counting + cycle collection | when the execution ends or the last reference is released; strong cycles are reclaimed by the cycle collector |
 | Stack (`struct` values, locals) | RAII | when scope exits |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
@@ -3778,7 +3782,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published module-readonly values, and shared/system-owned identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
 
 ```xray
 var n = 10
@@ -4083,7 +4087,7 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 | Primitive | Form | Description |
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `shared` | Stable shared identity | Stored on the global heap while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
+| `shared` | Stable shared identity | Owned by the shared/system owner while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
@@ -4159,7 +4163,9 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 | Rule | Enforced |
 |--|--|
-| `go` closures cannot capture ordinary local `var` / `const` reference values | ✅ |
+| Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
+| An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
+| Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
 | `shared` bindings may cross coroutine boundaries directly and cannot be reassigned or moved | ✅ |
 | `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
 | Channels for cross-coroutine values | ✅ |
@@ -4167,6 +4173,14 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 **Residual data-race risk** (detected at runtime, not compile time):
 - Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Bytes` / immutable objects, or transfer ownership via `move`.
+
+### 10.12 Logical root task and reachable runtime capabilities
+
+Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
+
+Runtime capabilities propagate only from final artifact roots such as the executable entry, shared-library exports, and `@c_export` functions. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
+
+A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entry plan. A freestanding target remains coroutine-runtime-free when reachable code needs only core. If reachable code needs task/frame allocation, submit, park/wake, timer, interrupt completion, or an executor pump, the target manifest must provide a versioned provider ABI and the required hooks; missing capabilities fail before generation or linking. The provider is a target/build contract and introduces no `async main`, `static main`, or freestanding-only source-language keyword.
 
 ---
 
@@ -4947,18 +4961,20 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 
 | Region | Use |
 |--|--|
-| **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared` / `shared`, reference counting |
-| **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
+| **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
+| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
+| **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
+| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, reference-counted |
+| **Execution owner** | local RC object graphs of a root, task, or direct entry; no physical coroutine identity is required |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
 ### 16.3 Memory Model
 
-- Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
+- Default reclamation is **per-execution reference counting**. AllocationContext explicitly selects the module, shared/system, or execution owner; ordinary allocation does not require `current_coro` as its sole entry. Objects enter their owner's reclamation path when the last strong reference is released.
 - **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
 - **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current ExecutionContext's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 

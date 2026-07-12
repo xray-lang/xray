@@ -50,6 +50,5 @@ XR_FUNC XrModule *xr_load_module_sync(XrVMRuntime *isolate) {
     sync_export_native_class(isolate, module, "ResultGroup", XR_TRESULTGROUP);
 
     module->requires_script = true;
-    module->loaded = true;
     return module;
 }

@@ -25,6 +25,5 @@ XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
         return NULL;
 
     module->requires_script = true;
-    module->loaded = true;
     return module;
 }

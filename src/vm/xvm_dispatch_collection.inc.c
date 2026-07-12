@@ -101,8 +101,11 @@ vmcase(OP_NEWARRAY) {
             }
         }
     } else {
-        // normal: allocate on coroutine heap
-        if (elem_type != XR_ELEM_ANY) {
+        // Root-elided execution uses fixed-lifetime local storage without
+        // materializing a coroutine solely as an allocation host.
+        if (!VM_CURRENT_CORO) {
+            array = vm_root_array_new(isolate, b > 0 ? b : 4, elem_type);
+        } else if (elem_type != XR_ELEM_ANY) {
             array = xr_array_with_capacity_typed(VM_CURRENT_CORO, b > 0 ? b : 4, elem_type);
         } else {
             array = (b > 0) ? xr_array_with_capacity(VM_CURRENT_CORO, b)
@@ -247,8 +250,9 @@ vmcase(OP_NEWMAP) {
             }
         }
     } else {
-        // normal: allocate on coroutine heap
-        map = (b > 0) ? xr_map_with_capacity(VM_CURRENT_CORO, b) : xr_map_new(VM_CURRENT_CORO);
+        map = VM_CURRENT_CORO ? ((b > 0) ? xr_map_with_capacity(VM_CURRENT_CORO, b)
+                                         : xr_map_new(VM_CURRENT_CORO))
+                              : vm_root_map_new(isolate, b > 0 ? (uint32_t) b : 0);
     }
 
     if (map) {
@@ -296,9 +300,17 @@ vmcase(OP_NEWSET) {
                 xr_set_add(set, elems[j]);
         }
     } else if (init_mode == 1 && XR_IS_ARRAY(R(a + 1))) {
-        // Initialize from array on coroutine heap
         XrArray *arr = XR_TO_ARRAY(R(a + 1));
-        set = xr_set_from_array(xr_current_coro(isolate), arr);
+        if (VM_CURRENT_CORO) {
+            set = xr_set_from_array(VM_CURRENT_CORO, arr);
+        } else {
+            set = vm_root_set_new(isolate);
+            if (set) {
+                XrValue *elements = (XrValue *) arr->data;
+                for (int32_t j = 0; j < arr->length; j++)
+                    xr_set_add(set, elements[j]);
+            }
+        }
     } else if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // shared: allocate on system heap
         set = (XrSet *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
@@ -311,8 +323,7 @@ vmcase(OP_NEWSET) {
             }
         }
     } else {
-        // normal: allocate on coroutine heap
-        set = xr_set_new(VM_CURRENT_CORO);
+        set = VM_CURRENT_CORO ? xr_set_new(VM_CURRENT_CORO) : vm_root_set_new(isolate);
     }
 
     if (set) {

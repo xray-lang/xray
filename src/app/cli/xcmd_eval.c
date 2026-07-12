@@ -54,8 +54,6 @@ XR_FUNC int cmd_eval(const XrCliInvocation *inv) {
         xr_free(stdin_code);
         return XR_CLI_EXIT_INTERNAL;
     }
-    xray_vm_multicore_init(iso, 0);
-
     int result = xray_vm_dostring(iso, code);
 
     xray_vm_multicore_destroy(iso);

@@ -94,7 +94,7 @@ static XrValue m_try_pop(XrVMRuntime *isolate, XrValue self, XrValue *args, int 
 
     bool ok = false;
     XrValue value = xr_work_queue_try_pop(isolate, q, worker, &ok);
-    XrTuple *tuple = xr_tuple_new(xr_current_coro(isolate), 2);
+    XrTuple *tuple = xr_tuple_new(NULL, 2);
     if (!tuple)
         return xr_null();
     xr_tuple_set(tuple, 0, value);

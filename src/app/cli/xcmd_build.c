@@ -1385,10 +1385,6 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --shared requires --native\n");
         CMD_BUILD_RETURN(2);
     }
-    if (shared_library && c_only) {
-        fprintf(stderr, "Error: --shared cannot be combined with --c-only\n");
-        CMD_BUILD_RETURN(2);
-    }
     if (dry_run_link && c_only) {
         fprintf(stderr, "Error: --dry-run-link cannot be combined with --c-only\n");
         CMD_BUILD_RETURN(2);
@@ -2327,6 +2323,88 @@ static bool xaot_cli_fast_test_direct_link_allowed(const XaotLinkManifest *manif
            manifest->n_stdlib_objects == 0;
 }
 
+static uint32_t xaot_cli_provider_hook_by_name(const char *name) {
+    if (!name)
+        return 0;
+    if (strcmp(name, "task_alloc") == 0)
+        return XAOT_PROVIDER_HOOK_TASK_ALLOC;
+    if (strcmp(name, "submit") == 0)
+        return XAOT_PROVIDER_HOOK_SUBMIT;
+    if (strcmp(name, "park_wake") == 0)
+        return XAOT_PROVIDER_HOOK_PARK_WAKE;
+    if (strcmp(name, "timer") == 0)
+        return XAOT_PROVIDER_HOOK_TIMER;
+    if (strcmp(name, "executor_pump") == 0)
+        return XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    if (strcmp(name, "interrupt_complete") == 0)
+        return XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE;
+    return 0;
+}
+
+static uint32_t xaot_cli_provider_capability_by_name(const char *name) {
+    uint32_t count = 0;
+    const uint32_t *catalog = xg_capability_catalog(&count);
+    if (!name)
+        return 0;
+    for (uint32_t i = 0; i < count; i++) {
+        if (strcmp(name, xg_capability_name(catalog[i])) == 0)
+            return catalog[i];
+    }
+    return 0;
+}
+
+static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
+                                                 XrCliBuildProfile profile,
+                                                 const XrCliBuildTarget *target,
+                                                 XaotTargetCapabilityProvider *out,
+                                                 bool *out_present, char *err, size_t err_size) {
+    bool present = config && ((config->runtime_provider && config->runtime_provider[0]) ||
+                              config->n_runtime_capabilities > 0 || config->n_runtime_hooks > 0);
+    if (out_present)
+        *out_present = present;
+    if (!present)
+        return true;
+    if (!out || !config->runtime_provider || !config->runtime_provider[0]) {
+        snprintf(err, err_size,
+                 "target runtime_capabilities/runtime_hooks require runtime_provider identity");
+        return false;
+    }
+    if (profile != XR_CLI_BUILD_PROFILE_FREESTANDING) {
+        snprintf(err, err_size, "runtime_provider is only valid for freestanding targets");
+        return false;
+    }
+    memset(out, 0, sizeof(*out));
+    out->abi_version = XAOT_PROVIDER_ABI_VERSION;
+    for (int i = 0; i < config->n_runtime_capabilities; i++) {
+        const char *name = config->runtime_capabilities[i];
+        uint32_t capability = xaot_cli_provider_capability_by_name(name);
+        if (capability == 0) {
+            snprintf(err, err_size, "unknown target runtime capability '%s'", name ? name : "");
+            return false;
+        }
+        out->provided_capability_bits |= capability;
+    }
+    for (int i = 0; i < config->n_runtime_hooks; i++) {
+        const char *name = config->runtime_hooks[i];
+        uint32_t hook = xaot_cli_provider_hook_by_name(name);
+        if (hook == 0) {
+            snprintf(err, err_size, "unknown target runtime hook '%s'", name ? name : "");
+            return false;
+        }
+        out->hook_bits |= hook;
+    }
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    hash = xaot_hash_fold_str(hash, "xray-target-runtime-provider-v1");
+    hash = xaot_hash_fold_str(hash, config->runtime_provider);
+    hash = xaot_hash_fold_str(hash, target ? target->name : NULL);
+    hash = xaot_hash_fold_string_list(hash, config->runtime_capabilities,
+                                      (uint32_t) config->n_runtime_capabilities);
+    hash =
+        xaot_hash_fold_string_list(hash, config->runtime_hooks, (uint32_t) config->n_runtime_hooks);
+    out->target_metadata_hash = hash ? hash : 1;
+    return true;
+}
+
 static int cmd_build_native(const char *input, const char *output, const char *cc,
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
@@ -2340,6 +2418,8 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const XrTargetConfig *target_config, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
+    XaotTargetCapabilityProvider capability_provider;
+    bool has_capability_provider = false;
     XaotTarget build_target;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
@@ -2359,7 +2439,18 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         return 1;
     }
     memset(&build_options, 0, sizeof(build_options));
+    {
+        char provider_err[256];
+        if (!xaot_cli_provider_from_target_config(target_config, profile, target,
+                                                  &capability_provider, &has_capability_provider,
+                                                  provider_err, sizeof(provider_err))) {
+            fprintf(stderr, "Error: %s\n", provider_err);
+            xaot_target_free(&build_target);
+            return 1;
+        }
+    }
     build_options.target = &build_target;
+    build_options.capability_provider = has_capability_provider ? &capability_provider : NULL;
     build_options.profile = aot_profile;
     build_options.type_name_profile = type_name_profile;
     build_options.emit_plan_dump = dump_xaot_plan;

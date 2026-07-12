@@ -251,7 +251,8 @@ int xr_vm_proto_add_proto(XrProto *proto, XrProto *child) {
 // Add upvalue info
 // Returns upvalue index
 int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode, uint8_t is_const,
-                            uint8_t slot_type, uint8_t source, struct XrType *type_info) {
+                            uint8_t slot_type, uint8_t source, uint8_t capture_action,
+                            struct XrType *type_info) {
     XR_DCHECK(proto != NULL, "proto_add_upvalue: NULL proto");
     // No dedup here: dedup is done at compiler level in scope_add_upvalue.
     // proto->upvalues must stay in 1-to-1 correspondence with XrCompiler->upvalues[].
@@ -262,6 +263,158 @@ int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode
                         .is_const = is_const,
                         .slot_type = slot_type,
                         .source = source,
+                        .capture_action = capture_action,
                         .type_info = type_info};
     return DYNARRAY_ADD(&proto->upvalues, new_uv, UpvalInfo);
+}
+
+static void xr_vm_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEntryPlan *plan) {
+    if (!proto || !plan)
+        return;
+    plan->reachable_body_count++;
+    int count = DYNARRAY_COUNT(&proto->code);
+    for (int i = 0; i < count; i++) {
+        XrInstruction instruction = DYNARRAY_GET(&proto->code, i, XrInstruction);
+        OpCode op = GET_OPCODE(instruction);
+        switch (op) {
+            case OP_GO:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_TASK;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SPAWN | XR_EFFECT_MAY_ALLOC;
+                if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)
+                    plan->root_representation = XR_ROOT_DESCRIPTOR;
+                break;
+            case OP_THREAD_SPAWN:
+                plan->required_capability_bits |=
+                    XR_CAP_COROUTINE | XR_CAP_TASK | XR_CAP_SYS_THREAD;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SPAWN | XR_EFFECT_MAY_ALLOC;
+                if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)
+                    plan->root_representation = XR_ROOT_DESCRIPTOR;
+                break;
+            case OP_PAR_FOR:
+            case OP_PAR_MAP:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_TASK | XR_CAP_PARALLEL;
+                plan->reachable_effect_bits |=
+                    XR_EFFECT_MAY_SPAWN | XR_EFFECT_MAY_SUSPEND | XR_EFFECT_MAY_ALLOC;
+                if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)
+                    plan->root_representation = XR_ROOT_DESCRIPTOR;
+                break;
+            case OP_CHAN_NEW:
+            case OP_CHAN_NEW_CAP:
+            case OP_CHAN_NEW_NAMED:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_CHANNEL;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_ALLOC;
+                if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)
+                    plan->root_representation = XR_ROOT_DESCRIPTOR;
+                break;
+            case OP_SCOPE_ENTER:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_SCOPE;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_ALLOC;
+                if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)
+                    plan->root_representation = XR_ROOT_DESCRIPTOR;
+                break;
+            case OP_TIME_AFTER:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_TIMER;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_ALLOC;
+                if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)
+                    plan->root_representation = XR_ROOT_DESCRIPTOR;
+                break;
+            case OP_AWAIT:
+            case OP_AWAIT_TIMEOUT:
+            case OP_AWAIT_ALL:
+            case OP_AWAIT_ALL_INTO:
+            case OP_AWAIT_ANY:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_TASK;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SUSPEND;
+                if (is_root)
+                    plan->root_representation = XR_ROOT_RESUMABLE_FRAME;
+                break;
+            case OP_CHAN_SEND:
+            case OP_CHAN_RECV:
+            case OP_CHAN_SEND_TIMEOUT:
+            case OP_CHAN_RECV_TIMEOUT:
+            case OP_SELECT_BLOCK:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_CHANNEL;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SUSPEND;
+                if (is_root)
+                    plan->root_representation = XR_ROOT_RESUMABLE_FRAME;
+                break;
+            case OP_SLEEP:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_TIMER;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SUSPEND;
+                if (is_root)
+                    plan->root_representation = XR_ROOT_RESUMABLE_FRAME;
+                break;
+            case OP_SCOPE_EXIT:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_SCOPE;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SUSPEND;
+                if (is_root)
+                    plan->root_representation = XR_ROOT_RESUMABLE_FRAME;
+                break;
+            case OP_YIELD:
+                plan->required_capability_bits |= XR_CAP_COROUTINE;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SUSPEND;
+                if (is_root)
+                    plan->root_representation = XR_ROOT_RESUMABLE_FRAME;
+                break;
+            case OP_GEN_YIELD:
+                plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_GENERATOR;
+                plan->reachable_effect_bits |= XR_EFFECT_MAY_SUSPEND;
+                if (is_root)
+                    plan->root_representation = XR_ROOT_RESUMABLE_FRAME;
+                break;
+            default:
+                break;
+        }
+    }
+    int child_count = DYNARRAY_COUNT(&proto->protos);
+    for (int i = 0; i < child_count; i++)
+        xr_vm_entry_plan_scan_proto(DYNARRAY_GET(&proto->protos, i, XrProto *), false, plan);
+}
+
+bool xr_vm_entry_plan_derive(XrProto *root) {
+    XrEntryPlan plan;
+    if (!root)
+        return false;
+    memset(&plan, 0, sizeof(plan));
+    /* VM bytecode has one canonical module-entry id.  Runtime proto ids are
+     * process-local IC indices and must never leak into serialized plans. */
+    plan.entry_func_id = 1;
+    plan.provided_capability_bits = UINT32_MAX;
+    plan.provider_hook_bits = UINT32_MAX;
+    plan.evidence = XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XR_ENTRY_EV_ROOT_EFFECT |
+                    XR_ENTRY_EV_VERIFIED_BYTECODE;
+    xr_vm_entry_plan_scan_proto(root, true, &plan);
+    plan.runtime_component_bits = plan.required_capability_bits;
+    if ((plan.reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
+        plan.root_representation = XR_ROOT_RESUMABLE_FRAME;
+    else if ((plan.reachable_effect_bits & (XR_EFFECT_MAY_SPAWN | XR_EFFECT_OBSERVES_TASK_ID)) != 0)
+        plan.root_representation = XR_ROOT_DESCRIPTOR;
+    if ((plan.required_capability_bits & (XR_CAP_SYS_THREAD | XR_CAP_PARALLEL)) != 0)
+        plan.scheduler_mode = XR_SCHED_MULTI;
+    else if (plan.root_representation != XR_ROOT_ELIDED)
+        plan.scheduler_mode = XR_SCHED_SINGLE;
+    root->entry_plan = plan;
+    return xr_vm_entry_plan_validate(root);
+}
+
+bool xr_vm_entry_plan_validate(const XrProto *root) {
+    const XrEntryPlan *plan;
+    if (!root)
+        return false;
+    plan = &root->entry_plan;
+    if (plan->root_representation > XR_ROOT_RESUMABLE_FRAME ||
+        plan->scheduler_mode > XR_SCHED_MULTI || plan->unproven_reason != XR_ENTRY_PROVEN)
+        return false;
+    if ((plan->evidence & (XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XR_ENTRY_EV_ROOT_EFFECT |
+                           XR_ENTRY_EV_VERIFIED_BYTECODE)) !=
+        (XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XR_ENTRY_EV_ROOT_EFFECT |
+         XR_ENTRY_EV_VERIFIED_BYTECODE))
+        return false;
+    if ((plan->required_capability_bits & ~plan->provided_capability_bits) != 0)
+        return false;
+    if (plan->root_representation == XR_ROOT_ELIDED && plan->scheduler_mode != XR_SCHED_NONE)
+        return false;
+    if (plan->root_representation != XR_ROOT_ELIDED && plan->scheduler_mode == XR_SCHED_NONE)
+        return false;
+    return true;
 }

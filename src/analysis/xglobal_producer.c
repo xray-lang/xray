@@ -103,6 +103,7 @@ typedef struct XgPendingBody {
 
 struct XgLocalType {
     const char *name;
+    const char *nominal_name;
     XgClassId class_id;
     XgInterfaceId interface_id;
     uint32_t type_key;
@@ -1690,7 +1691,7 @@ static bool body_push_name_local(XgBodyCollect *bc, const char *name, uint32_t s
 
 static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
                             XgClassId class_id, XgInterfaceId interface_id, uint32_t type_key,
-                            bool inferred) {
+                            const char *nominal_name, bool inferred) {
     XgLocalType *row;
     if (!bc)
         return true;
@@ -1702,6 +1703,7 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
         return false;
     row = &bc->locals[bc->nlocals++];
     row->name = name;
+    row->nominal_name = nominal_name;
     row->class_id = class_id;
     row->interface_id = interface_id;
     row->type_key = type_key;
@@ -1789,7 +1791,7 @@ static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symb
     if (class_id == XG_NO_ID && interface_id == XG_NO_ID && type_key == 0)
         return;
     if (!row) {
-        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, type_key, true);
+        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, type_key, NULL, true);
         return;
     }
     if (!row->inferred)
@@ -7415,6 +7417,64 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
     }
 }
 
+static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const XgClassSummary *receiver;
+    uint32_t class_name;
+    uint32_t method_name;
+    int argc;
+    if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
+        callee->type != AST_MEMBER_ACCESS)
+        return false;
+    receiver =
+        body_find_class_summary(bc, body_resolve_expr_class(bc, callee->as.member_access.object));
+    if (receiver) {
+        class_name = receiver->name_id;
+    } else if (callee->as.member_access.object->type == AST_VARIABLE) {
+        XgLocalType *local = body_find_local(bc, callee->as.member_access.object->as.variable.name);
+        if (!local || !local->nominal_name)
+            return false;
+        class_name = hash_name32(local->nominal_name);
+    } else {
+        return false;
+    }
+    if (!callee->as.member_access.name)
+        return false;
+    method_name = hash_name32(callee->as.member_access.name);
+    argc = call->as.call_expr.arg_count;
+    if (class_name == hash_name32("Channel"))
+        return (method_name == hash_name32("send") && argc == 1) ||
+               (method_name == hash_name32("sendTimeout") && argc == 2) ||
+               (method_name == hash_name32("recv") && argc == 0) ||
+               (method_name == hash_name32("recvOr") && argc == 1) ||
+               (method_name == hash_name32("recvTimeout") && argc == 1);
+    if (class_name == hash_name32("Task"))
+        return (method_name == hash_name32("awaitResult") && argc == 0) ||
+               (method_name == hash_name32("awaitTimeout") && argc == 1);
+    if (class_name == hash_name32("WorkQueue"))
+        return method_name == hash_name32("pop") && (argc == 0 || argc == 1);
+    if (class_name == hash_name32("ResultGroup"))
+        return method_name == hash_name32("recv") && argc == 0;
+    if (class_name == hash_name32("CountdownLatch"))
+        return method_name == hash_name32("wait") && argc == 0;
+    if (class_name == hash_name32("Semaphore"))
+        return method_name == hash_name32("acquire") && argc == 0;
+    if (class_name == hash_name32("EventCount"))
+        return method_name == hash_name32("wait") && (argc == 1 || argc == 2);
+    return false;
+}
+
+static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const char *module;
+    if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
+        callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
+        return false;
+    module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+    return module && strcmp(module, "time") == 0 &&
+           strcmp(callee->as.member_access.name, "sleep") == 0;
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -7442,6 +7502,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR:
+            if (body_builtin_method_call_may_suspend(bc, node) ||
+                body_stdlib_call_may_suspend(bc, node)) {
+                bc->effect_bits |= XG_BODY_MAY_SUSPEND;
+                bc->capability_bits |= XG_CAP_COROUTINE;
+            }
             body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);
             body_add_sequence_method_evidence(bc, node);
@@ -7580,8 +7645,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 type_key = hash_named_type_key32("Json", NULL, 0);
             if (record_literal && type_key == 0)
                 type_key = body_record_type_key(record_literal);
-            (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
-                                   class_id, interface_id, type_key, inferred);
+            (void) body_push_local(
+                bc, node->as.var_decl.name, node->as.var_decl.symbol_id, class_id, interface_id,
+                type_key,
+                node->as.var_decl.type_annotation ? node->as.var_decl.type_annotation->name : NULL,
+                inferred);
             body_bind_record_bridge_shapes_for_type_key(bc, node->as.var_decl.name, type_key);
             if (json_literal) {
                 json_shape_id = body_add_json_shape_for_literal(bc, json_literal,
@@ -7947,9 +8015,12 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.yield_stmt.value);
             break;
         case AST_GO_EXPR:
-            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC;
+            /* Spawn requires a task/scheduler, but does not suspend the
+             * current body.  Keeping this distinct is what permits a
+             * descriptor-only root instead of a resumable main frame. */
+            bc->effect_bits |= XG_BODY_MAY_SPAWN | XG_BODY_MAY_ALLOC;
             bc->escape_bits |= XG_BODY_ESCAPE_CORO;
-            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL | XG_CAP_OBJECTS;
+            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_OBJECTS;
             if (node->as.go_expr.spawn_kind == XR_SPAWN_THREAD)
                 bc->capability_bits |= XG_CAP_SYS_THREAD;
             walk_body_for_calls(bc, node->as.go_expr.expr);
@@ -7982,6 +8053,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.defer_stmt.expr);
             break;
         case AST_SCOPE_BLOCK:
+            /* Scope exit joins linked children and is therefore a real
+             * suspension point even when the body contains no explicit
+             * await expression. */
+            bc->effect_bits |= XG_BODY_MAY_SUSPEND;
             bc->capability_bits |= XG_CAP_SCOPE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.scope_block.body);
             break;
@@ -8037,9 +8112,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
             (void) body_push_name_local(bc, node->as.for_in_stmt.value_name,
                                         node->as.for_in_stmt.value_symbol_id);
-            (void) body_push_local(bc, node->as.for_in_stmt.item_name,
-                                   node->as.for_in_stmt.item_symbol_id, item_class, item_interface,
-                                   item_type_key, false);
+            (void) body_push_local(
+                bc, node->as.for_in_stmt.item_name, node->as.for_in_stmt.item_symbol_id, item_class,
+                item_interface, item_type_key,
+                node->as.for_in_stmt.item_type ? node->as.for_in_stmt.item_type->name : NULL,
+                false);
             walk_body_for_calls(bc, node->as.for_in_stmt.body);
             bc->nlocals = base_locals;
             bc->nname_locals = base_name_locals;
@@ -8090,8 +8167,11 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
         (void) body_add_interface_object_uses_for_type_ref(
             bc, method->param_types ? method->param_types[i] : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
             0);
-        (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
-                               interface_id, type_key, false);
+        (void) body_push_local(
+            bc, method->parameters ? method->parameters[i] : NULL, 0, class_id, interface_id,
+            type_key,
+            method->param_types && method->param_types[i] ? method->param_types[i]->name : NULL,
+            false);
         body_bind_record_bridge_shapes_for_type_key(
             bc, method->parameters ? method->parameters[i] : NULL, type_key);
         body_bind_map_shape_local_for_type_ref(
@@ -8124,7 +8204,8 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             bc, param ? param->type : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
             param && param->line > 0 ? (uint32_t) param->line : 0);
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
-                               class_id, interface_id, type_key, false);
+                               class_id, interface_id, type_key,
+                               param && param->type ? param->type->name : NULL, false);
         body_bind_record_bridge_shapes_for_type_key(bc, param ? param->name : NULL, type_key);
         body_bind_map_shape_local_for_type_ref(
             bc, param ? param->name : NULL, param ? param->type : NULL,
@@ -8221,6 +8302,10 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
+    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
     if (native_attr)
         decl.flags |= XG_DECL_NATIVE;
     if (extern_attr)
@@ -8302,6 +8387,10 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
+    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
     if (cls->is_native)
         decl.flags |= XG_DECL_NATIVE;
     if (cls->explicit_final)
@@ -8495,6 +8584,10 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
+    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
@@ -8569,6 +8662,72 @@ static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     }
 }
 
+static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const AstNode *stmt) {
+    XgDeclSummary decl;
+    const char *name = NULL;
+    if (!stmt)
+        return true;
+    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
+        return add_module_storage_decl(p, module_id, stmt->as.export_stmt.declaration);
+    if (stmt->type == AST_IMPORT_STMT) {
+        if (stmt->as.import_stmt.member_count == 0) {
+            name = stmt->as.import_stmt.alias ? stmt->as.import_stmt.alias
+                                              : stmt->as.import_stmt.module_name;
+        } else {
+            for (int i = 0; i < stmt->as.import_stmt.member_count; i++) {
+                const ImportMember *member = &stmt->as.import_stmt.members[i];
+                XgDeclSummary import_decl;
+                memset(&import_decl, 0, sizeof(import_decl));
+                import_decl.module_id = module_id;
+                import_decl.source_node_id =
+                    producer_source_node_id(module_id, stmt) + (uint32_t) i;
+                import_decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
+                import_decl.kind = XG_DECL_GLOBAL;
+                import_decl.name_id = hash_name32(member->alias ? member->alias : member->name);
+                import_decl.source_span_id = (uint32_t) stmt->line;
+                import_decl.storage_owner = XR_STORAGE_MODULE;
+                import_decl.storage_mutability = XR_STORAGE_READONLY;
+                import_decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+                import_decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+                if (!xg_global_evidence_add_decl(p->evidence, &import_decl))
+                    return false;
+            }
+            return true;
+        }
+    } else if (stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL ||
+               stmt->type == AST_SHARED_DECL) {
+        name = stmt->as.var_decl.name;
+    } else {
+        return true;
+    }
+    memset(&decl, 0, sizeof(decl));
+    decl.module_id = module_id;
+    decl.source_node_id = producer_source_node_id(module_id, stmt);
+    decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
+    decl.kind = XG_DECL_GLOBAL;
+    decl.name_id = hash_name32(name);
+    decl.type_key =
+        stmt->type == AST_IMPORT_STMT ? 0 : hash_tref32(stmt->as.var_decl.type_annotation);
+    decl.source_span_id = (uint32_t) stmt->line;
+    if (stmt->type == AST_SHARED_DECL) {
+        decl.storage_owner = XR_STORAGE_SHARED_SYSTEM;
+        decl.storage_mutability = XR_STORAGE_INTERIOR_MUTABLE;
+        decl.address_identity = XR_ADDRESS_SHARED_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_SHARED_SYSTEM;
+    } else {
+        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_mutability =
+            stmt->type == AST_CONST_DECL ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE;
+        if (stmt->type == AST_IMPORT_STMT)
+            decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = (stmt->type == AST_CONST_DECL || stmt->type == AST_IMPORT_STMT)
+                                        ? XR_MATERIALIZE_MODULE_READONLY
+                                        : XR_MATERIALIZE_MODULE_RUNTIME;
+    }
+    return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
+}
+
 static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstNode *stmt,
                                  bool *handled) {
     if (handled)
@@ -8610,6 +8769,8 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
         if (!stmt)
             continue;
         bool handled = false;
+        if (!add_module_storage_decl(p, module_id, stmt))
+            return false;
         if (!add_module_decl_stmt(p, module_id, stmt, &handled))
             return false;
         if (!handled && module_stmt_has_runtime_body(stmt))

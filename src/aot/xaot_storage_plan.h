@@ -1,0 +1,94 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ */
+
+#ifndef XAOT_STORAGE_PLAN_H
+#define XAOT_STORAGE_PLAN_H
+
+#include "../base/xdefs.h"
+#include "../analysis/xglobal_summary.h"
+#include "../runtime/core/xr_exec_context.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+struct XaotBundle;
+struct XiFunc;
+struct XiModule;
+struct XiValue;
+
+typedef struct XaotStoragePlan {
+    XgDeclId decl_id;
+    uint32_t module_index;
+    uint32_t slot;
+    uint32_t flags;
+    uint8_t owner;
+    uint8_t mutability;
+    uint8_t address_identity;
+    uint8_t materialization_kind;
+} XaotStoragePlan;
+
+enum {
+    XAOT_MODULE_INIT_EV_ENTRY_FUNC = 1u << 0,
+    XAOT_MODULE_INIT_EV_STORAGE_OWNER = 1u << 1,
+    XAOT_MODULE_INIT_EV_NONSUSPEND = 1u << 2,
+};
+
+typedef struct XaotModuleInitPlan {
+    const struct XiFunc *func;
+    XgFuncId body_func_id;
+    uint32_t module_index;
+    uint32_t evidence;
+    uint8_t allocation_owner;
+    bool may_suspend;
+} XaotModuleInitPlan;
+
+enum {
+    XAOT_CAPTURE_EV_CLOSED_CAPTURE = 1u << 0,
+    XAOT_CAPTURE_EV_STORAGE_OWNER = 1u << 1,
+    XAOT_CAPTURE_EV_TYPE_SHAPE = 1u << 2,
+    XAOT_CAPTURE_EV_MUTABILITY = 1u << 3,
+};
+
+typedef struct XaotCapturePlan {
+    const struct XiFunc *func;
+    uint16_t capture_index;
+    uint8_t source_owner;
+    uint8_t action;
+    uint32_t evidence;
+} XaotCapturePlan;
+
+enum {
+    XAOT_ADDRESS_EV_STORAGE_PLAN = 1u << 0,
+    XAOT_ADDRESS_EV_POINTER_TYPE = 1u << 1,
+    XAOT_ADDRESS_EV_LIFETIME = 1u << 2,
+    XAOT_ADDRESS_EV_ESCAPE_SCAN = 1u << 3,
+};
+
+typedef struct XaotAddressPlan {
+    const struct XiFunc *func;
+    const struct XiValue *value;
+    const struct XiValue *origin_value;
+    XrAddressProvenance provenance;
+    uint32_t evidence;
+} XaotAddressPlan;
+
+XR_FUNC bool xaot_storage_capture_plans_build(struct XaotBundle *bundle);
+XR_FUNC bool xaot_storage_capture_plans_verify(const struct XaotBundle *bundle, char *errbuf,
+                                               size_t errbuf_len);
+XR_FUNC const XaotStoragePlan *xaot_storage_plan_find(const struct XaotBundle *bundle,
+                                                      const struct XiModule *module, uint32_t slot);
+XR_FUNC const XaotCapturePlan *xaot_capture_plan_find(const struct XaotBundle *bundle,
+                                                      const struct XiFunc *func, uint16_t index);
+XR_FUNC const XaotAddressPlan *xaot_address_plan_find(const struct XaotBundle *bundle,
+                                                      const struct XiValue *value);
+XR_FUNC const char *xaot_materialization_kind_name(uint8_t value);
+XR_FUNC const char *xaot_capture_action_name(uint8_t value);
+XR_FUNC const char *xaot_pointer_origin_name(uint8_t value);
+XR_FUNC const char *xaot_pointer_escape_name(uint8_t value);
+
+#endif /* XAOT_STORAGE_PLAN_H */

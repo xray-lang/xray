@@ -76,6 +76,32 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 }
 
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (bundle && bundle->has_entry_plan &&
+        bundle->entry_plan.root_representation == XR_ROOT_DESCRIPTOR &&
+        bundle->entry_module < bundle->nmodules && bundle->modules[bundle->entry_module] &&
+        bundle->modules[bundle->entry_module]->init == f)
+        return false;
+    bool is_module_init = false;
+    if (bundle && f) {
+        for (uint32_t i = 0; i < bundle->nmodules; i++) {
+            if (bundle->modules[i] && bundle->modules[i]->init == f) {
+                is_module_init = true;
+                break;
+            }
+        }
+    }
+    if (is_module_init && bundle->global_evidence_plan.evidence && f->xg_body_func_id != XG_NO_ID) {
+        const XgGlobalEvidence *evidence = bundle->global_evidence_plan.evidence;
+        for (uint32_t i = 0; i < evidence->nbodies; i++) {
+            const XgBodySummary *body = &evidence->bodies[i];
+            uint32_t effects = body->effect_bits;
+            if (body->func_id != f->xg_body_func_id)
+                continue;
+            (void) xg_body_effects_compose_closed_world_calls(evidence, body, &effects);
+            return (effects & XG_BODY_MAY_SUSPEND) != 0;
+        }
+    }
     XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
     return xi_coro_func_is_suspendable(f, &resolver);
 }

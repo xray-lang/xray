@@ -61,7 +61,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 module-readonly 值和 shared/system owner 身份可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -366,7 +366,7 @@ xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所�
 | 原语 | 形态 | 说明 |
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `shared` | 稳定共享身份 | 存储在全局堆，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
+| `shared` | 稳定共享身份 | 由 shared/system owner 持有，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
@@ -442,7 +442,9 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 | 规则 | 强制 |
 |--|--|
-| `go` 闭包不能捕获普通 `var` / `const` 局部引用值 | ✅ |
+| 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
+| execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
+| 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
 | `shared` 绑定可直接跨协程传递/捕获，且不能重新赋值或 `move` | ✅ |
 | `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
 | Channel 跨协程传值 | ✅ |
@@ -450,6 +452,14 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
 - 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Bytes` / 不可变对象 / `move` 移交。
+
+### 10.12 逻辑根任务与可达运行时能力
+
+程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
+
+runtime capability 只从 executable entry、共享库导出和 `@c_export` 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
+
+Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -510,7 +520,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published module-readonly values, and shared/system-owned identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
 
 ```xray
 var n = 10
@@ -815,7 +825,7 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 | Primitive | Form | Description |
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `shared` | Stable shared identity | Stored on the global heap while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
+| `shared` | Stable shared identity | Owned by the shared/system owner while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
@@ -891,7 +901,9 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 | Rule | Enforced |
 |--|--|
-| `go` closures cannot capture ordinary local `var` / `const` reference values | ✅ |
+| Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
+| An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
+| Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
 | `shared` bindings may cross coroutine boundaries directly and cannot be reassigned or moved | ✅ |
 | `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
 | Channels for cross-coroutine values | ✅ |
@@ -899,4 +911,12 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 **Residual data-race risk** (detected at runtime, not compile time):
 - Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Bytes` / immutable objects, or transfer ownership via `move`.
+
+### 10.12 Logical root task and reachable runtime capabilities
+
+Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
+
+Runtime capabilities propagate only from final artifact roots such as the executable entry, shared-library exports, and `@c_export` functions. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
+
+A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entry plan. A freestanding target remains coroutine-runtime-free when reachable code needs only core. If reachable code needs task/frame allocation, submit, park/wake, timer, interrupt completion, or an executor pump, the target manifest must provide a versioned provider ABI and the required hooks; missing capabilities fail before generation or linking. The provider is a target/build contract and introduces no `async main`, `static main`, or freestanding-only source-language keyword.
 <!-- /xr-spec:en -->

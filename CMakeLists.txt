@@ -1748,6 +1748,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME aot_freestanding_provider_abi
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_provider_abi_test.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_freestanding_provider_abi PROPERTIES
+        LABELS "aot;freestanding;provider;smoke"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME aot_freestanding_qemu_smoke
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_qemu_smoke.sh
                 $<TARGET_FILE:xray>
