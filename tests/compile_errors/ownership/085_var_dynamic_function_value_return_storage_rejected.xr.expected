@@ -1,0 +1,1 @@
+var binding 'local' cannot receive storage-sensitive return from function value 'f'
