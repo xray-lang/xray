@@ -673,7 +673,33 @@ bool xa_symbol_is_function(XaSymbol *symbol) {
 void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
                                      XrType ***constraint_lists, const int *constraint_counts,
                                      int count) {
-    if (!links || count <= 0)
+    if (!links)
+        return;
+
+    if (links->type_param_names || links->type_param_constraints ||
+        links->type_param_constraint_counts) {
+        if (links->type_param_names) {
+            for (int i = 0; i < links->type_param_count; i++) {
+                if (links->type_param_names[i])
+                    xr_free((char *) links->type_param_names[i]);
+            }
+        }
+        if (links->type_param_constraints) {
+            for (int i = 0; i < links->type_param_count; i++) {
+                if (links->type_param_constraints[i])
+                    xr_free(links->type_param_constraints[i]);
+            }
+        }
+        xr_free(links->type_param_names);
+        xr_free(links->type_param_constraints);
+        xr_free(links->type_param_constraint_counts);
+        links->type_param_names = NULL;
+        links->type_param_constraints = NULL;
+        links->type_param_constraint_counts = NULL;
+        links->type_param_count = 0;
+    }
+
+    if (count <= 0)
         return;
 
     links->type_param_count = count;

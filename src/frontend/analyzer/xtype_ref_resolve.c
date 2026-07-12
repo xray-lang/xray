@@ -17,6 +17,7 @@
 #include "xanalyzer.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xanalyzer_visitor.h"
+#include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_symbol.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
@@ -871,9 +872,10 @@ static void xa_report_fixed_array_length_diag(XaAnalyzer *analyzer, const AstNod
                                &loc);
 }
 
-/* Map a named type to its runtime XrType*.
- * Order: built-in interfaces → prelude → well-known singletons → class fallback. */
-static XrType *resolve_named(XrVMRuntime *X, const char *name) {
+/* Map a known named type to its runtime XrType*. Unknown user type names are
+ * deliberately excluded here; analyzer-aware callers must prove those through
+ * symbols or active generic parameters before accepting them. */
+static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
     XR_DCHECK(name != NULL, "resolve_named: NULL name");
 
     /* Built-in interfaces (Comparable, Hashable, Stringable, Equatable, ...).
@@ -922,6 +924,15 @@ static XrType *resolve_named(XrVMRuntime *X, const char *name) {
         return xr_type_new_named_instance(X, "PanicInfo");
     if (strcmp(name, TYPE_NAME_BUFFER) == 0)
         return xr_type_new_named_instance(X, TYPE_NAME_BUFFER);
+    return NULL;
+}
+
+/* Map a named type to its runtime XrType*.
+ * Order: built-in interfaces → prelude → well-known singletons → class fallback. */
+static XrType *resolve_named(XrVMRuntime *X, const char *name) {
+    XrType *known = resolve_known_named(X, name);
+    if (known)
+        return known;
     /* Default: treat as class name */
     return xr_type_new_class(X, name);
 }
@@ -1118,12 +1129,18 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
     if (sym->kind == XA_SYM_IMPORT) {
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         XrType *type = links ? links->type : NULL;
-        if (links && links->module_name && strcmp(links->module_name, "sync") == 0) {
-            const char *class_name = links->import_member_name ? links->import_member_name : name;
-            if (strcmp(class_name, "Semaphore") == 0 || strcmp(class_name, "CountdownLatch") == 0 ||
-                strcmp(class_name, "EventCount") == 0 || strcmp(class_name, "WorkQueue") == 0 ||
-                strcmp(class_name, "ResultGroup") == 0) {
-                return sym;
+        if (links && links->module_name && links->import_member_name) {
+            bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
+            XrHashMap *exports =
+                resolve_graph_export_symbols(analyzer, links->module_name, is_quoted);
+            XaSymbol *export_sym =
+                exports ? (XaSymbol *) xr_hashmap_get(exports, links->import_member_name) : NULL;
+            if (export_sym) {
+                xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+                type = links->type;
+                if (export_sym->kind == XA_SYM_CLASS || export_sym->kind == XA_SYM_ENUM ||
+                    export_sym->kind == XA_SYM_TYPE_ALIAS)
+                    return sym;
             }
         }
         if (type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE ||
@@ -1142,16 +1159,6 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (!links)
         return NULL;
-
-    if (sym->kind == XA_SYM_IMPORT && links->module_name &&
-        strcmp(links->module_name, "sync") == 0) {
-        const char *class_name = links->import_member_name ? links->import_member_name : name;
-        if (strcmp(class_name, "Semaphore") == 0 || strcmp(class_name, "CountdownLatch") == 0 ||
-            strcmp(class_name, "EventCount") == 0 || strcmp(class_name, "WorkQueue") == 0 ||
-            strcmp(class_name, "ResultGroup") == 0) {
-            return xr_type_new_named_instance(analyzer->isolate, class_name);
-        }
-    }
 
     if (sym->kind == XA_SYM_ENUM)
         return links->type;
@@ -1177,11 +1184,6 @@ static bool is_removed_enum_runtime_wrapper_name(const char *name) {
     return name && (strcmp(name, "EnumValue") == 0 || strcmp(name, "EnumType") == 0);
 }
 
-static bool is_removed_binary_public_type_name(const char *name) {
-    return name && (strcmp(name, "Bytes") == 0 || strcmp(name, "ByteSpan") == 0 ||
-                    strcmp(name, "ByteView") == 0);
-}
-
 static void report_removed_enum_runtime_wrapper_type(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return;
@@ -1200,6 +1202,87 @@ static void report_undefined_public_type(XaAnalyzer *analyzer, const char *name)
     xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
 }
 
+static int active_type_param_index(XaAnalyzer *analyzer, const char *name) {
+    if (!analyzer || !name)
+        return -1;
+
+    for (XaScope *scope = analyzer->current_scope; scope; scope = scope->parent) {
+        XaSymbol *owners[2] = {scope->function_symbol, scope->class_symbol};
+        for (int owner_index = 0; owner_index < 2; owner_index++) {
+            XaSymbol *owner = owners[owner_index];
+            XaSymbolLinks *links = owner ? xa_analyzer_get_links(analyzer, owner) : NULL;
+            int count = links ? xa_symbol_links_get_type_param_count(links) : 0;
+            for (int i = 0; i < count; i++) {
+                const char *tp_name = xa_symbol_links_get_type_param_name(links, i);
+                if (tp_name && strcmp(tp_name, name) == 0)
+                    return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static bool is_known_generic_head(XrVMRuntime *X, const char *name) {
+    if (!name)
+        return false;
+    if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
+        strcmp(name, "Set") == 0 || strcmp(name, "Channel") == 0 || strcmp(name, "Map") == 0 ||
+        strcmp(name, "Task") == 0 || strcmp(name, "RawPtr") == 0 || strcmp(name, "RawMut") == 0 ||
+        strcmp(name, "CFn") == 0 || xa_is_builtin_interface_name(name)) {
+        return true;
+    }
+    const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
+    return symbols && xr_prelude_lookup_type(symbols, name, strlen(name)) != NULL;
+}
+
+static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
+    if (!analyzer || !tref || !tref->name || !is_known_generic_head(analyzer->isolate, tref->name))
+        return NULL;
+
+    int nargs = tref->nchildren;
+    XrType *stack_args[16];
+    XrType **args =
+        (nargs <= 16) ? stack_args : (XrType **) xr_malloc((size_t) nargs * sizeof(XrType *));
+    if (nargs > 0 && !args)
+        return xr_type_new_unknown(NULL);
+    for (int i = 0; i < nargs; i++)
+        args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+
+    XrVMRuntime *X = analyzer->isolate;
+    const char *name = tref->name;
+    XrType *result = NULL;
+    if (strcmp(name, "Array") == 0 && nargs >= 1) {
+        result = xr_type_new_array(X, args[0]);
+    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs >= 1) {
+        result = xr_type_new_span(X, args[0]);
+    } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
+        result = xr_type_new_set(X, args[0]);
+    } else if (strcmp(name, "Channel") == 0 && nargs >= 1) {
+        result = xr_type_new_channel(X, args[0]);
+    } else if (strcmp(name, "Map") == 0 && nargs >= 2) {
+        result = xr_type_new_map(X, args[0], args[1]);
+    } else if (strcmp(name, "Task") == 0 && nargs >= 1) {
+        result = xr_type_new_task(X, args[0]);
+    } else if (strcmp(name, "RawPtr") == 0 && nargs >= 1) {
+        result = xr_type_new_pointer(X, args[0], false);
+    } else if (strcmp(name, "RawMut") == 0 && nargs >= 1) {
+        result = xr_type_new_pointer(X, args[0], true);
+    } else if (strcmp(name, "CFn") == 0 && nargs == 1 && args[0] &&
+               args[0]->kind == XR_KIND_FUNCTION) {
+        result = xr_type_copy(X, args[0]);
+        if (result)
+            result->function.is_c_abi = true;
+    } else if (xa_is_builtin_interface_name(name)) {
+        result = xr_type_new_generic_interface(X, name, args, nargs);
+    } else {
+        result = xr_type_new_generic_instance(X, name, NULL, args, nargs);
+    }
+
+    if (args != stack_args)
+        xr_free(args);
+    return result;
+}
+
 XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!tref)
         return xr_type_new_unknown(NULL);
@@ -1213,13 +1296,17 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             report_removed_enum_runtime_wrapper_type(analyzer, tref->name);
             return xr_type_new_unknown(NULL);
         }
-        if (is_removed_binary_public_type_name(tref->name)) {
-            report_undefined_public_type(analyzer, tref->name);
-            return xr_type_new_unknown(NULL);
-        }
+        int type_param_index = active_type_param_index(analyzer, tref->name);
+        if (type_param_index >= 0)
+            return xr_type_new_type_param(analyzer->isolate, tref->name, type_param_index);
         XrType *cls = resolve_type_ref_symbol_type(analyzer, tref->name);
         if (cls)
             return cls;
+        XrType *known = resolve_known_named(analyzer->isolate, tref->name);
+        if (known)
+            return known;
+        report_undefined_public_type(analyzer, tref->name);
+        return xr_type_new_unknown(NULL);
     }
 
     /* Generic form: preserve declaration-backed class/interface identity so
@@ -1229,41 +1316,15 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             report_removed_enum_runtime_wrapper_type(analyzer, tref->name);
             return xr_type_new_unknown(NULL);
         }
-        if (is_removed_binary_public_type_name(tref->name)) {
+        if (active_type_param_index(analyzer, tref->name) >= 0) {
             report_undefined_public_type(analyzer, tref->name);
             return xr_type_new_unknown(NULL);
         }
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
-        const char *sync_class_name = NULL;
-        if (sym && sym->kind == XA_SYM_IMPORT && links && links->module_name &&
-            strcmp(links->module_name, "sync") == 0) {
-            const char *class_name =
-                links->import_member_name ? links->import_member_name : tref->name;
-            if (strcmp(class_name, "Semaphore") == 0 || strcmp(class_name, "CountdownLatch") == 0 ||
-                strcmp(class_name, "EventCount") == 0 || strcmp(class_name, "WorkQueue") == 0 ||
-                strcmp(class_name, "ResultGroup") == 0) {
-                sync_class_name = class_name;
-            }
-        }
         XrType *head = links ? links->type : NULL;
-        if (sync_class_name) {
-            int nargs = tref->nchildren;
-            XrType *stack_args[8];
-            XrType **args =
-                (nargs <= 8) ? stack_args : (XrType **) xr_malloc(sizeof(XrType *) * nargs);
-            if (args) {
-                for (int i = 0; i < nargs; i++)
-                    args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
-                XrType *result = xr_type_new_generic_instance(analyzer->isolate, sync_class_name,
-                                                              NULL, args, nargs);
-                if (args != stack_args)
-                    xr_free(args);
-                return result;
-            }
-        }
         if (head && (head->kind == XR_KIND_INTERFACE || head->kind == XR_KIND_CLASS ||
-                     head->kind == XR_KIND_INSTANCE)) {
+                     head->kind == XR_KIND_INSTANCE || head->kind == XR_KIND_ENUM)) {
             int nargs = tref->nchildren;
             XrType *stack_args[8];
             XrType **args =
@@ -1281,6 +1342,11 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 return result;
             }
         }
+        XrType *known = resolve_known_generic_in_analyzer(analyzer, tref);
+        if (known)
+            return known;
+        report_undefined_public_type(analyzer, tref->name);
+        return xr_type_new_unknown(NULL);
     }
 
     if (tref->kind == XR_TREF_OPTIONAL) {
