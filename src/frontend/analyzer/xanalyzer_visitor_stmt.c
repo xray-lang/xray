@@ -6750,6 +6750,7 @@ static bool xa_call_is_copy_builtin(AstNode *node) {
 }
 
 static void xa_ensure_function_return_storage_prepass(XaInferContext *ctx, XaSymbolLinks *links);
+static AstNode *xa_storage_boundary_identity_source(AstNode *expr);
 
 static bool xa_call_return_storage_summary(XaInferContext *ctx, AstNode *node, uint8_t *owner_out,
                                            bool *mixed_out, const char **name_out) {
@@ -6796,6 +6797,76 @@ static bool xa_call_return_storage_owner(XaInferContext *ctx, AstNode *node, uin
     bool mixed = false;
     if (!xa_call_return_storage_summary(ctx, node, owner_out, &mixed, name_out) || mixed)
         return false;
+    return true;
+}
+
+static AstNode *xa_direct_function_value_source(AstNode *expr) {
+    AstNode *source = xa_storage_boundary_identity_source(expr);
+    return source && source->type == AST_VARIABLE ? source : NULL;
+}
+
+static void xa_propagate_function_value_return_storage(XaInferContext *ctx, XaSymbol *dst_sym,
+                                                       AstNode *initializer, XrType *init_type) {
+    if (!ctx || !ctx->analyzer || !dst_sym || !initializer || !XR_TYPE_IS_FUNCTION(init_type))
+        return;
+    if (!dst_sym->is_const)
+        return;
+
+    AstNode *source = xa_direct_function_value_source(initializer);
+    if (!source || !source->as.variable.name)
+        return;
+
+    XaSymbol *src_sym = xa_lookup_visible_symbol(ctx, source->as.variable.name);
+    if (!src_sym)
+        return;
+    XaSymbolLinks *src_links = xa_analyzer_get_links(ctx->analyzer, src_sym);
+    XaSymbolLinks *dst_links = xa_analyzer_get_links(ctx->analyzer, dst_sym);
+    if (!src_links || !dst_links)
+        return;
+
+    if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_storage_scanned &&
+        !src_links->return_storage_scan_in_progress)
+        xa_ensure_function_return_storage_prepass(ctx, src_links);
+    if (!src_links->return_storage_scanned)
+        return;
+
+    dst_links->return_storage_owner = src_links->return_storage_owner;
+    dst_links->return_storage_known = src_links->return_storage_known;
+    dst_links->return_storage_mixed = src_links->return_storage_mixed;
+    dst_links->return_storage_scanned = true;
+    dst_links->return_storage_scan_in_progress = false;
+}
+
+static bool xa_call_is_unknown_storage_function_value(XaInferContext *ctx, AstNode *node,
+                                                      const char **name_out) {
+    if (name_out)
+        *name_out = NULL;
+    AstNode *init = xa_storage_boundary_identity_source(node);
+    if (!ctx || !init || init->type != AST_CALL_EXPR)
+        return false;
+
+    CallExprNode *call = &init->as.call_expr;
+    if (!call->callee || call->callee->type != AST_VARIABLE || !call->callee->as.variable.name)
+        return false;
+
+    XaSymbol *sym = xa_lookup_visible_symbol(ctx, call->callee->as.variable.name);
+    if (!sym || sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_IMPORT)
+        return false;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    XrType *callee_type =
+        links && links->type ? links->type : xa_analyzer_get_type(ctx->analyzer, sym);
+    if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type))
+        return false;
+    XrType *return_type = callee_type->function.return_type;
+    if (!return_type || XR_TYPE_IS_UNKNOWN(return_type) ||
+        return_type->kind == XR_KIND_TYPE_PARAM || !xa_type_needs_borrow_escape_guard(return_type))
+        return false;
+    if (links && links->return_storage_scanned)
+        return false;
+
+    if (name_out)
+        *name_out = call->callee->as.variable.name;
     return true;
 }
 
@@ -7273,8 +7344,29 @@ static void xa_check_decl_return_storage_boundary(XaInferContext *ctx, AstNode *
     AstNode *init = xa_storage_boundary_identity_source(var->initializer);
     uint8_t owner = XR_STORAGE_NONE;
     const char *fn_name = NULL;
-    if (!xa_call_return_storage_owner(ctx, init, &owner, &fn_name))
+    if (!xa_call_return_storage_owner(ctx, init, &owner, &fn_name)) {
+        const char *value_name = NULL;
+        if (xa_call_is_unknown_storage_function_value(ctx, init, &value_name)) {
+            XrLocation loc = {
+                .file = ctx->file_path,
+                .line = var->initializer->line ? var->initializer->line : decl_node->line,
+                .column = var->initializer->column ? var->initializer->column : decl_node->column,
+            };
+            const char *target_kind = decl_node->type == AST_CONST_DECL    ? "const"
+                                      : decl_node->type == AST_OWNED_DECL  ? "owned"
+                                      : decl_node->type == AST_SHARED_DECL ? "shared"
+                                                                           : "var";
+            char msg[384];
+            snprintf(msg, sizeof(msg),
+                     "%s binding '%s' cannot receive storage-sensitive return from function "
+                     "value '%s'; call a known function directly or use copy(%s())",
+                     target_kind, var->name ? var->name : "?", value_name ? value_name : "?",
+                     value_name ? value_name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
         return;
+    }
     if (owner != XR_STORAGE_OWNED_SYSTEM && owner != XR_STORAGE_SHARED_SYSTEM)
         return;
 
@@ -7492,6 +7584,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         // Store inferred initializer type in the analyzer side table
         // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
+        xa_propagate_function_value_return_storage(ctx, sym, var->initializer, init_type);
         xa_check_shared_initializer_boundary(ctx, node, init_type);
         xa_check_owned_initializer_boundary(ctx, node, init_type);
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);
@@ -7964,6 +8057,17 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_record_return_storage_mixed(ctx);
                     else
                         xa_record_return_storage_owner(ctx, owner);
+                } else if (xa_call_is_unknown_storage_function_value(ctx, ret_expr, NULL)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path,
+                        .line = ret->values[0]->line ? ret->values[0]->line : node->line,
+                        .column = ret->values[0]->column ? ret->values[0]->column : node->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "return from function value has unknown storage; call a known function "
+                        "directly or return copy(f())",
+                        &loc);
+                    xa_record_return_storage_mixed(ctx);
                 } else {
                     xa_record_return_storage_unknown(ctx);
                 }

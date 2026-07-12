@@ -115,3 +115,12 @@ fn test_copy_owned_return_to_var_binding() {
     assert_eq(bytes[0], 11)
     assert_eq(bytes[1], 12)
 }
+
+@test
+fn test_owned_return_through_const_function_alias() {
+    const build = make_owned_return_buffer
+    owned bytes = build()
+    assert_eq(len(bytes), 2)
+    assert_eq(bytes[0], 11)
+    assert_eq(bytes[1], 12)
+}

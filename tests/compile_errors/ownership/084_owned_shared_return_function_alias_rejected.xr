@@ -1,0 +1,13 @@
+fn buildBuffer() -> Array<byte> {
+    owned result = Array<byte>(1, 0)
+    shared frozen = move result
+    return frozen
+}
+
+fn main() {
+    const f = buildBuffer
+    owned local = f()
+    print(len(local))
+}
+
+main()

@@ -1,0 +1,15 @@
+fn buildBuffer() -> Array<byte> {
+    owned result = Array<byte>(1, 0)
+    return move result
+}
+
+fn wrap(f: () -> Array<byte>) -> Array<byte> {
+    return f()
+}
+
+fn main() {
+    var local = wrap(buildBuffer)
+    print(len(local))
+}
+
+main()

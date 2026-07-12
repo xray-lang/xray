@@ -1,0 +1,12 @@
+fn buildBuffer() -> Array<byte> {
+    owned result = Array<byte>(1, 0)
+    return move result
+}
+
+fn main() {
+    const f = buildBuffer
+    var local = f()
+    print(len(local))
+}
+
+main()
