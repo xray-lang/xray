@@ -1,0 +1,14 @@
+fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> []
+    }
+}
+
+export fn forwardImportedArray(ch: Channel<Array<int>>, data: Array<int>) {
+    ch.send(move data)
+}
+
+export fn recvImportedArray(ch: Channel<Array<int>>) -> Array<int> {
+    return recv_array(ch)
+}

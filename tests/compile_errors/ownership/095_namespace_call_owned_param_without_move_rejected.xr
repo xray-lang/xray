@@ -1,0 +1,10 @@
+import "../../fixtures/owned_transfer_lib" as transfer
+
+fn main() {
+    shared ch: Channel<Array<int>> = Channel(1)
+    owned xs = Array<int>(3, 0)
+    transfer.forwardImportedArray(ch, xs)
+    ch.close()
+}
+
+main()
