@@ -11,8 +11,15 @@ shared ch: Channel<Array<int>> = Channel(1)
 var a = go worker(41)
 var xs = [1, 2, 3]
 var b = go sum(copy(xs))
-var ys = [4, 5]
-ch.send(move ys)
+
+fn send_owned(ch: Channel<Array<int>>) {
+    owned ys = Array<int>(2, 0)
+    ys[0] = 4
+    ys[1] = 5
+    ch.send(move ys)
+}
+
+send_owned(ch)
 
 print(await a)
 print(await b)

@@ -5,7 +5,7 @@
 ** 测试内容：
 **   - shared: 全局堆，引用计数共享，并发读取
 **   - shared: 全局堆，稳定共享身份，可直接跨协程传递
-**   - move var: 普通局部变量显式所有权转移（用于 go / ch.send）
+**   - move owned: owned 根显式所有权转移（用于 go / ch.send）
 **   - 普通变量: 通过 copy(...) 显式深拷贝后传递给协程
 */
 
@@ -50,14 +50,14 @@ fn test_shared_const() {
     print("results:", r1, r2)  // 42 84
 }
 
-// Test 2: move with go — ownership transfer of a local var to coroutine
+// Test 2: move with go — ownership transfer of an owned root to coroutine
 @test
 fn test_move_go() {
     print("=== Test move go ===")
 
-    var data: Json = { count: 10 }
+    owned data: Json = { count: 10 }
 
-    // 'move data' transfers local ownership to child coroutine
+    // 'move data' transfers the owned root to child coroutine
     var task = go fn(d: Json) -> int {
         print("child got:", d.count)
         return int(d.count) + 1
@@ -74,7 +74,10 @@ fn test_move_channel_send() {
     print("=== Test move channel send ===")
 
     shared ch: Channel<Array<int>> = Channel(1)
-    var payload = [10, 20, 30]
+    owned payload = Array<int>(3, 0)
+    payload[0] = 10
+    payload[1] = 20
+    payload[2] = 30
 
     // send with move: transfers ownership through channel
     ch.send(move payload)
@@ -109,13 +112,14 @@ fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
     shared ch: Channel<Json> = Channel(1)
-    var msg: Json = { step: 0 }
+    owned msg: Json = { step: 0 }
 
     // Stage 1: modify and move-send
     var t1 = go fn(c: Channel<Json>, d: Json) {
-        d.step = int(d.step) + 1
-        print("stage1:", d.step)
-        c.send(move d)
+        owned next: Json = copy(d)
+        next.step = int(next.step) + 1
+        print("stage1:", next.step)
+        c.send(move next)
     }(ch, move msg)
 
     await t1

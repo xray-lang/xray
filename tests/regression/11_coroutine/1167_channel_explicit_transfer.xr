@@ -63,7 +63,9 @@ fn test_channel_send_timeout_copy_preserves_source() {
 @test
 fn test_channel_send_move_transfers_source() {
     shared ch: Channel<Array<int>> = Channel(1)
-    var xs = [10, 11]
+    owned xs = Array<int>(2, 0)
+    xs[0] = 10
+    xs[1] = 11
     ch.send(move xs)
 
     var got = recv_array(ch)

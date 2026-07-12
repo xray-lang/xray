@@ -1,0 +1,11 @@
+fn worker(xs: Array<int>) -> int {
+    return len(xs)
+}
+
+fn main() {
+    var xs = [1, 2, 3]
+    var task = go worker(move xs)
+    print(await task)
+}
+
+main()
