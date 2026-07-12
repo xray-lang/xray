@@ -13,6 +13,7 @@
 #include "../base/xfileio.h"
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -6349,6 +6350,25 @@ static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *
     row->sequence_fresh_empty = source->sequence_fresh_empty;
 }
 
+static void body_inherit_sequence_source_metadata(XgBodyCollect *bc, const char *name,
+                                                  const XgLocalType *source) {
+    XgLocalType *row;
+    if (!bc || !name || !source || source->sequence_kind == 0)
+        return;
+    row = body_find_local(bc, name);
+    if (!row || row->sequence_kind == 0)
+        return;
+    if (row->sequence_elem_type_key == 0)
+        row->sequence_elem_type_key = source->sequence_elem_type_key;
+    row->sequence_storage_id = source->sequence_storage_id;
+    row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
+    row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
+    row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
+    row->sequence_elem_map_key_type_key = source->sequence_elem_map_key_type_key;
+    row->sequence_elem_map_value_type_key = source->sequence_elem_map_value_type_key;
+    row->sequence_fresh_empty = source->sequence_fresh_empty;
+}
+
 static void body_clear_sequence_json_shape(XgLocalType *row) {
     if (!row)
         return;
@@ -7146,6 +7166,54 @@ static void body_add_encoding_op(XgBodyCollect *bc, const AstNode *node, uint8_t
     (void) xg_global_evidence_add_encoding_op(bc->evidence, &row);
 }
 
+static bool body_sequence_registry_receiver_matches(const XgLocalType *local,
+                                                    XaBuiltinReceiverKind receiver) {
+    if (!local || local->sequence_kind == 0)
+        return false;
+    switch (receiver) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return local->sequence_kind == XG_SEQ_BYTES;
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return local->sequence_kind == XG_SEQ_ARRAY || local->sequence_kind == XG_SEQ_BYTES;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return local->sequence_kind == XG_SEQ_BYTE_SPAN;
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return (local->sequence_kind == XG_SEQ_SPAN ||
+                    local->sequence_kind == XG_SEQ_BYTE_SPAN) &&
+                   body_type_key_is_pod_array_lane(local->sequence_elem_type_key);
+    }
+    return false;
+}
+
+static bool body_sequence_registry_arg_count_matches(const XaBuiltinReceiverMethodSpec *spec,
+                                                     uint32_t arg_count) {
+    if (!spec)
+        return false;
+    if (arg_count < (uint32_t) spec->min_params)
+        return false;
+    if (spec->is_variadic)
+        return true;
+    return arg_count <= (uint32_t) spec->param_count;
+}
+
+static bool body_sequence_registry_method_matches(const XgLocalType *local, const char *method_name,
+                                                  uint32_t arg_count,
+                                                  XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    return spec && method_name && strcmp(method_name, spec->source_name) == 0 &&
+           body_sequence_registry_receiver_matches(local, spec->receiver) &&
+           body_sequence_registry_arg_count_matches(spec, arg_count);
+}
+
+static bool body_sequence_registry_method_matches_either(const XgLocalType *local,
+                                                         const char *method_name,
+                                                         uint32_t arg_count,
+                                                         XaBuiltinReceiverMethodId left,
+                                                         XaBuiltinReceiverMethodId right) {
+    return body_sequence_registry_method_matches(local, method_name, arg_count, left) ||
+           body_sequence_registry_method_matches(local, method_name, arg_count, right);
+}
+
 static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *node) {
     const CallExprNode *call;
     const MemberAccessNode *member;
@@ -7163,7 +7231,8 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
     arg0 = call->arguments && call->arg_count > 0 ? call->arguments[0] : NULL;
 
     if (local) {
-        if (strcmp(member->name, "push") == 0 && call->arg_count == 1) {
+        if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH)) {
             bool loop_push =
                 body_counted_loop_push_is_proven(bc, node, local, member->object, arg0);
             body_add_capacity_op(
@@ -7185,18 +7254,23 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
                 body_clear_sequence_json_shape(local);
             return;
         }
-        if (strcmp(member->name, "reserve") == 0 && call->arg_count == 1) {
+        if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE)) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_RESERVE, arg0, 0,
                                  XG_CAPACITY_EXACT_COUNT, true);
             return;
         }
-        if (strcmp(member->name, "clear") == 0 && call->arg_count == 0) {
+        if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR)) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_CLEAR, NULL, 0, 0, false);
             local->sequence_fresh_empty = false;
             body_clear_sequence_json_shape(local);
             return;
         }
-        if (strcmp(member->name, "toString") == 0 && call->arg_count == 0) {
+        if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_TO_STRING) ||
+            (local->sequence_kind == XG_SEQ_STRING_BUILDER &&
+             strcmp(member->name, "toString") == 0 && call->arg_count == 0)) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_TO_STRING, NULL, 0, 0, false);
             if (local->sequence_kind == XG_SEQ_STRING_BUILDER)
                 body_add_encoding_op(bc, node, XG_ENCODING_BYTES_TO_STRING, member->object,
@@ -7204,7 +7278,9 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
                                      XG_ENCODING_VALIDATED_ONCE | XG_ENCODING_SCALAR_BOUNDARY);
             return;
         }
-        if (strcmp(member->name, "appendFrom") == 0 && call->arg_count >= 1) {
+        if (body_sequence_registry_method_matches(
+                local, member->name, call->arg_count,
+                XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM)) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_APPEND, arg0, 0,
                                  XG_CAPACITY_EXACT_COUNT, true);
             body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, arg0,
@@ -7214,7 +7290,9 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
                 body_clear_sequence_json_shape(local);
             return;
         }
-        if (strcmp(member->name, "copyFrom") == 0 && call->arg_count >= 1) {
+        if (body_sequence_registry_method_matches_either(
+                local, member->name, call->arg_count, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM,
+                XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM)) {
             body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, arg0,
                              body_bulk_overlap_possible(bc, local, arg0));
             local->sequence_fresh_empty = false;
@@ -7222,17 +7300,26 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
                 body_clear_sequence_json_shape(local);
             return;
         }
-        if (strcmp(member->name, "fill") == 0 && call->arg_count >= 1) {
+        if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL) ||
+            body_sequence_registry_method_matches_either(
+                local, member->name, call->arg_count, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL,
+                XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL)) {
             body_add_bulk_op(bc, node, XG_BULK_FILL, local, arg0, member->object, false);
             local->sequence_fresh_empty = false;
             body_update_sequence_json_shape_from_value(bc, local, arg0);
             return;
         }
-        if (strcmp(member->name, "compare") == 0 && call->arg_count == 1) {
+        if (body_sequence_registry_method_matches_either(
+                local, member->name, call->arg_count, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE,
+                XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE)) {
             body_add_bulk_op(bc, node, XG_BULK_COMPARE, local, arg0, arg0, false);
             return;
         }
-        if (strcmp(member->name, "repeatFrom") == 0 && call->arg_count >= 2) {
+        if (body_sequence_registry_method_matches_either(
+                local, member->name, call->arg_count,
+                XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM,
+                XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM)) {
             const AstNode *count_expr =
                 call->arguments ? call->arguments[call->arg_count - 1] : NULL;
             body_add_bulk_op(bc, node, XG_BULK_REPEAT, local, member->object, count_expr, true);
@@ -7972,9 +8059,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.var_decl.name, sequence_kind,
                                          sequence_elem_type_key, sequence_elem_type_ref);
-            if (source_sequence_local && !sequence_json_literal)
-                body_bind_sequence_local_from_source(bc, node->as.var_decl.name,
-                                                     source_sequence_local);
+            if (source_sequence_local && !sequence_json_literal) {
+                if (sequence_kind != 0)
+                    body_inherit_sequence_source_metadata(bc, node->as.var_decl.name,
+                                                          source_sequence_local);
+                else
+                    body_bind_sequence_local_from_source(bc, node->as.var_decl.name,
+                                                         source_sequence_local);
+            }
             if (sequence_kind != 0) {
                 XgLocalType *sequence_local = body_find_local(bc, node->as.var_decl.name);
                 const AstNode *initializer = node->as.var_decl.initializer;
@@ -8094,21 +8186,22 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (source_map_local)
                 body_bind_map_shape_local_from_source(bc, node->as.assignment.name,
                                                       source_map_local);
-            if (source_sequence_local)
-                body_bind_sequence_local_from_source(bc, node->as.assignment.name,
-                                                     source_sequence_local);
-            else if (source_sequence_kind != 0)
+            if (source_sequence_local && source_sequence_kind != 0) {
                 body_bind_sequence_local(bc, node->as.assignment.name, source_sequence_kind,
                                          source_sequence_elem_type_key,
                                          source_sequence_elem_type_ref);
-            else if (target_sequence_kind != 0)
+                body_inherit_sequence_source_metadata(bc, node->as.assignment.name,
+                                                      source_sequence_local);
+            } else if (source_sequence_local) {
+                body_bind_sequence_local_from_source(bc, node->as.assignment.name,
+                                                     source_sequence_local);
+            } else if (source_sequence_kind != 0) {
+                body_bind_sequence_local(bc, node->as.assignment.name, source_sequence_kind,
+                                         source_sequence_elem_type_key,
+                                         source_sequence_elem_type_ref);
+            } else if (target_sequence_kind != 0) {
                 body_bind_sequence_local(bc, node->as.assignment.name, target_sequence_kind,
                                          target_sequence_elem_type_key, NULL);
-            if (source_sequence_local) {
-                XgLocalType *sequence_local = body_find_local(bc, node->as.assignment.name);
-                if (sequence_local)
-                    sequence_local->sequence_storage_id =
-                        source_sequence_local->sequence_storage_id;
             }
             if (source_sequence_json_shape_id == XG_NO_ID && target_sequence_kind != 0 &&
                 target_sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0)) {

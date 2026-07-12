@@ -10504,7 +10504,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
                          "    var part = xs[0:1]\n"
                          "    var n = len(xs)\n"
                          "    b.appendFrom(span)\n"
-                         "    b.copyFrom(span)\n"
+                         "    span.copyFrom(b[:])\n"
                          "    var text = sb.toString()\n"
                          "    var bytes = s.copyBytes()\n"
                          "    return n\n"
@@ -10561,6 +10561,13 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_TRUE(saw_push);
     ASSERT_TRUE(saw_append);
     ASSERT_TRUE(saw_to_string);
+
+    bool saw_bulk_copy = false;
+    for (uint32_t i = 0; i < ev.nbulk_ops; i++) {
+        if (ev.bulk_ops[i].op_kind == XG_BULK_COPY)
+            saw_bulk_copy = true;
+    }
+    ASSERT_TRUE(saw_bulk_copy);
 
     bool saw_string_to_bytes = false;
     bool saw_bytes_to_string = false;
