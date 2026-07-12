@@ -3837,6 +3837,42 @@ bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
     return sym && sym->is_shared;
 }
 
+static XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node) {
+    if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_MOVE_EXPR)
+        return NULL;
+    AstNode *inner = arg_node->as.move_expr.expr;
+    if (!inner || inner->type != AST_VARIABLE || !inner->as.variable.name)
+        return NULL;
+    return xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
+}
+
+static bool xa_boundary_arg_is_owned_move(XaInferContext *ctx, AstNode *arg_node) {
+    XaSymbol *sym = xa_boundary_move_source_symbol(ctx, arg_node);
+    return sym && sym->is_owned;
+}
+
+static void xa_report_boundary_local_move(XaInferContext *ctx, AstNode *boundary_node,
+                                          AstNode *arg_node, const char *boundary_label) {
+    if (!ctx || !ctx->analyzer || !arg_node)
+        return;
+    AstNode *inner = arg_node->type == AST_MOVE_EXPR ? arg_node->as.move_expr.expr : NULL;
+    const char *name = inner && inner->type == AST_VARIABLE && inner->as.variable.name
+                           ? inner->as.variable.name
+                           : "?";
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node->line ? arg_node->line
+                                             : (boundary_node ? boundary_node->line : 0),
+                      .column = arg_node->column ? arg_node->column
+                                                 : (boundary_node ? boundary_node->column : 0)};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "%s move of '%s' requires an owned source; use copy(%s) for local storage or "
+             "declare '%s' with owned",
+             boundary_label ? boundary_label : "cross-coroutine value", name, name, name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
 void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node, AstNode *arg_node,
                                     XrType *arg_type, const char *boundary_label) {
     if (!ctx || !ctx->analyzer || !arg_node)
@@ -3850,8 +3886,13 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
     }
     if (!xa_boundary_transfer_type_needs_explicit(arg_type))
         return;
-    if (arg_node->type == AST_MOVE_EXPR || xa_boundary_arg_is_explicit_copy(arg_node) ||
-        xa_boundary_arg_is_shared(ctx, arg_node))
+    if (arg_node->type == AST_MOVE_EXPR) {
+        if (xa_boundary_arg_is_owned_move(ctx, arg_node))
+            return;
+        xa_report_boundary_local_move(ctx, boundary_node, arg_node, boundary_label);
+        return;
+    }
+    if (xa_boundary_arg_is_explicit_copy(arg_node) || xa_boundary_arg_is_shared(ctx, arg_node))
         return;
 
     XrLocation loc = {.file = ctx->file_path,
@@ -3861,8 +3902,8 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
                                                  : (boundary_node ? boundary_node->column : 0)};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "%s transfer of type '%s' requires explicit copy(...) or move; use shared for "
-             "shared identity",
+             "%s transfer of type '%s' requires explicit copy(...) or move of an owned source; "
+             "use shared for shared identity",
              boundary_label ? boundary_label : "cross-coroutine value",
              xr_type_to_string(arg_type));
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
