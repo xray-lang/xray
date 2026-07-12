@@ -2012,9 +2012,7 @@ static uint8_t xi_pointer_pointee_ffi(struct XrType *ptr_type) {
 }
 
 static bool xi_pointer_pointee_is_u8(struct XrType *ptr_type) {
-    struct XrType *pointee =
-        (ptr_type && XR_TYPE_IS_POINTER(ptr_type)) ? ptr_type->container.element_type : NULL;
-    return pointee && XR_TYPE_IS_INT(pointee) && pointee->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_pointer(ptr_type);
 }
 
 /* Build the scaled address `ptr + idx * sizeof(pointee)` as a raw-pointer SSA

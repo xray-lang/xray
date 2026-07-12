@@ -299,6 +299,31 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_UNION(t) ((t)->kind == XR_KIND_UNION)
 #define XR_TYPE_IS_POINTER(t) ((t)->kind == XR_KIND_POINTER)
 
+static inline bool xr_type_is_exact_u8(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_U8;
+}
+
+static inline bool xr_type_is_u8_array(const XrType *type) {
+    return type && type->kind == XR_KIND_ARRAY && xr_type_is_exact_u8(type->container.element_type);
+}
+
+static inline bool xr_type_is_u8_span(const XrType *type) {
+    return type && type->kind == XR_KIND_SPAN && xr_type_is_exact_u8(type->container.element_type);
+}
+
+static inline bool xr_type_is_u8_view(const XrType *type) {
+    return type && type->kind == XR_KIND_VIEW && xr_type_is_exact_u8(type->container.element_type);
+}
+
+static inline bool xr_type_is_u8_slice(const XrType *type) {
+    return xr_type_is_u8_span(type) || xr_type_is_u8_view(type);
+}
+
+static inline bool xr_type_is_u8_pointer(const XrType *type) {
+    return type && type->kind == XR_KIND_POINTER &&
+           xr_type_is_exact_u8(type->container.element_type);
+}
+
 #define XR_UNION_MAX_MEMBERS 6
 
 // Derive base rep ignoring nullable flag (for nullable optimization)

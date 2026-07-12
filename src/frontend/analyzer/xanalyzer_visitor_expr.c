@@ -72,17 +72,11 @@ static XrType *class_info_field_type(XaInferContext *ctx, XrClassInfo *info, con
 }
 
 static bool xa_type_is_bytes(XrType *type) {
-    if (!type || !XR_TYPE_IS_ARRAY(type) || !type->container.element_type)
-        return false;
-    XrType *elem = type->container.element_type;
-    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_array(type);
 }
 
 static bool xa_type_is_bytespan(XrType *type) {
-    if (!type || !XR_TYPE_IS_SPAN(type) || !type->container.element_type)
-        return false;
-    XrType *elem = type->container.element_type;
-    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_span(type);
 }
 
 static bool xa_type_is_pod_span_elem(XrType *type) {
@@ -100,10 +94,7 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
 }
 
 static bool xa_type_is_raw_u8_ptr(XrType *type) {
-    if (!type || !XR_TYPE_IS_POINTER(type) || !type->container.element_type)
-        return false;
-    XrType *elem = type->container.element_type;
-    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+    return xr_type_is_u8_pointer(type);
 }
 
 static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, AstNode *object,
