@@ -1829,6 +1829,20 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
     sym->location.line = node->line;
     sym->is_const = true;
+    XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
+    XaSymbol *saved_signature_function = signature_scope ? signature_scope->function_symbol : NULL;
+    if (fn->type_param_count > 0 && fn->type_params) {
+        const char **type_param_names = xr_malloc(sizeof(const char *) * fn->type_param_count);
+        if (type_param_names) {
+            for (int i = 0; i < fn->type_param_count; i++)
+                type_param_names[i] = fn->type_params[i] ? fn->type_params[i]->name : NULL;
+            xa_symbol_links_set_type_params(&sym->links, type_param_names, NULL, NULL,
+                                            fn->type_param_count);
+            xr_free(type_param_names);
+        }
+        if (signature_scope)
+            signature_scope->function_symbol = sym;
+    }
 
     // Build function type and collect param names
     XrType **param_types = NULL;
@@ -1841,6 +1855,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         if (!param_types || !param_names) {
             xr_free(param_types);
             xr_free(param_names);
+            if (signature_scope)
+                signature_scope->function_symbol = saved_signature_function;
             return;
         }
         for (int i = 0; i < fn->param_count; i++) {
@@ -1896,6 +1912,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         if (tp_names != tp_buf)
             xr_free((void *) tp_names);
     }
+    if (signature_scope)
+        signature_scope->function_symbol = saved_signature_function;
 
     for (int i = 0; i < fn->param_count; i++) {
         char context[160];
@@ -2789,27 +2807,36 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Create class symbol
-    XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
-    sym->location.line = node->line;
-
-    xa_visit_add_symbol_checked(ctx, sym, 0);
-
-    /* Write back resolved symbol ID for Xi lowering (shared binding key). */
-    cls->symbol_id = sym->id;
-
-    // Create class info
-    XrClassInfo *info = xa_class_info_new(cls->name);
-    info->explicit_final = cls->explicit_final;
-    info->location =
-        (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
-    if (cls->super_name) {
-        info->base_name = xr_strdup(cls->super_name);
+    XaSymbol *sym =
+        cls->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id) : NULL;
+    if (!sym && cls->name)
+        sym = xa_scope_lookup_local(ctx->analyzer->current_scope, cls->name);
+    if (!sym) {
+        sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
+        sym->location.line = node->line;
+        xa_visit_add_symbol_checked(ctx, sym, 0);
+        cls->symbol_id = sym->id;
     }
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    links->class_info = info;
-    links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
+    XrClassInfo *info = links ? links->class_info : NULL;
+    if (!info) {
+        info = xa_class_info_new(cls->name);
+        info->explicit_final = cls->explicit_final;
+        info->location =
+            (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
+        if (cls->super_name) {
+            info->base_name = xr_strdup(cls->super_name);
+        }
+        links->class_info = info;
+    } else {
+        info->explicit_final = cls->explicit_final;
+        info->location =
+            (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
+    }
+    if (!links->type) {
+        links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
+    }
     links->type->instance.class_ref = info;
     if (is_aggregate_decl) {
         links->type->is_value_type = true;
@@ -3226,6 +3253,16 @@ skip_layout:
             method_sym->mutates_receiver =
                 !md->is_static && xa_method_body_mutates_receiver(md->body, info);
             xa_visit_add_symbol_checked(ctx, method_sym, 0);
+            XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+            XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
+            XaSymbol *saved_signature_function =
+                signature_scope ? signature_scope->function_symbol : NULL;
+            if (md->type_param_count > 0 && md->type_param_names) {
+                xa_symbol_links_set_type_params(method_links, (const char **) md->type_param_names,
+                                                NULL, NULL, md->type_param_count);
+                if (signature_scope)
+                    signature_scope->function_symbol = method_sym;
+            }
 
             // Build method type
             XrType **param_types = NULL;
@@ -3309,6 +3346,8 @@ skip_layout:
                 ret_type = resolve_class_to_type_param(
                     NULL, ret_type, (const char **) md->type_param_names, md->type_param_count);
             }
+            if (signature_scope)
+                signature_scope->function_symbol = saved_signature_function;
 
             XrType *method_type = xr_type_new_function(ctx->analyzer->isolate, param_types,
                                                        md->param_count, ret_type, md->is_variadic);
@@ -3332,7 +3371,6 @@ skip_layout:
                 }
             }
 
-            XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
             method_links->type = method_type;
             method_links->file_path = ctx->file_path;
 

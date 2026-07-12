@@ -2341,10 +2341,87 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     }
 }
 
+static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node);
+
+static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return;
+    bool is_struct_decl = node->type == AST_STRUCT_DECL;
+    bool is_union_decl = node->type == AST_UNION_DECL;
+    if (node->type != AST_CLASS_DECL && !is_struct_decl && !is_union_decl)
+        return;
+
+    ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
+                         : is_struct_decl               ? &node->as.struct_decl
+                                                        : &node->as.union_decl;
+    if (!cls->name || cls->symbol_id != 0)
+        return;
+
+    XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
+    sym->location.line = node->line;
+    xa_visit_add_symbol_checked(ctx, sym, 0);
+    cls->symbol_id = sym->id;
+
+    XrClassInfo *info = xa_class_info_new(cls->name);
+    info->explicit_final = cls->explicit_final;
+    info->location =
+        (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
+    if (cls->super_name)
+        info->base_name = xr_strdup(cls->super_name);
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    links->class_info = info;
+    links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
+    links->type->instance.class_ref = info;
+    if (is_struct_decl || is_union_decl)
+        links->type->is_value_type = true;
+}
+
+static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_ENUM_DECL)
+        return;
+    EnumDeclNode *edecl = &node->as.enum_decl;
+    if (!edecl->name || edecl->symbol_id != 0)
+        return;
+
+    XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
+    sym->location.line = node->line;
+    sym->is_const = true;
+    xa_visit_add_symbol_checked(ctx, sym, 0);
+    edecl->symbol_id = sym->id;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
+    links->declared_type = links->type;
+    links->class_info = xa_class_info_new(edecl->name);
+    if (edecl->type_param_count > 0 && edecl->type_params) {
+        const char **type_param_names =
+            xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
+        if (type_param_names) {
+            for (int i = 0; i < edecl->type_param_count; i++)
+                type_param_names[i] = edecl->type_params[i] ? edecl->type_params[i]->name : NULL;
+            xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
+                                            edecl->type_param_count);
+            xr_free(type_param_names);
+        }
+    }
+}
+
 // xa_visit_collect_function_decl_only / xa_visit_collect_function_body
 // Cross-TU: also called from xa_visit_collect_function_body() in
 // xanalyzer_visitor_decl.c for nested function bodies.
 void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts, int count) {
+    // Phase -0.5: imports must be visible before signature and field type
+    // resolution. Strict type lookup cannot depend on the old unknown class-name
+    // fallback for imported declaration types.
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = stmts[i];
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_IMPORT_STMT)
+            xa_visit_collect_import(ctx, stmt);
+    }
+
     // Phase 0: register every interface declaration first so that any class
     // body parsed in Phase 1 can resolve `implements Foo` against a real
     // symbol (Foo could appear before or after the class in source order).
@@ -2371,6 +2448,31 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
                    stmt->as.export_stmt.declaration->type == AST_CONST_DECL) {
             xa_visit_precollect_const_decl(ctx, stmt->as.export_stmt.declaration);
+        }
+    }
+
+    // Phase 0.75: predeclare aggregate/class/enum names before function
+    // signatures are resolved. This keeps legitimate same-module forward type
+    // references out of the generic "undefined type" path.
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = stmts[i];
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_CLASS_DECL || stmt->type == AST_STRUCT_DECL ||
+            stmt->type == AST_UNION_DECL) {
+            xa_visit_predeclare_class_decl(ctx, stmt);
+        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
+            AstNode *decl = stmt->as.export_stmt.declaration;
+            if (decl->type == AST_CLASS_DECL || decl->type == AST_STRUCT_DECL ||
+                decl->type == AST_UNION_DECL) {
+                xa_visit_predeclare_class_decl(ctx, decl);
+            }
+        }
+        if (stmt->type == AST_ENUM_DECL) {
+            xa_visit_predeclare_enum_decl(ctx, stmt);
+        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
+                   stmt->as.export_stmt.declaration->type == AST_ENUM_DECL) {
+            xa_visit_predeclare_enum_decl(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -2410,12 +2512,14 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             AstNode *decl = stmt->as.export_stmt.declaration;
             if (decl->type == AST_FUNCTION_DECL) {
                 xa_visit_collect_function_body(ctx, decl);
-            } else if (decl->type != AST_CLASS_DECL && decl->type != AST_STRUCT_DECL &&
-                       decl->type != AST_UNION_DECL && decl->type != AST_ENUM_DECL) {
+            } else if (decl->type != AST_IMPORT_STMT && decl->type != AST_CLASS_DECL &&
+                       decl->type != AST_STRUCT_DECL && decl->type != AST_UNION_DECL &&
+                       decl->type != AST_ENUM_DECL) {
                 xa_visit_collect(ctx, decl);
             }
-        } else if (stmt->type != AST_CLASS_DECL && stmt->type != AST_STRUCT_DECL &&
-                   stmt->type != AST_UNION_DECL && stmt->type != AST_ENUM_DECL) {
+        } else if (stmt->type != AST_IMPORT_STMT && stmt->type != AST_CLASS_DECL &&
+                   stmt->type != AST_STRUCT_DECL && stmt->type != AST_UNION_DECL &&
+                   stmt->type != AST_ENUM_DECL) {
             /* Bare block statements need a scope so inner var/const
              * declarations get distinct symbol_ids from outer variables
              * with the same name (variable shadowing).  Matches Pass 2's
@@ -2729,15 +2833,25 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         case AST_ENUM_DECL: {
             EnumDeclNode *edecl = &node->as.enum_decl;
             if (edecl->name) {
-                XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
-                sym->location.line = node->line;
-                sym->is_const = true;
-                xa_visit_add_symbol_checked(ctx, sym, 0);
-                edecl->symbol_id = sym->id;
+                XaSymbol *sym =
+                    edecl->symbol_id
+                        ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, edecl->symbol_id)
+                        : NULL;
+                if (!sym)
+                    sym = xa_scope_lookup_local(ctx->analyzer->current_scope, edecl->name);
+                if (!sym) {
+                    sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
+                    sym->location.line = node->line;
+                    sym->is_const = true;
+                    xa_visit_add_symbol_checked(ctx, sym, 0);
+                    edecl->symbol_id = sym->id;
+                }
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-                links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
+                if (!links->type)
+                    links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
-                XrClassInfo *enum_info = xa_class_info_new(edecl->name);
+                XrClassInfo *enum_info =
+                    links->class_info ? links->class_info : xa_class_info_new(edecl->name);
                 links->class_info = enum_info;
                 if (edecl->type_param_count > 0 && edecl->type_params) {
                     const char **type_param_names =
@@ -2752,6 +2866,11 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         xr_free(type_param_names);
                     }
                 }
+                XaScope *enum_payload_scope = ctx->analyzer->current_scope;
+                XaSymbol *saved_enum_class_symbol =
+                    enum_payload_scope ? enum_payload_scope->class_symbol : NULL;
+                if (enum_payload_scope)
+                    enum_payload_scope->class_symbol = sym;
 
                 // Detect ADT enum: any variant with payload_count > 0
                 bool is_adt = false;
@@ -2837,6 +2956,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         xa_enum_info_free(enum_meta);
                     }
                 }
+                if (enum_payload_scope)
+                    enum_payload_scope->class_symbol = saved_enum_class_symbol;
 
                 if (enum_info && edecl->method_count > 0) {
                     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
