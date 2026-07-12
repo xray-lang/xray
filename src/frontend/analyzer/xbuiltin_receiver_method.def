@@ -1,0 +1,65 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xbuiltin_receiver_method.def - Canonical receiver-specialized builtin methods.
+ *
+ * X-Macro format:
+ *   XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2,
+ *                      param_count, min_params, type_params, effect, lowering)
+ */
+
+#ifndef XB_RECEIVER_METHOD
+#error "Define XB_RECEIVER_METHOD before including xbuiltin_receiver_method.def"
+#endif
+
+/* --- Array<U8> methods --- */
+XB_RECEIVER_METHOD(U8_ARRAY_APPEND_FROM, "appendFrom", XA_BUILTIN_RECEIVER_U8_ARRAY,
+                   XA_BUILTIN_TYPE_U8_ARRAY, XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_NONE,
+                   XA_BUILTIN_TYPE_NONE, 1, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "xi.byte.array.copy.from")
+XB_RECEIVER_METHOD(U8_ARRAY_REPEAT_FROM, "repeatFrom", XA_BUILTIN_RECEIVER_U8_ARRAY,
+                   XA_BUILTIN_TYPE_U8_ARRAY, XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_INT,
+                   XA_BUILTIN_TYPE_NONE, 2, 2, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "xi.byte.array.repeat.from")
+XB_RECEIVER_METHOD(U8_ARRAY_RESIZE, "resize", XA_BUILTIN_RECEIVER_U8_ARRAY,
+                   XA_BUILTIN_TYPE_U8_ARRAY, XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_U8,
+                   XA_BUILTIN_TYPE_NONE, 2, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "array.resize")
+
+/* --- Slice<U8> methods --- */
+XB_RECEIVER_METHOD(U8_SLICE_LOAD, "load", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_PARAM_0, XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_ENDIAN,
+                   XA_BUILTIN_TYPE_NONE, 2, 1, XA_BUILTIN_TYPE_PARAMS_T,
+                   XA_BUILTIN_EFFECT_READS_RECEIVER, "xi.byte.slice.load")
+XB_RECEIVER_METHOD(U8_SLICE_STORE, "store", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_UNIT, XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_PARAM_0,
+                   XA_BUILTIN_TYPE_ENDIAN, 3, 2, XA_BUILTIN_TYPE_PARAMS_T,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "xi.byte.slice.store")
+XB_RECEIVER_METHOD(U8_SLICE_FILL, "fill", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_U8, XA_BUILTIN_TYPE_NONE,
+                   XA_BUILTIN_TYPE_NONE, 1, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "xi.byte.slice.fill")
+XB_RECEIVER_METHOD(U8_SLICE_COPY_FROM, "copyFrom", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_NONE,
+                   XA_BUILTIN_TYPE_NONE, 1, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "xi.byte.slice.copy")
+XB_RECEIVER_METHOD(U8_SLICE_COMPARE, "compare", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_NONE,
+                   XA_BUILTIN_TYPE_NONE, 1, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_READS_RECEIVER, "xi.byte.slice.compare")
+XB_RECEIVER_METHOD(U8_SLICE_COMMON_PREFIX, "commonPrefix", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_NONE,
+                   XA_BUILTIN_TYPE_NONE, 1, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_READS_RECEIVER, "xi.byte.slice.common.prefix")
+XB_RECEIVER_METHOD(U8_SLICE_REPEAT_FROM, "repeatFrom", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_U8_SLICE, XA_BUILTIN_TYPE_INT, XA_BUILTIN_TYPE_INT,
+                   XA_BUILTIN_TYPE_INT, 3, 3, XA_BUILTIN_TYPE_PARAMS_NONE,
+                   XA_BUILTIN_EFFECT_MUTATES_RECEIVER, "xi.byte.slice.repeat")
+XB_RECEIVER_METHOD(U8_SLICE_REINTERPRET, "reinterpret", XA_BUILTIN_RECEIVER_U8_SLICE,
+                   XA_BUILTIN_TYPE_SLICE_OF_PARAM_0, XA_BUILTIN_TYPE_NONE, XA_BUILTIN_TYPE_NONE,
+                   XA_BUILTIN_TYPE_NONE, 0, 0, XA_BUILTIN_TYPE_PARAMS_T,
+                   XA_BUILTIN_EFFECT_READS_RECEIVER, "xi.span.reinterpret")

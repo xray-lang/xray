@@ -306,26 +306,119 @@ static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
     return xr_type_new_function(ctx->analyzer->isolate, params, 1, ret, false);
 }
 
-static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
-    if (!xa_type_is_bytes(receiver) || !name)
-        return NULL;
+typedef enum {
+    XA_BUILTIN_RECEIVER_U8_ARRAY,
+    XA_BUILTIN_RECEIVER_U8_SLICE,
+} XaBuiltinReceiverKind;
+
+typedef enum {
+    XA_BUILTIN_TYPE_NONE,
+    XA_BUILTIN_TYPE_INT,
+    XA_BUILTIN_TYPE_U8,
+    XA_BUILTIN_TYPE_U8_ARRAY,
+    XA_BUILTIN_TYPE_U8_SLICE,
+    XA_BUILTIN_TYPE_UNIT,
+    XA_BUILTIN_TYPE_ENDIAN,
+    XA_BUILTIN_TYPE_PARAM_0,
+    XA_BUILTIN_TYPE_SLICE_OF_PARAM_0,
+} XaBuiltinMethodTypeKind;
+
+typedef enum {
+    XA_BUILTIN_TYPE_PARAMS_NONE,
+    XA_BUILTIN_TYPE_PARAMS_T,
+} XaBuiltinMethodTypeParams;
+
+typedef enum {
+    XA_BUILTIN_EFFECT_READS_RECEIVER,
+    XA_BUILTIN_EFFECT_MUTATES_RECEIVER,
+} XaBuiltinMethodEffect;
+
+typedef struct XaBuiltinReceiverMethodSpec {
+    const char *id;
+    const char *source_name;
+    XaBuiltinReceiverKind receiver;
+    XaBuiltinMethodTypeKind result;
+    XaBuiltinMethodTypeKind params[3];
+    int param_count;
+    int min_params;
+    XaBuiltinMethodTypeParams type_params;
+    XaBuiltinMethodEffect effect;
+    const char *lowering;
+} XaBuiltinReceiverMethodSpec;
+
+static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
+#define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
+                           type_params, effect, lowering)                                          \
+    {#id,         source_name, receiver,    result, {p0, p1, p2},                                  \
+     param_count, min_params,  type_params, effect, lowering},
+#include "xbuiltin_receiver_method.def"
+#undef XB_RECEIVER_METHOD
+};
+
+static bool xa_builtin_receiver_matches(XrType *receiver, XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver);
+    }
+    return false;
+}
+
+static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMethodTypeKind kind,
+                                                XrType *type_param0) {
     XrVMRuntime *X = ctx->analyzer->isolate;
-    XrType *t_int = xr_type_new_int(X);
-    XrType *t_bytes = xr_type_new_u8_array(X);
-    XrType *t_bytespan = xr_type_new_u8_slice(X);
-    if (strcmp(name, "appendFrom") == 0) {
-        XrType *params[1] = {t_bytespan};
-        return xr_type_new_function(X, params, 1, t_bytes, false);
+    switch (kind) {
+        case XA_BUILTIN_TYPE_NONE:
+            return NULL;
+        case XA_BUILTIN_TYPE_INT:
+            return xr_type_new_int(X);
+        case XA_BUILTIN_TYPE_U8:
+            return xr_type_new_int_width(X, XR_NATIVE_U8);
+        case XA_BUILTIN_TYPE_U8_ARRAY:
+            return xr_type_new_u8_array(X);
+        case XA_BUILTIN_TYPE_U8_SLICE:
+            return xr_type_new_u8_slice(X);
+        case XA_BUILTIN_TYPE_UNIT:
+            return xr_type_new_unit(X);
+        case XA_BUILTIN_TYPE_ENDIAN:
+            return xr_type_new_enum(X, "Endian");
+        case XA_BUILTIN_TYPE_PARAM_0:
+            return type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0);
+        case XA_BUILTIN_TYPE_SLICE_OF_PARAM_0:
+            return xr_type_new_span(X,
+                                    type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0));
     }
-    if (strcmp(name, "repeatFrom") == 0) {
-        XrType *params[2] = {t_int, t_int};
-        return xr_type_new_function(X, params, 2, t_bytes, false);
-    }
-    if (strcmp(name, "resize") == 0) {
-        XrType *params[2] = {t_int, xr_type_new_int_width(X, XR_NATIVE_U8)};
-        XrType *fn = xr_type_new_function(X, params, 2, t_bytes, false);
+    return xr_type_new_unknown(X);
+}
+
+static XrType *xa_builtin_receiver_method_type(XaInferContext *ctx, XrType *receiver,
+                                               const char *name) {
+    if (!ctx || !ctx->analyzer || !name)
+        return NULL;
+    for (size_t i = 0;
+         i < sizeof(xa_builtin_receiver_methods) / sizeof(xa_builtin_receiver_methods[0]); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (strcmp(spec->source_name, name) != 0 ||
+            !xa_builtin_receiver_matches(receiver, spec->receiver))
+            continue;
+
+        XrVMRuntime *X = ctx->analyzer->isolate;
+        XrType *type_param0 = spec->type_params == XA_BUILTIN_TYPE_PARAMS_T
+                                  ? xr_type_new_type_param(X, "T", 0)
+                                  : NULL;
+        XrType *params[3] = {NULL, NULL, NULL};
+        for (int p = 0; p < spec->param_count && p < 3; p++)
+            params[p] = xa_builtin_method_component_type(ctx, spec->params[p], type_param0);
+        XrType *ret = xa_builtin_method_component_type(ctx, spec->result, type_param0);
+        XrType *fn = xr_type_new_function(X, spec->param_count > 0 ? params : NULL,
+                                          spec->param_count, ret, false);
+        if (fn && spec->type_params == XA_BUILTIN_TYPE_PARAMS_T) {
+            const char *names[1] = {"T"};
+            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+        }
         if (fn)
-            fn->function.min_params = 1;
+            fn->function.min_params = spec->min_params;
         return fn;
     }
     return NULL;
@@ -375,65 +468,6 @@ static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType
         return false;
     xa_report_view_expr_requires_target(ctx, node, name);
     return true;
-}
-
-static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
-    if (!xa_type_is_bytespan(receiver) || !name)
-        return NULL;
-
-    XrVMRuntime *X = ctx->analyzer->isolate;
-    if (strcmp(name, "load") == 0) {
-        XrType *params[2] = {xr_type_new_int(X), xr_type_new_enum(X, "Endian")};
-        XrType *ret = xr_type_new_type_param(X, "T", 0);
-        XrType *fn = xr_type_new_function(X, params, 2, ret, false);
-        if (fn) {
-            const char *names[1] = {"T"};
-            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
-            fn->function.min_params = 1;
-        }
-        return fn;
-    }
-    if (strcmp(name, "store") == 0) {
-        XrType *ret = xr_type_new_type_param(X, "T", 0);
-        XrType *params[3] = {xr_type_new_int(X), ret, xr_type_new_enum(X, "Endian")};
-        XrType *fn = xr_type_new_function(X, params, 3, xr_type_new_unit(X), false);
-        if (fn) {
-            const char *names[1] = {"T"};
-            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
-            fn->function.min_params = 2;
-        }
-        return fn;
-    }
-    if (strcmp(name, "fill") == 0) {
-        XrType *params[1] = {xr_type_new_int_width(X, XR_NATIVE_U8)};
-        return xr_type_new_function(X, params, 1, xr_type_new_u8_slice(X), false);
-    }
-    if (strcmp(name, "copyFrom") == 0) {
-        XrType *params[1] = {xr_type_new_u8_slice(X)};
-        return xr_type_new_function(X, params, 1, xr_type_new_u8_slice(X), false);
-    }
-    if (strcmp(name, "compare") == 0) {
-        XrType *params[1] = {xr_type_new_u8_slice(X)};
-        return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
-    }
-    if (strcmp(name, "commonPrefix") == 0) {
-        XrType *params[1] = {xr_type_new_u8_slice(X)};
-        return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
-    }
-    if (strcmp(name, "repeatFrom") == 0) {
-        XrType *params[3] = {xr_type_new_int(X), xr_type_new_int(X), xr_type_new_int(X)};
-        return xr_type_new_function(X, params, 3, xr_type_new_u8_slice(X), false);
-    }
-    if (strcmp(name, "reinterpret") == 0) {
-        XrType *ret_elem = xr_type_new_type_param(X, "T", 0);
-        XrType *fn = xr_type_new_function(X, NULL, 0, xr_type_new_span(X, ret_elem), false);
-        if (fn) {
-            const char *names[1] = {"T"};
-            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
-        }
-        return fn;
-    }
-    return NULL;
 }
 
 static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
@@ -1785,9 +1819,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (xa_contextual_view_method_without_target(ctx, obj_type, ma->name, node))
         return xr_type_new_unknown(NULL);
 
-    XrType *bytes_method = xa_bytes_method_type(ctx, obj_type, ma->name);
-    if (bytes_method)
-        return bytes_method;
+    XrType *builtin_receiver_method = xa_builtin_receiver_method_type(ctx, obj_type, ma->name);
+    if (builtin_receiver_method)
+        return builtin_receiver_method;
 
     XrType *string_view_method = xa_string_view_method_type(ctx, obj_type, ma->name, node);
     if (string_view_method)
@@ -1796,10 +1830,6 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     XrType *array_view_method = xa_array_view_method_type(ctx, obj_type, ma->name, node);
     if (array_view_method)
         return array_view_method;
-
-    XrType *bytespan_method = xa_bytespan_method_type(ctx, obj_type, ma->name);
-    if (bytespan_method)
-        return bytespan_method;
 
     XrType *span_method = xa_span_method_type(ctx, obj_type, ma->name);
     if (span_method)
