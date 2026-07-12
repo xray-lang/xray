@@ -23,7 +23,7 @@
 typedef enum {
     XR_ELEM_ANY = 0, /* XrValue[] — GC-traced, default */
     XR_ELEM_I8,      /* int8_t[]  */
-    XR_ELEM_U8,      /* uint8_t[] (replaces Bytes) */
+    XR_ELEM_U8,      /* uint8_t[] byte-array lane */
     XR_ELEM_I16,     /* int16_t[] */
     XR_ELEM_U16,     /* uint16_t[] */
     XR_ELEM_I32,     /* int32_t[] */

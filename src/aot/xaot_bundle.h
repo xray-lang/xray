@@ -278,8 +278,8 @@ typedef enum XaotAliasKind {
 } XaotAliasKind;
 
 enum {
-    /* Backing storage allocated by this function (array literal / Bytes /
-     * with_capacity — a fresh malloc nothing else can point at yet). */
+    /* Backing storage allocated by this function (array literal / Array<byte>
+     * constructor / with_capacity — a fresh malloc nothing else can point at yet). */
     XAOT_ALIAS_EV_FRESH_ALLOC = 1u << 0,
     /* Every XI_INDEX_GET / XI_INDEX_SET on the array has a proven bounds
      * plan, so every element access is emitted through the _adN cache and

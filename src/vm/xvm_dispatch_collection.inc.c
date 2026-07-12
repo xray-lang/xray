@@ -2416,7 +2416,7 @@ vmcase(OP_INDEX_SET) {
 vmcase(OP_SLICE) {
     /* OP_SLICE: slice operation
     ** R[A] = R[B][R[C]:R[C+1]]
-    ** - R[B]: source object (Array/String/Bytes)
+    ** - R[B]: source object (Array/String/Array<byte>)
     ** - R[C]: start index (0 = from beginning)
     ** - R[C+1]: end index (large positive value = to end)
     */

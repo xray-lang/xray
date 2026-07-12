@@ -4793,7 +4793,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     expected_args = 4;
             }
             if (bytes_op) {
-                /* Strict dynamic→int boundary on Bytes intrinsic offsets/counts:
+                /* Strict dynamic-to-int boundary on byte-array intrinsic offsets/counts:
                  * a Json/dynamic argument is verified at runtime via OP_CHECKTYPE
                  * so VM and AOT raise the same TypeError instead of silently
                  * coercing. */
