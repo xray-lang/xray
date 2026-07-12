@@ -2592,6 +2592,12 @@ static bool cg_array_value_type_is_u8_contiguous(XiCgenCtx *ctx, const XiValue *
            cg_array_elem_info_is_u8(&info);
 }
 
+static bool cg_call_method_matches_receiver_registry_id(const XiValue *v,
+                                                        XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    return spec && cg_method_name_is(v, spec->source_name, cg_method_sym(spec->source_name));
+}
+
 static bool cg_array_elem_info_from_storage_plan(const XaotArrayStoragePlan *plan,
                                                  CgArrayElemInfo *out) {
     return plan && cg_array_elem_info_from_container_plan(&plan->elem, out);
@@ -3151,8 +3157,7 @@ static bool cg_array_fill_loop_match(XiCgenCtx *ctx, const XiFunc *f, const XiVa
         return false;
     if (!f)
         f = push->block->func;
-    const char *method = (const char *) push->aux;
-    if (!method || strcmp(method, "push") != 0)
+    if (!cg_call_method_matches_receiver_registry_id(push, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH))
         return false;
     if (push->xg_capacity_op_id != XG_NO_ID) {
         const XaotCapacityPlan *plan = xaot_bundle_find_capacity_plan(
@@ -3408,14 +3413,17 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_LEN:
             return arg_index == 0;
         case XI_CALL_METHOD: {
-            const char *method = (const char *) user->aux;
-            if (!method)
-                return false;
-            if (arg_index == 0 &&
-                (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
-                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0))
+            if (arg_index == 0 && (cg_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
+                                   cg_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
+                                   cg_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
+                                   cg_call_method_matches_receiver_registry_id(
+                                       user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM)))
                 return true;
-            if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
+            if (arg_index == 1 && cg_call_method_matches_receiver_registry_id(
+                                      user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM))
                 return true;
             return false;
         }
@@ -4580,18 +4588,19 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
 static bool cg_array_call_is_direct_bytes_mutator_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
                                                                   const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux)
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
         return false;
 
-    const char *method = (const char *) v->aux;
     CgArrayElemInfo dst_info;
-    if (strcmp(method, "push") == 0 && v->nargs == 2) {
+    if (cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) &&
+        v->nargs == 2) {
         return (cg_array_value_storage_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
                 cg_array_elem_info_is_u8(&dst_info)) ||
                cg_array_value_type_is_u8_contiguous(ctx, v->args[0]);
     }
-    if (strcmp(method, "set") == 0 && v->nargs == 3) {
+    if (cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_SET) &&
+        v->nargs == 3) {
         return (cg_array_value_storage_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
                 cg_array_elem_info_is_u8(&dst_info)) ||
@@ -4607,7 +4616,9 @@ static bool cg_array_call_is_bytes_append_trusted_nothrow(XiCgenCtx *ctx, const 
         return false;
 
     CgArrayElemInfo dst_info;
-    return cg_method_name_is(v, "appendFrom", XRT_SYM_APPEND_FROM) && v->nargs == 2 &&
+    return cg_call_method_matches_receiver_registry_id(
+               v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) &&
+           v->nargs == 2 &&
            cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
            cg_span_value_u8_info(ctx, v->args[1], NULL);
@@ -4620,7 +4631,9 @@ static bool cg_array_call_is_bytes_repeat_trusted_nothrow(XiCgenCtx *ctx, const 
         return false;
 
     CgArrayElemInfo dst_info;
-    return cg_method_name_is(v, "repeatFrom", XRT_SYM_REPEATFROM) && v->nargs == 3 &&
+    return cg_call_method_matches_receiver_registry_id(
+               v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM) &&
+           v->nargs == 3 &&
            cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
                                             CG_ARRAY_STORAGE_MUTABLE) &&
            cg_byte_array_unchecked_int_arg(v->args[1]) &&
@@ -4895,8 +4908,8 @@ static bool cg_array_call_is_typed_push(XiCgenCtx *ctx, const XiFunc *f, const X
     CgArrayElemInfo info;
     if (!call || call->op != XI_CALL_METHOD || call->nargs != 2)
         return false;
-    const char *method = (const char *) call->aux;
-    return method && strcmp(method, "push") == 0 &&
+    return cg_call_method_matches_receiver_registry_id(call,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) &&
            cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE);
 }
 

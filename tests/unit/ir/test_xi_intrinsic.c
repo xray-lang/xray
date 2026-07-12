@@ -16,6 +16,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "../../src/ir/xi_intrinsic_flags.h"
+#include "../../src/frontend/analyzer/xbuiltin_receiver_registry.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
 typedef enum {
@@ -202,6 +203,34 @@ static void test_builtin_receiver_registry_method_symbols(void) {
     }
 }
 
+static void test_builtin_receiver_registry_method_ids(void) {
+    ASSERT_TRUE(xa_builtin_receiver_method_count() == XA_BUILTIN_RECEIVER_METHOD_COUNT,
+                "receiver registry method id count must match table count");
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        char msg[192];
+        const XaBuiltinReceiverMethodSpec *spec =
+            xa_builtin_receiver_method_by_id((XaBuiltinReceiverMethodId) i);
+        snprintf(msg, sizeof(msg), "receiver registry method id %zu missing table entry", i);
+        ASSERT_TRUE(spec != NULL, msg);
+        if (!spec)
+            continue;
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' id/table order mismatch",
+                 spec->id);
+        ASSERT_TRUE(spec->method_id == (XaBuiltinReceiverMethodId) i, msg);
+    }
+
+    const XaBuiltinReceiverMethodSpec *append =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM);
+    ASSERT_TRUE(append && append->receiver == XA_BUILTIN_RECEIVER_U8_ARRAY &&
+                    strcmp(append->source_name, "appendFrom") == 0,
+                "U8_ARRAY_APPEND_FROM registry id must resolve appendFrom");
+    const XaBuiltinReceiverMethodSpec *repeat =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM);
+    ASSERT_TRUE(repeat && repeat->receiver == XA_BUILTIN_RECEIVER_U8_ARRAY &&
+                    strcmp(repeat->source_name, "repeatFrom") == 0,
+                "U8_ARRAY_REPEAT_FROM registry id must resolve repeatFrom");
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -218,6 +247,7 @@ int main(void) {
     test_method_sym_names();
     test_method_sym_count();
     test_builtin_receiver_registry_method_symbols();
+    test_builtin_receiver_registry_method_ids();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

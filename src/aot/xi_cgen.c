@@ -54,6 +54,7 @@
 #include "../base/xutf8.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../stdlib/xstdlib_defs_generated.h"
 #include <string.h>
@@ -4245,18 +4246,6 @@ static const char *cg_no_alloc_stdlib_alloc_detail(XiCgenCtx *ctx, const char *m
     return cg_no_alloc_generated_stdlib_alloc_detail(ctx, module, name);
 }
 
-typedef enum {
-    XA_BUILTIN_RECEIVER_U8_ARRAY,
-    XA_BUILTIN_RECEIVER_ARRAY,
-    XA_BUILTIN_RECEIVER_U8_SLICE,
-    XA_BUILTIN_RECEIVER_POD_SLICE,
-} CgBuiltinReceiverKind;
-
-typedef enum {
-    XA_BUILTIN_ALLOCATION_NO_HEAP,
-    XA_BUILTIN_ALLOCATION_MAY_HEAP,
-} CgBuiltinMethodAllocation;
-
 static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
@@ -4272,7 +4261,7 @@ static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
 }
 
 static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
-                                                 CgBuiltinReceiverKind kind) {
+                                                 XaBuiltinReceiverKind kind) {
     switch (kind) {
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
@@ -4288,7 +4277,7 @@ static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
 }
 
 static const char *cg_builtin_receiver_registry_detail(XiCgenCtx *ctx,
-                                                       CgBuiltinReceiverKind receiver,
+                                                       XaBuiltinReceiverKind receiver,
                                                        const char *method_name) {
     switch (receiver) {
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
@@ -4308,30 +4297,15 @@ static const char *cg_no_alloc_receiver_registry_alloc_detail(XiCgenCtx *ctx,
                                                               const char *method_name) {
     if (!ctx || !receiver_type || !method_name)
         return NULL;
-    static const struct {
-        CgBuiltinReceiverKind receiver;
-        const char *method_name;
-        CgBuiltinMethodAllocation allocation;
-    } registry_methods[] = {
-#define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
-                           type_params, effect, allocation, unsafe_requirement, lowering)          \
-    {receiver, source_name, allocation},
-#define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
-                                    min_params, type_params, effect, allocation,                   \
-                                    unsafe_requirement, lowering)                                  \
-    {receiver, source_name, allocation},
-#include "../frontend/analyzer/xbuiltin_receiver_method.def"
-#undef XB_RECEIVER_VARIADIC_METHOD
-#undef XB_RECEIVER_METHOD
-    };
-    for (size_t i = 0; i < sizeof(registry_methods) / sizeof(registry_methods[0]); i++) {
-        if (registry_methods[i].allocation != XA_BUILTIN_ALLOCATION_MAY_HEAP)
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (spec->allocation != XA_BUILTIN_ALLOCATION_MAY_HEAP)
             continue;
-        if (strcmp(method_name, registry_methods[i].method_name) != 0)
+        if (strcmp(method_name, spec->source_name) != 0)
             continue;
-        if (!cg_builtin_receiver_registry_matches(receiver_type, registry_methods[i].receiver))
+        if (!cg_builtin_receiver_registry_matches(receiver_type, spec->receiver))
             continue;
-        return cg_builtin_receiver_registry_detail(ctx, registry_methods[i].receiver, method_name);
+        return cg_builtin_receiver_registry_detail(ctx, spec->receiver, method_name);
     }
     return NULL;
 }
