@@ -11,6 +11,7 @@
 #include "xaot_verify.h"
 #include "xaot_prepare.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xhash.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_escape.h"
@@ -60,6 +61,9 @@ static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t err
 
 static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
                                                               XgFuncId func_id);
+static const XgParamStorageSummary *
+verify_find_evidence_param_storage_by_id(const XgGlobalEvidence *ev,
+                                         XgParamStorageId requirement_id);
 static XgFuncId verify_find_method_body_func_id(const XgGlobalEvidence *ev, XgMethodId method_id);
 static bool verify_body_summary_anchor(const XaotBundle *bundle, const XiFunc *func,
                                        XgFuncId body_func_id, uint32_t body_effect_bits,
@@ -773,6 +777,81 @@ static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvid
             return &ev->bodies[i];
     }
     return NULL;
+}
+
+static const XgParamStorageSummary *
+verify_find_evidence_param_storage_by_id(const XgGlobalEvidence *ev,
+                                         XgParamStorageId requirement_id) {
+    if (!ev || requirement_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nparam_storages; i++) {
+        if (ev->param_storages[i].requirement_id == requirement_id)
+            return &ev->param_storages[i];
+    }
+    return NULL;
+}
+
+static uint64_t verify_param_storage_fold_bytes(uint64_t h, const void *data, size_t len) {
+    uint64_t part = xr_hash_bytes64(data, len);
+    h ^= part + UINT64_C(0x9e3779b97f4a7c15) + (h << 6) + (h >> 2);
+    return h ? h : 1;
+}
+
+static uint64_t verify_param_storage_fold_u64(uint64_t h, uint64_t value) {
+    return verify_param_storage_fold_bytes(h, &value, sizeof(value));
+}
+
+static uint32_t verify_param_storage_folded32(uint64_t h) {
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
+static bool verify_param_storage_owner_valid(uint8_t owner) {
+    return owner == XR_STORAGE_NONE || owner == XR_STORAGE_OWNED_SYSTEM ||
+           owner == XR_STORAGE_SHARED_SYSTEM;
+}
+
+static bool verify_body_param_storage_vector(const XgGlobalEvidence *ev, const XgBodySummary *body,
+                                             char *errbuf, size_t errbuf_len) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    bool has_requirement = false;
+    if (!ev || !body)
+        return false;
+    if (body->param_storage_count == 0) {
+        if (body->param_storage_start != 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence empty param storage range is stale");
+        if (body->param_storage_key != 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence param storage key lacks vector");
+        return true;
+    }
+    if (body->param_storage_start == XG_NO_ID)
+        return set_error(errbuf, errbuf_len, "AOT global evidence param storage range is missing");
+    hash = verify_param_storage_fold_u64(hash, body->param_storage_count);
+    for (uint32_t i = 0; i < body->param_storage_count; i++) {
+        const XgParamStorageSummary *row = verify_find_evidence_param_storage_by_id(
+            ev, (XgParamStorageId) (body->param_storage_start + i));
+        if (!row)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence param storage range is stale");
+        if (row->owner_func_id != body->func_id || row->param_index != i)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence param storage vector does not re-derive");
+        if (!verify_param_storage_owner_valid(row->storage_owner))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence param storage owner is invalid");
+        if (row->storage_owner != XR_STORAGE_NONE)
+            has_requirement = true;
+        hash = verify_param_storage_fold_u64(hash, (uint64_t) i);
+        hash = verify_param_storage_fold_u64(hash, (uint64_t) row->storage_owner);
+    }
+    if (!has_requirement)
+        return set_error(errbuf, errbuf_len, "AOT global evidence param storage vector is empty");
+    if (body->param_storage_key != verify_param_storage_folded32(hash))
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence param storage key does not re-derive");
+    return true;
 }
 
 static XgFuncId verify_find_method_body_func_id(const XgGlobalEvidence *ev, XgMethodId method_id) {
@@ -2320,6 +2399,10 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                         return set_error(
                             errbuf, errbuf_len,
                             "AOT global evidence direct callsite target body is missing");
+                    if (target_body->param_storage_count > call->arg_count)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence direct callsite param storage is stale");
                 }
                 break;
             case XG_CALL_METHOD:
@@ -2408,6 +2491,27 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 ev->callsites[j].source_node_id == call->source_node_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence callsite source identity is duplicated");
+        }
+    }
+    for (uint32_t i = 0; i < ev->nparam_storages; i++) {
+        const XgParamStorageSummary *row = &ev->param_storages[i];
+        if (row->requirement_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT global evidence param storage has no id");
+        if (!verify_find_evidence_body_by_func(ev, row->owner_func_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence param storage owner body is missing");
+        if (!verify_param_storage_owner_valid(row->storage_owner))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence param storage owner is invalid");
+        for (uint32_t j = i + 1; j < ev->nparam_storages; j++) {
+            const XgParamStorageSummary *other = &ev->param_storages[j];
+            if (other->requirement_id == row->requirement_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence param storage id is duplicated");
+            if (other->owner_func_id == row->owner_func_id &&
+                other->param_index == row->param_index)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence param storage slot is duplicated");
         }
     }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
@@ -2509,6 +2613,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
             default:
                 return set_error(errbuf, errbuf_len, "AOT global evidence body kind is invalid");
         }
+        if (!verify_body_param_storage_vector(ev, body, errbuf, errbuf_len))
+            return false;
         for (uint32_t j = i + 1; j < ev->nbodies; j++) {
             const XgBodySummary *other = &ev->bodies[j];
             if (other->module_id == body->module_id &&

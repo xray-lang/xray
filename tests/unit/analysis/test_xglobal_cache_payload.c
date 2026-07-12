@@ -27,6 +27,7 @@ static void add_sample_module_summary(XgGlobalEvidence *ev) {
 static void add_sample_body_summary(XgGlobalEvidence *ev) {
     XgDeclSummary decl = {0};
     XgBodySummary body = {0};
+    XgParamStorageSummary param = {0};
     XgCallsiteSummary call = {0};
     XgInterfaceObjectUseSummary iface_use = {0};
     XgLinkDependencySummary link = {0};
@@ -49,10 +50,22 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     body.kind = XG_BODY_FUNCTION;
     body.body_hash = UINT64_C(0x123456789abcdef0);
     body.effect_bits = XG_BODY_MAY_CALL;
-    body.param_storage_key = 0x203;
+    body.param_storage_key = UINT32_C(3812009484);
+    body.param_storage_start = 1;
+    body.param_storage_count = 2;
     body.callsite_start = 1;
     body.callsite_count = 1;
     ASSERT_NOT_NULL(xg_global_evidence_add_body(ev, &body));
+
+    param.requirement_id = 1;
+    param.owner_func_id = body.func_id;
+    param.param_index = 0;
+    param.storage_owner = XR_STORAGE_NONE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_param_storage(ev, &param));
+    param.requirement_id = 2;
+    param.param_index = 1;
+    param.storage_owner = XR_STORAGE_OWNED_SYSTEM;
+    ASSERT_NOT_NULL(xg_global_evidence_add_param_storage(ev, &param));
 
     call.callsite_id = 1;
     call.owner_func_id = body.func_id;
@@ -61,6 +74,7 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     call.kind = XG_CALL_DIRECT_FUNC;
     call.static_target_func_id = body.func_id;
     call.method_name_id = xg_name_id("entry");
+    call.arg_count = 2;
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(ev, &call));
 
     iface_use.use_id = 4;
@@ -527,10 +541,11 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(info.body_len, info.payload_bytes);
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-payload v2"));
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-request v1"));
-    ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 callsites=1"));
+    ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 param_storages=2 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
     ASSERT_NOT_NULL(strstr(info.body, "body id=11"));
-    ASSERT_NOT_NULL(strstr(info.body, "param_storage=515"));
+    ASSERT_NOT_NULL(strstr(info.body, "param_storage=3812009484 params=1+2"));
+    ASSERT_NOT_NULL(strstr(info.body, "param-storage id=2 owner=11 index=1 storage=3"));
     ASSERT_NOT_NULL(strstr(info.body, "interface-object-use id=4 interface=41"));
     ASSERT(xg_evidence_cache_payload_request_matches(payload, &expected_request));
     ASSERT(xg_evidence_cache_payload_matches(payload, &expected));
@@ -539,12 +554,16 @@ TEST(cache_payload_parse_exposes_validated_body) {
     materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT(xg_evidence_cache_key_matches(&materialized_key, &expected));
     ASSERT_EQ_UINT(materialized.nbodies, 1);
+    ASSERT_EQ_UINT(materialized.nparam_storages, 2);
     ASSERT_EQ_UINT(materialized.ncallsites, 1);
     ASSERT_EQ_UINT(materialized.ninterface_object_uses, 1);
     ASSERT_EQ_UINT(materialized.nlink_deps, 1);
     ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
     ASSERT_EQ_UINT(materialized.bodies[0].func_id, 11);
-    ASSERT_EQ_UINT(materialized.bodies[0].param_storage_key, 0x203);
+    ASSERT_EQ_UINT(materialized.bodies[0].param_storage_key, UINT32_C(3812009484));
+    ASSERT_EQ_UINT(materialized.bodies[0].param_storage_start, 1);
+    ASSERT_EQ_UINT(materialized.bodies[0].param_storage_count, 2);
+    ASSERT_EQ_UINT(materialized.param_storages[1].storage_owner, XR_STORAGE_OWNED_SYSTEM);
     ASSERT_EQ_UINT(materialized.callsites[0].callsite_id, 1);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].interface_id, 41);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].reason,
@@ -874,7 +893,7 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(report.package_hash, package_hash);
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 1);
-    ASSERT_EQ_UINT(report.rows_imported, 36);
+    ASSERT_EQ_UINT(report.rows_imported, 38);
 
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.modules[1].module_id, 101);
@@ -903,7 +922,12 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(target.bodies[1].func_id, 511);
     ASSERT_EQ_UINT(target.bodies[1].module_id, 101);
     ASSERT_EQ_UINT(target.bodies[1].owner_decl_id, 101);
+    ASSERT_EQ_UINT(target.bodies[1].param_storage_start, 1);
+    ASSERT_EQ_UINT(target.bodies[1].param_storage_count, 2);
     ASSERT_EQ_UINT(target.bodies[1].callsite_start, 402);
+    ASSERT_EQ_UINT(target.param_storages[1].owner_func_id, 511);
+    ASSERT_EQ_UINT(target.param_storages[1].param_index, 1);
+    ASSERT_EQ_UINT(target.param_storages[1].storage_owner, XR_STORAGE_OWNED_SYSTEM);
     ASSERT_EQ_UINT(target.callsites[1].callsite_id, 402);
     ASSERT_EQ_UINT(target.callsites[1].owner_func_id, 511);
     ASSERT_EQ_UINT(target.callsites[1].static_target_func_id, 511);
@@ -954,7 +978,7 @@ TEST(cache_payload_import_reuses_module_stub_without_duplicate_module) {
     ASSERT(xg_global_evidence_import_package_payload(&target, payload, &report));
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 0);
-    ASSERT_EQ_UINT(report.rows_imported, 36);
+    ASSERT_EQ_UINT(report.rows_imported, 38);
     ASSERT_EQ_UINT(target.nmodules, 1);
     ASSERT_EQ_UINT(target.modules[0].module_id, 100);
     ASSERT_EQ_UINT(target.decls[0].module_id, 100);
@@ -1034,10 +1058,11 @@ TEST(cache_payload_import_set_imports_multiple_payloads) {
     ASSERT_EQ_UINT(report.modules_remapped, 2);
     ASSERT_EQ_UINT(report.modules_added, 2);
     /* The second package reuses the already imported link dependency. */
-    ASSERT_EQ_UINT(report.rows_imported, 71);
+    ASSERT_EQ_UINT(report.rows_imported, 75);
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.ndecls, 4);
     ASSERT_EQ_UINT(target.nbodies, 2);
+    ASSERT_EQ_UINT(target.nparam_storages, 4);
 
     xr_free(payload);
     xr_free(second_payload);

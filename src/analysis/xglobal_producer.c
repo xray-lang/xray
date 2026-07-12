@@ -204,6 +204,47 @@ static uint32_t hash_param_storage_requirements32(const XaSymbolLinks *links) {
     return has_requirement ? hash_folded32(h) : 0;
 }
 
+static bool add_param_storage_summaries(XgProducer *producer, const XaSymbolLinks *links,
+                                        XgFuncId owner_func_id, uint32_t *out_start,
+                                        uint32_t *out_count) {
+    bool has_requirement = false;
+    uint32_t start = 0;
+    uint32_t count = 0;
+    if (out_start)
+        *out_start = 0;
+    if (out_count)
+        *out_count = 0;
+    if (!producer || !producer->evidence || owner_func_id == XG_NO_ID)
+        return false;
+    if (!links || !links->param_storage_requirements || links->param_storage_requirement_count <= 0)
+        return true;
+    for (int i = 0; i < links->param_storage_requirement_count; i++) {
+        if (links->param_storage_requirements[i] != XR_STORAGE_NONE) {
+            has_requirement = true;
+            break;
+        }
+    }
+    if (!has_requirement)
+        return true;
+    start = producer->evidence->nparam_storages + 1;
+    count = (uint32_t) links->param_storage_requirement_count;
+    for (uint32_t i = 0; i < count; i++) {
+        XgParamStorageSummary row;
+        memset(&row, 0, sizeof(row));
+        row.requirement_id = start + i;
+        row.owner_func_id = owner_func_id;
+        row.param_index = i;
+        row.storage_owner = links->param_storage_requirements[i];
+        if (!xg_global_evidence_add_param_storage(producer->evidence, &row))
+            return false;
+    }
+    if (out_start)
+        *out_start = start;
+    if (out_count)
+        *out_count = count;
+    return true;
+}
+
 static uint64_t hash_text64(const char *text) {
     if (!text || !*text)
         return 0;
@@ -8546,6 +8587,12 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.escape_bits = bc.escape_bits;
     row.capability_bits = bc.capability_bits;
     row.param_storage_key = hash_param_storage_requirements32(pending->links);
+    if (!add_param_storage_summaries(producer, pending->links, pending->func_id,
+                                     &row.param_storage_start, &row.param_storage_count)) {
+        xr_free(bc.locals);
+        xr_free(bc.name_locals);
+        return false;
+    }
     row.callsite_start = bc.callsite_start;
     row.callsite_count = bc.callsite_count;
     row.metadata_use_bits = bc.metadata_use_bits;

@@ -271,6 +271,53 @@ static void assert_single_callsite_rejected(const XgCallsiteSummary *call,
     xg_global_evidence_free(&ev);
 }
 
+static void assert_single_body_rejected(const XgBodySummary *body, const char *expected_error) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x9110,
+                      .compiler_semver_hash = 0x9111,
+                      .profile_hash = 0x9112,
+                      .imported_summary_hash = 0x9113,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {.module_id = 1,
+                          .source_node_id = body ? body->source_node_id : 0,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = body ? body->name_id : 0,
+                          .signature_key = body ? body->signature_key : 0,
+                          .source_span_id = body ? body->source_span_id : 0};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, body));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    init_func.xg_body_func_id = body ? body->func_id : XG_NO_ID;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, expected_error));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_adds_rows_and_grows) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x10,
@@ -299,6 +346,20 @@ TEST(global_evidence_adds_rows_and_grows) {
     ASSERT_EQ_UINT(ev.decls[19].signature_key, 319);
 
     xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rejects_param_storage_key_without_vector) {
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .source_node_id = 9014,
+                          .owner_decl_id = 1,
+                          .name_id = xg_name_id("init"),
+                          .signature_key = 20,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x9014,
+                          .param_storage_key = UINT32_C(3812009484)};
+    assert_single_body_rejected(&body, "param storage key lacks vector");
 }
 
 TEST(global_evidence_hash_is_content_stable) {
@@ -582,7 +643,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=21 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=22 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -876,15 +937,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=21 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=21 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=21 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=21 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=22 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=22 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=22 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=22 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=22 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=22 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=22 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=22 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -15967,6 +16028,7 @@ TEST(address_plan_rejects_owner_pointer_escape) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_adds_rows_and_grows);
+RUN_TEST(global_evidence_verifier_rejects_param_storage_key_without_vector);
 RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_records_interface_object_use_rows);
 RUN_TEST(global_evidence_cache_keys_are_phase_specific);
