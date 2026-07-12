@@ -2595,7 +2595,11 @@ static bool cg_array_value_type_is_u8_contiguous(XiCgenCtx *ctx, const XiValue *
 static bool cg_call_method_matches_receiver_registry_id(const XiValue *v,
                                                         XaBuiltinReceiverMethodId method_id) {
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
-    return spec && cg_method_name_is(v, spec->source_name, cg_method_sym(spec->source_name));
+    v = cg_unwrap_identity_value(v);
+    return spec && v && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+           v->nargs >= 1 && v->args[0] &&
+           cg_method_name_is(v, spec->source_name, cg_method_sym(spec->source_name)) &&
+           cg_builtin_receiver_registry_matches(v->args[0]->type, spec->receiver);
 }
 
 static bool cg_array_elem_info_from_storage_plan(const XaotArrayStoragePlan *plan,
@@ -4751,10 +4755,10 @@ static bool cg_array_err_check_after_bytes_append_trusted(XiCgenCtx *ctx, const 
 static bool cg_array_call_is_typed_fill_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
                                                         const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux)
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
         return false;
-    const char *method = (const char *) v->aux;
-    if (strcmp(method, "fill") != 0 || v->nargs < 2 || v->nargs > 4)
+    if (!cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL) ||
+        v->nargs < 2 || v->nargs > 4)
         return false;
     CgArrayElemInfo info;
     if (!cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))

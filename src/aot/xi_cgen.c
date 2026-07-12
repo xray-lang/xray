@@ -334,6 +334,36 @@ static bool cg_method_name_is(const XiValue *v, const char *name, int symbol) {
     return (int) (v->aux_int >> 1) == symbol;
 }
 
+static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
+                                                 XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver_type);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver_type);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+                   cg_builtin_receiver_pod_span_elem(receiver_type->container.element_type);
+    }
+    return false;
+}
+
 /* Check whether an op is void-like (produces no named result). */
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)
@@ -4246,36 +4276,6 @@ static const char *cg_no_alloc_stdlib_alloc_detail(XiCgenCtx *ctx, const char *m
     return cg_no_alloc_generated_stdlib_alloc_detail(ctx, module, name);
 }
 
-static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
-                                                 XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver_type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver_type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
-                   cg_builtin_receiver_pod_span_elem(receiver_type->container.element_type);
-    }
-    return false;
-}
-
 static const char *cg_builtin_receiver_registry_detail(XiCgenCtx *ctx,
                                                        XaBuiltinReceiverKind receiver,
                                                        const char *method_name) {
@@ -5044,12 +5044,18 @@ static bool cg_direct_call_param_accepts_borrowed_ref(XiCgenCtx *ctx, const XiFu
 
 static bool cg_method_receiver_accepts_borrowed_ref(const XiValue *user, uint16_t arg_index) {
     if (!user || arg_index != 0 ||
-        (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || !user->aux)
+        (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT))
         return false;
-    const char *method = (const char *) user->aux;
-    return strcmp(method, "resize") == 0 || strcmp(method, "reserve") == 0 ||
-           strcmp(method, "clear") == 0 || strcmp(method, "appendFrom") == 0 ||
-           strcmp(method, "repeatFrom") == 0;
+    return cg_call_method_matches_receiver_registry_id(user,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE) ||
+           cg_call_method_matches_receiver_registry_id(user,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
+           cg_call_method_matches_receiver_registry_id(user,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR) ||
+           cg_call_method_matches_receiver_registry_id(
+               user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
+           cg_call_method_matches_receiver_registry_id(
+               user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM);
 }
 
 static bool cg_borrowed_array_slot_alias_uses_are_borrowed(XiCgenCtx *ctx, const XiFunc *f,
