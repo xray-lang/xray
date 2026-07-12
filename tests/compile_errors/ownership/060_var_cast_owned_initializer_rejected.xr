@@ -1,0 +1,7 @@
+fn main() {
+    owned bytes = Array<byte>(2, 0)
+    var alias = bytes as Array<byte>
+    print(len(alias))
+}
+
+main()

@@ -5770,6 +5770,9 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
             case AST_FORCE_UNWRAP:
                 expr = expr->as.unary.operand;
                 break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
             default:
                 return NULL;
         }
@@ -5897,6 +5900,9 @@ XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode 
                 break;
             case AST_FORCE_UNWRAP:
                 expr = expr->as.unary.operand;
+                break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
                 break;
             default:
                 return NULL;
@@ -6742,15 +6748,35 @@ static bool xa_call_is_copy_builtin(AstNode *node) {
            strcmp(call->callee->as.variable.name, "copy") == 0 && call->arg_count == 1;
 }
 
+static AstNode *xa_storage_boundary_identity_source(AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
+            default:
+                return expr;
+        }
+    }
+    return NULL;
+}
+
 static AstNode *xa_shared_boundary_source(AstNode *init, bool *is_move) {
     if (is_move)
         *is_move = false;
+    init = xa_storage_boundary_identity_source(init);
     if (!init || xa_call_is_copy_builtin(init))
         return NULL;
     if (init->type == AST_MOVE_EXPR) {
         if (is_move)
             *is_move = true;
-        AstNode *inner = init->as.move_expr.expr;
+        AstNode *inner = xa_storage_boundary_identity_source(init->as.move_expr.expr);
         return (inner && inner->type == AST_VARIABLE) ? inner : NULL;
     }
     return init->type == AST_VARIABLE ? init : NULL;
@@ -6901,6 +6927,42 @@ static void xa_check_const_initializer_alias_boundary(XaInferContext *ctx, AstNo
     char msg[256];
     snprintf(msg, sizeof(msg), "const binding from mutable reference value '%s' requires copy(%s)",
              name, name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+static void xa_check_const_owned_move_initializer_boundary(XaInferContext *ctx, AstNode *decl_node,
+                                                           XrType *init_type) {
+    if (!ctx || !decl_node || decl_node->type != AST_CONST_DECL)
+        return;
+
+    VarDeclNode *var = &decl_node->as.var_decl;
+    if (!var->initializer || xa_call_is_copy_builtin(var->initializer))
+        return;
+    if (!xa_type_needs_borrow_escape_guard(init_type))
+        return;
+
+    bool is_move = false;
+    AstNode *source = xa_shared_boundary_source(var->initializer, &is_move);
+    if (!source || !is_move)
+        return;
+
+    XaSymbol *root = xa_lookup_shared_source_symbol(ctx, source);
+    if (!root || root->kind != XA_SYM_VARIABLE || !root->is_owned)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line = var->initializer->line ? var->initializer->line : decl_node->line,
+        .column = var->initializer->column ? var->initializer->column : decl_node->column,
+    };
+    const char *src_name = source->as.variable.name ? source->as.variable.name : "?";
+    const char *dst_name = var->name ? var->name : "?";
+    char msg[320];
+    snprintf(msg, sizeof(msg),
+             "const binding '%s' cannot take moved owned value '%s'; use owned %s = move %s "
+             "or copy(%s)",
+             dst_name, src_name, dst_name, src_name, src_name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -7088,6 +7150,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_check_shared_initializer_boundary(ctx, node, init_type);
         xa_check_owned_initializer_boundary(ctx, node, init_type);
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);
+        xa_check_const_owned_move_initializer_boundary(ctx, node, init_type);
         xa_check_var_owned_alias_initializer_boundary(ctx, node, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
