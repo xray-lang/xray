@@ -4021,6 +4021,14 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
          * standalone AOT's single RC heap. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
         if (strcmp(bn, "to_shared") == 0 && v->aux_int == XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED) {
+            const XaotTransferPlan *transfer_plan =
+                cg_required_transfer_plan(ctx, v, 0, v->args[0], "shared initializer");
+            if (!transfer_plan || transfer_plan->site_kind != XAOT_TRANSFER_SHARED_INIT ||
+                transfer_plan->mode != XR_TRANSFER_MOVE ||
+                transfer_plan->action != XAOT_TRANSFER_ACTION_MOVE) {
+                emit_codegen_abort_expr(out);
+                return;
+            }
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
                                                              cg_value_plan_storage_rep(ctx, v));
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);

@@ -2624,6 +2624,15 @@ static uint8_t prepare_transfer_channel_site_kind(const XiValue *site) {
     return 0;
 }
 
+static bool prepare_transfer_site_is_source_move_to_shared(const XiValue *site) {
+    const char *builtin;
+    if (!site || site->op != XI_CALL_BUILTIN || site->nargs != 1)
+        return false;
+    builtin = (const char *) site->aux;
+    return builtin && strcmp(builtin, "to_shared") == 0 &&
+           site->aux_int == XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED;
+}
+
 static uint8_t prepare_transfer_action(uint8_t mode, bool needs_boundary_clone) {
     switch ((XrTransferMode) mode) {
         case XR_TRANSFER_SHARE:
@@ -2668,6 +2677,12 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
         site_kind = site->op == XI_GO ? XAOT_TRANSFER_GO_ARG : XAOT_TRANSFER_THREAD_ARG;
         value = site->args[transfer_index + 1u];
         mode = xi_go_arg_transfer_mode(site, transfer_index);
+    } else if (prepare_transfer_site_is_source_move_to_shared(site)) {
+        if (transfer_index != 0)
+            return false;
+        site_kind = XAOT_TRANSFER_SHARED_INIT;
+        value = site->args[0];
+        mode = XR_TRANSFER_MOVE;
     } else {
         site_kind = prepare_transfer_channel_site_kind(site);
         if (site_kind == 0 || transfer_index != 0)
@@ -2742,7 +2757,8 @@ static bool prepare_func_transfer_plans(XaotBundle *bundle, const XiFunc *func) 
                         return false;
                     }
                 }
-            } else if (prepare_transfer_channel_site_kind(site) != 0) {
+            } else if (prepare_transfer_channel_site_kind(site) != 0 ||
+                       prepare_transfer_site_is_source_move_to_shared(site)) {
                 XaotTransferPlan derived;
                 if (!xaot_prepare_transfer_plan_for_site(func, site, 0, &derived))
                     continue;
