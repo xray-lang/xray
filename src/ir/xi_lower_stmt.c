@@ -2831,7 +2831,36 @@ static bool stmt_call_is_named_builtin(AstNode *node, const char *name) {
            strcmp(call->callee->as.variable.name, name) == 0;
 }
 
+static AstNode *stmt_storage_boundary_identity_source(AstNode *node) {
+    while (node) {
+        switch (node->type) {
+            case AST_GROUPING:
+                node = node->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                node = node->as.unary.operand;
+                break;
+            case AST_AS_EXPR:
+                node = node->as.as_expr.expr;
+                break;
+            default:
+                return node;
+        }
+    }
+    return NULL;
+}
+
+static XiValue *stmt_storage_boundary_identity_value(XiValue *value) {
+    while (value && value->nargs >= 1 &&
+           (value->op == XI_AS || value->op == XI_BOX || value->op == XI_UNBOX ||
+            xi_copy_is_identity_alias(value))) {
+        value = value->args[0];
+    }
+    return value;
+}
+
 static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
+    node = stmt_storage_boundary_identity_source(node);
     if (!node)
         return false;
     switch (node->type) {
@@ -2960,26 +2989,31 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
     AstNode *init = decl->as.var_decl.initializer;
     if (!init)
         return init_val;
+    AstNode *boundary = stmt_storage_boundary_identity_source(init);
 
-    if (stmt_shared_init_direct_alloc_safe(init)) {
+    if (stmt_shared_init_direct_alloc_safe(boundary)) {
         stmt_mark_storage_allocs_in_range(init_block, init_begin, XR_STORAGE_SHARED);
         return init_val;
     }
 
-    if (stmt_call_is_named_builtin(init, "copy")) {
-        if (init_val->op == XI_CALL_BUILTIN && init_val->aux &&
-            strcmp((const char *) init_val->aux, "copy") == 0) {
-            init_val->aux = (void *) "copy_shared";
+    if (stmt_call_is_named_builtin(boundary, "copy")) {
+        XiValue *copy_val = stmt_storage_boundary_identity_value(init_val);
+        if (copy_val && copy_val->op == XI_CALL_BUILTIN && copy_val->aux &&
+            strcmp((const char *) copy_val->aux, "copy") == 0) {
+            copy_val->aux = (void *) "copy_shared";
             return init_val;
         }
-        return stmt_wrap_to_shared(l, init_val, init->line);
+        return stmt_wrap_to_shared(l, init_val, boundary ? boundary->line : init->line);
     }
 
-    if (init->type == AST_MOVE_EXPR)
-        return stmt_wrap_to_shared_kind(l, init_val, init->line ? init->line : decl->line,
+    if (boundary && boundary->type == AST_MOVE_EXPR) {
+        XiValue *move_val = stmt_storage_boundary_identity_value(init_val);
+        return stmt_wrap_to_shared_kind(l, move_val ? move_val : init_val,
+                                        boundary->line ? boundary->line : decl->line,
                                         XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED);
+    }
 
-    if (init->type == AST_VARIABLE)
+    if (boundary && boundary->type == AST_VARIABLE)
         return init_val;
 
     return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
@@ -2990,9 +3024,12 @@ static XiValue *stmt_lower_owned_initializer(XiLower *l, AstNode *decl, XiValue 
     if (!l || !decl || !init_val || decl->as.var_decl.storage_mode != XR_STORAGE_OWNED)
         return init_val;
     AstNode *init = decl->as.var_decl.initializer;
-    if (stmt_call_is_named_builtin(init, "copy") && init_val->op == XI_CALL_BUILTIN &&
-        init_val->aux && strcmp((const char *) init_val->aux, "copy") == 0) {
-        init_val->aux = (void *) "copy_owned";
+    AstNode *boundary = stmt_storage_boundary_identity_source(init);
+    XiValue *copy_val = stmt_storage_boundary_identity_value(init_val);
+    if (stmt_call_is_named_builtin(boundary, "copy") && copy_val &&
+        copy_val->op == XI_CALL_BUILTIN && copy_val->aux &&
+        strcmp((const char *) copy_val->aux, "copy") == 0) {
+        copy_val->aux = (void *) "copy_owned";
         return init_val;
     }
     stmt_mark_storage_allocs_in_range(init_block, init_begin, XR_STORAGE_OWNED);

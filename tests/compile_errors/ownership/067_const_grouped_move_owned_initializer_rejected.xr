@@ -1,0 +1,7 @@
+fn main() {
+    owned bytes = Array<byte>(2, 0)
+    const alias = (move bytes)
+    print(len(alias))
+}
+
+main()
