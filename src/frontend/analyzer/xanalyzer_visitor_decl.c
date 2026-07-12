@@ -756,6 +756,7 @@ static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xa_summary_mark_capture_refs(summary, node->as.var_decl.initializer);
             xa_summary_set_alias(summary, node->as.var_decl.name, -1);
             break;
@@ -1223,6 +1224,7 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return xa_method_body_mutates_receiver(node->as.var_decl.initializer, receiver_info);
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
@@ -2173,6 +2175,7 @@ static bool stmt_contains_this(AstNode *stmt) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return contains_this_expr(stmt->as.var_decl.initializer);
         case AST_ASSIGNMENT:
             return contains_this_expr(stmt->as.assignment.value);
@@ -3362,9 +3365,11 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
 
     VarDeclNode *var = &node->as.var_decl;
     bool is_shared = node->type == AST_SHARED_DECL || var->storage_mode == XR_STORAGE_SHARED;
+    bool is_owned = node->type == AST_OWNED_DECL || var->storage_mode == XR_STORAGE_OWNED;
     bool is_const = node->type == AST_CONST_DECL;
     var->is_const = is_const;
-    var->storage_mode = is_shared ? XR_STORAGE_SHARED : XR_STORAGE_NORMAL;
+    var->storage_mode =
+        is_shared ? XR_STORAGE_SHARED : (is_owned ? XR_STORAGE_OWNED : XR_STORAGE_NORMAL);
 
     XaSymbol *sym =
         var->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, var->symbol_id) : NULL;
@@ -3374,7 +3379,8 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         sym->is_const = is_const;
         sym->is_readonly_binding = is_const;
         sym->is_shared = is_shared;
-        sym->is_rebindable = !is_const && !is_shared;
+        sym->is_owned = is_owned;
+        sym->is_rebindable = !is_const && !is_shared && !is_owned;
 
         xa_visit_add_symbol_checked(ctx, sym, 0);
 
@@ -3385,7 +3391,8 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         sym->is_const = is_const;
         sym->is_readonly_binding = is_const;
         sym->is_shared = is_shared;
-        sym->is_rebindable = !is_const && !is_shared;
+        sym->is_owned = is_owned;
+        sym->is_rebindable = !is_const && !is_shared && !is_owned;
     }
 
     // Type will be inferred in pass 2

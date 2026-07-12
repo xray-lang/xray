@@ -528,6 +528,7 @@ TEST(lexer_keyword_table_completeness) {
         {"new", TK_NEW},
         {"null", TK_NULL},
         {"operator", TK_OPERATOR},
+        {"owned", TK_OWNED},
         {"private", TK_PRIVATE},
         {"return", TK_RETURN},
         {"scope", TK_SCOPE},

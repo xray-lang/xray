@@ -40,8 +40,7 @@
 #define AST_AS_LITERAL(n)                                                                          \
     (XR_AST_ASSERT_RANGE(n, AST_LITERAL_INT, AST_LITERAL_FALSE), &(n)->as.literal)
 #define AST_AS_VARIABLE(n) (XR_AST_ASSERT(n, AST_VARIABLE), &(n)->as.variable)
-#define AST_AS_VAR_DECL(n)                                                                         \
-    (XR_AST_ASSERT_RANGE(n, AST_VAR_DECL, AST_SHARED_DECL), &(n)->as.var_decl)
+#define AST_AS_VAR_DECL(n) (XR_AST_ASSERT_RANGE(n, AST_VAR_DECL, AST_OWNED_DECL), &(n)->as.var_decl)
 #define AST_AS_ASSIGNMENT(n) (XR_AST_ASSERT(n, AST_ASSIGNMENT), &(n)->as.assignment)
 #define AST_AS_BLOCK(n) (XR_AST_ASSERT(n, AST_BLOCK), &(n)->as.block)
 #define AST_AS_IF_STMT(n) (XR_AST_ASSERT(n, AST_IF_STMT), &(n)->as.if_stmt)

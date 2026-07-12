@@ -626,6 +626,11 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
         return;
     }
 
+    if (XR_OBJ_IS_OWNED(obj)) {
+        xr_owned_destroy_core(coro_heap_core(heap), obj);
+        return;
+    }
+
     /* Depth-limit guard: if we are already deep in a recursive destroy
      * chain, defer this object for iterative processing later. */
     if (heap && heap->destroy_depth >= XR_DESTROY_DEPTH_LIMIT) {

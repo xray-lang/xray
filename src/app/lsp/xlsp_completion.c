@@ -408,7 +408,9 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             } else {
                 kind = 6;
                 const char *type_str = type ? xr_type_to_string(type) : "unknown";
-                const char *kw = sym->is_shared ? "shared" : (sym->is_const ? "const" : "var");
+                const char *kw =
+                    sym->is_shared ? "shared"
+                                   : (sym->is_owned ? "owned" : (sym->is_const ? "const" : "var"));
                 snprintf(detail_buf, sizeof(detail_buf), "%s: %s", kw, type_str);
                 detail = detail_buf;
             }

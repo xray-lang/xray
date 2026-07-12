@@ -182,6 +182,7 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             check_node(ctx, node->as.var_decl.initializer);
             break;
 

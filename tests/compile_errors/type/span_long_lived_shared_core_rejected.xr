@@ -27,9 +27,9 @@ var keptBytes = keepBytes(bytes)
 print(len(keptBytes))
 print(keptBytes[0])
 
-var owned: Array<byte> = copy(bv)
-print(len(owned))
-print(owned[1])
+var snapshot: Array<byte> = copy(bv)
+print(len(snapshot))
+print(snapshot[1])
 
 var values: Array<int> = [10, 20, 30, 40]
 var iv: Slice<int> = values[1:3]

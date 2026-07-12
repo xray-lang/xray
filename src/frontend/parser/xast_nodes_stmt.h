@@ -23,12 +23,12 @@
 
 /* ========== Binding Declarations (statement form) ========== */
 
-// Binding declaration payload, shared by var/const/shared AST nodes.
+// Binding declaration payload, shared by var/const/owned/shared AST nodes.
 typedef struct VarDeclNode {
     char *name;
     AstNode *initializer;
     bool is_const;
-    uint8_t storage_mode;  // 0 = normal, 1 = shared
+    uint8_t storage_mode;  // XR_STORAGE_NORMAL / XR_STORAGE_SHARED / XR_STORAGE_OWNED
     XrTypeRef *type_annotation;
     XrAttribute **attributes;
     int attr_count;
@@ -38,6 +38,7 @@ typedef struct VarDeclNode {
 // Storage mode constants
 #define XR_STORAGE_NORMAL 0
 #define XR_STORAGE_SHARED 1
+#define XR_STORAGE_OWNED 2
 
 // Destructure declaration node
 typedef struct DestructureDeclNode {

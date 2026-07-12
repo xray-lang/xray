@@ -502,6 +502,9 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         if (declaration && declaration->type == AST_SHARED_DECL) {
             export_name = declaration->as.var_decl.name;
         }
+    } else if (xr_parser_check(parser, TK_OWNED)) {
+        xr_parser_error(parser, "module owned declaration is not supported");
+        return NULL;
     } else if (xr_parser_match(parser, TK_TYPE_ALIAS)) {
         // export type Point = { x: float, y: float }
         declaration = xr_parse_type_alias_declaration(parser);

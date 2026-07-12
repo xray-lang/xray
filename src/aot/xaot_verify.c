@@ -2269,6 +2269,10 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 decl->materialization_kind != XR_MATERIALIZE_SHARED_SYSTEM)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence shared storage provenance is stale");
+        } else if (decl->storage_owner == XR_STORAGE_OWNED_SYSTEM) {
+            if (decl->materialization_kind != XR_MATERIALIZE_OWNED_SYSTEM)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence owned storage provenance is stale");
         } else if (decl->storage_owner == XR_STORAGE_FOREIGN) {
             if (decl->address_identity != XR_ADDRESS_FOREIGN)
                 return set_error(errbuf, errbuf_len,

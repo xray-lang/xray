@@ -1,0 +1,6 @@
+fn main() {
+    owned buffer = Array<int>()
+    buffer = Array<int>()
+}
+
+main()

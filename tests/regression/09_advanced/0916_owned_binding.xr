@@ -1,0 +1,34 @@
+// 0916_owned_binding.xr
+// Regression: owned declarations are storage declarations, not type modifiers.
+
+@test
+fn test_owned_fresh_array() {
+    owned buffer = Array<int>()
+    buffer.push(1)
+    buffer.push(2)
+    assert_eq(len(buffer), 2)
+    assert_eq(buffer[0], 1)
+    assert_eq(buffer[1], 2)
+}
+
+@test
+fn test_owned_move_initializer() {
+    var source = Array<int>()
+    source.push(7)
+    owned buffer = move source
+    buffer.push(8)
+    assert_eq(len(buffer), 2)
+    assert_eq(buffer[0], 7)
+    assert_eq(buffer[1], 8)
+}
+
+@test
+fn test_owned_copy_initializer() {
+    var source = Array<int>()
+    source.push(3)
+    owned buffer = copy(source)
+    source.push(4)
+    assert_eq(len(source), 2)
+    assert_eq(len(buffer), 1)
+    assert_eq(buffer[0], 3)
+}

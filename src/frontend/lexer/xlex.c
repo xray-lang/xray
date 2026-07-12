@@ -1086,6 +1086,7 @@ static const char *token_names[] = {
     [TK_CONST] = "const",
     [TK_COMPTIME] = "comptime",
     [TK_SHARED] = "shared",
+    [TK_OWNED] = "owned",
     [TK_IF] = "if",
     [TK_ELSE] = "else",
     [TK_WHILE] = "while",

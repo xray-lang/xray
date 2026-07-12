@@ -78,6 +78,8 @@ const char *xr_storage_owner_name(XrStorageOwner owner) {
             return "exec_local";
         case XR_STORAGE_MODULE:
             return "module";
+        case XR_STORAGE_OWNED_SYSTEM:
+            return "owned_system";
         case XR_STORAGE_SHARED_SYSTEM:
             return "shared_system";
         case XR_STORAGE_FOREIGN:

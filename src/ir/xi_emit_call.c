@@ -760,7 +760,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     if (bname && strcmp(bname, "StringBuilder") == 0) {
         /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
-        emit_inst(ctx, CREATE_ABC(OP_NEWSTRINGBUILDER, dst, 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_NEWSTRINGBUILDER, dst, (uint8_t) (v->aux_int & 0x03), 0));
         return;
     }
     if (bname && strcmp(bname, "array_byte_new") == 0) {

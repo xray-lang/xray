@@ -88,7 +88,7 @@ vmcase(OP_BYTES_NEW) {
     /* R[A] = Array<byte>(R[A+1..A+B]) - create Array<uint8>
      * A = result register
      * B = argument count
-     * C = storage_mode (0=normal, 1=shared)
+     * C = storage_mode (0=normal, 1=shared, 2=owned)
      */
     int a = GETARG_A(i);
     int nargs = GETARG_B(i);
@@ -132,13 +132,14 @@ vmcase(OP_BYTES_NEW) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array<byte> length exceeds VM allocation limit");
     }
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // Shared: allocate on system heap
-        arr = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrArray),
-                                                  XR_TARRAY);
+        // System storage: allocate on system heap
+        arr = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+                                                   sizeof(XrArray), XR_TARRAY, storage_mode);
         if (arr) {
             xr_array_init_inplace(arr, len > 0 ? (int) len : 4, XR_ELEM_U8);
-            XR_OBJ_SET_STORAGE(&arr->hdr, XR_OBJ_STORAGE_SHARED);
-            xr_shared_set_refc(&arr->hdr, 1);
+            XR_OBJ_SET_STORAGE(&arr->hdr, storage_mode);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED)
+                xr_shared_set_refc(&arr->hdr, 1);
         }
     } else {
         arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, len > 0 ? (int) len : 0, XR_ELEM_U8);

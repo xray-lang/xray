@@ -275,6 +275,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             xfmt_emit_var_decl(ctx, node);
             break;
 

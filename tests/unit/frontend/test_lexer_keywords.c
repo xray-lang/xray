@@ -119,6 +119,7 @@ static const KwExpect kKnownKeywords[] = {
     {"new", TK_NEW},
     {"null", TK_NULL},
     {"operator", TK_OPERATOR},
+    {"owned", TK_OWNED},
     {"packed", TK_PACKED},
     {"private", TK_PRIVATE},
     {"protected", TK_PROTECTED},

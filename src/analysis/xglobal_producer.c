@@ -1945,6 +1945,7 @@ static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             capture_scan_node(scan, node->as.var_decl.initializer);
             (void) capture_push_local(scan, node->as.var_decl.name, node->as.var_decl.symbol_id);
             break;
@@ -3896,7 +3897,8 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
             return return_literal_scan_node(scan, node->as.expr_stmt);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL: {
+        case AST_SHARED_DECL:
+        case AST_OWNED_DECL: {
             const AstNode *initializer = node->as.var_decl.initializer;
             const ObjectLiteralNode *literal = return_literal_static_literal(scan, initializer);
             if (literal)
@@ -4525,6 +4527,7 @@ static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.var_decl.initializer);
         case AST_ASSIGNMENT:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.assignment.value);
@@ -7746,7 +7749,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL: {
+        case AST_SHARED_DECL:
+        case AST_OWNED_DECL: {
             uint32_t type_key = node->as.var_decl.type_annotation
                                     ? hash_tref32(node->as.var_decl.type_annotation)
                                     : 0;

@@ -1173,7 +1173,7 @@ static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
         scan->block_depth++;
 
     if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ||
-        node->type == AST_SHARED_DECL) {
+        node->type == AST_SHARED_DECL || node->type == AST_OWNED_DECL) {
         VarDeclNode *var = &node->as.var_decl;
         const char *class_name =
             xa_thread_spawn_expr_sync_ctor_class(scan->ctx, var ? var->initializer : NULL);

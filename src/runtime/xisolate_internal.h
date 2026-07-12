@@ -109,7 +109,7 @@ struct XrVMRuntime {
     // Relaxed atomic: each worker sets it immediately before the
     // instantiation that consumes-and-clears it, but multiple workers touch
     // the same isolate-level slot, so the accesses must be tear-free.
-    _Atomic uint8_t current_storage_mode;  // 0=normal, 1=shared
+    _Atomic uint8_t current_storage_mode;  // 0=normal, 1=shared, 2=owned
 
     // Test mode: suppress [Uncaught Exception] stderr output
     bool suppress_exception_print;

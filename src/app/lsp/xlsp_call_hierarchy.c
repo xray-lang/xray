@@ -157,6 +157,7 @@ static void find_calls_in_ast(AstNode *node, CallHierarchyCtx *ctx) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             find_calls_in_ast(node->as.var_decl.initializer, ctx);
             break;
 
@@ -331,6 +332,7 @@ static void find_outgoing_calls(AstNode *node, const char *uri, XrJsonValue *cal
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             find_outgoing_calls(node->as.var_decl.initializer, uri, calls);
             break;
 

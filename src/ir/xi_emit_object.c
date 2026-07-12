@@ -499,15 +499,15 @@ XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_index_to_arg(ctx, v->args[0]->aux_int, XI_EMIT_ERR_INTERNAL, &cap))
             return;
     }
-    /* C field pre-encoded by lowerer: (key_kind<<7)|(value_tid<<2)|flags */
-    uint8_t c_field = (uint8_t) (v->aux_int & 0xFF);
+    /* C field pre-encoded by lowerer: (key_kind<<8)|(value_tid<<3)|flags */
+    uint16_t c_field = (uint16_t) (v->aux_int & 0xFFFF);
     emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, c_field));
 }
 
 /* Set creation */
 XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    /* B field pre-encoded by lowerer: (elem_tid<<2)|flags */
-    uint8_t b_field = (uint8_t) (v->aux_int & 0xFF);
+    /* B field pre-encoded by lowerer: (elem_tid<<3)|flags */
+    uint16_t b_field = (uint16_t) (v->aux_int & 0xFFFF);
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
 

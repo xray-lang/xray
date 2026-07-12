@@ -125,6 +125,7 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
             hash = hash_string_into(node->as.var_decl.name, hash);
             hash = hash_ast_node(node->as.var_decl.initializer, hash);
             break;

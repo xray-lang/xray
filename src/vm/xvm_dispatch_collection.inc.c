@@ -81,7 +81,7 @@ vmcase(OP_NEWARRAY) {
     ** A = destination register
     ** B = capacity/initial element count
     ** C = (elem_tid << 2) | storage_mode
-    **     storage_mode: bits 0-1 (0=normal, 1=shared)
+    **     storage_mode: bits 0-1 (0=normal, 1=shared, 2=owned)
     **     elem_tid:     bits 2-7 (XrTypeId, 0=any)
     */
     int a = GETARG_A(i);
@@ -93,9 +93,9 @@ vmcase(OP_NEWARRAY) {
 
     XrArray *array;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // shared: allocate on system heap
-        array = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
-                                                    sizeof(XrArray), XR_TARRAY);
+        // System storage: allocate on system heap
+        array = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+                                                     sizeof(XrArray), XR_TARRAY, storage_mode);
         if (array) {
             xr_array_init_inplace(array, b > 0 ? b : 4, elem_type);
             // Set storage mode
@@ -156,8 +156,8 @@ vmcase(OP_ARRAY_NEW_CAP) {
 
     XrArray *array;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        array = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
-                                                    sizeof(XrArray), XR_TARRAY);
+        array = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+                                                     sizeof(XrArray), XR_TARRAY, storage_mode);
         if (array) {
             xr_array_init_inplace(array, cap, elem_type);
             XR_OBJ_SET_STORAGE(&array->hdr, storage_mode);
@@ -194,8 +194,8 @@ vmcase(OP_ARRAY_NEW_LEN) {
 
     XrArray *array;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        array = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
-                                                    sizeof(XrArray), XR_TARRAY);
+        array = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+                                                     sizeof(XrArray), XR_TARRAY, storage_mode);
         if (array) {
             xr_array_init_inplace(array, length, elem_type);
             XR_OBJ_SET_STORAGE(&array->hdr, storage_mode);
@@ -268,25 +268,25 @@ vmcase(OP_NEWMAP) {
     /* OP_NEWMAP: create Map
     ** A = destination register
     ** B = capacity hint
-    ** C = (key_kind << 7) | (value_tid << 2) | flags
-    **     flags bit0: shared, bit1: weak
-    **     value_tid: bits 2-6 (5 bits, XrTypeId 0-31)
-    **     key_kind:  bits 7-8 (2 bits: 0=any, 1=string, 2=int)
+    ** C = (key_kind << 8) | (value_tid << 3) | flags
+    **     flags bits0-1: storage mode (0=normal, 1=shared, 2=owned), bit2: weak
+    **     value_tid: bits 3-7 (5 bits, XrTypeId 0-31)
+    **     key_kind:  bits 8-9 (2 bits: 0=any, 1=string, 2=int)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    int storage_mode = c & 0x01;
-    int is_weak = c & 0x02;
-    uint8_t value_tid = (uint8_t) ((c >> 2) & 0x1F);
-    int key_kind = (c >> 7) & 0x03;
+    int storage_mode = c & 0x03;
+    int is_weak = c & 0x04;
+    uint8_t value_tid = (uint8_t) ((c >> 3) & 0x1F);
+    int key_kind = (c >> 8) & 0x03;
     uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_INT : 0;
 
     XrMap *map;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // shared: allocate on system heap
-        map = (XrMap *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrMap),
-                                                XR_TMAP);
+        // System storage: allocate on system heap
+        map = (XrMap *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate), sizeof(XrMap),
+                                                 XR_TMAP, storage_mode);
         if (map) {
             xr_map_init_inplace(map, b > 0 ? b : 8);
             // Set storage mode
@@ -317,28 +317,29 @@ vmcase(OP_NEWMAP) {
 vmcase(OP_NEWSET) {
     /* OP_NEWSET: create Set
     ** A = destination register
-    ** B = (elem_tid << 2) | flags
-    **     flags bit0: shared, bit1: weak
-    **     elem_tid: bits 2-6 (XrTypeId, 0=any)
+    ** B = (elem_tid << 3) | flags
+    **     flags bits0-1: storage mode (0=normal, 1=shared, 2=owned), bit2: weak
+    **     elem_tid: bits 3-7 (XrTypeId, 0=any)
     ** C = init mode (0=empty, 1=from array in R[A+1])
     */
     int a = GETARG_A(i);
     int b_arg = GETARG_B(i);
     int init_mode = GETARG_C(i);
-    int storage_mode = b_arg & 0x01;
-    int is_weak = b_arg & 0x02;
-    uint8_t elem_tid = (uint8_t) ((b_arg >> 2) & 0x1F);
+    int storage_mode = b_arg & 0x03;
+    int is_weak = b_arg & 0x04;
+    uint8_t elem_tid = (uint8_t) ((b_arg >> 3) & 0x1F);
 
     XrSet *set;
     if (init_mode == 1 && XR_IS_ARRAY(R(a + 1)) && storage_mode != 0 &&
         xr_isolate_get_sys_heap(isolate)) {
-        // Initialize from array on system heap (shared)
-        set = (XrSet *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
-                                                XR_TSET);
+        // Initialize from array on system heap
+        set = (XrSet *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
+                                                 XR_TSET, storage_mode);
         if (set) {
             xr_set_init_inplace(set);
             XR_OBJ_SET_STORAGE(&set->hdr, storage_mode);
-            xr_shared_set_refc(&set->hdr, 1);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED)
+                xr_shared_set_refc(&set->hdr, 1);
             XrArray *arr = XR_TO_ARRAY(R(a + 1));
             int32_t len = arr->length;
             XrValue *elems = (XrValue *) arr->data;
@@ -358,9 +359,9 @@ vmcase(OP_NEWSET) {
             }
         }
     } else if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // shared: allocate on system heap
-        set = (XrSet *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
-                                                XR_TSET);
+        // System storage: allocate on system heap
+        set = (XrSet *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
+                                                 XR_TSET, storage_mode);
         if (set) {
             xr_set_init_inplace(set);
             XR_OBJ_SET_STORAGE(&set->hdr, storage_mode);
@@ -436,16 +437,16 @@ vmcase(OP_RANGE_UNPACK) {
 vmcase(OP_NEWSTRINGBUILDER) {
     /* OP_NEWSTRINGBUILDER: create StringBuilder
     ** A = destination register
-    ** B = storage mode (0=normal, 1=shared)
+    ** B = storage mode (0=normal, 1=shared, 2=owned)
     */
     int a = GETARG_A(i);
     int storage_mode = GETARG_B(i);
 
     XrStringBuilder *sb;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // shared: allocate on system heap
-        sb = (XrStringBuilder *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
-                                                         sizeof(XrStringBuilder), XR_TINSTANCE);
+        // System storage: allocate on system heap
+        sb = (XrStringBuilder *) xr_sysheap_alloc_storage(
+            xr_isolate_get_sys_heap(isolate), sizeof(XrStringBuilder), XR_TINSTANCE, storage_mode);
         if (sb) {
             sb->klass = isolate->core->stringBuilderClass;
             xr_stringbuilder_init_inplace(sb);

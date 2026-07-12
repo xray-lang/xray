@@ -9,8 +9,8 @@ fn main() {
     print(len(mid))
     print(mid[0])
     print(mid[1])
-    var owned = copy(mid)
-    print(owned[0])
+    var snapshot = copy(mid)
+    print(snapshot[0])
 }
 
 main()

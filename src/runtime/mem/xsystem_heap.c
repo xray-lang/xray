@@ -229,7 +229,49 @@ void xr_sysheap_free_coro(XrSystemHeap *heap, struct XrCoroutine *coro) {
     heap->stats.coro_free_count++;
 }
 
-/* ========== Shared Object Allocation API ========== */
+/* ========== System Object Allocation API ========== */
+
+void *xr_sysheap_alloc_owned(XrSystemHeap *heap, size_t size, uint8_t type) {
+    XR_DCHECK(size > 0, "sysheap_alloc_owned: zero size");
+    if (!heap || !heap->initialized)
+        return NULL;
+
+    XrObjHeader *obj = NULL;
+    bool use_mmap = (size >= XR_SHARED_MMAP_THRESHOLD);
+
+    if (use_mmap) {
+        obj = (XrObjHeader *) xr_mem_map(size, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
+        if (!obj)
+            return NULL;
+        obj->type = type;
+        obj->objsize = (uint32_t) size;
+        obj->extra = 0;
+        XR_OBJ_SET_STORAGE(obj, XR_OBJ_STORAGE_OWNED);
+        obj->extra |= XR_OBJ_FLAG_MMAP;
+        obj->refcount = XR_RC_INIT;
+        obj->_rsv = 0;
+        atomic_fetch_add(&heap->stats.owned_mmap_count, 1);
+    } else {
+        obj = (XrObjHeader *) xr_malloc(size);
+        if (obj) {
+            memset(obj, 0, size);
+            obj->type = type;
+            XR_OBJ_SET_STORAGE(obj, XR_OBJ_STORAGE_OWNED);
+            obj->refcount = XR_RC_INIT;
+        }
+    }
+
+    if (obj)
+        atomic_fetch_add(&heap->stats.owned_alloc_count, 1);
+    return obj;
+}
+
+void *xr_sysheap_alloc_storage(XrSystemHeap *heap, size_t size, uint8_t type,
+                               uint8_t storage_mode) {
+    if (storage_mode == XR_OBJ_STORAGE_OWNED)
+        return xr_sysheap_alloc_owned(heap, size, type);
+    return xr_sysheap_alloc_shared(heap, size, type);
+}
 
 void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
     XR_DCHECK(size > 0, "sysheap_alloc_shared: zero size");
@@ -332,7 +374,10 @@ void xr_sysheap_get_stats(XrSystemHeap *heap, XrSysHeapStats *stats) {
     stats->class_alloc_count = atomic_load(&heap->stats.class_alloc_count);
     stats->class_alloc_bytes = atomic_load(&heap->stats.class_alloc_bytes);
     stats->module_alloc_count = atomic_load(&heap->stats.module_alloc_count);
+    stats->owned_alloc_count = atomic_load(&heap->stats.owned_alloc_count);
+    stats->owned_mmap_count = atomic_load(&heap->stats.owned_mmap_count);
     stats->shared_alloc_count = atomic_load(&heap->stats.shared_alloc_count);
+    stats->shared_mmap_count = atomic_load(&heap->stats.shared_mmap_count);
 }
 
 void xr_sysheap_print_stats(XrSystemHeap *heap) {
@@ -353,13 +398,32 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
     printf("  Classes: %llu, Bytes: %llu\n", (unsigned long long) stats.class_alloc_count,
            (unsigned long long) stats.class_alloc_bytes);
     printf("  Modules: %llu\n", (unsigned long long) stats.module_alloc_count);
-    printf("Shared:\n");
+    printf("System objects:\n");
+    printf("  Owned: %llu\n", (unsigned long long) stats.owned_alloc_count);
     printf("  Shared: %llu\n", (unsigned long long) stats.shared_alloc_count);
     printf("  Arena total: %zu bytes\n", heap->class_arena.total_allocated);
     printf("==============================\n");
 }
 
-/* ========== Shared Object Destruction ========== */
+/* ========== System Object Destruction ========== */
+
+void xr_owned_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
+    if (!obj)
+        return;
+    if (obj->extra & XR_OBJ_DEAD)
+        return;
+    obj->extra |= XR_OBJ_DEAD;
+
+    uint8_t type = XR_OBJ_GET_TYPE(obj);
+    XrObjDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
+    if (destroy)
+        destroy(obj, NULL);
+
+    if (XR_OBJ_IS_MMAP(obj))
+        xr_mem_unmap(obj, obj->objsize);
+    else
+        xr_free(obj);
+}
 
 void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
     if (!obj)
