@@ -24,7 +24,7 @@ XR_FUNC uint32_t xaot_prepare_array_access_bounds_evidence(const XaotBundle *bun
                                                            const XiValue *access,
                                                            uint8_t *out_reason);
 
-/* Static Span / ByteSpan hot-path evidence for XI_BYTES_* and XI_SPAN_* ops.
+/* Static Span / Slice<byte> hot-path evidence for XI_BYTES_* and XI_SPAN_* ops.
  * Returns false for non-Span ops. Recognized ops always fill `out` with either
  * eliminated checks or an unproven reason; the verifier re-derives the same
  * row before CGen is allowed to consume it. */

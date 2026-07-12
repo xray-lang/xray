@@ -748,18 +748,20 @@ static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t rig
 static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,
                                                          uint8_t elem_size, uint8_t elem_tid) {
     if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.reinterpret<T>() requires POD target type");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice<byte>.reinterpret<T>() requires POD target type");
     if (XR_ELEM_SIZES[elem_type] != elem_size)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.reinterpret<T>() target metadata mismatch");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice<byte>.reinterpret<T>() target metadata mismatch");
     if (span.elem_type != XR_ELEM_U8 || span.elem_size != 1)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "ByteSpan.reinterpret<T>() expects ByteSpan receiver");
+                        "Slice<byte>.reinterpret<T>() expects Slice<byte> receiver");
     if (span.length < 0)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.reinterpret<T>() byte length overflow");
+                        "Slice<byte>.reinterpret<T>() byte length overflow");
     if (span.length % (int64_t) elem_size != 0)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "ByteSpan.reinterpret<T>() length is not divisible by target size");
+                        "Slice<byte>.reinterpret<T>() length is not divisible by target size");
     xr_span_t out = span;
     out.length = span.length / (int64_t) elem_size;
     out.elem_type = elem_type;

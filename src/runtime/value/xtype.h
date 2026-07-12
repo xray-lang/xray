@@ -542,9 +542,9 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
 // API: Container types
 XR_FUNC XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_span(XrVMRuntime *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_bytespan(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_u8_slice(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_view(XrVMRuntime *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_byteview(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_u8_view(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type);
 XR_FUNC XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type);
@@ -571,7 +571,7 @@ XR_FUNC XrType *xr_type_new_generic_instance(XrVMRuntime *X, const char *class_n
                                              XrClassInfo *class_info, XrType **type_args,
                                              int type_arg_count);
 XR_FUNC XrType *xr_type_new_bigint(XrVMRuntime *X);
-XR_FUNC XrType *xr_type_new_bytes(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_u8_array(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_regex(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_stringbuilder(XrVMRuntime *X);
 XR_FUNC XrType *

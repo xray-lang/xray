@@ -3528,7 +3528,7 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         if (cg_type_is_byte_span(v->type)) {
             fprintf(out, "xrt_byte_span_from_value(");
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
-            fprintf(out, ", \"ByteSpan argument expects Bytes or ByteSpan\")");
+            fprintf(out, ", \"Slice<byte> argument expects Array<byte> or Slice<byte>\")");
             return;
         }
     }
@@ -6171,7 +6171,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     int sym = cg_method_sym(method);
     if (sym < 0 && xicgen_emit_stringbuilder_append(out, v, method, nargs))
         return;
-    /* string.copyBytes(): the VM dispatches this by name (no stable method-symbol
+    /* string.copyArray<byte>(): the VM dispatches this by name (no stable method-symbol
      * id), so lower it directly to the runtime helper. Mirrors VM m_to_bytes. */
     if (sym < 0 && method && strcmp(method, "copyBytes") == 0 && nargs == 0 && v->nargs >= 1) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
@@ -8224,7 +8224,7 @@ static void xicgen_bytes_load_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u16",
                                     "xrt_span_bytes_load_u16_le_unchecked_raw", "uint16_t", 2,
-                                    "ByteSpan.load<uint16>() offset out of bounds"))
+                                    "Slice<byte>.load<uint16>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
@@ -8244,7 +8244,7 @@ static void xicgen_bytes_load_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u32",
                                     "xrt_span_bytes_load_u32_le_unchecked_raw", "uint32_t", 4,
-                                    "ByteSpan.load<uint32>() offset out of bounds"))
+                                    "Slice<byte>.load<uint32>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
@@ -8264,7 +8264,7 @@ static void xicgen_bytes_load_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u64",
                                     "xrt_span_bytes_load_u64_le_unchecked_raw", "uint64_t", 8,
-                                    "ByteSpan.load<uint64>() offset out of bounds"))
+                                    "Slice<byte>.load<uint64>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
@@ -8283,7 +8283,7 @@ static void xicgen_bytes_load_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) f;
     (void) prefix;
     if (xicgen_emit_span_bytes_float_load(ctx, out, v, "xr_array_core_bytes_load_f32", "float",
-                                          "ByteSpan.load<float32>() offset out of bounds"))
+                                          "Slice<byte>.load<float32>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
@@ -8302,7 +8302,7 @@ static void xicgen_bytes_load_f64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) f;
     (void) prefix;
     if (xicgen_emit_span_bytes_float_load(ctx, out, v, "xr_array_core_bytes_load_f64", "double",
-                                          "ByteSpan.load<float64>() offset out of bounds"))
+                                          "Slice<byte>.load<float64>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
@@ -8322,7 +8322,7 @@ static void xicgen_bytes_store_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u16_checked_raw",
                                      "xr_array_core_bytes_store_u16", "uint16_t",
-                                     "ByteSpan.store<uint16>() offset out of bounds"))
+                                     "Slice<byte>.store<uint16>() offset out of bounds"))
         return;
     fprintf(out, "xrt_span_bytes_store_u16_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -8341,7 +8341,7 @@ static void xicgen_bytes_store_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u32_checked_raw",
                                      "xr_array_core_bytes_store_u32", "uint32_t",
-                                     "ByteSpan.store<uint32>() offset out of bounds"))
+                                     "Slice<byte>.store<uint32>() offset out of bounds"))
         return;
     fprintf(out, "xrt_span_bytes_store_u32_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -8360,7 +8360,7 @@ static void xicgen_bytes_store_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u64_checked_raw",
                                      "xr_array_core_bytes_store_u64", "uint64_t",
-                                     "ByteSpan.store<uint64>() offset out of bounds"))
+                                     "Slice<byte>.store<uint64>() offset out of bounds"))
         return;
     fprintf(out, "xrt_span_bytes_store_u64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -8379,7 +8379,7 @@ static void xicgen_bytes_store_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (xicgen_emit_span_bytes_float_store(ctx, out, v, "xrt_span_bytes_store_f32_checked_raw",
                                            "xr_array_core_bytes_store_f32", "float",
-                                           "ByteSpan.store<float32>() offset out of bounds"))
+                                           "Slice<byte>.store<float32>() offset out of bounds"))
         return;
     fprintf(out, "xrt_span_bytes_store_f32_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -8398,7 +8398,7 @@ static void xicgen_bytes_store_f64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (xicgen_emit_span_bytes_float_store(ctx, out, v, "xrt_span_bytes_store_f64_checked_raw",
                                            "xr_array_core_bytes_store_f64", "double",
-                                           "ByteSpan.store<float64>() offset out of bounds"))
+                                           "Slice<byte>.store<float64>() offset out of bounds"))
         return;
     fprintf(out, "xrt_span_bytes_store_f64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -8446,7 +8446,7 @@ static void xicgen_bytes_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         }
         fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || (_s.length > 0 && !_s.data))) "
                      "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "\"ByteSpan.fill(value) range out of bounds\"); if (_s.length > 0) ");
+                     "\"Slice<byte>.fill(value) range out of bounds\"); if (_s.length > 0) ");
         if (inline_memset)
             fprintf(out, "memset(_s.data, (uint8_t)");
         else
@@ -8511,7 +8511,7 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         xicgen_emit_byte_span_operand(ctx, out, v->args[1],
-                                      "ByteSpan.copyFrom(src) source must be ByteSpan");
+                                      "Slice<byte>.copyFrom(src) source must be Slice<byte>");
         fprintf(out, ")");
         return;
     }
@@ -8543,7 +8543,7 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out,
                 "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
                 "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
-                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"ByteSpan.copyFrom(src) range out "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice<byte>.copyFrom(src) range out "
                 "of bounds\"); ");
         if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
             fprintf(out, "if (_src.length > 0) memcpy(_dst.data, _src.data, "
@@ -8566,7 +8566,7 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_span_operand(ctx, out, v->args[1],
-                                  "ByteSpan.copyFrom(src) source must be ByteSpan");
+                                  "Slice<byte>.copyFrom(src) source must be Slice<byte>");
     fprintf(out, ")");
 }
 
@@ -8586,7 +8586,7 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         xicgen_emit_byte_span_operand(ctx, out, v->args[1],
-                                      "ByteSpan.compare(other) operand must be ByteSpan");
+                                      "Slice<byte>.compare(other) operand must be Slice<byte>");
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return;
@@ -8608,7 +8608,7 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         fprintf(out,
                 "; if (XR_UNLIKELY(_left.length < 0 || _right.length < 0 || "
                 "(_left.length > 0 && !_left.data) || (_right.length > 0 && !_right.data))) "
-                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"ByteSpan.compare(other) span has no "
+                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"Slice<byte>.compare(other) span has no "
                 "data\"); int64_t _n = _left.length < _right.length ? _left.length : "
                 "_right.length; int _cmp = _n > 0 ? memcmp(_left.data, _right.data, "
                 "(size_t)_n) : 0; _cmp < 0 ? INT64_C(-1) : (_cmp > 0 ? INT64_C(1) : "
@@ -8621,7 +8621,7 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_span_operand(ctx, out, v->args[1],
-                                  "ByteSpan.compare(other) operand must be ByteSpan");
+                                  "Slice<byte>.compare(other) operand must be Slice<byte>");
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -8673,7 +8673,7 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
         fprintf(out,
                 "; int64_t _prefix = 0; if (XR_UNLIKELY(_left_len < 0 || _right_len < 0 || "
                 "(_left_len > 0 && !_left_data) || (_right_len > 0 && !_right_data))) "
-                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"ByteSpan.commonPrefix(other) span has "
+                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"Slice<byte>.commonPrefix(other) span has "
                 "no data\"); else _prefix = xr_array_core_bytes_common_prefix_raw(_left_data, "
                 "_left_len, _right_data, _right_len); _prefix; })");
         emit_conversion_suffix(out, conv_suffix);
@@ -8683,7 +8683,7 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_span_operand(ctx, out, v->args[1],
-                                  "ByteSpan.commonPrefix(other) operand must be ByteSpan");
+                                  "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -8735,7 +8735,7 @@ static void xicgen_bytes_span_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                      "_count < 0 || _distance > _dst_offset || _dst_offset > _span.length || "
                      "_count > _span.length - _dst_offset || (_count > 0 && !_span.data))) "
                      "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "\"ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds\"); "
+                     "\"Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds\"); "
                      "xr_array_core_bytes_repeat_copy(_span.data, _dst_offset, _distance, "
                      "_count); _span; })");
         return;
@@ -8765,7 +8765,7 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (!overflow_check_dropped)
             fprintf(out, " || (_s.elem_size > 0 && _s.length > INT64_MAX / (int64_t)_s.elem_size)");
         fprintf(out, ")) xrt_throw_error("
-                     "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Span.asBytes() byte length overflow\"); "
+                     "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Span.asArray<byte>() byte length overflow\"); "
                      "xr_span_t _out = _s; _out.length = _s.length * (int64_t)_s.elem_size; "
                      "_out.elem_type = XR_ELEM_U8; _out.elem_size = 1; _out.elem_tid = 0; "
                      "_out.contains_refs = 0; _out.flags = _s.flags & XRT_SPAN_FLAG_READONLY; "
@@ -9003,13 +9003,13 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         if (!overflow_check_dropped) {
             fprintf(out, "if (XR_UNLIKELY(_s.length < 0)) "
                          "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                         "\"ByteSpan.reinterpret<T>() byte length overflow\"); ");
+                         "\"Slice<byte>.reinterpret<T>() byte length overflow\"); ");
         }
         if (!length_rel_proven) {
             fprintf(out,
                     "if (XR_UNLIKELY(_s.length %% (int64_t)%u != 0)) "
                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                    "\"ByteSpan.reinterpret<T>() length is not divisible by target size\"); ",
+                    "\"Slice<byte>.reinterpret<T>() length is not divisible by target size\"); ",
                     (unsigned) elem_size);
         }
         fprintf(out,

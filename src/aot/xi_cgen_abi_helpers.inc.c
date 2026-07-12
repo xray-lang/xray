@@ -596,7 +596,8 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
     const XrType *param_type = cg_func_param_type(f, param_idx);
     if (cg_func_param_abi_is_byte_span_aggregate(ctx, f, param_idx)) {
         fprintf(out,
-                "xrt_byte_span_from_value(%s, \"ByteSpan argument expects Bytes or ByteSpan\")",
+                "xrt_byte_span_from_value(%s, \"Slice<byte> argument expects Array<byte> or "
+                "Slice<byte>\")",
                 boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }
@@ -891,7 +892,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
             cg_type_is_byte_span(cg_func_param_type(target, arg_index))) {
             fprintf(out, "xrt_byte_span_from_value(");
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
-            fprintf(out, ", \"ByteSpan argument expects Bytes or ByteSpan\")");
+            fprintf(out, ", \"Slice<byte> argument expects Array<byte> or Slice<byte>\")");
             return;
         }
         fprintf(stderr,

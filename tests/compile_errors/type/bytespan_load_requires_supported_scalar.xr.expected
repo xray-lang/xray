@@ -1,1 +1,1 @@
-ByteSpan.load<T>() currently supports T = int16, uint16, int32, uint32, int64, uint64, float32 or float64
+Slice<byte>.load<T>() currently supports T = int16, uint16, int32, uint32, int64, uint64, float32 or float64

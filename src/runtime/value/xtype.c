@@ -447,21 +447,21 @@ XrType *xr_type_new_bigint(XrVMRuntime *X) {
     return type;
 }
 
-XrType *xr_type_new_bytes(XrVMRuntime *X) {
+XrType *xr_type_new_u8_array(XrVMRuntime *X) {
     XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
     if (!elem)
         return NULL;
     return xr_type_new_array(X, elem);
 }
 
-XrType *xr_type_new_bytespan(XrVMRuntime *X) {
+XrType *xr_type_new_u8_slice(XrVMRuntime *X) {
     XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
     if (!elem)
         return NULL;
     return xr_type_new_span(X, elem);
 }
 
-XrType *xr_type_new_byteview(XrVMRuntime *X) {
+XrType *xr_type_new_u8_view(XrVMRuntime *X) {
     XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
     if (!elem)
         return NULL;

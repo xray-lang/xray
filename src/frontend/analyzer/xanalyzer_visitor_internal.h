@@ -159,7 +159,7 @@ static inline void xa_freestanding_report_tagged_type_unavailable(XaInferContext
     }
     xa_freestanding_report_unavailable(
         ctx, node, feature,
-        "use fixed-layout structs, fixed arrays, Span/ByteSpan, enum value-structs, Buffer, or "
+        "use fixed-layout structs, fixed arrays, Span/Slice<byte>, enum value-structs, Buffer, or "
         "raw pointers instead");
 }
 

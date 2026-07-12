@@ -320,8 +320,8 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
         return NULL;
     XrVMRuntime *X = ctx->analyzer->isolate;
     XrType *t_int = xr_type_new_int(X);
-    XrType *t_bytes = xr_type_new_bytes(X);
-    XrType *t_bytespan = xr_type_new_bytespan(X);
+    XrType *t_bytes = xr_type_new_u8_array(X);
+    XrType *t_bytespan = xr_type_new_u8_slice(X);
     if (strcmp(name, "appendFrom") == 0) {
         XrType *params[1] = {t_bytespan};
         return xr_type_new_function(X, params, 1, t_bytes, false);
@@ -356,7 +356,7 @@ static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver,
         return xr_type_new_unknown(NULL);
     }
     XrVMRuntime *X = ctx->analyzer->isolate;
-    return xr_type_new_function(X, NULL, 0, xr_type_new_bytespan(X), false);
+    return xr_type_new_function(X, NULL, 0, xr_type_new_u8_slice(X), false);
 }
 
 static XrType *xa_array_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name,
@@ -415,23 +415,23 @@ static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, co
     }
     if (strcmp(name, "fill") == 0) {
         XrType *params[1] = {xr_type_new_int_width(X, XR_NATIVE_U8)};
-        return xr_type_new_function(X, params, 1, xr_type_new_bytespan(X), false);
+        return xr_type_new_function(X, params, 1, xr_type_new_u8_slice(X), false);
     }
     if (strcmp(name, "copyFrom") == 0) {
-        XrType *params[1] = {xr_type_new_bytespan(X)};
-        return xr_type_new_function(X, params, 1, xr_type_new_bytespan(X), false);
+        XrType *params[1] = {xr_type_new_u8_slice(X)};
+        return xr_type_new_function(X, params, 1, xr_type_new_u8_slice(X), false);
     }
     if (strcmp(name, "compare") == 0) {
-        XrType *params[1] = {xr_type_new_bytespan(X)};
+        XrType *params[1] = {xr_type_new_u8_slice(X)};
         return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
     }
     if (strcmp(name, "commonPrefix") == 0) {
-        XrType *params[1] = {xr_type_new_bytespan(X)};
+        XrType *params[1] = {xr_type_new_u8_slice(X)};
         return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
     }
     if (strcmp(name, "repeatFrom") == 0) {
         XrType *params[3] = {xr_type_new_int(X), xr_type_new_int(X), xr_type_new_int(X)};
-        return xr_type_new_function(X, params, 3, xr_type_new_bytespan(X), false);
+        return xr_type_new_function(X, params, 3, xr_type_new_u8_slice(X), false);
     }
     if (strcmp(name, "reinterpret") == 0) {
         XrType *ret_elem = xr_type_new_type_param(X, "T", 0);
@@ -452,7 +452,7 @@ static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const 
         if (!xa_type_is_pod_span_elem(receiver->container.element_type))
             return NULL;
         XrVMRuntime *X = ctx->analyzer->isolate;
-        return xr_type_new_function(X, NULL, 0, xr_type_new_bytespan(X), false);
+        return xr_type_new_function(X, NULL, 0, xr_type_new_u8_slice(X), false);
     }
     if (strcmp(name, "fill") == 0) {
         if (!xa_type_is_pod_span_elem(receiver->container.element_type))
@@ -1766,7 +1766,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
-                 xa_type_is_bytes(obj_type) ? "Bytes" : "Array", ma->name);
+                 xa_type_is_bytes(obj_type) ? "Array<byte>" : "Array", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
@@ -1776,7 +1776,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
-                 xa_type_is_bytespan(obj_type) ? "ByteSpan" : "Span", ma->name);
+                 xa_type_is_bytespan(obj_type) ? "Slice<byte>" : "Slice", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
@@ -1978,7 +1978,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
         snprintf(msg, sizeof(msg), "%s has no member '%s'",
-                 xa_type_is_bytes(obj_type) ? "Bytes" : "Array", ma->name);
+                 xa_type_is_bytes(obj_type) ? "Array<byte>" : "Array", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_unknown(NULL);

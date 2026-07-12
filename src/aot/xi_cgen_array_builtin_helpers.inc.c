@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_cgen_array_builtin_helpers.inc.c - AOT Array and Bytes builtin emission
+ * xi_cgen_array_builtin_helpers.inc.c - AOT Array and Array<byte> builtin emission
  */
 
 static XrRep xicgen_value_c_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);

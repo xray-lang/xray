@@ -1,1 +1,1 @@
-Bytes has no member 'setLengthUnchecked'
+Array<byte> has no member 'setLengthUnchecked'
