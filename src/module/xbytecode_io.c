@@ -127,13 +127,18 @@ static bool bc_put_bytes(BcWriter *w, const void *data, size_t len) {
     return true;
 }
 
-static bool bc_put_string(BcWriter *w, const char *str) {
-    uint32_t len = str ? (uint32_t) strlen(str) : 0;
+static bool bc_put_string_data(BcWriter *w, const char *str, uint32_t len) {
+    if (len > 0 && !str)
+        return false;
     if (!bc_put_u32(w, len))
         return false;
     if (len > 0 && !bc_put_bytes(w, str, len))
         return false;
     return true;
+}
+
+static bool bc_put_string(BcWriter *w, const char *str) {
+    return bc_put_string_data(w, str ? str : "", str ? (uint32_t) strlen(str) : 0);
 }
 
 /* ========== Reader Helper ========== */
@@ -215,13 +220,10 @@ static double bc_get_f64(BcReader *r) {
     return u.d;
 }
 
-static char *bc_get_string(BcReader *r) {
+static char *bc_get_string_data(BcReader *r, uint32_t *out_len) {
     uint32_t len = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         return NULL;
-    if (len == 0)
-        return NULL;
-
     if (!bc_has_bytes(r, len)) {
         r->error = XR_BC_ERR_TRUNCATED;
         return NULL;
@@ -236,7 +238,13 @@ static char *bc_get_string(BcReader *r) {
     memcpy(str, r->buf + r->pos, len);
     str[len] = '\0';
     r->pos += len;
+    if (out_len)
+        *out_len = len;
     return str;
+}
+
+static char *bc_get_string(BcReader *r) {
+    return bc_get_string_data(r, NULL);
 }
 
 /* ========== Value Serialization ========== */
@@ -292,13 +300,15 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
 static XrValue bc_read_value(BcReader *r);
 
 static bool bc_put_optional_string(BcWriter *w, const char *str) {
-    return bc_put_string(w, str ? str : "");
+    if (!bc_put_u8(w, str ? 1 : 0))
+        return false;
+    return !str || bc_put_string(w, str);
 }
 
 static bool bc_write_field_descriptor(BcWriter *w, const XrFieldDescriptorEntry *field) {
-    if (!field)
+    if (!field || !field->name)
         return false;
-    if (!bc_put_optional_string(w, field->name))
+    if (!bc_put_string(w, field->name))
         return false;
     if (!bc_put_optional_string(w, field->type_name))
         return false;
@@ -308,9 +318,9 @@ static bool bc_write_field_descriptor(BcWriter *w, const XrFieldDescriptorEntry 
 }
 
 static bool bc_write_method_descriptor(BcWriter *w, const XrMethodDescriptorEntry *method) {
-    if (!method)
+    if (!method || !method->name)
         return false;
-    if (!bc_put_optional_string(w, method->name))
+    if (!bc_put_string(w, method->name))
         return false;
     if (!bc_put_u32(w, method->closure_index))
         return false;
@@ -342,7 +352,7 @@ static bool bc_write_class_descriptor(BcWriter *w, XrValue val) {
 
     if (!bc_put_u8(w, BC_VAL_CLASS_DESCRIPTOR))
         return false;
-    if (!bc_put_optional_string(w, desc->class_name))
+    if (!desc->class_name || !bc_put_string(w, desc->class_name))
         return false;
     if (!bc_put_optional_string(w, desc->super_name))
         return false;
@@ -419,7 +429,7 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
 
     if (!bc_put_u8(w, BC_VAL_ENUM_TYPE))
         return false;
-    if (!bc_put_optional_string(w, enum_type->name))
+    if (!bc_put_string(w, enum_type->name))
         return false;
     if (!bc_put_u32(w, enum_type->member_count))
         return false;
@@ -428,7 +438,7 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
 
     for (uint32_t i = 0; i < enum_type->member_count; i++) {
         const char *name = xr_enum_type_member_name(enum_type, i);
-        if (!bc_put_optional_string(w, name))
+        if (!name || !bc_put_string(w, name))
             return false;
         int payload_count = xr_enum_type_payload_count(enum_type, i);
         if (payload_count < 0 || payload_count > UINT16_MAX)
@@ -466,29 +476,25 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
         if (!bc_put_u8(w, BC_VAL_STRING))
             return false;
         XrString *s = XR_TO_STRING(val);
-        return bc_put_string(w, s->data);
+        return bc_put_string_data(w, s->data, s->length);
     }
     // Other types not supported yet
     return bc_put_u8(w, BC_VAL_NULL);
 }
 
 static char *bc_read_string_or_empty(BcReader *r) {
-    char *str = bc_get_string(r);
-    if (r->error != XR_BC_OK)
-        return NULL;
-    if (str)
-        return str;
-    str = xr_strdup("");
-    if (!str)
-        r->error = XR_BC_ERR_ALLOC;
-    return str;
+    return bc_get_string(r);
 }
 
 static char *bc_read_optional_string(BcReader *r) {
-    char *str = bc_get_string(r);
-    if (r->error != XR_BC_OK)
+    uint8_t present = bc_get_u8(r);
+    if (r->error != XR_BC_OK || present == 0)
         return NULL;
-    return str;
+    if (present != 1) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return NULL;
+    }
+    return bc_get_string(r);
 }
 
 static bool bc_read_field_descriptor(BcReader *r, XrFieldDescriptorEntry *field) {
@@ -787,10 +793,11 @@ static XrValue bc_read_value(BcReader *r) {
         case BC_VAL_FLOAT:
             return xr_float(bc_get_f64(r));
         case BC_VAL_STRING: {
-            char *str = bc_get_string(r);
-            if (!str)
+            uint32_t len = 0;
+            char *str = bc_get_string_data(r, &len);
+            if (r->error != XR_BC_OK)
                 return xr_null();
-            XrString *s = xr_string_intern(r->X, str, strlen(str), 0);
+            XrString *s = xr_string_intern(r->X, str, len, 0);
             xr_free(str);
             return s ? xr_string_value(s) : xr_null();
         }

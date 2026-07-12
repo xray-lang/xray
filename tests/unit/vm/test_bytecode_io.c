@@ -17,6 +17,7 @@
 #include "runtime/class/xclass_descriptor.h"
 #include "runtime/class/xenum.h"
 #include "runtime/class/xinstance.h"
+#include "runtime/object/xstring.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
@@ -93,6 +94,47 @@ TEST(bytecode_roundtrips_struct_area_size) {
     xr_free(bytes);
     xr_vm_proto_free(proto);
     xray_vm_delete(iso);
+}
+
+TEST(bytecode_roundtrips_exact_string_constant_lengths) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    XrString *empty = xr_string_intern(writer, "", 0, 0);
+    ASSERT_NOT_NULL(empty);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, xr_string_value(empty)), 0);
+    const char embedded_nul[] = {'a', '\0', 'b'};
+    XrString *binary = xr_string_intern(writer, embedded_nul, sizeof(embedded_nul), 0);
+    ASSERT_NOT_NULL(binary);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, xr_string_value(binary)), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 2);
+    XrValue value = PROTO_CONSTANT(roundtrip, 0);
+    ASSERT_TRUE(XR_IS_STRING(value));
+    ASSERT_EQ_UINT(XR_TO_STRING(value)->length, 0);
+    ASSERT_STR_EQ(XR_TO_STRING(value)->data, "");
+    value = PROTO_CONSTANT(roundtrip, 1);
+    ASSERT_TRUE(XR_IS_STRING(value));
+    ASSERT_EQ_UINT(XR_TO_STRING(value)->length, sizeof(embedded_nul));
+    ASSERT_TRUE(memcmp(XR_TO_STRING(value)->data, embedded_nul, sizeof(embedded_nul)) == 0);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
 }
 
 TEST(bytecode_reader_assigns_unique_proto_ids) {
@@ -213,6 +255,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     XrClassDescriptor *desc = xr_calloc(1, sizeof(XrClassDescriptor));
     ASSERT_NOT_NULL(desc);
     desc->class_name = "BytecodeClass";
+    desc->display_name = "";
     desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
     desc->clinit_proto_index = -1;
     desc->super_global_index = -1;
@@ -246,6 +289,9 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     XrClassDescriptor *roundtrip_desc = XR_TO_PTR(roundtrip_val);
     ASSERT_NOT_NULL(roundtrip_desc);
     ASSERT_STR_EQ(roundtrip_desc->class_name, "BytecodeClass");
+    ASSERT_NULL(roundtrip_desc->super_name);
+    ASSERT_NOT_NULL(roundtrip_desc->display_name);
+    ASSERT_STR_EQ(roundtrip_desc->display_name, "");
     ASSERT_EQ_INT(roundtrip_desc->clinit_proto_index, -1);
     ASSERT_EQ_INT(roundtrip_desc->super_global_index, -1);
     ASSERT_EQ_UINT(roundtrip_desc->descriptor_version, XR_CLASS_DESCRIPTOR_VERSION);
@@ -259,6 +305,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     xr_free((void *) roundtrip_desc->instance_fields[0].type_name);
     xr_free(roundtrip_desc->instance_fields);
     xr_free((void *) roundtrip_desc->class_name);
+    xr_free((void *) roundtrip_desc->display_name);
     xr_free(roundtrip_desc);
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
@@ -551,6 +598,7 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_roundtrips_struct_area_size);
+    RUN_TEST(bytecode_roundtrips_exact_string_constant_lengths);
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);

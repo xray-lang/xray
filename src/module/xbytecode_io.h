@@ -42,7 +42,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 14        // v14: serializes enum type descriptor constants
+#define XR_BC_VERSION 15        // v15: distinguishes empty strings from absent metadata
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)

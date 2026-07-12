@@ -1,8 +1,9 @@
 // 1411_url_parse.xr
-// Test: url module - parse, format, parseQuery, buildQuery,
+// Test: url module - parse, format, QueryParams,
 //       encodeForm, decodeForm, resolve, join, userinfo, IPv6
 
 import url
+import { UrlError } from url
 
 // ============================================================
 // Part 1: URL Parsing (Json fields)
@@ -133,54 +134,78 @@ fn test_format_with_userinfo() {
 }
 
 // ============================================================
-// Part 5: parseQuery / buildQuery
+// Part 5: QueryParams parse / encode
 // ============================================================
 
 @test
 fn test_parse_query() {
     var q = url.parseQuery("foo=bar&baz=qux")
-    assert_eq(q.foo, "bar")
-    assert_eq(q.baz, "qux")
+    assert_eq(q.get("foo")!, "bar")
+    assert_eq(q.get("baz")!, "qux")
 }
 
 @test
 fn test_parse_query_with_leading_question() {
     var q = url.parseQuery("?name=hello&count=10")
-    assert_eq(q.name, "hello")
-    assert_eq(q.count, "10")
+    assert_eq(q.get("name")!, "hello")
+    assert_eq(q.get("count")!, "10")
 }
 
 @test
 fn test_parse_query_encoded() {
     var q = url.parseQuery("msg=hello+world&key=a%26b")
-    assert_eq(q.msg, "hello world")
-    assert_eq(q.key, "a&b")
+    assert_eq(q.get("msg")!, "hello world")
+    assert_eq(q.get("key")!, "a&b")
 }
 
 @test
 fn test_parse_query_empty_flag_and_empty_pairs() {
     var q = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
-    assert_eq(q.empty, "")
-    assert_eq(q.flag, "")
-    assert_eq(q.msg, "hello world")
+    assert_eq(q.get("empty")!, "")
+    assert_eq(q.get("flag")!, "")
+    assert_eq(q.get("msg")!, "hello world")
+    assert_eq(q.get("")!, "skip")
 }
 
 @test
-fn test_build_query() {
+fn test_query_encode() {
     var q = url.parseQuery("a=1&b=2")
-    var qs = url.buildQuery(q)
-    // Order may vary in hash map, just check both pairs exist
-    assert_true(qs.includes("a=1"))
-    assert_true(qs.includes("b=2"))
+    assert_eq(q.encode(), "a=1&b=2")
 }
 
 @test
-fn test_build_query_encodes_form_values() {
+fn test_query_encode_form_values() {
     var q = url.parseQuery("msg=hello+world&key=a%26b&flag")
-    var qs = url.buildQuery(q)
-    assert_true(qs.includes("msg=hello+world"))
-    assert_true(qs.includes("key=a%26b"))
-    assert_true(qs.includes("flag="))
+    assert_eq(q.encode(), "msg=hello+world&key=a%26b&flag=")
+}
+
+@test
+fn test_query_preserves_duplicates_and_set_position() {
+    var q = url.parseQuery("a=1&b=2&a=3")
+    assert_eq(q.getAll("a"), ["1", "3"])
+    var before = q.entries()
+    assert_eq(before.length, 3)
+    assert_eq(before[0].0 + "=" + before[0].1, "a=1")
+    assert_eq(before[1].0 + "=" + before[1].1, "b=2")
+    assert_eq(before[2].0 + "=" + before[2].1, "a=3")
+    q.set("a", "9")
+    var after = q.entries()
+    assert_eq(after.length, 2)
+    assert_eq(after[0].0 + "=" + after[0].1, "a=9")
+    assert_eq(after[1].0 + "=" + after[1].1, "b=2")
+}
+
+@test
+fn test_query_invalid_percent_is_typed_error() {
+    var offset = -1
+    try {
+        url.parseQuery("ok=1&bad=%GG")
+    } catch (e: UrlError) {
+        offset = match (e) {
+            UrlError.InvalidPercentEncoding(at) -> at
+        }
+    }
+    assert_eq(offset, 9)
 }
 
 // ============================================================

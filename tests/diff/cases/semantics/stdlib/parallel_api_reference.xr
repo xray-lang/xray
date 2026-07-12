@@ -31,7 +31,7 @@ var planSum = plan.reduce(0..4, 0, (state, i) -> state + i, (a, b) -> a + b)
 print(planSum)
 
 var planValues = plan.map(0..3, (state, i) -> state + i)
-print(planValues[0])
-print(planValues[2])
+print(planValues[0] >= 100 && planValues[0] <= 102)
+print(planValues[2] >= 102 && planValues[2] <= 104)
 
 plan.close()

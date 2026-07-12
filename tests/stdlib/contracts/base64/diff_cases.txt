@@ -1,0 +1,2 @@
+tests/diff/cases/semantics/stdlib/base64_module.xr
+tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr

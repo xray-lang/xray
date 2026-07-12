@@ -91,11 +91,11 @@
 
 (define-aot-abi record
   :type-kind XR_KIND_RECORD
-  :nullable no
-  :abi-class pointer
-  :default-rep ptr
+  :nullable yes
+  :abi-class tagged
+  :default-rep tagged
   :native-width no
-  :typed-boundary yes)
+  :typed-boundary no)
 
 ; FFI raw pointer (RawPtr<T> / RawMut<T>). Carried as a native C pointer in AOT
 ; hot code, but never treated as an owning/GC-traced pointer. Tagged/VM boundaries

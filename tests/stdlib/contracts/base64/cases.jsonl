@@ -1,0 +1,2 @@
+{"case":"rfc4648-and-invalid","probe":"tests/diff/cases/semantics/stdlib/base64_module.xr","equivalence":["value","error","effect"],"oracle":"RFC 4648 vectors and roundtrip properties"}
+{"case":"direct-byte-surface","probe":"tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr","equivalence":["value","error","complexity"],"oracle":"RFC 4648 alphabet and padding rules"}

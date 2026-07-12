@@ -1,0 +1,4 @@
+import url
+
+var query = url.parseQuery("a=1")
+print(query.a)

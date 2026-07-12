@@ -1,0 +1,89 @@
+schema = 1
+raw_samples_required = true
+minimum_release_repetitions = 5
+governed_suites = [
+  "stdlib/_probe", "stdlib/base64", "stdlib/cluster", "stdlib/compress", "stdlib/crypto",
+  "stdlib/csv", "stdlib/datetime", "stdlib/encoding", "stdlib/http", "stdlib/io",
+  "stdlib/log", "stdlib/math", "stdlib/mem", "stdlib/net", "stdlib/os", "stdlib/parallel",
+  "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/sync",
+  "stdlib/sys", "stdlib/test_yield", "stdlib/time", "stdlib/toml", "stdlib/url",
+  "stdlib/ws", "stdlib/xml", "stdlib/yaml",
+]
+
+[[benchmark]]
+id = "base64.contract"
+module = "base64"
+suite = "stdlib/base64"
+kind = "cpu_kernel"
+source = "tests/diff/cases/semantics/stdlib/base64_module.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 30.0
+
+[[benchmark]]
+id = "path.contract"
+module = "path"
+suite = "stdlib/path"
+kind = "tiny_helper"
+source = "tests/diff/cases/semantics/stdlib/path_module.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 50.0
+
+[[benchmark]]
+id = "http.head.contract"
+module = "http"
+suite = "stdlib/http"
+kind = "protocol_helper"
+source = "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 60.0
+
+[[benchmark]]
+id = "url.query.contract"
+module = "url"
+suite = "stdlib/url"
+kind = "tiny_helper"
+source = "tests/diff/cases/semantics/stdlib/url_core_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 50.0
+
+[[benchmark]]
+id = "cluster.protocol.contract"
+module = "cluster"
+suite = "stdlib/cluster"
+kind = "protocol_helper"
+source = "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 50.0
+
+[[benchmark]]
+id = "csv.parse.contract"
+module = "csv"
+suite = "stdlib/csv"
+kind = "parser"
+source = "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 50.0

@@ -165,6 +165,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "NodeAddress",
+        .signature = "NodeAddress",
+        .summary = "",
+    },
+    {
+        .name = "NodeAddress.constructor",
+        .signature = "(host: string, port: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "NodeAddress.host",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "NodeAddress.port",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
         .name = "TOPIC_DEFAULT_HOP_LIMIT",
         .signature = ": int",
         .summary = "",
@@ -206,7 +226,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "parseAddress",
-        .signature = "(addr: string): Json",
+        .signature = "(addr: string): NodeAddress",
         .summary = "",
     },
     {
@@ -369,38 +389,113 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     {
+        .name = "CsvDiagnostic",
+        .signature = "CsvDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.byteOffset",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.kind",
+        .signature = ": CsvErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CsvDiagnostic.record",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument",
+        .signature = "CsvDocument",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument.headers",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "CsvDocument.rows",
+        .signature = ": Array<Array<string>>",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport",
+        .signature = "CsvParseReport",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.delimiter",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.diagnostics",
+        .signature = ": Array<CsvDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.document",
+        .signature = ": CsvDocument",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.linebreak",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.truncated",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "defaultParseOptions",
+        .signature = "(): CsvParseOptions",
+        .summary = "",
+    },
+    {
+        .name = "defaultWriteOptions",
+        .signature = "(): CsvWriteOptions",
+        .summary = "",
+    },
+    {
         .name = "parse",
-        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .signature = "(data: string, options: CsvParseOptions? = null): CsvDocument",
         .summary = "",
     },
     {
-        .name = "parseAuto",
-        .signature = "(data: string, options: unknown = null): Array<Json>",
-        .summary = "",
-    },
-    {
-        .name = "parseDetailed",
-        .signature = "(data: string, options: unknown = null): Json",
-        .summary = "",
-    },
-    {
-        .name = "parseFile",
-        .signature = "(path: string, options: unknown = null): Array<Json>",
-        .summary = "",
-    },
-    {
-        .name = "parseTsv",
-        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .name = "parseReport",
+        .signature = "(data: string, options: CsvParseOptions? = null): CsvParseReport",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(data: unknown, options: unknown = null): string",
-        .summary = "",
-    },
-    {
-        .name = "writeFile",
-        .signature = "(path: string, data: unknown, options: unknown = null): bool",
+        .signature = "(document: CsvDocument, options: CsvWriteOptions? = null): string",
         .summary = "",
     },
 };
@@ -663,13 +758,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ChunkedBody.trailerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "ChunkedBody.trailers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -843,6 +933,46 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "Headers",
+        .signature = "Headers",
+        .summary = "",
+    },
+    {
+        .name = "Headers.add",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "Headers.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Headers.entries",
+        .signature = "(): Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "Headers.get",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "Headers.getAll",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "Headers.has",
+        .signature = "(name: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "Headers.set",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
         .name = "HttpResponse",
         .signature = "HttpResponse",
         .summary = "",
@@ -854,7 +984,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.constructor",
-        .signature = "(status: int, statusText: string, headers: Json, body: string, error: string?): ()",
+        .signature = "(status: int, statusText: string, headers: Headers, body: string, error: string?): ()",
         .summary = "",
     },
     {
@@ -864,7 +994,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.headers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -963,13 +1093,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestHead.headerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "RequestHead.headers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1028,13 +1153,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestMessage.trailerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "RequestMessage.trailers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1068,13 +1188,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ResponseHead.headerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "ResponseHead.headers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1133,13 +1248,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ResponseMessage.trailerPairs",
-        .signature = ": Array<(string, string)>",
-        .summary = "",
-    },
-    {
         .name = "ResponseMessage.trailers",
-        .signature = ": Json",
+        .signature = ": Headers",
         .summary = "",
     },
     {
@@ -1259,12 +1369,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "requestText",
-        .signature = "(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?",
+        .signature = "(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?",
         .summary = "",
     },
     {
         .name = "responseText",
-        .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?",
+        .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
         .summary = "",
     },
     {
@@ -3226,6 +3336,46 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     {
+        .name = "QueryParams",
+        .signature = "QueryParams",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.add",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.encode",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.entries",
+        .signature = "(): Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.get",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.getAll",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "QueryParams.set",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
         .name = "URL",
         .signature = "URL",
         .summary = "",
@@ -3286,11 +3436,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "",
     },
     {
-        .name = "buildQuery",
-        .signature = "(obj: Json): string",
-        .summary = "",
-    },
-    {
         .name = "decode",
         .signature = "(s: string): string",
         .summary = "",
@@ -3327,7 +3472,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     },
     {
         .name = "parseQuery",
-        .signature = "(qs: string): Json",
+        .signature = "(qs: string): QueryParams",
         .summary = "",
     },
     {
@@ -5189,6 +5334,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
+            "| `NodeAddress` | `NodeAddress` |  |\n"
+            "| `NodeAddress.constructor` | `(host: string, port: int): ()` |  |\n"
+            "| `NodeAddress.host` | `: string` |  |\n"
+            "| `NodeAddress.port` | `: int` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
@@ -5197,7 +5346,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
-            "| `cluster.parseAddress` | `(addr: string): Json` |  |\n"
+            "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
             "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
             "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
@@ -5282,13 +5431,28 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `csv.parse` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.parseAuto` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.parseDetailed` | `(data: string, options: unknown = null): Json` |  |\n"
-            "| `csv.parseFile` | `(path: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.parseTsv` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
-            "| `csv.stringify` | `(data: unknown, options: unknown = null): string` |  |\n"
-            "| `csv.writeFile` | `(path: string, data: unknown, options: unknown = null): bool` |  |\n"
+            "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n"
+            "| `CsvDiagnostic.byteOffset` | `: int` |  |\n"
+            "| `CsvDiagnostic.column` | `: int` |  |\n"
+            "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n"
+            "| `CsvDiagnostic.line` | `: int` |  |\n"
+            "| `CsvDiagnostic.message` | `: string` |  |\n"
+            "| `CsvDiagnostic.record` | `: int` |  |\n"
+            "| `CsvDocument` | `CsvDocument` |  |\n"
+            "| `CsvDocument.constructor` | `(): ()` |  |\n"
+            "| `CsvDocument.headers` | `: Array<string>` |  |\n"
+            "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
+            "| `CsvParseReport` | `CsvParseReport` |  |\n"
+            "| `CsvParseReport.delimiter` | `: string` |  |\n"
+            "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n"
+            "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
+            "| `CsvParseReport.linebreak` | `: string` |  |\n"
+            "| `CsvParseReport.truncated` | `: bool` |  |\n"
+            "| `csv.defaultParseOptions` | `(): CsvParseOptions` |  |\n"
+            "| `csv.defaultWriteOptions` | `(): CsvWriteOptions` |  |\n"
+            "| `csv.parse` | `(data: string, options: CsvParseOptions? = null): CsvDocument` |  |\n"
+            "| `csv.parseReport` | `(data: string, options: CsvParseOptions? = null): CsvParseReport` |  |\n"
+            "| `csv.stringify` | `(document: CsvDocument, options: CsvWriteOptions? = null): string` |  |\n"
             "",
         .symbols = _symbols_csv,
         .symbol_count = (int)(sizeof(_symbols_csv) / sizeof(_symbols_csv[0])),
@@ -5393,8 +5557,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ChunkedBody.consumedBytes` | `: int` |  |\n"
             "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
             "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
-            "| `ChunkedBody.trailerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `ChunkedBody.trailers` | `: Json` |  |\n"
+            "| `ChunkedBody.trailers` | `: Headers` |  |\n"
             "| `Cookie` | `Cookie` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
             "| `Cookie.expires` | `: int` |  |\n"
@@ -5429,11 +5592,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FormData.maxFileSize` | `: int` |  |\n"
             "| `FormData.maxTotalSize` | `: int` |  |\n"
             "| `FormData.totalSize` | `: int` |  |\n"
+            "| `Headers` | `Headers` |  |\n"
+            "| `Headers.add` | `(name: string, value: string): ()` |  |\n"
+            "| `Headers.constructor` | `(): ()` |  |\n"
+            "| `Headers.entries` | `(): Array<(string, string)>` |  |\n"
+            "| `Headers.get` | `(name: string): string?` |  |\n"
+            "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
+            "| `Headers.has` | `(name: string): bool` |  |\n"
+            "| `Headers.set` | `(name: string, value: string): ()` |  |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: string` |  |\n"
-            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Json, body: string, error: string?): ()` |  |\n"
+            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Headers, body: string, error: string?): ()` |  |\n"
             "| `HttpResponse.error` | `: string?` |  |\n"
-            "| `HttpResponse.headers` | `: Json` |  |\n"
+            "| `HttpResponse.headers` | `: Headers` |  |\n"
             "| `HttpResponse.ok` | `: bool` |  |\n"
             "| `HttpResponse.status` | `: int` |  |\n"
             "| `HttpResponse.statusText` | `: string` |  |\n"
@@ -5453,8 +5624,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
             "| `RequestHead.headerBytes` | `: int` |  |\n"
-            "| `RequestHead.headerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `RequestHead.headers` | `: Json` |  |\n"
+            "| `RequestHead.headers` | `: Headers` |  |\n"
             "| `RequestHead.keepAlive` | `: bool` |  |\n"
             "| `RequestHead.method` | `: string` |  |\n"
             "| `RequestHead.target` | `: string` |  |\n"
@@ -5466,16 +5636,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `RequestMessage.head` | `: RequestHead` |  |\n"
-            "| `RequestMessage.trailerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `RequestMessage.trailers` | `: Json` |  |\n"
+            "| `RequestMessage.trailers` | `: Headers` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
             "| `ResponseHead.contentLength` | `: int` |  |\n"
             "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
             "| `ResponseHead.headerBytes` | `: int` |  |\n"
-            "| `ResponseHead.headerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `ResponseHead.headers` | `: Json` |  |\n"
+            "| `ResponseHead.headers` | `: Headers` |  |\n"
             "| `ResponseHead.keepAlive` | `: bool` |  |\n"
             "| `ResponseHead.reason` | `: string` |  |\n"
             "| `ResponseHead.status` | `: int` |  |\n"
@@ -5487,8 +5655,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
-            "| `ResponseMessage.trailerPairs` | `: Array<(string, string)>` |  |\n"
-            "| `ResponseMessage.trailers` | `: Json` |  |\n"
+            "| `ResponseMessage.trailers` | `: Headers` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
             "| `RouteMatch.constructor` | `(value: unknown, params: Json): ()` |  |\n"
             "| `RouteMatch.params` | `: Json` |  |\n"
@@ -5512,8 +5679,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: Json): HttpResponse` |  |\n"
-            "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
-            "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Json = null, keepAlive: bool = true): string?` |  |\n"
+            "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
+            "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: unknown): ()` |  |\n"
             "| `http.router` | `(): Router` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
@@ -5932,12 +6099,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# parallel module\n"
             "\n"
-            "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns.\n"
+            "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns. The `.xr` module is the canonical semantic source; hosted VM and native AOT may lower eligible operations to verified batch execution without changing the public contract.\n"
             "\n"
             "Usage: `import parallel` then call `parallel.function()`.\n"
             "\n"
             "### Execution model\n"
-            "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies exist for bootstrap and tooling semantics.\n"
+            "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies define bootstrap and tooling semantics.\n"
             "\n"
             "### Safety contract\n"
             "- Lane callbacks must not suspend, await, spawn tasks, or throw.\n"
@@ -6248,6 +6415,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `QueryParams` | `QueryParams` |  |\n"
+            "| `QueryParams.add` | `(name: string, value: string): ()` |  |\n"
+            "| `QueryParams.constructor` | `(): ()` |  |\n"
+            "| `QueryParams.encode` | `(): string` |  |\n"
+            "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n"
+            "| `QueryParams.get` | `(name: string): string?` |  |\n"
+            "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n"
+            "| `QueryParams.set` | `(name: string, value: string): ()` |  |\n"
             "| `URL` | `URL` |  |\n"
             "| `URL.hash` | `: string` |  |\n"
             "| `URL.host` | `: string` |  |\n"
@@ -6260,7 +6435,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `URL.protocol` | `: string` |  |\n"
             "| `URL.search` | `: string` |  |\n"
             "| `URL.username` | `: string` |  |\n"
-            "| `url.buildQuery` | `(obj: Json): string` |  |\n"
             "| `url.decode` | `(s: string): string` |  |\n"
             "| `url.decodeForm` | `(s: string): string` |  |\n"
             "| `url.encode` | `(s: string): string` |  |\n"
@@ -6268,7 +6442,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `url.format` | `(obj: URL): string` |  |\n"
             "| `url.join` | `(...parts: string): string` |  |\n"
             "| `url.parse` | `(url: string): URL` |  |\n"
-            "| `url.parseQuery` | `(qs: string): Json` |  |\n"
+            "| `url.parseQuery` | `(qs: string): QueryParams` |  |\n"
             "| `url.resolve` | `(base: string, relative: string): string` |  |\n"
             "",
         .symbols = _symbols_url,

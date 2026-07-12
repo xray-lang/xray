@@ -1,0 +1,1 @@
+{"case":"typed-document","probe":"tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"RFC 4180 textual rows plus explicit recovery diagnostics"}

@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/url_core_direct.xr

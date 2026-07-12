@@ -1007,6 +1007,13 @@ static void cg_register_class_methods(XiCgenCtx *ctx, const XiFunc *parent, cons
                     ctx->methods[ctx->nmethod].func = parent->children[idx];
                     ctx->methods[ctx->nmethod].class_data = cd;
                     ctx->methods[ctx->nmethod].instance_layout = cd->instance_layout;
+                    /* ctx->methods storage is reused across module emission.
+                     * Local registrations must clear a prefix left by an
+                     * imported class in the previous module, otherwise a
+                     * same-named method is emitted with the stale module
+                     * owner. Imported registrations set the real prefix in
+                     * cg_register_imported_classes immediately afterwards. */
+                    ctx->methods[ctx->nmethod].module_prefix = NULL;
                     ctx->nmethod++;
                 }
             }
