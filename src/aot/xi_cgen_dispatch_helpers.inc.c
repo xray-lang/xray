@@ -1862,33 +1862,52 @@ static bool xicgen_direct_call_param_noescape(XiCgenCtx *ctx, const XiFunc *curr
                                               uint8_t depth);
 
 static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t arg_index) {
-    if (!user || (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || !user->aux)
+    if (!user || (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT))
         return false;
-    const char *method = (const char *) user->aux;
-    if (arg_index == 0 && (strcmp(method, "get") == 0 || strcmp(method, "load") == 0 ||
-                           strcmp(method, "store") == 0 || strcmp(method, "commonPrefix") == 0 ||
-                           strcmp(method, "repeatFrom") == 0 || strcmp(method, "copyFrom") == 0 ||
-                           strcmp(method, "compare") == 0 || strcmp(method, "fill") == 0))
+    if (arg_index == 0 &&
+        (cg_call_method_matches_receiver_registry_id(user,
+                                                     XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_GET) ||
+         cg_call_method_matches_receiver_registry_id(user,
+                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD) ||
+         cg_call_method_matches_receiver_registry_id(user,
+                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE) ||
+         cg_call_method_matches_receiver_registry_id(
+             user, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX) ||
+         cg_call_method_matches_receiver_registry_id(
+             user, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM) ||
+         cg_call_method_matches_receiver_registry_id(
+             user, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM) ||
+         cg_call_method_matches_receiver_registry_id(user,
+                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE) ||
+         cg_call_method_matches_receiver_registry_id(user,
+                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL) ||
+         cg_call_method_matches_receiver_registry_id(
+             user, XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM) ||
+         cg_call_method_matches_receiver_registry_id(
+             user, XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE) ||
+         cg_call_method_matches_receiver_registry_id(user,
+                                                     XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL)))
         return true;
-    if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
+    if (arg_index == 1 && cg_call_method_matches_receiver_registry_id(
+                              user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM))
         return true;
     return false;
 }
 
 static bool xicgen_call_method_is_common_prefix(const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2 ||
-        !v->aux)
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2)
         return false;
-    return strcmp((const char *) v->aux, "commonPrefix") == 0;
+    return cg_call_method_matches_receiver_registry_id(
+        v, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX);
 }
 
 static bool xicgen_call_method_is_copy_from(const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2 ||
-        !v->aux)
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2)
         return false;
-    return strcmp((const char *) v->aux, "copyFrom") == 0;
+    return cg_call_method_matches_receiver_registry_id(
+        v, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM);
 }
 
 static bool xicgen_rawptr_value_only_used_noescape(XiCgenCtx *ctx, const XiFunc *f,
@@ -4132,25 +4151,34 @@ static bool xicgen_emit_time_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
 static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, const char *prefix, const char *method,
                                            uint16_t nargs) {
-    if (nargs == 1 && method && strcmp(method, "push") == 0 &&
+    if (nargs == 1 &&
+        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) &&
         emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
         return true;
-    if (nargs == 2 && method && strcmp(method, "set") == 0 &&
+    if (nargs == 2 &&
+        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_SET) &&
         emit_typed_array_set_unchecked_expr(ctx, out, f, prefix, v))
         return true;
-    if (method && strcmp(method, "reserve") == 0 && nargs == 1 &&
+    if (nargs == 1 &&
+        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) &&
         emit_typed_array_reserve_expr(ctx, out, f, prefix, v))
         return true;
-    if (method && strcmp(method, "resize") == 0 && nargs >= 1 && nargs <= 2 &&
+    if (nargs >= 1 && nargs <= 2 &&
+        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE) &&
         emit_typed_array_resize_zero_expr(ctx, out, f, prefix, v))
         return true;
-    if (nargs == 1 && method && strcmp(method, "appendFrom") == 0 &&
+    if (nargs == 1 &&
+        cg_call_method_matches_receiver_registry_id(
+            v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) &&
         emit_byte_array_append_from_expr(ctx, out, f, prefix, v))
         return true;
-    if (nargs == 2 && method && strcmp(method, "repeatFrom") == 0 &&
+    if (nargs == 2 &&
+        cg_call_method_matches_receiver_registry_id(
+            v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM) &&
         emit_byte_array_repeat_from_expr(ctx, out, f, prefix, v))
         return true;
-    if (method && strcmp(method, "fill") == 0 && nargs >= 1 && nargs <= 3 &&
+    if (nargs >= 1 && nargs <= 3 &&
+        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL) &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))
         return true;
     if (!method)
