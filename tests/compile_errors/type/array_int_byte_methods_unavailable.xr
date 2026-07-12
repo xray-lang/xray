@@ -1,0 +1,7 @@
+fn checkAppend(values: Array<int>, src: Slice<int>) {
+    values.appendFrom(src)
+}
+
+fn checkRepeat(values: Array<int>) {
+    values.repeatFrom(1, 1)
+}

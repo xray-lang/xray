@@ -1,0 +1,4 @@
+fn check(values: Array<int>) -> int {
+    var view: Slice<int> = values[:]
+    return int(view.load<uint16>(0, Endian.LE))
+}
