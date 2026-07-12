@@ -1,2 +1,1 @@
-Type 'Array<int>' is not assignable to type 'Span<int>'
-
+Type 'Array<int>' is not assignable to type 'Slice<int>'

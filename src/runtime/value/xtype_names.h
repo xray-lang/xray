@@ -54,11 +54,8 @@
 #define TYPE_NAME_SET "Set"
 #define TYPE_NAME_WEAKMAP "WeakMap"
 #define TYPE_NAME_WEAKSET "WeakSet"
-#define TYPE_NAME_BYTES "Array<byte>"
 #define TYPE_NAME_SPAN "Slice"
-#define TYPE_NAME_BYTESPAN "Slice<byte>"
 #define TYPE_NAME_VIEW "Slice"
-#define TYPE_NAME_BYTEVIEW "Slice<byte>"
 
 /* ========== Runtime Types ========== */
 

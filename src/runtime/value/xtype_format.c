@@ -116,19 +116,15 @@ const char *xr_type_to_string(XrType *type) {
 
     if (XR_TYPE_IS_SPAN(type)) {
         XrType *elem_type = type->container.element_type;
-        if (elem_type && XR_TYPE_IS_INT(elem_type) && elem_type->native_width == XR_NATIVE_U8)
-            return TYPE_NAME_BYTESPAN;
         const char *elem = elem_type ? xr_type_to_string(elem_type) : "unknown";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "Span<%s>", elem);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", TYPE_NAME_SPAN, elem);
         return xr_pool_strdup(pool, buf);
     }
 
     if (XR_TYPE_IS_VIEW(type)) {
         XrType *elem_type = type->container.element_type;
-        if (elem_type && XR_TYPE_IS_INT(elem_type) && elem_type->native_width == XR_NATIVE_U8)
-            return TYPE_NAME_BYTEVIEW;
         const char *elem = elem_type ? xr_type_to_string(elem_type) : "unknown";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "View<%s>", elem);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", TYPE_NAME_VIEW, elem);
         return xr_pool_strdup(pool, buf);
     }
 
