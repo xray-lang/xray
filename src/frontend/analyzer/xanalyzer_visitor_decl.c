@@ -1796,6 +1796,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     links->type = fn_type;
     links->declared_type = fn_type;
     links->file_path = ctx->file_path;
+    links->function_decl_node = node;
 
     // FFI: mark @extern functions so call sites can require `unsafe { }`.
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);

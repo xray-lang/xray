@@ -20,6 +20,7 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
+#include "../../base/xstorage.h"
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
@@ -4896,9 +4897,17 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType **saved_return_types = ctx->return_types;
             int saved_return_count = ctx->return_type_count;
             int saved_return_cap = ctx->return_type_capacity;
+            uint8_t saved_return_storage_owner = ctx->return_storage_owner;
+            bool saved_return_storage_known = ctx->return_storage_known;
+            bool saved_return_storage_mixed = ctx->return_storage_mixed;
+            bool saved_return_storage_unknown = ctx->return_storage_unknown;
             ctx->return_types = NULL;
             ctx->return_type_count = 0;
             ctx->return_type_capacity = 0;
+            ctx->return_storage_owner = XR_STORAGE_NONE;
+            ctx->return_storage_known = false;
+            ctx->return_storage_mixed = false;
+            ctx->return_storage_unknown = false;
 
             // Isolate flow graph: each function gets a fresh start node
             // so that flow facts from sibling/parent functions (e.g.
@@ -5024,6 +5033,25 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
+            if (fn_decl->name) {
+                XaSymbol *fn_sym =
+                    xa_scope_lookup(ctx->analyzer->current_scope->parent, fn_decl->name);
+                XaSymbolLinks *fn_links = fn_sym && fn_sym->kind == XA_SYM_FUNCTION
+                                              ? xa_analyzer_get_links(ctx->analyzer, fn_sym)
+                                              : NULL;
+                if (fn_links) {
+                    fn_links->return_storage_owner = ctx->return_storage_owner;
+                    fn_links->return_storage_known = ctx->return_storage_known &&
+                                                     !ctx->return_storage_mixed &&
+                                                     !ctx->return_storage_unknown;
+                    fn_links->return_storage_mixed =
+                        ctx->return_storage_mixed ||
+                        (ctx->return_storage_known && ctx->return_storage_unknown);
+                    fn_links->return_storage_scanned = true;
+                    fn_links->return_storage_scan_in_progress = false;
+                }
+            }
+
             ctx->expected_return_type = saved_expected_ret;
 
             xa_analyzer_exit_scope(ctx->analyzer);
@@ -5043,6 +5071,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->return_types = saved_return_types;
             ctx->return_type_count = saved_return_count;
             ctx->return_type_capacity = saved_return_cap;
+            ctx->return_storage_owner = saved_return_storage_owner;
+            ctx->return_storage_known = saved_return_storage_known;
+            ctx->return_storage_mixed = saved_return_storage_mixed;
+            ctx->return_storage_unknown = saved_return_storage_unknown;
             break;
         }
         case AST_EXPORT_STMT:

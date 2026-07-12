@@ -112,6 +112,12 @@ struct XaSymbolLinks {
     int param_escape_count;
     XrType *return_type;
     bool return_type_inferred;
+    uint8_t return_storage_owner;  // XrStorageOwner for known owned/shared returns
+    bool return_storage_known;
+    bool return_storage_mixed;
+    bool return_storage_scanned;
+    bool return_storage_scan_in_progress;
+    struct AstNode *function_decl_node;
     bool is_extern;    // @extern foreign function (FFI): calls require unsafe { }
     bool is_c_export;  // @c_export AOT C ABI wrapper
     const char *c_export_symbol;

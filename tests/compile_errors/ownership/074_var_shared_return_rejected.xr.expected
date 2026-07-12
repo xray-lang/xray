@@ -1,0 +1,1 @@
+var binding 'local' cannot receive shared return from function 'buildConfig'

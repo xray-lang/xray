@@ -61,3 +61,42 @@ fn test_owned_move_to_shared_ref_free_array() {
     assert_eq(frozen[1], 20)
     assert_eq(frozen[2], 30)
 }
+
+fn make_owned_return_buffer() -> Array<byte> {
+    owned bytes = Array<byte>(2, 0)
+    bytes[0] = 11
+    bytes[1] = 12
+    return move bytes
+}
+
+fn make_shared_return_buffer() -> Array<byte> {
+    owned bytes = Array<byte>(2, 0)
+    bytes[0] = 21
+    bytes[1] = 22
+    shared frozen = move bytes
+    return frozen
+}
+
+@test
+fn test_owned_return_to_owned_binding() {
+    owned bytes = make_owned_return_buffer()
+    assert_eq(len(bytes), 2)
+    assert_eq(bytes[0], 11)
+    assert_eq(bytes[1], 12)
+}
+
+@test
+fn test_shared_return_to_shared_binding() {
+    shared bytes = make_shared_return_buffer()
+    assert_eq(len(bytes), 2)
+    assert_eq(bytes[0], 21)
+    assert_eq(bytes[1], 22)
+}
+
+@test
+fn test_copy_owned_return_to_var_binding() {
+    var bytes = copy(make_owned_return_buffer())
+    assert_eq(len(bytes), 2)
+    assert_eq(bytes[0], 11)
+    assert_eq(bytes[1], 12)
+}
