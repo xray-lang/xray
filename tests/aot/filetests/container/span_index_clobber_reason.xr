@@ -12,5 +12,4 @@ fn clobbered_sum(src: Slice<byte>) -> int {
 var bytes = Array<byte>(2)
 bytes[0] = 1
 bytes[1] = 2
-var view: Slice<byte> = bytes[:]
-print(clobbered_sum(view))
+print(clobbered_sum(bytes[:]))

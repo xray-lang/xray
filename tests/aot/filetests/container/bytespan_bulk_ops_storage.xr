@@ -7,3 +7,7 @@ fn bulk(dst: Slice<byte>, src: Slice<byte>) -> int {
     var check: Slice<byte> = dst[2:6]
     return check.compare(src) + check.commonPrefix(src)
 }
+
+var dst = Array<byte>(8, 0)
+var src = Array<byte>(4, 0)
+print(bulk(dst[:], src[:]))

@@ -1013,6 +1013,7 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
     int line = parser->previous.line;
     Parser checkpoint = *parser;
     int saved_panic_mode = parser->panic_mode;
+    int saved_error_count = parser->error_count;
 
     // Suppress error output during speculative parsing
     parser->panic_mode = 1;
@@ -1027,6 +1028,9 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
             break;
 
         XrTypeRef *type = xr_parse_type_annotation(parser);
+        if (parser->error_count > saved_error_count) {
+            return NULL;
+        }
         if (!type || parser->had_error) {
             // Not valid type args, restore and return NULL
             *parser = checkpoint;
@@ -1103,9 +1107,13 @@ AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left) {
     }
 
     // Try generic call first (no space before '<')
+    int saved_error_count = parser->error_count;
     AstNode *generic_call = xr_parse_try_generic_call_after_lt(parser, left);
     if (generic_call) {
         return generic_call;
+    }
+    if (parser->error_count > saved_error_count) {
+        return left;
     }
 
     // Fall back to comparison

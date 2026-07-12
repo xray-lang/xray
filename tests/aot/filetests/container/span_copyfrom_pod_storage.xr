@@ -3,3 +3,7 @@ fn copy_words(dst: Slice<uint32>, src: Slice<uint32>) -> int {
     var copied: Slice<uint32> = window.copyFrom(src)
     return len(copied)
 }
+
+var dst = Array<uint32>(4, 0)
+var src = Array<uint32>(2, 9)
+print(copy_words(dst[:], src[:]))

@@ -9,7 +9,7 @@
  *
  * The first input byte selects the stdlib parser:
  *   0: csv.parseReport
- *   1: toml.parseStrict
+ *   1: toml.parseReport
  *   2: xml.parseDetailed
  *   3: yaml.parseAll
  */
@@ -137,7 +137,7 @@ static const char *target_suffix(uint8_t selector) {
                    "options.maxRecords = 2048\n"
                    "var result = csv.parseReport(data, options)\n";
         case 1:
-            return "\nvar result = toml.parseStrict(data)\n";
+            return "\nvar result = toml.parseReport(data)\n";
         case 2:
             return "\nvar result = xml.parseDetailed(data, { preserveComments: true, "
                    "preserveCData: true, validateEntities: true })\n";

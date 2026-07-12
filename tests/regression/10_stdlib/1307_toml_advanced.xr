@@ -1,215 +1,173 @@
-// 1302_toml_advanced.xr - TOML advanced feature tests
+// 1307_toml_advanced.xr - typed TOML module tests
 
 import toml
+import { TomlDateTime, TomlValue } from toml
 
-// ===== Multiline basic string =====
+fn field(value: TomlValue, key: string) -> TomlValue {
+    return toml.get(value, key)!
+}
+
+fn item(value: TomlValue, index: int) -> TomlValue {
+    return toml.at(value, index)!
+}
+
+fn asString(value: TomlValue) -> string {
+    return toml.asString(value)!
+}
+
+fn asInt(value: TomlValue) -> int {
+    return toml.asInt(value)!
+}
+
+fn asBool(value: TomlValue) -> bool {
+    return toml.asBool(value)!
+}
+
+fn asFloat(value: TomlValue) -> float {
+    return toml.asFloat(value)!
+}
+
+fn asDateTime(value: TomlValue) -> TomlDateTime {
+    return toml.asDateTime(value)!
+}
+
+fn isTable(value: TomlValue) -> bool {
+    return toml.isTable(value)
+}
+
+fn configSample() -> TomlValue {
+    var table = toml.newTable()
+    toml.tableSet(table, "name", toml.stringValue("xray"))
+    toml.tableSet(table, "version", toml.intValue(2))
+    toml.tableSet(table, "enabled", toml.boolValue(true))
+    return toml.tableValue(table)
+}
 
 @test
 fn test_multiline_basic_string() {
-    var data = "desc = \"\"\"\nHello\nWorld\"\"\""
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["desc"], "Hello\nWorld")
+    var obj = toml.parse("desc = \"\"\"\nHello\nWorld\"\"\"")
+    assert_eq(asString(field(obj, "desc")), "Hello\nWorld")
 }
-
-// ===== Literal string =====
 
 @test
-fn test_literal_string() {
-    var data = "path = 'C:\\Users\\Alice'"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["path"], "C:\\Users\\Alice")
+fn test_literal_strings() {
+    var obj = toml.parse("path = 'C:\\Users\\Alice'\ntext = '''\nno escapes \\n here\n'''")
+    assert_eq(asString(field(obj, "path")), "C:\\Users\\Alice")
+    assert(len(asString(field(obj, "text"))) > 0)
 }
-
-// ===== Multiline literal string =====
-
-@test
-fn test_multiline_literal_string() {
-    var data = "text = '''\nno escapes \\n here\n'''"
-    var obj: Json = toml.parse(data) ?? {}
-    assert(len(obj["text"]) > 0)
-}
-
-// ===== Array of tables =====
 
 @test
 fn test_array_of_tables() {
     var data = "[[products]]\nname = \"Hammer\"\nsku = 738594937\n\n[[products]]\nname = \"Nail\"\nsku = 284758393"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["products"][0]["name"], "Hammer")
-    assert_eq(obj["products"][1]["name"], "Nail")
-    assert_eq(obj["products"][0]["sku"], 738594937)
+    var products = field(toml.parse(data), "products")
+    assert_eq(asString(field(item(products, 0), "name")), "Hammer")
+    assert_eq(asString(field(item(products, 1), "name")), "Nail")
+    assert_eq(asInt(field(item(products, 0), "sku")), 738594937)
 }
-
-// ===== Escape sequences =====
 
 @test
-fn test_escape_sequences() {
-    var data = "s = \"tab\\there\\nnewline\""
-    var obj: Json = toml.parse(data) ?? {}
-    assert(len(obj["s"]) > 0)
+fn test_escape_and_unicode_sequences() {
+    var obj = toml.parse("s = \"tab\\there\\nnewline\"\nheart = \"\\u2764\"")
+    assert(len(asString(field(obj, "s"))) > 0)
+    assert(len(asString(field(obj, "heart"))) > 0)
 }
-
-// ===== Unicode escape =====
-
-@test
-fn test_unicode_escape() {
-    var data = "heart = \"\\u2764\""
-    var obj: Json = toml.parse(data) ?? {}
-    assert(len(obj["heart"]) > 0)
-}
-
-// ===== Dotted keys =====
 
 @test
 fn test_dotted_keys() {
-    var data = "fruit.name = \"apple\"\nfruit.color = \"red\""
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["fruit"]["name"], "apple")
-    assert_eq(obj["fruit"]["color"], "red")
+    var obj = toml.parse("fruit.name = \"apple\"\nfruit.color = \"red\"")
+    var fruit = field(obj, "fruit")
+    assert_eq(asString(field(fruit, "name")), "apple")
+    assert_eq(asString(field(fruit, "color")), "red")
 }
-
-// ===== Inline table with dotted keys =====
 
 @test
 fn test_inline_table_dotted_keys() {
-    var data = "point = { position.x = 1, position.y = 2 }"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["point"]["position"]["x"], 1)
-    assert_eq(obj["point"]["position"]["y"], 2)
+    var obj = toml.parse("point = { position.x = 1, position.y = 2 }")
+    var position = field(field(obj, "point"), "position")
+    assert_eq(asInt(field(position, "x")), 1)
+    assert_eq(asInt(field(position, "y")), 2)
 }
-
-// ===== Special float values =====
 
 @test
-fn test_special_floats() {
-    var data = "pos_inf = inf\nneg_inf = -inf\nnot_a_num = nan"
-    var obj: Json = toml.parse(data) ?? {}
-    assert(obj["pos_inf"] > 0)
-    assert(obj["neg_inf"] < 0)
+fn test_special_floats_and_negative_numbers() {
+    var obj = toml.parse("pos_inf = inf\nneg_inf = -inf\nnot_a_num = nan\ntemp = -17\noffset = -0.5")
+    assert(asFloat(field(obj, "pos_inf")) > 0.0)
+    assert(asFloat(field(obj, "neg_inf")) < 0.0)
+    assert_eq(asInt(field(obj, "temp")), -17)
+    assert_eq(asFloat(field(obj, "offset")), -0.5)
 }
-
-// ===== Negative numbers =====
-
-@test
-fn test_negative_numbers() {
-    var data = "temp = -17\noffset = -0.5"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["temp"], -17)
-    assert_eq(obj["offset"], -0.5)
-}
-
-// ===== Float serialization with decimal point =====
 
 @test
 fn test_float_decimal_point() {
-    var config: Json = {"value": 1.0}
-    var result = toml.stringify(config)
-    // Float must have decimal point in TOML
-    assert(len(result) > 0)
-    var reparsed: Json = toml.parse(result) ?? {}
-    assert_eq(typeName(reparsed["value"]), "float")
+    var table = toml.newTable()
+    toml.tableSet(table, "value", toml.floatValue(1.0))
+    var result = toml.stringify(toml.tableValue(table))
+    assert(result.contains("value = 1.0"))
+    var reparsed = toml.parse(result)
+    assert_eq(asFloat(field(reparsed, "value")), 1.0)
 }
-
-// ===== Stringify roundtrip =====
 
 @test
 fn test_stringify_roundtrip() {
-    var original: Json = {"name": "xray", "version": 2, "enabled": true}
-    var toml_str = toml.stringify(original)
-    var parsed: Json = toml.parse(toml_str) ?? {}
-    assert_eq(parsed["name"], "xray")
-    assert_eq(parsed["version"], 2)
-    assert_eq(parsed["enabled"], true)
+    var tomlText = toml.stringify(configSample())
+    var parsed = toml.parse(tomlText)
+    assert_eq(asString(field(parsed, "name")), "xray")
+    assert_eq(asInt(field(parsed, "version")), 2)
+    assert_eq(asBool(field(parsed, "enabled")), true)
 }
-
-// ===== Stringify nested table roundtrip =====
 
 @test
 fn test_stringify_nested_roundtrip() {
-    var data = "[server]\nhost = \"localhost\"\nport = 8080"
-    var obj: Json = toml.parse(data) ?? {}
-    var toml_str = toml.stringify(obj)
-    var reparsed: Json = toml.parse(toml_str) ?? {}
-    assert_eq(reparsed["server"]["host"], "localhost")
-    assert_eq(reparsed["server"]["port"], 8080)
+    var obj = toml.parse("[server]\nhost = \"localhost\"\nport = 8080")
+    var tomlText = toml.stringify(obj)
+    var server = field(toml.parse(tomlText), "server")
+    assert_eq(asString(field(server, "host")), "localhost")
+    assert_eq(asInt(field(server, "port")), 8080)
 }
-
-// ===== parseStrict mode =====
 
 @test
-fn test_parse_strict() {
-    var data = "name = \"Alice\"\nage = 30"
-    var result: Json = toml.parseStrict(data) ?? {}
-    assert_eq(result["data"]["name"], "Alice")
-    assert(len(result["errors"]) == 0)
-    assert(result["meta"]["lines"] > 0)
-    assert(result["meta"]["keys"] > 0)
+fn test_parse_report() {
+    var report = toml.parseReport("name = \"Alice\"\nage = 30")
+    assert_eq(asString(field(report.data, "name")), "Alice")
+    assert(len(report.errors) == 0)
+    assert(report.lines > 0)
+    assert(report.keys > 0)
 }
-
-// ===== Duplicate key detection =====
 
 @test
-fn test_duplicate_key_strict() {
-    var data = "name = \"Alice\"\nname = \"Bob\""
-    var result: Json = toml.parseStrict(data) ?? {}
-    // Should detect duplicate key error
-    assert(len(result["errors"]) > 0)
+fn test_duplicate_key_report() {
+    var report = toml.parseReport("name = \"Alice\"\nname = \"Bob\"")
+    assert(len(report.errors) > 0)
 }
-
-// ===== Empty input =====
 
 @test
 fn test_empty_input() {
-    var obj: Json = toml.parse("") ?? {}
-    assert(obj != null)
+    var obj = toml.parse("")
+    assert(isTable(obj))
 }
-
-// ===== Comments =====
 
 @test
-fn test_comments() {
-    var data = "# This is a comment\nkey = \"value\" # inline comment"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["key"], "value")
+fn test_comments_and_bool_end() {
+    var obj = toml.parse("# This is a comment\nkey = \"value\" # inline comment\nflag = false")
+    assert_eq(asString(field(obj, "key")), "value")
+    assert_eq(asBool(field(obj, "flag")), false)
 }
-
-// ===== Boolean at end of input =====
-
-@test
-fn test_bool_at_end() {
-    var data = "flag = true"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["flag"], true)
-
-    var data2 = "flag = false"
-    var obj2 = toml.parse(data2)
-    assert_eq(obj2["flag"], false)
-}
-
-// ===== Datetime =====
 
 @test
 fn test_datetime() {
-    var data = "created = 2024-01-15T10:30:00Z"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["created"].toString(), "2024-01-15 10:30:00")
+    var obj = toml.parse("created = 2024-01-15T10:30:00Z")
+    assert_eq(asDateTime(field(obj, "created")).toString(), "2024-01-15 10:30:00")
 }
-
-// ===== Datetime with space separator =====
 
 @test
 fn test_datetime_space() {
-    var data = "created = 1979-05-27 07:32:00"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["created"].toString(), "1979-05-27 07:32:00")
+    var obj = toml.parse("created = 1979-05-27 07:32:00")
+    assert_eq(asDateTime(field(obj, "created")).toString(), "1979-05-27 07:32:00")
 }
-
-// ===== Underscore in numbers =====
 
 @test
 fn test_underscore_numbers() {
-    var data = "big = 1_000_000\nhex = 0xFF_FF"
-    var obj: Json = toml.parse(data) ?? {}
-    assert_eq(obj["big"], 1000000)
-    assert_eq(obj["hex"], 65535)
+    var obj = toml.parse("big = 1_000_000\nhex = 0xFF_FF")
+    assert_eq(asInt(field(obj, "big")), 1000000)
+    assert_eq(asInt(field(obj, "hex")), 65535)
 }

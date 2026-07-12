@@ -6,7 +6,7 @@ import text
 // Public HTTP/1.x request/response formatting, client, routing, and server
 // dispatch live here.
 
-import { QueryParams, encode, decodeForm, parse as parseUrl, parseQuery, resolve as resolveUrl } from url
+import { encode, decodeForm, parse as parseUrl, resolve as resolveUrl } from url
 import crypto
 import io
 import net
@@ -596,10 +596,10 @@ fn _matchRoutePath(pattern: string, path: string) -> Json {
 }
 
 class RouteMatch {
-    value: unknown
+    value: Json
     params: Json
 
-    constructor(value: unknown, params: Json) {
+    constructor(value: Json, params: Json) {
         this.value = value
         this.params = params
     }
@@ -608,9 +608,9 @@ class RouteMatch {
 class _RouteEntry {
     method: string
     path: string
-    value: unknown
+    value: Json
 
-    constructor(method: string, path: string, value: unknown) {
+    constructor(method: string, path: string, value: Json) {
         this.method = method
         this.path = path
         this.value = value
@@ -624,17 +624,18 @@ class Router {
         this.routes = []
     }
 
-    add(method: string, path: string, value: unknown) -> bool {
+    add<T>(method: string, path: string, value: T) -> bool {
+        var encoded = Json.encode(value)
         var m = _routeMethodKey(method)
         if (len(m) == 0 || !_routePatternValid(path)) { return false }
         for (var i = 0; i < len(this.routes); i++) {
             var entry = this.routes[i]
             if (entry.method == m && entry.path == path) {
-                this.routes[i] = _RouteEntry(m, path, value)
+                this.routes[i] = _RouteEntry(m, path, encoded)
                 return true
             }
         }
-        this.routes.push(_RouteEntry(m, path, value))
+        this.routes.push(_RouteEntry(m, path, encoded))
         return true
     }
 
@@ -662,19 +663,19 @@ fn router() -> Router {
 }
 
 class _RouteHandler {
-    handler: (Json) -> unknown
+    handler: (Json) -> Json
 
-    constructor(handler: (Json) -> unknown) {
+    constructor(handler: (Json) -> Json) {
         this.handler = handler
     }
 }
 
 class _ServerRouteMatch {
-    value: unknown
+    value: Json
     handler: _RouteHandler?
     params: Json
 
-    constructor(value: unknown, params: Json, handler: _RouteHandler? = null) {
+    constructor(value: Json, params: Json, handler: _RouteHandler? = null) {
         this.value = value
         this.params = params
         this.handler = handler
@@ -684,10 +685,10 @@ class _ServerRouteMatch {
 class _ServerRouteEntry {
     method: string
     path: string
-    value: unknown
+    value: Json
     handler: _RouteHandler?
 
-    constructor(method: string, path: string, value: unknown, handler: _RouteHandler? = null) {
+    constructor(method: string, path: string, value: Json, handler: _RouteHandler? = null) {
         this.method = method
         this.path = path
         this.value = value
@@ -702,11 +703,16 @@ class _ServerRouter {
         this.routes = []
     }
 
-    add(method: string, path: string, value: unknown) -> bool {
-        return this.addRoute(method, path, value, null)
+    add<T>(method: string, path: string, value: T) -> bool {
+        return this.addRouteJson(method, path, Json.encode(value), null)
     }
 
-    addRoute(method: string, path: string, value: unknown, handler: _RouteHandler?) -> bool {
+    addHandler(method: string, path: string, handler: _RouteHandler) -> bool {
+        var value: Json = {}
+        return this.addRouteJson(method, path, value, handler)
+    }
+
+    addRouteJson(method: string, path: string, value: Json, handler: _RouteHandler?) -> bool {
         var m = _routeMethodKey(method)
         if (len(m) == 0 || !_routePatternValid(path)) { return false }
         for (var i = 0; i < len(this.routes); i++) {
@@ -743,9 +749,9 @@ var _serverRouter = _ServerRouter()
 var _serverRunning = false
 var _serverListener: NetListener? = null
 
-fn route(method: string, path: string, handler: unknown) {
+fn route<T>(method: string, path: string, handler: T) {
     if (typeName(handler) == "function") {
-        _serverRouter.addRoute(method, path, handler, _RouteHandler(handler as (Json) -> unknown))
+        _serverRouter.addHandler(method, path, _RouteHandler(handler as (Json) -> Json))
         return
     }
     _serverRouter.add(method, path, handler)
@@ -757,21 +763,36 @@ fn _serverTargetPath(target: string) -> string {
     return target
 }
 
-fn _serverTargetQuery(target: string) -> unknown {
-    var q = target.indexOf("?")
-    if (q < 0) { return QueryParams() }
-    return parseQuery(target.slice(q + 1))
-}
-
-// The legacy Json server-request envelope cannot represent duplicate query
-// names. Keep the lossy conversion explicit at that dynamic boundary; the
-// canonical URL parser and all new typed HTTP surfaces consume QueryParams.
-fn _serverQueryJson(params: unknown) -> Json {
+// The legacy Json server-request envelope cannot represent duplicate query names.
+// Keep the lossy conversion explicit at this dynamic handler boundary; the
+// canonical URL parser's public typed surface remains url.QueryParams.
+fn _serverQueryJson(target: string) -> Json {
     var out: Json = {}
-    var typed: QueryParams = params as QueryParams
-    var pairs = typed.entries()
-    for (var i = 0; i < len(pairs); i++) {
-        out[pairs[i].0] = pairs[i].1
+    var q = target.indexOf("?")
+    if (q < 0) { return out }
+
+    var start = q + 1
+    var end = len(target)
+    var hash = _findCharBefore(target, '#', start, end)
+    if (hash >= 0) { end = hash }
+
+    while (start < end) {
+        var amp = _findCharBefore(target, '&', start, end)
+        var pairEnd = amp
+        if (pairEnd < 0) { pairEnd = end }
+
+        var eq = _findCharBefore(target, '=', start, pairEnd)
+        var keyEnd = pairEnd
+        if (eq >= 0) { keyEnd = eq }
+        if (pairEnd > start) {
+            var name = decodeForm(target.slice(start, keyEnd))
+            var value = ""
+            if (eq >= 0) { value = decodeForm(target.slice(eq + 1, pairEnd)) }
+            out[name] = value
+        }
+
+        if (amp < 0) { break }
+        start = amp + 1
     }
     return out
 }
@@ -780,7 +801,7 @@ fn _serverRequestJson(msg: RequestMessage, params: Json) -> Json {
     var req: Json = {}
     req["method"] = msg.head.method
     req["path"] = _serverTargetPath(msg.head.target)
-    req["query"] = _serverQueryJson(_serverTargetQuery(msg.head.target))
+    req["query"] = _serverQueryJson(msg.head.target)
     req["headers"] = _headersJson(msg.head.headers as Headers)
     req["body"] = msg.body
     req["contentLength"] = msg.head.contentLength
@@ -794,12 +815,11 @@ fn _serverStatusResponse(status: int, body: string, keepAlive: bool = false) -> 
     return "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\nConnection: close\r\n\r\nInternal Server Error"
 }
 
-fn _serverHeadersFrom(value: unknown) -> Headers? {
+fn _serverHeadersFrom(value: Json) -> Headers? {
     var headers = Headers()
     if (value == null) { return headers }
-    var encoded = Json.encode(value)
-    if (typeName(encoded) != "Json") { return null }
-    var object = encoded as Json
+    if (typeName(value) != "Json") { return null }
+    var object = value as Json
     for (key in object) {
         var name = string(key)
         var rawValue = Json.get(object, name, null)
@@ -808,8 +828,8 @@ fn _serverHeadersFrom(value: unknown) -> Headers? {
     return headers
 }
 
-fn _serverArrayResponse(value: unknown, keepAlive: bool) -> string {
-    var arr = value as Array
+fn _serverArrayResponse(value: Json, keepAlive: bool) -> string {
+    var arr = value as Array<Json>
     var status = 200
     var contentType = "text/plain; charset=utf-8"
     var body = ""
@@ -831,7 +851,7 @@ fn _serverArrayResponse(value: unknown, keepAlive: bool) -> string {
     return _serverStatusResponse(500, "Internal Server Error", false)
 }
 
-fn _serverResponseFor(value: unknown, keepAlive: bool) -> string {
+fn _serverResponseFor(value: Json, keepAlive: bool) -> string {
     var kind = typeName(value)
     if (kind == "null") { return _serverStatusResponse(204, "", keepAlive) }
     if (kind == "Array") { return _serverArrayResponse(value, keepAlive) }
@@ -865,7 +885,7 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
                msg.head.keepAlive
     }
 
-    var result: unknown = found!.value
+    var result: Json = found!.value
     if (found!.handler != null) {
         var req = _serverRequestJson(msg, found!.params)
         try {
@@ -879,7 +899,7 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
 
         if (typeName(result) == "string") {
             // Keep dynamic handler strings in this frame; AOT can lose payloads
-            // when that unknown value crosses another helper boundary.
+            // when that Json value crosses another helper boundary.
             var body = string(result)
             return _serverWriteAll(
                 conn,

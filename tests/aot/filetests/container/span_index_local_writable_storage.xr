@@ -7,3 +7,5 @@ fn local_bump() -> int {
     view[1] = view[1] + 7
     return int(view[1])
 }
+
+print(local_bump())

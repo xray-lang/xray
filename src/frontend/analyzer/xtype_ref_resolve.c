@@ -922,9 +922,6 @@ static XrType *resolve_named(XrVMRuntime *X, const char *name) {
         return xr_type_new_named_instance(X, "PanicInfo");
     if (strcmp(name, TYPE_NAME_BUFFER) == 0)
         return xr_type_new_named_instance(X, TYPE_NAME_BUFFER);
-    if (strcmp(name, "unknown") == 0)
-        return xr_type_new_unknown(X);
-
     /* Default: treat as class name */
     return xr_type_new_class(X, name);
 }

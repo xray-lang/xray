@@ -8,7 +8,7 @@ regex=span-access [0-9]+ func=word_ops value=v[0-9]+ kind=span_fill evidence=rec
 regex=span-access [0-9]+ func=word_ops value=v[0-9]+ kind=span_copy evidence=recv_agg\+pod\+elem_match\+writable drop=readonly\+type\+pod\+helper
 c_contains=memset(_s.data, (uint8_t)
 c_contains=xr_array_core_bytes_store_u16(
-c_contains=xr_array_core_copy_or_move_bytes(
+c_contains=memmove(_dst.data, _src.data
 c_contains=xr_array_core_bytes_repeat_copy(
 c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
 c_contains=memmove(_dst.data, _src.data

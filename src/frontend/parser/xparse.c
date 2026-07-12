@@ -718,11 +718,15 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
         if (parser->current.type == TK_LT && !parser->current.has_leading_space &&
             precedence <= PREC_CALL) {
             Parser before_generic = *parser;
+            int before_error_count = parser->error_count;
             xr_parser_advance(parser);
             AstNode *generic_call = xr_parse_try_generic_call_after_lt(parser, left);
             if (generic_call) {
                 left = generic_call;
                 continue;
+            }
+            if (parser->error_count > before_error_count) {
+                return left;
             }
             *parser = before_generic;
         }
@@ -1466,6 +1470,7 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
     Token saved_previous = parser->previous;
     int saved_had_error = parser->had_error;
     int saved_panic_mode = parser->panic_mode;
+    int saved_error_count = parser->error_count;
 
     // Tentative parsing: disable error output
     parser->panic_mode = 1;
@@ -1483,6 +1488,10 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
         }
 
         XrTypeRef *type = xr_parse_type_annotation(parser);
+        if (parser->error_count > saved_error_count) {
+            parser->panic_mode = 1;
+            return 0;
+        }
 
         if (parser->had_error && !saved_had_error) {
             goto rollback;
@@ -1585,8 +1594,14 @@ AstNode *xr_parse_variable(Parser *parser) {
 
     // Try parsing generic type args <T1, T2, ...>
     XrTypeRef *type_args[16];  // Max 16 type args
+    int before_generic_error_count = parser->error_count;
     int type_arg_count =
         try_parse_generic_type_args(parser, type_args, 16, is_raw_pointer_type_name(name));
+    if (parser->error_count > before_generic_error_count) {
+        AstNode *node = xr_ast_variable(parser->compiler_session, name, line);
+        node->column = column;
+        return node;
+    }
 
     if (type_arg_count > 0) {
         if (xr_parser_check(parser, TK_DOT) && is_raw_pointer_type_name(name)) {

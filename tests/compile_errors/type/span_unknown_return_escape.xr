@@ -1,13 +1,5 @@
-fn erase(x: unknown) -> unknown {
+fn erase<T>(x: T) -> T {
     return x
 }
 
-fn bad() {
-    var bytes = Array<byte>(4)
-    var view: Slice<byte> = bytes[:]
-    var any = erase(view)
-    var values = Array<unknown>()
-    values.push(any)
-}
-
-bad()
+var values = Array<unknown>()

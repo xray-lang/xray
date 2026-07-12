@@ -66,6 +66,33 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
+static bool xa_call_is_mem_address_of(CallExprNode *call, XaSymbolLinks *fn_links) {
+    if (fn_links && fn_links->module_name && strcmp(fn_links->module_name, "mem") == 0) {
+        if (fn_links->import_member_name && strcmp(fn_links->import_member_name, "addressOf") == 0)
+            return true;
+    }
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || strcmp(ma->name, "addressOf") != 0 || !ma->object ||
+        ma->object->type != AST_VARIABLE)
+        return false;
+    return ma->object->as.variable.name && strcmp(ma->object->as.variable.name, "mem") == 0;
+}
+
+static void xa_check_mem_address_of_arg(XaInferContext *ctx, AstNode *arg_node, XrType *arg_type) {
+    if (!ctx || !ctx->analyzer || !arg_node)
+        return;
+    if (arg_type && XR_TYPE_IS_POINTER(arg_type))
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "mem.addressOf expects RawPtr<T> or RawMut<T>, got '%s'",
+             arg_type ? xr_type_to_string(arg_type) : "unknown");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
 static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                             const char *class_name, XaSymbolLinks *class_links,
                                             XrClassInfo *class_info, XrType **type_args,
@@ -3558,6 +3585,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     int fixed_param_count = rest_param_index >= 0 ? rest_param_index : param_count;
     if (!fn_links && call->callee && call->callee->type == AST_MEMBER_ACCESS)
         fn_links = xa_static_method_fn_links(ctx, call->callee);
+    bool is_mem_address_of = xa_call_is_mem_address_of(call, fn_links);
 
     // Caller-side default argument filling (C1): for a direct call to a named
     // function with default parameters, complete omitted trailing arguments by
@@ -3794,6 +3822,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
                 effective_arg_names[slot] = arg_sym->name;
             }
+        }
+
+        if (is_mem_address_of && slot == 0) {
+            xa_check_mem_address_of_arg(ctx, arg_node, arg_type);
+            slot++;
+            continue;
         }
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {

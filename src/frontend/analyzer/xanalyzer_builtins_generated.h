@@ -244,7 +244,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"pageProtect", "(ptr: RawMut<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false, false},
     {"pageFree", "(ptr: RawMut<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false, false},
     {"fromAddress", "(addr: int): RawMut<byte>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false, false, false, false},
-    {"addressOf", "(ptr: RawPtr<unknown>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false, false, false, false},
+    {"addressOf", "(ptr: RawPtr<byte>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false, false, false, false},
     {"copy", "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, false, false, false},
     {"move", "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, false, false, false},
     {"set", "(dst: RawMut<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false, false, false, false},

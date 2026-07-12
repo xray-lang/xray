@@ -932,7 +932,7 @@ static XrCFuncResult net_read_handle_yieldable(XrVMRuntime *X, XrValue *args, in
 typedef struct {
     int fd;
     XrNetConn *conn;
-    XrArray *buf;  // Bytes buffer supplied by caller (not owned)
+    XrArray *buf;  // Array<byte> buffer supplied by caller (not owned)
     size_t max_len;
     bool is_tls;
     XrPollDesc *pd;  // set on the io_uring completion path
@@ -1064,7 +1064,7 @@ static XrCFuncResult net_read_into_step(XrVMRuntime *X, NetReadIntoState *state,
 
 /*
  * net.readInto(conn_handle, buffer, maxlen?) -> int
- * Read into a reusable Bytes buffer. EOF returns 0; errors return -1.
+ * Read into a reusable Array<byte> buffer. EOF returns 0; errors return -1.
  */
 static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                              XrValue *result) {
@@ -1135,7 +1135,7 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
 typedef struct {
     int fd;
     XrNetConn *conn;
-    const char *data;  // Points directly into XrString/Bytes storage (not owned)
+    const char *data;  // Points directly into XrString/Array<byte> storage (not owned)
     size_t len;
     size_t written;
     bool is_tls;
@@ -1346,7 +1346,7 @@ static XrCFuncResult net_write_handle_yieldable(XrVMRuntime *X, XrValue *args, i
 
 /*
  * net.writeBytes(conn_handle, data) -> int
- * Yieldable: handle-based, dispatches TCP/TLS, sends Bytes or Bytes slice.
+ * Yieldable: handle-based, dispatches TCP/TLS, sends Array<byte> or Slice<byte>.
  */
 static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                XrValue *result) {

@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_unknown_tostring_reject' allocates via method 'unknown.toString'
-contains=xray_no_alloc_unknown_tostring_reject
+contains=@no_alloc function 'xray_no_alloc_json_tostring_reject' allocates via method 'Json.toString'
+contains=xray_no_alloc_json_tostring_reject
 not_contains=CRASH

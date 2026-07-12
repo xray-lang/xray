@@ -9,3 +9,8 @@ fn roundtrip(words: Slice<uint32>) -> int {
     var words_again: Slice<uint32> = bytes.reinterpret<uint32>()
     return len(words_again)
 }
+
+var words = Array<uint32>(4, 0)
+var raw = Array<byte>(8, 0)
+print(views(words[:], raw[:]))
+print(roundtrip(words[:]))

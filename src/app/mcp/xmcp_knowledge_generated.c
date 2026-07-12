@@ -1259,7 +1259,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RouteMatch.constructor",
-        .signature = "(value: unknown, params: Json): ()",
+        .signature = "(value: Json, params: Json): ()",
         .summary = "",
     },
     {
@@ -1269,7 +1269,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RouteMatch.value",
-        .signature = ": unknown",
+        .signature = ": Json",
         .summary = "",
     },
     {
@@ -1279,7 +1279,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Router.add",
-        .signature = "(method: string, path: string, value: unknown): bool",
+        .signature = "(method: string, path: string, value: T): bool",
         .summary = "",
     },
     {
@@ -1375,11 +1375,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "responseText",
         .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
-        .summary = "",
-    },
-    {
-        .name = "route",
-        .signature = "(method: string, path: string, handler: unknown): ()",
         .summary = "",
     },
     {
@@ -1625,7 +1620,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "Json.encode",
-        .signature = "(value: unknown): Json",
+        .signature = "(value: T): Json",
         .summary = "",
     },
     {
@@ -1645,7 +1640,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "Json.get",
-        .signature = "(obj: Json, key: string, default?: unknown): Json",
+        .signature = "(obj: Json, key: string, default?: T): Json",
         .summary = "",
     },
     {
@@ -1675,7 +1670,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "Json.stringify",
-        .signature = "(value: unknown, indent?: int): string",
+        .signature = "(value: T, indent?: int): string",
         .summary = "",
     },
     {
@@ -1733,22 +1728,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.child",
-        .signature = "(...fields: unknown): Logger",
+        .signature = "(...fields: Json): Logger",
         .summary = "",
     },
     {
         .name = "Logger.debug",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
         .name = "Logger.error",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
         .name = "Logger.fatal",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
@@ -1758,7 +1753,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.info",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
@@ -1788,7 +1783,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.warn",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
@@ -1798,12 +1793,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "child",
-        .signature = "(...fields: unknown): Logger",
+        .signature = "(...fields: Json): Logger",
         .summary = "",
     },
     {
         .name = "debug",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
@@ -1818,12 +1813,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "error",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
         .name = "fatal",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
@@ -1833,7 +1828,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "info",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
     {
@@ -1848,7 +1843,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "setLevel",
-        .signature = "(level: unknown): ()",
+        .signature = "(level: Json): ()",
         .summary = "",
     },
     {
@@ -1858,7 +1853,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "warn",
-        .signature = "(...args: unknown): ()",
+        .signature = "(...args: Json): ()",
         .summary = "",
     },
 };
@@ -2144,7 +2139,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "addressOf",
-        .signature = "(ptr: RawPtr<unknown>): int",
+        .signature = "(ptr: RawPtr<byte>): int",
         .summary = "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)",
     },
     {
@@ -3354,28 +3349,413 @@ static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
+        .name = "TomlArray",
+        .signature = "TomlArray",
+        .summary = "",
+    },
+    {
+        .name = "TomlArray.at",
+        .signature = "(index: int): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "TomlArray.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlArray.len",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "TomlArray.push",
+        .signature = "(value: TomlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlArray.values",
+        .signature = ": Array<TomlValue>",
+        .summary = "",
+    },
+    {
+        .name = "TomlDateTime",
+        .signature = "TomlDateTime",
+        .summary = "",
+    },
+    {
+        .name = "TomlDateTime.constructor",
+        .signature = "(raw: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlDateTime.raw",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "TomlDateTime.toISOString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "TomlDateTime.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "TomlFloat",
+        .signature = "TomlFloat",
+        .summary = "",
+    },
+    {
+        .name = "TomlFloat.constructor",
+        .signature = "(value: float, text: string = \"\"): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlFloat.text",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "TomlFloat.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "TomlFloat.value",
+        .signature = ": float",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport",
+        .signature = "TomlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport.constructor",
+        .signature = "(data: TomlValue, errors: Array<Json>, lines: int, keys: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport.data",
+        .signature = ": TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport.errors",
+        .signature = ": Array<Json>",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport.keys",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport.lines",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable",
+        .signature = "TomlTable",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.containsKey",
+        .signature = "(key: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.get",
+        .signature = "(key: string): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.keys",
+        .signature = "(): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.set",
+        .signature = "(key: string, value: TomlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.values",
+        .signature = ": Map<string, TomlValue>",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue",
+        .signature = "TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.Array",
+        .signature = "(value: TomlArray): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.Bool",
+        .signature = "(value: bool): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.DateTime",
+        .signature = "(value: TomlDateTime): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.Float",
+        .signature = "(value: TomlFloat): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.Int",
+        .signature = "(value: int): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.String",
+        .signature = "(value: string): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.Table",
+        .signature = "(value: TomlTable): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.arrayValue",
+        .signature = ": TomlArray?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asArray",
+        .signature = "(): TomlArray?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asBool",
+        .signature = "(): bool?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asDateTime",
+        .signature = "(): TomlDateTime?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asFloat",
+        .signature = "(): float?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asInt",
+        .signature = "(): int?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asString",
+        .signature = "(): string?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.asTable",
+        .signature = "(): TomlTable?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.at",
+        .signature = "(index: int): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.boolValue",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.constructor",
+        .signature = "(kind: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.dateTimeValue",
+        .signature = ": TomlDateTime?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.floatValue",
+        .signature = ": TomlFloat?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.get",
+        .signature = "(key: string): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.intValue",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.keys",
+        .signature = "(): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.kind",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.len",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.stringValue",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.tableValue",
+        .signature = ": TomlTable?",
+        .summary = "",
+    },
+    {
+        .name = "arrayPush",
+        .signature = "(array: TomlArray, value: TomlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "arrayValue",
+        .signature = "(value: TomlArray): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "asBool",
+        .signature = "(value: TomlValue): bool?",
+        .summary = "",
+    },
+    {
+        .name = "asDateTime",
+        .signature = "(value: TomlValue): TomlDateTime?",
+        .summary = "",
+    },
+    {
+        .name = "asFloat",
+        .signature = "(value: TomlValue): float?",
+        .summary = "",
+    },
+    {
+        .name = "asInt",
+        .signature = "(value: TomlValue): int?",
+        .summary = "",
+    },
+    {
+        .name = "asString",
+        .signature = "(value: TomlValue): string?",
+        .summary = "",
+    },
+    {
+        .name = "at",
+        .signature = "(value: TomlValue, index: int): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "boolValue",
+        .signature = "(value: bool): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "dateTimeValue",
+        .signature = "(value: string): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "floatValue",
+        .signature = "(value: float): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "get",
+        .signature = "(value: TomlValue, key: string): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "intValue",
+        .signature = "(value: int): TomlValue",
+        .summary = "",
+    },
+    {
+        .name = "isTable",
+        .signature = "(value: TomlValue): bool",
+        .summary = "",
+    },
+    {
+        .name = "length",
+        .signature = "(value: TomlValue): int",
+        .summary = "",
+    },
+    {
+        .name = "newArray",
+        .signature = "(): TomlArray",
+        .summary = "",
+    },
+    {
+        .name = "newTable",
+        .signature = "(): TomlTable",
+        .summary = "",
+    },
+    {
         .name = "parse",
-        .signature = "(data: string): Json",
+        .signature = "(data: string): TomlValue",
         .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: string): Json",
+        .signature = "(path: string): TomlValue",
         .summary = "",
     },
     {
-        .name = "parseStrict",
-        .signature = "(data: string): Json",
+        .name = "parseReport",
+        .signature = "(data: string): TomlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "stringValue",
+        .signature = "(value: string): TomlValue",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(value: unknown): string",
+        .signature = "(value: TomlValue): string",
+        .summary = "",
+    },
+    {
+        .name = "tableSet",
+        .signature = "(table: TomlTable, key: string, value: TomlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "tableValue",
+        .signature = "(value: TomlTable): TomlValue",
         .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, value: unknown): bool",
+        .signature = "(path: string, value: TomlValue): bool",
         .summary = "",
     },
 };
@@ -3849,27 +4229,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "element",
-        .signature = "(tag: string, attrsValue: unknown = null): Json",
+        .signature = "(tag: string, attrsValue: Json = null): Json",
         .summary = "",
     },
     {
         .name = "parse",
-        .signature = "(data: string, options: unknown = null): Json",
+        .signature = "(data: string, options: Json = null): Json",
         .summary = "",
     },
     {
         .name = "parseDetailed",
-        .signature = "(data: string, options: unknown = null): Json",
+        .signature = "(data: string, options: Json = null): Json",
         .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: string, options: unknown = null): Json",
+        .signature = "(path: string, options: Json = null): Json",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(node: unknown, options: unknown = null): string",
+        .signature = "(node: Json, options: Json = null): string",
         .summary = "",
     },
     {
@@ -3879,7 +4259,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, node: unknown, options: unknown = null): bool",
+        .signature = "(path: string, node: Json, options: Json = null): bool",
         .summary = "",
     },
 };
@@ -3887,7 +4267,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     {
         .name = "parse",
-        .signature = "(data: string, options: unknown = null): Json",
+        .signature = "(data: string, options: Json = null): Json",
         .summary = "",
     },
     {
@@ -3907,12 +4287,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "stringify",
-        .signature = "(value: unknown, options: unknown = null): string",
+        .signature = "(value: Json, options: Json = null): string",
         .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, value: unknown): bool",
+        .signature = "(path: string, value: Json): bool",
         .summary = "",
     },
 };
@@ -5702,11 +6082,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
             "| `ResponseMessage.trailers` | `: Headers` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
-            "| `RouteMatch.constructor` | `(value: unknown, params: Json): ()` |  |\n"
+            "| `RouteMatch.constructor` | `(value: Json, params: Json): ()` |  |\n"
             "| `RouteMatch.params` | `: Json` |  |\n"
-            "| `RouteMatch.value` | `: unknown` |  |\n"
+            "| `RouteMatch.value` | `: Json` |  |\n"
             "| `Router` | `Router` |  |\n"
-            "| `Router.add` | `(method: string, path: string, value: unknown): bool` |  |\n"
+            "| `Router.add` | `(method: string, path: string, value: T): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
             "| `Router.find` | `(method: string, path: string): RouteMatch?` |  |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
@@ -5726,7 +6106,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: Json): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
-            "| `http.route` | `(method: string, path: string, handler: unknown): ()` |  |\n"
             "| `http.router` | `(): Router` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
@@ -5819,17 +6198,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Json` | `Json` |  |\n"
             "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
-            "| `Json.encode` | `(value: unknown): Json` |  |\n"
+            "| `Json.encode` | `(value: T): Json` |  |\n"
             "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
             "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
             "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
-            "| `Json.get` | `(obj: Json, key: string, default?: unknown): Json` |  |\n"
+            "| `Json.get` | `(obj: Json, key: string, default?: T): Json` |  |\n"
             "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
             "| `Json.iterator` | `(): Iterator<string>` |  |\n"
             "| `Json.keys` | `(): Array<string>` |  |\n"
             "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
             "| `Json.parse` | `(text: string): Json` |  |\n"
-            "| `Json.stringify` | `(value: unknown, indent?: int): string` |  |\n"
+            "| `Json.stringify` | `(value: T, indent?: int): string` |  |\n"
             "| `Json.toString` | `(): string` |  |\n"
             "| `Json.tryParse` | `(text: string): Json` |  |\n"
             "| `Json.values` | `(): Array<Json>` |  |\n"
@@ -5858,32 +6237,32 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `log.INFO` | `: int` |  |\n"
             "| `Logger` | `Logger` |  |\n"
             "| `Logger.asyncMode` | `: bool` |  |\n"
-            "| `Logger.child` | `(...fields: unknown): Logger` |  |\n"
-            "| `Logger.debug` | `(...args: unknown): ()` |  |\n"
-            "| `Logger.error` | `(...args: unknown): ()` |  |\n"
-            "| `Logger.fatal` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.child` | `(...fields: Json): Logger` |  |\n"
+            "| `Logger.debug` | `(...args: Json): ()` |  |\n"
+            "| `Logger.error` | `(...args: Json): ()` |  |\n"
+            "| `Logger.fatal` | `(...args: Json): ()` |  |\n"
             "| `Logger.format` | `: string` |  |\n"
-            "| `Logger.info` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.info` | `(...args: Json): ()` |  |\n"
             "| `Logger.jsonContext` | `: string` |  |\n"
             "| `Logger.level` | `: int` |  |\n"
             "| `Logger.output` | `: string` |  |\n"
             "| `Logger.source` | `: bool` |  |\n"
             "| `Logger.textContext` | `: string` |  |\n"
-            "| `Logger.warn` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.warn` | `(...args: Json): ()` |  |\n"
             "| `log.WARN` | `: int` |  |\n"
-            "| `log.child` | `(...fields: unknown): Logger` |  |\n"
-            "| `log.debug` | `(...args: unknown): ()` |  |\n"
+            "| `log.child` | `(...fields: Json): Logger` |  |\n"
+            "| `log.debug` | `(...args: Json): ()` |  |\n"
             "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n"
             "| `log.enableSource` | `(enabled: bool = true): ()` |  |\n"
-            "| `log.error` | `(...args: unknown): ()` |  |\n"
-            "| `log.fatal` | `(...args: unknown): ()` |  |\n"
+            "| `log.error` | `(...args: Json): ()` |  |\n"
+            "| `log.fatal` | `(...args: Json): ()` |  |\n"
             "| `log.flush` | `(): ()` |  |\n"
-            "| `log.info` | `(...args: unknown): ()` |  |\n"
+            "| `log.info` | `(...args: Json): ()` |  |\n"
             "| `log.isEnabled` | `(level: int): bool` |  |\n"
             "| `log.setFormat` | `(format: string): ()` |  |\n"
-            "| `log.setLevel` | `(level: unknown): ()` |  |\n"
+            "| `log.setLevel` | `(level: Json): ()` |  |\n"
             "| `log.setOutput` | `(path: string): ()` |  |\n"
-            "| `log.warn` | `(...args: unknown): ()` |  |\n"
+            "| `log.warn` | `(...args: Json): ()` |  |\n"
             "",
         .symbols = _symbols_log,
         .symbol_count = (int)(sizeof(_symbols_log) / sizeof(_symbols_log[0])),
@@ -5975,7 +6354,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.PROT_NONE` | `: int` | No access protection for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.addressOf` | `(ptr: RawPtr<unknown>): int` | Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
+            "| `mem.addressOf` | `(ptr: RawPtr<byte>): int` | Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
             "| `mem.alignOf` | `(): int` | Compile-time alignment in bytes of a statically laid out type T |\n"
             "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
             "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
@@ -6492,11 +6871,88 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `toml.parse` | `(data: string): Json` |  |\n"
-            "| `toml.parseFile` | `(path: string): Json` |  |\n"
-            "| `toml.parseStrict` | `(data: string): Json` |  |\n"
-            "| `toml.stringify` | `(value: unknown): string` |  |\n"
-            "| `toml.writeFile` | `(path: string, value: unknown): bool` |  |\n"
+            "| `TomlArray` | `TomlArray` |  |\n"
+            "| `TomlArray.at` | `(index: int): TomlValue?` |  |\n"
+            "| `TomlArray.constructor` | `(): ()` |  |\n"
+            "| `TomlArray.len` | `(): int` |  |\n"
+            "| `TomlArray.push` | `(value: TomlValue): ()` |  |\n"
+            "| `TomlArray.values` | `: Array<TomlValue>` |  |\n"
+            "| `TomlDateTime` | `TomlDateTime` |  |\n"
+            "| `TomlDateTime.constructor` | `(raw: string): ()` |  |\n"
+            "| `TomlDateTime.raw` | `: string` |  |\n"
+            "| `TomlDateTime.toISOString` | `(): string` |  |\n"
+            "| `TomlDateTime.toString` | `(): string` |  |\n"
+            "| `TomlFloat` | `TomlFloat` |  |\n"
+            "| `TomlFloat.constructor` | `(value: float, text: string = \"\"): ()` |  |\n"
+            "| `TomlFloat.text` | `: string` |  |\n"
+            "| `TomlFloat.toString` | `(): string` |  |\n"
+            "| `TomlFloat.value` | `: float` |  |\n"
+            "| `TomlParseReport` | `TomlParseReport` |  |\n"
+            "| `TomlParseReport.constructor` | `(data: TomlValue, errors: Array<Json>, lines: int, keys: int): ()` |  |\n"
+            "| `TomlParseReport.data` | `: TomlValue` |  |\n"
+            "| `TomlParseReport.errors` | `: Array<Json>` |  |\n"
+            "| `TomlParseReport.keys` | `: int` |  |\n"
+            "| `TomlParseReport.lines` | `: int` |  |\n"
+            "| `TomlTable` | `TomlTable` |  |\n"
+            "| `TomlTable.constructor` | `(): ()` |  |\n"
+            "| `TomlTable.containsKey` | `(key: string): bool` |  |\n"
+            "| `TomlTable.get` | `(key: string): TomlValue?` |  |\n"
+            "| `TomlTable.keys` | `(): Array<string>` |  |\n"
+            "| `TomlTable.set` | `(key: string, value: TomlValue): ()` |  |\n"
+            "| `TomlTable.values` | `: Map<string, TomlValue>` |  |\n"
+            "| `TomlValue` | `TomlValue` |  |\n"
+            "| `TomlValue.Array` | `(value: TomlArray): TomlValue` |  |\n"
+            "| `TomlValue.Bool` | `(value: bool): TomlValue` |  |\n"
+            "| `TomlValue.DateTime` | `(value: TomlDateTime): TomlValue` |  |\n"
+            "| `TomlValue.Float` | `(value: TomlFloat): TomlValue` |  |\n"
+            "| `TomlValue.Int` | `(value: int): TomlValue` |  |\n"
+            "| `TomlValue.String` | `(value: string): TomlValue` |  |\n"
+            "| `TomlValue.Table` | `(value: TomlTable): TomlValue` |  |\n"
+            "| `TomlValue.arrayValue` | `: TomlArray?` |  |\n"
+            "| `TomlValue.asArray` | `(): TomlArray?` |  |\n"
+            "| `TomlValue.asBool` | `(): bool?` |  |\n"
+            "| `TomlValue.asDateTime` | `(): TomlDateTime?` |  |\n"
+            "| `TomlValue.asFloat` | `(): float?` |  |\n"
+            "| `TomlValue.asInt` | `(): int?` |  |\n"
+            "| `TomlValue.asString` | `(): string?` |  |\n"
+            "| `TomlValue.asTable` | `(): TomlTable?` |  |\n"
+            "| `TomlValue.at` | `(index: int): TomlValue?` |  |\n"
+            "| `TomlValue.boolValue` | `: bool` |  |\n"
+            "| `TomlValue.constructor` | `(kind: string): ()` |  |\n"
+            "| `TomlValue.dateTimeValue` | `: TomlDateTime?` |  |\n"
+            "| `TomlValue.floatValue` | `: TomlFloat?` |  |\n"
+            "| `TomlValue.get` | `(key: string): TomlValue?` |  |\n"
+            "| `TomlValue.intValue` | `: int` |  |\n"
+            "| `TomlValue.keys` | `(): Array<string>` |  |\n"
+            "| `TomlValue.kind` | `: string` |  |\n"
+            "| `TomlValue.len` | `(): int` |  |\n"
+            "| `TomlValue.stringValue` | `: string` |  |\n"
+            "| `TomlValue.tableValue` | `: TomlTable?` |  |\n"
+            "| `toml.arrayPush` | `(array: TomlArray, value: TomlValue): ()` |  |\n"
+            "| `toml.arrayValue` | `(value: TomlArray): TomlValue` |  |\n"
+            "| `toml.asBool` | `(value: TomlValue): bool?` |  |\n"
+            "| `toml.asDateTime` | `(value: TomlValue): TomlDateTime?` |  |\n"
+            "| `toml.asFloat` | `(value: TomlValue): float?` |  |\n"
+            "| `toml.asInt` | `(value: TomlValue): int?` |  |\n"
+            "| `toml.asString` | `(value: TomlValue): string?` |  |\n"
+            "| `toml.at` | `(value: TomlValue, index: int): TomlValue?` |  |\n"
+            "| `toml.boolValue` | `(value: bool): TomlValue` |  |\n"
+            "| `toml.dateTimeValue` | `(value: string): TomlValue` |  |\n"
+            "| `toml.floatValue` | `(value: float): TomlValue` |  |\n"
+            "| `toml.get` | `(value: TomlValue, key: string): TomlValue?` |  |\n"
+            "| `toml.intValue` | `(value: int): TomlValue` |  |\n"
+            "| `toml.isTable` | `(value: TomlValue): bool` |  |\n"
+            "| `toml.length` | `(value: TomlValue): int` |  |\n"
+            "| `toml.newArray` | `(): TomlArray` |  |\n"
+            "| `toml.newTable` | `(): TomlTable` |  |\n"
+            "| `toml.parse` | `(data: string): TomlValue` |  |\n"
+            "| `toml.parseFile` | `(path: string): TomlValue` |  |\n"
+            "| `toml.parseReport` | `(data: string): TomlParseReport` |  |\n"
+            "| `toml.stringValue` | `(value: string): TomlValue` |  |\n"
+            "| `toml.stringify` | `(value: TomlValue): string` |  |\n"
+            "| `toml.tableSet` | `(table: TomlTable, key: string, value: TomlValue): ()` |  |\n"
+            "| `toml.tableValue` | `(value: TomlTable): TomlValue` |  |\n"
+            "| `toml.writeFile` | `(path: string, value: TomlValue): bool` |  |\n"
             "",
         .symbols = _symbols_toml,
         .symbol_count = (int)(sizeof(_symbols_toml) / sizeof(_symbols_toml[0])),
@@ -6643,13 +7099,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `xml.cdata` | `(content: string): Json` |  |\n"
             "| `xml.comment` | `(content: string): Json` |  |\n"
             "| `xml.document` | `(): Json` |  |\n"
-            "| `xml.element` | `(tag: string, attrsValue: unknown = null): Json` |  |\n"
-            "| `xml.parse` | `(data: string, options: unknown = null): Json` |  |\n"
-            "| `xml.parseDetailed` | `(data: string, options: unknown = null): Json` |  |\n"
-            "| `xml.parseFile` | `(path: string, options: unknown = null): Json` |  |\n"
-            "| `xml.stringify` | `(node: unknown, options: unknown = null): string` |  |\n"
+            "| `xml.element` | `(tag: string, attrsValue: Json = null): Json` |  |\n"
+            "| `xml.parse` | `(data: string, options: Json = null): Json` |  |\n"
+            "| `xml.parseDetailed` | `(data: string, options: Json = null): Json` |  |\n"
+            "| `xml.parseFile` | `(path: string, options: Json = null): Json` |  |\n"
+            "| `xml.stringify` | `(node: Json, options: Json = null): string` |  |\n"
             "| `xml.text` | `(content: string): Json` |  |\n"
-            "| `xml.writeFile` | `(path: string, node: unknown, options: unknown = null): bool` |  |\n"
+            "| `xml.writeFile` | `(path: string, node: Json, options: Json = null): bool` |  |\n"
             "",
         .symbols = _symbols_xml,
         .symbol_count = (int)(sizeof(_symbols_xml) / sizeof(_symbols_xml[0])),
@@ -6668,12 +7124,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `yaml.parse` | `(data: string, options: unknown = null): Json` |  |\n"
+            "| `yaml.parse` | `(data: string, options: Json = null): Json` |  |\n"
             "| `yaml.parseAll` | `(data: string): Array<Json>` |  |\n"
             "| `yaml.parseFile` | `(path: string): Json` |  |\n"
             "| `yaml.parseStrict` | `(data: string): Json` |  |\n"
-            "| `yaml.stringify` | `(value: unknown, options: unknown = null): string` |  |\n"
-            "| `yaml.writeFile` | `(path: string, value: unknown): bool` |  |\n"
+            "| `yaml.stringify` | `(value: Json, options: Json = null): string` |  |\n"
+            "| `yaml.writeFile` | `(path: string, value: Json): bool` |  |\n"
             "",
         .symbols = _symbols_yaml,
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),

@@ -12,6 +12,226 @@ import io
 
 const TOML_MAX_DEPTH = 256
 
+class TomlDateTime {
+    raw: string
+
+    constructor(raw: string) {
+        this.raw = raw
+    }
+
+    toString() -> string {
+        var s = this.raw
+        if (s.endsWith("Z") || s.endsWith("z")) {
+            s = s.slice(0, len(s) - 1)
+        }
+        var dot = s.indexOf(".")
+        if (dot >= 0) { s = s.slice(0, dot) }
+        return s.replace("T", " ").replace("t", " ")
+    }
+
+    toISOString() -> string {
+        return this.raw
+    }
+}
+
+class TomlFloat {
+    value: float
+    text: string
+
+    constructor(value: float, text: string = "") {
+        this.value = value
+        if (len(text) > 0) {
+            this.text = text
+        } else {
+            var s = Json.stringify(value)
+            if (!s.contains(".") && !s.contains("e") && !s.contains("E")) { s = s + ".0" }
+            this.text = s
+        }
+    }
+
+    toString() -> string {
+        return this.text
+    }
+}
+
+class TomlArray {
+    values: Array<TomlValue>
+
+    constructor() {
+        this.values = []
+    }
+
+    push(value: TomlValue) {
+        this.values.push(value)
+    }
+
+    at(index: int) -> TomlValue? {
+        if (index < 0 || index >= len(this.values)) { return null }
+        return this.values[index]
+    }
+
+    len() -> int {
+        return len(this.values)
+    }
+}
+
+class TomlTable {
+    values: Map<string, TomlValue>
+
+    constructor() {
+        this.values = #{}
+    }
+
+    get(key: string) -> TomlValue? {
+        return this.values.get(key)
+    }
+
+    set(key: string, value: TomlValue) {
+        this.values.set(key, value)
+    }
+
+    containsKey(key: string) -> bool {
+        return this.values.containsKey(key)
+    }
+
+    keys() -> Array<string> {
+        return this.values.keys()
+    }
+}
+
+class TomlValue {
+    kind: string
+    boolValue: bool
+    intValue: int
+    floatValue: TomlFloat?
+    stringValue: string
+    dateTimeValue: TomlDateTime?
+    arrayValue: TomlArray?
+    tableValue: TomlTable?
+
+    constructor(kind: string) {
+        this.kind = kind
+        this.boolValue = false
+        this.intValue = 0
+        this.floatValue = null
+        this.stringValue = ""
+        this.dateTimeValue = null
+        this.arrayValue = null
+        this.tableValue = null
+    }
+
+    static Bool(value: bool) -> TomlValue {
+        var out = TomlValue("bool")
+        out.boolValue = value
+        return out
+    }
+
+    static Int(value: int) -> TomlValue {
+        var out = TomlValue("int")
+        out.intValue = value
+        return out
+    }
+
+    static Float(value: TomlFloat) -> TomlValue {
+        var out = TomlValue("float")
+        out.floatValue = value
+        return out
+    }
+
+    static String(value: string) -> TomlValue {
+        var out = TomlValue("string")
+        out.stringValue = value
+        return out
+    }
+
+    static DateTime(value: TomlDateTime) -> TomlValue {
+        var out = TomlValue("datetime")
+        out.dateTimeValue = value
+        return out
+    }
+
+    static Array(value: TomlArray) -> TomlValue {
+        var out = TomlValue("array")
+        out.arrayValue = value
+        return out
+    }
+
+    static Table(value: TomlTable) -> TomlValue {
+        var out = TomlValue("table")
+        out.tableValue = value
+        return out
+    }
+
+    get(key: string) -> TomlValue? {
+        if (this.kind != "table" || this.tableValue == null) { return null }
+        return this.tableValue!.get(key)
+    }
+
+    at(index: int) -> TomlValue? {
+        if (this.kind != "array" || this.arrayValue == null) { return null }
+        return this.arrayValue!.at(index)
+    }
+
+    len() -> int {
+        if (this.kind == "array" && this.arrayValue != null) { return this.arrayValue!.len() }
+        return 0
+    }
+
+    keys() -> Array<string> {
+        if (this.kind == "table" && this.tableValue != null) { return this.tableValue!.keys() }
+        return []
+    }
+
+    asBool() -> bool? {
+        if (this.kind == "bool") { return this.boolValue }
+        return null
+    }
+
+    asInt() -> int? {
+        if (this.kind == "int") { return this.intValue }
+        return null
+    }
+
+    asFloat() -> float? {
+        if (this.kind == "float" && this.floatValue != null) { return this.floatValue!.value }
+        return null
+    }
+
+    asString() -> string? {
+        if (this.kind == "string") { return this.stringValue }
+        return null
+    }
+
+    asDateTime() -> TomlDateTime? {
+        if (this.kind == "datetime") { return this.dateTimeValue }
+        return null
+    }
+
+    asArray() -> TomlArray? {
+        if (this.kind == "array") { return this.arrayValue }
+        return null
+    }
+
+    asTable() -> TomlTable? {
+        if (this.kind == "table") { return this.tableValue }
+        return null
+    }
+}
+
+class TomlParseReport {
+    data: TomlValue
+    errors: Array<Json>
+    lines: int
+    keys: int
+
+    constructor(data: TomlValue, errors: Array<Json>, lines: int, keys: int) {
+        this.data = data
+        this.errors = errors
+        this.lines = lines
+        this.keys = keys
+    }
+}
+
 fn _isDigit(c: string) -> bool {
     if (len(c) == 0) { return false }
     var o = c.runes().nth(0).toUInt32()
@@ -88,10 +308,11 @@ class TomlParser {
     pos: int
     line: int
     column: int
-    root: Json
-    current: Json
-    errors: Json
-    definedTables: Json
+    root: TomlValue
+    rootTable: TomlTable
+    current: TomlTable
+    errors: Array<Json>
+    definedTables: Map<string, bool>
     keyCount: int
 
     constructor(data: string) {
@@ -99,10 +320,12 @@ class TomlParser {
         this.pos = 0
         this.line = 1
         this.column = 1
-        this.root = {}
-        this.current = this.root
+        var table = TomlTable()
+        this.rootTable = table
+        this.root = TomlValue.Table(table)
+        this.current = table
         this.errors = []
-        this.definedTables = {}
+        this.definedTables = #{}
         this.keyCount = 0
     }
 
@@ -366,44 +589,44 @@ class TomlParser {
         return sign * out
     }
 
-    parseNumberLiteral(raw: string) -> unknown {
+    parseNumberLiteral(raw: string) -> TomlValue {
         var s = _stripUnderscores(raw)
-        if (s == "inf" || s == "+inf") { return 1.0e308 }
-        if (s == "-inf") { return -1.0e308 }
-        if (s == "nan" || s == "+nan" || s == "-nan") { return 0.0 }
+        if (s == "inf" || s == "+inf") { return TomlValue.Float(TomlFloat(1.0e308, "inf")) }
+        if (s == "-inf") { return TomlValue.Float(TomlFloat(-1.0e308, "-inf")) }
+        if (s == "nan" || s == "+nan" || s == "-nan") { return TomlValue.Float(TomlFloat(0.0, "nan")) }
 
         var signOffset = 0
         if (s.startsWith("+") || s.startsWith("-")) { signOffset = 1 }
         if (signOffset + 1 < len(s) && s.slice(signOffset, (signOffset) + 1) == "0") {
             var p = text.lower(s.slice(signOffset + 1, (signOffset + 1) + 1))
-            if (p == "x") { return this.parseBaseInt(s, 16) }
-            if (p == "o") { return this.parseBaseInt(s, 8) }
-            if (p == "b") { return this.parseBaseInt(s, 2) }
+            if (p == "x") { return TomlValue.Int(this.parseBaseInt(s, 16)) }
+            if (p == "o") { return TomlValue.Int(this.parseBaseInt(s, 8)) }
+            if (p == "b") { return TomlValue.Int(this.parseBaseInt(s, 2)) }
         }
 
         if (s.contains(".") || s.contains("e") || s.contains("E")) {
             var f = strconv.parseFloat(s)
-            if (f != null) { return f! }
+            if (f != null) { return TomlValue.Float(TomlFloat(f!, s)) }
             this.addError("InvalidNumber", "Invalid number")
-            return 0.0
+            return TomlValue.Float(TomlFloat(0.0, "0.0"))
         }
         var i = strconv.parseInt(s)
-        if (i != null) { return i! }
+        if (i != null) { return TomlValue.Int(i!) }
         this.addError("InvalidNumber", "Invalid number")
-        return 0
+        return TomlValue.Int(0)
     }
 
-    parseDateTimeLiteral(raw: string) -> unknown {
-        return TomlDateTime(raw)
+    parseDateTimeLiteral(raw: string) -> TomlValue {
+        return TomlValue.DateTime(TomlDateTime(raw))
     }
 
-    parseArray() -> Json {
+    parseArray() -> TomlValue {
         this.advance()
-        var arr: Json = []
+        var arr = TomlArray()
         this.skipWsAndNewlines()
         if (this.peek() == "]") {
             this.advance()
-            return arr
+            return TomlValue.Array(arr)
         }
         while (!this.atEnd()) {
             this.skipWsAndNewlines()
@@ -420,16 +643,16 @@ class TomlParser {
             this.addExpected("',' or ']'")
             break
         }
-        return arr
+        return TomlValue.Array(arr)
     }
 
-    parseInlineTable() -> Json {
+    parseInlineTable() -> TomlValue {
         this.advance()
-        var obj: Json = {}
+        var obj = TomlTable()
         this.skipWs()
         if (this.peek() == "}") {
             this.advance()
-            return obj
+            return TomlValue.Table(obj)
         }
         while (!this.atEnd()) {
             this.skipWs()
@@ -454,27 +677,27 @@ class TomlParser {
             this.addExpected("',' or '}'")
             break
         }
-        return obj
+        return TomlValue.Table(obj)
     }
 
-    parseValue() -> unknown {
+    parseValue() -> TomlValue {
         this.skipWs()
         if (this.atEnd()) {
             this.addError("SyntaxError", "Expected value")
-            return null
+            return TomlValue.String("")
         }
         var c = this.peek()
-        if (c == "\"") { return this.parseBasicString() }
-        if (c == "'") { return this.parseLiteralString() }
+        if (c == "\"") { return TomlValue.String(this.parseBasicString()) }
+        if (c == "'") { return TomlValue.String(this.parseLiteralString()) }
         if (_startsWithAt(this.data, this.pos, "true") && !_isAlphaNum(this.peekAt(4))) {
             this.pos = this.pos + 4
             this.column = this.column + 4
-            return true
+            return TomlValue.Bool(true)
         }
         if (_startsWithAt(this.data, this.pos, "false") && !_isAlphaNum(this.peekAt(5))) {
             this.pos = this.pos + 5
             this.column = this.column + 5
-            return false
+            return TomlValue.Bool(false)
         }
         if (c == "[") { return this.parseArray() }
         if (c == "{") { return this.parseInlineTable() }
@@ -489,29 +712,33 @@ class TomlParser {
             return this.parseNumberLiteral(raw)
         }
         this.addError("InvalidValue", "Invalid value")
-        return null
+        return TomlValue.String("")
     }
 
-    setNestedValue(rootObj: Json, keys: Array<string>, value: unknown) {
+    setNestedValue(rootObj: TomlTable, keys: Array<string>, value: TomlValue) {
         var current = rootObj
         if (len(keys) == 0) { return }
         for (var i = 0; i < len(keys) - 1; i++) {
             var key = keys[i]
-            var existing = Json.get(current, key, null)
-            if (typeName(existing) != "Json") {
-                var child: Json = {}
-                current[key] = child
+            var existing = current.get(key)
+            if (existing == null) {
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
                 current = child
+            } else if (existing!.kind == "table") {
+                current = existing!.asTable()!
             } else {
-                current = existing
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
+                current = child
             }
         }
         var last = keys[len(keys) - 1]
-        if (Json.containsKey(current, last)) {
+        if (current.containsKey(last)) {
             this.addError("DuplicateKey", "Duplicate key")
             return
         }
-        current[last] = value
+        current.set(last, value)
         this.keyCount = this.keyCount + 1
     }
 
@@ -524,66 +751,70 @@ class TomlParser {
         return out.toString()
     }
 
-    getOrCreateTable(keys: Array<string>) -> Json {
+    getOrCreateTable(keys: Array<string>) -> TomlTable {
         var path = this.tablePath(keys)
-        if (Json.containsKey(this.definedTables, path)) {
+        if (this.definedTables.containsKey(path)) {
             this.addError("DuplicateKey", "Table already defined")
         }
-        this.definedTables[path] = true
+        this.definedTables.set(path, true)
 
-        var current = this.root
+        var current = this.rootTable
         for (var i = 0; i < len(keys); i++) {
             var key = keys[i]
-            var existing = Json.get(current, key, null)
+            var existing = current.get(key)
             if (existing == null) {
-                var child: Json = {}
-                current[key] = child
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
                 current = child
-            } else if (typeName(existing) == "Json") {
-                current = existing
+            } else if (existing!.kind == "table") {
+                current = existing!.asTable()!
             } else {
                 this.addError("TableConflict", "Table definition conflict")
-                return this.root
+                return this.rootTable
             }
         }
         return current
     }
 
-    getOrCreateArrayTable(keys: Array<string>) -> Json {
-        var current = this.root
+    getOrCreateArrayTable(keys: Array<string>) -> TomlTable {
+        var current = this.rootTable
         for (var i = 0; i < len(keys) - 1; i++) {
             var key = keys[i]
-            var existing = Json.get(current, key, null)
+            var existing = current.get(key)
             if (existing == null) {
-                var child: Json = {}
-                current[key] = child
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
                 current = child
-            } else if (typeName(existing) == "Json") {
-                current = existing
-            } else if (typeName(existing) == "Array" && len(existing) > 0 &&
-                       typeName(existing[len(existing) - 1]) == "Json") {
-                current = existing[len(existing) - 1]
+            } else if (existing!.kind == "table") {
+                current = existing!.asTable()!
+            } else if (existing!.kind == "array") {
+                var arr = existing!.asArray()!
+                if (arr.len() > 0 && arr.at(arr.len() - 1)!.kind == "table") {
+                    current = arr.at(arr.len() - 1)!.asTable()!
+                } else {
+                    return this.rootTable
+                }
             } else {
-                return this.root
+                return this.rootTable
             }
         }
         if (len(keys) == 0) { return current }
         var last = keys[len(keys) - 1]
-        var slot = Json.get(current, last, null)
-        var arr: Json = []
+        var slot = current.get(last)
+        var arr = TomlArray()
         if (slot == null) {
-            current[last] = arr
-        } else if (typeName(slot) == "Array") {
-            arr = slot
+            current.set(last, TomlValue.Array(arr))
+        } else if (slot!.kind == "array") {
+            arr = slot!.asArray()!
         } else {
-            return this.root
+            return this.rootTable
         }
-        var table: Json = {}
-        arr.push(table)
+        var table = TomlTable()
+        arr.push(TomlValue.Table(table))
         return table
     }
 
-    parseDocument() -> Json {
+    parseDocument() -> TomlValue {
         while (!this.atEnd()) {
             this.skipWsAndNewlines()
             if (this.atEnd()) { break }
@@ -637,48 +868,19 @@ class TomlParser {
     }
 }
 
-class TomlDateTime {
-    raw: string
-
-    constructor(raw: string) {
-        this.raw = raw
-    }
-
-    toString() -> string {
-        var s = this.raw
-        if (s.endsWith("Z") || s.endsWith("z")) {
-            s = s.slice(0, len(s) - 1)
-        }
-        var dot = s.indexOf(".")
-        if (dot >= 0) { s = s.slice(0, dot) }
-        return s.replace("T", " ").replace("t", " ")
-    }
-
-    toISOString() -> string {
-        return this.raw
-    }
-}
-
-fn _parseWithDetails(data: string) -> unknown {
+fn _parseWithDetails(data: string) -> TomlParser {
     var parser = TomlParser(data)
     parser.parseDocument()
     return parser
 }
 
-fn parse(data: string) -> Json {
+fn parse(data: string) -> TomlValue {
     return _parseWithDetails(data).root
 }
 
-fn parseStrict(data: string) -> Json {
+fn parseReport(data: string) -> TomlParseReport {
     var parser = _parseWithDetails(data)
-    return {
-        data: parser.root,
-        errors: parser.errors,
-        meta: {
-            lines: parser.line,
-            keys: parser.keyCount
-        }
-    }
+    return TomlParseReport(parser.root, parser.errors, parser.line, parser.keyCount)
 }
 
 fn _escapeString(value: string) -> string {
@@ -719,50 +921,47 @@ fn _writeKey(key: string) -> string {
     return _escapeString(key)
 }
 
-fn _isArrayOfTables(value: Json) -> bool {
-    return typeName(value) == "Array" && len(value) > 0 && typeName(value[0]) == "Json"
+fn _isArrayOfTables(value: TomlValue) -> bool {
+    if (value.kind != "array") { return false }
+    return value.len() > 0 && value.at(0)!.kind == "table"
 }
 
-fn _valueText(value: unknown, depth: int = 0) -> string {
+fn _valueText(value: TomlValue, depth: int = 0) -> string {
     if (depth > TOML_MAX_DEPTH) { return "\"\"" }
-    if (value == null) { return "\"\"" }
-    var kind = typeName(value)
-    if (kind == "string") { return _escapeString(value as string) }
-    if (kind == "bool") { return string(value as bool) }
-    if (kind == "int") { return string(value as int) }
-    if (kind == "float") {
-        var s = string(value as float)
-        if (!s.contains(".") && !s.contains("e") && !s.contains("E")) { s = s + ".0" }
-        return s
+    if (value.kind == "string") { return _escapeString(value.stringValue) }
+    if (value.kind == "bool") { return string(value.boolValue) }
+    if (value.kind == "int") { return string(value.intValue) }
+    if (value.kind == "float" && value.floatValue != null) { return value.floatValue!.toString() }
+    if (value.kind == "datetime" && value.dateTimeValue != null) {
+        return value.dateTimeValue!.toISOString()
     }
-    if (kind == "TomlDateTime") { return value.toISOString() }
-    if (kind == "Array") {
-        var arr = value as Array
+    if (value.kind == "array") {
         var out = StringBuilder()
         out.append("[")
-        for (var i = 0; i < len(arr); i++) {
+        for (var i = 0; i < value.len(); i++) {
             if (i > 0) { out.append(", ") }
-            out.append(_valueText(arr[i], depth + 1))
+            out.append(_valueText(value.at(i)!, depth + 1))
         }
         out.append("]")
         return out.toString()
     }
-    if (kind == "Json") {
-        var obj = value as Json
+    if (value.kind == "table") {
         var out = StringBuilder()
         out.append("{")
         var first = true
-        for (key in obj) {
+        var keys = value.keys()
+        for (var i = 0; i < len(keys); i++) {
+            var key = keys[i]
             if (!first) { out.append(", ") }
             first = false
             out.append(_writeKey(key))
             out.append(" = ")
-            out.append(_valueText(obj[key], depth + 1))
+            out.append(_valueText(value.get(key)!, depth + 1))
         }
         out.append("}")
         return out.toString()
     }
-    return _escapeString("")
+    return "\"\""
 }
 
 fn _tablePrefix(prefix: string, key: string) -> string {
@@ -770,61 +969,147 @@ fn _tablePrefix(prefix: string, key: string) -> string {
     return prefix + "." + key
 }
 
-fn _arrayTableText(arr: Array, prefix: string, depth: int) -> string {
+fn _arrayTableText(arr: TomlValue, prefix: string, depth: int) -> string {
     var out = StringBuilder()
-    for (var i = 0; i < len(arr); i++) {
-        var item = arr[i]
-        if (typeName(item) != "Json") { continue }
-        out.append("\n[[")
-        out.append(prefix)
-        out.append("]]\n")
-        out.append(_tableText(item as Json, prefix, depth + 1))
-    }
-    return out.toString()
-}
-
-fn _tableText(obj: Json, prefix: string, depth: int = 0) -> string {
-    if (depth > TOML_MAX_DEPTH) { return "" }
-    var out = StringBuilder()
-    var keys = obj.keys()
-    for (var ki = 0; ki < len(keys); ki++) {
-        var key = keys[ki]
-        var value = obj[key]
-        var p = _tablePrefix(prefix, key)
-        if (typeName(value) == "Json") {
-            out.append("\n[")
-            out.append(p)
-            out.append("]\n")
-            out.append(_tableText(value as Json, p, depth + 1))
-        } else if (_isArrayOfTables(value)) {
-            out.append(_arrayTableText(value as Array, p, depth))
-        } else {
-            out.append(_writeKey(key))
-            out.append(" = ")
-            out.append(_valueText(value))
-            out.append("\n")
+    for (var i = 0; i < arr.len(); i++) {
+        var value = arr.at(i)!
+        if (value.kind == "table") {
+            out.append("\n[[")
+            out.append(prefix)
+            out.append("]]\n")
+            out.append(_tableText(value, prefix, depth + 1))
         }
     }
     return out.toString()
 }
 
-fn stringify(value: unknown) -> string {
-    var obj = Json.encode(value)
-    if (typeName(obj) != "Json") { return "" }
-    return _tableText(obj, "")
+fn _tableText(obj: TomlValue, prefix: string, depth: int = 0) -> string {
+    if (depth > TOML_MAX_DEPTH) { return "" }
+    var out = StringBuilder()
+    var keys = obj.keys()
+    for (var ki = 0; ki < len(keys); ki++) {
+        var key = keys[ki]
+        var value = obj.get(key)!
+        var p = _tablePrefix(prefix, key)
+        if (value.kind == "table") {
+            out.append("\n[")
+            out.append(p)
+            out.append("]\n")
+            out.append(_tableText(value, p, depth + 1))
+        } else if (value.kind == "array" && _isArrayOfTables(value)) {
+            out.append(_arrayTableText(value, p, depth))
+        } else {
+                out.append(_writeKey(key))
+                out.append(" = ")
+                out.append(_valueText(value))
+                out.append("\n")
+        }
+    }
+    return out.toString()
 }
 
-fn parseFile(path: string) -> Json {
+fn stringify(value: TomlValue) -> string {
+    if (value.kind == "table") { return _tableText(value, "") }
+    return _valueText(value)
+}
+
+fn parseFile(path: string) -> TomlValue {
     var content = io.readFile(path)
     if (content == null) {
-        var empty: Json = {}
-        return empty
+        var empty = TomlTable()
+        return TomlValue.Table(empty)
     }
     return parse(content!)
 }
 
-fn writeFile(path: string, value: unknown) -> bool {
+fn writeFile(path: string, value: TomlValue) -> bool {
     return io.writeFile(path, stringify(value))
 }
 
-export { parse, parseStrict, stringify, parseFile, writeFile }
+fn newTable() -> TomlTable {
+    return TomlTable()
+}
+
+fn newArray() -> TomlArray {
+    return TomlArray()
+}
+
+fn tableSet(table: TomlTable, key: string, value: TomlValue) {
+    table.set(key, value)
+}
+
+fn arrayPush(array: TomlArray, value: TomlValue) {
+    array.push(value)
+}
+
+fn boolValue(value: bool) -> TomlValue {
+    return TomlValue.Bool(value)
+}
+
+fn intValue(value: int) -> TomlValue {
+    return TomlValue.Int(value)
+}
+
+fn floatValue(value: float) -> TomlValue {
+    return TomlValue.Float(TomlFloat(value))
+}
+
+fn stringValue(value: string) -> TomlValue {
+    return TomlValue.String(value)
+}
+
+fn dateTimeValue(value: string) -> TomlValue {
+    return TomlValue.DateTime(TomlDateTime(value))
+}
+
+fn arrayValue(value: TomlArray) -> TomlValue {
+    return TomlValue.Array(value)
+}
+
+fn tableValue(value: TomlTable) -> TomlValue {
+    return TomlValue.Table(value)
+}
+
+fn get(value: TomlValue, key: string) -> TomlValue? {
+    return value.get(key)
+}
+
+fn at(value: TomlValue, index: int) -> TomlValue? {
+    return value.at(index)
+}
+
+fn length(value: TomlValue) -> int {
+    return value.len()
+}
+
+fn asBool(value: TomlValue) -> bool? {
+    return value.asBool()
+}
+
+fn asInt(value: TomlValue) -> int? {
+    return value.asInt()
+}
+
+fn asFloat(value: TomlValue) -> float? {
+    return value.asFloat()
+}
+
+fn asString(value: TomlValue) -> string? {
+    return value.asString()
+}
+
+fn asDateTime(value: TomlValue) -> TomlDateTime? {
+    return value.asDateTime()
+}
+
+fn isTable(value: TomlValue) -> bool {
+    return value.kind == "table"
+}
+
+export {
+    TomlArray, TomlDateTime, TomlFloat, TomlTable, TomlValue, TomlParseReport,
+    parse, parseReport, stringify, parseFile, writeFile,
+    newTable, newArray, tableSet, arrayPush,
+    boolValue, intValue, floatValue, stringValue, dateTimeValue, arrayValue, tableValue,
+    get, at, length, asBool, asInt, asFloat, asString, asDateTime, isTable
+}

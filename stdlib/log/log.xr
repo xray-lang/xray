@@ -33,8 +33,8 @@ fn _levelName(level: int) -> string {
     return "UNKNOWN"
 }
 
-fn _parseLevel(value: unknown) -> int {
-    if (typeName(value) == "int") { return value }
+fn _parseLevel(value: Json) -> int {
+    if (typeName(value) == "int") { return value as int }
     var name = text.lower(string(value))
     if (name == "debug") { return DEBUG }
     if (name == "info") { return INFO }
@@ -67,10 +67,10 @@ fn _jsonEscape(s: string) -> string {
     return out.toString()
 }
 
-fn _jsonValue(value: unknown) -> string {
+fn _jsonValue(value: Json) -> string {
     var t = typeName(value)
     if (t == "null") { return "null" }
-    if (t == "bool") { return value ? "true" : "false" }
+    if (t == "bool") { return (value as bool) ? "true" : "false" }
     if (t == "int" || t == "float") { return string(value) }
     return _jsonEscape(string(value))
 }
@@ -85,12 +85,12 @@ fn _needsQuote(s: string) -> bool {
     return false
 }
 
-fn _message(args: Array<unknown>) -> string {
+fn _message(args: Array<Json>) -> string {
     if (len(args) == 0) { return "" }
     return string(args[0])
 }
 
-fn _appendTextAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
+fn _appendTextAttrs(out: StringBuilder, args: Array<Json>, start: int) {
     var i = start
     while (i + 1 < len(args)) {
         var key = string(args[i])
@@ -109,7 +109,7 @@ fn _appendTextAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
     }
 }
 
-fn _appendJsonAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
+fn _appendJsonAttrs(out: StringBuilder, args: Array<Json>, start: int) {
     var i = start
     while (i + 1 < len(args)) {
         out.append(",")
@@ -120,7 +120,7 @@ fn _appendJsonAttrs(out: StringBuilder, args: Array<unknown>, start: int) {
     }
 }
 
-fn _formatLine(logger: Logger, level: int, args: Array<unknown>) -> string {
+fn _formatLine(logger: Logger, level: int, args: Array<Json>) -> string {
     var msg = _message(args)
     if (logger.format == "json") {
         var out = StringBuilder()
@@ -177,7 +177,7 @@ fn _emit(logger: Logger, line: string) {
     }
 }
 
-fn _logAt(logger: Logger, level: int, args: Array<unknown>) {
+fn _logAt(logger: Logger, level: int, args: Array<Json>) {
     if (level < logger.level) { return }
     _emit(logger, _formatLine(logger, level, args))
 }
@@ -186,7 +186,7 @@ fn _rootLogger() -> Logger {
     return Logger(_level, _format, _output, _source, _async, "", "")
 }
 
-fn _contextText(args: Array<unknown>) -> string {
+fn _contextText(args: Array<Json>) -> string {
     var out = StringBuilder()
     _appendTextAttrs(out, args, 0)
     var s = out.toString()
@@ -194,7 +194,7 @@ fn _contextText(args: Array<unknown>) -> string {
     return s
 }
 
-fn _contextJson(args: Array<unknown>) -> string {
+fn _contextJson(args: Array<Json>) -> string {
     var out = StringBuilder()
     _appendJsonAttrs(out, args, 0)
     var s = out.toString()
@@ -208,7 +208,7 @@ fn _joinContext(parent: string, child: string, sep: string) -> string {
     return parent + sep + child
 }
 
-fn _makeChild(parent: Logger, fields: Array<unknown>) -> Logger {
+fn _makeChild(parent: Logger, fields: Array<Json>) -> Logger {
     return Logger(
         parent.level,
         parent.format,
@@ -247,56 +247,56 @@ class Logger {
         this.textContext = textContext
     }
 
-    debug(...args: unknown) {
+    debug(...args: Json) {
         _logAt(this, DEBUG, args)
     }
 
-    info(...args: unknown) {
+    info(...args: Json) {
         _logAt(this, INFO, args)
     }
 
-    warn(...args: unknown) {
+    warn(...args: Json) {
         _logAt(this, WARN, args)
     }
 
-    error(...args: unknown) {
+    error(...args: Json) {
         _logAt(this, ERROR, args)
     }
 
-    fatal(...args: unknown) {
+    fatal(...args: Json) {
         _logAt(this, FATAL, args)
         flush()
         os.exit(1)
     }
 
-    child(...fields: unknown) -> Logger {
+    child(...fields: Json) -> Logger {
         return _makeChild(this, fields)
     }
 }
 
-fn debug(...args: unknown) {
+fn debug(...args: Json) {
     _logAt(_rootLogger(), DEBUG, args)
 }
 
-fn info(...args: unknown) {
+fn info(...args: Json) {
     _logAt(_rootLogger(), INFO, args)
 }
 
-fn warn(...args: unknown) {
+fn warn(...args: Json) {
     _logAt(_rootLogger(), WARN, args)
 }
 
-fn error(...args: unknown) {
+fn error(...args: Json) {
     _logAt(_rootLogger(), ERROR, args)
 }
 
-fn fatal(...args: unknown) {
+fn fatal(...args: Json) {
     _logAt(_rootLogger(), FATAL, args)
     flush()
     os.exit(1)
 }
 
-fn setLevel(level: unknown) {
+fn setLevel(level: Json) {
     _level = _parseLevel(level)
 }
 
@@ -338,7 +338,7 @@ fn flush() {
     }
 }
 
-fn child(...fields: unknown) -> Logger {
+fn child(...fields: Json) -> Logger {
     return _makeChild(_rootLogger(), fields)
 }
 

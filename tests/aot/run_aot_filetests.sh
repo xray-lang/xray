@@ -374,6 +374,12 @@ check_expect() {
     return 0
 }
 
+normalize_link_c_for_expect() {
+    local in_file="$1"
+    local out_file="$2"
+    perl -pe 's/([A-Za-z_][A-Za-z0-9_]*)_[0-9a-f]{16}_/${1}_/g' "$in_file" >"$out_file"
+}
+
 run_dump_command() {
     local out_c="$1"
     local out_dump="$2"
@@ -395,7 +401,7 @@ run_one() {
     local xr_file="$2"
     local case_key="${3:-}"
     local test_name base dump c_out expect extra_args expected_status rel safe args_key
-    local cache_dir cached_dump cached_c tmp_dump tmp_c
+    local cache_dir cached_dump cached_c tmp_dump tmp_c c_check
 
     base="$(basename "$xr_file" .xr)"
     test_name="$(rel_path "$xr_file")"
@@ -425,7 +431,12 @@ run_one() {
             FAIL=$((FAIL + 1))
             return 1
         fi
-        check_expect "$expect" "$dump" "$c_out"
+        c_check="$c_out"
+        if [ "$mode" = "link" ] && [ -f "$c_out" ]; then
+            c_check="$WORK/${mode}_${base}.expect.c"
+            normalize_link_c_for_expect "$c_out" "$c_check"
+        fi
+        check_expect "$expect" "$dump" "$c_check"
         return $?
     fi
 
@@ -487,7 +498,12 @@ run_one() {
         fi
     fi
 
-    check_expect "$expect" "$dump" "$c_out"
+    c_check="$c_out"
+    if [ "$mode" = "link" ] && [ -f "$c_out" ]; then
+        c_check="$WORK/${mode}_${base}.expect.c"
+        normalize_link_c_for_expect "$c_out" "$c_check"
+    fi
+    check_expect "$expect" "$dump" "$c_check"
 }
 
 record_filetest_log() {
