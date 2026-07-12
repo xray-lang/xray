@@ -1,0 +1,7 @@
+{"case":"request-head","probe":"tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr","equivalence":["value","error","complexity"],"oracle":"RFC 9112 request-line and field grammar"}
+{"case":"response-head","probe":"tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr","equivalence":["value","error","complexity"],"oracle":"RFC 9112 status-line and field grammar"}
+{"case":"chunked-body","probe":"tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"RFC 9112 chunked transfer coding vectors"}
+{"case":"router","probe":"tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr","equivalence":["value","effect"],"oracle":"declared route precedence and parameter contract"}
+{"case":"typed-headers","probe":"tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"RFC 9110 field-name case-insensitivity and ordered repeated field observations"}
+{"case":"request-text","probe":"tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed Headers request serialization and sensitive-field stripping"}
+{"case":"response-text","probe":"tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed Headers response serialization and framing-field ownership"}

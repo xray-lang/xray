@@ -1,0 +1,2 @@
+import http
+http.responseText(200, "ok", "text/plain", { "X-Trace": "abc" })

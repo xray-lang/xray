@@ -274,6 +274,7 @@ option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
 option(ENABLE_TLS "Enable HTTPS/TLS support (requires OpenSSL)" ON)
 option(XR_USE_MIMALLOC "Use mimalloc high-performance allocator" OFF)
 option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (for debugging)" OFF)
+option(XRAY_STDLIB_VM_FASTPATHS "Enable verified VM-only stdlib fastpaths" ON)
 
 # Modular build options
 option(XR_BUILD_LSP "Build LSP language server" ON)
@@ -1472,6 +1473,77 @@ if(BUILD_TESTS)
         LABELS "stdlib;metadata;generated"
         PROCESSORS 1
         TIMEOUT 30
+    )
+
+    foreach(_xray_stdlib_boundary_check IN ITEMS manifest semantic error-model fastpath dynamic)
+        add_test(
+            NAME stdlib_boundary_${_xray_stdlib_boundary_check}
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_boundary.py
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}
+                    --check ${_xray_stdlib_boundary_check}
+        )
+        set_tests_properties(stdlib_boundary_${_xray_stdlib_boundary_check} PROPERTIES
+            LABELS "stdlib;boundary;metadata"
+            PROCESSORS 1
+            TIMEOUT 30
+        )
+    endforeach()
+
+    add_test(
+        NAME test_stdlib_boundary_manifest
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_boundary_manifest.py
+    )
+    set_tests_properties(test_stdlib_boundary_manifest PROPERTIES
+        LABELS "stdlib;boundary;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_migration_contracts
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stdlib_migration.py
+                check --root ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_migration_contracts PROPERTIES
+        LABELS "stdlib;contract;migration"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_perf_manifest
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/stdlib/run.py
+                --validate-only
+    )
+    set_tests_properties(stdlib_perf_manifest PROPERTIES
+        LABELS "stdlib;performance;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_self_hosting_consistency
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --check
+    )
+    set_tests_properties(stdlib_self_hosting_consistency PROPERTIES
+        LABELS "stdlib;boundary;report"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_custom_target(stdlib-self-hosting-complete
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --require-complete
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Checking final task-196 stdlib self-hosting completion criteria"
     )
 
     add_test(

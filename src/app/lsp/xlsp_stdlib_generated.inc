@@ -35,7 +35,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
-    {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): Json", "", NULL, 0},
+    {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"topicMatches", XLSP_SYM_FUNCTION, "fn(pattern: string, topic: string): bool", "", NULL, 0},
@@ -44,8 +44,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"CHANNEL_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
+    {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 22
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 24
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
@@ -79,15 +81,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
 
 // csv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Parse CSV text into row arrays, or Json objects when header/columns is enabled.", NULL, 0},
-    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "Parse CSV text and return data, errors, and parser metadata.", NULL, 0},
-    {"parseTsv", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Parse tab-separated text.", NULL, 0},
-    {"parseAuto", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Detect a common delimiter and parse the text.", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(data: unknown, options?: unknown): string", "Convert row arrays or Json object rows to CSV text.", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: unknown): Array<Json>", "Read a file through io and parse its CSV text.", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, data: unknown, options?: unknown): bool", "Stringify data and write it through io.", NULL, 0},
+    {"defaultParseOptions", XLSP_SYM_FUNCTION, "fn(): CsvParseOptions", "", NULL, 0},
+    {"defaultWriteOptions", XLSP_SYM_FUNCTION, "fn(): CsvWriteOptions", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?): CsvParseReport", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?): CsvDocument", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(document: CsvDocument, options?: CsvWriteOptions?): string", "", NULL, 0},
+    {"CsvDelimiter", XLSP_SYM_CLASS, "type CsvDelimiter", "Enum type", NULL, 0},
+    {"CsvHeader", XLSP_SYM_CLASS, "type CsvHeader", "Enum type", NULL, 0},
+    {"CsvErrorKind", XLSP_SYM_CLASS, "type CsvErrorKind", "Enum type", NULL, 0},
+    {"CsvDiagnostic", XLSP_SYM_CLASS, "type CsvDiagnostic", "Class type", NULL, 0},
+    {"CsvError", XLSP_SYM_CLASS, "type CsvError", "Enum type", NULL, 0},
+    {"CsvDocument", XLSP_SYM_CLASS, "type CsvDocument", "Class type", NULL, 0},
+    {"CsvParseReport", XLSP_SYM_CLASS, "type CsvParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 12
 
 // datetime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
@@ -130,9 +137,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
     {"urlDecode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-decode and treat + as a space, matching the former HTTP", NULL, 0},
-    {"responseText", XLSP_SYM_FUNCTION, "fn(status: int, body?: string, contentType?: string, headers?: Json, keepAlive?: bool): string?", "Format a complete HTTP/1.1 response with explicit headers.", NULL, 0},
+    {"responseText", XLSP_SYM_FUNCTION, "fn(status: int, body?: string, contentType?: string, headers?: Headers?, keepAlive?: bool): string?", "Format a complete HTTP/1.1 response with explicit headers.", NULL, 0},
     {"request", XLSP_SYM_FUNCTION, "fn(options: Json): HttpResponse", "", NULL, 0},
-    {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Json, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
+    {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Headers?, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
     {"parseResponseHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): ResponseHead?", "Parse an HTTP/1.x response head without reading sockets.", NULL, 0},
     {"parseRequestHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): RequestHead?", "Parse an HTTP/1.x request head without reading sockets.", NULL, 0},
     {"parseRequestText", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxHeaders?: int, maxTrailerHeaders?: int): RequestMessage?", "Parse a complete HTTP/1.x request text.", NULL, 0},
@@ -143,6 +150,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"redirectTarget", XLSP_SYM_FUNCTION, "fn(currentUrl: string, location: string): string?", "Resolve a Location value against the current URL.", NULL, 0},
     {"redirectDecision", XLSP_SYM_FUNCTION, "fn(status: int, currentUrl: string, location: string, method?: string, alreadyStripped?: bool): RedirectDecision?", "Compute the next URL/method and credential stripping rule.", NULL, 0},
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
+    {"HttpError", XLSP_SYM_CLASS, "type HttpError", "Enum type", NULL, 0},
+    {"Headers", XLSP_SYM_CLASS, "type Headers", "Class type", NULL, 0},
     {"Cookie", XLSP_SYM_CLASS, "type Cookie", "Class type", NULL, 0},
     {"CookieJar", XLSP_SYM_CLASS, "type CookieJar", "Class type", NULL, 0},
     {"Router", XLSP_SYM_CLASS, "type Router", "Class type", NULL, 0},
@@ -157,7 +166,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 35
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 37
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
@@ -495,13 +504,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
     {"decodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL decode a string, treating plus as space.", NULL, 0},
     {"parse", XLSP_SYM_FUNCTION, "fn(url: string): URL", "Parse URL text into a URL handle.", NULL, 0},
     {"format", XLSP_SYM_FUNCTION, "fn(obj: URL): string", "Build URL text from a URL handle.", NULL, 0},
-    {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string): Json", "Parse a query string into a Json object.", NULL, 0},
-    {"buildQuery", XLSP_SYM_FUNCTION, "fn(obj: Json): string", "Build a query string from a Json object.", NULL, 0},
+    {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string): QueryParams", "Parse a form-encoded query while preserving order and duplicates.", NULL, 0},
     {"resolve", XLSP_SYM_FUNCTION, "fn(base: string, relative: string): string", "Resolve a relative URL reference against a base URL.", NULL, 0},
     {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Join URL path segments.", NULL, 0},
     {"URL", XLSP_SYM_CLASS, "type URL", "Parsed URL handle with normalized host, origin, and href components.", NULL, 0},
+    {"UrlError", XLSP_SYM_CLASS, "type UrlError", "Enum type", NULL, 0},
+    {"QueryParams", XLSP_SYM_CLASS, "type QueryParams", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_URL_SYMBOL_COUNT 11
+#define GEN_XLSP_STDLIB_URL_SYMBOL_COUNT 12
 
 // ws module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {

@@ -1,0 +1,368 @@
+# Task 196: canonical standard-library ownership and backend-boundary policy.
+# Signatures remain source-derived from .xr/.def/native type declarations.
+schema = 1
+
+[governance]
+vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
+error_model = "enum_value_channel"
+failure_as_data = "domain_adt"
+forbidden_prelude_symbols = ["Result"]
+
+[dynamic_audit]
+# These modules still expose fixed-shape Json/unknown APIs and must be migrated
+# by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
+migration_modules = [
+  "Coro", "CoroPool", "cluster", "csv", "http", "log", "net", "toml",
+  "url", "ws", "xml", "yaml",
+]
+# Exact, reviewed dynamic boundaries. New entries require a source API plus a
+# domain justification in the review that changes this list.
+allowed_symbols = [
+  "Logger.child", "Logger.debug", "Logger.error", "Logger.fatal", "Logger.info",
+  "Logger.warn", "cluster.publish", "log.child", "log.debug", "log.error",
+  "log.fatal", "log.info", "log.warn", "mem.addressOf",
+]
+
+[[module]]
+name = "prelude"
+public = false
+layer = "L1"
+policy = "native_primitive"
+semantic_source = "stdlib/prelude/prelude_types.def"
+loader = "stdlib/prelude/prelude.c"
+public_native = []
+private_native_sources = ["stdlib/prelude/*.c"]
+private_native_reason = "Bootstrap types, operators, and implicit prelude installation"
+perf_suite = "stdlib/prelude"
+
+[[module]]
+name = "time"
+public = true
+layer = "L1"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/time/time.c"
+public_native = ["clock", "localOffset", "localOffsetAt", "micros", "monotonic", "nanos", "now", "sleep"]
+perf_suite = "stdlib/time"
+
+[[module]]
+name = "math"
+public = true
+layer = "L1"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/math/math.c"
+public_native = ["E", "EPSILON", "INF", "LN10", "LN2", "LOG10E", "LOG2E", "MAX_FLOAT", "MAX_INT", "MIN_INT", "NAN", "PI", "SQRT2", "TAU", "abs", "acos", "asin", "atan", "atan2", "cbrt", "ceil", "clamp", "cos", "cosh", "degToRad", "exp", "expm1", "floor", "fmod", "hypot", "isFinite", "isNaN", "lerp", "log", "log10", "log1p", "log2", "max", "min", "pow", "radToDeg", "random", "randomInt", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh", "trunc"]
+perf_suite = "stdlib/math"
+
+[[module]]
+name = "path"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/path/path.xr"
+loader = "stdlib/path/path.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/path"
+
+[[module]]
+name = "base64"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/base64/base64.xr"
+loader = "stdlib/base64/base64.c"
+public_native = []
+private_native_sources = ["stdlib/base64/base64.c"]
+private_native_reason = "WebSocket handshake data-plane helpers; no public base64 exports"
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/base64"
+
+[[module]]
+name = "regex"
+public = true
+layer = "L3"
+policy = "native_library"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/regex/xregex_binding.c"
+loader_symbol = "regex"
+public_native = ["Regex", "Regex.find", "Regex.findAll", "Regex.findGroup", "Regex.findText", "Regex.replace", "Regex.split", "Regex.test", "RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "compile", "count", "escape", "find", "findAll", "findGroup", "findText", "fullFind", "isValid", "replace", "replaceAll", "split", "test"]
+private_native_sources = ["stdlib/regex/*.c"]
+private_native_reason = "Mature regex automata implementation with bounded native data structures"
+perf_suite = "stdlib/regex"
+
+[[module]]
+name = "mem"
+public = true
+layer = "L1"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/mem/mem.c"
+public_native = ["Buffer", "Buffer.asSpan", "Buffer.get:length", "Buffer.length", "Buffer.ptr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addressOf", "alignOf", "alloc", "allocAligned", "allocZeroed", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "copy", "fence", "fromAddress", "move", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "set", "sizeOf", "volatileLoad", "volatileStore"]
+perf_suite = "stdlib/mem"
+
+[[module]]
+name = "runtime"
+public = true
+layer = "L0"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/runtime/runtime.c"
+public_native = ["collectCycles", "disableCycleCollection", "enableCycleCollection", "info", "isCycleCollectionEnabled", "liveBytes", "liveObjects"]
+perf_suite = "stdlib/runtime"
+
+[[module]]
+name = "sync"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/sync/sync.xr"
+loader = "stdlib/sync/sync.c"
+public_native = ["CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"]
+manual_public_native = ["CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"]
+private_native_sources = ["stdlib/sync/sync.c"]
+private_native_reason = "Typed scheduler-backed synchronization primitive classes consumed by Xray composition"
+def_migration_complete = true
+perf_suite = "stdlib/sync"
+
+[[module]]
+name = "parallel"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/parallel/parallel.xr"
+loader = "stdlib/parallel/parallel.c"
+public_native = []
+def_migration_complete = true
+perf_suite = "stdlib/parallel"
+
+[[module]]
+name = "sys"
+public = true
+layer = "L2"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/sys/sys.c"
+public_native = ["OsBarrier", "OsBarrier.wait", "OsCondvar", "OsCondvar.broadcast", "OsCondvar.signal", "OsCondvar.wait", "OsCondvar.waitFor", "OsMutex", "OsMutex.lock", "OsMutex.tryLock", "OsMutex.unlock", "OsOnce", "OsOnce.call", "OsRwLock", "OsRwLock.rdlock", "OsRwLock.rdunlock", "OsRwLock.wrlock", "OsRwLock.wrunlock", "cpuCount", "pinToCpu", "sleepMs", "threadYield"]
+private_native_sources = ["stdlib/sys/sys.c"]
+private_native_reason = "OS thread, process, pipe, signal, and dynamic-loader thin boundary"
+perf_suite = "stdlib/sys"
+
+[[module]]
+name = "url"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/url/url.xr"
+loader = "stdlib/url/url.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/url"
+
+[[module]]
+name = "datetime"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/datetime/datetime.xr"
+loader = "stdlib/datetime/datetime.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/datetime"
+
+[[module]]
+name = "log"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/log/log.xr"
+loader = "stdlib/log/log.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/log"
+
+[[module]]
+name = "encoding"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/encoding/encoding.xr"
+loader = "stdlib/encoding/encoding.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/encoding"
+
+[[module]]
+name = "_probe"
+public = false
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/_probe/_probe.xr"
+loader = "stdlib/_probe/_probe.c"
+loader_symbol = "probe"
+public_native = []
+def_migration_complete = true
+perf_suite = "stdlib/_probe"
+
+[[module]]
+name = "io"
+public = true
+layer = "L2"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/io/io.c"
+public_native = ["FileStat", "appendFile", "chdir", "chmod", "copyFile", "cwd", "exists", "fileSize", "isDir", "isFile", "isSymlink", "mkdir", "mkdirp", "readDir", "readDirRecursive", "readFile", "readFileBytes", "readLines", "readStdin", "readlink", "realpath", "remove", "removeAll", "rename", "stat", "symlink", "tempDir", "tempFile", "touch", "writeFile", "writeFileBytes"]
+perf_suite = "stdlib/io"
+
+[[module]]
+name = "os"
+public = true
+layer = "L2"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/os/os.c"
+public_native = ["ExecResult", "arch", "chdir", "clock", "cpuCount", "environ", "eol", "exec", "exit", "freeMemory", "getcwd", "getenv", "getpid", "gid", "homedir", "hostname", "kill", "loadavg", "platform", "ppid", "sep", "setenv", "sleep", "spawn", "tmpdir", "totalMemory", "uid", "unsetenv", "uptime", "username"]
+perf_suite = "stdlib/os"
+
+[[module]]
+name = "test_yield"
+public = false
+layer = "L0"
+policy = "native_primitive"
+semantic_source = "stdlib/test_yield/test_yield.c"
+loader = "stdlib/test_yield/test_yield.c"
+public_native = []
+private_native_sources = ["stdlib/test_yield/*.c"]
+private_native_reason = "Internal scheduler/yieldable test module"
+perf_suite = "stdlib/test_yield"
+
+[[module]]
+name = "net"
+public = true
+layer = "L2"
+policy = "native_primitive"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/net/net.c"
+public_native = ["NetConn", "NetConn.close", "NetConn.fd", "NetConn.isClosed", "NetConn.isTLS", "NetListener", "NetListener.close", "NetListener.fd", "NetListener.isClosed", "NetListener.port", "UdpPacket", "accept", "close", "copy", "copyBidirectional", "dial", "dialTLS", "fd", "hasTLS", "lastErrno", "lastError", "listen", "lookup", "read", "readInto", "recvFrom", "sendTo", "setAcceptDeadline", "setDeadline", "setReadDeadline", "setWriteDeadline", "shutdown", "shutdownRead", "shutdownWrite", "udpBind", "upgradeTLS", "write", "writeBytes"]
+private_native_sources = ["stdlib/net/*.c"]
+private_native_reason = "Socket, TLS, deadline, and netpoll thin runtime boundary"
+perf_suite = "stdlib/net"
+
+[[module]]
+name = "http"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/http/http.xr"
+loader = "stdlib/http/http.c"
+public_native = ["h2Request"]
+private_native_sources = ["stdlib/http/*.c"]
+private_native_reason = "HTTP/2, TLS/socket, parser-buffer and client-pool data plane"
+perf_suite = "stdlib/http"
+
+[[module]]
+name = "ws"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/ws/ws.xr"
+loader = "stdlib/ws/ws_binding.c"
+loader_symbol = "ws"
+public_native = ["WsConn", "WsMessage", "close", "connect", "ping", "recv", "send", "serve", "stopServer"]
+private_native_sources = ["stdlib/ws/*.c"]
+private_native_reason = "Connection I/O, compression, and HTTP upgrade data plane"
+perf_suite = "stdlib/ws"
+
+[[module]]
+name = "crypto"
+public = true
+layer = "L3"
+policy = "native_library"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/crypto/crypto.c"
+public_native = ["decrypt", "encrypt", "hmac", "md5", "randomBytes", "sha1", "sha256", "sha512", "timingSafeEqual", "uuid"]
+private_native_sources = ["stdlib/crypto/*.c"]
+private_native_reason = "Platform CSPRNG, constant-time operations, and mature cryptographic library boundary"
+perf_suite = "stdlib/crypto"
+
+[[module]]
+name = "compress"
+public = true
+layer = "L3"
+policy = "native_library"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/compress/compress.c"
+public_native = ["adler32", "crc32", "deflate", "gunzip", "gzip", "inflate", "isGzip", "isZlib", "zlibCompress", "zlibDecompress"]
+private_native_sources = ["stdlib/compress/*.c"]
+private_native_reason = "zlib-compatible mature compression and checksum kernels"
+perf_suite = "stdlib/compress"
+
+[[module]]
+name = "cluster"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/cluster/cluster.xr"
+loader = "stdlib/cluster/cluster.c"
+public_native = ["channel", "discover", "info", "join", "monitor", "nodes", "publish", "self", "start", "stop", "subscribe"]
+private_native_sources = ["stdlib/cluster/*.c"]
+private_native_reason = "Distributed transport, discovery, channel and node lifecycle runtime data plane"
+perf_suite = "stdlib/cluster"
+
+[[module]]
+name = "csv"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/csv/csv.xr"
+loader = "stdlib/csv/csv.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/csv"
+
+[[module]]
+name = "toml"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/toml/toml.xr"
+loader = "stdlib/toml/toml.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/toml"
+
+[[module]]
+name = "yaml"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/yaml/yaml.xr"
+loader = "stdlib/yaml/yaml.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/yaml"
+
+[[module]]
+name = "xml"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/xml/xml.xr"
+loader = "stdlib/xml/xml.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/xml"
+
+# No VM-only fastpath is approved at this baseline. New entries must provide
+# reference source, benchmark, diff coverage, review date, and the global off switch.

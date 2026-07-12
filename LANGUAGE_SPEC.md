@@ -847,7 +847,7 @@ var y: int? = 42        // OK
 var z: int = null       // compile error: null is not int
 ```
 
-`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Use `Result<T, E>`, an ADT, or a Record with an explicit status field for parse failure or absence.
+`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a Record with an explicit status field. Do not introduce a global `Result<T,E>`.
 
 **Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -4817,7 +4817,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 | `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
-| `url` | URL parsing and construction | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
+| `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
 > DNS lookups go through `net.lookup(host)`; there is no standalone `dns` module.
 

@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr

@@ -8,21 +8,9 @@ import re
 import sys
 from pathlib import Path
 
+from stdlib_manifest import load_manifest
 
-MIGRATED_MODULES = (
-    "path",
-    "url",
-    "base64",
-    "encoding",
-    "datetime",
-    "csv",
-    "toml",
-    "xml",
-    "yaml",
-    "log",
-)
-
-FORBIDDEN_TOKENS = (
+STATIC_FORBIDDEN_TOKENS = (
     (re.compile(r"\bXR_TAG_DATETIME\b"), "DateTime light-object tag"),
     (re.compile(r"\bxrt_datetime_"), "DateTime AOT helper prefix"),
     (re.compile(r"\bxrt_path_"), "path AOT helper prefix"),
@@ -37,16 +25,16 @@ FORBIDDEN_TOKENS = (
 )
 
 
-def check_resurrected_files(root: Path) -> list[str]:
+def check_resurrected_files(root: Path, migrated_modules: tuple[str, ...]) -> list[str]:
     aot_dir = root / "src" / "aot"
     errors: list[str] = []
-    for module in MIGRATED_MODULES:
+    for module in migrated_modules:
         for path in sorted(aot_dir.glob(f"xrt_{module}*")):
             errors.append(f"{path.relative_to(root)}: migrated module AOT helper file must not exist")
     return errors
 
 
-def check_forbidden_tokens(root: Path) -> list[str]:
+def check_forbidden_tokens(root: Path, migrated_modules: tuple[str, ...]) -> list[str]:
     aot_dir = root / "src" / "aot"
     errors: list[str] = []
     for path in sorted(aot_dir.rglob("*")):
@@ -57,7 +45,12 @@ def check_forbidden_tokens(root: Path) -> list[str]:
         except UnicodeDecodeError:
             continue
         for lineno, line in enumerate(lines, 1):
-            for pattern, label in FORBIDDEN_TOKENS:
+            tokens = list(STATIC_FORBIDDEN_TOKENS)
+            tokens.extend(
+                (re.compile(rf"\bxrt_{re.escape(module)}_"), f"{module} AOT helper prefix")
+                for module in migrated_modules
+            )
+            for pattern, label in tokens:
                 if pattern.search(line):
                     errors.append(f"{path.relative_to(root)}:{lineno}: {label} is forbidden")
     return errors
@@ -69,7 +62,10 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    errors = check_resurrected_files(root) + check_forbidden_tokens(root)
+    migrated_modules = load_manifest(root).aot_helper_forbidden_modules
+    errors = check_resurrected_files(root, migrated_modules) + check_forbidden_tokens(
+        root, migrated_modules
+    )
     if errors:
         print("stdlib AOT helper residue gate failed:", file=sys.stderr)
         for error in errors:

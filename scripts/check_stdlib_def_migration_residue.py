@@ -8,20 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-
-MIGRATED_SCRIPT_MODULES = (
-    "sync",
-    "path",
-    "url",
-    "base64",
-    "encoding",
-    "datetime",
-    "csv",
-    "toml",
-    "xml",
-    "yaml",
-    "log",
-)
+from stdlib_manifest import load_manifest
 
 MODULE_RE = re.compile(r"\s*module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*")
 
@@ -30,10 +17,10 @@ def strip_comment(line: str) -> str:
     return line.split("//", 1)[0].strip()
 
 
-def check_def_files(root: Path) -> list[str]:
+def check_def_files(root: Path, migrated_modules: tuple[str, ...] | None = None) -> list[str]:
     defs_dir = root / "stdlib" / "defs"
     errors: list[str] = []
-    migrated = set(MIGRATED_SCRIPT_MODULES)
+    migrated = set(migrated_modules or load_manifest(root).def_migrated_modules)
     for path in sorted(defs_dir.glob("*.def")):
         for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             line = strip_comment(raw_line)
@@ -55,12 +42,13 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    errors = check_def_files(root)
+    migrated_modules = load_manifest(root).def_migrated_modules
+    errors = check_def_files(root, migrated_modules)
     if errors:
         print("stdlib .def migration residue gate failed:", file=sys.stderr)
         for error in errors:
             print(f"  {error}", file=sys.stderr)
-        modules = ", ".join(MIGRATED_SCRIPT_MODULES)
+        modules = ", ".join(migrated_modules)
         print(
             "These modules use their stdlib/<module>/<module>.xr exports as the "
             f"declaration source: {modules}.",

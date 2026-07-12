@@ -1,247 +1,153 @@
-// 1300_csv_basic.xr - CSV module tests
+// Typed CSV module contract.
 
 import csv
-
-// ===== Basic parsing =====
+import {
+    CsvDelimiter,
+    CsvDocument,
+    CsvError,
+    CsvErrorKind,
+    CsvHeader,
+    defaultParseOptions
+} from csv
 
 @test
 fn test_parse_basic() {
-    var data = "name,age,city\nAlice,30,Beijing\nBob,25,Shanghai"
-    var rows = csv.parse(data)
-    assert_eq(rows.length, 3)
-    assert_eq(rows[0][0], "name")
-    assert_eq(rows[1][0], "Alice")
-    assert_eq(rows[1][1], "30")
+    var doc = csv.parse("name,age,city\nAlice,30,Beijing\nBob,25,Shanghai")
+    assert_eq(doc.headers.length, 0)
+    assert_eq(doc.rows.length, 3)
+    assert_eq(doc.rows[1][0], "Alice")
+    assert_eq(doc.rows[1][1], "30")
 }
 
 @test
-fn test_parse_with_header() {
-    var data = "name,age,city\nAlice,30,Beijing\nBob,25,Shanghai"
-    var rows = csv.parse(data, { header: true })
-    assert_eq(rows.length, 2)
-    assert_eq(rows[0]["name"], "Alice")
-    assert_eq(rows[0]["age"], "30")
-}
+fn test_header_modes() {
+    var first = defaultParseOptions()
+    first.header = CsvHeader.FirstRow
+    var doc = csv.parse("name,age\nAlice,30\nBob,25", first)
+    assert_eq(doc.headers[0], "name")
+    assert_eq(doc.rows.length, 2)
 
-// ===== Quoted fields =====
-
-@test
-fn test_parse_quoted() {
-    var data = "name,desc\n\"John\",\"Hello, World\""
-    var rows = csv.parse(data)
-    assert_eq(rows[1][1], "Hello, World")
-}
-
-@test
-fn test_parse_escaped_quotes() {
-    var data = "name,quote\n\"Test\",\"He said \"\"Hello\"\"\""
-    var rows = csv.parse(data)
-    assert_eq(rows[1][1], "He said \"Hello\"")
-}
-
-// ===== Stringify =====
-
-@test
-fn test_stringify() {
-    var arr = [["a", "b", "c"], ["1", "2", "3"]]
-    var result = csv.stringify(arr)
-    assert(result.length > 0)
-}
-
-// ===== TSV =====
-
-@test
-fn test_parse_tsv() {
-    var tsv = "a\tb\tc\n1\t2\t3"
-    var rows = csv.parseTsv(tsv)
-    assert_eq(rows[0][1], "b")
-}
-
-// ===== Empty data =====
-
-@test
-fn test_parse_empty() {
-    var empty = csv.parse("")
-    assert_eq(empty.length, 0)
-}
-
-// ===== Dynamic typing =====
-
-@test
-fn test_parse_dynamic_typing() {
-    var data = "name,age,active\nAlice,30,true\nBob,25,false"
-    var rows = csv.parse(data, { header: true, dynamicTyping: true })
-    assert_eq(rows[0]["age"], 30)
-    assert_eq(rows[0]["active"], true)
-}
-
-// ===== parseDetailed =====
-
-@test
-fn test_parse_detailed() {
-    var detailed = csv.parseDetailed("a,b\n1,2\n3,4")
-    assert_eq(detailed["meta"]["rows"], 3)
-    assert_eq(detailed["meta"]["columns"], 2)
-}
-
-// ===== parseAuto =====
-
-@test
-fn test_parse_auto() {
-    var auto = csv.parseAuto("a;b;c\n1;2;3")
-    assert_eq(auto[0][1], "b")
-}
-
-// ===== Empty fields =====
-
-@test
-fn test_parse_empty_fields() {
-    var data = "a,,c\n1,,3"
-    var rows = csv.parse(data)
-    assert_eq(rows[0][1], "")
-    assert_eq(rows[1][1], "")
-    assert_eq(rows[0].length, 3)
+    var names: Array<string> = ["user", "score"]
+    var explicit = defaultParseOptions()
+    explicit.header = CsvHeader.Explicit(names)
+    var explicitDoc = csv.parse("Alice,30\nBob,25", explicit)
+    assert_eq(explicitDoc.headers[0], "user")
+    assert_eq(explicitDoc.rows[1][1], "25")
 }
 
 @test
-fn test_parse_consecutive_delimiters() {
-    var data = ",,,\n,,,"
-    var rows = csv.parse(data)
-    assert_eq(rows[0].length, 4)
-    assert_eq(rows[0][0], "")
-}
-
-// ===== CRLF handling =====
-
-@test
-fn test_parse_crlf() {
-    var data = "a,b\r\n1,2\r\n3,4"
-    var rows = csv.parse(data)
-    assert_eq(rows.length, 3)
-    assert_eq(rows[2][0], "3")
+fn test_parse_quoted_and_escaped() {
+    var doc = csv.parse("name,desc\n\"John\",\"Hello, World\"\n\"Test\",\"He said \"\"Hello\"\"\"")
+    assert_eq(doc.rows[1][1], "Hello, World")
+    assert_eq(doc.rows[2][1], "He said \"Hello\"")
 }
 
 @test
-fn test_parse_mixed_linebreaks() {
-    var data = "a,b\n1,2\r\n3,4\r5,6"
-    var rows = csv.parse(data)
-    assert_eq(rows.length, 4)
-}
+fn test_parse_report_and_strict_error() {
+    var report = csv.parseReport("a,b\n1,2\n3")
+    assert_eq(report.document.rows.length, 3)
+    assert_eq(report.diagnostics.length, 1)
+    assert(report.diagnostics[0].kind == CsvErrorKind.FieldCountMismatch)
+    assert_eq(report.diagnostics[0].line, 3)
+    assert_eq(report.diagnostics[0].record, 2)
 
-// ===== Config: skipRows =====
+    var rejected = false
+    try {
+        csv.parse("a,b\n1")
+    } catch (e: CsvError) {
+        rejected = match (e) {
+            CsvError.FieldCountMismatch(offset, line, record, column, message) -> record == 1,
+            _ -> false
+        }
+    }
+    assert(rejected)
+}
 
 @test
-fn test_parse_skip_rows() {
-    var data = "skip1\nskip2\na,b\n1,2"
-    var rows = csv.parse(data, { skipRows: 2 })
-    assert_eq(rows.length, 2)
-    assert_eq(rows[0][0], "a")
-}
+fn test_exact_and_auto_delimiters() {
+    var tsvOptions = defaultParseOptions()
+    tsvOptions.delimiter = CsvDelimiter.Exact("\t")
+    var tsv = csv.parse("a\tb\tc\n1\t2\t3", tsvOptions)
+    assert_eq(tsv.rows[0][1], "b")
 
-// ===== Config: maxRows =====
+    var autoOptions = defaultParseOptions()
+    autoOptions.delimiter = CsvDelimiter.Auto
+    var auto = csv.parse("a|b|c\n1|2|3", autoOptions)
+    assert_eq(auto.rows[1][1], "2")
+}
 
 @test
-fn test_parse_max_rows() {
-    var data = "a,b\n1,2\n3,4\n5,6\n7,8"
-    var rows = csv.parse(data, { maxRows: 2 })
-    assert_eq(rows.length, 2)
+fn test_parse_options() {
+    var options = defaultParseOptions()
+    options.skipRecords = 2
+    options.maxRecords = 2
+    options.trimFields = true
+    var doc = csv.parse("skip1\nskip2\n a , b \n 1 , 2 \n3,4", options)
+    assert_eq(doc.rows.length, 2)
+    assert_eq(doc.rows[0][0], "a")
+    assert_eq(doc.rows[1][1], "2")
 }
-
-// ===== Config: trimFields =====
 
 @test
-fn test_parse_trim_fields() {
-    var data = " a , b \n 1 , 2 "
-    var rows = csv.parse(data, { trimFields: true })
-    assert_eq(rows[0][0], "a")
-    assert_eq(rows[0][1], "b")
-    assert_eq(rows[1][0], "1")
+fn test_comment_quoting_empty_fields_and_crlf() {
+    var options = defaultParseOptions()
+    options.commentPrefix = "#"
+    var doc = csv.parse("\"# value\",x,\r\n# comment\r\n1,,3", options)
+    assert_eq(doc.rows.length, 2)
+    assert_eq(doc.rows[0][0], "# value")
+    assert_eq(doc.rows[0].length, 3)
+    assert_eq(doc.rows[1].length, 3)
+    assert_eq(doc.rows[1][1], "")
 }
-
-// ===== Config: comments =====
 
 @test
-fn test_parse_comments() {
-    var data = "a,b\n# comment\n1,2"
-    var rows = csv.parse(data, { comments: "#" })
-    assert_eq(rows.length, 2)
-    assert_eq(rows[1][0], "1")
-}
+fn test_stringify_roundtrip() {
+    var doc = CsvDocument()
+    doc.headers.push("name")
+    doc.headers.push("note")
+    doc.rows.push(["Alice", "hello, world"])
+    doc.rows.push(["Bob", "quote \" me"])
+    var output = csv.stringify(doc)
+    assert(output.includes("\"hello, world\""))
+    assert(output.includes("\"quote \"\" me\""))
 
-// ===== Config: relaxColumns =====
+    var options = defaultParseOptions()
+    options.header = CsvHeader.FirstRow
+    var reparsed = csv.parse(output, options)
+    assert_eq(reparsed.headers[0], "name")
+    assert_eq(reparsed.rows[1][1], "quote \" me")
+}
 
 @test
-fn test_parse_relax_columns() {
-    var data = "a,b,c\n1,2\n3,4,5,6"
-    var result = csv.parseDetailed(data, { relaxColumns: true })
-    assert_eq(result["data"].length, 3)
+fn test_unterminated_quote_preserves_partial_row() {
+    var report = csv.parseReport("a,b\n\"unterminated")
+    assert_eq(report.diagnostics.length, 2)
+    assert(report.diagnostics[0].kind == CsvErrorKind.UnterminatedQuote)
+    assert_eq(report.document.rows.length, 2)
+    assert_eq(report.document.rows[1][0], "unterminated")
 }
-
-// ===== Stringify with typed values =====
 
 @test
-fn test_stringify_typed() {
-    var arr = [["name", "age", "active"], ["Alice", "30", "true"], ["Bob", "25", "false"]]
-    var result = csv.stringify(arr)
-    assert(result.indexOf("30") >= 0)
-    assert(result.indexOf("true") >= 0)
-    assert(result.indexOf("false") >= 0)
+fn test_limits() {
+    var options = defaultParseOptions()
+    options.maxColumns = 1
+    var rejected = false
+    try {
+        csv.parse("a,b", options)
+    } catch (e: CsvError) {
+        rejected = match (e) {
+            CsvError.ColumnLimitExceeded(limit) -> limit == 1,
+            _                                   -> false
+        }
+    }
+    assert(rejected)
 }
-
-// ===== Stringify roundtrip =====
 
 @test
-fn test_roundtrip() {
-    var original = "name,age\nAlice,30\nBob,25\n"
-    var parsed = csv.parse(original)
-    var output = csv.stringify(parsed)
-    var reparsed = csv.parse(output)
-    assert_eq(reparsed.length, parsed.length)
-    assert_eq(reparsed[0][0], parsed[0][0])
+fn test_mixed_linebreak_metadata() {
+    var report = csv.parseReport("a,b\r\n1,2\n3,4\r5,6")
+    assert_eq(report.document.rows.length, 4)
+    assert_eq(report.linebreak, "mixed")
 }
 
-// ===== Quoted field with newline =====
-
-@test
-fn test_quoted_newline() {
-    var data = "a,b\n"  + "\"line1\nline2\",value"
-    var rows = csv.parse(data)
-    assert_eq(rows.length, 2)
-    assert_eq(rows[1][0], "line1\nline2")
-}
-
-// ===== Dynamic typing edge cases =====
-
-@test
-fn test_dynamic_typing_edge() {
-    var data = "val\n0\n-123\n3.14\nTRUE\nFALSE\nNULL\nhello"
-    var rows = csv.parse(data, { dynamicTyping: true })
-    assert_eq(rows[1][0], 0)
-    assert_eq(rows[2][0], -123)
-    // 3.14 should be float
-    assert(rows[3][0] > 3.0)
-    assert(rows[3][0] < 4.0)
-    assert_eq(rows[4][0], true)
-    assert_eq(rows[5][0], false)
-    assert_eq(rows[6][0], null)
-    assert_eq(rows[7][0], "hello")
-}
-
-// ===== Semicolon delimiter =====
-
-@test
-fn test_parse_semicolon() {
-    var data = "a;b;c\n1;2;3"
-    var rows = csv.parse(data, { delimiter: ";" })
-    assert_eq(rows[0][1], "b")
-    assert_eq(rows[1][1], "2")
-}
-
-// ===== Pipe delimiter auto-detect =====
-
-@test
-fn test_parse_auto_pipe() {
-    var data = "a|b|c\n1|2|3"
-    var auto = csv.parseAuto(data)
-    assert_eq(auto[0][1], "b")
-}
+print("All typed CSV tests passed")

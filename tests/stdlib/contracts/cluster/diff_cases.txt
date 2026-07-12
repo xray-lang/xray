@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr

@@ -9,7 +9,7 @@ print(fixed.head.status)
 print(fixed.body)
 print(fixed.consumedBytes)
 print(fixed.getHeader("x-trace")!)
-print(fixed.trailerPairs.length)
+print(fixed.trailers.entries().length)
 print("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nX-Trace: one\r\n\r\nhelloextra".slice(fixed.consumedBytes))
 
 var chunked = parseResponseText(

@@ -1,11 +1,11 @@
 {
   "module": "parallel",
   "summary": "Structured CPU data-parallel operations",
-  "lead": "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns.",
+  "lead": "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns. The `.xr` module is the canonical semantic source; hosted VM and native AOT may lower eligible operations to verified batch execution without changing the public contract.",
   "sections": [
     {
       "heading": "Execution model",
-      "before_text": "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies exist for bootstrap and tooling semantics."
+      "before_text": "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies define bootstrap and tooling semantics."
     },
     {
       "heading": "Safety contract",

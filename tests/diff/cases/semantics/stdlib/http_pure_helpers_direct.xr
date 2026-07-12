@@ -1,7 +1,13 @@
 // Pure-Xray HTTP helper exports layered on the native HTTP module.
 
 import http
-import { urlEncode, urlDecode, responseText } from http
+import { Headers, HttpError, urlEncode, urlDecode, responseText } from http
+
+fn withHeader(name: string, value: string) -> Headers {
+    var headers = Headers()
+    headers.add(name, value)
+    return headers
+}
 
 print(http.urlEncode("a b+张"))
 print(urlEncode(":/?#[]@!$&'()*+,;="))
@@ -29,13 +35,20 @@ print(empty.includes("HTTP/1.1 204 No Content\r\n"))
 print(empty.includes("Content-Length: 0\r\n"))
 print(empty.endsWith("\r\n\r\n"))
 
-var custom = responseText(201, "created", "text/custom", {"X-Trace": "abc"}, false)!
+var custom = responseText(201, "created", "text/custom", withHeader("X-Trace", "abc"), false)!
 print(custom.includes("HTTP/1.1 201 Created\r\n"))
 print(custom.includes("Content-Type: text/custom\r\n"))
 print(custom.includes("X-Trace: abc\r\n"))
 print(custom.includes("Connection: close\r\n"))
 print(custom.endsWith("\r\n\r\ncreated"))
-print(responseText(200, "bad", "text/plain", {"Content-Length": "999"}) == null)
-print(responseText(200, "bad", "text/plain", {"Transfer-Encoding": "chunked"}) == null)
-print(responseText(200, "bad", "text/plain", {"X-Bad": "a\r\nInjected: y"}) == null)
+print(responseText(200, "bad", "text/plain", withHeader("Content-Length", "999")) == null)
+print(responseText(200, "bad", "text/plain", withHeader("Transfer-Encoding", "chunked")) == null)
+var injectionRejected = false
+try {
+    var badHeaders = Headers()
+    badHeaders.add("X-Bad", "a\r\nInjected: y")
+} catch (e: HttpError) {
+    injectionRejected = true
+}
+print(injectionRejected)
 print(http.responseText(200, "bad", "text\r\nbad") == null)

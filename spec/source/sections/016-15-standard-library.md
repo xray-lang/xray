@@ -36,7 +36,7 @@ order: 016
 | `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
-| `url` | URL 解析与构造 | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
+| `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
 > DNS 查询通过 `net.lookup(host)` 完成；没有独立的 `dns` 模块。
 
@@ -168,7 +168,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
-| `url` | URL parsing and construction | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
+| `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
 > DNS lookups go through `net.lookup(host)`; there is no standalone `dns` module.
 

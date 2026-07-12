@@ -1,0 +1,4 @@
+tests/diff/cases/semantics/stdlib/path_module.xr
+tests/diff/cases/semantics/stdlib/path_isabsolute.xr
+tests/diff/cases/semantics/stdlib/path_string_ops.xr
+tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr

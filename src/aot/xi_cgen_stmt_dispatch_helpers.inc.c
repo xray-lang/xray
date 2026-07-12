@@ -108,8 +108,12 @@ static bool xicgen_stmt_defer_run_to(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     return true;
 }
 
+static bool xicgen_value_is_enum_aggregate_error(XiCgenCtx *ctx, const XiValue *v) {
+    return ctx && cg_value_plan_is_adt_aggregate(ctx, v);
+}
+
 static bool xicgen_value_is_freestanding_enum_aggregate_error(XiCgenCtx *ctx, const XiValue *v) {
-    return ctx && ctx->freestanding_profile && cg_value_plan_is_adt_aggregate(ctx, v);
+    return ctx && ctx->freestanding_profile && xicgen_value_is_enum_aggregate_error(ctx, v);
 }
 
 static void xicgen_emit_clear_freestanding_enum_error(XiCgenCtx *ctx, FILE *out) {
@@ -211,7 +215,9 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) prefix;
-    bool aggregate_error = xicgen_value_is_freestanding_enum_aggregate_error(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    bool aggregate_error = xicgen_value_is_enum_aggregate_error(ctx, v);
+    bool freestanding_aggregate = ctx->freestanding_profile && aggregate_error;
     fprintf(out, "    ");
     if (!ctx->pre_decl_all) {
         fprintf(out, "%s ",
@@ -223,10 +229,13 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, " = ");
     }
     if (aggregate_error) {
-        const XaotValuePlan *plan = cg_value_plan(ctx, v);
         if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
             fprintf(out, "%s_from_base(", plan->rep.c_type);
-        fprintf(out, "xrt_pending_enum_error");
+        if (freestanding_aggregate) {
+            fprintf(out, "xrt_pending_enum_error");
+        } else {
+            fprintf(out, "xrt_enum_aggregate_from_boxed(xrt_pending_error)");
+        }
         if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
             fprintf(out, ")");
         fprintf(out, ";\n");
