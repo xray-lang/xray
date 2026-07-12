@@ -1,0 +1,20 @@
+fn makeA() -> Array<byte> {
+    owned a = Array<byte>(1, 0)
+    return move a
+}
+
+fn makeB() -> Array<byte> {
+    owned b = Array<byte>(2, 0)
+    return move b
+}
+
+fn choose(flag: bool) -> Array<byte> {
+    return flag ? makeA() : makeB()
+}
+
+fn main() {
+    var local = choose(true)
+    print(len(local))
+}
+
+main()

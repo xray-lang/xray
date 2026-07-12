@@ -6913,6 +6913,7 @@ typedef struct XaReturnStoragePrepass {
     bool known;
     bool mixed;
     bool unknown;
+    bool use_scope_lookup;
 } XaReturnStoragePrepass;
 
 static void xa_return_storage_prepass_record_owner(XaReturnStoragePrepass *scan, uint8_t owner) {
@@ -6959,7 +6960,74 @@ static uint8_t xa_return_storage_prepass_lookup(XaReturnStoragePrepass *scan, co
         if (scan->names[i] && strcmp(scan->names[i], name) == 0)
             return scan->owners[i];
     }
+    if (scan->use_scope_lookup && scan->ctx) {
+        XaSymbol *sym = xa_lookup_visible_symbol(scan->ctx, name);
+        if (sym && sym->kind == XA_SYM_VARIABLE) {
+            if (sym->is_owned)
+                return XR_STORAGE_OWNED_SYSTEM;
+            if (sym->is_shared)
+                return XR_STORAGE_SHARED_SYSTEM;
+        }
+    }
     return XR_STORAGE_NONE;
+}
+
+static bool xa_return_storage_prepass_expr_summary(XaReturnStoragePrepass *scan, AstNode *expr,
+                                                   uint8_t *owner_out, bool *mixed_out);
+
+static void xa_return_storage_prepass_accumulate_expr_summary(XaReturnStoragePrepass *scan,
+                                                              AstNode *expr, bool *any_known,
+                                                              bool *any_unknown, uint8_t *owner_io,
+                                                              bool *mixed_io) {
+    if (!any_known || !any_unknown || !owner_io || !mixed_io)
+        return;
+
+    uint8_t arm_owner = XR_STORAGE_NONE;
+    bool arm_mixed = false;
+    if (!xa_return_storage_prepass_expr_summary(scan, expr, &arm_owner, &arm_mixed)) {
+        *any_unknown = true;
+        return;
+    }
+    if (arm_mixed) {
+        *any_known = true;
+        *mixed_io = true;
+        return;
+    }
+    if (arm_owner != XR_STORAGE_OWNED_SYSTEM && arm_owner != XR_STORAGE_SHARED_SYSTEM) {
+        *any_unknown = true;
+        return;
+    }
+    if (!*any_known) {
+        *owner_io = arm_owner;
+        *any_known = true;
+        return;
+    }
+    if (*owner_io != arm_owner)
+        *mixed_io = true;
+}
+
+static bool xa_return_storage_prepass_finish_branch_summary(bool any_known, bool any_unknown,
+                                                            uint8_t owner, bool mixed,
+                                                            uint8_t *owner_out, bool *mixed_out) {
+    if (mixed || (any_known && any_unknown)) {
+        if (mixed_out)
+            *mixed_out = true;
+        return true;
+    }
+    if (!any_known)
+        return false;
+    if (owner_out)
+        *owner_out = owner;
+    return true;
+}
+
+static AstNode *xa_return_storage_prepass_match_arm_value(AstNode *arm) {
+    if (!arm || arm->type != AST_MATCH_ARM)
+        return NULL;
+    AstNode *body = arm->as.match_arm.body;
+    if (body && (body->type == AST_BLOCK || body->type == AST_PROGRAM))
+        body = xa_lifecycle_lint_single_expr_block_value(body);
+    return body;
 }
 
 static bool xa_return_storage_prepass_expr_summary(XaReturnStoragePrepass *scan, AstNode *expr,
@@ -6968,6 +7036,12 @@ static bool xa_return_storage_prepass_expr_summary(XaReturnStoragePrepass *scan,
         *owner_out = XR_STORAGE_NONE;
     if (mixed_out)
         *mixed_out = false;
+
+    AstNode *block_value = NULL;
+    if (expr && (expr->type == AST_BLOCK || expr->type == AST_PROGRAM) &&
+        (block_value = xa_lifecycle_lint_single_expr_block_value(expr)))
+        return xa_return_storage_prepass_expr_summary(scan, block_value, owner_out, mixed_out);
+
     bool is_move = false;
     AstNode *source = xa_shared_boundary_source(expr, &is_move);
     if (source && source->type == AST_VARIABLE && source->as.variable.name) {
@@ -6986,6 +7060,47 @@ static bool xa_return_storage_prepass_expr_summary(XaReturnStoragePrepass *scan,
     }
 
     AstNode *direct = xa_storage_boundary_identity_source(expr);
+    if (direct && direct->type == AST_TERNARY) {
+        bool any_known = false;
+        bool any_unknown = false;
+        uint8_t owner = XR_STORAGE_NONE;
+        bool mixed = false;
+        xa_return_storage_prepass_accumulate_expr_summary(scan, direct->as.ternary.true_expr,
+                                                          &any_known, &any_unknown, &owner, &mixed);
+        xa_return_storage_prepass_accumulate_expr_summary(scan, direct->as.ternary.false_expr,
+                                                          &any_known, &any_unknown, &owner, &mixed);
+        return xa_return_storage_prepass_finish_branch_summary(any_known, any_unknown, owner, mixed,
+                                                               owner_out, mixed_out);
+    }
+    if (direct && direct->type == AST_NULLISH_COALESCE) {
+        bool any_known = false;
+        bool any_unknown = false;
+        uint8_t owner = XR_STORAGE_NONE;
+        bool mixed = false;
+        xa_return_storage_prepass_accumulate_expr_summary(scan, direct->as.binary.left, &any_known,
+                                                          &any_unknown, &owner, &mixed);
+        xa_return_storage_prepass_accumulate_expr_summary(scan, direct->as.binary.right, &any_known,
+                                                          &any_unknown, &owner, &mixed);
+        return xa_return_storage_prepass_finish_branch_summary(any_known, any_unknown, owner, mixed,
+                                                               owner_out, mixed_out);
+    }
+    if (direct && direct->type == AST_MATCH_EXPR) {
+        bool any_known = false;
+        bool any_unknown = false;
+        uint8_t owner = XR_STORAGE_NONE;
+        bool mixed = false;
+        MatchExprNode *match = &direct->as.match_expr;
+        for (int i = 0; i < match->arm_count; i++) {
+            xa_return_storage_prepass_accumulate_expr_summary(
+                scan, xa_return_storage_prepass_match_arm_value(match->arms[i]), &any_known,
+                &any_unknown, &owner, &mixed);
+        }
+        return xa_return_storage_prepass_finish_branch_summary(any_known, any_unknown, owner, mixed,
+                                                               owner_out, mixed_out);
+    }
+    if (direct && direct->type == AST_MATCH_ARM)
+        return xa_return_storage_prepass_expr_summary(
+            scan, xa_return_storage_prepass_match_arm_value(direct), owner_out, mixed_out);
     if (direct && direct->type == AST_CALL_EXPR) {
         uint8_t owner = XR_STORAGE_NONE;
         bool mixed = false;
@@ -7093,7 +7208,10 @@ static void xa_return_storage_prepass_scan_stmt(XaReturnStoragePrepass *scan, As
 }
 
 static void xa_ensure_function_return_storage_prepass(XaInferContext *ctx, XaSymbolLinks *links) {
-    if (!ctx || !links || links->return_storage_scanned || links->return_storage_scan_in_progress)
+    if (!ctx || !links || links->return_storage_scan_in_progress)
+        return;
+    if (links->return_storage_scanned &&
+        (links->return_storage_known || links->return_storage_mixed))
         return;
     AstNode *fn_node = links->function_decl_node;
     if (!fn_node || fn_node->type != AST_FUNCTION_DECL || !fn_node->as.function_decl.body)
@@ -8052,7 +8170,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 AstNode *ret_expr = xa_storage_boundary_identity_source(ret->values[0]);
                 uint8_t owner = XR_STORAGE_NONE;
                 bool mixed = false;
-                if (xa_call_return_storage_summary(ctx, ret_expr, &owner, &mixed, NULL)) {
+                XaReturnStoragePrepass ret_scan = {.ctx = ctx, .use_scope_lookup = true};
+                if (xa_return_storage_prepass_expr_summary(&ret_scan, ret_expr, &owner, &mixed)) {
                     if (mixed)
                         xa_record_return_storage_mixed(ctx);
                     else
