@@ -19,7 +19,6 @@ c_contains=xrt_span_bytes_load_u32_le_unchecked_raw
 c_contains=xrt_span_bytes_load_u64_le_unchecked_raw
 c_contains=xr_array_core_bytes_load_f32
 c_contains=xr_array_core_bytes_load_f64
-c_contains=xr_array_core_copy_or_move_bytes
 c_contains=memcmp(_left.data, _right.data,
 c_contains=xr_array_core_bytes_common_prefix_raw
 c_contains=xr_array_core_bytes_repeat_copy
@@ -27,7 +26,7 @@ c_contains=Span.fill(value) byte length overflow
 c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
 c_contains=memmove(_dst.data, _src.data
 c_contains=Span.copyFrom(src) byte length overflow
-c_contains=Span.asBytes() byte length overflow
+c_contains=Span.asArray<byte>() byte length overflow
 c_contains=_out.elem_type = XR_ELEM_U8
 c_contains=Span.compare(other) byte length overflow
 c_contains=xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS
@@ -56,7 +55,7 @@ c_not_contains=xrt_span_copy_checked_raw
 c_not_contains=xrt_span_compare_checked_raw
 c_not_contains=xrt_span_as_bytes_checked_raw
 c_not_contains=xrt_span_reinterpret_checked_raw
-c_not_contains=ByteSpan.reinterpret<T>() length is not divisible by target size
+c_not_contains=Slice<byte>.reinterpret<T>() length is not divisible by target size
 c_not_contains=__memcpy_chk
 c_not_contains=___memcpy_chk
 not_contains=xray_rt_coro

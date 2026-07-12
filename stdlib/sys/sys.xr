@@ -166,10 +166,10 @@ class Process {
     }
 }
 
-class _ThreadLocalSlot {
-    value: unknown
+class _ThreadLocalSlot<T> {
+    value: T
 
-    constructor(value: unknown) {
+    constructor(value: T) {
         this.value = value
     }
 }
@@ -178,7 +178,7 @@ enum _ThreadLocalError {
     RecursiveInit
 }
 
-fn _threadLocalPruneDeadSlots(values: Map<int, _ThreadLocalSlot>) {
+fn _threadLocalPruneDeadSlots<T>(values: Map<int, _ThreadLocalSlot<T>>) {
     var keys = values.keys()
     for (key in keys) {
         if (!__threadLocalAlive(key)) {
@@ -198,7 +198,7 @@ fn _threadLocalPruneDeadFlags(values: Map<int, bool>) {
 
 class ThreadLocal<T> {
     _lock: OsMutex
-    _values: Map<int, _ThreadLocalSlot>
+    _values: Map<int, _ThreadLocalSlot<T>>
     _initializing: Map<int, bool>
     _init: () -> T
 
@@ -226,10 +226,22 @@ class ThreadLocal<T> {
             this._initializing.set(key, true)
         }
 
-        var init = this._init
-        var value: unknown = null
         try {
-            value = init()
+            var init = this._init
+            var value = init()
+            var result = value
+            {
+                this._lock.lock()
+                defer { this._lock.unlock() }
+                _threadLocalPruneDeadSlots(this._values)
+                _threadLocalPruneDeadFlags(this._initializing)
+                this._initializing.delete(key)
+                if (!this._values.containsKey(key)) {
+                    this._values.set(key, _ThreadLocalSlot<T>(value))
+                }
+                result = this._values.get(key)!.value
+            }
+            return result
         } catch (e) {
             {
                 this._lock.lock()
@@ -238,19 +250,6 @@ class ThreadLocal<T> {
             }
             throw e
         }
-        var result: unknown = null
-        {
-            this._lock.lock()
-            defer { this._lock.unlock() }
-            _threadLocalPruneDeadSlots(this._values)
-            _threadLocalPruneDeadFlags(this._initializing)
-            this._initializing.delete(key)
-            if (!this._values.containsKey(key)) {
-                this._values.set(key, _ThreadLocalSlot(value))
-            }
-            result = this._values.get(key)!.value
-        }
-        return result as T
     }
 
     set(value: T) {
@@ -262,7 +261,7 @@ class ThreadLocal<T> {
             var slot = this._values.get(key)!
             slot.value = value
         } else {
-            this._values.set(key, _ThreadLocalSlot(value))
+            this._values.set(key, _ThreadLocalSlot<T>(value))
         }
         this._initializing.delete(key)
     }

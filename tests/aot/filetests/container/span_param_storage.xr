@@ -14,5 +14,4 @@ bytes[1] = 2
 bytes[2] = 3
 bytes[3] = 4
 
-var view: Slice<byte> = bytes[1:4]
-print(sum_bytes(view))
+print(sum_bytes(bytes[1:4]))

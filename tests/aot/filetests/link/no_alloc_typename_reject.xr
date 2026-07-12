@@ -1,5 +1,5 @@
 @no_alloc
-fn xray_no_alloc_typename_reject(value: unknown) -> string {
+fn xray_no_alloc_typename_reject(value: Json) -> string {
     return typeName(value)
 }
 

@@ -51,8 +51,8 @@ static const char xr_native_def_channel[] =
 
 static const char xr_native_def_coroutine[] =
     "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "
-    "TaskResult<T> {\n    Success(T)\n    Failed(unknown)\n    Cancelled\n    Timeout\n    "
-    "Pending\n}\n\nenum TaskOutcome {\n    Success(unknown)\n    Failed(unknown)\n    "
+    "TaskResult<T> {\n    Success(T)\n    Failed(PanicInfo)\n    Cancelled\n    Timeout\n    "
+    "Pending\n}\n\nenum TaskOutcome {\n    Success(Json)\n    Failed(Json)\n    "
     "Cancelled\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
     "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    "
     "cancel()\n    poll() -> TaskResult<T>\n    awaitResult() -> TaskResult<T>\n    "
@@ -91,12 +91,12 @@ static const char xr_native_def_int[] =
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "
     "src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    static parse(text: string) "
-    "-> Json\n    static stringify(value: unknown, indent?: int) -> string\n    static "
-    "encode(value: unknown) -> Json\n    static isValid(text: string, strict?: bool) -> bool\n    "
+    "-> Json\n    static stringify<T>(value: T, indent?: int) -> string\n    static "
+    "encode<T>(value: T) -> Json\n    static isValid(text: string, strict?: bool) -> bool\n    "
     "static tryParse(text: string) -> Json\n    static keys(obj: Json) -> Array<string>\n    "
     "static values(obj: Json) -> Array<Json>\n    static entries(obj: Json) -> Array<(string, "
-    "Json)>\n    static containsKey(obj: Json, key: string) -> bool\n    static get(obj: Json, "
-    "key: string, default?: unknown) -> Json\n\n    keys() -> Array<string>\n    values() -> "
+    "Json)>\n    static containsKey(obj: Json, key: string) -> bool\n    static get<T>(obj: Json, "
+    "key: string, default?: T) -> Json\n\n    keys() -> Array<string>\n    values() -> "
     "Array<Json>\n    entries() -> Array<(string, Json)>\n    // Iteration protocol — iterator() "
     "yields each field name (used by\n    // single-variable `for (k in jsonObj)`); "
     "entriesIterator() yields\n    // (fieldName, value) tuples (used by `for (k, v in "

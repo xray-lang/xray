@@ -245,7 +245,7 @@ fn _looksDecimalNumber(s: string) -> bool {
     return sawDigit
 }
 
-fn _parsePlainScalar(rawValue: string) -> unknown {
+fn _parsePlainScalar(rawValue: string) -> Json {
     var raw = textutil.trim(rawValue)
     var lower = textutil.lower(raw)
     if (len(raw) == 0) { return null }
@@ -368,7 +368,7 @@ class YamlFlowParser {
         return textutil.trim(this.src.slice(start, this.pos))
     }
 
-    parsePlain() -> unknown {
+    parsePlain() -> Json {
         var start = this.pos
         while (!this.atEnd() && this.peek() != "," && this.peek() != "]" && this.peek() != "}") {
             this.advance()
@@ -376,7 +376,7 @@ class YamlFlowParser {
         return _parsePlainScalar(this.src.slice(start, this.pos))
     }
 
-    parseValue() -> unknown {
+    parseValue() -> Json {
         this.skipWs()
         if (this.atEnd()) { return null }
         var c = this.peek()
@@ -494,7 +494,7 @@ class YamlParser {
         return -1
     }
 
-    parseValueText(text: string) -> unknown {
+    parseValueText(text: string) -> Json {
         var raw = textutil.trim(_stripInlineComment(text))
         if (len(raw) == 0) { return null }
         if (raw.startsWith("&")) {
@@ -502,7 +502,7 @@ class YamlParser {
             while (i < len(raw) && !_isWs(raw.slice(i, (i) + 1))) { i = i + 1 }
             var name = raw.slice(1, i)
             var rest = textutil.trim(raw.slice(i, len(raw)))
-            var value: unknown = null
+            var value: Json = null
             if (len(rest) > 0) { value = this.parseValueText(rest) }
             this.anchors[name] = value
             return value
@@ -705,7 +705,7 @@ fn _parseOne(data: string) -> YamlParser {
     return parser
 }
 
-fn parse(data: string, options: unknown = null) -> Json {
+fn parse(data: string, options: Json = null) -> Json {
     var parser = YamlParser(data)
     return parser.parseDocument()
 }
@@ -779,7 +779,7 @@ fn _keyText(key: string) -> string {
     return key
 }
 
-fn _scalarText(value: unknown) -> string {
+fn _scalarText(value: Json) -> string {
     if (value == null) { return "null" }
     var kind = typeName(value)
     if (kind == "string") { return _quoteString(value as string) }
@@ -792,13 +792,13 @@ fn _scalarText(value: unknown) -> string {
     return _quoteString(string(value))
 }
 
-fn _isScalar(value: unknown) -> bool {
+fn _isScalar(value: Json) -> bool {
     var kind = typeName(value)
     return value == null || kind == "string" || kind == "bool" || kind == "int" ||
            kind == "float"
 }
 
-fn _emitValue(value: unknown, level: int, indent: int) -> string {
+fn _emitValue(value: Json, level: int, indent: int) -> string {
     if (_isScalar(value)) { return _scalarText(value) }
     var kind = typeName(value)
     if (kind == "Array") {
@@ -844,7 +844,7 @@ fn _emitValue(value: unknown, level: int, indent: int) -> string {
     return _scalarText(value)
 }
 
-fn stringify(value: unknown, options: unknown = null) -> string {
+fn stringify(value: Json, options: Json = null) -> string {
     var indent = 2
     var opts = Json.encode(options)
     if (typeName(opts) == "Json") {
@@ -864,7 +864,7 @@ fn parseFile(path: string) -> Json {
     return parse(content!)
 }
 
-fn writeFile(path: string, value: unknown) -> bool {
+fn writeFile(path: string, value: Json) -> bool {
     return io.writeFile(path, stringify(value))
 }
 

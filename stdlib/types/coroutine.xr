@@ -2,15 +2,15 @@
 
 enum TaskResult<T> {
     Success(T)
-    Failed(unknown)
+    Failed(PanicInfo)
     Cancelled
     Timeout
     Pending
 }
 
 enum TaskOutcome {
-    Success(unknown)
-    Failed(unknown)
+    Success(Json)
+    Failed(Json)
     Cancelled
 }
 

@@ -62,6 +62,43 @@ static int alias_param_index(const XrTypeAlias *alias, const char *name) {
 static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                                        const XrTypeAlias *subst_alias, XrTypeRef **type_args);
 
+static void report_removed_source_type_name(Parser *parser, const char *message) {
+    if (!parser || !message)
+        return;
+    if (parser->panic_mode && parser->had_error)
+        return;
+
+    int saved_panic_mode = parser->panic_mode;
+    parser->panic_mode = 0;
+    xr_parser_error(parser, message);
+    if (saved_panic_mode)
+        parser->panic_mode = 1;
+}
+
+static bool reject_removed_source_type_name(Parser *parser, const char *name) {
+    if (!name)
+        return false;
+    if (strcmp(name, "JsonValue") == 0) {
+        report_removed_source_type_name(parser,
+                                        "Type 'JsonValue' has been removed. Use 'Json' instead.");
+        return true;
+    }
+    if (strcmp(name, "any") == 0) {
+        report_removed_source_type_name(
+            parser,
+            "'any' type is not supported. Use a concrete type or 'Json' for dynamic values.");
+        return true;
+    }
+    if (strcmp(name, "unknown") == 0) {
+        report_removed_source_type_name(
+            parser,
+            "'unknown' type has been removed. Use a concrete type, a generic type parameter, or "
+            "'Json' for JSON-domain values.");
+        return true;
+    }
+    return false;
+}
+
 static XrTypeRef *expand_type_alias(Parser *parser, XrTypeAlias *alias, XrTypeRef **type_args,
                                     int type_arg_count) {
     if (!alias)
@@ -121,12 +158,16 @@ static XrTypeRef *expand_generic_or_clone(Parser *parser, const char *name, XrTy
 
 XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name) {
     XR_DCHECK(parser != NULL, "xr_parse_type_name_ref: NULL parser");
+    if (reject_removed_source_type_name(parser, name))
+        return xr_tref_unknown(parser->compiler_session);
     return expand_named_or_clone(parser, name);
 }
 
 XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *name,
                                                   XrTypeRef **args, int arg_count) {
     XR_DCHECK(parser != NULL, "xr_parse_generic_type_name_ref: NULL parser");
+    if (reject_removed_source_type_name(parser, name))
+        return xr_tref_unknown(parser->compiler_session);
     return expand_generic_or_clone(parser, name, args, arg_count);
 }
 
@@ -519,14 +560,11 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
 
         /* Misspelling detection (purely syntactic, kept in parser) */
         if (strcmp(temp_name, "JsonValue") == 0) {
-            xr_parser_error(parser, "Type 'JsonValue' has been removed. Use 'Json' instead.");
+            reject_removed_source_type_name(parser, temp_name);
             return xr_tref_named(parser->compiler_session, "Json");
         }
-        if (strcmp(temp_name, "any") == 0) {
-            xr_parser_error(parser, "'any' type is not supported. "
-                                    "Use a concrete type or 'Json' for dynamic values.");
+        if (reject_removed_source_type_name(parser, temp_name))
             return xr_tref_unknown(parser->compiler_session);
-        }
         if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
             xr_parser_error(parser, "type 'string' must be lowercase in Xray");
             return xr_tref_string(parser->compiler_session);

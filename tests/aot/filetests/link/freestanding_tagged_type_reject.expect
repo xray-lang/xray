@@ -3,6 +3,6 @@ status=fail
 contains=freestanding profile rejects tagged/dynamic value type in function parameter 'x'
 contains=freestanding profile rejects tagged/dynamic value type in function return type
 contains=freestanding profile rejects tagged/dynamic value type in variable 'x'
-contains=use fixed-layout structs, fixed arrays, Span/ByteSpan, enum value-structs, Buffer, or raw pointers instead
+contains=use fixed-layout structs, fixed arrays, Slice<T>/Slice<byte>, enum value-structs, Buffer, or raw pointers instead
 not_contains=unsupported AOT
 not_contains=CRASH

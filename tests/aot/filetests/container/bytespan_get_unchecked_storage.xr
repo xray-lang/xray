@@ -10,5 +10,4 @@ unsafe {
     bytes.push(7)
     bytes.push(11)
 }
-var view: Slice<byte> = bytes[:]
-print(pair(view))
+print(pair(bytes[:]))

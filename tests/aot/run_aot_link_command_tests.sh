@@ -1315,28 +1315,28 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/fixed-array: generated C slices fixed array into span"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_store_u16" \
-            "freestanding-profile/fixed-array: ByteSpan.store<uint16> uses freestanding bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.store<uint16> uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_load_u16_le_unchecked_raw" \
-            "freestanding-profile/fixed-array: ByteSpan.load<uint16> uses freestanding span bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.load<uint16> uses freestanding span bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_load_u64_le_unchecked_raw" \
-            "freestanding-profile/fixed-array: ByteSpan.load<uint64> uses freestanding span bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.load<uint64> uses freestanding span bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_store_f32" \
-            "freestanding-profile/fixed-array: ByteSpan.store<float32> uses freestanding bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.store<float32> uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_load_f64" \
-            "freestanding-profile/fixed-array: ByteSpan.load<float64> uses freestanding bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.load<float64> uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xr_array_core_copy_or_move_bytes" \
-            "freestanding-profile/fixed-array: ByteSpan.copyFrom uses freestanding bytes copy helper"
+            "memmove(_dst.data, _src.data" \
+            "freestanding-profile/fixed-array: Slice<byte>.copyFrom lowers to no-libc memmove"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_common_prefix_raw" \
-            "freestanding-profile/fixed-array: ByteSpan.commonPrefix uses freestanding bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.commonPrefix uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_repeat_copy" \
-            "freestanding-profile/fixed-array: ByteSpan.repeatFrom uses freestanding bytes helper"
+            "freestanding-profile/fixed-array: Slice<byte>.repeatFrom uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "Span.fill(value) byte length overflow" \
             "freestanding-profile/fixed-array: Span.fill uses freestanding POD path"
@@ -1347,11 +1347,11 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "memmove(_dst.data, _src.data" \
             "freestanding-profile/fixed-array: Span.copyFrom lowers to no-libc memmove"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "Span.asBytes() byte length overflow" \
-            "freestanding-profile/fixed-array: Span.asBytes uses local metadata rewrite"
+            "Span.asArray<byte>() byte length overflow" \
+            "freestanding-profile/fixed-array: Span.asArray<byte> uses local metadata rewrite"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "_out.length = _s.length / (int64_t)2; _out.elem_type =" \
-            "freestanding-profile/fixed-array: ByteSpan.reinterpret uses local metadata rewrite"
+            "freestanding-profile/fixed-array: Slice<byte>.reinterpret uses local metadata rewrite"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "Span.compare(other) byte length overflow" \
             "freestanding-profile/fixed-array: Span.compare uses freestanding POD path"
@@ -1363,19 +1363,19 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/fixed-array: generated C avoids hosted exception objects"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_store_u64_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.store"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.store"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_load_f64_value" \
-            "freestanding-profile/fixed-array: generated C avoids hosted boxed ByteSpan.load"
+            "freestanding-profile/fixed-array: generated C avoids hosted boxed Slice<byte>.load"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_copy_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.copyFrom"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.copyFrom"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_common_prefix_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.commonPrefix"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.commonPrefix"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_bytes_repeat_from_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.repeatFrom"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.repeatFrom"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_fill_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Span.fill"
@@ -1387,13 +1387,13 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Span.compare"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_as_bytes_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.asBytes"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.asArray<byte>"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_reinterpret_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.reinterpret"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.reinterpret"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "ByteSpan.reinterpret<T>() length is not divisible by target size" \
-            "freestanding-profile/fixed-array: generated C proves ByteSpan.reinterpret length relation"
+            "Slice<byte>.reinterpret<T>() length is not divisible by target size" \
+            "freestanding-profile/fixed-array: generated C proves Slice<byte>.reinterpret length relation"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "__memcpy_chk" \
             "freestanding-profile/fixed-array: generated C avoids checked memcpy builtin"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "___memcpy_chk" \
@@ -3682,7 +3682,7 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
 else
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
         "freestanding profile rejects string.copyBytes" \
-        "freestanding-profile: rejects hosted string-to-Bytes bridge"
+        "freestanding-profile: rejects hosted string byte-copy bridge"
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
         "freestanding profile rejects string.bytes" \
         "freestanding-profile: rejects hosted string byte-view helper"
@@ -3699,7 +3699,7 @@ FREESTANDING_BYTES_STATIC_LOG="$WORK/freestanding_bytes_static_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_bytes_static_reject" \
         "$FREESTANDING_BYTES_STATIC_SRC" >"$FREESTANDING_BYTES_STATIC_LOG" 2>&1; then
-    record_fail "freestanding-profile: rejects owned Bytes static constructors"
+    record_fail "freestanding-profile: rejects owned Array<byte> static constructors"
     sed 's/^/      /' "$FREESTANDING_BYTES_STATIC_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \

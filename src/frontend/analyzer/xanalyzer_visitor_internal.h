@@ -157,10 +157,10 @@ static inline void xa_freestanding_report_tagged_type_unavailable(XaInferContext
     } else {
         snprintf(feature, sizeof(feature), "tagged/dynamic value type");
     }
-    xa_freestanding_report_unavailable(
-        ctx, node, feature,
-        "use fixed-layout structs, fixed arrays, Span/Slice<byte>, enum value-structs, Buffer, or "
-        "raw pointers instead");
+    xa_freestanding_report_unavailable(ctx, node, feature,
+                                       "use fixed-layout structs, fixed arrays, "
+                                       "Slice<T>/Slice<byte>, enum value-structs, Buffer, or "
+                                       "raw pointers instead");
 }
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)

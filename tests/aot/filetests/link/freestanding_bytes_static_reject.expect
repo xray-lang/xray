@@ -1,6 +1,6 @@
 args=--profile freestanding
 status=fail
-contains=freestanding profile rejects Bytes.withCapacity
-contains=freestanding profile rejects Bytes.fromString
+contains=freestanding profile rejects Array.withCapacity
+contains=freestanding profile rejects class construction
 not_contains=CRASH
 not_contains=unsupported AOT

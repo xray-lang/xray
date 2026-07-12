@@ -1,6 +1,6 @@
 @no_alloc
-fn xray_no_alloc_unknown_tostring_reject(value: unknown) -> string {
+fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
     return value.toString()
 }
 
-print(xray_no_alloc_unknown_tostring_reject(42))
+print(xray_no_alloc_json_tostring_reject(42))

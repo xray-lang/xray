@@ -1,23 +1,54 @@
 import toml
+import { TomlValue } from toml
+
+fn field(value: TomlValue, key: string) -> TomlValue {
+    return toml.get(value, key)!
+}
+
+fn item(value: TomlValue, index: int) -> TomlValue {
+    return toml.at(value, index)!
+}
+
+fn asString(value: TomlValue) -> string {
+    return toml.asString(value)!
+}
+
+fn asInt(value: TomlValue) -> int {
+    return toml.asInt(value)!
+}
+
+fn asBool(value: TomlValue) -> bool {
+    return toml.asBool(value)!
+}
+
+fn arrayLen(value: TomlValue) -> int {
+    return toml.length(value)
+}
 
 var basic = toml.parse("name = \"xray\"\nversion = 2\nactive = true")
-print(basic["name"])
-print(basic["version"])
-print(basic["active"])
+print(asString(field(basic, "name")))
+print(asInt(field(basic, "version")))
+print(asBool(field(basic, "active")))
 
 var nested = toml.parse("fruit.name = \"apple\"\nfruit.color = \"red\"")
-print(nested["fruit"]["name"])
-print(nested["fruit"]["color"])
+var fruit = field(nested, "fruit")
+print(asString(field(fruit, "name")))
+print(asString(field(fruit, "color")))
 
 var products = toml.parse("[[products]]\nname = \"Hammer\"\n\n[[products]]\nname = \"Nail\"")
-print(len(products["products"]))
-print(products["products"][1]["name"])
+var productList = field(products, "products")
+print(arrayLen(productList))
+print(asString(field(item(productList, 1), "name")))
 
-var strict = toml.parseStrict("name = \"Alice\"\nname = \"Bob\"")
-print(len(strict["errors"]) > 0)
-print(strict["data"]["name"])
+var report = toml.parseReport("name = \"Alice\"\nname = \"Bob\"")
+print(len(report.errors) > 0)
+print(asString(field(report.data, "name")))
 
-var out = toml.stringify({"name": "xray", "version": 1, "enabled": true})
+var config = toml.newTable()
+toml.tableSet(config, "name", toml.stringValue("xray"))
+toml.tableSet(config, "version", toml.intValue(1))
+toml.tableSet(config, "enabled", toml.boolValue(true))
+var out = toml.stringify(toml.tableValue(config))
 print(out.contains("name = \"xray\""))
 print(out.contains("version = 1"))
-print(toml.parse(out)["enabled"])
+print(asBool(field(toml.parse(out), "enabled")))

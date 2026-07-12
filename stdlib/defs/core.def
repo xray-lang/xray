@@ -2822,7 +2822,7 @@ module mem {
   }
 
   fn addressOf {
-    signature: "(ptr: RawPtr<unknown>): int"
+    signature: "(ptr: RawPtr<byte>): int"
     doc: "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)"
     vm: "mem_address_of"
     aot: "xrt_mem_address_of"

@@ -1,1 +1,1 @@
-Argument 1: type 'int' is not assignable to parameter type 'RawPtr<unknown>'
+mem.addressOf expects RawPtr<T> or RawMut<T>, got 'int'

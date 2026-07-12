@@ -132,7 +132,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"parseSetCookie", XLSP_SYM_FUNCTION, "fn(header: string, requestDomain?: string, requestPath?: string, nowSeconds?: int): Cookie?", "", NULL, 0},
     {"cookieJar", XLSP_SYM_FUNCTION, "fn(maxCookies?: int): CookieJar", "", NULL, 0},
     {"router", XLSP_SYM_FUNCTION, "fn(): Router", "", NULL, 0},
-    {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: unknown): ()", "", NULL, 0},
     {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "", NULL, 0},
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
@@ -166,7 +165,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 37
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 36
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
@@ -206,19 +205,19 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
-    {"debug", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
-    {"warn", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
-    {"error", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
-    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
-    {"setLevel", XLSP_SYM_FUNCTION, "fn(level: unknown): ()", "", NULL, 0},
+    {"debug", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"warn", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"error", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"setLevel", XLSP_SYM_FUNCTION, "fn(level: Json): ()", "", NULL, 0},
     {"setFormat", XLSP_SYM_FUNCTION, "fn(format: string): ()", "", NULL, 0},
     {"setOutput", XLSP_SYM_FUNCTION, "fn(path: string): ()", "", NULL, 0},
     {"isEnabled", XLSP_SYM_FUNCTION, "fn(level: int): bool", "", NULL, 0},
     {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
-    {"child", XLSP_SYM_FUNCTION, "fn(...fields: unknown): Logger", "", NULL, 0},
+    {"child", XLSP_SYM_FUNCTION, "fn(...fields: Json): Logger", "", NULL, 0},
     {"DEBUG", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"INFO", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"WARN", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
@@ -302,7 +301,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
     {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
     {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): RawMut<byte>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
-    {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<unknown>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
+    {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<byte>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
     {"move", XLSP_SYM_FUNCTION, "fn(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
     {"set", XLSP_SYM_FUNCTION, "fn(dst: RawMut<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
@@ -509,13 +508,39 @@ static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
 
 // toml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string): Json", "", NULL, 0},
-    {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): Json", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(value: unknown): string", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: unknown): bool", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string): TomlValue", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string): TomlParseReport", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(value: TomlValue): string", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): TomlValue", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: TomlValue): bool", "", NULL, 0},
+    {"newTable", XLSP_SYM_FUNCTION, "fn(): TomlTable", "", NULL, 0},
+    {"newArray", XLSP_SYM_FUNCTION, "fn(): TomlArray", "", NULL, 0},
+    {"tableSet", XLSP_SYM_FUNCTION, "fn(table: TomlTable, key: string, value: TomlValue): ()", "", NULL, 0},
+    {"arrayPush", XLSP_SYM_FUNCTION, "fn(array: TomlArray, value: TomlValue): ()", "", NULL, 0},
+    {"boolValue", XLSP_SYM_FUNCTION, "fn(value: bool): TomlValue", "", NULL, 0},
+    {"intValue", XLSP_SYM_FUNCTION, "fn(value: int): TomlValue", "", NULL, 0},
+    {"floatValue", XLSP_SYM_FUNCTION, "fn(value: float): TomlValue", "", NULL, 0},
+    {"stringValue", XLSP_SYM_FUNCTION, "fn(value: string): TomlValue", "", NULL, 0},
+    {"dateTimeValue", XLSP_SYM_FUNCTION, "fn(value: string): TomlValue", "", NULL, 0},
+    {"arrayValue", XLSP_SYM_FUNCTION, "fn(value: TomlArray): TomlValue", "", NULL, 0},
+    {"tableValue", XLSP_SYM_FUNCTION, "fn(value: TomlTable): TomlValue", "", NULL, 0},
+    {"get", XLSP_SYM_FUNCTION, "fn(value: TomlValue, key: string): TomlValue?", "", NULL, 0},
+    {"at", XLSP_SYM_FUNCTION, "fn(value: TomlValue, index: int): TomlValue?", "", NULL, 0},
+    {"length", XLSP_SYM_FUNCTION, "fn(value: TomlValue): int", "", NULL, 0},
+    {"asBool", XLSP_SYM_FUNCTION, "fn(value: TomlValue): bool?", "", NULL, 0},
+    {"asInt", XLSP_SYM_FUNCTION, "fn(value: TomlValue): int?", "", NULL, 0},
+    {"asFloat", XLSP_SYM_FUNCTION, "fn(value: TomlValue): float?", "", NULL, 0},
+    {"asString", XLSP_SYM_FUNCTION, "fn(value: TomlValue): string?", "", NULL, 0},
+    {"asDateTime", XLSP_SYM_FUNCTION, "fn(value: TomlValue): TomlDateTime?", "", NULL, 0},
+    {"isTable", XLSP_SYM_FUNCTION, "fn(value: TomlValue): bool", "", NULL, 0},
+    {"TomlArray", XLSP_SYM_CLASS, "type TomlArray", "Class type", NULL, 0},
+    {"TomlDateTime", XLSP_SYM_CLASS, "type TomlDateTime", "Class type", NULL, 0},
+    {"TomlFloat", XLSP_SYM_CLASS, "type TomlFloat", "Class type", NULL, 0},
+    {"TomlTable", XLSP_SYM_CLASS, "type TomlTable", "Class type", NULL, 0},
+    {"TomlValue", XLSP_SYM_CLASS, "type TomlValue", "Class type", NULL, 0},
+    {"TomlParseReport", XLSP_SYM_CLASS, "type TomlParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT 5
+#define GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT 31
 
 // url module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
@@ -572,13 +597,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "", NULL, 0},
-    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: unknown): Json", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(node: unknown, options?: unknown): string", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, node: unknown, options?: unknown): bool", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "", NULL, 0},
+    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: Json): Json", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(node: Json, options?: Json): string", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, node: Json, options?: Json): bool", "", NULL, 0},
     {"document", XLSP_SYM_FUNCTION, "fn(): Json", "", NULL, 0},
-    {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrsValue?: unknown): Json", "", NULL, 0},
+    {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrsValue?: Json): Json", "", NULL, 0},
     {"text", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
     {"comment", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
     {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
@@ -587,12 +612,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
 
 // yaml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "", NULL, 0},
     {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): Json", "", NULL, 0},
     {"parseAll", XLSP_SYM_FUNCTION, "fn(data: string): Array<Json>", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(value: unknown, options?: unknown): string", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(value: Json, options?: Json): string", "", NULL, 0},
     {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: unknown): bool", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: Json): bool", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_YAML_SYMBOL_COUNT 6
 

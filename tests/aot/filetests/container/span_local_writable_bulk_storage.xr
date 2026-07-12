@@ -19,3 +19,6 @@ fn word_ops() -> int {
     view.copyFrom(src)
     return int(view[0]) + int(view[1])
 }
+
+print(byte_ops())
+print(word_ops())

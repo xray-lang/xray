@@ -1,5 +1,5 @@
 status=fail
 contains=@no_alloc function 'xray_no_alloc_os_arch_selective_const_reject' allocates via stdlib 'os.arch'
 contains=xray_no_alloc_os_arch_selective_const_reject
-not_contains=Return type mismatch: expected 'string', got 'fn(): unknown'
+not_contains=Return type mismatch: expected 'string', got 'fn(): Json'
 not_contains=CRASH

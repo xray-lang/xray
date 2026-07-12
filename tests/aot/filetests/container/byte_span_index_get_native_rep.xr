@@ -1,3 +1,9 @@
 fn readByteAsInt(b: Slice<byte>, i: int) -> int {
     return int(b[i])
 }
+
+var bytes = Array<byte>(3, 0)
+bytes[0] = 7
+bytes[1] = 11
+bytes[2] = 13
+print(readByteAsInt(bytes[:], 1))

@@ -49,3 +49,24 @@ fn writeI16(src: Slice<byte>, pos: int, value: int16) {
 fn writeF32(src: Slice<byte>, pos: int, value: float32) {
     src.store<float32>(pos, value, Endian.LE)
 }
+
+var bytes = Array<byte>(16, 0)
+bytes[0] = 1
+bytes[1] = 2
+bytes[2] = 3
+bytes[3] = 4
+bytes[4] = 5
+bytes[5] = 6
+bytes[6] = 7
+bytes[7] = 8
+print(read16(bytes[:], 0))
+print(read32(bytes[:], 0))
+print(read64(bytes[:], 0))
+print(readI16(bytes[:], 0))
+print(readI32(bytes[:], 0))
+print(readF32(bytes[:], 0))
+print(readF64(bytes[:], 0))
+print(read32BE(bytes[:], 0))
+write16(bytes[:], 0, 0x1234)
+writeI16(bytes[:], 2, -3)
+writeF32(bytes[:], 4, 1.25)

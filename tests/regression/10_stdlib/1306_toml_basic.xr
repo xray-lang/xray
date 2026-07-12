@@ -1,6 +1,27 @@
 // 1301_toml_basic.xr - TOML module tests
 
 import toml
+import { TomlValue } from toml
+
+fn field(value: TomlValue, key: string) -> TomlValue {
+    return toml.get(value, key)!
+}
+
+fn item(value: TomlValue, index: int) -> TomlValue {
+    return toml.at(value, index)!
+}
+
+fn asString(value: TomlValue) -> string {
+    return toml.asString(value)!
+}
+
+fn asInt(value: TomlValue) -> int {
+    return toml.asInt(value)!
+}
+
+fn asBool(value: TomlValue) -> bool {
+    return toml.asBool(value)!
+}
 
 // ===== Basic key-value =====
 
@@ -8,9 +29,9 @@ import toml
 fn test_parse_basic() {
     var data = "name = \"Alice\"\nage = 30\nactive = true"
     var obj = toml.parse(data)
-    assert_eq(obj["name"], "Alice")
-    assert_eq(obj["age"], 30)
-    assert_eq(obj["active"], true)
+    assert_eq(asString(field(obj, "name")), "Alice")
+    assert_eq(asInt(field(obj, "age")), 30)
+    assert_eq(asBool(field(obj, "active")), true)
 }
 
 // ===== Table (section) =====
@@ -19,8 +40,9 @@ fn test_parse_basic() {
 fn test_parse_table() {
     var data = "[server]\nhost = \"localhost\"\nport = 8080"
     var obj = toml.parse(data)
-    assert_eq(obj["server"]["host"], "localhost")
-    assert_eq(obj["server"]["port"], 8080)
+    var server = field(obj, "server")
+    assert_eq(asString(field(server, "host")), "localhost")
+    assert_eq(asInt(field(server, "port")), 8080)
 }
 
 // ===== Array =====
@@ -29,8 +51,9 @@ fn test_parse_table() {
 fn test_parse_array() {
     var data = "ports = [80, 443, 8080]"
     var obj = toml.parse(data)
-    assert_eq(obj["ports"][0], 80)
-    assert_eq(obj["ports"][2], 8080)
+    var ports = field(obj, "ports")
+    assert_eq(asInt(item(ports, 0)), 80)
+    assert_eq(asInt(item(ports, 2)), 8080)
 }
 
 // ===== Inline table =====
@@ -39,7 +62,7 @@ fn test_parse_array() {
 fn test_parse_inline_table() {
     var data = "point = { x = 10, y = 20 }"
     var obj = toml.parse(data)
-    assert_eq(obj["point"]["x"], 10)
+    assert_eq(asInt(field(field(obj, "point"), "x")), 10)
 }
 
 // ===== Number formats =====
@@ -48,17 +71,19 @@ fn test_parse_inline_table() {
 fn test_parse_number_formats() {
     var data = "hex = 0xDEADBEEF\noct = 0o755\nbin = 0b11010110"
     var obj = toml.parse(data)
-    assert_eq(obj["hex"], 3735928559)
-    assert_eq(obj["oct"], 493)
-    assert_eq(obj["bin"], 214)
+    assert_eq(asInt(field(obj, "hex")), 3735928559)
+    assert_eq(asInt(field(obj, "oct")), 493)
+    assert_eq(asInt(field(obj, "bin")), 214)
 }
 
 // ===== Stringify =====
 
 @test
 fn test_stringify() {
-    var config: Json = {"name": "xray", "version": 1}
-    var result = toml.stringify(config)
+    var config = toml.newTable()
+    toml.tableSet(config, "name", toml.stringValue("xray"))
+    toml.tableSet(config, "version", toml.intValue(1))
+    var result = toml.stringify(toml.tableValue(config))
     assert(len(result) > 0)
 }
 
@@ -68,6 +93,7 @@ fn test_stringify() {
 fn test_parse_nested_table() {
     var data = "[database]\n[database.primary]\nhost = \"db1\"\n[database.replica]\nhost = \"db2\""
     var obj = toml.parse(data)
-    assert_eq(obj["database"]["primary"]["host"], "db1")
-    assert_eq(obj["database"]["replica"]["host"], "db2")
+    var database = field(obj, "database")
+    assert_eq(asString(field(field(database, "primary"), "host")), "db1")
+    assert_eq(asString(field(field(database, "replica"), "host")), "db2")
 }

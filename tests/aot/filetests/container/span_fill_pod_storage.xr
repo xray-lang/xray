@@ -7,3 +7,7 @@ fn zero_words(dst: Slice<uint32>) -> int {
     dst.fill(0)
     return len(dst)
 }
+
+var words = Array<uint32>(4, 0)
+print(fill_words(words[:], 7))
+print(zero_words(words[:]))
