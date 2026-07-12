@@ -308,13 +308,16 @@ static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
 
 typedef enum {
     XA_BUILTIN_RECEIVER_U8_ARRAY,
+    XA_BUILTIN_RECEIVER_ARRAY,
     XA_BUILTIN_RECEIVER_U8_SLICE,
     XA_BUILTIN_RECEIVER_POD_SLICE,
 } XaBuiltinReceiverKind;
 
 typedef enum {
     XA_BUILTIN_TYPE_NONE,
+    XA_BUILTIN_TYPE_BOOL,
     XA_BUILTIN_TYPE_INT,
+    XA_BUILTIN_TYPE_STRING,
     XA_BUILTIN_TYPE_U8,
     XA_BUILTIN_TYPE_U8_ARRAY,
     XA_BUILTIN_TYPE_U8_SLICE,
@@ -324,6 +327,7 @@ typedef enum {
     XA_BUILTIN_TYPE_SLICE_OF_PARAM_0,
     XA_BUILTIN_TYPE_RECEIVER,
     XA_BUILTIN_TYPE_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_RECEIVER_ELEM_NULLABLE,
     XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM,
 } XaBuiltinMethodTypeKind;
 
@@ -363,6 +367,8 @@ static bool xa_builtin_receiver_matches(XrType *receiver, XaBuiltinReceiverKind 
     switch (kind) {
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver && XR_TYPE_IS_ARRAY(receiver);
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
@@ -378,8 +384,12 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
     switch (kind) {
         case XA_BUILTIN_TYPE_NONE:
             return NULL;
+        case XA_BUILTIN_TYPE_BOOL:
+            return xr_type_new_bool(X);
         case XA_BUILTIN_TYPE_INT:
             return xr_type_new_int(X);
+        case XA_BUILTIN_TYPE_STRING:
+            return xr_type_new_string(X);
         case XA_BUILTIN_TYPE_U8:
             return xr_type_new_int_width(X, XR_NATIVE_U8);
         case XA_BUILTIN_TYPE_U8_ARRAY:
@@ -400,6 +410,12 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
         case XA_BUILTIN_TYPE_RECEIVER_ELEM:
             return receiver && receiver->container.element_type ? receiver->container.element_type
                                                                 : xr_type_new_unknown(X);
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_NULLABLE: {
+            XrType *elem = receiver && receiver->container.element_type
+                               ? xr_type_copy(X, receiver->container.element_type)
+                               : xr_type_new_unknown(X);
+            return xr_type_make_nullable(X, elem);
+        }
         case XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM:
             return xr_type_new_span(X, receiver && receiver->container.element_type
                                            ? receiver->container.element_type
