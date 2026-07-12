@@ -49,6 +49,7 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     body.kind = XG_BODY_FUNCTION;
     body.body_hash = UINT64_C(0x123456789abcdef0);
     body.effect_bits = XG_BODY_MAY_CALL;
+    body.param_storage_key = 0x203;
     body.callsite_start = 1;
     body.callsite_count = 1;
     ASSERT_NOT_NULL(xg_global_evidence_add_body(ev, &body));
@@ -529,6 +530,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
     ASSERT_NOT_NULL(strstr(info.body, "body id=11"));
+    ASSERT_NOT_NULL(strstr(info.body, "param_storage=515"));
     ASSERT_NOT_NULL(strstr(info.body, "interface-object-use id=4 interface=41"));
     ASSERT(xg_evidence_cache_payload_request_matches(payload, &expected_request));
     ASSERT(xg_evidence_cache_payload_matches(payload, &expected));
@@ -542,6 +544,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(materialized.nlink_deps, 1);
     ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
     ASSERT_EQ_UINT(materialized.bodies[0].func_id, 11);
+    ASSERT_EQ_UINT(materialized.bodies[0].param_storage_key, 0x203);
     ASSERT_EQ_UINT(materialized.callsites[0].callsite_id, 1);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].interface_id, 41);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].reason,
@@ -1160,7 +1163,7 @@ TEST(imported_summary_hash_folds_valid_package_payloads) {
     add_sample_semantic_summary(&changed);
     add_sample_body_summary(&changed);
     add_sample_global_extra_summary(&changed);
-    changed.bodies[0].body_hash ^= UINT64_C(0x55);
+    changed.bodies[0].param_storage_key ^= UINT32_C(0x55);
     changed_payload =
         xg_global_evidence_cache_payload_dump(&changed, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(changed_payload);

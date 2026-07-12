@@ -277,6 +277,7 @@ static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     hash = hash_u32(hash, row->effect_bits);
     hash = hash_u32(hash, row->escape_bits);
     hash = hash_u32(hash, row->capability_bits);
+    hash = hash_u32(hash, row->param_storage_key);
     hash = hash_u32(hash, row->callsite_start);
     hash = hash_u32(hash, row->callsite_count);
     hash = hash_u32(hash, row->metadata_use_bits);
@@ -3525,12 +3526,12 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         fprintf(out,
                 "body id=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
                 "kind=%u hash=%016" PRIx64 " effect=0x%x escape=0x%x caps=0x%x "
-                "calls=%u+%u metadata=0x%x static=0x%x\n",
+                "param_storage=%u calls=%u+%u metadata=0x%x static=0x%x\n",
                 b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
                 b->owner_method_id, b->name_id, b->signature_key, b->source_span_id,
                 (unsigned) b->kind, b->body_hash, b->effect_bits, b->escape_bits,
-                b->capability_bits, b->callsite_start, b->callsite_count, b->metadata_use_bits,
-                b->static_data_use_bits);
+                b->capability_bits, b->param_storage_key, b->callsite_start, b->callsite_count,
+                b->metadata_use_bits, b->static_data_use_bits);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
@@ -4255,13 +4256,14 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
                    "body id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " decl=%" SCNu32
                    " class=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
                    " span=%" SCNu32 " kind=%" SCNu32 " hash=%" SCNx64 " effect=0x%" SCNx32
-                   " escape=0x%" SCNx32 " caps=0x%" SCNx32 " calls=%" SCNu32 "+%" SCNu32
-                   " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
+                   " escape=0x%" SCNx32 " caps=0x%" SCNx32 " param_storage=%" SCNu32
+                   " calls=%" SCNu32 "+%" SCNu32 " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
                    &row.func_id, &row.module_id, &row.source_node_id, &row.owner_decl_id,
                    &row.owner_class_id, &row.owner_method_id, &row.name_id, &row.signature_key,
                    &row.source_span_id, &kind, &row.body_hash, &row.effect_bits, &row.escape_bits,
-                   &row.capability_bits, &row.callsite_start, &row.callsite_count,
-                   &row.metadata_use_bits, &row.static_data_use_bits, &trailing) != 18)
+                   &row.capability_bits, &row.param_storage_key, &row.callsite_start,
+                   &row.callsite_count, &row.metadata_use_bits, &row.static_data_use_bits,
+                   &trailing) != 19)
             return false;
         row.kind = (uint8_t) kind;
         if (!xg_global_evidence_add_body(evidence, &row))
@@ -6198,8 +6200,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(out, " caps=0x%x", b->capability_bits);
         dump_named_bitset(out, b->capability_bits, capabilities, capability_count,
                           xg_capability_name);
-        fprintf(out, " callsites=%u+%u metadata=0x%x", b->callsite_start, b->callsite_count,
-                b->metadata_use_bits);
+        fprintf(out, " param_storage=%u callsites=%u+%u metadata=0x%x", b->param_storage_key,
+                b->callsite_start, b->callsite_count, b->metadata_use_bits);
         dump_named_bitset(out, b->metadata_use_bits, metadata, metadata_count, xg_metadata_name);
         fprintf(out, " static=0x%x", b->static_data_use_bits);
         dump_named_bitset(out, b->static_data_use_bits, static_data, static_data_count,

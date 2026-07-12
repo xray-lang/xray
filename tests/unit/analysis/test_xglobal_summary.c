@@ -582,7 +582,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=20 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=21 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -876,15 +876,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=20 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=20 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=20 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=20 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=21 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=21 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=21 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=21 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=20 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=21 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -10444,7 +10444,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
                          "    var n = len(xs)\n"
                          "    b.appendFrom(span)\n"
                          "    b.copyFrom(span)\n"
-                         "    var text = b.toString()\n"
+                         "    var text = sb.toString()\n"
                          "    var bytes = s.copyBytes()\n"
                          "    return n\n"
                          "}\n";
