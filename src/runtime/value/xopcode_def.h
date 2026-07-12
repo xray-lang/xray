@@ -336,7 +336,7 @@
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
     _(DEFER_MARK, FMT_A, KOP_A_LOAD, "R[A] = defer mark")                                          \
     _(DEFER_RUN_TO, FMT_A, KOP_A_USE, "run defers down to mark R[A]")                              \
-    _(BYTE_ARRAY_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Array<byte>(B args)")                        \
+    _(ARRAY_COPY_NEW, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = Array<T>(R[B]) copy/convert")              \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
     _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \
     _(SLEEP, FMT_A, KOP_A_USE, "time.sleep(R[A]) ms")                                              \

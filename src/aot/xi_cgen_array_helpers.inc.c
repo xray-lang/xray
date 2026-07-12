@@ -2656,7 +2656,7 @@ static bool cg_array_value_has_fresh_owned_origin(XiCgenCtx *ctx, const XiValue 
         return true;
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        return strcmp(name, "array_byte_new") == 0 || strcmp(name, "array_with_capacity") == 0 ||
+        return strcmp(name, "array_copy_new") == 0 || strcmp(name, "array_with_capacity") == 0 ||
                strcmp(name, "array_filled_new") == 0;
     }
     return false;
@@ -2704,7 +2704,7 @@ static const XiValue *cg_array_single_origin(const XiValue *array_value, uint8_t
         return v;
     if (v->op == XI_CALL_BUILTIN) {
         const char *name = (const char *) v->aux;
-        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "array_byte_new") == 0))
+        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "array_copy_new") == 0))
             return v;
     }
     if (v->op != XI_PHI)
@@ -2786,11 +2786,6 @@ static bool cg_array_fill_origin_starts_empty(const XiValue *origin) {
     }
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        if (strcmp(name, "array_byte_new") == 0) {
-            if (origin->nargs == 0)
-                return true;
-            return origin->nargs == 1 && cg_array_const_int_value(origin->args[0], 0);
-        }
         if (strcmp(name, "array_with_capacity") == 0)
             return true;
     }
@@ -3372,11 +3367,7 @@ static bool cg_array_is_native_local_alloc(const XiValue *value) {
         return true;
     if (strcmp(name, "array_with_capacity") == 0)
         return true;
-    if (strcmp(name, "array_byte_new") != 0)
-        return false;
-    if (v->nargs == 0)
-        return true;
-    return v->nargs == 1 && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT;
+    return strcmp(name, "array_copy_new") == 0;
 }
 
 static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t arg_index) {
@@ -3872,34 +3863,6 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, "xrt_array_new_typed_ptr(%" PRId64 ", %s)", cap, info.elem_name);
     }
     return true;
-}
-
-static bool emit_byte_array_new_native_local_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                  const XiValue *v) {
-    if (!out || !v || v->op != XI_CALL_BUILTIN || !v->aux ||
-        strcmp((const char *) v->aux, "array_byte_new") != 0)
-        return false;
-    CgArrayFillLoop fill;
-    if (cg_array_fill_origin_starts_empty(v) &&
-        cg_array_unique_fill_loop_for_origin(ctx, f, v, &fill)) {
-        fprintf(out, "xrt_array_new_typed_uninit_ptr(");
-        emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
-        fprintf(out, ", XR_ELEM_U8)");
-        return true;
-    }
-    if (v->nargs == 0) {
-        fprintf(out, "xrt_array_new_typed_ptr(0, XR_ELEM_U8)");
-        return true;
-    }
-    if (v->nargs == 1 && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT) {
-        fprintf(out, "({ int64_t _n = ");
-        emit_value_as_rep(out, v->args[0], XR_REP_I64);
-        fprintf(out, "; if (_n < 0) _n = 0; ");
-        fprintf(out, "xrt_array_t *_b = xrt_array_new_typed_ptr(_n, XR_ELEM_U8); ");
-        fprintf(out, "_b->length = _n; _b; })");
-        return true;
-    }
-    return false;
 }
 
 static void emit_typed_array_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,

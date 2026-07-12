@@ -126,6 +126,27 @@ static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill
     return arr;
 }
 
+static inline XrValue xrt_array_new_copy_value(XrValue src_value, uint8_t etype) {
+    if (!XR_IS_ARRAY(src_value) || !src_value.ptr)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
+    xrt_array_t *src = (xrt_array_t *) src_value.ptr;
+    int64_t len = src->length < 0 ? 0 : src->length;
+    XrValue arr = xrt_array_new_typed_exact(len, etype);
+    xrt_array_t *dst = (xrt_array_t *) arr.ptr;
+    dst->length = len;
+    if (len <= 0)
+        return arr;
+    if (src->elem_type == dst->elem_type && dst->elem_type != XR_ELEM_ANY) {
+        memcpy(dst->data, src->data, (size_t) len * (size_t) dst->elem_size);
+        return arr;
+    }
+    for (int64_t i = 0; i < len; i++) {
+        XrValue item = xr_typed_get(src->data, (int32_t) i, src->elem_type);
+        xr_typed_set(dst->data, (int32_t) i, item, dst->elem_type);
+    }
+    return arr;
+}
+
 static inline int xrt_bytes_range_ok(xrt_array_t *a, int64_t offset, int64_t count) {
     return a && a->elem_type == XR_ELEM_U8 && offset >= 0 && count >= 0 && count <= a->length &&
            offset <= a->length - count;

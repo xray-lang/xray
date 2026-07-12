@@ -2990,26 +2990,6 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return v;
     }
-    /* Array<byte>(n) / Array<byte>(n, fill) → XI_CALL_BUILTIN with aux_int encoding
-     * the opcode OP_BYTE_ARRAY_NEW so the emitter produces the right instruction. */
-    if (strcmp(fname, "array_byte_new") == 0 && call->arg_count >= 1 && call->arg_count <= 2) {
-        /* Evaluate arguments BEFORE creating CALL_BUILTIN to ensure
-         * argument values appear before the call in the block. */
-        int n = call->arg_count;
-        XiValue *arg_vals[2];
-        for (int i = 0; i < n; i++)
-            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, rtype, (uint16_t) n);
-        if (!v)
-            return NULL;
-        for (int i = 0; i < n; i++)
-            v->args[i] = arg_vals[i];
-        v->aux = (void *) "array_byte_new";
-        v->flags |= XI_FLAG_SIDE_EFFECT;
-        v->line = (uint32_t) line;
-        return v;
-    }
-
     /* print(...) in expression context (e.g. match arm body).
      * Statement-level print is handled by AST_PRINT_STMT → lower_print(),
      * but expression-level calls (AST_CALL_EXPR on variable "print") arrive
@@ -4329,14 +4309,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         if (ma->object && ma->object->type == AST_VARIABLE && ma->name &&
             strcmp(ma->name, "withCapacity") == 0 && call->arg_count == 1 &&
-            (strcmp(ma->object->as.variable.name, "Array") == 0 ||
-             strcmp(ma->object->as.variable.name, "array_byte_new") == 0)) {
+            strcmp(ma->object->as.variable.name, "Array") == 0) {
             XiValue *cap = xi_lower_expr(l, call->arguments[0]);
             if (!cap)
                 return NULL;
             struct XrType *result_type = xi_lower_node_type(l, node);
-            if (!result_type && strcmp(ma->object->as.variable.name, "array_byte_new") == 0)
-                result_type = xr_type_new_u8_array(NULL);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 1);
             if (!v)
                 return NULL;
@@ -6611,17 +6588,17 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             XiValue *arg = xi_lower_expr(l, arguments[0]);
             if (!arg)
                 return NULL;
-            bool byte_copy =
-                (!arg->type || !XR_TYPE_IS_INT(arg->type)) && xi_type_is_bytes(result_type);
-            if (!byte_copy && arg->type && !XR_TYPE_IS_INT(arg->type))
+            bool array_copy = result_type && XR_TYPE_IS_ARRAY(result_type) && arg->type &&
+                              !XR_TYPE_IS_INT(arg->type);
+            if (!array_copy && arg->type && !XR_TYPE_IS_INT(arg->type))
                 goto generic_constructor;
             XiValue *v = xi_value_new(l->func, l->cur_block,
-                                      byte_copy ? XI_CALL_BUILTIN : XI_ARRAY_NEW, result_type, 1);
+                                      array_copy ? XI_CALL_BUILTIN : XI_ARRAY_NEW, result_type, 1);
             if (!v)
                 return NULL;
             v->args[0] = arg;
-            if (byte_copy)
-                v->aux = (void *) "array_byte_new";
+            if (array_copy)
+                v->aux = (void *) "array_copy_new";
             v->aux_int = xi_array_cfield_from_type(result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
@@ -6681,23 +6658,6 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
         /* Exception: no special handling needed — it is a regular class with a
          * primitive constructor registered in core->panicInfoClass. Falls through
          * to the generic class-instantiation path below. */
-        /* new Array<byte>() / new Array<byte>(n) / new Array<byte>(n, fill) */
-        if (strcmp(cname, "array_byte_new") == 0 && arg_count <= 2) {
-            int n = (int) arg_count;
-            XiValue *arg_vals[2];
-            for (int i = 0; i < n; i++)
-                arg_vals[i] = xi_lower_expr(l, arguments[i]);
-            XiValue *v =
-                xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, (uint16_t) n);
-            if (!v)
-                return NULL;
-            for (int i = 0; i < n; i++)
-                v->args[i] = arg_vals[i];
-            v->aux = (void *) "array_byte_new";
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
         /* new Channel() / new Channel(bufferSize) */
         if (strcmp(cname, "Channel") == 0 && arg_count <= 1) {
             XiValue *buf_size = arg_count == 1 ? xi_lower_expr(l, arguments[0]) : NULL;

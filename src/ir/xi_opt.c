@@ -2686,10 +2686,6 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 if (arg_idx == 1)
                     return XR_REP_I64;
             }
-            if (name && strcmp(name, "array_byte_new") == 0 && arg_idx < user->nargs &&
-                user->args[arg_idx] && user->args[arg_idx]->type &&
-                user->args[arg_idx]->type->kind == XR_KIND_INT)
-                return XR_REP_I64;
             return XR_REP_TAGGED;
         }
         case XI_CALL_METHOD:
