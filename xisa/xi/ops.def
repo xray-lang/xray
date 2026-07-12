@@ -498,7 +498,7 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.u16
+(define-xi-op xi.byte.slice.load.u16
   :class memory-read
   :arity 3
   :tbaa-group array
@@ -508,7 +508,7 @@
   :observable (u16-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.u32
+(define-xi-op xi.byte.slice.load.u32
   :class memory-read
   :arity 3
   :tbaa-group array
@@ -518,7 +518,7 @@
   :observable (u32-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.u64
+(define-xi-op xi.byte.slice.load.u64
   :class memory-read
   :arity 3
   :tbaa-group array
@@ -528,7 +528,7 @@
   :observable (u64-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.f32
+(define-xi-op xi.byte.slice.load.f32
   :class memory-read
   :arity 3
   :tbaa-group array
@@ -538,7 +538,7 @@
   :observable (f32-bitcast)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.f64
+(define-xi-op xi.byte.slice.load.f64
   :class memory-read
   :arity 3
   :tbaa-group array
@@ -548,7 +548,7 @@
   :observable (f64-bitcast)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.store.u16
+(define-xi-op xi.byte.slice.store.u16
   :class memory-write
   :arity 4
   :tbaa-group array
@@ -560,7 +560,7 @@
   :observable (u16-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.store.u32
+(define-xi-op xi.byte.slice.store.u32
   :class memory-write
   :arity 4
   :tbaa-group array
@@ -572,7 +572,7 @@
   :observable (u32-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.store.u64
+(define-xi-op xi.byte.slice.store.u64
   :class memory-write
   :arity 4
   :tbaa-group array
@@ -584,7 +584,7 @@
   :observable (u64-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.store.f32
+(define-xi-op xi.byte.slice.store.f32
   :class memory-write
   :arity 4
   :tbaa-group array
@@ -596,7 +596,7 @@
   :observable (f32-bitcast)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.store.f64
+(define-xi-op xi.byte.slice.store.f64
   :class memory-write
   :arity 4
   :tbaa-group array
@@ -608,7 +608,7 @@
   :observable (f64-bitcast)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.span.fill
+(define-xi-op xi.byte.slice.fill
   :class memory-write
   :arity 2
   :result-ownership borrowed
@@ -618,7 +618,7 @@
   :observable (span-fill)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.span.copy
+(define-xi-op xi.byte.slice.copy
   :class memory-write
   :arity 2
   :result-ownership borrowed
@@ -628,7 +628,7 @@
   :observable (span-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.span.compare
+(define-xi-op xi.byte.slice.compare
   :class memory-read
   :arity 2
   :own-use borrow
@@ -637,7 +637,7 @@
   :observable (span-compare)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.span.common.prefix
+(define-xi-op xi.byte.slice.common.prefix
   :class memory-read
   :arity 2
   :own-use borrow
@@ -646,7 +646,7 @@
   :observable (span-common-prefix)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.span.repeat
+(define-xi-op xi.byte.slice.repeat
   :class memory-write
   :arity 4
   :result-ownership borrowed
@@ -705,7 +705,7 @@
   :observable (span-reinterpret)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.copy.within
+(define-xi-op xi.byte.array.copy.within
   :class memory-write
   :arity 4
   :tbaa-group array
@@ -716,7 +716,7 @@
   :observable (in-place-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.copy.from
+(define-xi-op xi.byte.array.copy.from
   :class memory-write
   :arity 5
   :tbaa-group array
@@ -727,7 +727,7 @@
   :observable (in-place-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.repeat.from
+(define-xi-op xi.byte.array.repeat.from
   :class memory-write
   :arity 4
   :tbaa-group array

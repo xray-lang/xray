@@ -3863,13 +3863,13 @@ static uint16_t lower_bytes_typed_op_for_target(XrType *target, bool is_load) {
         switch (target->native_width) {
             case XR_NATIVE_I16:
             case XR_NATIVE_U16:
-                return is_load ? XI_BYTES_LOAD_U16 : XI_BYTES_STORE_U16;
+                return is_load ? XI_BYTE_SLICE_LOAD_U16 : XI_BYTE_SLICE_STORE_U16;
             case XR_NATIVE_I32:
             case XR_NATIVE_U32:
-                return is_load ? XI_BYTES_LOAD_U32 : XI_BYTES_STORE_U32;
+                return is_load ? XI_BYTE_SLICE_LOAD_U32 : XI_BYTE_SLICE_STORE_U32;
             case XR_NATIVE_I64:
             case XR_NATIVE_U64:
-                return is_load ? XI_BYTES_LOAD_U64 : XI_BYTES_STORE_U64;
+                return is_load ? XI_BYTE_SLICE_LOAD_U64 : XI_BYTE_SLICE_STORE_U64;
             default:
                 return 0;
         }
@@ -3877,9 +3877,9 @@ static uint16_t lower_bytes_typed_op_for_target(XrType *target, bool is_load) {
     if (XR_TYPE_IS_FLOAT(target)) {
         switch (target->native_width) {
             case XR_NATIVE_F32:
-                return is_load ? XI_BYTES_LOAD_F32 : XI_BYTES_STORE_F32;
+                return is_load ? XI_BYTE_SLICE_LOAD_F32 : XI_BYTE_SLICE_STORE_F32;
             case XR_NATIVE_F64:
-                return is_load ? XI_BYTES_LOAD_F64 : XI_BYTES_STORE_F64;
+                return is_load ? XI_BYTE_SLICE_LOAD_F64 : XI_BYTE_SLICE_STORE_F64;
             default:
                 return 0;
         }
@@ -4839,7 +4839,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 }
                 if (strcmp(ma->name, "fill") == 0 && n == 1) {
                     XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_FILL, recv->type, 2);
+                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_FILL, recv->type, 2);
                     if (!v)
                         return NULL;
                     v->args[0] = recv;
@@ -4850,7 +4850,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 }
                 if (strcmp(ma->name, "copyFrom") == 0 && n == 1) {
                     XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_COPY, recv->type, 2);
+                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COPY, recv->type, 2);
                     if (!v)
                         return NULL;
                     v->args[0] = recv;
@@ -4861,7 +4861,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 }
                 if (strcmp(ma->name, "compare") == 0 && n == 1) {
                     XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_COMPARE, l->type_int, 2);
+                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMPARE, l->type_int, 2);
                     if (!v)
                         return NULL;
                     v->args[0] = recv;
@@ -4871,7 +4871,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     return v;
                 }
                 if (strcmp(ma->name, "commonPrefix") == 0 && n == 1) {
-                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_COMMON_PREFIX,
+                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMMON_PREFIX,
                                               l->type_int, 2);
                     if (!v)
                         return NULL;
@@ -4882,7 +4882,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 }
                 if (strcmp(ma->name, "repeatFrom") == 0 && n == 3) {
                     XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_REPEAT, recv->type, 4);
+                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_REPEAT, recv->type, 4);
                     if (!v)
                         return NULL;
                     v->args[0] = recv;

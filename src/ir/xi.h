@@ -286,29 +286,29 @@ typedef enum {
      * COPY_FROM args: args[0]=dst, args[1]=src, args[2]=src_offset,
      *                 args[3]=dst_offset, args[4]=count.
      * REPEAT_FROM args: args[0]=bytes, args[1]=dst, args[2]=distance, args[3]=count. */
-    XI_BYTES_LOAD_U16,
-    XI_BYTES_LOAD_U32,
-    XI_BYTES_LOAD_U64,
-    XI_BYTES_LOAD_F32,
-    XI_BYTES_LOAD_F64,
-    XI_BYTES_STORE_U16,
-    XI_BYTES_STORE_U32,
-    XI_BYTES_STORE_U64,
-    XI_BYTES_STORE_F32,
-    XI_BYTES_STORE_F64,
-    XI_BYTES_SPAN_FILL,
-    XI_BYTES_SPAN_COPY,
-    XI_BYTES_SPAN_COMPARE,
-    XI_BYTES_SPAN_COMMON_PREFIX,
-    XI_BYTES_SPAN_REPEAT,
+    XI_BYTE_SLICE_LOAD_U16,
+    XI_BYTE_SLICE_LOAD_U32,
+    XI_BYTE_SLICE_LOAD_U64,
+    XI_BYTE_SLICE_LOAD_F32,
+    XI_BYTE_SLICE_LOAD_F64,
+    XI_BYTE_SLICE_STORE_U16,
+    XI_BYTE_SLICE_STORE_U32,
+    XI_BYTE_SLICE_STORE_U64,
+    XI_BYTE_SLICE_STORE_F32,
+    XI_BYTE_SLICE_STORE_F64,
+    XI_BYTE_SLICE_FILL,
+    XI_BYTE_SLICE_COPY,
+    XI_BYTE_SLICE_COMPARE,
+    XI_BYTE_SLICE_COMMON_PREFIX,
+    XI_BYTE_SLICE_REPEAT,
     XI_SPAN_AS_BYTES,    /* args[0]=Span<T>; result Slice<byte>; aux unused */
     XI_SPAN_FILL,        /* args[0]=Span<T> dst, args[1]=T value; result dst */
     XI_SPAN_COPY,        /* args[0]=Span<T> dst, args[1]=Span<T> src; result dst */
     XI_SPAN_COMPARE,     /* args[0]=Span<T> left, args[1]=Span<T> right; result int */
     XI_SPAN_REINTERPRET, /* args[0]=Slice<byte>; result Span<T>; aux packs elem metadata */
-    XI_BYTES_COPY_WITHIN,
-    XI_BYTES_COPY_FROM,
-    XI_BYTES_REPEAT_FROM,
+    XI_BYTE_ARRAY_COPY_WITHIN,
+    XI_BYTE_ARRAY_COPY_FROM,
+    XI_BYTE_ARRAY_REPEAT_FROM,
     XI_ARRAY_DATA_PTR, /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
     XI_STATIC_ADDR,    /* aux_int=shared slot; result RawPtr<T>/RawMut<T> to static data */
 

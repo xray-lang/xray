@@ -669,10 +669,13 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "print(a)\n"
                              "print(b)\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16) && "load<uint16> should lower to Array<byte> op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Array<byte> op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Array<byte> op");
-    assert(func_tree_has_op(f, XI_BYTES_STORE_U16) &&
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) &&
+           "load<uint16> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U32) &&
+           "load<uint32> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U64) &&
+           "load<uint64> should lower to Array<byte> op");
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_STORE_U16) &&
            "store<uint16> should lower to Array<byte> op");
     assert(func_tree_find_method(f, "appendFrom") &&
            "appendFrom should remain an explicit method call");

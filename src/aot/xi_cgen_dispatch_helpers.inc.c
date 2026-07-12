@@ -2001,29 +2001,29 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
                                                                             (uint8_t) (depth + 1));
         case XI_INDEX_GET:
             return arg_index == 0;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
-        case XI_BYTES_STORE_U16:
-        case XI_BYTES_STORE_U32:
-        case XI_BYTES_STORE_U64:
-        case XI_BYTES_STORE_F32:
-        case XI_BYTES_STORE_F64:
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
+        case XI_BYTE_SLICE_STORE_U16:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F32:
+        case XI_BYTE_SLICE_STORE_F64:
+        case XI_BYTE_SLICE_FILL:
+        case XI_BYTE_SLICE_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
             return arg_index == 0;
         case XI_SPAN_COPY:
         case XI_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COPY:
+        case XI_BYTE_SLICE_COMPARE:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
-        case XI_BYTES_COPY_FROM:
+        case XI_BYTE_ARRAY_COPY_FROM:
             return arg_index == 1;
         case XI_CALL: {
             if (arg_index == 0)
@@ -2253,7 +2253,7 @@ static bool xicgen_proxy_value_only_feeds_stack_slice_direct_call(XiCgenCtx *ctx
                         continue;
                     }
                 }
-                if (user->op == XI_BYTES_SPAN_COMMON_PREFIX && a <= 1 &&
+                if (user->op == XI_BYTE_SLICE_COMMON_PREFIX && a <= 1 &&
                     xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
                     saw_stack_call = true;
                     continue;
@@ -2321,7 +2321,7 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
                         continue;
                     }
                 }
-                if (user->op == XI_BYTES_SPAN_COMMON_PREFIX && a <= 1 &&
+                if (user->op == XI_BYTE_SLICE_COMMON_PREFIX && a <= 1 &&
                     xicgen_slice_can_inline_bytes_common_prefix(ctx, target)) {
                     saw_stack_call = true;
                     continue;
