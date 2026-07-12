@@ -84,6 +84,17 @@ fn make_owned_return_buffer() -> Array<byte> {
     return move bytes
 }
 
+fn make_owned_return_buffer_alt() -> Array<byte> {
+    owned bytes = Array<byte>(2, 0)
+    bytes[0] = 31
+    bytes[1] = 32
+    return move bytes
+}
+
+fn choose_owned_return_buffer(flag: bool) -> Array<byte> {
+    return flag ? make_owned_return_buffer() : make_owned_return_buffer_alt()
+}
+
 fn make_shared_return_buffer() -> Array<byte> {
     owned bytes = Array<byte>(2, 0)
     bytes[0] = 21
@@ -123,4 +134,12 @@ fn test_owned_return_through_const_function_alias() {
     assert_eq(len(bytes), 2)
     assert_eq(bytes[0], 11)
     assert_eq(bytes[1], 12)
+}
+
+@test
+fn test_owned_return_through_ternary_summary() {
+    owned bytes = choose_owned_return_buffer(false)
+    assert_eq(len(bytes), 2)
+    assert_eq(bytes[0], 31)
+    assert_eq(bytes[1], 32)
 }
