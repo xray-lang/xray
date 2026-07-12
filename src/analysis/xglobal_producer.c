@@ -120,11 +120,13 @@ struct XgLocalType {
     uint32_t map_value_type_key;
     uint8_t sequence_kind;
     uint32_t sequence_elem_type_key;
+    uint32_t sequence_storage_id;
     XgJsonShapeId sequence_elem_json_shape_id;
     const ObjectLiteralNode *sequence_elem_json_shape_literal;
     uint8_t sequence_elem_map_container_kind;
     uint32_t sequence_elem_map_key_type_key;
     uint32_t sequence_elem_map_value_type_key;
+    bool sequence_fresh_empty;
     bool inferred;
 };
 
@@ -153,6 +155,9 @@ typedef struct XgBodyCollect {
     uint32_t capacity_op_count;
     uint32_t bulk_op_count;
     uint32_t encoding_op_count;
+    const AstNode *counted_loop_body;
+    const AstNode *counted_loop_count_expr;
+    uint32_t counted_loop_id;
     uint32_t effect_bits;
     uint32_t escape_bits;
     uint32_t capability_bits;
@@ -6202,11 +6207,13 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
         return;
     row->sequence_kind = sequence_kind;
     row->sequence_elem_type_key = elem_type_key;
+    row->sequence_storage_id = 0;
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
+    row->sequence_fresh_empty = false;
     if (body_type_ref_map_parts(elem_type_ref, &row->sequence_elem_map_container_kind,
                                 &row->sequence_elem_map_key_type_key,
                                 &row->sequence_elem_map_value_type_key) &&
@@ -6237,11 +6244,13 @@ static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *
         return;
     row->sequence_kind = source->sequence_kind;
     row->sequence_elem_type_key = source->sequence_elem_type_key;
+    row->sequence_storage_id = source->sequence_storage_id;
     row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
     row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
     row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
     row->sequence_elem_map_key_type_key = source->sequence_elem_map_key_type_key;
     row->sequence_elem_map_value_type_key = source->sequence_elem_map_value_type_key;
+    row->sequence_fresh_empty = source->sequence_fresh_empty;
 }
 
 static void body_clear_sequence_json_shape(XgLocalType *row) {
@@ -6324,11 +6333,13 @@ static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
         return;
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
+    row->sequence_storage_id = 0;
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
+    row->sequence_fresh_empty = false;
 }
 
 static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode *expr) {
@@ -6344,6 +6355,8 @@ static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode 
             return body_lookup_local_sequence(bc, expr->as.unsafe_expr.operand);
         case AST_FORCE_UNWRAP:
             return body_lookup_local_sequence(bc, expr->as.unary.operand);
+        case AST_SLICE_EXPR:
+            return body_lookup_local_sequence(bc, expr->as.slice_expr.source);
         default:
             break;
     }
@@ -6351,6 +6364,15 @@ static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode 
         return NULL;
     row = body_find_local(bc, expr->as.variable.name);
     return row && row->sequence_kind != 0 ? row : NULL;
+}
+
+static bool body_bulk_overlap_possible(XgBodyCollect *bc, const XgLocalType *dst_local,
+                                       const AstNode *src_expr) {
+    XgLocalType *src_local = body_lookup_local_sequence(bc, src_expr);
+    if (!dst_local || !src_local || dst_local->sequence_storage_id == 0 ||
+        src_local->sequence_storage_id == 0)
+        return true;
+    return dst_local->sequence_storage_id == src_local->sequence_storage_id;
 }
 
 static XgLocalType *body_lookup_local_map_shape(XgBodyCollect *bc, const AstNode *expr) {
@@ -6867,6 +6889,8 @@ static void body_add_sequence_index_access(XgBodyCollect *bc, const AstNode *nod
     body_add_sequence_access_row(bc, node, local,
                                  mutating ? XG_SEQ_ACCESS_INDEX_SET : XG_SEQ_ACCESS_INDEX_GET,
                                  index, NULL, mutating);
+    if (mutating)
+        local->sequence_fresh_empty = false;
 }
 
 static void body_add_sequence_slice_access(XgBodyCollect *bc, const AstNode *node) {
@@ -6913,8 +6937,46 @@ static bool body_add_sequence_len_call(XgBodyCollect *bc, const AstNode *node) {
     return true;
 }
 
+static const AstNode *body_single_expr_statement(const AstNode *body) {
+    if (!body)
+        return NULL;
+    if (body->type == AST_EXPR_STMT)
+        return body->as.expr_stmt;
+    if (body->type != AST_BLOCK || body->as.block.count != 1 || !body->as.block.statements ||
+        !body->as.block.statements[0] || body->as.block.statements[0]->type != AST_EXPR_STMT)
+        return NULL;
+    return body->as.block.statements[0]->as.expr_stmt;
+}
+
+static bool body_counted_loop_push_is_proven(const XgBodyCollect *bc, const AstNode *call,
+                                             const XgLocalType *local, const AstNode *receiver,
+                                             const AstNode *value) {
+    if (!bc || !call || !local || !local->sequence_fresh_empty || !receiver || !value ||
+        receiver->type != AST_VARIABLE ||
+        body_single_expr_statement(bc->counted_loop_body) != call || !bc->counted_loop_count_expr ||
+        bc->counted_loop_count_expr->node_id == 0 || bc->counted_loop_id == 0)
+        return false;
+    if (!receiver->as.variable.name || !local->name ||
+        strcmp(receiver->as.variable.name, local->name) != 0)
+        return false;
+    switch (value->type) {
+        case AST_VARIABLE:
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_RUNE:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void body_add_capacity_op(XgBodyCollect *bc, const AstNode *node, const XgLocalType *local,
-                                 uint8_t op_kind, const AstNode *count_expr, bool may_grow) {
+                                 uint8_t op_kind, const AstNode *count_expr, uint32_t loop_id,
+                                 uint32_t proof_flags, bool may_grow) {
     XgCapacityOpSummary row;
     if (!bc || !node || !local || local->sequence_kind == 0)
         return;
@@ -6930,11 +6992,11 @@ static void body_add_capacity_op(XgBodyCollect *bc, const AstNode *node, const X
             ? local->type_key
             : body_sequence_receiver_type_key(local->sequence_kind, local->sequence_elem_type_key);
     row.elem_type_key = local->sequence_elem_type_key;
-    row.count_expr_id = body_const_expr_id(count_expr);
+    row.count_expr_id = count_expr ? count_expr->node_id : 0;
+    row.loop_id = loop_id;
+    row.flags = proof_flags;
     if (may_grow)
         row.flags |= XG_CAPACITY_MAY_GROW;
-    if (row.count_expr_id != 0)
-        row.flags |= XG_CAPACITY_EXACT_COUNT;
     if (op_kind == XG_CAPACITY_TO_STRING)
         row.flags |= XG_CAPACITY_BUILDER_FINAL;
     (void) xg_global_evidence_add_capacity_op(bc->evidence, &row);
@@ -6958,13 +7020,12 @@ static void body_add_bulk_op(XgBodyCollect *bc, const AstNode *node, uint8_t op_
                            ? dst_local->type_key
                            : body_sequence_receiver_type_key(dst_local->sequence_kind,
                                                              dst_local->sequence_elem_type_key);
-    row.length_expr_id = body_const_expr_id(length_expr);
-    if (dst_local->sequence_elem_type_key == body_uint8_type_key() ||
-        dst_local->sequence_elem_type_key == body_rune_type_key())
+    row.length_expr_id = length_expr ? length_expr->node_id : 0;
+    if (body_type_key_is_pod_array_lane(dst_local->sequence_elem_type_key))
         row.flags |= XG_BULK_POD;
     if (overlap_possible)
         row.flags |= XG_BULK_OVERLAP_POSSIBLE;
-    if (dst_local->sequence_kind == XG_SEQ_ARRAY)
+    if (op_kind != XG_BULK_COMPARE && dst_local->sequence_kind == XG_SEQ_ARRAY)
         row.flags |= XG_BULK_WRITE_BARRIER;
     (void) xg_global_evidence_add_bulk_op(bc->evidence, &row);
 }
@@ -7007,7 +7068,13 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
 
     if (local) {
         if (strcmp(member->name, "push") == 0 && call->arg_count == 1) {
-            body_add_capacity_op(bc, node, local, XG_CAPACITY_PUSH, arg0, true);
+            bool loop_push =
+                body_counted_loop_push_is_proven(bc, node, local, member->object, arg0);
+            body_add_capacity_op(
+                bc, node, local, XG_CAPACITY_PUSH, loop_push ? bc->counted_loop_count_expr : NULL,
+                loop_push ? bc->counted_loop_id : 0,
+                loop_push ? XG_CAPACITY_EXACT_COUNT | XG_CAPACITY_LOOP_APPEND : 0, true);
+            local->sequence_fresh_empty = false;
             body_update_sequence_json_shape_from_value(bc, local, arg0);
             return;
         }
@@ -7016,47 +7083,67 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
             body_add_capacity_op(bc, node, local,
                                  strcmp(member->name, "extend") == 0 ? XG_CAPACITY_EXTEND
                                                                      : XG_CAPACITY_APPEND,
-                                 arg0, true);
+                                 NULL, 0, 0, true);
+            local->sequence_fresh_empty = false;
             if (body_sequence_local_elem_is_json(local))
                 body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "reserve") == 0 && call->arg_count == 1) {
-            body_add_capacity_op(bc, node, local, XG_CAPACITY_RESERVE, arg0, true);
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_RESERVE, arg0, 0,
+                                 XG_CAPACITY_EXACT_COUNT, true);
             return;
         }
         if (strcmp(member->name, "clear") == 0 && call->arg_count == 0) {
-            body_add_capacity_op(bc, node, local, XG_CAPACITY_CLEAR, NULL, false);
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_CLEAR, NULL, 0, 0, false);
+            local->sequence_fresh_empty = false;
             body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "toString") == 0 && call->arg_count == 0) {
-            body_add_capacity_op(bc, node, local, XG_CAPACITY_TO_STRING, NULL, false);
-            if (local->sequence_kind == XG_SEQ_BYTES ||
-                local->sequence_kind == XG_SEQ_STRING_BUILDER)
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_TO_STRING, NULL, 0, 0, false);
+            if (local->sequence_kind == XG_SEQ_STRING_BUILDER)
                 body_add_encoding_op(bc, node, XG_ENCODING_BYTES_TO_STRING, member->object,
                                      hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0),
                                      XG_ENCODING_VALIDATED_ONCE | XG_ENCODING_SCALAR_BOUNDARY);
             return;
         }
         if (strcmp(member->name, "appendFrom") == 0 && call->arg_count >= 1) {
-            body_add_capacity_op(bc, node, local, XG_CAPACITY_APPEND, arg0, true);
-            body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, NULL, false);
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_APPEND, arg0, 0,
+                                 XG_CAPACITY_EXACT_COUNT, true);
+            body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, arg0,
+                             body_bulk_overlap_possible(bc, local, arg0));
+            local->sequence_fresh_empty = false;
             if (body_sequence_local_elem_is_json(local))
                 body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "copyFrom") == 0 && call->arg_count >= 1) {
-            body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, NULL, true);
+            body_add_bulk_op(bc, node, XG_BULK_COPY, local, arg0, arg0,
+                             body_bulk_overlap_possible(bc, local, arg0));
+            local->sequence_fresh_empty = false;
             if (body_sequence_local_elem_is_json(local))
                 body_clear_sequence_json_shape(local);
             return;
         }
         if (strcmp(member->name, "fill") == 0 && call->arg_count >= 1) {
-            body_add_bulk_op(bc, node, XG_BULK_FILL, local, arg0, NULL, false);
+            body_add_bulk_op(bc, node, XG_BULK_FILL, local, arg0, member->object, false);
+            local->sequence_fresh_empty = false;
             body_update_sequence_json_shape_from_value(bc, local, arg0);
             return;
         }
+        if (strcmp(member->name, "compare") == 0 && call->arg_count == 1) {
+            body_add_bulk_op(bc, node, XG_BULK_COMPARE, local, arg0, arg0, false);
+            return;
+        }
+        if (strcmp(member->name, "repeatFrom") == 0 && call->arg_count >= 2) {
+            const AstNode *count_expr =
+                call->arguments ? call->arguments[call->arg_count - 1] : NULL;
+            body_add_bulk_op(bc, node, XG_BULK_REPEAT, local, member->object, count_expr, true);
+            local->sequence_fresh_empty = false;
+            return;
+        }
+        local->sequence_fresh_empty = false;
     }
 
     if (strcmp(member->name, "copyBytes") == 0 && call->arg_count == 0 &&
@@ -7065,6 +7152,15 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
         uint32_t output_type_key = hash_named_type_key32("Array", NULL, 0) ^ body_uint8_type_key();
         body_add_encoding_op(bc, node, XG_ENCODING_STRING_TO_BYTES, member->object, output_type_key,
                              XG_ENCODING_KNOWN_UTF8 | XG_ENCODING_SCALAR_BOUNDARY);
+        return;
+    }
+    if ((strcmp(member->name, "fromUtf8") == 0 || strcmp(member->name, "fromUtf8Lossy") == 0) &&
+        call->arg_count == 1 && member->object && member->object->type == AST_VARIABLE &&
+        member->object->as.variable.name &&
+        strcmp(member->object->as.variable.name, "string") == 0) {
+        uint32_t output_type_key = hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
+        body_add_encoding_op(bc, node, XG_ENCODING_BYTES_TO_STRING, arg0, output_type_key,
+                             XG_ENCODING_SCALAR_BOUNDARY);
     }
 }
 
@@ -7678,6 +7774,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *sequence_json_literal = NULL;
             XgJsonShapeId sequence_json_shape_id = XG_NO_ID;
             XgLocalType *source_sequence_local = NULL;
+            uint32_t source_sequence_storage_id = 0;
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             XgInterfaceId interface_id = producer_lookup_interface_from_tref(
@@ -7710,6 +7807,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_lookup_record_shape(bc, node->as.var_decl.initializer, &source_record_literal);
             source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
             source_sequence_local = body_lookup_local_sequence(bc, node->as.var_decl.initializer);
+            if (source_sequence_local)
+                source_sequence_storage_id = source_sequence_local->sequence_storage_id;
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
@@ -7779,6 +7878,22 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (source_sequence_local && !sequence_json_literal)
                 body_bind_sequence_local_from_source(bc, node->as.var_decl.name,
                                                      source_sequence_local);
+            if (sequence_kind != 0) {
+                XgLocalType *sequence_local = body_find_local(bc, node->as.var_decl.name);
+                const AstNode *initializer = node->as.var_decl.initializer;
+                if (sequence_local) {
+                    if (source_sequence_storage_id != 0) {
+                        sequence_local->sequence_storage_id = source_sequence_storage_id;
+                    } else if (sequence_kind == XG_SEQ_ARRAY || sequence_kind == XG_SEQ_BYTES ||
+                               sequence_kind == XG_SEQ_STRING_BUILDER) {
+                        sequence_local->sequence_storage_id = node->node_id;
+                    }
+                    if (initializer && initializer->type == AST_ARRAY_LITERAL &&
+                        !initializer->as.array_literal.is_repeat &&
+                        initializer->as.array_literal.count == 0)
+                        sequence_local->sequence_fresh_empty = true;
+                }
+            }
             if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref) &&
                 !sequence_json_literal) {
                 sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
@@ -7892,6 +8007,12 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             else if (target_sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.assignment.name, target_sequence_kind,
                                          target_sequence_elem_type_key, NULL);
+            if (source_sequence_local) {
+                XgLocalType *sequence_local = body_find_local(bc, node->as.assignment.name);
+                if (sequence_local)
+                    sequence_local->sequence_storage_id =
+                        source_sequence_local->sequence_storage_id;
+            }
             if (source_sequence_json_shape_id == XG_NO_ID && target_sequence_kind != 0 &&
                 target_sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0)) {
                 source_sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
@@ -8192,6 +8313,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_FOR_IN_STMT: {
             uint32_t base_locals = bc->nlocals;
             uint32_t base_name_locals = bc->nname_locals;
+            const AstNode *saved_loop_body = bc->counted_loop_body;
+            const AstNode *saved_count_expr = bc->counted_loop_count_expr;
+            uint32_t saved_loop_id = bc->counted_loop_id;
+            const AstNode *collection = node->as.for_in_stmt.collection;
             XgClassId item_class =
                 producer_lookup_class_from_tref(bc->producer, node->as.for_in_stmt.item_type);
             XgInterfaceId item_interface =
@@ -8208,7 +8333,18 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 item_interface, item_type_key,
                 node->as.for_in_stmt.item_type ? node->as.for_in_stmt.item_type->name : NULL,
                 false);
+            if (collection && collection->type == AST_RANGE &&
+                !collection->as.range.inclusive_end && collection->as.range.start &&
+                collection->as.range.start->type == AST_LITERAL_INT &&
+                collection->as.range.start->as.literal.int_bits == 0 && collection->as.range.end) {
+                bc->counted_loop_body = node->as.for_in_stmt.body;
+                bc->counted_loop_count_expr = collection->as.range.end;
+                bc->counted_loop_id = node->node_id;
+            }
             walk_body_for_calls(bc, node->as.for_in_stmt.body);
+            bc->counted_loop_body = saved_loop_body;
+            bc->counted_loop_count_expr = saved_count_expr;
+            bc->counted_loop_id = saved_loop_id;
             bc->nlocals = base_locals;
             bc->nname_locals = base_name_locals;
             break;

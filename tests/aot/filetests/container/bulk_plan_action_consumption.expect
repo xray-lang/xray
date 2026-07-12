@@ -1,0 +1,15 @@
+contains=op=copy action=inline_memmove
+contains=op=copy action=inline_memcpy
+contains=op=fill action=inline_memset
+contains=op=fill action=typed_loop
+contains=op=compare action=inline_memcmp
+contains=op=repeat action=typed_loop
+c_contains=memmove(_dst.data, _src.data
+c_contains=memcpy(_dst.data, _src.data
+c_contains=memset(_s.data, (uint8_t)
+c_contains=memcmp(_left.data, _right.data
+c_contains=xr_array_core_bytes_repeat_copy(
+c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
+c_contains=XrArrayCoreRange _r = xr_array_core_fill_range(
+c_contains=((uint32_t*)_a->data)[_r.start + _i]
+c_not_contains=xrt_array_fill_value(

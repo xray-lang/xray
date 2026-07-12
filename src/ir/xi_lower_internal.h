@@ -122,6 +122,25 @@ XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const c
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
                                          uint32_t body_ordinal, uint8_t access_op);
 
+typedef struct XiSequenceEvidenceIds {
+    uint32_t sequence_access_id;
+    uint32_t capacity_op_id;
+    uint32_t bulk_op_id;
+    uint32_t encoding_op_id;
+} XiSequenceEvidenceIds;
+
+typedef struct XiSequenceEvidenceKinds {
+    uint8_t sequence_access_kind;
+    uint8_t capacity_op_kind;
+    uint8_t bulk_op_kind;
+    uint8_t encoding_op_kind;
+} XiSequenceEvidenceKinds;
+
+XR_FUNC void xi_lower_take_sequence_evidence_ids(XiLower *l, uint32_t source_span_id,
+                                                 XiSequenceEvidenceKinds kinds,
+                                                 XiSequenceEvidenceIds *out_ids);
+XR_FUNC void xi_lower_apply_sequence_evidence_ids(XiValue *value, const XiSequenceEvidenceIds *ids);
+
 /* ========== Function Lowering (xi_lower.c) ========== */
 
 XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer *analyzer,

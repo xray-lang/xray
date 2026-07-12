@@ -1080,6 +1080,84 @@ XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t s
         access->xg_key_access_id = match->access_id;
 }
 
+XR_FUNC void xi_lower_take_sequence_evidence_ids(XiLower *l, uint32_t source_span_id,
+                                                 XiSequenceEvidenceKinds kinds,
+                                                 XiSequenceEvidenceIds *out_ids) {
+    const XgGlobalEvidence *ev;
+    XgFuncId owner_func_id;
+    if (!out_ids)
+        return;
+    memset(out_ids, 0, sizeof(*out_ids));
+    if (!l || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID)
+        return;
+    ev = l->global_evidence;
+    owner_func_id = (XgFuncId) l->func->xg_body_func_id;
+
+    if (kinds.sequence_access_kind != 0) {
+        for (uint32_t i = 0; i < ev->nsequence_accesses; i++) {
+            const XgSequenceAccessSummary *row = &ev->sequence_accesses[i];
+            if (row->owner_func_id != owner_func_id ||
+                row->body_ordinal != l->xg_next_sequence_access_ordinal)
+                continue;
+            if (row->source_span_id == source_span_id &&
+                row->access_kind == kinds.sequence_access_kind) {
+                out_ids->sequence_access_id = row->access_id;
+                l->xg_next_sequence_access_ordinal++;
+            }
+            break;
+        }
+    }
+    if (kinds.capacity_op_kind != 0) {
+        for (uint32_t i = 0; i < ev->ncapacity_ops; i++) {
+            const XgCapacityOpSummary *row = &ev->capacity_ops[i];
+            if (row->owner_func_id != owner_func_id ||
+                row->body_ordinal != l->xg_next_capacity_op_ordinal)
+                continue;
+            if (row->source_span_id == source_span_id && row->op_kind == kinds.capacity_op_kind) {
+                out_ids->capacity_op_id = row->op_id;
+                l->xg_next_capacity_op_ordinal++;
+            }
+            break;
+        }
+    }
+    if (kinds.bulk_op_kind != 0) {
+        for (uint32_t i = 0; i < ev->nbulk_ops; i++) {
+            const XgBulkOpSummary *row = &ev->bulk_ops[i];
+            if (row->owner_func_id != owner_func_id ||
+                row->body_ordinal != l->xg_next_bulk_op_ordinal)
+                continue;
+            if (row->source_span_id == source_span_id && row->op_kind == kinds.bulk_op_kind) {
+                out_ids->bulk_op_id = row->op_id;
+                l->xg_next_bulk_op_ordinal++;
+            }
+            break;
+        }
+    }
+    if (kinds.encoding_op_kind != 0) {
+        for (uint32_t i = 0; i < ev->nencoding_ops; i++) {
+            const XgEncodingOpSummary *row = &ev->encoding_ops[i];
+            if (row->owner_func_id != owner_func_id ||
+                row->body_ordinal != l->xg_next_encoding_op_ordinal)
+                continue;
+            if (row->source_span_id == source_span_id && row->op_kind == kinds.encoding_op_kind) {
+                out_ids->encoding_op_id = row->op_id;
+                l->xg_next_encoding_op_ordinal++;
+            }
+            break;
+        }
+    }
+}
+
+XR_FUNC void xi_lower_apply_sequence_evidence_ids(XiValue *value,
+                                                  const XiSequenceEvidenceIds *ids) {
+    if (!value || !ids)
+        return;
+    value->xg_sequence_access_id = ids->sequence_access_id;
+    value->xg_capacity_op_id = ids->capacity_op_id;
+    value->xg_bulk_op_id = ids->bulk_op_id;
+    value->xg_encoding_op_id = ids->encoding_op_id;
+}
+
 /* ========== Method Symbol Resolution ========== */
 
 XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
