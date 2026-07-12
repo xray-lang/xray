@@ -398,51 +398,6 @@ static inline void xrt_throw_error(int code, const char *message) {
     xrt_throw_exc(xrt_structured_error_value(code, message));
 }
 
-static inline XrValue xrt_bytes_new_len(int64_t len) {
-    if (len < 0)
-        len = 0;
-    XrValue arr = xrt_array_new_typed(len, XR_ELEM_U8);
-    ((xrt_array_t *) arr.ptr)->length = len;
-    return arr;
-}
-
-static inline XrValue xrt_bytes_new_fill(XrValue len_value, XrValue fill_value) {
-    if (!XR_IS_INT(len_value) || !XR_IS_INT(fill_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
-    int64_t len = XR_TO_INT(len_value);
-    XrValue arr = xrt_bytes_new_len(len);
-    xrt_array_t *a = (xrt_array_t *) arr.ptr;
-    uint8_t fill = (uint8_t) (xr_value_to_int64_coerce(fill_value) & 0xFF);
-    if (a->length > 0)
-        memset(a->data, fill, (size_t) a->length);
-    return arr;
-}
-
-static inline XrValue xrt_bytes_new_copy(XrValue src_value) {
-    if (!XR_IS_ARRAY(src_value) || !src_value.ptr)
-        return XR_NULL_VAL;
-    xrt_array_t *src = (xrt_array_t *) src_value.ptr;
-    XrValue arr = xrt_bytes_new_len(src->length);
-    xrt_array_t *dst = (xrt_array_t *) arr.ptr;
-    if (src->elem_type == XR_ELEM_U8) {
-        memcpy(dst->data, src->data, (size_t) src->length);
-        return arr;
-    }
-    for (int64_t i = 0; i < src->length; i++) {
-        XrValue item = xr_typed_get(src->data, (int32_t) i, src->elem_type);
-        xr_typed_set(dst->data, (int32_t) i, item, dst->elem_type);
-    }
-    return arr;
-}
-
-static inline XrValue xrt_bytes_new_1(XrValue arg) {
-    if (XR_IS_ARRAY(arg))
-        return xrt_bytes_new_copy(arg);
-    if (!XR_IS_INT(arg))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
-    return xrt_bytes_new_len(XR_TO_INT(arg));
-}
-
 static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     xrt_array_check_store_or_abort(a, val, "xrt_array_push");

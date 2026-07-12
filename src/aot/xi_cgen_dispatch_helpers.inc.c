@@ -3942,42 +3942,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
         xicgen_array_new(ctx, out, f, v, prefix);
-    } else if (strcmp(bn, "array_byte_new") == 0) {
-        if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR) {
-            if (!emit_byte_array_new_native_local_expr(ctx, out, f, v)) {
-                if (v->nargs == 0) {
-                    fprintf(out, "(xrt_array_t*)xrt_bytes_new_len(0).ptr");
-                } else if (v->nargs == 1) {
-                    fprintf(out, "(xrt_array_t*)xrt_bytes_new_1(");
-                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-                    fprintf(out, ").ptr");
-                } else {
-                    emit_codegen_abort_expr(out);
-                    ctx->error = true;
-                }
-            }
-        } else if (v->nargs == 0) {
-            fprintf(out, "xrt_bytes_new_len(0)");
-        } else if (v->nargs == 1) {
-            if (v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT) {
-                fprintf(out, "xrt_bytes_new_len(");
-                emit_value_as_rep(out, v->args[0], XR_REP_I64);
-                fprintf(out, ")");
-            } else {
-                fprintf(out, "xrt_bytes_new_1(");
-                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-                fprintf(out, ")");
-            }
-        } else if (v->nargs == 2) {
-            fprintf(out, "xrt_bytes_new_fill(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-            fprintf(out, ")");
-        } else {
-            emit_codegen_abort_expr(out);
-            ctx->error = true;
-        }
     } else if (emit_array_bytes_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the array/bytes helper. */
     } else if (strcmp(bn, "string_bytes_span") == 0) {

@@ -88,6 +88,19 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, ", %s)", elem_name);
         return true;
     }
+    if (strcmp(name, "array_copy_new") == 0) {
+        CgArrayElemInfo info;
+        const char *elem_name =
+            cg_array_elem_info_from_type_ctx(ctx, v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
+        if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR)
+            fprintf(out, "((xrt_array_t*)");
+        fprintf(out, "xrt_array_new_copy_value(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", %s)", elem_name);
+        if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR)
+            fprintf(out, ".ptr)");
+        return true;
+    }
     if (strcmp(name, "array_clear") == 0) {
         fprintf(out, "xrt_array_clear_value(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);

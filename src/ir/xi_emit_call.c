@@ -395,25 +395,15 @@ static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
-static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    uint16_t nargs = (uint16_t) v->nargs;
-    if (ctx->next_reg + 1 + nargs > MAX_REGS) {
-        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+static void emit_builtin_array_copy_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg base = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg += 1 + nargs;
-    if (ctx->next_reg > ctx->max_reg)
-        ctx->max_reg = ctx->next_reg;
-    for (uint16_t a = 0; a < nargs; a++) {
-        XiEmitReg arg_r = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1 + a), arg_r, 0));
-    }
-    emit_inst(ctx, CREATE_ABC(OP_BYTE_ARRAY_NEW, base, nargs, 0));
-    if (dst != base)
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_COPY_NEW, dst, src, (uint8_t) (v->aux_int & 0xFF)));
 }
 
 XR_FUNC void xi_emit_bytes_load_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -784,8 +774,8 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWSTRINGBUILDER, dst, (uint8_t) (v->aux_int & 0x03), 0));
         return;
     }
-    if (bname && strcmp(bname, "array_byte_new") == 0) {
-        emit_builtin_bytes_new(ctx, v, dst);
+    if (bname && strcmp(bname, "array_copy_new") == 0) {
+        emit_builtin_array_copy_new(ctx, v, dst);
         return;
     }
     if (bname && strcmp(bname, "string_bytes_span") == 0) {

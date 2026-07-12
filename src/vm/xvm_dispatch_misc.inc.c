@@ -15,7 +15,7 @@
  * startfunc label, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
- * Owns: OP_DEFER, OP_BYTE_ARRAY_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
+ * Owns: OP_DEFER, OP_ARRAY_COPY_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
  *       OP_TIME_AFTER, OP_SLEEP, OP_SELECT_BLOCK dispatch.
  */
 
@@ -84,75 +84,55 @@ vmcase(OP_DEFER_RUN_TO) {
     vmbreak;
 }
 
-vmcase(OP_BYTE_ARRAY_NEW) {
-    /* R[A] = Array<byte>(R[A+1..A+B]) - create Array<uint8>
-     * A = result register
-     * B = argument count
-     * C = storage_mode (0=normal, 1=shared, 2=owned)
+vmcase(OP_ARRAY_COPY_NEW) {
+    /* R[A] = Array<T>(R[B]) copy/convert.
+     * C = (elem_tid << 2) | storage_mode.
      */
     int a = GETARG_A(i);
-    int nargs = GETARG_B(i);
-    int storage_mode = GETARG_C(i);
-
-    int64_t len = 0;
-    XrValue fill_value = XR_NULL_VAL;
-    bool has_fill = false;
-    XrArray *src_arr = NULL;
-
-    if (nargs == 0) {
-        len = 0;
-    } else if (nargs == 1) {
-        XrValue arg = R(a + 1);
-        if (XR_IS_INT(arg)) {
-            len = xr_array_core_nonnegative_length(XR_TO_INT(arg));
-            has_fill = true;
-            fill_value = XR_FROM_INT(0);
-        } else if (XR_IS_ARRAY(arg)) {
-            src_arr = XR_TO_ARRAY(arg);
-            len = src_arr->length;
-        } else {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
-        }
-    } else if (nargs == 2) {
-        XrValue arg1 = R(a + 1);
-        XrValue arg2 = R(a + 2);
-        if (!XR_IS_INT(arg1) || !XR_IS_INT(arg2)) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                             XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
-        }
-        len = xr_array_core_nonnegative_length(XR_TO_INT(arg1));
-        fill_value = arg2;
-        has_fill = true;
-    } else {
-        VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "Array<byte>() requires 0, 1 or 2 arguments");
+    int b = GETARG_B(i);
+    int c_field = GETARG_C(i);
+    XrValue src_value = R(b);
+    if (!XR_IS_ARRAY(src_value)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
     }
-
+    XrArray *src_arr = XR_TO_ARRAY(src_value);
+    int64_t len = src_arr ? src_arr->length : 0;
     XrArray *arr = NULL;
     if (len > INT32_MAX) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array<byte> length exceeds VM allocation limit");
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array length exceeds VM allocation limit");
     }
+    int storage_mode = c_field & 0x03;
+    uint8_t elem_tid = (uint8_t) (c_field >> 2);
+    uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // System storage: allocate on system heap
         arr = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
                                                    sizeof(XrArray), XR_TARRAY, storage_mode);
         if (arr) {
-            xr_array_init_inplace(arr, len > 0 ? (int) len : 4, XR_ELEM_U8);
+            xr_array_init_inplace(arr, len > 0 ? (int) len : 4, elem_type);
             XR_OBJ_SET_STORAGE(&arr->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED)
                 xr_shared_set_refc(&arr->hdr, 1);
         }
     } else {
-        arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, len > 0 ? (int) len : 0, XR_ELEM_U8);
+        arr = VM_CURRENT_CORO ? xr_array_with_capacity_typed(VM_CURRENT_CORO, (int) len, elem_type)
+                              : vm_root_array_new(isolate, (int) len, elem_type);
     }
 
     if (arr) {
-        if (src_arr) {
-            (void) xr_array_core_bytes_copy_from_typed(arr->data, len, src_arr->data,
-                                                       src_arr->length, src_arr->elem_type);
-            arr->length = len;
-        } else if (has_fill && len > 0) {
-            (void) xr_array_core_bytes_fill_value(arr->data, len, fill_value);
-            arr->length = len;
+        arr->elem_tid = elem_tid;
+        arr->length = (int32_t) len;
+        if (len > 0) {
+            if (elem_type == XR_ELEM_U8) {
+                (void) xr_array_core_bytes_copy_from_typed(arr->data, len, src_arr->data,
+                                                           src_arr->length, src_arr->elem_type);
+            } else if (src_arr && src_arr->elem_type == elem_type && elem_type != XR_ELEM_ANY) {
+                memcpy(arr->data, src_arr->data, (size_t) len * (size_t) arr->elem_size);
+            } else {
+                for (int64_t j = 0; j < len; j++) {
+                    XrValue item = xr_typed_get(src_arr->data, (int32_t) j, src_arr->elem_type);
+                    xr_array_set_element(arr, (int32_t) j, item);
+                }
+            }
         }
     }
 

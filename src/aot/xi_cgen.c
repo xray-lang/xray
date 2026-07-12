@@ -4010,7 +4010,7 @@ static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char
         const char *kind;
         const char *detail;
     } allocating_builtins[] = {
-        {"array_byte_new", "constructor", "array_byte_new"},
+        {"array_copy_new", "constructor", "Array"},
         {"StringBuilder", "constructor", "StringBuilder"},
         {"map_new", "constructor", "Map"},
         {"set_new", "constructor", "Set"},
@@ -4121,8 +4121,6 @@ static bool cg_no_alloc_type_name_allocates(const char *type) {
     while (*type == ' ')
         type++;
     if (strncmp(type, "string", 6) == 0)
-        return true;
-    if (strncmp(type, "array_byte_new", 5) == 0)
         return true;
     if (strncmp(type, "Array<", 6) == 0)
         return true;
