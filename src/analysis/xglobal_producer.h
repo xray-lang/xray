@@ -18,6 +18,7 @@
 
 struct XrModuleGraph;
 struct XrModuleSpec;
+struct XaAnalyzer;
 
 XR_FUNC bool xg_module_summary_from_module_spec(XgModuleSummary *out_summary, XgModuleId module_id,
                                                 const struct XrModuleSpec *spec);
@@ -39,6 +40,10 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
     XgGlobalEvidence *evidence, const struct XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
     uint32_t imported_module_count);
+XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+    XgGlobalEvidence *evidence, const struct XrModuleGraph *graph, uint32_t profile,
+    uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
+    uint32_t imported_module_count, struct XaAnalyzer *analyzer);
 XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
                                                          const XgGlobalEvidence *roots);
 

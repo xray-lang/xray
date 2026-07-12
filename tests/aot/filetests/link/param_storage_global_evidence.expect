@@ -1,0 +1,5 @@
+args=--dump-global-evidence
+contains=xaot-plan v0
+contains=xglobal-evidence v1 profile=native_release
+regex=function [0-9]+ name=consume
+regex=body [0-9]+ .*kind=function .*param_storage=[1-9][0-9]*
