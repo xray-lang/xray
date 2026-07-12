@@ -14,6 +14,7 @@
 | `scripts/check_stdlib_surface_uniqueness.py` | 151 R3：不同 public stdlib surface 不得绑定同一 VM/AOT helper | `--root <repo>`；可选 `--list-known` | 新重复=1；仅命中已登记债务=0 | < 1s |
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
+| `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认只输出 inventory=0；`--fail-on-public` 命中 public 残余=1 | < 2s |
 
 ## 详细说明
 
@@ -49,6 +50,16 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 header/runtime/cgen fixtures 仍使用 `xr_parallel_*` 与 `XrParallel*` descriptor ABI。该脚本接入
 CTest 的 `parallel_backend_abi_convergence`。
 
+### `check_bytes_type_residue.py`
+
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/`，把 204 旧 public binary 类型残余分为
+`PUBLIC_TYPE_BYTES*`、`PUBLIC_SIGNATURE_BYTES`、`PUBLIC_DIAGNOSTIC_BYTES`、
+`PRELUDE_OR_RESOLVER_ALIAS`、`CONSTRUCTOR_OPCODE_BYTES`、`METHOD_RECEIVER_BYTES`、
+`INTERNAL_LEGACY_BYTES_NAMING` 和允许保留的 compile-error 负例。默认模式只打印 inventory
+并返回 0，便于 P0 固定基线；`--json` 输出机器可读结果；`--fail-on-public` 在 public 表面类目
+非空时返回 1，等 resolver/type-name/docs/spec 清零后可接入 CI。`XI_BYTES_*`、`OP_BYTES_*`、
+`xr_array_bytes_*` 等 internal legacy 命名仅进入 inventory，后续由 204 backend 收敛切片清理。
+
 ## 与 nightly.yml 的关系
 
 `nightly.yml` 的 `mem-stress` job 调用 `scripts/run_mem_stress.sh`，`windows-msvc-release` job 调用 `scripts/repro_win11_coro_burn.sh`：
@@ -74,3 +85,4 @@ CTest 的 `parallel_backend_abi_convergence`。
 | 2026-07-08 | 增加 stdlib public surface uniqueness 检查，接 151 R3 单一规范表面门禁 | Codex |
 | 2026-07-12 | 增加 parallel surface convergence 检查，接 193 旧专用语法删除门禁 | Codex |
 | 2026-07-12 | 增加 parallel backend ABI convergence 检查，接 193 VM/AOT backend 命名收敛门禁 | Codex |
+| 2026-07-13 | 增加 Bytes type residue inventory，接 204 P0/P7 public 表面与 internal legacy 命名分类 | Codex |
