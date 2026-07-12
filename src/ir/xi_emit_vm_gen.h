@@ -140,29 +140,29 @@
     X(REGEX_COMPILE, xi_emit_regex_compile) \
     X(TUPLE_NEW, xi_emit_tuple_new) \
     X(TUPLE_GET, xi_emit_tuple_get) \
-    X(BYTE_SLICE_LOAD_U16, xi_emit_bytes_load_u16) \
-    X(BYTE_SLICE_LOAD_U32, xi_emit_bytes_load_u32) \
-    X(BYTE_SLICE_LOAD_U64, xi_emit_bytes_load_u64) \
-    X(BYTE_SLICE_LOAD_F32, xi_emit_bytes_load_f32) \
-    X(BYTE_SLICE_LOAD_F64, xi_emit_bytes_load_f64) \
-    X(BYTE_SLICE_STORE_U16, xi_emit_bytes_store_u16) \
-    X(BYTE_SLICE_STORE_U32, xi_emit_bytes_store_u32) \
-    X(BYTE_SLICE_STORE_U64, xi_emit_bytes_store_u64) \
-    X(BYTE_SLICE_STORE_F32, xi_emit_bytes_store_f32) \
-    X(BYTE_SLICE_STORE_F64, xi_emit_bytes_store_f64) \
-    X(BYTE_SLICE_FILL, xi_emit_bytes_span_fill) \
-    X(BYTE_SLICE_COPY, xi_emit_bytes_span_copy) \
-    X(BYTE_SLICE_COMPARE, xi_emit_bytes_span_compare) \
-    X(BYTE_SLICE_COMMON_PREFIX, xi_emit_bytes_span_common_prefix) \
-    X(BYTE_SLICE_REPEAT, xi_emit_bytes_span_repeat) \
+    X(BYTE_SLICE_LOAD_U16, xi_emit_byte_slice_load_u16) \
+    X(BYTE_SLICE_LOAD_U32, xi_emit_byte_slice_load_u32) \
+    X(BYTE_SLICE_LOAD_U64, xi_emit_byte_slice_load_u64) \
+    X(BYTE_SLICE_LOAD_F32, xi_emit_byte_slice_load_f32) \
+    X(BYTE_SLICE_LOAD_F64, xi_emit_byte_slice_load_f64) \
+    X(BYTE_SLICE_STORE_U16, xi_emit_byte_slice_store_u16) \
+    X(BYTE_SLICE_STORE_U32, xi_emit_byte_slice_store_u32) \
+    X(BYTE_SLICE_STORE_U64, xi_emit_byte_slice_store_u64) \
+    X(BYTE_SLICE_STORE_F32, xi_emit_byte_slice_store_f32) \
+    X(BYTE_SLICE_STORE_F64, xi_emit_byte_slice_store_f64) \
+    X(BYTE_SLICE_FILL, xi_emit_byte_slice_fill) \
+    X(BYTE_SLICE_COPY, xi_emit_byte_slice_copy) \
+    X(BYTE_SLICE_COMPARE, xi_emit_byte_slice_compare) \
+    X(BYTE_SLICE_COMMON_PREFIX, xi_emit_byte_slice_common_prefix) \
+    X(BYTE_SLICE_REPEAT, xi_emit_byte_slice_repeat) \
     X(SPAN_AS_BYTES, xi_emit_span_as_bytes) \
     X(SPAN_FILL, xi_emit_span_fill) \
     X(SPAN_COPY, xi_emit_span_copy) \
     X(SPAN_COMPARE, xi_emit_span_compare) \
     X(SPAN_REINTERPRET, xi_emit_span_reinterpret) \
-    X(BYTE_ARRAY_COPY_WITHIN, xi_emit_bytes_copy_within) \
-    X(BYTE_ARRAY_COPY_FROM, xi_emit_bytes_copy_from) \
-    X(BYTE_ARRAY_REPEAT_FROM, xi_emit_bytes_repeat_from) \
+    X(BYTE_ARRAY_COPY_WITHIN, xi_emit_byte_array_copy_within) \
+    X(BYTE_ARRAY_COPY_FROM, xi_emit_byte_array_copy_from) \
+    X(BYTE_ARRAY_REPEAT_FROM, xi_emit_byte_array_repeat_from) \
     X(ARRAY_DATA_PTR, xi_emit_array_data_ptr) \
     X(PTR_LOAD, xi_emit_ptr_load) \
     X(PTR_STORE, xi_emit_ptr_store) \

@@ -406,63 +406,63 @@ static void emit_builtin_array_copy_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_COPY_NEW, dst, src, (uint8_t) (v->aux_int & 0xFF)));
 }
 
-XR_FUNC void xi_emit_bytes_load_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_load_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTE_SLICE_LOAD_U16);
 }
 
-XR_FUNC void xi_emit_bytes_load_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_load_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTE_SLICE_LOAD_U32);
 }
 
-XR_FUNC void xi_emit_bytes_load_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_load_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTE_SLICE_LOAD_U64);
 }
 
-XR_FUNC void xi_emit_bytes_load_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_load_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTE_SLICE_LOAD_F32);
 }
 
-XR_FUNC void xi_emit_bytes_load_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_load_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTE_SLICE_LOAD_F64);
 }
 
-XR_FUNC void xi_emit_bytes_store_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_store_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTE_SLICE_STORE_U16);
 }
 
-XR_FUNC void xi_emit_bytes_store_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_store_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTE_SLICE_STORE_U32);
 }
 
-XR_FUNC void xi_emit_bytes_store_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_store_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTE_SLICE_STORE_U64);
 }
 
-XR_FUNC void xi_emit_bytes_store_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_store_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTE_SLICE_STORE_F32);
 }
 
-XR_FUNC void xi_emit_bytes_store_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_store_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTE_SLICE_STORE_F64);
 }
 
-XR_FUNC void xi_emit_bytes_span_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_SLICE_FILL, 2);
 }
 
-XR_FUNC void xi_emit_bytes_span_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_SLICE_COPY, 2);
 }
 
-XR_FUNC void xi_emit_bytes_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_SLICE_COMPARE, 2);
 }
 
-XR_FUNC void xi_emit_bytes_span_common_prefix(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_common_prefix(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_SLICE_COMMON_PREFIX, 2);
 }
 
-XR_FUNC void xi_emit_bytes_span_repeat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_slice_repeat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_SLICE_REPEAT, 4);
 }
 
@@ -604,15 +604,15 @@ XR_FUNC void xi_emit_ptr_copy_nonoverlap(EmitCtx *ctx, XiValue *v, XiEmitReg dst
     emit_inst(ctx, CREATE_ABC(OP_PTR_COPY_NONOVERLAP, dst_addr, src_addr, byte_count));
 }
 
-XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_array_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_ARRAY_COPY_WITHIN, 4);
 }
 
-XR_FUNC void xi_emit_bytes_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_array_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_ARRAY_COPY_FROM, 5);
 }
 
-XR_FUNC void xi_emit_bytes_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_byte_array_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTE_ARRAY_REPEAT_FROM, 4);
 }
 
