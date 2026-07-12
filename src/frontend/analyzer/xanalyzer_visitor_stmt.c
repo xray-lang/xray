@@ -6765,6 +6765,23 @@ static XaSymbol *xa_lookup_shared_source_symbol(XaInferContext *ctx, AstNode *so
     return sym;
 }
 
+static bool xa_type_is_ref_free_owned_freeze_root(XrType *type) {
+    if (!type || !XR_TYPE_IS_ARRAY(type) || !type->container.element_type)
+        return false;
+    XrType *elem = type->container.element_type;
+    if (elem->is_nullable)
+        return false;
+    switch (elem->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *decl_node,
                                                  XrType *init_type) {
     if (!ctx || !decl_node)
@@ -6793,6 +6810,20 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
         snprintf(msg, sizeof(msg),
                  "shared binding '%s' is already a shared identity and must not be moved",
                  src_name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+        return;
+    }
+
+    if (is_move && src_sym->is_owned) {
+        if (xa_type_is_ref_free_owned_freeze_root(init_type))
+            return;
+        char msg[320];
+        snprintf(msg, sizeof(msg),
+                 "shared binding from owned value '%s' requires a ref-free Array<T> until the "
+                 "owned graph freeze verifier is complete; use copy(%s) for an independent "
+                 "shared clone",
+                 src_name, src_name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    msg, &loc);
         return;

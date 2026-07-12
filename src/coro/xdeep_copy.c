@@ -1425,6 +1425,10 @@ XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {
     // Already shared: no-op (do NOT incref — caller already owns the reference)
     if (XR_OBJ_IS_SHARED(obj))
         return value;
+    if (XR_OBJ_IS_OWNED(obj)) {
+        xr_shared_init(obj);
+        return value;
+    }
     if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING) {
         XrString *shared =
             xr_string_clone_shared_core(xr_isolate_get_runtime_core(X), (XrString *) obj);

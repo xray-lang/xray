@@ -1,0 +1,1 @@
+shared binding from owned value 'nested' requires a ref-free Array<T> until the owned graph freeze verifier is complete
