@@ -278,10 +278,22 @@ static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     hash = hash_u32(hash, row->escape_bits);
     hash = hash_u32(hash, row->capability_bits);
     hash = hash_u32(hash, row->param_storage_key);
+    hash = hash_u32(hash, row->param_storage_start);
+    hash = hash_u32(hash, row->param_storage_count);
     hash = hash_u32(hash, row->callsite_start);
     hash = hash_u32(hash, row->callsite_count);
     hash = hash_u32(hash, row->metadata_use_bits);
     return hash_u32(hash, row->static_data_use_bits);
+}
+
+static uint64_t hash_param_storage_summary(uint64_t hash, const XgParamStorageSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->requirement_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->param_index);
+    hash = hash_u8(hash, row->storage_owner);
+    return hash_u32(hash, row->flags);
 }
 
 static uint64_t hash_callsite_summary(uint64_t hash, const XgCallsiteSummary *row) {
@@ -1356,6 +1368,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->interface_methods);
     xr_free(evidence->interface_object_uses);
     xr_free(evidence->bodies);
+    xr_free(evidence->param_storages);
     xr_free(evidence->callsites);
     xr_free(evidence->link_deps);
     xr_free(evidence->generic_insts);
@@ -1415,6 +1428,7 @@ static bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEviden
     XG_CLONE_ARRAY(interface_methods, ninterface_methods, interface_method_cap);
     XG_CLONE_ARRAY(interface_object_uses, ninterface_object_uses, interface_object_use_cap);
     XG_CLONE_ARRAY(bodies, nbodies, body_cap);
+    XG_CLONE_ARRAY(param_storages, nparam_storages, param_storage_cap);
     XG_CLONE_ARRAY(callsites, ncallsites, callsite_cap);
     XG_CLONE_ARRAY(link_deps, nlink_deps, link_dep_cap);
     XG_CLONE_ARRAY(generic_insts, ngeneric_insts, generic_inst_cap);
@@ -1508,6 +1522,13 @@ XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->bodies, &evidence->body_cap, capacity,
                                      sizeof(XgBodySummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_param_storages(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->param_storages, &evidence->param_storage_cap,
+                         capacity, sizeof(XgParamStorageSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -1782,6 +1803,20 @@ XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
         return NULL;
     row = &evidence->bodies[evidence->nbodies++];
     *row = *summary;
+    return row;
+}
+
+XR_FUNC XgParamStorageSummary *
+xg_global_evidence_add_param_storage(XgGlobalEvidence *evidence,
+                                     const XgParamStorageSummary *summary) {
+    XgParamStorageSummary *row;
+    if (!evidence || !summary || summary->owner_func_id == XG_NO_ID ||
+        !xg_global_evidence_reserve_param_storages(evidence, evidence->nparam_storages + 1))
+        return NULL;
+    row = &evidence->param_storages[evidence->nparam_storages++];
+    *row = *summary;
+    if (row->requirement_id == XG_NO_ID)
+        row->requirement_id = evidence->nparam_storages;
     return row;
 }
 
@@ -2873,6 +2908,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash =
         hash_mix(hash, &evidence->ninterface_object_uses, sizeof(evidence->ninterface_object_uses));
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
+    hash = hash_mix(hash, &evidence->nparam_storages, sizeof(evidence->nparam_storages));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
     hash = hash_mix(hash, &evidence->nlink_deps, sizeof(evidence->nlink_deps));
     hash = hash_mix(hash, &evidence->ngeneric_insts, sizeof(evidence->ngeneric_insts));
@@ -2919,6 +2955,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_interface_object_use_summary(hash, &evidence->interface_object_uses[i]);
     for (uint32_t i = 0; i < evidence->nbodies; i++)
         hash = hash_body_summary(hash, &evidence->bodies[i]);
+    for (uint32_t i = 0; i < evidence->nparam_storages; i++)
+        hash = hash_param_storage_summary(hash, &evidence->param_storages[i]);
     for (uint32_t i = 0; i < evidence->ncallsites; i++)
         hash = hash_callsite_summary(hash, &evidence->callsites[i]);
     for (uint32_t i = 0; i < evidence->nlink_deps; i++)
@@ -3039,12 +3077,15 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
             break;
         case XG_EVIDENCE_CACHE_BODY_SUMMARY:
             hash = hash_u32(hash, evidence->nbodies);
+            hash = hash_u32(hash, evidence->nparam_storages);
             hash = hash_u32(hash, evidence->ncallsites);
             hash = hash_u32(hash, evidence->ninterface_object_uses);
             hash = hash_u32(hash, evidence->nlink_deps);
             hash = hash_u32(hash, evidence->ngeneric_insts);
             for (uint32_t i = 0; i < evidence->nbodies; i++)
                 hash = hash_body_summary(hash, &evidence->bodies[i]);
+            for (uint32_t i = 0; i < evidence->nparam_storages; i++)
+                hash = hash_param_storage_summary(hash, &evidence->param_storages[i]);
             for (uint32_t i = 0; i < evidence->ncallsites; i++)
                 hash = hash_callsite_summary(hash, &evidence->callsites[i]);
             for (uint32_t i = 0; i < evidence->ninterface_object_uses; i++)
@@ -3514,11 +3555,11 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
 
 static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-count bodies=%u callsites=%u interface_object_uses=%u link_deps=%u "
-            "generic_insts=%u\n",
-            evidence ? evidence->nbodies : 0, evidence ? evidence->ncallsites : 0,
-            evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->nlink_deps : 0,
-            evidence ? evidence->ngeneric_insts : 0);
+            "payload-count bodies=%u param_storages=%u callsites=%u interface_object_uses=%u "
+            "link_deps=%u generic_insts=%u\n",
+            evidence ? evidence->nbodies : 0, evidence ? evidence->nparam_storages : 0,
+            evidence ? evidence->ncallsites : 0, evidence ? evidence->ninterface_object_uses : 0,
+            evidence ? evidence->nlink_deps : 0, evidence ? evidence->ngeneric_insts : 0);
     if (!evidence)
         return;
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
@@ -3526,12 +3567,19 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         fprintf(out,
                 "body id=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
                 "kind=%u hash=%016" PRIx64 " effect=0x%x escape=0x%x caps=0x%x "
-                "param_storage=%u calls=%u+%u metadata=0x%x static=0x%x\n",
+                "param_storage=%u params=%u+%u calls=%u+%u metadata=0x%x static=0x%x\n",
                 b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
                 b->owner_method_id, b->name_id, b->signature_key, b->source_span_id,
                 (unsigned) b->kind, b->body_hash, b->effect_bits, b->escape_bits,
-                b->capability_bits, b->param_storage_key, b->callsite_start, b->callsite_count,
-                b->metadata_use_bits, b->static_data_use_bits);
+                b->capability_bits, b->param_storage_key, b->param_storage_start,
+                b->param_storage_count, b->callsite_start, b->callsite_count, b->metadata_use_bits,
+                b->static_data_use_bits);
+    }
+    for (uint32_t i = 0; i < evidence->nparam_storages; i++) {
+        const XgParamStorageSummary *p = &evidence->param_storages[i];
+        fprintf(out, "param-storage id=%u owner=%u index=%u storage=%u flags=0x%x\n",
+                p->requirement_id, p->owner_func_id, p->param_index, (unsigned) p->storage_owner,
+                p->flags);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
@@ -4225,6 +4273,7 @@ static bool materialize_payload_semantic(const char *body, XgGlobalEvidence *evi
 static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidence *evidence) {
     char line[1024];
     uint32_t body_count = 0;
+    uint32_t param_storage_count = 0;
     uint32_t callsite_count = 0;
     uint32_t interface_object_use_count = 0;
     uint32_t link_dep_count = 0;
@@ -4233,13 +4282,14 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
     if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-count bodies=%" SCNu32 " callsites=%" SCNu32
+               "payload-count bodies=%" SCNu32 " param_storages=%" SCNu32 " callsites=%" SCNu32
                " interface_object_uses=%" SCNu32 " link_deps=%" SCNu32 " generic_insts=%" SCNu32
                " %c",
-               &body_count, &callsite_count, &interface_object_use_count, &link_dep_count,
-               &generic_inst_count, &trailing) != 5)
+               &body_count, &param_storage_count, &callsite_count, &interface_object_use_count,
+               &link_dep_count, &generic_inst_count, &trailing) != 6)
         return false;
     if (!xg_global_evidence_reserve_bodies(evidence, body_count) ||
+        !xg_global_evidence_reserve_param_storages(evidence, param_storage_count) ||
         !xg_global_evidence_reserve_callsites(evidence, callsite_count) ||
         !xg_global_evidence_reserve_interface_object_uses(evidence, interface_object_use_count) ||
         !xg_global_evidence_reserve_link_deps(evidence, link_dep_count) ||
@@ -4257,16 +4307,34 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
                    " class=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
                    " span=%" SCNu32 " kind=%" SCNu32 " hash=%" SCNx64 " effect=0x%" SCNx32
                    " escape=0x%" SCNx32 " caps=0x%" SCNx32 " param_storage=%" SCNu32
-                   " calls=%" SCNu32 "+%" SCNu32 " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
+                   " params=%" SCNu32 "+%" SCNu32 " calls=%" SCNu32 "+%" SCNu32
+                   " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
                    &row.func_id, &row.module_id, &row.source_node_id, &row.owner_decl_id,
                    &row.owner_class_id, &row.owner_method_id, &row.name_id, &row.signature_key,
                    &row.source_span_id, &kind, &row.body_hash, &row.effect_bits, &row.escape_bits,
-                   &row.capability_bits, &row.param_storage_key, &row.callsite_start,
-                   &row.callsite_count, &row.metadata_use_bits, &row.static_data_use_bits,
-                   &trailing) != 19)
+                   &row.capability_bits, &row.param_storage_key, &row.param_storage_start,
+                   &row.param_storage_count, &row.callsite_start, &row.callsite_count,
+                   &row.metadata_use_bits, &row.static_data_use_bits, &trailing) != 21)
             return false;
         row.kind = (uint8_t) kind;
         if (!xg_global_evidence_add_body(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < param_storage_count; i++) {
+        XgParamStorageSummary row;
+        uint32_t storage_owner = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "param-storage id=%" SCNu32 " owner=%" SCNu32 " index=%" SCNu32
+                   " storage=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   &row.requirement_id, &row.owner_func_id, &row.param_index, &storage_owner,
+                   &row.flags, &trailing) != 5)
+            return false;
+        row.storage_owner = (uint8_t) storage_owner;
+        if (!xg_global_evidence_add_param_storage(evidence, &row))
             return false;
     }
     for (uint32_t i = 0; i < callsite_count; i++) {
@@ -4932,6 +5000,7 @@ typedef struct XgPackageImportOffsets {
     XgInterfaceMethodId interface_method_id;
     XgInterfaceObjectUseId interface_object_use_id;
     XgFuncId func_id;
+    XgParamStorageId param_storage_id;
     XgCallsiteId callsite_id;
     XgLinkId link_id;
     XgGenericInstId generic_inst_id;
@@ -5101,7 +5170,13 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
         offsets->decl_id = max_u32(offsets->decl_id, row->owner_decl_id);
         offsets->class_id = max_u32(offsets->class_id, row->owner_class_id);
         offsets->method_id = max_u32(offsets->method_id, row->owner_method_id);
+        offsets->param_storage_id = max_u32(offsets->param_storage_id, row->param_storage_start);
         offsets->callsite_id = max_u32(offsets->callsite_id, row->callsite_start);
+    }
+    for (uint32_t i = 0; i < target->nparam_storages; i++) {
+        const XgParamStorageSummary *row = &target->param_storages[i];
+        offsets->param_storage_id = max_u32(offsets->param_storage_id, row->requirement_id);
+        offsets->func_id = max_u32(offsets->func_id, row->owner_func_id);
     }
     for (uint32_t i = 0; i < target->ncallsites; i++) {
         const XgCallsiteSummary *row = &target->callsites[i];
@@ -5356,16 +5431,16 @@ static bool build_module_import_map(XgGlobalEvidence *target, const XgGlobalEvid
 static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
     return package->ndecls + package->nclasses + package->nclass_fields + package->nmethods +
            package->ninterface_impls + package->ninterface_extends + package->ninterface_methods +
-           package->ninterface_object_uses + package->nbodies + package->ncallsites +
-           package->nlink_deps + package->ngeneric_insts + package->ngeneric_body_uses +
-           package->ngeneric_storages + package->ngeneric_code_sizes + package->nsequence_accesses +
-           package->ncapacity_ops + package->nbulk_ops + package->nencoding_ops +
-           package->nderives + package->nderived_fields + package->nderived_methods +
-           package->njson_shapes + package->njson_fields + package->njson_accesses +
-           package->njson_codecs + package->nrecord_shapes + package->nrecord_fields +
-           package->nrecord_accesses + package->nrecord_merges + package->noptions_bags +
-           package->nmap_shapes + package->nmap_entries + package->nkey_accesses +
-           package->nhash_eqs;
+           package->ninterface_object_uses + package->nbodies + package->nparam_storages +
+           package->ncallsites + package->nlink_deps + package->ngeneric_insts +
+           package->ngeneric_body_uses + package->ngeneric_storages + package->ngeneric_code_sizes +
+           package->nsequence_accesses + package->ncapacity_ops + package->nbulk_ops +
+           package->nencoding_ops + package->nderives + package->nderived_fields +
+           package->nderived_methods + package->njson_shapes + package->njson_fields +
+           package->njson_accesses + package->njson_codecs + package->nrecord_shapes +
+           package->nrecord_fields + package->nrecord_accesses + package->nrecord_merges +
+           package->noptions_bags + package->nmap_shapes + package->nmap_entries +
+           package->nkey_accesses + package->nhash_eqs;
 }
 
 static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModuleId module_id) {
@@ -5690,8 +5765,16 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.owner_decl_id, offsets.decl_id);
         REMAP_ID(row.owner_class_id, offsets.class_id);
         REMAP_ID(row.owner_method_id, offsets.method_id);
+        REMAP_ID(row.param_storage_start, offsets.param_storage_id);
         REMAP_ID(row.callsite_start, offsets.callsite_id);
         if (!xg_global_evidence_add_body(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nparam_storages; i++) {
+        XgParamStorageSummary row = package.param_storages[i];
+        REMAP_ID(row.requirement_id, offsets.param_storage_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_param_storage(target, &row))
             goto done;
     }
     for (uint32_t i = 0; i < package.ncallsites; i++) {
@@ -6079,8 +6162,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     fprintf(out,
             "counts modules=%u decls=%u classes=%u class_fields=%u methods=%u "
             "interface_impls=%u interface_extends=%u "
-            "interface_methods=%u interface_object_uses=%u bodies=%u callsites=%u link_deps=%u "
-            "generic_insts=%u "
+            "interface_methods=%u interface_object_uses=%u bodies=%u param_storages=%u "
+            "callsites=%u link_deps=%u generic_insts=%u "
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "sequence_accesses=%u capacity_ops=%u bulk_ops=%u encoding_ops=%u derives=%u "
             "derived_fields=%u derived_methods=%u json_shapes=%u "
@@ -6091,8 +6174,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->nmodules, evidence->ndecls, evidence->nclasses, evidence->nclass_fields,
             evidence->nmethods, evidence->ninterface_impls, evidence->ninterface_extends,
             evidence->ninterface_methods, evidence->ninterface_object_uses, evidence->nbodies,
-            evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts,
-            evidence->ngeneric_body_uses, evidence->ngeneric_storages,
+            evidence->nparam_storages, evidence->ncallsites, evidence->nlink_deps,
+            evidence->ngeneric_insts, evidence->ngeneric_body_uses, evidence->ngeneric_storages,
             evidence->ngeneric_code_sizes, evidence->nsequence_accesses, evidence->ncapacity_ops,
             evidence->nbulk_ops, evidence->nencoding_ops, evidence->nderives,
             evidence->nderived_fields, evidence->nderived_methods, evidence->njson_shapes,
@@ -6200,13 +6283,20 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(out, " caps=0x%x", b->capability_bits);
         dump_named_bitset(out, b->capability_bits, capabilities, capability_count,
                           xg_capability_name);
-        fprintf(out, " param_storage=%u callsites=%u+%u metadata=0x%x", b->param_storage_key,
+        fprintf(out, " param_storage=%u params=%u+%u callsites=%u+%u metadata=0x%x",
+                b->param_storage_key, b->param_storage_start, b->param_storage_count,
                 b->callsite_start, b->callsite_count, b->metadata_use_bits);
         dump_named_bitset(out, b->metadata_use_bits, metadata, metadata_count, xg_metadata_name);
         fprintf(out, " static=0x%x", b->static_data_use_bits);
         dump_named_bitset(out, b->static_data_use_bits, static_data, static_data_count,
                           xg_static_data_name);
         fprintf(out, "\n");
+    }
+    for (uint32_t i = 0; i < evidence->nparam_storages; i++) {
+        const XgParamStorageSummary *p = &evidence->param_storages[i];
+        fprintf(out, "param-storage %u id=%u owner=%u index=%u storage=%u flags=0x%x\n", i,
+                p->requirement_id, p->owner_func_id, p->param_index, (unsigned) p->storage_owner,
+                p->flags);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];

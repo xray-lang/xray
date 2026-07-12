@@ -28,6 +28,7 @@ typedef uint32_t XgInterfaceMethodId;
 typedef uint32_t XgInterfaceObjectUseId;
 typedef uint32_t XgFieldId;
 typedef uint32_t XgCallsiteId;
+typedef uint32_t XgParamStorageId;
 typedef uint32_t XgLinkId;
 typedef uint32_t XgGenericInstId;
 typedef uint32_t XgGenericBodyUseId;
@@ -58,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 21,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 22,
 };
 
 typedef enum XgBuildProfile {
@@ -791,11 +792,21 @@ typedef struct XgBodySummary {
     uint32_t escape_bits;
     uint32_t capability_bits;
     uint32_t param_storage_key;
+    uint32_t param_storage_start;
+    uint32_t param_storage_count;
     uint32_t callsite_start;
     uint32_t callsite_count;
     uint32_t metadata_use_bits;
     uint32_t static_data_use_bits;
 } XgBodySummary;
+
+typedef struct XgParamStorageSummary {
+    XgParamStorageId requirement_id;
+    XgFuncId owner_func_id;
+    uint32_t param_index;
+    uint8_t storage_owner;
+    uint32_t flags;
+} XgParamStorageSummary;
 
 typedef struct XgCallsiteSummary {
     XgCallsiteId callsite_id;
@@ -1162,6 +1173,7 @@ typedef struct XgGlobalEvidence {
     XgInterfaceMethodSummary *interface_methods;
     XgInterfaceObjectUseSummary *interface_object_uses;
     XgBodySummary *bodies;
+    XgParamStorageSummary *param_storages;
     XgCallsiteSummary *callsites;
     XgLinkDependencySummary *link_deps;
     XgGenericInstSummary *generic_insts;
@@ -1199,6 +1211,7 @@ typedef struct XgGlobalEvidence {
     uint32_t ninterface_methods;
     uint32_t ninterface_object_uses;
     uint32_t nbodies;
+    uint32_t nparam_storages;
     uint32_t ncallsites;
     uint32_t nlink_deps;
     uint32_t ngeneric_insts;
@@ -1236,6 +1249,7 @@ typedef struct XgGlobalEvidence {
     uint32_t interface_method_cap;
     uint32_t interface_object_use_cap;
     uint32_t body_cap;
+    uint32_t param_storage_cap;
     uint32_t callsite_cap;
     uint32_t link_dep_cap;
     uint32_t generic_inst_cap;
@@ -1323,6 +1337,8 @@ XR_FUNC bool xg_global_evidence_reserve_interface_methods(XgGlobalEvidence *evid
 XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *evidence,
                                                               uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_param_storages(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_generic_insts(XgGlobalEvidence *evidence,
@@ -1386,6 +1402,9 @@ xg_global_evidence_add_interface_object_use(XgGlobalEvidence *evidence,
                                             const XgInterfaceObjectUseSummary *summary);
 XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
+XR_FUNC XgParamStorageSummary *
+xg_global_evidence_add_param_storage(XgGlobalEvidence *evidence,
+                                     const XgParamStorageSummary *summary);
 XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evidence,
                                                            const XgCallsiteSummary *summary);
 XR_FUNC XgLinkDependencySummary *
