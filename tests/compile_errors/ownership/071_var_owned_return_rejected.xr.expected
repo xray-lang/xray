@@ -1,0 +1,1 @@
+var binding 'local' cannot receive owned return from function 'buildBuffer'

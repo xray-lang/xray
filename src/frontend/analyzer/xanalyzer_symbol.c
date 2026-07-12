@@ -755,6 +755,12 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
         }
     }
     dst->return_type_inferred = src->return_type_inferred;
+    dst->return_storage_owner = src->return_storage_owner;
+    dst->return_storage_known = src->return_storage_known;
+    dst->return_storage_mixed = src->return_storage_mixed;
+    dst->return_storage_scanned = src->return_storage_scanned;
+    dst->return_storage_scan_in_progress = false;
+    dst->function_decl_node = src->function_decl_node;
     dst->is_extern = src->is_extern;
     dst->is_c_export = src->is_c_export;
     dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;

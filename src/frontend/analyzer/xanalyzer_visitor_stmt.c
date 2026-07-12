@@ -17,6 +17,7 @@
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
+#include "../../base/xstorage.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -6748,6 +6749,35 @@ static bool xa_call_is_copy_builtin(AstNode *node) {
            strcmp(call->callee->as.variable.name, "copy") == 0 && call->arg_count == 1;
 }
 
+static void xa_ensure_function_return_storage_prepass(XaInferContext *ctx, XaSymbolLinks *links);
+
+static bool xa_call_return_storage_owner(XaInferContext *ctx, AstNode *node, uint8_t *owner_out,
+                                         const char **name_out) {
+    if (owner_out)
+        *owner_out = XR_STORAGE_NONE;
+    if (name_out)
+        *name_out = NULL;
+    if (!ctx || !node || node->type != AST_CALL_EXPR)
+        return false;
+
+    CallExprNode *call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_VARIABLE || !call->callee->as.variable.name)
+        return false;
+
+    XaSymbol *sym = xa_lookup_visible_symbol(ctx, call->callee->as.variable.name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    if (links && !links->return_storage_known && !links->return_storage_mixed)
+        xa_ensure_function_return_storage_prepass(ctx, links);
+    if (!links || !links->return_storage_known || links->return_storage_mixed)
+        return false;
+
+    if (owner_out)
+        *owner_out = links->return_storage_owner;
+    if (name_out)
+        *name_out = call->callee->as.variable.name;
+    return true;
+}
+
 static AstNode *xa_storage_boundary_identity_source(AstNode *expr) {
     while (expr) {
         switch (expr->type) {
@@ -6780,6 +6810,218 @@ static AstNode *xa_shared_boundary_source(AstNode *init, bool *is_move) {
         return (inner && inner->type == AST_VARIABLE) ? inner : NULL;
     }
     return init->type == AST_VARIABLE ? init : NULL;
+}
+
+typedef struct XaReturnStoragePrepass {
+    const char *names[256];
+    uint8_t owners[256];
+    int count;
+    uint8_t owner;
+    bool known;
+    bool mixed;
+    bool unknown;
+} XaReturnStoragePrepass;
+
+static void xa_return_storage_prepass_record_owner(XaReturnStoragePrepass *scan, uint8_t owner) {
+    if (!scan)
+        return;
+    if (owner != XR_STORAGE_OWNED_SYSTEM && owner != XR_STORAGE_SHARED_SYSTEM)
+        return;
+    if (!scan->known) {
+        scan->owner = owner;
+        scan->known = true;
+        if (scan->unknown)
+            scan->mixed = true;
+        return;
+    }
+    if (scan->owner != owner)
+        scan->mixed = true;
+}
+
+static void xa_return_storage_prepass_record_unknown(XaReturnStoragePrepass *scan) {
+    if (!scan)
+        return;
+    if (scan->known)
+        scan->mixed = true;
+    scan->unknown = true;
+}
+
+static void xa_return_storage_prepass_bind(XaReturnStoragePrepass *scan, const char *name,
+                                           uint8_t owner) {
+    if (!scan || !name)
+        return;
+    if (scan->count >= (int) (sizeof(scan->names) / sizeof(scan->names[0]))) {
+        xa_return_storage_prepass_record_unknown(scan);
+        return;
+    }
+    scan->names[scan->count] = name;
+    scan->owners[scan->count] = owner;
+    scan->count++;
+}
+
+static uint8_t xa_return_storage_prepass_lookup(XaReturnStoragePrepass *scan, const char *name) {
+    if (!scan || !name)
+        return XR_STORAGE_NONE;
+    for (int i = scan->count - 1; i >= 0; i--) {
+        if (scan->names[i] && strcmp(scan->names[i], name) == 0)
+            return scan->owners[i];
+    }
+    return XR_STORAGE_NONE;
+}
+
+static bool xa_return_storage_prepass_expr_owner(XaReturnStoragePrepass *scan, AstNode *expr,
+                                                 uint8_t *owner_out) {
+    if (owner_out)
+        *owner_out = XR_STORAGE_NONE;
+    bool is_move = false;
+    AstNode *source = xa_shared_boundary_source(expr, &is_move);
+    if (!source || source->type != AST_VARIABLE || !source->as.variable.name)
+        return false;
+
+    uint8_t owner = xa_return_storage_prepass_lookup(scan, source->as.variable.name);
+    if (is_move && owner == XR_STORAGE_OWNED_SYSTEM) {
+        if (owner_out)
+            *owner_out = owner;
+        return true;
+    }
+    if (!is_move && owner == XR_STORAGE_SHARED_SYSTEM) {
+        if (owner_out)
+            *owner_out = owner;
+        return true;
+    }
+    return false;
+}
+
+static void xa_return_storage_prepass_scan_stmt(XaReturnStoragePrepass *scan, AstNode *stmt);
+
+static void xa_return_storage_prepass_scan_block(XaReturnStoragePrepass *scan, AstNode *block) {
+    if (!scan || !block)
+        return;
+    int saved_count = scan->count;
+    if (block->type == AST_BLOCK) {
+        BlockNode *body = &block->as.block;
+        for (int i = 0; i < body->count; i++)
+            xa_return_storage_prepass_scan_stmt(scan, body->statements[i]);
+    } else if (block->type == AST_PROGRAM) {
+        ProgramNode *body = &block->as.program;
+        for (int i = 0; i < body->count; i++)
+            xa_return_storage_prepass_scan_stmt(scan, body->statements[i]);
+    } else {
+        xa_return_storage_prepass_scan_stmt(scan, block);
+    }
+    scan->count = saved_count;
+}
+
+static void xa_return_storage_prepass_scan_stmt(XaReturnStoragePrepass *scan, AstNode *stmt) {
+    if (!scan || !stmt)
+        return;
+    switch (stmt->type) {
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+        case AST_OWNED_DECL: {
+            uint8_t owner = stmt->type == AST_OWNED_DECL    ? XR_STORAGE_OWNED_SYSTEM
+                            : stmt->type == AST_SHARED_DECL ? XR_STORAGE_SHARED_SYSTEM
+                                                            : XR_STORAGE_NONE;
+            xa_return_storage_prepass_bind(scan, stmt->as.var_decl.name, owner);
+            return;
+        }
+        case AST_RETURN_STMT: {
+            ReturnStmtNode *ret = &stmt->as.return_stmt;
+            uint8_t owner = XR_STORAGE_NONE;
+            if (ret->value_count == 1 &&
+                xa_return_storage_prepass_expr_owner(scan, ret->values[0], &owner))
+                xa_return_storage_prepass_record_owner(scan, owner);
+            else if (ret->value_count > 0)
+                xa_return_storage_prepass_record_unknown(scan);
+            return;
+        }
+        case AST_BLOCK:
+        case AST_PROGRAM:
+            xa_return_storage_prepass_scan_block(scan, stmt);
+            return;
+        case AST_IF_STMT:
+            xa_return_storage_prepass_scan_block(scan, stmt->as.if_stmt.then_branch);
+            xa_return_storage_prepass_scan_block(scan, stmt->as.if_stmt.else_branch);
+            return;
+        case AST_WHILE_STMT:
+            xa_return_storage_prepass_scan_block(scan, stmt->as.while_stmt.body);
+            return;
+        case AST_FOR_STMT: {
+            int saved_count = scan->count;
+            xa_return_storage_prepass_scan_stmt(scan, stmt->as.for_stmt.initializer);
+            xa_return_storage_prepass_scan_block(scan, stmt->as.for_stmt.body);
+            scan->count = saved_count;
+            return;
+        }
+        case AST_FOR_IN_STMT:
+            xa_return_storage_prepass_scan_block(scan, stmt->as.for_in_stmt.body);
+            return;
+        case AST_TRY_CATCH:
+            xa_return_storage_prepass_scan_block(scan, stmt->as.try_catch.try_body);
+            for (int i = 0; i < stmt->as.try_catch.catch_count; i++) {
+                XrCatchClause *clause = stmt->as.try_catch.catch_clauses[i];
+                if (clause)
+                    xa_return_storage_prepass_scan_block(scan, clause->body);
+            }
+            return;
+        case AST_MATCH_EXPR:
+            for (int i = 0; i < stmt->as.match_expr.arm_count; i++)
+                xa_return_storage_prepass_scan_stmt(scan, stmt->as.match_expr.arms[i]);
+            return;
+        case AST_MATCH_ARM:
+            xa_return_storage_prepass_scan_block(scan, stmt->as.match_arm.body);
+            return;
+        default:
+            return;
+    }
+}
+
+static void xa_ensure_function_return_storage_prepass(XaInferContext *ctx, XaSymbolLinks *links) {
+    if (!ctx || !links || links->return_storage_scanned || links->return_storage_scan_in_progress)
+        return;
+    AstNode *fn_node = links->function_decl_node;
+    if (!fn_node || fn_node->type != AST_FUNCTION_DECL || !fn_node->as.function_decl.body)
+        return;
+
+    links->return_storage_scan_in_progress = true;
+    XaReturnStoragePrepass scan = {0};
+    xa_return_storage_prepass_scan_block(&scan, fn_node->as.function_decl.body);
+
+    if (scan.known && !scan.mixed && !scan.unknown) {
+        links->return_storage_owner = scan.owner;
+        links->return_storage_known = true;
+        links->return_storage_mixed = false;
+    } else if (scan.mixed || (scan.known && scan.unknown)) {
+        links->return_storage_known = false;
+        links->return_storage_mixed = true;
+    }
+    links->return_storage_scanned = true;
+    links->return_storage_scan_in_progress = false;
+}
+
+static void xa_record_return_storage_owner(XaInferContext *ctx, uint8_t owner) {
+    if (!ctx)
+        return;
+    if (owner != XR_STORAGE_OWNED_SYSTEM && owner != XR_STORAGE_SHARED_SYSTEM)
+        return;
+    if (!ctx->return_storage_known) {
+        ctx->return_storage_owner = owner;
+        ctx->return_storage_known = true;
+        if (ctx->return_storage_unknown)
+            ctx->return_storage_mixed = true;
+        return;
+    }
+    if (ctx->return_storage_owner != owner)
+        ctx->return_storage_mixed = true;
+}
+
+static void xa_record_return_storage_unknown(XaInferContext *ctx) {
+    if (!ctx)
+        return;
+    if (ctx->return_storage_known)
+        ctx->return_storage_mixed = true;
+    ctx->return_storage_unknown = true;
 }
 
 static XaSymbol *xa_lookup_shared_source_symbol(XaInferContext *ctx, AstNode *source) {
@@ -6963,6 +7205,59 @@ static void xa_check_const_owned_move_initializer_boundary(XaInferContext *ctx, 
              "const binding '%s' cannot take moved owned value '%s'; use owned %s = move %s "
              "or copy(%s)",
              dst_name, src_name, dst_name, src_name, src_name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+static void xa_check_decl_return_storage_boundary(XaInferContext *ctx, AstNode *decl_node) {
+    if (!ctx || !decl_node)
+        return;
+    if (decl_node->type != AST_VAR_DECL && decl_node->type != AST_CONST_DECL &&
+        decl_node->type != AST_OWNED_DECL && decl_node->type != AST_SHARED_DECL)
+        return;
+
+    VarDeclNode *var = &decl_node->as.var_decl;
+    if (!var->initializer || xa_call_is_copy_builtin(var->initializer))
+        return;
+
+    AstNode *init = xa_storage_boundary_identity_source(var->initializer);
+    uint8_t owner = XR_STORAGE_NONE;
+    const char *fn_name = NULL;
+    if (!xa_call_return_storage_owner(ctx, init, &owner, &fn_name))
+        return;
+    if (owner != XR_STORAGE_OWNED_SYSTEM && owner != XR_STORAGE_SHARED_SYSTEM)
+        return;
+
+    bool target_owned = decl_node->type == AST_OWNED_DECL;
+    bool target_shared = decl_node->type == AST_SHARED_DECL;
+    if ((owner == XR_STORAGE_OWNED_SYSTEM && target_owned) ||
+        (owner == XR_STORAGE_SHARED_SYSTEM && target_shared))
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line = var->initializer->line ? var->initializer->line : decl_node->line,
+        .column = var->initializer->column ? var->initializer->column : decl_node->column,
+    };
+    const char *dst_name = var->name ? var->name : "?";
+    const char *target_kind = decl_node->type == AST_CONST_DECL    ? "const"
+                              : decl_node->type == AST_OWNED_DECL  ? "owned"
+                              : decl_node->type == AST_SHARED_DECL ? "shared"
+                                                                   : "var";
+    char msg[384];
+    if (owner == XR_STORAGE_OWNED_SYSTEM) {
+        snprintf(msg, sizeof(msg),
+                 "%s binding '%s' cannot receive owned return from function '%s'; use owned %s = "
+                 "%s() or copy(%s())",
+                 target_kind, dst_name, fn_name ? fn_name : "?", dst_name, fn_name ? fn_name : "?",
+                 fn_name ? fn_name : "?");
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "%s binding '%s' cannot receive shared return from function '%s'; use shared %s = "
+                 "%s() or copy(%s())",
+                 target_kind, dst_name, fn_name ? fn_name : "?", dst_name, fn_name ? fn_name : "?",
+                 fn_name ? fn_name : "?");
+    }
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -7152,6 +7447,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);
         xa_check_const_owned_move_initializer_boundary(ctx, node, init_type);
         xa_check_var_owned_alias_initializer_boundary(ctx, node, init_type);
+        xa_check_decl_return_storage_boundary(ctx, node);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -7590,6 +7886,33 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->expected_type = saved_expected;
             xa_check_borrowed_return_escape(ctx, node, ret->values[0], return_type);
             xa_check_span_return_escape(ctx, node, return_type);
+            bool is_move = false;
+            AstNode *source = xa_shared_boundary_source(ret->values[0], &is_move);
+            XaSymbol *root = source ? xa_lookup_shared_source_symbol(ctx, source) : NULL;
+            if (root && root->kind == XA_SYM_VARIABLE && root->is_owned && !is_move) {
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = ret->values[0]->line ? ret->values[0]->line : node->line,
+                                  .column = ret->values[0]->column ? ret->values[0]->column
+                                                                   : node->column};
+                const char *name = source->as.variable.name ? source->as.variable.name : "?";
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "returning owned value '%s' requires move %s or copy(%s)", name, name,
+                         name);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            } else if (root && root->kind == XA_SYM_VARIABLE && root->is_owned && is_move) {
+                xa_record_return_storage_owner(ctx, XR_STORAGE_OWNED_SYSTEM);
+            } else if (root && root->kind == XA_SYM_VARIABLE && root->is_shared) {
+                xa_record_return_storage_owner(ctx, XR_STORAGE_SHARED_SYSTEM);
+            } else {
+                AstNode *ret_expr = xa_storage_boundary_identity_source(ret->values[0]);
+                uint8_t owner = XR_STORAGE_NONE;
+                if (xa_call_return_storage_owner(ctx, ret_expr, &owner, NULL))
+                    xa_record_return_storage_owner(ctx, owner);
+                else
+                    xa_record_return_storage_unknown(ctx);
+            }
         }
     } else {
         // Legacy AST multi-expression return is treated as a tuple type.

@@ -60,6 +60,10 @@ typedef struct XaInferContext {
     XrType **return_types;
     int return_type_count;
     int return_type_capacity;
+    uint8_t return_storage_owner;
+    bool return_storage_known;
+    bool return_storage_mixed;
+    bool return_storage_unknown;
 
     // File info
     const char *file_path;
