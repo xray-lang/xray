@@ -355,6 +355,7 @@ typedef struct XaBuiltinReceiverMethodSpec {
     XaBuiltinMethodTypeKind params[3];
     int param_count;
     int min_params;
+    bool is_variadic;
     XaBuiltinMethodTypeParams type_params;
     XaBuiltinMethodEffect effect;
     const char *lowering;
@@ -363,9 +364,14 @@ typedef struct XaBuiltinReceiverMethodSpec {
 static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
 #define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
                            type_params, effect, lowering)                                          \
-    {#id,         source_name, receiver,    result, {p0, p1, p2},                                  \
-     param_count, min_params,  type_params, effect, lowering},
+    {#id,        source_name, receiver,    result, {p0, p1, p2}, param_count,                      \
+     min_params, false,       type_params, effect, lowering},
+#define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
+                                    min_params, type_params, effect, lowering)                     \
+    {#id,        source_name, receiver,    result, {p0, p1, p2}, param_count,                      \
+     min_params, true,        type_params, effect, lowering},
 #include "xbuiltin_receiver_method.def"
+#undef XB_RECEIVER_VARIADIC_METHOD
 #undef XB_RECEIVER_METHOD
 };
 
@@ -494,7 +500,7 @@ static XrType *xa_builtin_receiver_method_type(XaInferContext *ctx, XrType *rece
                 xa_builtin_method_component_type(ctx, spec->params[p], receiver, type_param0);
         XrType *ret = xa_builtin_method_component_type(ctx, spec->result, receiver, type_param0);
         XrType *fn = xr_type_new_function(X, spec->param_count > 0 ? params : NULL,
-                                          spec->param_count, ret, false);
+                                          spec->param_count, ret, spec->is_variadic);
         if (fn && spec->type_params == XA_BUILTIN_TYPE_PARAMS_T) {
             const char *names[1] = {"T"};
             xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
