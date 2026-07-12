@@ -1,0 +1,14 @@
+fn consume(ch: Channel<Array<int>>, data: Array<int>) {
+    ch.send(move data)
+}
+
+fn main_value() -> int {
+    shared ch: Channel<Array<int>> = Channel(1)
+    owned data = Array<int>(2, 0)
+    data[0] = 41
+    data[1] = 1
+    consume(ch, move data)
+    return 42
+}
+
+print(main_value())

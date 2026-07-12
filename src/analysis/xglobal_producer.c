@@ -13,6 +13,7 @@
 #include "../base/xfileio.h"
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
@@ -81,6 +82,7 @@ typedef struct XgProducer {
     uint32_t nbodies;
     uint32_t body_cap;
     XgFuncId next_func_id;
+    XaAnalyzer *analyzer;
 } XgProducer;
 
 typedef struct XgPendingBody {
@@ -97,6 +99,7 @@ typedef struct XgPendingBody {
     const AstNode *body;
     const MethodDeclNode *method;
     const FunctionDeclNode *function;
+    XaSymbolLinks *links;
     XgLocalType *captured_locals;
     uint32_t captured_local_count;
     XgLocalName *captured_name_locals;
@@ -183,6 +186,22 @@ static uint32_t hash_folded32(uint64_t h) {
 
 static uint32_t hash_name32(const char *name) {
     return xg_name_id(name);
+}
+
+static uint32_t hash_param_storage_requirements32(const XaSymbolLinks *links) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    bool has_requirement = false;
+    if (!links || !links->param_storage_requirements || links->param_storage_requirement_count <= 0)
+        return 0;
+    h = fold_u64(h, (uint64_t) links->param_storage_requirement_count);
+    for (int i = 0; i < links->param_storage_requirement_count; i++) {
+        uint8_t owner = links->param_storage_requirements[i];
+        if (owner != XR_STORAGE_NONE)
+            has_requirement = true;
+        h = fold_u64(h, (uint64_t) (uint32_t) i);
+        h = fold_u64(h, (uint64_t) owner);
+    }
+    return has_requirement ? hash_folded32(h) : 0;
 }
 
 static uint64_t hash_text64(const char *text) {
@@ -277,6 +296,37 @@ static uint32_t producer_unique_body_source_node_id(const XgProducer *p, XgModul
         candidate = hash_folded32(h);
     }
     return candidate;
+}
+
+static XaSymbolLinks *producer_function_links(const XgProducer *p, const FunctionDeclNode *fn) {
+    XaSymbol *sym = NULL;
+    if (!p || !p->analyzer || !fn)
+        return NULL;
+    if (fn->symbol_id && p->analyzer->global_scope)
+        sym = xa_scope_lookup_by_id(p->analyzer->global_scope, fn->symbol_id);
+    if (!sym && fn->name)
+        sym = xa_scope_lookup(p->analyzer->global_scope, fn->name);
+    return sym && sym->kind == XA_SYM_FUNCTION ? xa_analyzer_get_links(p->analyzer, sym) : NULL;
+}
+
+static XaSymbolLinks *producer_class_links(const XgProducer *p, const ClassDeclNode *cls) {
+    XaSymbol *sym = NULL;
+    if (!p || !p->analyzer || !cls)
+        return NULL;
+    if (cls->symbol_id && p->analyzer->global_scope)
+        sym = xa_scope_lookup_by_id(p->analyzer->global_scope, cls->symbol_id);
+    if (!sym && cls->name)
+        sym = xa_scope_lookup(p->analyzer->global_scope, cls->name);
+    return sym && sym->kind == XA_SYM_CLASS ? xa_analyzer_get_links(p->analyzer, sym) : NULL;
+}
+
+static XaSymbolLinks *producer_method_links(const XgProducer *p, XrClassInfo *info,
+                                            const MethodDeclNode *method) {
+    XaSymbol *sym;
+    if (!p || !p->analyzer || !info || !method || !method->name)
+        return NULL;
+    sym = xa_class_info_lookup_member(info, method->name);
+    return sym && sym->kind == XA_SYM_METHOD ? xa_analyzer_get_links(p->analyzer, sym) : NULL;
 }
 
 static bool producer_decl_source_seen(const XgProducer *p, XgModuleId module_id,
@@ -1136,7 +1186,8 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
                                   XgMethodId owner_method_id, uint32_t name_id,
                                   uint32_t signature_key, uint32_t source_node_id,
                                   uint32_t source_span_id, uint8_t kind, const AstNode *body,
-                                  const MethodDeclNode *method, const FunctionDeclNode *function) {
+                                  const MethodDeclNode *method, const FunctionDeclNode *function,
+                                  XaSymbolLinks *links) {
     XgPendingBody *row;
     if (!body)
         return true;
@@ -1157,6 +1208,7 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
     row->body = body;
     row->method = method;
     row->function = function;
+    row->links = links;
     return true;
 }
 
@@ -7604,7 +7656,7 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
     if (!producer_enqueue_body(bc->producer, child_func_id, bc->module_id, XG_NO_ID,
                                bc->current_class_id, XG_NO_ID, hash_name32(name), signature_key,
                                source_node_id, (uint32_t) node->line, XG_BODY_FUNCTION, fn->body,
-                               NULL, fn))
+                               NULL, fn, NULL))
         return;
     pending = &bc->producer->bodies[bc->producer->nbodies - 1];
     if (!producer_snapshot_body_captures(pending, bc)) {
@@ -8493,6 +8545,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.effect_bits = bc.effect_bits;
     row.escape_bits = bc.escape_bits;
     row.capability_bits = bc.capability_bits;
+    row.param_storage_key = hash_param_storage_requirements32(pending->links);
     row.callsite_start = bc.callsite_start;
     row.callsite_count = bc.callsite_count;
     row.metadata_use_bits = bc.metadata_use_bits;
@@ -8558,7 +8611,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
                                  hash_name32(fn->name), decl.signature_key, decl.source_node_id,
-                                 (uint32_t) node->line, XG_BODY_FUNCTION, fn->body, NULL, fn);
+                                 (uint32_t) node->line, XG_BODY_FUNCTION, fn->body, NULL, fn,
+                                 producer_function_links(p, fn));
 }
 
 static bool add_monomorphized_class_instantiation(XgProducer *p, XgModuleId module_id,
@@ -8609,6 +8663,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     uint32_t method_start = p->evidence->nmethods + 1;
     uint32_t method_count = 0;
     uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
+    XaSymbolLinks *class_links = producer_class_links(p, cls);
+    XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = decl_id;
@@ -8660,7 +8716,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
                                    method.method_id, hash_name32(m->name), method.signature_key,
                                    method.source_node_id, (uint32_t) method_node->line,
-                                   XG_BODY_METHOD, m->body, m, NULL))
+                                   XG_BODY_METHOD, m->body, m, NULL,
+                                   producer_method_links(p, class_info, m)))
             return false;
     }
     for (int i = 0; i < cls->field_count; i++) {
@@ -9011,7 +9068,7 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
         XgFuncId module_func_id = producer_next_func_id(p);
         if (!producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
                                    hash_name32("<module-init>"), 0, 0, 0, XG_BODY_MODULE_INIT, ast,
-                                   NULL, NULL))
+                                   NULL, NULL, NULL))
             return false;
     }
     return true;
@@ -9164,6 +9221,15 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
     XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
     uint32_t imported_module_count) {
+    return xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        evidence, graph, profile, imported_summary_hash, imported_modules, imported_module_count,
+        NULL);
+}
+
+XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+    XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
+    uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
+    uint32_t imported_module_count, XaAnalyzer *analyzer) {
     XgBuildKey key;
     XgProducer producer;
     if (!evidence || !graph || (imported_module_count > 0 && !imported_modules))
@@ -9175,6 +9241,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
     memset(&producer, 0, sizeof(producer));
     producer.evidence = evidence;
     producer.next_func_id = 1;
+    producer.analyzer = analyzer;
 
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int idx = graph->topo_order[ti];

@@ -1486,9 +1486,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         if (evidence_cache_verbose)
             printf("[xi-native] evidence cache producer skip: pre_mono_generic_summary\n");
     } else {
-        if (!xg_global_evidence_build_from_module_graph_with_imported_modules(
+        if (!xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
                 &pre_mono_generic_evidence, graph, xg_profile, imported_summary_hash,
-                imported_summary_modules, imported_summary_module_count)) {
+                imported_summary_modules, imported_summary_module_count, shared_analyzer)) {
             fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
             goto fail_free_analyzer;
         }
@@ -1582,9 +1582,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         if (evidence_cache_verbose)
             printf("[xi-native] evidence cache producer skip: global_evidence_summary\n");
     } else {
-        if (!xg_global_evidence_build_from_module_graph_with_imported_modules(
+        if (!xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
                 &global_evidence, graph, xg_profile, imported_summary_hash,
-                imported_summary_modules, imported_summary_module_count)) {
+                imported_summary_modules, imported_summary_module_count, shared_analyzer)) {
             fprintf(stderr, "Error: failed to build global evidence\n");
             goto fail_free_ir;
         }
