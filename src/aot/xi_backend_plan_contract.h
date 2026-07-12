@@ -37,6 +37,8 @@ typedef enum XaotBackendContractIssue {
     XAOT_BACKEND_CONTRACT_CAPABILITY_PROFILE_REJECTED,
     XAOT_BACKEND_CONTRACT_METADATA_PROFILE_REJECTED,
     XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED,
+    XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH,
+    XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED,
 } XaotBackendContractIssue;
 
 static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIssue issue) {
@@ -63,6 +65,10 @@ static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIs
             return "metadata_profile_rejected";
         case XAOT_BACKEND_CONTRACT_STATIC_DATA_PROFILE_REJECTED:
             return "static_data_profile_rejected";
+        case XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH:
+            return "generic_body_identity_mismatch";
+        case XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED:
+            return "generic_body_action_rejected";
     }
     return "unknown";
 }
@@ -256,6 +262,53 @@ xaot_backend_contract_static_data_plan_allowed(const XaotStaticDataPlan *plan,
     }
     xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
     return true;
+}
+
+static inline bool xaot_backend_contract_generic_body_call_allowed(
+    const XaotGenericBodyPlan *plan, XgCallsiteId callsite_id, XgFuncId owner_func_id,
+    XgFuncId target_func_id, XaotBackendContractIssue *out_issue) {
+    /* Inlining can move a value into a different XiFunc by CGen time. The
+     * verified root callsite id remains the stable generic-body anchor. */
+    (void) owner_func_id;
+    if (!plan) {
+        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+        return false;
+    }
+    if (callsite_id == XG_NO_ID || target_func_id == XG_NO_ID ||
+        plan->root_callsite_id != callsite_id) {
+        xaot_backend_contract_set_issue(out_issue,
+                                        XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH);
+        return false;
+    }
+
+    switch ((XaotGenericBodyAction) plan->action) {
+        case XAOT_GENERIC_BODY_CLONE:
+            if (plan->specialized_body_func_id != XG_NO_ID &&
+                target_func_id == plan->specialized_body_func_id) {
+                xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
+                return true;
+            }
+            xaot_backend_contract_set_issue(out_issue,
+                                            XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH);
+            return false;
+        case XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY:
+        case XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL:
+            if (plan->origin_body_func_id != XG_NO_ID &&
+                target_func_id == plan->origin_body_func_id) {
+                xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
+                return true;
+            }
+            xaot_backend_contract_set_issue(out_issue,
+                                            XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH);
+            return false;
+        case XAOT_GENERIC_BODY_REJECT:
+            xaot_backend_contract_set_issue(out_issue,
+                                            XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED);
+            return false;
+    }
+
+    xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED);
+    return false;
 }
 
 #endif /* XI_BACKEND_PLAN_CONTRACT_H */

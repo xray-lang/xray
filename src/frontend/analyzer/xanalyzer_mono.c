@@ -962,26 +962,16 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
 
     uint32_t rep_sig = compute_rep_signature(type_args, type_arg_count);
 
-    /* Pre-compute mangled name for class/struct generics so we can
-     * do exact-name dedup instead of rep-signature dedup. This avoids
-     * conflating Box<string> and Box<MyClass> which share XR_SLOT_PTR. */
-    char *candidate_mangled = NULL;
-    if (is_class_generic) {
-        candidate_mangled = xr_mono_mangle(generic_name, type_args, type_arg_count);
-    }
+    char *candidate_mangled = xr_mono_mangle(generic_name, type_args, type_arg_count);
+    if (!candidate_mangled)
+        return NULL;
 
-    // Check for duplicate; class generics compare by mangled name,
-    // function generics compare by rep-signature (allows rep-sharing).
+    // Concrete type arguments define instance identity. ABI-equivalent instances
+    // may share code only through explicit verified plans, not collector dedup.
     int per_generic = 0;
     for (int i = 0; i < c->count; i++) {
         if (strcmp(c->instances[i].generic_name, generic_name) == 0) {
-            bool is_dup = false;
-            if (is_class_generic && candidate_mangled) {
-                is_dup = (strcmp(c->instances[i].mangled_name, candidate_mangled) == 0);
-            } else {
-                is_dup = (c->instances[i].rep_signature == rep_sig &&
-                          c->instances[i].type_arg_count == type_arg_count);
-            }
+            bool is_dup = strcmp(c->instances[i].mangled_name, candidate_mangled) == 0;
             if (is_dup) {
                 xr_free(candidate_mangled);
                 return c->instances[i].mangled_name;  // Already registered
@@ -1019,37 +1009,25 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
     inst->generic_name = xr_strdup(generic_name);
     inst->type_args = type_args;
     inst->type_arg_count = type_arg_count;
-    inst->mangled_name = candidate_mangled
-                             ? candidate_mangled
-                             : xr_mono_mangle(generic_name, type_args, type_arg_count);
+    inst->mangled_name = candidate_mangled;
     inst->rep_signature = rep_sig;
     inst->is_class_generic = is_class_generic;
     return inst->mangled_name;
 }
 
-// Lookup mangled name (same dedup logic as add: class generics by name,
-// function generics by rep-signature).
+// Lookup the exact concrete instance.
 static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *generic_name,
                                             XrTypeRef **type_args, int type_arg_count) {
     if (!c || !generic_name)
         return NULL;
-    uint32_t rep_sig = compute_rep_signature(type_args, type_arg_count);
     char *candidate_mangled = xr_mono_mangle(generic_name, type_args, type_arg_count);
     const char *result = NULL;
     for (int i = 0; i < c->count; i++) {
         if (strcmp(c->instances[i].generic_name, generic_name) != 0)
             continue;
-        if (c->instances[i].is_class_generic) {
-            if (candidate_mangled && strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
-                result = c->instances[i].mangled_name;
-                break;
-            }
-        } else {
-            if (c->instances[i].rep_signature == rep_sig &&
-                c->instances[i].type_arg_count == type_arg_count) {
-                result = c->instances[i].mangled_name;
-                break;
-            }
+        if (candidate_mangled && strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
+            result = c->instances[i].mangled_name;
+            break;
         }
     }
     xr_free(candidate_mangled);

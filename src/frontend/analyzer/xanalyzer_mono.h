@@ -72,8 +72,8 @@ typedef struct {
     XrTypeRef **type_args;     // Concrete type ref arguments
     int type_arg_count;
     const char *mangled_name;  // Mangled name (heap-allocated)
-    uint32_t rep_signature;    // Combined slot-type signature for dedup
-    bool is_class_generic;     // true for class/struct generics (disable rep-sharing)
+    uint32_t rep_signature;    // Combined slot-type signature for ABI planning
+    bool is_class_generic;     // true for class/struct generics
 } XaMonoInstance;
 
 typedef struct {
@@ -86,8 +86,7 @@ XR_FUNC void xa_mono_collector_init(XaMonoCollector *c);
 XR_FUNC void xa_mono_collector_free(XaMonoCollector *c);
 
 // Add a generic instantiation. Returns the mangled name (owned by collector).
-// For class/struct generics (is_class_generic=true), dedup uses mangled name
-// instead of rep-signature to avoid conflating distinct reference types.
+// Concrete type arguments define identity for function, class, and struct instances.
 XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
                                           XrTypeRef **type_args, int type_arg_count,
                                           bool is_class_generic);

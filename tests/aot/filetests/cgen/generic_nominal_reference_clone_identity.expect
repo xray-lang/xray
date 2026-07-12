@@ -1,0 +1,4 @@
+contains=xaot-plan v0
+regex=generic-body-plan [0-9]+ .*action=clone .*reason=none
+c_regex=generic_nominal_reference_clone_identity_[0-9a-f]+_score_Circle_[0-9]+\(
+c_regex=generic_nominal_reference_clone_identity_[0-9a-f]+_score_Square_[0-9]+\(

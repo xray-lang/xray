@@ -657,6 +657,50 @@ static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t 
     return match;
 }
 
+static uint32_t xi_lower_function_evidence_source_node_id(XiLower *l, const AstNode *func_node,
+                                                          const FunctionDeclNode *fdecl) {
+    uint32_t fallback = xi_lower_source_node_id(l, func_node);
+    const XgGlobalEvidence *ev = l ? l->global_evidence : NULL;
+    const char *name;
+    uint32_t name_id;
+    uint32_t source_span_id;
+    const XgDeclSummary *decl_match = NULL;
+    const XgBodySummary *body_match = NULL;
+    if (!l || !func_node || !fdecl || !ev)
+        return fallback;
+    name = fdecl->name && fdecl->name[0] ? fdecl->name : "<anonymous>";
+    name_id = xg_name_id(name);
+    source_span_id = (uint32_t) func_node->line;
+    if (name_id == 0 || source_span_id == 0)
+        return fallback;
+
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->kind != XG_DECL_FUNC || decl->name_id != name_id ||
+            decl->source_span_id != source_span_id ||
+            !xi_lower_evidence_module_matches(l, decl->module_id))
+            continue;
+        if (decl_match)
+            return fallback;
+        decl_match = decl;
+    }
+    if (!decl_match)
+        return fallback;
+
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->kind != XG_BODY_FUNCTION || body->owner_decl_id != decl_match->decl_id ||
+            body->name_id != name_id || !xi_lower_evidence_module_matches(l, body->module_id))
+            continue;
+        if (body_match)
+            return fallback;
+        body_match = body;
+    }
+    if (body_match && body_match->source_node_id != 0)
+        return body_match->source_node_id;
+    return decl_match->source_node_id != 0 ? decl_match->source_node_id : fallback;
+}
+
 static void xi_lower_bind_current_func_body_id(XiLower *l, XgFuncId body_func_id) {
     if (!l || !l->func || body_func_id == XG_NO_ID)
         return;
@@ -1261,7 +1305,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
-    xi_lower_bind_function_body_id(&l, xi_lower_source_node_id(&l, func_node));
+    xi_lower_bind_function_body_id(&l,
+                                   xi_lower_function_evidence_source_node_id(&l, func_node, fdecl));
 
     /* FFI: @extern("C") functions are bodyless foreign declarations. Record
      * the C symbol + optional dylib; the body below stays empty and a trivial

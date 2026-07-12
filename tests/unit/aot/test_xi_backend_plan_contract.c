@@ -169,11 +169,41 @@ static void test_profile_contracts(void) {
     passed++;
 }
 
+static void test_generic_body_contract(void) {
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    XaotGenericBodyPlan plan = {0};
+
+    plan.root_callsite_id = 11;
+    plan.owner_func_id = 7;
+    plan.origin_body_func_id = 3;
+    plan.specialized_body_func_id = 9;
+    plan.action = XAOT_GENERIC_BODY_CLONE;
+    ASSERT_TRUE(xaot_backend_contract_generic_body_call_allowed(&plan, 11, 7, 9, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+
+    ASSERT_TRUE(!xaot_backend_contract_generic_body_call_allowed(&plan, 11, 7, 3, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH);
+
+    plan.action = XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
+    ASSERT_TRUE(xaot_backend_contract_generic_body_call_allowed(&plan, 11, 7, 3, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+
+    ASSERT_TRUE(!xaot_backend_contract_generic_body_call_allowed(&plan, 12, 7, 3, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH);
+
+    plan.action = XAOT_GENERIC_BODY_REJECT;
+    ASSERT_TRUE(!xaot_backend_contract_generic_body_call_allowed(&plan, 11, 7, 3, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED);
+
+    passed++;
+}
+
 int main(void) {
     test_runtime_helper_contract();
     test_target_case_contract();
     test_itable_requires_interface_abi_plan();
     test_profile_contracts();
+    test_generic_body_contract();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }
