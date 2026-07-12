@@ -1,0 +1,3 @@
+var made = Bytes(4)
+var reserved = Bytes.withCapacity(4)
+var fromString = Bytes.fromString("x")
