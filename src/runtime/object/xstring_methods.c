@@ -176,7 +176,7 @@ static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     XrString *str = str_self(self);
     int32_t byte_len = (int32_t) (str ? str->length : 0);
     XrCoroutine *coro = NULL;
-    XrArray *bytes = xr_array_bytes_new(coro, byte_len);
+    XrArray *bytes = xr_byte_array_new(coro, byte_len);
     if (!bytes)
         return xr_null();
     if (byte_len > 0)

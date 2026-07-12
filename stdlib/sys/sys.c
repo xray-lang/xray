@@ -938,7 +938,7 @@ static XrValue sys_pipe_read_value(XrVMRuntime *isolate, XrPipeHandle handle, in
     if (max_bytes < 0 || max_bytes > INT32_MAX || src_len < 0 || src_len > max_bytes)
         return xr_null();
 
-    XrArray *bytes = xr_array_bytes_new(xr_current_coro(isolate), (int32_t) src_len);
+    XrArray *bytes = xr_byte_array_new(xr_current_coro(isolate), (int32_t) src_len);
     if (!bytes)
         return xr_null();
     if (src && src_len > 0)
@@ -953,7 +953,7 @@ static XrValue sys_pipe_read_sync_value(XrVMRuntime *isolate, XrPipeHandle handl
     if (max_bytes < 0 || max_bytes > INT32_MAX)
         return xr_null();
 
-    XrArray *bytes = xr_array_bytes_new(xr_current_coro(isolate), (int32_t) max_bytes);
+    XrArray *bytes = xr_byte_array_new(xr_current_coro(isolate), (int32_t) max_bytes);
     if (!bytes)
         return xr_null();
 

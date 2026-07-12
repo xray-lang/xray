@@ -254,7 +254,7 @@ static XrValue m_append_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
-    if (!xr_array_bytes_append_from_span(dst, src_data, src_length, src_guard)) {
+    if (!xr_byte_array_append_from_span(dst, src_data, src_length, src_guard)) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
                                          XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG);
         xr_vm_unwind_with_trace(iso, exc);
@@ -277,7 +277,7 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
-    if (!xr_array_bytes_repeat_from_tail(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]))) {
+    if (!xr_byte_array_repeat_from_tail(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]))) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
                                          XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
         xr_vm_unwind_with_trace(iso, exc);
