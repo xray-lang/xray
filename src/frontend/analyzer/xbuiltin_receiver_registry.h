@@ -72,7 +72,22 @@ typedef enum {
     XA_BUILTIN_UNSAFE_REQUIRED,
 } XaBuiltinMethodUnsafeRequirement;
 
+typedef enum {
+#define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
+                           type_params, effect, allocation, unsafe_requirement, lowering)          \
+    XA_BUILTIN_RECEIVER_METHOD_##id,
+#define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
+                                    min_params, type_params, effect, allocation,                   \
+                                    unsafe_requirement, lowering)                                  \
+    XA_BUILTIN_RECEIVER_METHOD_##id,
+#include "xbuiltin_receiver_method.def"
+#undef XB_RECEIVER_VARIADIC_METHOD
+#undef XB_RECEIVER_METHOD
+    XA_BUILTIN_RECEIVER_METHOD_COUNT,
+} XaBuiltinReceiverMethodId;
+
 typedef struct XaBuiltinReceiverMethodSpec {
+    XaBuiltinReceiverMethodId method_id;
     const char *id;
     const char *source_name;
     XaBuiltinReceiverKind receiver;
@@ -91,13 +106,37 @@ typedef struct XaBuiltinReceiverMethodSpec {
 static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
 #define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
                            type_params, effect, allocation, unsafe_requirement, lowering)          \
-    {#id,   source_name, receiver, result,     {p0, p1, p2},       param_count, min_params,        \
-     false, type_params, effect,   allocation, unsafe_requirement, lowering},
+    {XA_BUILTIN_RECEIVER_METHOD_##id,                                                              \
+     #id,                                                                                          \
+     source_name,                                                                                  \
+     receiver,                                                                                     \
+     result,                                                                                       \
+     {p0, p1, p2},                                                                                 \
+     param_count,                                                                                  \
+     min_params,                                                                                   \
+     false,                                                                                        \
+     type_params,                                                                                  \
+     effect,                                                                                       \
+     allocation,                                                                                   \
+     unsafe_requirement,                                                                           \
+     lowering},
 #define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
                                     min_params, type_params, effect, allocation,                   \
                                     unsafe_requirement, lowering)                                  \
-    {#id,  source_name, receiver, result,     {p0, p1, p2},       param_count, min_params,         \
-     true, type_params, effect,   allocation, unsafe_requirement, lowering},
+    {XA_BUILTIN_RECEIVER_METHOD_##id,                                                              \
+     #id,                                                                                          \
+     source_name,                                                                                  \
+     receiver,                                                                                     \
+     result,                                                                                       \
+     {p0, p1, p2},                                                                                 \
+     param_count,                                                                                  \
+     min_params,                                                                                   \
+     true,                                                                                         \
+     type_params,                                                                                  \
+     effect,                                                                                       \
+     allocation,                                                                                   \
+     unsafe_requirement,                                                                           \
+     lowering},
 #include "xbuiltin_receiver_method.def"
 #undef XB_RECEIVER_VARIADIC_METHOD
 #undef XB_RECEIVER_METHOD
@@ -105,6 +144,14 @@ static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
 
 static inline size_t xa_builtin_receiver_method_count(void) {
     return sizeof(xa_builtin_receiver_methods) / sizeof(xa_builtin_receiver_methods[0]);
+}
+
+static inline const XaBuiltinReceiverMethodSpec *
+xa_builtin_receiver_method_by_id(XaBuiltinReceiverMethodId method_id) {
+    if (method_id < 0 || method_id >= XA_BUILTIN_RECEIVER_METHOD_COUNT)
+        return NULL;
+    const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[method_id];
+    return spec->method_id == method_id ? spec : NULL;
 }
 
 #endif  // XBUILTIN_RECEIVER_REGISTRY_H
