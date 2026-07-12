@@ -4128,6 +4128,58 @@ static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *b
 
 static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                   const ObjectLiteralNode **out_literal);
+static bool body_json_shape_id_same_shape(XgBodyCollect *bc, XgJsonShapeId left_id,
+                                          XgJsonShapeId right_id);
+
+static XgJsonShapeId
+body_lookup_sequence_json_ternary_arm_shape(XgBodyCollect *bc, const AstNode *expr,
+                                            const ObjectLiteralNode **out_literal) {
+    XgLocalType *local;
+    XgJsonShapeId shape_id;
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !expr)
+        return XG_NO_ID;
+    local = body_lookup_local_sequence(bc, expr);
+    if (local && local->sequence_elem_type_key != 0) {
+        if (local->sequence_elem_json_shape_id != XG_NO_ID) {
+            if (out_literal)
+                *out_literal = local->sequence_elem_json_shape_literal;
+            return local->sequence_elem_json_shape_id;
+        }
+        return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
+    }
+    shape_id = body_lookup_static_sequence_json_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    return body_lookup_call_sequence_json_shape(bc, expr, out_literal);
+}
+
+static XgJsonShapeId
+body_lookup_sequence_json_ternary_shape(XgBodyCollect *bc, const AstNode *expr,
+                                        const ObjectLiteralNode **out_literal) {
+    const AstNode *value = body_json_receiver_unwrap(expr);
+    const ObjectLiteralNode *then_literal = NULL;
+    const ObjectLiteralNode *else_literal = NULL;
+    XgJsonShapeId then_shape_id;
+    XgJsonShapeId else_shape_id;
+    if (out_literal)
+        *out_literal = NULL;
+    if (!bc || !value || value->type != AST_TERNARY)
+        return XG_NO_ID;
+    then_shape_id =
+        body_lookup_sequence_json_ternary_arm_shape(bc, value->as.ternary.true_expr, &then_literal);
+    if (then_shape_id == XG_NO_ID)
+        return XG_NO_ID;
+    else_shape_id = body_lookup_sequence_json_ternary_arm_shape(bc, value->as.ternary.false_expr,
+                                                                &else_literal);
+    if (else_shape_id == XG_NO_ID ||
+        !body_json_shape_id_same_shape(bc, then_shape_id, else_shape_id))
+        return XG_NO_ID;
+    if (out_literal)
+        *out_literal = then_literal ? then_literal : else_literal;
+    return then_shape_id;
+}
 
 static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                      const ObjectLiteralNode **out_literal) {
@@ -4151,6 +4203,12 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
     {
         XgJsonShapeId shape_id =
             body_lookup_static_sequence_json_shape(bc, array_expr, out_literal);
+        if (shape_id != XG_NO_ID)
+            return shape_id;
+    }
+    {
+        XgJsonShapeId shape_id =
+            body_lookup_sequence_json_ternary_shape(bc, array_expr, out_literal);
         if (shape_id != XG_NO_ID)
             return shape_id;
     }
@@ -7563,8 +7621,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                                      source_sequence_local);
             if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref) &&
                 !sequence_json_literal) {
-                sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
                     bc, node->as.var_decl.initializer, &sequence_json_literal);
+                if (sequence_json_shape_id == XG_NO_ID)
+                    sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                        bc, node->as.var_decl.initializer, &sequence_json_literal);
             }
             if (sequence_json_shape_id == XG_NO_ID && sequence_json_literal) {
                 sequence_json_shape_id = body_add_json_shape_for_literal(
@@ -7613,8 +7674,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 source_sequence_elem_type_ref =
                     body_type_ref_sequence_elem_type_ref(source_sequence_type_ref);
                 if (body_type_ref_is_json(source_sequence_elem_type_ref)) {
-                    source_sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                    source_sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
                         bc, node->as.assignment.value, &source_sequence_json_literal);
+                    if (source_sequence_json_shape_id == XG_NO_ID)
+                        source_sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                            bc, node->as.assignment.value, &source_sequence_json_literal);
                 }
             }
             walk_body_for_calls(bc, node->as.assignment.value);
@@ -7668,6 +7732,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             else if (target_sequence_kind != 0)
                 body_bind_sequence_local(bc, node->as.assignment.name, target_sequence_kind,
                                          target_sequence_elem_type_key, NULL);
+            if (source_sequence_json_shape_id == XG_NO_ID && target_sequence_kind != 0 &&
+                target_sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0)) {
+                source_sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
+                    bc, node->as.assignment.value, &source_sequence_json_literal);
+            }
             if (source_sequence_json_shape_id != XG_NO_ID)
                 body_bind_sequence_json_shape_local(bc, node->as.assignment.name,
                                                     source_sequence_json_shape_id,

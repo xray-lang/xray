@@ -1,0 +1,24 @@
+fn jsonArrayTernaryExpressionContainerReceiverPlan(flag: bool) -> int {
+    var left: Array<Json> = [{ name: "ada", age: 7 }]
+    var right: Array<Json> = [{ name: "bob", age: 8 }]
+    return (flag ? left : right)[0].age
+}
+
+fn jsonArrayTernaryInitializedContainerReceiverPlan(flag: bool) -> int {
+    var left: Array<Json> = [{ name: "ada", age: 7 }]
+    var right: Array<Json> = [{ name: "bob", age: 8 }]
+    var users: Array<Json> = flag ? left : right
+    return users[0].age
+}
+
+fn jsonArrayTernaryAssignedContainerReceiverPlan(flag: bool) -> int {
+    var left: Array<Json> = [{ name: "ada", age: 7 }]
+    var right: Array<Json> = [{ name: "bob", age: 8 }]
+    var users: Array<Json> = [{ name: "seed", age: 0 }]
+    users = flag ? left : right
+    return users[0].age
+}
+
+print(jsonArrayTernaryExpressionContainerReceiverPlan(true))
+print(jsonArrayTernaryInitializedContainerReceiverPlan(false))
+print(jsonArrayTernaryAssignedContainerReceiverPlan(true))
