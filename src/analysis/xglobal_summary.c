@@ -142,7 +142,12 @@ static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     hash = hash_u32(hash, row->type_key);
     hash = hash_u32(hash, row->signature_key);
     hash = hash_u32(hash, row->source_span_id);
-    return hash_u32(hash, row->derive_flags);
+    hash = hash_u32(hash, row->derive_flags);
+    hash = hash_u32(hash, row->storage_flags);
+    hash = hash_u8(hash, row->storage_owner);
+    hash = hash_u8(hash, row->storage_mutability);
+    hash = hash_u8(hash, row->address_identity);
+    return hash_u8(hash, row->materialization_kind);
 }
 
 static uint64_t hash_class_summary(uint64_t hash, const XgClassSummary *row) {
@@ -1110,6 +1115,12 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
             return "read_mem";
         case XG_BODY_MAY_CALL:
             return "call";
+        case XG_BODY_MAY_SPAWN:
+            return "spawn";
+        case XG_BODY_ACCESSES_MUTABLE_MODULE:
+            return "mutable_module";
+        case XG_BODY_OBSERVES_TASK_ID:
+            return "task_identity";
         default:
             return "unknown";
     }
@@ -1117,8 +1128,10 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
 
 XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
     static const uint32_t effects[] = {
-        XG_BODY_MAY_THROW,       XG_BODY_MAY_SUSPEND,  XG_BODY_MAY_ALLOC, XG_BODY_MAY_MUTATE,
-        XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM, XG_BODY_MAY_CALL,
+        XG_BODY_MAY_THROW,        XG_BODY_MAY_SUSPEND,     XG_BODY_MAY_ALLOC,
+        XG_BODY_MAY_MUTATE,       XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM,
+        XG_BODY_MAY_CALL,         XG_BODY_MAY_SPAWN,       XG_BODY_ACCESSES_MUTABLE_MODULE,
+        XG_BODY_OBSERVES_TASK_ID,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(effects) / sizeof(effects[0]));
@@ -1230,6 +1243,8 @@ XR_FUNC const char *xg_capability_name(uint32_t capability) {
             return "generator";
         case XG_CAP_STACKTRACE:
             return "stacktrace";
+        case XG_CAP_PARALLEL:
+            return "parallel";
         default:
             return "unknown";
     }
@@ -1244,6 +1259,7 @@ XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
         XG_CAP_TASK,         XG_CAP_ATOMIC,          XG_CAP_WORK_QUEUE,
         XG_CAP_RESULT_GROUP, XG_CAP_COUNTDOWN_LATCH, XG_CAP_SEMAPHORE,
         XG_CAP_EVENT_COUNT,  XG_CAP_GENERATOR,       XG_CAP_STACKTRACE,
+        XG_CAP_PARALLEL,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(capabilities) / sizeof(capabilities[0]));
@@ -2604,6 +2620,121 @@ static bool xg_interface_callsite_compose_target_set(const XgGlobalEvidence *evi
     return target_count > 0;
 }
 
+static bool xg_body_reachability_mark_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
+                                          uint8_t *reachable, uint32_t reachable_count);
+
+static bool xg_body_reachability_mark_method(const XgGlobalEvidence *evidence, XgMethodId method_id,
+                                             uint8_t *reachable, uint32_t reachable_count) {
+    uint32_t target_index = 0;
+    return xg_global_evidence_find_body_index_by_method(evidence, method_id, &target_index) &&
+           xg_body_reachability_mark_rec(evidence, target_index, reachable, reachable_count);
+}
+
+static bool xg_body_reachability_mark_call(const XgGlobalEvidence *evidence,
+                                           const XgCallsiteSummary *call, uint8_t *reachable,
+                                           uint32_t reachable_count) {
+    uint32_t target_index = 0;
+    if (!call)
+        return false;
+    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN)
+        return true;
+    if (call->kind == XG_CALL_DIRECT_FUNC ||
+        (call->kind == XG_CALL_CLOSURE && call->static_target_func_id != XG_NO_ID)) {
+        return xg_global_evidence_find_body_index_by_func(evidence, call->static_target_func_id,
+                                                          &target_index) &&
+               xg_body_reachability_mark_rec(evidence, target_index, reachable, reachable_count);
+    }
+    if (call->kind == XG_CALL_CLOSURE)
+        /* Closure and builtin calls carry their local effect/capability
+         * contract on the owner body.  Concrete direct function targets are
+         * recorded above; no declaration-tree fallback is permitted here. */
+        return true;
+    if (xg_method_callsite_is_direct_dispatch(evidence, call))
+        return xg_body_reachability_mark_method(evidence, call->method_id, reachable,
+                                                reachable_count);
+    if (call->kind == XG_CALL_INTERFACE) {
+        XgMethodId direct = XG_NO_ID;
+        uint32_t target_count = 0;
+        if (xg_interface_callsite_direct_target_method(evidence, call, &direct))
+            return xg_body_reachability_mark_method(evidence, direct, reachable, reachable_count);
+        for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
+            const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
+            const XgMethodSummary *target;
+            if (!xg_global_evidence_interface_impl_matches(evidence, impl->interface_id,
+                                                           call->receiver_static_interface_id) ||
+                xg_global_evidence_effective_interface_implementor_seen(
+                    evidence, call->receiver_static_interface_id, impl->implementor_class_id, i))
+                continue;
+            target = xg_global_evidence_find_method_by_signature_in_hierarchy(
+                evidence, impl->implementor_class_id, call->method_name_id,
+                call->method_signature_key);
+            if (!target)
+                return false;
+            if ((target->flags & XG_METHOD_NATIVE) == 0 &&
+                !xg_body_reachability_mark_method(evidence, target->method_id, reachable,
+                                                  reachable_count))
+                return false;
+            target_count++;
+        }
+        return target_count > 0;
+    }
+    if (call->kind == XG_CALL_METHOD) {
+        uint32_t target_count = 0;
+        for (uint32_t i = 0; i < evidence->nclasses; i++) {
+            const XgClassSummary *candidate = &evidence->classes[i];
+            const XgMethodSummary *target;
+            if (!xg_class_summary_is_runtime_class(candidate) ||
+                !xg_global_evidence_class_is_descendant_or_self(evidence, candidate->class_id,
+                                                                call->receiver_static_class_id))
+                continue;
+            target = xg_global_evidence_find_method_by_signature_in_hierarchy(
+                evidence, candidate->class_id, call->method_name_id, call->method_signature_key);
+            if (!target)
+                return false;
+            if ((target->flags & XG_METHOD_NATIVE) == 0 &&
+                !xg_body_reachability_mark_method(evidence, target->method_id, reachable,
+                                                  reachable_count))
+                return false;
+            target_count++;
+        }
+        return target_count > 0;
+    }
+    return false;
+}
+
+static bool xg_body_reachability_mark_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
+                                          uint8_t *reachable, uint32_t reachable_count) {
+    const XgBodySummary *body;
+    if (!evidence || !reachable || body_index >= evidence->nbodies || body_index >= reachable_count)
+        return false;
+    if (reachable[body_index])
+        return true;
+    reachable[body_index] = 1;
+    body = &evidence->bodies[body_index];
+    if ((body->effect_bits & XG_BODY_MAY_CALL) == 0)
+        return true;
+    if (body->callsite_count == 0)
+        return false;
+    for (uint32_t i = 0; i < body->callsite_count; i++) {
+        const XgCallsiteSummary *call =
+            xg_global_evidence_find_callsite(evidence, (XgCallsiteId) (body->callsite_start + i));
+        if (!call || call->owner_func_id != body->func_id || call->body_ordinal != i ||
+            !xg_body_reachability_mark_call(evidence, call, reachable, reachable_count))
+            return false;
+    }
+    return true;
+}
+
+XR_FUNC bool xg_body_reachability_mark_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                          XgFuncId root_func_id, uint8_t *reachable,
+                                                          uint32_t reachable_count) {
+    uint32_t root_index = 0;
+    if (!evidence || !reachable || reachable_count < evidence->nbodies ||
+        !xg_global_evidence_find_body_index_by_func(evidence, root_func_id, &root_index))
+        return false;
+    return xg_body_reachability_mark_rec(evidence, root_index, reachable, reachable_count);
+}
+
 static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
                                         uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits) {
     const XgBodySummary *body;
@@ -3256,9 +3387,11 @@ static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *e
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
                 "decl id=%u module=%u node=%u kind=%u flags=0x%x name=%u type=%u sig=%u span=%u "
-                "derive=0x%x\n",
+                "derive=0x%x storage_flags=0x%x owner=%u mutability=%u address=%u materialize=%u\n",
                 d->decl_id, d->module_id, d->source_node_id, (unsigned) d->kind, d->flags,
-                d->name_id, d->type_key, d->signature_key, d->source_span_id, d->derive_flags);
+                d->name_id, d->type_key, d->signature_key, d->source_span_id, d->derive_flags,
+                d->storage_flags, (unsigned) d->storage_owner, (unsigned) d->storage_mutability,
+                (unsigned) d->address_identity, (unsigned) d->materialization_kind);
     }
 }
 
@@ -3801,6 +3934,10 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
     for (uint32_t i = 0; i < decl_count; i++) {
         XgDeclSummary row;
         uint32_t kind = 0;
+        uint32_t storage_owner = 0;
+        uint32_t storage_mutability = 0;
+        uint32_t address_identity = 0;
+        uint32_t materialization_kind = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -3808,12 +3945,22 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
         if (sscanf(line,
                    "decl id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " kind=%" SCNu32
                    " flags=0x%" SCNx32 " name=%" SCNu32 " type=%" SCNu32 " sig=%" SCNu32
-                   " span=%" SCNu32 " derive=0x%" SCNx32 " %c",
+                   " span=%" SCNu32 " derive=0x%" SCNx32 " storage_flags=0x%" SCNx32
+                   " owner=%" SCNu32 " mutability=%" SCNu32 " address=%" SCNu32
+                   " materialize=%" SCNu32 " %c",
                    &row.decl_id, &row.module_id, &row.source_node_id, &kind, &row.flags,
                    &row.name_id, &row.type_key, &row.signature_key, &row.source_span_id,
-                   &row.derive_flags, &trailing) != 10)
+                   &row.derive_flags, &row.storage_flags, &storage_owner, &storage_mutability,
+                   &address_identity, &materialization_kind, &trailing) != 15)
+            return false;
+        if (kind > UINT8_MAX || storage_owner > UINT8_MAX || storage_mutability > UINT8_MAX ||
+            address_identity > UINT8_MAX || materialization_kind > UINT8_MAX)
             return false;
         row.kind = (uint8_t) kind;
+        row.storage_owner = (uint8_t) storage_owner;
+        row.storage_mutability = (uint8_t) storage_mutability;
+        row.address_identity = (uint8_t) address_identity;
+        row.materialization_kind = (uint8_t) materialization_kind;
         if (!xg_global_evidence_add_decl(evidence, &row))
             return false;
     }
@@ -5937,10 +6084,13 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgDeclSummary *d = &evidence->decls[i];
         fprintf(out,
                 "decl %u id=%u module=%u node=%u kind=%s flags=0x%x name=%u type=%u sig=%u "
-                "span=%u derive=0x%x\n",
+                "span=%u derive=0x%x storage_flags=0x%x owner=%u mutability=%u address=%u "
+                "materialize=%u\n",
                 i, d->decl_id, d->module_id, d->source_node_id, xg_decl_kind_name(d->kind),
                 d->flags, d->name_id, d->type_key, d->signature_key, d->source_span_id,
-                d->derive_flags);
+                d->derive_flags, d->storage_flags, (unsigned) d->storage_owner,
+                (unsigned) d->storage_mutability, (unsigned) d->address_identity,
+                (unsigned) d->materialization_kind);
     }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *c = &evidence->classes[i];

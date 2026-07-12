@@ -28,6 +28,7 @@
 #include "xcoro_pool.h"
 #include "xcoroutine.h"
 #include "xscope_transfer.h"
+#include "xtask.h"
 #include "xworker.h"
 
 typedef struct XrAotCoroState {
@@ -696,6 +697,10 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         xr_scheduler_runtime_delete(runtime->scheduler);
         runtime->scheduler = NULL;
     }
+    if (runtime->root_scope) {
+        xr_free(runtime->root_scope);
+        runtime->root_scope = NULL;
+    }
     if (runtime->core) {
         xr_runtime_core_delete(runtime->core);
         runtime->core = NULL;
@@ -789,6 +794,75 @@ XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *
     XrValue result = main_coro->result;
     xr_coro_destroy(main_coro);
     return result;
+}
+
+static XrAotResult aot_root_descriptor_resume(void *raw_scope, const XrAotContext *ctx) {
+    XrScopeContext *scope = (XrScopeContext *) raw_scope;
+    (void) ctx;
+    if (!scope)
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (atomic_load_explicit(&scope->count, memory_order_acquire) != 0)
+        return xr_aot_yielded();
+    if (!XR_IS_NULL(scope->first_error))
+        return xr_aot_error(scope->first_error, scope->first_error_is_value);
+    return xr_aot_done(XR_NULL_VAL);
+}
+
+static void aot_root_descriptor_release(void *frame, XrCoroHeap *heap) {
+    (void) frame;
+    (void) heap;
+}
+
+static const XrAotCoroDesc AOT_ROOT_DESCRIPTOR = {
+    .name = "root-descriptor",
+    .frame_size = 0,
+    .root_count = 0,
+    .release_count = 0,
+    .resume = aot_root_descriptor_resume,
+    .trace_roots = NULL,
+    .release_frame = aot_root_descriptor_release,
+};
+
+bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime) {
+    XrScopeContext *scope;
+    if (!runtime || !runtime->scheduler || runtime->root_scope)
+        return false;
+    scope = (XrScopeContext *) xr_calloc(1, sizeof(XrScopeContext));
+    if (!scope)
+        return false;
+    atomic_init(&scope->count, 0);
+    atomic_init(&scope->cancel_requested, false);
+    atomic_init(&scope->child_lock, false);
+    scope->mode = XR_SCOPE_LINKED;
+    scope->first_error = XR_NULL_VAL;
+    runtime->root_scope = scope;
+    runtime->scheduler->current_scope = scope;
+    return true;
+}
+
+bool xr_aot_root_descriptor_end(XrAotRuntime *runtime) {
+    XrScopeContext *scope;
+    XrCoroutine *root;
+    bool ok;
+    if (!runtime || !runtime->scheduler || !(scope = runtime->root_scope))
+        return false;
+    root = xr_coro_create_aot(runtime, &AOT_ROOT_DESCRIPTOR, scope, "root-descriptor");
+    if (!root) {
+        runtime->scheduler->current_scope = NULL;
+        runtime->root_scope = NULL;
+        xr_free(scope);
+        return false;
+    }
+    scope->owner = root;
+    atomic_store_explicit(&root->current_scope, scope, memory_order_release);
+    ok =
+        xr_runtime_main_thread_run(runtime->scheduler, root) == 0 && XR_IS_NULL(scope->first_error);
+    runtime->scheduler->current_scope = NULL;
+    atomic_store_explicit(&root->current_scope, NULL, memory_order_release);
+    runtime->root_scope = NULL;
+    xr_coro_destroy(root);
+    xr_free(scope);
+    return ok;
 }
 
 XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {

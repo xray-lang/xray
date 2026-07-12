@@ -73,6 +73,11 @@ XR_FUNC struct XrReplSymbolTable *
 xr_compiler_session_repl_symbols(const XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session);
+/* A persistent analyzer retains symbols and type references into every REPL
+ * input AST.  Transfer the program arena to the session until analyzer
+ * teardown; destroying an input immediately would leave those references
+ * dangling on the next incremental compile. */
+XR_FUNC bool xr_compiler_session_retain_repl_program(XrCompilerSession *session, AstNode *program);
 
 XR_FUNC void xr_compiler_session_set_module_graph(XrCompilerSession *session,
                                                   struct XrModuleGraph *graph);

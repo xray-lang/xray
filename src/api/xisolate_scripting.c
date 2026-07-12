@@ -400,6 +400,9 @@ void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int 
     if (isolate == NULL)
         return;
 
+    XrExecutionContext *previous =
+        xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
+
     if (isolate->core_rt) {
         xr_script_info_set(&isolate->core_rt->script_info, script_file, argc, argv);
     }
@@ -424,7 +427,8 @@ void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int 
         main_str = xr_string_intern(isolate, script_file, strlen(script_file), 0);
     }
 
-    XrArray *args_array = xr_array_new(xr_current_coro(isolate));
+    XrArray *args_array =
+        xr_array_with_capacity_in(&isolate->core_rt->root_alloc, argc, XR_ELEM_ANY);
     for (int i = 0; i < argc; i++) {
         XrString *arg_str = xr_string_intern(isolate, argv[i], strlen(argv[i]), 0);
         xr_array_push(args_array, xr_string_value(arg_str));
@@ -452,4 +456,6 @@ void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int 
     if (isolate->vm.builtin_count < XR_USER_GLOBALS_START) {
         isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
+
+    xr_exec_context_restore(previous);
 }

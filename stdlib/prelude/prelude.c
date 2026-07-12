@@ -268,7 +268,6 @@ XrModule *xr_load_module_prelude(XrVMRuntime *isolate) {
     /* No exports yet. Marking loaded prevents the module subsystem from
      * re-entering the loader if user code does an explicit
      * `import prelude`. */
-    module->loaded = true;
     return module;
 }
 

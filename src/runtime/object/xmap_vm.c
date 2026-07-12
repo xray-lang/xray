@@ -16,7 +16,8 @@
 #include "../xvm_call.h"
 
 struct XrIterator *xr_map_entries_iterator(struct XrVMRuntime *iso, XrMap *map) {
-    return xr_iterator_new_from_map(xr_current_coro(iso), map);
+    (void) iso;
+    return xr_iterator_new_from_map(NULL, map);
 }
 
 void xr_map_foreach(struct XrVMRuntime *isolate, XrMap *map, struct XrClosure *callback) {

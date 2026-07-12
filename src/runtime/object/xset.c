@@ -28,6 +28,7 @@
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../mem/xweak_registry.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
@@ -234,13 +235,13 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
 /* ========== Create and Destroy ========== */
 
 XrSet *xr_set_new(struct XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "set_new: NULL coro");
     XrSet *set = (XrSet *) xr_alloc(coro, sizeof(XrSet), XR_TSET);
     if (!set)
         return NULL;
 
     xr_obj_header_init_type(&set->hdr, XR_TSET);
-    set->owner_heap = xr_coro_get_heap(coro);
+    XrAllocationContext *alloc = coro ? NULL : xr_alloc_context_current();
+    set->owner_heap = coro ? xr_coro_get_heap(coro) : (alloc ? alloc->local_heap : NULL);
 
     set->count = 0;
     set->nentries = 0;
@@ -388,7 +389,6 @@ bool xr_set_is_empty(XrSet *set) {
 /* ========== Create from Array ========== */
 
 XrSet *xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
-    XR_DCHECK(coro != NULL, "set_from_array: NULL coro");
     XR_DCHECK(arr != NULL, "set_from_array: NULL arr");
     XrSet *set = xr_set_new(coro);
 
@@ -405,7 +405,6 @@ XrSet *xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
 /* ========== Iteration Methods (insertion order) ========== */
 
 XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set) {
-    XR_DCHECK(coro != NULL, "set_values: NULL coro");
     XR_DCHECK(set != NULL, "set_values: NULL set");
     XrArray *arr = xr_array_with_capacity(coro, (int32_t) set->count);
 
@@ -425,7 +424,6 @@ XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set) {
 /* ========== Set Operations ========== */
 
 XrSet *xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
-    XR_DCHECK(coro != NULL, "set_union: NULL coro");
     XR_DCHECK(set1 != NULL, "set_union: NULL set1");
     XR_DCHECK(set2 != NULL, "set_union: NULL set2");
     XrSet *result = xr_set_new_with_capacity(coro, set1->count + set2->count);
@@ -449,7 +447,6 @@ XrSet *xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
 }
 
 XrSet *xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
-    XR_DCHECK(coro != NULL, "set_intersection: NULL coro");
     XR_DCHECK(set1 != NULL, "set_intersection: NULL set1");
     XR_DCHECK(set2 != NULL, "set_intersection: NULL set2");
     uint32_t min_count = (set1->count < set2->count) ? set1->count : set2->count;
@@ -471,7 +468,6 @@ XrSet *xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
 }
 
 XrSet *xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
-    XR_DCHECK(coro != NULL, "set_difference: NULL coro");
     XR_DCHECK(set1 != NULL, "set_difference: NULL set1");
     XR_DCHECK(set2 != NULL, "set_difference: NULL set2");
     XrSet *result = xr_set_new_with_capacity(coro, set1->count);
@@ -488,7 +484,6 @@ XrSet *xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
 }
 
 XrSet *xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
-    XR_DCHECK(coro != NULL, "set_symmetric_difference: NULL coro");
     XR_DCHECK(set1 != NULL, "set_symmetric_difference: NULL set1");
     XR_DCHECK(set2 != NULL, "set_symmetric_difference: NULL set2");
     XrSet *result = xr_set_new_with_capacity(coro, set1->count + set2->count);

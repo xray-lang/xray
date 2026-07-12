@@ -553,6 +553,5 @@ XR_FUNC XrModule *xr_load_module_test_yield(XrVMRuntime *isolate) {
     XRS_EXPORT(mod, isolate, "counter_get", test_yield_counter_get);
     XRS_EXPORT(mod, isolate, "counter_reset", test_yield_counter_reset);
 
-    mod->loaded = true;
     return mod;
 }

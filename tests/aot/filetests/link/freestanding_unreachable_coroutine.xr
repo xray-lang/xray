@@ -1,0 +1,13 @@
+fn worker() -> int {
+    return 7
+}
+
+fn unused_coroutine_helper() -> int {
+    var task = go worker()
+    return await task
+}
+
+@c_export("xray_entry")
+fn xray_entry() -> int32 {
+    return 0
+}

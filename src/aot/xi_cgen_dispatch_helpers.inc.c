@@ -3062,6 +3062,48 @@ static void xicgen_chan_recv_status(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     fprintf(out, ")");
 }
 
+static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    CgStaticFunctionCall call;
+    const XiFunc *target;
+    const char *target_prefix;
+    bool target_is_coro;
+    bool target_is_sync_go;
+    int link_mode;
+    bool one_shot_await;
+    bool fire_and_forget;
+    if (!v || v->nargs < 1) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    target = call.func;
+    target_prefix = call.prefix ? call.prefix : prefix;
+    target_is_coro = target && cg_func_needs_aot_coro_ctx(ctx, target);
+    target_is_sync_go = target && cg_func_needs_sync_go_wrapper_ctx(ctx, target);
+    if (!target || (!target_is_coro && !target_is_sync_go) ||
+        !cg_aot_frame_new_can_supply_cl_arg(f, v->args[0], target) ||
+        (v->aux_int & XI_GO_AUX_DEFER_BATCH) != 0) {
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported direct root go target\n");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    link_mode = (int) v->aux_int & 0xff;
+    one_shot_await = (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0;
+    fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
+    fprintf(out, "xr_aot_spawn(%s, &", xicgen_aot_context_expr(ctx, f));
+    emit_fname_suffix(ctx, out, target_prefix, target, "_aot_desc");
+    fprintf(out, ", ");
+    emit_fname_suffix(ctx, out, target_prefix, target, "_aot_frame_new");
+    fprintf(out, "(");
+    emit_aot_frame_new_call_args(ctx, out, f, v->args[0], target, target_is_sync_go, v->args, 1,
+                                 v->nargs, v);
+    fprintf(out, "), %d, %s, %s, \"%s\").task_value", link_mode, fire_and_forget ? "true" : "false",
+            one_shot_await ? "true" : "false", target->name ? target->name : "aot");
+}
+
 static void xicgen_emit_json_set_field_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     XR_DCHECK(v->nargs >= 2, "xicgen_emit_json_set_field_expr: missing operands");
     if (v->op == XI_JSON_SET_F &&
@@ -8905,6 +8947,23 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     bool want_mutable = v && v->type && XR_TYPE_IS_POINTER(v->type) && v->type->ptr_is_mut;
     const XiConstLiteral *lit = xicgen_static_addr_resolve_literal(ctx, f, v ? v->aux_int : -1,
                                                                    want_mutable, &module, &slot);
+    const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
+    if (!address ||
+        (address->provenance.address_identity != XR_ADDRESS_MODULE_STABLE &&
+         address->provenance.address_identity != XR_ADDRESS_SHARED_STABLE) ||
+        address->provenance.escape != XR_POINTER_ESCAPE_STABLE ||
+        (want_mutable && address->provenance.mutability == XR_STORAGE_READONLY) ||
+        (!want_mutable && address->provenance.owner != XR_STORAGE_MODULE)) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: %s requires verified stable %s storage provenance for '%s.%s'\n",
+                want_mutable ? "RawMut.of" : "RawPtr.of", want_mutable ? "mutable" : "readonly",
+                module && module->name ? module->name : "?",
+                module && slot >= 0 && cg_module_const_slot_name(module, slot)
+                    ? cg_module_const_slot_name(module, slot)
+                    : "?");
+        ctx->error = true;
+        lit = NULL;
+    }
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_RAWPTR,
                                                      cg_value_plan_storage_rep(ctx, v));
     fprintf(out, "(void *)(&");
@@ -8917,6 +8976,14 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     if (!v || v->nargs < 1) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
+    if (!address || address->provenance.origin != XR_POINTER_ORIGIN_OWNER_BORROW ||
+        address->provenance.escape != XR_POINTER_ESCAPE_CALL_BOUND) {
+        fprintf(stderr, "[xi_cgen] ERROR: owner pointer borrow has no verified address plan\n");
+        ctx->error = true;
         emit_codegen_abort_expr(out);
         return;
     }

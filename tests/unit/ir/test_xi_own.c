@@ -290,6 +290,30 @@ static void test_scalar_not_tracked(void) {
     xi_func_free(f);
 }
 
+static void test_cross_execution_capture_actions(void) {
+    XiCapture capture;
+    memset(&capture, 0, sizeof(capture));
+    capture.type = &t_int;
+    capture.capture_kind = XI_CAPTURE_BY_COPY;
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_INLINE_VALUE,
+              "scalar capture is inline");
+
+    capture.type = &t_str;
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_DEEP_COPY,
+              "RC capture is deep copied");
+
+    capture.needs_cell = true;
+    capture.capture_kind = XI_CAPTURE_BY_MUT_CELL;
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_REJECT,
+              "mutable cell capture is rejected");
+
+    capture.needs_cell = false;
+    capture.is_shared = true;
+    capture.capture_kind = XI_CAPTURE_SHARED;
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_SHARED_REF,
+              "shared capture keeps stable identity");
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -301,6 +325,7 @@ int main(void) {
     test_consumed_store_field();
     test_borrow_signature();
     test_scalar_not_tracked();
+    test_cross_execution_capture_actions();
 
     printf("\n=== test_xi_own: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

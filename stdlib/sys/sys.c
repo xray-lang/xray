@@ -1343,6 +1343,5 @@ XrModule *xr_load_module_sys(XrVMRuntime *isolate) {
         return NULL;
 
     xr_stdlib_vm_bind_sys_generated(isolate, module);
-    module->loaded = true;
     return module;
 }

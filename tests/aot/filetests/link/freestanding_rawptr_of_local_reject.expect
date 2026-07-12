@@ -1,4 +1,4 @@
 args=--profile freestanding
 status=fail
-contains=RawPtr.of can only take the name of a top-level const static object
+contains=RawPtr.of classified this expression as stack local (escape cannot be proven)
 not_contains=CRASH

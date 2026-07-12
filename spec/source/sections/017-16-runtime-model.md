@@ -36,18 +36,20 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 
 | 区域 | 用途 |
 |--|--|
-| **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared` / `shared`，引用计数 |
-| **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
+| **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
+| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
+| **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
+| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，引用计数 |
+| **execution owner** | root、task 或直接入口的局部 RC 对象图；不要求存在物理 coroutine identity |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
 ### 16.3 内存模型
 
-- 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
+- 默认 **per-execution reference counting**。AllocationContext 显式选择 module、shared/system 或 execution owner；普通分配不以 `current_coro` 作为唯一入口。最后一个强引用释放时，对象进入对应 owner 的释放路径。
 - **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
 - **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 只报告当前协程堆的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 ExecutionContext 的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 
@@ -163,18 +165,20 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 
 | Region | Use |
 |--|--|
-| **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared` / `shared`, reference counting |
-| **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
+| **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
+| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
+| **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
+| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, reference-counted |
+| **Execution owner** | local RC object graphs of a root, task, or direct entry; no physical coroutine identity is required |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
 ### 16.3 Memory Model
 
-- Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
+- Default reclamation is **per-execution reference counting**. AllocationContext explicitly selects the module, shared/system, or execution owner; ordinary allocation does not require `current_coro` as its sole entry. Objects enter their owner's reclamation path when the last strong reference is released.
 - **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
 - **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current ExecutionContext's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 

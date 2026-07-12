@@ -18,6 +18,7 @@
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_escape.h"
+#include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
@@ -86,6 +87,161 @@ typedef struct TestAotEvidenceIds {
     uint32_t next_source_node_id;
 } TestAotEvidenceIds;
 
+static const XiFunc *test_aot_direct_call_target(const XiFunc *owner, const XiValue *value) {
+    if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL) || value->nargs == 0)
+        return NULL;
+    const XiValue *callee = value->args[0];
+    for (int depth = 0; callee && depth < 8; depth++) {
+        if (callee->op == XI_GET_SHARED && owner && owner->shared_slot_funcs &&
+            callee->aux_int >= 0 && callee->aux_int < owner->shared_slot_func_count)
+            return owner->shared_slot_funcs[callee->aux_int];
+        if ((callee->op == XI_CLOSURE_NEW ||
+             (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW)) &&
+            callee->aux)
+            return (const XiFunc *) callee->aux;
+        if ((callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY ||
+             callee->op == XI_MOVE) &&
+            callee->nargs > 0) {
+            callee = callee->args[0];
+            continue;
+        }
+        break;
+    }
+    return NULL;
+}
+
+static bool test_aot_value_is_sync_runtime_op(const XiValue *value) {
+    if (!value)
+        return false;
+    if (value->op == XI_PAR_FOR || value->op == XI_PAR_MAP || value->op == XI_PAR_REDUCE ||
+        value->op == XI_CHAN_NEW || value->op == XI_CHAN_TRY_SEND ||
+        value->op == XI_CHAN_TRY_RECV || value->op == XI_CHAN_IS_CLOSED)
+        return true;
+    if ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) && value->aux) {
+        const char *name = (const char *) value->aux;
+        return strcmp(name, "close") == 0 || strcmp(name, "trySend") == 0 ||
+               strcmp(name, "tryRecv") == 0 || strcmp(name, "isClosed") == 0;
+    }
+    return false;
+}
+
+static bool test_aot_value_may_suspend(const XiValue *value) {
+    if (!value || test_aot_value_is_sync_runtime_op(value))
+        return false;
+    if ((value->flags & XI_FLAG_MAY_SUSPEND) != 0)
+        return true;
+    if (xi_value_is_channel_method_call(value, "send", 1) ||
+        xi_value_is_channel_method_call(value, "sendTimeout", 2) ||
+        xi_value_is_channel_method_call(value, "recv", 0) ||
+        xi_value_is_channel_method_call(value, "recvOr", 1) ||
+        xi_value_is_channel_method_call(value, "recvTimeout", 1))
+        return true;
+    if ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) && value->aux &&
+        strcmp((const char *) value->aux, "sleep") == 0)
+        return true;
+    return xi_value_is_blocking_task_method_call(value) ||
+           xi_value_is_blocking_work_queue_method_call(value) ||
+           xi_value_is_blocking_result_group_method_call(value) ||
+           xi_value_is_blocking_countdown_latch_method_call(value) ||
+           xi_value_is_blocking_semaphore_method_call(value) ||
+           xi_value_is_blocking_event_count_method_call(value);
+}
+
+static uint32_t test_aot_value_runtime_capabilities(const XiValue *value) {
+    if (!value)
+        return 0;
+    const XiValue *receiver = value->nargs >= 1 ? value->args[0] : NULL;
+    if (xi_value_type_is_channel(value) || xi_value_type_is_channel(receiver))
+        return XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (xi_value_type_is_task(value) || xi_value_type_is_task(receiver))
+        return XG_CAP_TASK | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (xi_value_type_is_atomic(value) || xi_value_type_is_atomic(receiver))
+        return XG_CAP_ATOMIC | XG_CAP_OBJECTS;
+    if (xi_value_type_is_work_queue(value) || xi_value_type_is_work_queue(receiver))
+        return XG_CAP_WORK_QUEUE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (xi_value_type_is_result_group(value) || xi_value_type_is_result_group(receiver))
+        return XG_CAP_RESULT_GROUP | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (xi_value_type_is_countdown_latch(value) || xi_value_type_is_countdown_latch(receiver))
+        return XG_CAP_COUNTDOWN_LATCH | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (xi_value_type_is_semaphore(value) || xi_value_type_is_semaphore(receiver))
+        return XG_CAP_SEMAPHORE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (xi_value_type_is_event_count(value) || xi_value_type_is_event_count(receiver))
+        return XG_CAP_EVENT_COUNT | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    return 0;
+}
+
+static uint32_t test_aot_effect_bits_depth(const XiFunc *func, int depth) {
+    uint32_t effects = 0;
+    if (!func || depth > 16)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            if (test_aot_value_may_suspend(value))
+                effects |= XG_BODY_MAY_SUSPEND;
+            if ((value->flags & XI_FLAG_MAY_THROW) != 0)
+                effects |= XG_BODY_MAY_THROW;
+            if ((value->flags & XI_FLAG_WRITES_MEM) != 0)
+                effects |= XG_BODY_MAY_MUTATE;
+            if ((value->flags & XI_FLAG_READS_MEM) != 0)
+                effects |= XG_BODY_MAY_READ_MEM;
+            if (value->op == XI_GO || value->op == XI_THREAD_SPAWN)
+                effects |= XG_BODY_MAY_SPAWN;
+            const XiFunc *target = test_aot_direct_call_target(func, value);
+            if (target && target != func)
+                effects |= test_aot_effect_bits_depth(target, depth + 1);
+        }
+    }
+    return effects;
+}
+
+static uint32_t test_aot_effect_bits(const XiFunc *func) {
+    return test_aot_effect_bits_depth(func, 0);
+}
+
+static uint32_t test_aot_capability_bits_depth(const XiFunc *func, int depth) {
+    uint32_t capabilities = 0;
+    if (!func || depth > 16)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            bool parallel =
+                value->op == XI_PAR_FOR || value->op == XI_PAR_MAP || value->op == XI_PAR_REDUCE;
+            if (test_aot_value_may_suspend(value))
+                capabilities |= XG_CAP_COROUTINE;
+            if (parallel)
+                capabilities |= XG_CAP_PARALLEL;
+            if (value->op == XI_CHAN_NEW || value->op == XI_CHAN_TRY_SEND ||
+                value->op == XI_CHAN_TRY_RECV || value->op == XI_CHAN_IS_CLOSED)
+                capabilities |= XG_CAP_CHANNEL | XG_CAP_OBJECTS;
+            if (value->op == XI_GO)
+                capabilities |= XG_CAP_COROUTINE | XG_CAP_TASK;
+            if (value->op == XI_THREAD_SPAWN)
+                capabilities |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_SYS_THREAD;
+            capabilities |= test_aot_value_runtime_capabilities(value);
+            const XiFunc *target = test_aot_direct_call_target(func, value);
+            if (target && target != func)
+                capabilities |= test_aot_capability_bits_depth(target, depth + 1);
+        }
+    }
+    return capabilities;
+}
+
+static uint32_t test_aot_capability_bits(const XiFunc *func) {
+    return test_aot_capability_bits_depth(func, 0);
+}
+
 static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgModuleId module_id,
                                            TestAotEvidenceIds *ids) {
     if (!func)
@@ -114,6 +270,8 @@ static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgMo
         .signature_key = signature_key,
         .source_span_id = source_node_id,
         .kind = XG_BODY_FUNCTION,
+        .effect_bits = test_aot_effect_bits(func),
+        .capability_bits = test_aot_capability_bits(func),
         .body_hash = ((uint64_t) module_id << 32) | func_id,
     };
 
@@ -366,8 +524,8 @@ static void test_aot_annotate_class_field_values(XiModule **modules, uint32_t nm
     }
 }
 
-static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
-                                  uint32_t entry_module) {
+static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
+                                      uint32_t entry_module) {
     char verify_err[256];
 
     TEST_REQUIRE(plan != NULL, "AOT plan holder is NULL");
@@ -399,18 +557,45 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
             .module_id = module_id,
             .name_id = xg_name_id("<module-init>"),
             .kind = XG_BODY_MODULE_INIT,
+            .effect_bits = test_aot_effect_bits(module->init),
+            .capability_bits = test_aot_capability_bits(module->init),
             .body_hash = ((uint64_t) module_id << 32) | func_id,
         };
         module->init->xg_body_func_id = func_id;
         TEST_REQUIRE(xg_global_evidence_add_body(&plan->evidence, &body) != NULL,
                      "AOT module-init body evidence allocation failed");
+        for (uint32_t slot = 0; slot < module->nslots; slot++) {
+            const char *name =
+                module->init->slot_owned_names ? module->init->slot_owned_names[slot] : NULL;
+            if (!name)
+                continue;
+            bool is_const =
+                module->init->slot_owned_consts && module->init->slot_owned_consts[slot] != 0;
+            uint32_t source_node_id = ids.next_source_node_id++;
+            XgDeclSummary storage = {
+                .module_id = module_id,
+                .decl_id = ids.next_decl_id++,
+                .kind = XG_DECL_GLOBAL,
+                .name_id = xg_name_id(name),
+                .source_node_id = source_node_id,
+                .source_span_id = source_node_id,
+                .signature_key = source_node_id,
+                .storage_owner = XR_STORAGE_MODULE,
+                .storage_mutability = is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE,
+                .address_identity = XR_ADDRESS_MODULE_STABLE,
+                .materialization_kind =
+                    is_const ? XR_MATERIALIZE_MODULE_READONLY : XR_MATERIALIZE_MODULE_RUNTIME,
+            };
+            TEST_REQUIRE(xg_global_evidence_add_decl(&plan->evidence, &storage) != NULL,
+                         "AOT storage declaration evidence allocation failed");
+        }
         for (uint16_t ci = 0; ci < module->init->nchildren; ci++)
             test_aot_add_function_evidence(plan, module->init->children[ci], module_id, &ids);
     }
-    TEST_REQUIRE(
-        xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE),
-        "AOT global evidence attach failed");
-    TEST_REQUIRE(xaot_prepare_bundle(&plan->bundle, NULL), "AOT prepare failed");
+    if (!xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE))
+        return false;
+    if (!xaot_prepare_bundle(&plan->bundle, NULL))
+        return false;
     test_aot_annotate_class_field_values(modules, nmodules, &plan->evidence);
     if (!xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err))) {
         fprintf(stderr, "  AOT verify error: %s\n", verify_err);
@@ -420,8 +605,17 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
                     cls->class_id, cls->parent_class_id, cls->name_id, cls->flags, cls->field_start,
                     cls->field_count);
         }
-        TEST_REQUIRE(false, "AOT verify failed");
+        return false;
     }
+    return true;
+}
+
+static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
+                                  uint32_t entry_module) {
+    bool prepared = test_aot_plan_try_prepare(plan, modules, nmodules, entry_module);
+    if (!prepared && plan && plan->bundle.error_msg)
+        fprintf(stderr, "  AOT plan error: %s\n", plan->bundle.error_msg);
+    TEST_REQUIRE(prepared, "AOT plan preparation failed");
 }
 
 static void test_aot_plan_free(TestAotPlan *plan) {
@@ -790,10 +984,9 @@ TEST(cgen_initializes_file_dir_builtins_from_entry_source) {
 }
 
 TEST(cgen_runtime_file_dir_stays_runtime_owned) {
-    const char *src = "import time\n"
-                      "print(__file__)\n"
+    const char *src = "print(__file__)\n"
                       "print(__dir__)\n"
-                      "time.sleep(0)\n";
+                      "Coro.yield()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -1138,7 +1331,8 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
                           "}\n"
                           "export fn public(x: int) -> int {\n"
                           "    return helper(x) + 1\n"
-                          "}\n";
+                          "}\n"
+                          "public(0)\n";
     const char *app_src = "print(0)\n";
 
     XiFunc *lib_ir = compile_to_ir(lib_src);
@@ -2746,18 +2940,26 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
 
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "returned RawPtr case should generate");
-    assert(contains(code, "xrt_span_from_array_slice(") &&
-           "returned RawPtr should derive from a native span slice");
-    assert(!contains(code, "xrt_slice(") && "returned RawPtr must not force a heap slice view");
-    assert(!contains(code, "xrt_array_stack_borrow_slice_view(") &&
-           "returned RawPtr must not borrow a stack slice view");
+    XiModule *module = ir->module;
+    bool own_module = false;
+    if (!module) {
+        module = xi_module_new("test.xr", "test", ir);
+        assert(module != NULL);
+        own_module = true;
+    }
+    XiModule *modules[] = {module};
+    TestAotPlan plan;
+    bool prepared = test_aot_plan_try_prepare(&plan, modules, 1, 0);
+    assert(!prepared && "returned borrowed RawPtr must fail AOT planning");
+    assert(plan.bundle.error_msg != NULL);
+    assert(strstr(plan.bundle.error_msg, "address borrow escapes its verified lifetime") != NULL);
+    test_aot_plan_free(&plan);
+    if (own_module) {
+        module->init = NULL;
+        xi_module_free(module);
+    }
 
-    printf("  Generated returned RawPtr slice escape guard %zu bytes of C code\n", strlen(code));
-    xr_free(code);
+    printf("  Rejected returned RawPtr that escapes its verified borrow lifetime\n");
     xi_func_free(ir);
 }
 
@@ -3400,10 +3602,10 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
            "escaping native class constructor should allocate a typed heap object");
     assert(!contains(code, "xrt_box_obj(_inst)") &&
            "native class constructor values should stay as pointers inside typed AOT code");
-    assert(contains(code, "heap_type == XR_TINSTANCE") &&
-           "boxed method and field paths should discriminate native class instances");
-    assert(contains(code, "xrt_instanceof(") &&
-           "boxed native class paths should guard the concrete class id");
+    assert(!contains(code, "heap_type == XR_TINSTANCE") &&
+           "closed-world typed class flow should not retain boxed instance discrimination");
+    assert(!contains(code, "xrt_instanceof(") &&
+           "closed-world typed class flow should not retain boxed instanceof guards");
 
     const char *make_sig = "static xrt_native_test_Counter * test_make_";
     const char *make = strstr(code, make_sig);
@@ -5420,29 +5622,12 @@ TEST(cgen_suspendable_dependency_init_fails_fast) {
     assert(dep_mod != NULL && entry_mod != NULL);
     XiModule *modules[] = {dep_mod, entry_mod};
     TestAotPlan plan;
-    test_aot_plan_prepare(&plan, modules, 2, 1);
+    bool prepared = test_aot_plan_try_prepare(&plan, modules, 2, 1);
+    assert(!prepared && "suspendable dependency init must fail AOT planning");
+    assert(plan.bundle.error_msg != NULL);
+    assert(strstr(plan.bundle.error_msg, "module initializer may not suspend") != NULL);
 
-    XiCgenCtx *ctx = xi_cgen_ctx_new();
-    assert(ctx != NULL);
-    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
-
-    char *buf = NULL;
-    size_t bufsz = 0;
-    FILE *mem = xr_open_memstream(&buf, &bufsz);
-    assert(mem != NULL);
-    xi_cgen_main(ctx, mem, modules, 2, 1);
-    int rc = xr_close_memstream(mem, &buf, &bufsz);
-    assert(rc == 0);
-
-    assert(xi_cgen_has_error(ctx) && "suspendable dependency init must fail C generation");
-    assert(contains(buf, "return 1;") && "generated main should hard-fail if emitted");
-    assert(!contains(buf, "unsupported") && "generated C must not contain unsupported comments");
-    assert(!contains(buf, "coroutine dependency init") &&
-           "dependency diagnostics should stay out of generated C comments");
-
-    printf("  Generated rejected multi-module main %zu bytes of C code\n", strlen(buf));
-    free(buf);
-    xi_cgen_ctx_free(ctx);
+    printf("  Rejected suspendable dependency initializer during AOT planning\n");
     test_aot_plan_free(&plan);
     xi_module_free(dep_mod);
     xi_module_free(entry_mod);
@@ -6298,7 +6483,7 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
+TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
     const char *src = "shared ch = Channel<int>(1)\n"
                       "var ok = ch.trySend(42)\n"
                       "print(ok)\n";
@@ -6310,15 +6495,15 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT scalar channel trySend should generate");
-    assert(contains(code, "xr_aot_chan_try_send_i64(ctx,") &&
-           "scalar channel trySend must use the typed AOT bridge");
+    assert(contains(code, "xr_aot_chan_try_send_sync_i64(") &&
+           "descriptor-root channel trySend must use the typed synchronous AOT bridge");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "nonblocking trySend must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_send(ctx,") &&
            "scalar channel trySend must not re-box at the generated call site");
     assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
            "scalar channel trySend should not emit a dead boxed send operand");
-    const char *typed_try_send_call = strstr(code, "xr_aot_chan_try_send_i64(ctx,");
+    const char *typed_try_send_call = strstr(code, "xr_aot_chan_try_send_sync_i64(");
     assert(typed_try_send_call != NULL && "typed trySend call should exist");
     assert(
         !contains_between(typed_try_send_call, code + strlen(code), "xrt_value_clone_for_coro(") &&
@@ -6787,7 +6972,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
+TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
     const char *src = "shared ch = Channel<int>(1)\n"
                       "var recv = ch.tryRecv()\n"
                       "print(recv)\n";
@@ -6799,8 +6984,8 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT channel tryRecv should generate");
-    assert(contains(code, "xr_aot_chan_try_recv(ctx,") &&
-           "tryRecv must use the Recv<T> enum bridge");
+    assert(contains(code, "xr_aot_chan_try_recv_sync(") &&
+           "descriptor-root tryRecv must use the synchronous Recv<T> enum bridge");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "nonblocking tryRecv must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
@@ -6812,7 +6997,7 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_select_try_recv_uses_ready_bit) {
+TEST(cgen_descriptor_select_try_recv_uses_ready_bit) {
     const char *src = "shared ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
@@ -6826,8 +7011,8 @@ TEST(cgen_coro_select_try_recv_uses_ready_bit) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT select tryRecv should generate");
-    assert(contains(code, "xr_aot_chan_try_recv(ctx,") &&
-           "select recv probe must use the AOT Recv enum bridge");
+    assert(contains(code, "xr_aot_chan_try_recv_sync(") &&
+           "descriptor-root select probe must use the synchronous AOT Recv enum bridge");
     assert(contains(code, " = xr_aot_recv_is_value(") &&
            "select readiness must use the positive Recv.Value status projection");
 
@@ -7936,7 +8121,7 @@ int main(void) {
     run_cgen_coro_channel_send_copy_uses_transfer_helper();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
-    run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
+    run_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge();
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_scalar_await_uses_tagged_slot();
@@ -7949,8 +8134,8 @@ int main(void) {
     run_cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge();
     run_cgen_coro_scalar_channel_recv_uses_tagged_slot();
     run_cgen_coro_channel_recv_null_check_keeps_tagged_slot();
-    run_cgen_coro_scalar_channel_try_recv_returns_recv_enum();
-    run_cgen_coro_select_try_recv_uses_ready_bit();
+    run_cgen_descriptor_scalar_channel_try_recv_returns_recv_enum();
+    run_cgen_descriptor_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
     run_cgen_runtime_needed_main_uses_aot_runtime();
     run_cgen_coro_select_publishes_state_before_block();

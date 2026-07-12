@@ -34,7 +34,7 @@ static XrValue xr_json_method_entries_iterator(XrVMRuntime *iso, XrValue self, X
                                                int argc) {
     (void) args;
     (void) argc;
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     XrIterator *iter = xr_iterator_new_from_json(coro, json_self(self), iso);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
@@ -45,7 +45,7 @@ static XrValue xr_json_method_entries_iterator(XrVMRuntime *iso, XrValue self, X
 static XrValue xr_json_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     XrIterator *iter = xr_iterator_keys_from_json(coro, json_self(self), iso);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
@@ -60,7 +60,7 @@ static XrValue xr_json_method_to_string(XrVMRuntime *iso, XrValue self, XrValue 
 static XrValue xr_json_method_keys(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     XrArray *result = xr_array_new(coro);
     XR_DCHECK(result != NULL, "json.keys: array alloc failed");
 
@@ -81,9 +81,10 @@ static XrValue xr_json_method_keys(XrVMRuntime *iso, XrValue self, XrValue *args
 
 /* values() → Array<Json>: return all field values. */
 static XrValue xr_json_method_values(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     XrArray *result = xr_array_new(coro);
     XR_DCHECK(result != NULL, "json.values: array alloc failed");
 
@@ -104,7 +105,7 @@ static XrValue xr_json_method_values(XrVMRuntime *iso, XrValue self, XrValue *ar
 static XrValue xr_json_method_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     XrArray *result = xr_array_new(coro);
     XR_DCHECK(result != NULL, "json.entries: array alloc failed");
 

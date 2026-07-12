@@ -1127,7 +1127,6 @@ XR_FUNC XrModule *xr_load_module_crypto(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_crypto_generated(isolate, mod);
 
-    mod->loaded = true;
     return mod;
 }
 

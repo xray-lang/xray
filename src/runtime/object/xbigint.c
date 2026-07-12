@@ -16,6 +16,7 @@
 #include "../../base/xchecks.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../xisolate_api.h"
 #include "../class/xclass_system.h"
 #include <stdlib.h>
@@ -45,7 +46,8 @@ static XrBigInt *bigint_alloc(struct XrCoroutine *coro, uint32_t cap) {
     size_t size = sizeof(XrBigInt) + cap * sizeof(uint32_t);
     XrBigInt *b = (XrBigInt *) xr_alloc(coro, size, XR_TINSTANCE);
     if (b) {
-        XrayCoreClasses *core = xr_isolate_get_core_classes(xr_coro_vm_owner(coro));
+        XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
+        XrayCoreClasses *core = xr_isolate_get_core_classes(X);
         b->klass = core ? core->bigintClass : NULL;
         b->sign = 1;
         b->len = 0;
@@ -112,7 +114,6 @@ static XrBigInt *bigint_ensure_cap_on_fixed_heap(struct XrFixedHeap *fixed_heap,
 /* ========== Creation Functions ========== */
 
 XrBigInt *xr_bigint_new(struct XrCoroutine *coro, int64_t value) {
-    XR_DCHECK(coro != NULL, "bigint_new: NULL coro");
     XrBigInt *b = bigint_alloc(coro, 2);  // 64-bit needs at most 2 limbs
     if (!b)
         return NULL;
@@ -157,7 +158,6 @@ static int hex_digit_value(char c) {
 }
 
 XrBigInt *xr_bigint_from_string(struct XrCoroutine *coro, const char *str) {
-    XR_DCHECK(coro != NULL, "bigint_from_string: NULL coro");
     if (!str || !*str)
         return NULL;
 
@@ -368,7 +368,6 @@ XrBigInt *xr_bigint_from_string_on_fixed_heap(struct XrFixedHeap *fixed_heap, co
 }
 
 XrBigInt *xr_bigint_copy(struct XrCoroutine *coro, XrBigInt *a) {
-    XR_DCHECK(coro != NULL, "bigint_copy: NULL coro");
     XR_DCHECK(a != NULL, "bigint_copy: NULL a");
     XrBigInt *b = bigint_alloc(coro, a->len);
     if (!b)
@@ -536,7 +535,6 @@ static XrBigInt *bigint_sub_abs(struct XrCoroutine *coro, XrBigInt *a, XrBigInt 
 }
 
 XrBigInt *xr_bigint_add(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_add: NULL coro");
     XR_DCHECK(a != NULL, "bigint_add: NULL a");
     XR_DCHECK(b != NULL, "bigint_add: NULL b");
     // Same sign: add absolute values
@@ -567,7 +565,6 @@ XrBigInt *xr_bigint_add(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 }
 
 XrBigInt *xr_bigint_sub(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_sub: NULL coro");
     XR_DCHECK(a != NULL, "bigint_sub: NULL a");
     XR_DCHECK(b != NULL, "bigint_sub: NULL b");
     // a - b = a + (-b)
@@ -722,7 +719,6 @@ static XrBigInt *bigint_mul_karatsuba(struct XrCoroutine *coro, XrBigInt *a, XrB
 }
 
 XrBigInt *xr_bigint_mul(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_mul: NULL coro");
     XR_DCHECK(a != NULL, "bigint_mul: NULL a");
     XR_DCHECK(b != NULL, "bigint_mul: NULL b");
     // Fast path: multiply by zero
@@ -1011,7 +1007,6 @@ bool xr_bigint_divmod(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b, XrBigI
 }
 
 XrBigInt *xr_bigint_div(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_div: NULL coro");
     XR_DCHECK(a != NULL, "bigint_div: NULL a");
     XR_DCHECK(b != NULL, "bigint_div: NULL b");
     XrBigInt *q = NULL;
@@ -1024,7 +1019,6 @@ XrBigInt *xr_bigint_div(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 // Modulo operation: a % b
 // Remainder has same sign as dividend a
 XrBigInt *xr_bigint_mod(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_mod: NULL coro");
     XR_DCHECK(a != NULL, "bigint_mod: NULL a");
     XR_DCHECK(b != NULL, "bigint_mod: NULL b");
     XrBigInt *r = NULL;
@@ -1037,7 +1031,6 @@ XrBigInt *xr_bigint_mod(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 /* ========== Negation and Absolute Value ========== */
 
 XrBigInt *xr_bigint_neg(struct XrCoroutine *coro, XrBigInt *a) {
-    XR_DCHECK(coro != NULL, "bigint_neg: NULL coro");
     XR_DCHECK(a != NULL, "bigint_neg: NULL a");
     XrBigInt *result = xr_bigint_copy(coro, a);
     if (result && !(result->len == 1 && result->limbs[0] == 0)) {
@@ -1047,7 +1040,6 @@ XrBigInt *xr_bigint_neg(struct XrCoroutine *coro, XrBigInt *a) {
 }
 
 XrBigInt *xr_bigint_abs(struct XrCoroutine *coro, XrBigInt *a) {
-    XR_DCHECK(coro != NULL, "bigint_abs: NULL coro");
     XR_DCHECK(a != NULL, "bigint_abs: NULL a");
     XrBigInt *result = xr_bigint_copy(coro, a);
     if (result) {
@@ -1218,7 +1210,6 @@ int xr_bigint_get_bit(XrBigInt *a, uint32_t n) {
 /* ========== Power Operation ========== */
 
 XrBigInt *xr_bigint_pow(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
-    XR_DCHECK(coro != NULL, "bigint_pow: NULL coro");
     XR_DCHECK(a != NULL, "bigint_pow: NULL a");
     // a^0 = 1
     if (n == 0) {
@@ -1350,7 +1341,6 @@ static XrBigInt *bigint_bitwise(struct XrCoroutine *coro, XrBigInt *a, XrBigInt 
 }
 
 XrBigInt *xr_bigint_and(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_and: NULL coro");
     XR_DCHECK(a != NULL, "bigint_and: NULL a");
     XR_DCHECK(b != NULL, "bigint_and: NULL b");
     // AND is negative only if both operands are negative
@@ -1359,7 +1349,6 @@ XrBigInt *xr_bigint_and(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 }
 
 XrBigInt *xr_bigint_or(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_or: NULL coro");
     XR_DCHECK(a != NULL, "bigint_or: NULL a");
     XR_DCHECK(b != NULL, "bigint_or: NULL b");
     // OR is negative if either operand is negative
@@ -1368,7 +1357,6 @@ XrBigInt *xr_bigint_or(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 }
 
 XrBigInt *xr_bigint_xor(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(coro != NULL, "bigint_xor: NULL coro");
     XR_DCHECK(a != NULL, "bigint_xor: NULL a");
     XR_DCHECK(b != NULL, "bigint_xor: NULL b");
     // XOR is negative if exactly one operand is negative
@@ -1377,7 +1365,6 @@ XrBigInt *xr_bigint_xor(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 }
 
 XrBigInt *xr_bigint_shl(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
-    XR_DCHECK(coro != NULL, "bigint_shl: NULL coro");
     XR_DCHECK(a != NULL, "bigint_shl: NULL a");
     if (xr_bigint_is_zero(a) || n == 0) {
         return xr_bigint_copy(coro, a);
@@ -1416,7 +1403,6 @@ XrBigInt *xr_bigint_shl(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
 }
 
 XrBigInt *xr_bigint_shr(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
-    XR_DCHECK(coro != NULL, "bigint_shr: NULL coro");
     XR_DCHECK(a != NULL, "bigint_shr: NULL a");
     if (xr_bigint_is_zero(a) || n == 0) {
         return xr_bigint_copy(coro, a);

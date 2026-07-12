@@ -282,6 +282,7 @@ static XrValue m_swap(XrVMRuntime *isolate, XrValue self, XrValue *args, int nar
 
 /* .compareExchange(expected, desired, ordering?) -> (T, bool) */
 static XrValue m_compare_exchange(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.compareExchange: NULL atomic");
     XR_DCHECK(nargs >= 2, "Atomic.compareExchange: need expected and desired");
@@ -294,7 +295,7 @@ static XrValue m_compare_exchange(XrVMRuntime *isolate, XrValue self, XrValue *a
     bool ok = xr_atomic_compare_exchange(a, &prev, desired, ord);
 
     /* Return (prev_value, success) tuple */
-    XrCoroutine *coro = xr_current_coro(isolate);
+    XrCoroutine *coro = NULL;
     XrTuple *tup = xr_tuple_new(coro, 2);
     if (tup) {
         xr_tuple_set(tup, 0, xr_atomic_unpack(prev, (XrAtomicKind) a->kind));

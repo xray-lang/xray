@@ -309,7 +309,8 @@ op_call_closure:
 
             // Collect extra arguments into rest array
             int extra_args = nargs > proto->numparams ? nargs - proto->numparams : 0;
-            XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+            XrArray *rest_array = VM_CURRENT_CORO ? xr_array_new(VM_CURRENT_CORO)
+                                                  : vm_root_array_new(isolate, 4, XR_ELEM_ANY);
             if (extra_args > 0) {
                 XrValue *arg_base = &R(a + 1 + proto->numparams);
                 for (int j = 0; j < extra_args; j++) {
@@ -423,7 +424,8 @@ vmcase(OP_CALL_KEEP) {
             R(a + 1 + j) = xr_null();
         }
         int extra_args = nargs > proto->numparams ? nargs - proto->numparams : 0;
-        XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+        XrArray *rest_array = VM_CURRENT_CORO ? xr_array_new(VM_CURRENT_CORO)
+                                              : vm_root_array_new(isolate, 4, XR_ELEM_ANY);
         if (extra_args > 0) {
             XrValue *arg_base = &R(a + 1 + proto->numparams);
             for (int j = 0; j < extra_args; j++) {

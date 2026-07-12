@@ -64,6 +64,7 @@
 #include "../base/xconstants.h"
 #include "../base/xchecks.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/core/xr_exec_context.h"
 #include "xcoro_abi.h"
 #include "xcoro_flags.h"
 #include "xslot_ref.h"
@@ -190,6 +191,12 @@ struct XrCoroutine {
     struct XrCoroHeap *heap;      // GC safepoint: checked every loop back-edge
     struct XrRuntimeCore *core;   // VM-neutral runtime resources for this coroutine
     struct XrRuntime *scheduler;  // owning scheduler runtime, NULL before multicore attach
+    /* A physical coroutine owns its execution and allocation identity.  The
+     * scheduler installs exec_ctx only while this coroutine is running; code
+     * that merely needs allocation provenance never has to synthesize or
+     * discover task identity from VM TLS. */
+    XrAllocationContext alloc_ctx;
+    XrExecutionContext exec_ctx;
     XrValue result;
     XrValue error;
     /* true: `error` came from the value-return channel (user `throw <enum>`);

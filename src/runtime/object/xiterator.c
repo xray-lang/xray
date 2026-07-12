@@ -25,6 +25,7 @@
 #include "../mem/xobj_header.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../mem/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xdeep_copy.h"
@@ -38,7 +39,7 @@
 
 /* Internal helper: allocate iterator instance with klass set. */
 static XrIterator *iterator_alloc(struct XrCoroutine *coro) {
-    XrVMRuntime *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
     XrClass *cls = xr_isolate_get_core_classes(X)->iteratorClass;
     XR_DCHECK(cls != NULL, "iterator_alloc: iteratorClass not registered");
     XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TINSTANCE);
@@ -51,7 +52,6 @@ static XrIterator *iterator_alloc(struct XrCoroutine *coro) {
 // Create iterator from Map (lazy, no pre-generation). Default mode = PAIRS:
 // next() yields (k, v) tuples. Used by entriesIterator and `for (k, v in m)`.
 XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map_param) {
-    XR_DCHECK(coro != NULL, "iterator_new_from_map: NULL coro");
     XR_DCHECK(map_param != NULL, "iterator_new_from_map: NULL map");
     XrIterator *iter = iterator_alloc(coro);
     if (!iter)
@@ -79,7 +79,6 @@ XrIterator *xr_iterator_keys_from_map(struct XrCoroutine *coro, struct XrMap *ma
 
 // Create iterator from Set (lazy, no pre-generation)
 XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set_param) {
-    XR_DCHECK(coro != NULL, "iterator_new_from_set: NULL coro");
     XR_DCHECK(set_param != NULL, "iterator_new_from_set: NULL set");
     XrIterator *iter = iterator_alloc(coro);
     if (!iter)
@@ -96,7 +95,6 @@ XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set
 
 // Create iterator from Array (lazy, yields [index, element] pairs)
 XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
-    XR_DCHECK(coro != NULL, "iterator_new_from_array: NULL coro");
     XR_DCHECK(arr != NULL, "iterator_new_from_array: NULL array");
     XrIterator *iter = iterator_alloc(coro);
     if (!iter)
@@ -116,7 +114,6 @@ XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray 
 // The index is the UTF-8 character index, matching string.charAt() semantics.
 XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
                                         struct XrVMRuntime *isolate) {
-    XR_DCHECK(coro != NULL, "iterator_new_from_string: NULL coro");
     XR_DCHECK(s != NULL, "iterator_new_from_string: NULL string");
     XrIterator *iter = iterator_alloc(coro);
     if (!iter)
@@ -135,7 +132,6 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
 XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
                                       struct XrVMRuntime *isolate) {
-    XR_DCHECK(coro != NULL, "iterator_new_from_json: NULL coro");
     XR_DCHECK(json != NULL, "iterator_new_from_json: NULL json");
     XrIterator *iter = iterator_alloc(coro);
     if (!iter)

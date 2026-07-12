@@ -211,8 +211,7 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 ** Resolution order:
 **   1. Current worker's current coroutine VM backend context
 **   2. Current worker's VM backend scratch context
-**   3. isolate->main_coro VM backend context
-**   4. &isolate->vm_ctx (static fallback)
+**   3. &isolate->vm_ctx (logical-root/direct-entry context)
 **
 ** This is the ONLY supported way to obtain the live execution context inside
 ** the VM module. Internal helpers must accept ctx as a parameter; they MUST

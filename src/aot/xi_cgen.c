@@ -3857,6 +3857,15 @@ static bool cg_import_ref_value_is_dead_for_aot(XiCgenCtx *ctx, const XiFunc *ow
     return !cg_import_ref_value_use_requires_runtime_value(ctx, owner, v, 0);
 }
 
+static bool cg_aot_frame_new_can_supply_cl_arg(const XiFunc *current, const XiValue *callee,
+                                               const XiFunc *target);
+static bool cg_func_needs_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f);
+static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                         const XiValue *callee, const XiFunc *target,
+                                         bool typed_params, XiValue *const *args,
+                                         uint16_t arg_start, uint16_t nargs,
+                                         const XiValue *transfer_owner);
+
 #include "xi_cgen_dispatch_helpers.inc.c"
 
 static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char *name,
@@ -5177,6 +5186,69 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix) {
     XR_DCHECK(ctx != NULL, "emit_value_rhs: NULL ctx");
     XR_DCHECK(v != NULL, "emit_value_rhs: NULL value");
+
+    if (v->op == XI_GO) {
+        xicgen_go(ctx, out, f, v, prefix);
+        return;
+    }
+
+    if (v->op == XI_CHAN_NEW) {
+        XrRep rep = cg_value_plan_storage_rep(ctx, v);
+        if (rep == XR_REP_PTR)
+            fprintf(out, "(");
+        else if (rep != XR_REP_TAGGED) {
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported channel storage representation %d\n",
+                    (int) rep);
+            emit_codegen_abort_expr(out);
+            ctx->error = true;
+            return;
+        }
+        fprintf(out, "xr_aot_channel_new(%s, ", xicgen_aot_context_expr(ctx, f));
+        if (v->nargs >= 1)
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        else
+            fprintf(out, "0");
+        fprintf(out, ")");
+        if (rep == XR_REP_PTR)
+            fprintf(out, ").ptr");
+        return;
+    }
+
+    if (v->op == XI_CHAN_RECV_STATUS) {
+        if (v->nargs < 1) {
+            fprintf(stderr, "[xi_cgen] ERROR: CHAN_RECV_STATUS missing recv value\n");
+            emit_codegen_abort_expr(out);
+            ctx->error = true;
+            return;
+        }
+        XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, rep);
+        if (v->args[0] && v->args[0]->op == XI_CHAN_TRY_RECV)
+            fprintf(out, "xr_aot_recv_is_value(_chan_try_%u)", v->args[0]->id);
+        else {
+            fprintf(out, "xr_aot_recv_is_value(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
+
+    if (v->op == XI_CHAN_IS_CLOSED) {
+        if (v->nargs < 1) {
+            fprintf(stderr, "[xi_cgen] ERROR: CHAN_IS_CLOSED missing channel\n");
+            emit_codegen_abort_expr(out);
+            ctx->error = true;
+            return;
+        }
+        XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, rep);
+        fprintf(out, "xr_aot_chan_is_closed_sync(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
 
     if (xi_op_is_coroutine(v->op)) {
         const char *op_name = xi_op_name(v->op);
@@ -6652,6 +6724,33 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
     if (cg_class_native_value_stmt_is_elided(ctx, f, v))
         return;
+
+    if (v->op == XI_CHAN_TRY_RECV) {
+        if (v->nargs < 1) {
+            fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_RECV missing channel\n");
+            ctx->error = true;
+            return;
+        }
+        fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv_sync(", v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ");\n");
+        if (ctx->pre_decl_all) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        } else {
+            fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        }
+        XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, rep);
+        fprintf(out, "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u))", v->id);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ";\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        return;
+    }
 
     if (emit_class_shared_native_ctor_value_stmt(ctx, out, f, prefix, v))
         return;
@@ -8588,6 +8687,13 @@ static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner
                 if (call.func == target)
                     return true;
             }
+            if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) {
+                const char *method_prefix = NULL;
+                const XiFunc *method =
+                    cg_class_native_resolve_method_call(ctx, owner, v, &method_prefix);
+                if (method == target)
+                    return true;
+            }
             if (cg_value_is_static_func_ref(ctx, owner, v, target) &&
                 cg_static_func_ref_use_requires_body(ctx, owner, v, target, 0))
                 return true;
@@ -8625,7 +8731,12 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
     if (f->c_export || f->aot_used || f->aot_naked || f->aot_weak || f->aot_section ||
         (f->aot_interrupt_abi && f->aot_interrupt_abi[0]))
         return true;
-    return cg_func_is_module_export(ctx, f) || cg_func_is_class_member(ctx, f);
+    if (cg_func_is_class_member(ctx, f))
+        return !ctx->emit_main;
+    /* An executable is closed-world: language-level module exports are not
+     * external roots.  Only explicit @c_export/interrupt/used roots above
+     * survive.  Shared-library emission keeps module exports as roots. */
+    return !ctx->emit_main && cg_func_is_module_export(ctx, f);
 }
 
 static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth) {

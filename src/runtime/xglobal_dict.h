@@ -46,17 +46,14 @@
 #include <stdbool.h>
 
 /* Wrapper around a string-keyed XrMap.  All keys are interned
- * XrString*; values are arbitrary XrValue.  The map node memory is
- * owned by the GC heap, so the dict participates in mark-sweep via
- * the isolate's GC root list. */
+ * XrString*; values are arbitrary XrValue.  The map is module storage
+ * owned by the isolate fixed heap, independent from any task heap. */
 typedef struct XrGlobalDict {
     XrMap *map;
 } XrGlobalDict;
 
-/* Construct an empty dict.  Allocates the underlying XrMap on the
- * isolate's GC heap, so a coroutine context is required (use the
- * main coroutine for isolate-wide globals). */
-XR_FUNC void xr_global_dict_init(XrGlobalDict *gd, struct XrCoroutine *coro);
+/* Construct an empty module-storage dict on the isolate fixed heap. */
+XR_FUNC void xr_global_dict_init(XrGlobalDict *gd, struct XrVMRuntime *isolate);
 
 /* Tear down the dict.  The XrMap itself is GC-owned; this clears the
  * pointer so subsequent accesses fault loudly during shutdown. */

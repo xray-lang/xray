@@ -14,6 +14,8 @@
 #include "xaot_abi.h"
 #include "xaot_class_layout.h"
 #include "xaot_container.h"
+#include "xaot_entry_plan.h"
+#include "xaot_storage_plan.h"
 #include "../analysis/xglobal_summary.h"
 #include "../ir/xi_module.h"
 #include "../base/xdefs.h"
@@ -1539,6 +1541,21 @@ typedef struct XaotBundle {
     XiModule **modules;
     uint32_t nmodules;
     uint32_t entry_module;
+    XaotTargetCapabilityProvider target_provider;
+    XrEntryPlan entry_plan;
+    bool has_entry_plan;
+    XaotStoragePlan *storage_plans;
+    uint32_t nstorage_plans;
+    uint32_t storage_plan_cap;
+    XaotCapturePlan *capture_plans;
+    uint32_t ncapture_plans;
+    uint32_t capture_plan_cap;
+    XaotModuleInitPlan *module_init_plans;
+    uint32_t nmodule_init_plans;
+    uint32_t module_init_plan_cap;
+    XaotAddressPlan *address_plans;
+    uint32_t naddress_plans;
+    uint32_t address_plan_cap;
     XaotTargetDataLayout target_data_layout;
     XaotFuncPlan *func_plans;
     uint32_t nfunc_plans;
@@ -1705,6 +1722,8 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
                                                 const XaotTargetDataLayout *target_layout);
+XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
+                                                 const XaotTargetCapabilityProvider *provider);
 XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,
                                              uint32_t profile);
 XR_FUNC const XaotClassHierarchyPlan *

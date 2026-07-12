@@ -25,6 +25,7 @@
 #include "xmap.h"
 #include "xstring.h"
 #include "../mem/xalloc_unified.h"
+#include "../core/xr_exec_context.h"
 #include "../mem/xweak_registry.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
@@ -332,13 +333,13 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap
 /* ========== Create and Destroy ========== */
 
 XrMap *xr_map_new(struct XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "map_new: NULL coro");
     XrMap *map = (XrMap *) xr_alloc(coro, sizeof(XrMap), XR_TMAP);
     if (!map)
         return NULL;
 
     xr_obj_header_init_type(&map->hdr, XR_TMAP);
-    map->owner_heap = xr_coro_get_heap(coro);
+    XrAllocationContext *alloc = coro ? NULL : xr_alloc_context_current();
+    map->owner_heap = coro ? xr_coro_get_heap(coro) : (alloc ? alloc->local_heap : NULL);
 
     map->count = 0;
     map->nentries = 0;
@@ -514,7 +515,6 @@ bool xr_map_is_empty(XrMap *map) {
 /* ========== Iteration (insertion order) ========== */
 
 XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
-    XR_DCHECK(coro != NULL, "map_keys: NULL coro");
     XR_DCHECK(map != NULL, "map_keys: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
@@ -531,7 +531,6 @@ XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
 }
 
 XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
-    XR_DCHECK(coro != NULL, "map_values: NULL coro");
     XR_DCHECK(map != NULL, "map_values: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
@@ -548,7 +547,6 @@ XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
 }
 
 XrArray *xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
-    XR_DCHECK(coro != NULL, "map_entries: NULL coro");
     XR_DCHECK(map != NULL, "map_entries: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 

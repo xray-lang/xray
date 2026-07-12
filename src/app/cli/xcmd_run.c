@@ -47,11 +47,11 @@ static XrVMRuntime *create_run_isolate(const RunOptions *opts) {
     params.trace_execution = opts->trace;
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
+    params.scheduler_workers = opts->num_workers;
 
     XrVMRuntime *iso = xr_isolate_profile_create(&params);
     if (!iso)
         return NULL;
-    xray_vm_multicore_init(iso, opts->num_workers);
     return iso;
 }
 

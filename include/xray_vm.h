@@ -37,6 +37,8 @@ typedef struct {
     bool dump_bytecode;
     bool dump_ic_feedback;
 
+    int scheduler_workers;  // 0=auto; consumed only when EntryPlan reaches a scheduler
+
     void *userdata;
 
     const char *script_file;

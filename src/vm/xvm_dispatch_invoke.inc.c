@@ -346,7 +346,8 @@ invoke_dispatch:;
                     R(a + 1 + j) = xr_null();
                 }
                 int extra_args = frame_argc > proto->numparams ? frame_argc - proto->numparams : 0;
-                XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+                XrArray *rest_array = VM_CURRENT_CORO ? xr_array_new(VM_CURRENT_CORO)
+                                                      : vm_root_array_new(isolate, 4, XR_ELEM_ANY);
                 if (extra_args > 0) {
                     XrValue *arg_base = &R(a + 1 + proto->numparams);
                     for (int j = 0; j < extra_args; j++) {
@@ -544,7 +545,8 @@ vmcase(OP_INVOKE_DIRECT) {
         }
         int extra_args =
             frame_argc > direct_proto->numparams ? frame_argc - direct_proto->numparams : 0;
-        XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+        XrArray *rest_array = VM_CURRENT_CORO ? xr_array_new(VM_CURRENT_CORO)
+                                              : vm_root_array_new(isolate, 4, XR_ELEM_ANY);
         if (extra_args > 0) {
             XrValue *arg_base = &R(a + 1 + direct_proto->numparams);
             for (int j = 0; j < extra_args; j++) {

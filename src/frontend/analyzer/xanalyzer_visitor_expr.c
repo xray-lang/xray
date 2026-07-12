@@ -645,9 +645,10 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                 ptr_type->ptr_is_mut
-                    ? "RawMut.of is only supported in freestanding AOT profile for static data"
-                    : "RawPtr.of is only supported in freestanding AOT profile for static const "
-                      "data",
+                    ? "RawMut.of general lvalue address-taking is not enabled; the current "
+                      "surface only exposes verified freestanding static data"
+                    : "RawPtr.of general lvalue address-taking is not enabled; the current "
+                      "surface only exposes verified freestanding static const data",
                 &loc);
             return xr_type_new_unknown(ctx->analyzer->isolate);
         }
@@ -3816,193 +3817,12 @@ static void xa_check_go_call_boundary_args(XaInferContext *ctx, AstNode *go_node
     }
 }
 
-/* ----------------------------------------------------------------------------
- * Coroutine Closure Capture Validation
- * Ensures coroutines don't capture non-shared variables unsafely.
- * -------------------------------------------------------------------------- */
-void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
-    if (!node)
-        return;
-
-    switch (node->type) {
-        case AST_VARIABLE: {
-            const char *name = node->as.variable.name;
-            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
-            if (!sym || sym->is_builtin || sym->is_imported || sym->kind == XA_SYM_FUNCTION ||
-                sym->kind == XA_SYM_CLASS || sym->kind == XA_SYM_MODULE ||
-                sym->kind == XA_SYM_IMPORT)
-                break;
-
-            if (sym->is_shared)
-                break;
-
-            XrLocation loc = {.file = ctx->file_path, .line = line, .column = node->column};
-            char msg[512];
-            if (sym->kind == XA_SYM_PARAMETER) {
-                if (sym->passing_mode == XR_PARAM_IN || sym->passing_mode == XR_PARAM_REF) {
-                    snprintf(
-                        msg, sizeof(msg),
-                        "go closure cannot capture borrowed parameter '%s'\n"
-                        "hint: pass an owned value or copy(%s) through an explicit go argument",
-                        name, name);
-                } else {
-                    snprintf(msg, sizeof(msg),
-                             "go closure cannot capture parameter '%s'\n"
-                             "hint: pass copy(%s) or move %s through an explicit go argument",
-                             name, name, name);
-                }
-            } else if (sym->is_const) {
-                snprintf(msg, sizeof(msg),
-                         "go closure cannot capture const variable '%s'\n"
-                         "hint: pass copy(%s) through an explicit go argument, or declare shared "
-                         "for shared identity",
-                         name, name);
-            } else {
-                snprintf(
-                    msg, sizeof(msg),
-                    "go closure cannot capture mutable variable '%s'\n"
-                    "hint: pass copy(%s) or move %s through an explicit go argument, or declare "
-                    "shared for shared identity",
-                    name, name, name);
-            }
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_CLOSURE_CAPTURE, msg, &loc);
-            break;
-        }
-        case AST_BINARY_ADD:
-        case AST_BINARY_SUB:
-        case AST_BINARY_MUL:
-        case AST_BINARY_DIV:
-        case AST_BINARY_MOD:
-        case AST_BINARY_EQ:
-        case AST_BINARY_NE:
-        case AST_BINARY_LT:
-        case AST_BINARY_LE:
-        case AST_BINARY_GT:
-        case AST_BINARY_GE:
-        case AST_BINARY_AND:
-        case AST_BINARY_OR:
-            check_closure_capture(ctx, node->as.binary.left, line);
-            check_closure_capture(ctx, node->as.binary.right, line);
-            break;
-        case AST_UNARY_NEG:
-        case AST_UNARY_NOT:
-        case AST_UNARY_BNOT:
-            check_closure_capture(ctx, node->as.unary.operand, line);
-            break;
-        case AST_CALL_EXPR:
-            // Only check callee captures here; go-call arguments are validated
-            // separately by xa_check_go_call_boundary_args.
-            check_closure_capture(ctx, node->as.call_expr.callee, line);
-            break;
-        case AST_MEMBER_ACCESS:
-            check_closure_capture(ctx, node->as.member_access.object, line);
-            break;
-        case AST_COMPTIME_EXPR:
-            check_closure_capture(ctx, node->as.comptime_expr.expr, line);
-            break;
-        case AST_FUNCTION_EXPR:
-            // Nested closure - check its body for captured variables
-            if (node->as.function_expr.body) {
-                check_closure_capture(ctx, node->as.function_expr.body, line);
-            }
-            break;
-        case AST_BLOCK:
-            for (int i = 0; i < node->as.block.count; i++) {
-                check_closure_capture(ctx, node->as.block.statements[i], line);
-            }
-            break;
-        case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-            // Check initializer
-            if (node->as.var_decl.initializer) {
-                check_closure_capture(ctx, node->as.var_decl.initializer, line);
-            }
-            break;
-        case AST_ASSIGNMENT:
-            check_closure_capture(ctx, node->as.assignment.value, line);
-            break;
-        case AST_IF_STMT:
-            check_closure_capture(ctx, node->as.if_stmt.condition, line);
-            check_closure_capture(ctx, node->as.if_stmt.then_branch, line);
-            if (node->as.if_stmt.else_branch) {
-                check_closure_capture(ctx, node->as.if_stmt.else_branch, line);
-            }
-            break;
-        case AST_WHILE_STMT:
-            check_closure_capture(ctx, node->as.while_stmt.condition, line);
-            check_closure_capture(ctx, node->as.while_stmt.body, line);
-            break;
-        case AST_FOR_STMT:
-            if (node->as.for_stmt.initializer) {
-                check_closure_capture(ctx, node->as.for_stmt.initializer, line);
-            }
-            if (node->as.for_stmt.condition) {
-                check_closure_capture(ctx, node->as.for_stmt.condition, line);
-            }
-            if (node->as.for_stmt.increment) {
-                check_closure_capture(ctx, node->as.for_stmt.increment, line);
-            }
-            check_closure_capture(ctx, node->as.for_stmt.body, line);
-            break;
-        case AST_FOR_IN_STMT:
-            check_closure_capture(ctx, node->as.for_in_stmt.collection, line);
-            check_closure_capture(ctx, node->as.for_in_stmt.body, line);
-            break;
-        case AST_RETURN_STMT:
-            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
-                check_closure_capture(ctx, node->as.return_stmt.values[i], line);
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-// Check coroutine expression for closure capture issues
-// go fn(args) - arguments are checked by xa_check_go_call_boundary_args.
-// go { ... }  - closure captures need checking
-void check_coro_capture(XaInferContext *ctx, AstNode *node, int line) {
-    if (!node)
-        return;
-
-    // go fn(args) - arguments are checked by xa_check_go_call_boundary_args.
-    if (node->type == AST_CALL_EXPR) {
-        // Only check if callee itself is a closure that captures variables.
-        CallExprNode *call = &node->as.call_expr;
-        if (call->callee && call->callee->type == AST_FUNCTION_EXPR) {
-            // go (fn() { ... })(args) - check the closure body
-            check_closure_capture(ctx, call->callee->as.function_expr.body, line);
-        }
-        return;
-    }
-
-    // go { ... } - block or closure, check for captured variables
-    if (node->type == AST_FUNCTION_EXPR) {
-        if (node->as.function_expr.body) {
-            check_closure_capture(ctx, node->as.function_expr.body, line);
-        }
-        return;
-    }
-
-    // go block { ... }
-    if (node->type == AST_BLOCK) {
-        check_closure_capture(ctx, node, line);
-        return;
-    }
-}
-
 XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_task(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     GoExprNode *go = &node->as.go_expr;
     bool is_thread_spawn = go->spawn_kind == XR_SPAWN_THREAD;
-
-    xa_freestanding_report_unavailable(
-        ctx, node, is_thread_spawn ? "sys.Thread.spawn" : "go expression",
-        is_thread_spawn ? "OS threads are hosted-only" : "the coroutine scheduler is hosted-only");
 
     // Infer the type of the expression being spawned
     XrType *result_type = xr_type_new_unit(NULL);
@@ -4017,11 +3837,6 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
             // Direct expression result
             result_type = expr_type;
         }
-
-        // Check coroutine closure capture rules. Coroutine closures can only
-        // capture shared; heap-shaped values must cross as explicit
-        // copy(...), move, or shared arguments.
-        check_coro_capture(ctx, go->expr, node->line);
     }
 
     if (is_thread_spawn) {
@@ -4039,9 +3854,6 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
 XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
-
-    xa_freestanding_report_unavailable(ctx, node, "await expression",
-                                       "the coroutine scheduler is hosted-only");
 
     AwaitExprNode *await = &node->as.await_expr;
 

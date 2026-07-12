@@ -280,6 +280,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrVMRuntime *X) {
             xr_coro_discard_uninitialized(coro);
             return NULL;
         }
+        coro->alloc_ctx.local_heap = coro->heap;
     }
 
     coro->flags |= XR_CORO_FLG_MAIN;
@@ -546,19 +547,15 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrC
  * `go topLevelFn(args)` and `go closureOverSharedConst()` shapes.
  */
 static bool vm_closure_needs_private_copy(const XrClosure *closure) {
-    if (!closure)
+    if (!closure || !closure->proto)
         return false;
+    if (PROTO_UPVAL_COUNT(closure->proto) != closure->upval_count)
+        return true;
     for (uint16_t i = 0; i < closure->upval_count; i++) {
-        XrValue uv = closure->upvals[i];
-        if (!XR_IS_PTR(uv))
-            continue;
-        XrObjHeader *h = XR_VALUE_GCPTR(uv);
-        if (!h)
-            continue;
-        int32_t rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
-        if (rc < 0)
-            continue;  // shared / managed / immortal: safe to share by pointer
-        return true;   // thread-local private capture: child needs its own copy
+        uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
+        if (action == XR_CAPTURE_DEEP_COPY || action == XR_CAPTURE_REJECT ||
+            action == XR_CAPTURE_MOVE)
+            return true;
     }
     return false;
 }
@@ -1657,6 +1654,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
     gctx->current_coro = coro;
     if (gctx->isolate != isolate)
         gctx->isolate = isolate;
+    XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
 
     XrVMResult res;
     uint32_t flags = xr_coro_flags_load(coro);
@@ -1675,6 +1673,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
         xr_coro_transition_to_ready(coro);
         if (out)
             *out = coro->result;
+        xr_exec_context_restore(previous);
         return XR_CORO_RUN_YIELD;
     }
     if (res == XR_VM_OK && XR_IS_NULL(gctx->pending_error)) {
@@ -1682,6 +1681,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
         if (out)
             *out = coro->result;
+        xr_exec_context_restore(previous);
         return XR_CORO_RUN_DONE;
     }
 
@@ -1699,6 +1699,7 @@ static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bo
         *out = err;
     gctx->pending_error = xr_null();
     gctx->current_exception = xr_null();
+    xr_exec_context_restore(previous);
     return XR_CORO_RUN_ERROR;
 }
 

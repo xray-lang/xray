@@ -28,6 +28,5 @@ XR_FUNC XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
         return NULL;
 
     module->requires_script = true;
-    module->loaded = true;
     return module;
 }

@@ -82,6 +82,10 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
     ctx->source_file = source_file;
 
     XrProto *proto = xr_compile(ctx, ast);
+    if (proto && !xr_vm_entry_plan_derive(proto)) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+    }
 
     xr_compiler_context_free(ctx);
 
@@ -125,6 +129,10 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
 
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
+    if (proto && !xr_vm_entry_plan_derive(proto)) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+    }
 
     xr_compiler_context_free(ctx);
 

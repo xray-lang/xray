@@ -92,7 +92,7 @@ XrValue xr_range_to_array(struct XrVMRuntime *iso, XrRange *r) {
     XrRangeCore core = xr_range_core_make(r->start, r->end, r->step);
     XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
 
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     if (plan.kind == XR_RANGE_CORE_MATERIALIZE_EMPTY) {
         XrArray *arr = xr_array_with_capacity(coro, 0);
         return xr_value_from_array(arr);

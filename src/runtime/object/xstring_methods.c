@@ -203,7 +203,7 @@ static XrValue m_pad_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
 static XrValue m_split(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1) {
-        XrArray *arr = xr_array_new(xr_current_coro(iso));
+        XrArray *arr = xr_array_new(NULL);
         xr_array_push(arr, xr_string_value(str));
         return xr_value_from_array(arr);
     }
@@ -277,11 +277,12 @@ static XrValue m_reverse(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
  * Bytes.toString(). The receiver remains immutable; the result owns its
  * own backing storage. */
 static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
     int32_t byte_len = (int32_t) (str ? str->length : 0);
-    XrCoroutine *coro = xr_current_coro(iso);
+    XrCoroutine *coro = NULL;
     XrArray *bytes = xr_array_bytes_new(coro, byte_len);
     if (!bytes)
         return xr_null();
@@ -391,7 +392,7 @@ static XrValue m_match(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) 
     if (!xr_regex_match(re, str->data, (int) str->length, &match)) {
         return xr_null();
     }
-    XrArray *result = xr_array_new(xr_current_coro(iso));
+    XrArray *result = xr_array_new(NULL);
     for (int i = 0; i < match.group_count; i++) {
         if (match.groups[i].start) {
             size_t len = match.groups[i].end - match.groups[i].start;
@@ -420,7 +421,7 @@ static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     (void) args;
     (void) argc;
     XrString *s = str_self(self);
-    XrIterator *iter = xr_iterator_new_from_string(xr_current_coro(iso), s, iso);
+    XrIterator *iter = xr_iterator_new_from_string(NULL, s, iso);
     if (iter)
         iter->mode = XR_ITER_MODE_VALUES;
     return iter ? xr_value_from_iterator(iter) : xr_null();
@@ -432,7 +433,7 @@ static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
     (void) args;
     (void) argc;
     XrString *s = str_self(self);
-    XrIterator *iter = xr_iterator_new_from_string(xr_current_coro(iso), s, iso);
+    XrIterator *iter = xr_iterator_new_from_string(NULL, s, iso);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
@@ -440,10 +441,11 @@ static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
  * real (index, char) tuple, matching the static signature and the
  * XI_TUPLE_GET destructuring used by `for ((i, c) in s.entries())`. */
 static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     (void) args;
     (void) argc;
     XrString *s = str_self(self);
-    struct XrCoroutine *coro = xr_current_coro(iso);
+    struct XrCoroutine *coro = NULL;
     size_t n = xr_string_char_length(s);
     XrArray *out = xr_array_with_capacity(coro, n > 0 ? (int) n : 1);
     if (!out)

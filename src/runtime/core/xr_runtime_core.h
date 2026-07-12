@@ -19,6 +19,7 @@
 #include "../object/xnative_type.h"
 #include "../value/xvalue.h"
 #include "xr_script_info.h"
+#include "xr_exec_context.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -45,6 +46,14 @@ typedef struct XrRuntimeCore {
     struct XrStrBuf *tmp_strbuf;
     void *weak_registry;
     struct XrVMRuntime *vm_owner;
+
+    /* Storage lifetime and task identity are deliberately orthogonal.  These
+     * contexts exist even when no scheduler or coroutine object is present. */
+    XrAllocationContext root_alloc;
+    XrAllocationContext module_alloc;
+    XrAllocationContext shared_alloc;
+    XrExecutionContext root_exec;
+    XrExecutionContext module_exec;
 
     XrTypeRegistry *type_registry;
     XrSymbolTable *symbol_table;
@@ -88,5 +97,7 @@ XR_FUNC bool xr_runtime_core_type_needs_destroy(const XrRuntimeCore *core, uint8
 XR_FUNC void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core,
                                                     const XrScopeTransferOps *ops);
 XR_FUNC const XrScopeTransferOps *xr_runtime_core_scope_transfer_ops(const XrRuntimeCore *core);
+XR_FUNC XrExecutionContext *xr_runtime_core_root_exec(XrRuntimeCore *core);
+XR_FUNC XrExecutionContext *xr_runtime_core_module_exec(XrRuntimeCore *core);
 
 #endif  // XR_RUNTIME_CORE_H

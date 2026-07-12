@@ -1,0 +1,7 @@
+import mem
+
+@c_export("xray_rawptr_of_owner_element_reject")
+fn rawptrOfOwnerElementReject() -> int {
+    var values: Array<int> = [7, 11]
+    return mem.addressOf(RawPtr<int>.of(values[0]))
+}

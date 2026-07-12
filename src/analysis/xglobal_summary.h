@@ -12,6 +12,8 @@
 #define XGLOBAL_SUMMARY_H
 
 #include "../base/xdefs.h"
+#include "../base/xentry_plan.h"
+#include "../base/xstorage.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -56,7 +58,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 18,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 20,
 };
 
 typedef enum XgBuildProfile {
@@ -328,27 +330,28 @@ enum {
 };
 
 enum {
-    XG_CAP_COROUTINE = 1u << 0,
-    XG_CAP_CHANNEL = 1u << 1,
-    XG_CAP_EXCEPTION = 1u << 2,
-    XG_CAP_NATIVE = 1u << 3,
-    XG_CAP_EXTERN = 1u << 4,
-    XG_CAP_OBJECTS = 1u << 5,
-    XG_CAP_DEEP_COPY = 1u << 6,
-    XG_CAP_INSTANCEOF = 1u << 7,
-    XG_CAP_SYS_THREAD = 1u << 8,
-    XG_CAP_SCOPE = 1u << 9,
-    XG_CAP_TIMER = 1u << 10,
-    XG_CAP_NETPOLL = 1u << 11,
-    XG_CAP_TASK = 1u << 12,
-    XG_CAP_ATOMIC = 1u << 13,
-    XG_CAP_WORK_QUEUE = 1u << 14,
-    XG_CAP_RESULT_GROUP = 1u << 15,
-    XG_CAP_COUNTDOWN_LATCH = 1u << 16,
-    XG_CAP_SEMAPHORE = 1u << 17,
-    XG_CAP_EVENT_COUNT = 1u << 18,
-    XG_CAP_GENERATOR = 1u << 19,
-    XG_CAP_STACKTRACE = 1u << 20,
+    XG_CAP_COROUTINE = XR_CAP_COROUTINE,
+    XG_CAP_CHANNEL = XR_CAP_CHANNEL,
+    XG_CAP_EXCEPTION = XR_CAP_EXCEPTION,
+    XG_CAP_NATIVE = XR_CAP_NATIVE,
+    XG_CAP_EXTERN = XR_CAP_EXTERN,
+    XG_CAP_OBJECTS = XR_CAP_OBJECTS,
+    XG_CAP_DEEP_COPY = XR_CAP_DEEP_COPY,
+    XG_CAP_INSTANCEOF = XR_CAP_INSTANCEOF,
+    XG_CAP_SYS_THREAD = XR_CAP_SYS_THREAD,
+    XG_CAP_SCOPE = XR_CAP_SCOPE,
+    XG_CAP_TIMER = XR_CAP_TIMER,
+    XG_CAP_NETPOLL = XR_CAP_NETPOLL,
+    XG_CAP_TASK = XR_CAP_TASK,
+    XG_CAP_ATOMIC = XR_CAP_ATOMIC,
+    XG_CAP_WORK_QUEUE = XR_CAP_WORK_QUEUE,
+    XG_CAP_RESULT_GROUP = XR_CAP_RESULT_GROUP,
+    XG_CAP_COUNTDOWN_LATCH = XR_CAP_COUNTDOWN_LATCH,
+    XG_CAP_SEMAPHORE = XR_CAP_SEMAPHORE,
+    XG_CAP_EVENT_COUNT = XR_CAP_EVENT_COUNT,
+    XG_CAP_GENERATOR = XR_CAP_GENERATOR,
+    XG_CAP_STACKTRACE = XR_CAP_STACKTRACE,
+    XG_CAP_PARALLEL = XR_CAP_PARALLEL,
 };
 
 enum {
@@ -367,13 +370,16 @@ enum {
 };
 
 enum {
-    XG_BODY_MAY_THROW = 1u << 0,
-    XG_BODY_MAY_SUSPEND = 1u << 1,
-    XG_BODY_MAY_ALLOC = 1u << 2,
-    XG_BODY_MAY_MUTATE = 1u << 3,
-    XG_BODY_MAY_CALL_NATIVE = 1u << 4,
-    XG_BODY_MAY_READ_MEM = 1u << 5,
-    XG_BODY_MAY_CALL = 1u << 6,
+    XG_BODY_MAY_THROW = XR_EFFECT_MAY_THROW,
+    XG_BODY_MAY_SUSPEND = XR_EFFECT_MAY_SUSPEND,
+    XG_BODY_MAY_ALLOC = XR_EFFECT_MAY_ALLOC,
+    XG_BODY_MAY_MUTATE = XR_EFFECT_MAY_MUTATE,
+    XG_BODY_MAY_CALL_NATIVE = XR_EFFECT_MAY_CALL_NATIVE,
+    XG_BODY_MAY_READ_MEM = XR_EFFECT_MAY_READ_MEM,
+    XG_BODY_MAY_CALL = XR_EFFECT_MAY_CALL,
+    XG_BODY_MAY_SPAWN = XR_EFFECT_MAY_SPAWN,
+    XG_BODY_ACCESSES_MUTABLE_MODULE = XR_EFFECT_ACCESSES_MUTABLE_MODULE,
+    XG_BODY_OBSERVES_TASK_ID = XR_EFFECT_OBSERVES_TASK_ID,
 };
 
 enum {
@@ -668,6 +674,11 @@ typedef struct XgDeclSummary {
     uint32_t signature_key;
     uint32_t source_span_id;
     uint32_t derive_flags;
+    uint32_t storage_flags;
+    uint8_t storage_owner;
+    uint8_t storage_mutability;
+    uint8_t address_identity;
+    uint8_t materialization_kind;
 } XgDeclSummary;
 
 typedef struct XgClassSummary {
@@ -1486,6 +1497,9 @@ XR_FUNC const XgHashEqSummary *xg_global_evidence_find_hash_eq(const XgGlobalEvi
 XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *evidence,
                                                         const XgBodySummary *body,
                                                         uint32_t *out_effect_bits);
+XR_FUNC bool xg_body_reachability_mark_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                          XgFuncId root_func_id, uint8_t *reachable,
+                                                          uint32_t reachable_count);
 
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
 XR_FUNC XgEvidenceCacheKey xg_global_evidence_cache_key(const XgGlobalEvidence *evidence,

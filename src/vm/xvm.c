@@ -97,6 +97,27 @@
 
 #include "xvm_profiler.h"
 
+static XrArray *vm_root_array_new(XrVMRuntime *isolate, int capacity, uint8_t elem_type) {
+    return xr_array_with_capacity_in(&isolate->core_rt->root_alloc, capacity > 0 ? capacity : 4,
+                                     (XrArrayElemType) elem_type);
+}
+
+static XrMap *vm_root_map_new(XrVMRuntime *isolate, uint32_t capacity) {
+    XrMap *map =
+        (XrMap *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), sizeof(XrMap), XR_TMAP);
+    if (map)
+        xr_map_init_inplace(map, capacity);
+    return map;
+}
+
+static XrSet *vm_root_set_new(XrVMRuntime *isolate) {
+    XrSet *set =
+        (XrSet *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), sizeof(XrSet), XR_TSET);
+    if (set)
+        xr_set_init_inplace(set);
+    return set;
+}
+
 /* ========== Computed Goto Support ========== */
 #ifndef XR_USE_COMPUTED_GOTO
 #if defined(__GNUC__) || defined(__clang__)
