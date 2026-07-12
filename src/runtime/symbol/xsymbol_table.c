@@ -297,6 +297,7 @@ static const char *xr_builtin_symbol_names[] = {
     "compare",
     "commonPrefix",
     "reinterpret",
+    "asBytes",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \
