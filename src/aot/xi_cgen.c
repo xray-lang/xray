@@ -3968,6 +3968,10 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
                                          bool typed_params, XiValue *const *args,
                                          uint16_t arg_start, uint16_t nargs,
                                          const XiValue *transfer_owner);
+static const XaotTransferPlan *cg_required_transfer_plan(XiCgenCtx *ctx, const XiValue *site,
+                                                         uint16_t transfer_index,
+                                                         const XiValue *expected_value,
+                                                         const char *context);
 
 #include "xi_cgen_dispatch_helpers.inc.c"
 

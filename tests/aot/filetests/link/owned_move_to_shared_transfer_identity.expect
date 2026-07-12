@@ -1,6 +1,7 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 regex=function [0-9]+ name=publish_len
+regex=transfer [0-9]+ func=publish_len site=v[0-9]+ kind=shared_init index=0 value=v[0-9]+ mode=move action=move type-key=[0-9a-f]{16} evidence=site\+value\+mode\+type\+boundary_clone reason=none
 c_contains=xrt_array_new_filled_value(
 c_not_contains=xrt_value_clone_for_coro(
 c_not_contains=xrt_json_clone_for_coro(
