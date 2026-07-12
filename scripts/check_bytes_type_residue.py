@@ -69,6 +69,10 @@ ALLOWED_REMOVED_TYPE_FILES = {
     Path("tests/compile_errors/type/bytes_public_types_removed.xr"),
     Path("tests/compile_errors/type/bytes_public_types_removed.xr.expected"),
 }
+ALLOWED_REMOVED_NAMESPACE_FILES = {
+    Path("tests/compile_errors/type/bytes_public_namespace_removed.xr"),
+    Path("tests/compile_errors/type/bytes_public_namespace_removed.xr.expected"),
+}
 PUBLIC_BLOCKING_CATEGORIES = {
     "PUBLIC_TYPE_BYTES",
     "PUBLIC_TYPE_BYTESPAN",
@@ -120,6 +124,8 @@ def classify_removed_type(root: Path, path: Path, line: str) -> str | None:
     rel_path = rel(root, path)
     if rel_path in ALLOWED_REMOVED_TYPE_FILES:
         return "ALLOWED_REMOVED_TYPE_NEGATIVE_TEST"
+    if rel_path in ALLOWED_REMOVED_NAMESPACE_FILES:
+        return "ALLOWED_REMOVED_NAMESPACE_NEGATIVE_TEST"
     if PRELUDE_RE.search(line) or (
         rel_path == Path("src/frontend/analyzer/xtype_ref_resolve.c")
         and REMOVED_TYPE_RE.search(line)
