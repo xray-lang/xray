@@ -962,7 +962,7 @@ static inline void xrt_array_stack_slice_view_release(XrValue view) {
     }
 }
 
-#include "xrt_array_bytes.inc.c"
+#include "xrt_byte_array.inc.c"
 
 typedef struct {
     int64_t len;

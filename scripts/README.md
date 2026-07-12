@@ -58,8 +58,8 @@ CTest 的 `parallel_backend_abi_convergence`。
 `INTERNAL_LEGACY_BYTES_NAMING` 和允许保留的 compile-error 负例。默认模式只打印 inventory
 并返回 0，便于 P0 固定基线；`--json` 输出机器可读结果；`--fail-on-public` 在 public 表面类目
 非空时返回 1，等 resolver/type-name/docs/spec 清零后可接入 CI。历史 `XI_BYTES_*`、
-`OP_BYTES_*` 与 `xr_array_bytes_*` 名称应为 0；CGen bytes helper 等剩余 internal legacy
-命名仅进入 inventory，后续由 204 backend 收敛切片清理。
+`OP_BYTES_*`、`xr_array_bytes_*`、`emit_bytes_*` 与 `cg_bytes_*` 名称应保持为 0；若后续
+backend 切片重新引入这些 internal legacy 命名，inventory 会把它们列为回流证据。
 
 ## 与 nightly.yml 的关系
 
