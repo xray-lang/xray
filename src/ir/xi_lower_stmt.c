@@ -2927,21 +2927,29 @@ static void stmt_mark_storage_allocs_in_range(XiBlock *block, uint32_t begin,
         stmt_mark_value_storage_alloc(block->values[i], storage_mode);
 }
 
-static XiValue *stmt_wrap_to_shared(XiLower *l, XiValue *value, int line) {
+static XiValue *stmt_wrap_to_shared_kind(XiLower *l, XiValue *value, int line, int64_t kind) {
     if (!l || !value)
         return value;
     if (value->op == XI_CALL_BUILTIN && value->aux &&
-        strcmp((const char *) value->aux, "to_shared") == 0)
+        strcmp((const char *) value->aux, "to_shared") == 0) {
+        if (kind != XI_TO_SHARED_KIND_DEFAULT)
+            value->aux_int = kind;
         return value;
+    }
     XiValue *shared = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
                                    value->type ? value->type : l->type_any, 1);
     if (!shared)
         return value;
     shared->args[0] = value;
     shared->aux = (void *) "to_shared";
+    shared->aux_int = kind;
     shared->flags |= XI_FLAG_SIDE_EFFECT;
     shared->line = (uint32_t) line;
     return shared;
+}
+
+static XiValue *stmt_wrap_to_shared(XiLower *l, XiValue *value, int line) {
+    return stmt_wrap_to_shared_kind(l, value, line, XI_TO_SHARED_KIND_DEFAULT);
 }
 
 static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue *init_val,
@@ -2968,7 +2976,8 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
     }
 
     if (init->type == AST_MOVE_EXPR)
-        return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
+        return stmt_wrap_to_shared_kind(l, init_val, init->line ? init->line : decl->line,
+                                        XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED);
 
     if (init->type == AST_VARIABLE)
         return init_val;

@@ -867,6 +867,9 @@ static inline void xi_json_set_storage_mode(XiValue *v, uint8_t storage_mode) {
 #define XI_COPY_KIND_LIKELY INT64_C(0x584C494B454C5901)
 #define XI_COPY_KIND_UNLIKELY INT64_C(0x58554E4C494B5901)
 
+#define XI_TO_SHARED_KIND_DEFAULT 0
+#define XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED INT64_C(0x5853484D4F564F57)
+
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
 }

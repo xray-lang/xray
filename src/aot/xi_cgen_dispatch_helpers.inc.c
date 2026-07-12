@@ -4016,10 +4016,17 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, ", %d)", (int) v->aux_int);
     } else if (strcmp(bn, "copy") == 0 || strcmp(bn, "copy_shared") == 0 ||
                strcmp(bn, "copy_owned") == 0 || strcmp(bn, "to_shared") == 0) {
-        /* copy(x): explicit deep copy. The internal copy_shared/copy_owned/to_shared
-         * forms carry VM storage intent; standalone AOT currently has one RC heap,
-         * so they still emit a single recursive clone. */
+        /* copy(x): explicit deep copy. A source-level move-owned to_shared is a
+         * transfer identity; other internal copy/shared forms still clone in
+         * standalone AOT's single RC heap. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
+        if (strcmp(bn, "to_shared") == 0 && v->aux_int == XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED) {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
         if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
             if (cg_value_plan_is_span_aggregate(ctx, v)) {
                 fprintf(out, "xrt_span_to_owned_span(");
