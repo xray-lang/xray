@@ -3843,20 +3843,20 @@ static bool lower_endian_arg_const(AstNode *arg, int64_t *out_index) {
     return lower_endian_member_index(ma->name, out_index);
 }
 
-static XiValue *lower_bytes_int_arg(XiLower *l, AstNode *node, XiValue *arg) {
+static XiValue *lower_byte_slice_int_arg(XiLower *l, AstNode *node, XiValue *arg) {
     if (arg && arg->type && xr_is_json_coercion(l->type_int, arg->type))
         return xi_lower_checktype_for_type(l, node, arg, l->type_int);
     return arg;
 }
 
-static XiValue *lower_bytes_endian_arg(XiLower *l, AstNode *arg) {
+static XiValue *lower_byte_slice_endian_arg(XiLower *l, AstNode *arg) {
     int64_t endian = XR_ENDIAN_NATIVE;
     if (lower_endian_arg_const(arg, &endian))
         return xi_const_int(l->func, l->cur_block, endian, l->type_int);
     return xi_lower_expr(l, arg);
 }
 
-static uint16_t lower_bytes_typed_op_for_target(XrType *target, bool is_load) {
+static uint16_t lower_byte_slice_typed_op_for_target(XrType *target, bool is_load) {
     if (!target)
         return 0;
     if (XR_TYPE_IS_INT(target)) {
@@ -3887,8 +3887,8 @@ static uint16_t lower_bytes_typed_op_for_target(XrType *target, bool is_load) {
     return 0;
 }
 
-static XiValue *lower_bytes_typed_signed_load_narrow(XiLower *l, AstNode *node, XiValue *value,
-                                                     XrType *target) {
+static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *node, XiValue *value,
+                                                          XrType *target) {
     if (!target || !value || !XR_TYPE_IS_INT(target))
         return value;
     switch (target->native_width) {
@@ -3900,17 +3900,18 @@ static XiValue *lower_bytes_typed_signed_load_narrow(XiLower *l, AstNode *node, 
     }
 }
 
-static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                       MemberAccessNode *ma, XiValue *recv,
-                                       struct XrType *result_type) {
+static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                            MemberAccessNode *ma, XiValue *recv,
+                                            struct XrType *result_type) {
     if (!xi_type_is_bytes(recv->type) || !ma->name || !call->type_args || !call->type_args[0] ||
         call->type_arg_count != 1)
         return NULL;
 
-    bool bytes_typed_load = strcmp(ma->name, "load") == 0;
-    bool bytes_typed_store = strcmp(ma->name, "store") == 0;
+    bool byte_slice_typed_load = strcmp(ma->name, "load") == 0;
+    bool byte_slice_typed_store = strcmp(ma->name, "store") == 0;
     int n = call->arg_count;
-    if ((!bytes_typed_load || (n != 1 && n != 2)) && (!bytes_typed_store || (n != 2 && n != 3)))
+    if ((!byte_slice_typed_load || (n != 1 && n != 2)) &&
+        (!byte_slice_typed_store || (n != 2 && n != 3)))
         return NULL;
     for (int i = 0; i < n; i++) {
         if (!lower_is_direct_arg(call->arguments[i]))
@@ -3918,54 +3919,55 @@ static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *
     }
 
     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-    uint16_t bytes_op = lower_bytes_typed_op_for_target(target, bytes_typed_load);
-    if (!bytes_op)
+    uint16_t byte_slice_op = lower_byte_slice_typed_op_for_target(target, byte_slice_typed_load);
+    if (!byte_slice_op)
         return NULL;
 
     XiValue *offset = xi_lower_expr(l, call->arguments[0]);
     if (!offset)
         return NULL;
-    offset = lower_bytes_int_arg(l, node, offset);
+    offset = lower_byte_slice_int_arg(l, node, offset);
     if (!offset)
         return NULL;
 
     XiValue *value = NULL;
-    if (bytes_typed_store) {
+    if (byte_slice_typed_store) {
         value = xi_lower_expr(l, call->arguments[1]);
         if (!value)
             return NULL;
         if (target && XR_TYPE_IS_INT(target)) {
-            value = lower_bytes_int_arg(l, node, value);
+            value = lower_byte_slice_int_arg(l, node, value);
             if (!value)
                 return NULL;
         }
     }
 
-    int endian_arg_index = bytes_typed_load ? 1 : 2;
+    int endian_arg_index = byte_slice_typed_load ? 1 : 2;
     bool has_explicit_endian = n > endian_arg_index;
     XiValue *endian = has_explicit_endian
-                          ? lower_bytes_endian_arg(l, call->arguments[endian_arg_index])
+                          ? lower_byte_slice_endian_arg(l, call->arguments[endian_arg_index])
                           : xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
     if (!endian)
         return NULL;
 
-    uint16_t expected_args = bytes_typed_load ? 3 : 4;
-    XrType *op_type = bytes_typed_store ? l->type_unit : result_type;
-    if (bytes_typed_load && (!op_type || xi_lower_type_is_unknown(op_type)))
+    uint16_t expected_args = byte_slice_typed_load ? 3 : 4;
+    XrType *op_type = byte_slice_typed_store ? l->type_unit : result_type;
+    if (byte_slice_typed_load && (!op_type || xi_lower_type_is_unknown(op_type)))
         op_type = target;
-    XiValue *v = xi_value_new(l->func, l->cur_block, bytes_op, op_type, expected_args);
+    XiValue *v = xi_value_new(l->func, l->cur_block, byte_slice_op, op_type, expected_args);
     if (!v)
         return NULL;
     v->args[0] = recv;
     v->args[1] = offset;
-    if (bytes_typed_store) {
+    if (byte_slice_typed_store) {
         v->args[2] = value;
         v->args[3] = endian;
     } else {
         v->args[2] = endian;
     }
     v->line = (uint32_t) node->line;
-    return bytes_typed_load ? lower_bytes_typed_signed_load_narrow(l, node, v, target) : v;
+    return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
+                                 : v;
 }
 
 static bool lower_is_channel_send_boundary_method(const char *method) {
@@ -4473,9 +4475,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
-        XiValue *bytes_typed = lower_bytes_typed_call(l, node, call, ma, recv, result_type);
-        if (bytes_typed)
-            return bytes_typed;
+        XiValue *byte_slice_typed =
+            lower_byte_slice_typed_call(l, node, call, ma, recv, result_type);
+        if (byte_slice_typed)
+            return byte_slice_typed;
 
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
@@ -4774,42 +4777,44 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (xi_type_is_bytes(recv->type) && ma->name) {
-            uint16_t bytes_op = 0;
+            uint16_t byte_slice_op = 0;
             uint16_t expected_args = 0;
             XrType *target = NULL;
-            bool bytes_typed_load = strcmp(ma->name, "load") == 0;
-            bool bytes_typed_store = strcmp(ma->name, "store") == 0;
-            if (bytes_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
+            bool byte_slice_typed_load = strcmp(ma->name, "load") == 0;
+            bool byte_slice_typed_store = strcmp(ma->name, "store") == 0;
+            if (byte_slice_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
                 call->type_args && call->type_args[0]) {
                 target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                bytes_op = lower_bytes_typed_op_for_target(target, true);
-                if (bytes_op)
+                byte_slice_op = lower_byte_slice_typed_op_for_target(target, true);
+                if (byte_slice_op)
                     expected_args = 3;
-            } else if (bytes_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
+            } else if (byte_slice_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
                        call->type_args && call->type_args[0]) {
                 target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                bytes_op = lower_bytes_typed_op_for_target(target, false);
-                if (bytes_op)
+                byte_slice_op = lower_byte_slice_typed_op_for_target(target, false);
+                if (byte_slice_op)
                     expected_args = 4;
             }
-            if (bytes_op) {
+            if (byte_slice_op) {
                 /* Strict dynamic-to-int boundary on byte-array intrinsic offsets/counts:
                  * a Json/dynamic argument is verified at runtime via OP_CHECKTYPE
                  * so VM and AOT raise the same TypeError instead of silently
                  * coercing. */
                 for (int i = 0; i < n; i++) {
-                    bool needs_int_boundary = bytes_typed_load || i != 1 || XR_TYPE_IS_INT(target);
+                    bool needs_int_boundary =
+                        byte_slice_typed_load || i != 1 || XR_TYPE_IS_INT(target);
                     if (arg_vals[i] && arg_vals[i]->type && needs_int_boundary &&
                         xr_is_json_coercion(l->type_int, arg_vals[i]->type))
                         arg_vals[i] =
                             xi_lower_checktype_for_type(l, node, arg_vals[i], l->type_int);
                 }
                 XiValue *default_endian = NULL;
-                if ((bytes_typed_load && n == 1) || (bytes_typed_store && n == 2))
+                if ((byte_slice_typed_load && n == 1) || (byte_slice_typed_store && n == 2))
                     default_endian =
                         xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-                XrType *op_type = bytes_typed_store ? l->type_unit : result_type;
-                XiValue *v = xi_value_new(l->func, l->cur_block, bytes_op, op_type, expected_args);
+                XrType *op_type = byte_slice_typed_store ? l->type_unit : result_type;
+                XiValue *v =
+                    xi_value_new(l->func, l->cur_block, byte_slice_op, op_type, expected_args);
                 if (!v)
                     return NULL;
                 v->args[0] = recv;
@@ -4818,8 +4823,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 if (default_endian)
                     v->args[expected_args - 1] = default_endian;
                 v->line = (uint32_t) node->line;
-                return bytes_typed_load ? lower_bytes_typed_signed_load_narrow(l, node, v, target)
-                                        : v;
+                return byte_slice_typed_load
+                           ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
+                           : v;
             }
 
             if (XR_TYPE_IS_SPAN(recv->type)) {
