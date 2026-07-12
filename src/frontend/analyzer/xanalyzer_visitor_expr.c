@@ -333,6 +333,8 @@ typedef enum {
     XA_BUILTIN_TYPE_ITERATOR_OF_INDEX_RECEIVER_ELEM_TUPLE,
     XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE,
     XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_PTR_OF_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_MUT_PTR_OF_RECEIVER_ELEM,
 } XaBuiltinMethodTypeKind;
 
 typedef enum {
@@ -455,6 +457,18 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
             return xr_type_new_span(X, receiver && receiver->container.element_type
                                            ? receiver->container.element_type
                                            : xr_type_new_unknown(X));
+        case XA_BUILTIN_TYPE_PTR_OF_RECEIVER_ELEM:
+            return xr_type_new_pointer(X,
+                                       receiver && receiver->container.element_type
+                                           ? receiver->container.element_type
+                                           : xr_type_new_unknown(X),
+                                       false);
+        case XA_BUILTIN_TYPE_MUT_PTR_OF_RECEIVER_ELEM:
+            return xr_type_new_pointer(X,
+                                       receiver && receiver->container.element_type
+                                           ? receiver->container.element_type
+                                           : xr_type_new_unknown(X),
+                                       true);
     }
     return xr_type_new_unknown(X);
 }
