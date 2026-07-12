@@ -45,18 +45,18 @@ else
 fi
 
 "$XRAY" run --dump-bytecode "$SRC" >"$WORK/dump.out" 2>"$WORK/dump.err"
-if grep -Eq '^[0-9]+.*[[:space:]]TO_SHARED[[:space:]]' "$WORK/dump.out"; then
-    record_pass "shared copy: bytecode uses TO_SHARED"
+if grep -Eq '^[0-9]+.*[[:space:]]COPY[[:space:]]+R\[[0-9]+\][[:space:]]+R\[[0-9]+\][[:space:]]+R\[1\]([[:space:]]|$)' "$WORK/dump.out"; then
+    record_pass "shared copy: bytecode targets shared storage"
 else
-    record_fail "shared copy: missing TO_SHARED bytecode"
+    record_fail "shared copy: missing shared-target COPY bytecode"
     sed 's/^/      /' "$WORK/dump.out" | sed -n '1,120p'
 fi
 
-if grep -Eq '^[0-9]+.*[[:space:]]COPY[[:space:]]' "$WORK/dump.out"; then
-    record_fail "shared copy: bytecode still uses COPY before shared store"
+if grep -Eq '^[0-9]+.*[[:space:]]TO_SHARED[[:space:]]' "$WORK/dump.out"; then
+    record_fail "shared copy: bytecode still wraps copy in TO_SHARED"
     sed 's/^/      /' "$WORK/dump.out" | sed -n '1,120p'
 else
-    record_pass "shared copy: bytecode avoids COPY"
+    record_pass "shared copy: bytecode avoids TO_SHARED wrapper"
 fi
 
 echo ""

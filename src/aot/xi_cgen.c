@@ -4012,6 +4012,8 @@ static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char
         {"set_new", "constructor", "Set"},
         {"json_new", "constructor", "Json"},
         {"copy", "builtin", "copy"},
+        {"copy_shared", "builtin", "copy_shared"},
+        {"copy_owned", "builtin", "copy_owned"},
         {"to_shared", "builtin", "to_shared"},
         {"str_concat", "builtin", "str_concat"},
         {"regex_compile", "builtin", "regex_compile"},

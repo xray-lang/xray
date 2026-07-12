@@ -2958,8 +2958,14 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
         return init_val;
     }
 
-    if (stmt_call_is_named_builtin(init, "copy"))
+    if (stmt_call_is_named_builtin(init, "copy")) {
+        if (init_val->op == XI_CALL_BUILTIN && init_val->aux &&
+            strcmp((const char *) init_val->aux, "copy") == 0) {
+            init_val->aux = (void *) "copy_shared";
+            return init_val;
+        }
         return stmt_wrap_to_shared(l, init_val, init->line);
+    }
 
     if (init->type == AST_MOVE_EXPR)
         return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
@@ -2974,6 +2980,12 @@ static XiValue *stmt_lower_owned_initializer(XiLower *l, AstNode *decl, XiValue 
                                              XiBlock *init_block, uint32_t init_begin) {
     if (!l || !decl || !init_val || decl->as.var_decl.storage_mode != XR_STORAGE_OWNED)
         return init_val;
+    AstNode *init = decl->as.var_decl.initializer;
+    if (stmt_call_is_named_builtin(init, "copy") && init_val->op == XI_CALL_BUILTIN &&
+        init_val->aux && strcmp((const char *) init_val->aux, "copy") == 0) {
+        init_val->aux = (void *) "copy_owned";
+        return init_val;
+    }
     stmt_mark_storage_allocs_in_range(init_block, init_begin, XR_STORAGE_OWNED);
     return init_val;
 }

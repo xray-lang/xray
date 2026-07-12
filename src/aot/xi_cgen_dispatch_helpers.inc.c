@@ -4014,10 +4014,11 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "xrt_json_get_field(");
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d)", (int) v->aux_int);
-    } else if (strcmp(bn, "copy") == 0 || strcmp(bn, "to_shared") == 0) {
-        /* copy(x): explicit deep copy. The internal to_shared form is used
-         * only for shared-slot stores; standalone AOT has one RC heap, so it
-         * is still a single recursive clone rather than a VM heap promotion. */
+    } else if (strcmp(bn, "copy") == 0 || strcmp(bn, "copy_shared") == 0 ||
+               strcmp(bn, "copy_owned") == 0 || strcmp(bn, "to_shared") == 0) {
+        /* copy(x): explicit deep copy. The internal copy_shared/copy_owned/to_shared
+         * forms carry VM storage intent; standalone AOT currently has one RC heap,
+         * so they still emit a single recursive clone. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
         if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
             if (cg_value_plan_is_span_aggregate(ctx, v)) {

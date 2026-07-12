@@ -64,6 +64,8 @@ XR_FUNC XrValue xr_deep_copy_to_coro(struct XrVMRuntime *X, XrValue value,
                                      struct XrCoroutine *dst_coro);
 XR_FUNC XrValue xr_deep_copy_explicit_to_coro(struct XrVMRuntime *X, XrValue value,
                                               struct XrCoroutine *dst_coro);
+XR_FUNC XrValue xr_deep_copy_explicit_to_storage(struct XrVMRuntime *X, XrValue value,
+                                                 uint8_t storage_mode);
 XR_FUNC XrValue xr_deep_copy_to_coro_counted(struct XrVMRuntime *X, XrValue value,
                                              struct XrCoroutine *dst_coro, int *out_count);
 XR_FUNC XrValue xr_deep_copy_array(struct XrVMRuntime *X, struct XrArray *array,
@@ -94,6 +96,7 @@ typedef struct XrCopyContext {
     struct XrFixedHeap *dst_fixed_heap;  // fixed heap fallback
     struct XrCoroHeap *dst_heap;         // Region heap (preferred when non-NULL)
     bool to_transit;                     // channel-transit copy: sysheap + XR_OBJ_TRANSIT
+    uint8_t dst_storage_mode;            // 0=normal, 1=shared system, 2=owned system
     bool share_existing_shared;          // boundary transfer may retain non-TRANSIT shared objs
     XrSeenEntry **buckets;
     int bucket_count;
@@ -116,6 +119,8 @@ XR_FUNC XrValue xr_deep_copy_to_coro_core(struct XrRuntimeCore *core, XrValue va
                                           struct XrCoroutine *dst_coro);
 XR_FUNC XrValue xr_deep_copy_explicit_to_coro_core(struct XrRuntimeCore *core, XrValue value,
                                                    struct XrCoroutine *dst_coro);
+XR_FUNC XrValue xr_deep_copy_explicit_to_storage_core(struct XrRuntimeCore *core, XrValue value,
+                                                      uint8_t storage_mode);
 XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, XrValue value,
                                                   struct XrCoroutine *dst_coro, int *out_count);
 

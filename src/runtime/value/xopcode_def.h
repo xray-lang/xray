@@ -258,7 +258,7 @@
     _(TOFLOAT, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = float(R[B])")                                    \
     _(TOSTRING, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = string(R[B])")                                  \
     _(TOBOOL, FMT_AB, KOP_AB_UNARY, "R[A] = bool(R[B])")                                           \
-    _(COPY, FMT_AB, KOP_AB_UNARY, "R[A] = copy(R[B])")                                             \
+    _(COPY, FMT_ABC, KOP_AB_UNARY_HINT, "R[A] = copy(R[B]), C=storage")                            \
     _(CHR, FMT_AB, KOP_AB_UNARY, "R[A] = chr(R[B])")                                               \
     _(ENUM_ACCESS, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].variant[R[C]]")                              \
     _(ENUM_NAME, FMT_AB, KOP_AB_UNARY, "R[A] = enum_name(R[B])")                                   \
