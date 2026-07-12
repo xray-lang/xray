@@ -1,0 +1,19 @@
+fn main() {
+    var value = wrap(true)
+    print(len(value))
+}
+
+fn wrap(flag: bool) -> Array<byte> {
+    return choose(flag)
+}
+
+fn choose(flag: bool) -> Array<byte> {
+    owned ownedBuf = Array<byte>(1, 1)
+    shared sharedBuf = copy(ownedBuf)
+    if (flag) {
+        return move ownedBuf
+    }
+    return sharedBuf
+}
+
+main()

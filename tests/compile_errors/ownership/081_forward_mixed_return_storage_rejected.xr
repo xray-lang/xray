@@ -1,0 +1,15 @@
+fn main() {
+    var value = choose(true)
+    print(len(value))
+}
+
+fn choose(flag: bool) -> Array<byte> {
+    owned ownedBuf = Array<byte>(1, 1)
+    shared sharedBuf = copy(ownedBuf)
+    if (flag) {
+        return move ownedBuf
+    }
+    return sharedBuf
+}
+
+main()
