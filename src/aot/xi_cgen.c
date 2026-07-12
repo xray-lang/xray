@@ -5159,27 +5159,27 @@ static bool cg_borrowed_array_slot_user_is_borrow(const XiCgenCtx *ctx_ro, const
         }
         case XI_INDEX_GET:
         case XI_ARRAY_DATA_PTR:
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
-        case XI_BYTES_STORE_U16:
-        case XI_BYTES_STORE_U32:
-        case XI_BYTES_STORE_U64:
-        case XI_BYTES_STORE_F32:
-        case XI_BYTES_STORE_F64:
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
+        case XI_BYTE_SLICE_STORE_U16:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F32:
+        case XI_BYTE_SLICE_STORE_F64:
+        case XI_BYTE_SLICE_FILL:
+        case XI_BYTE_SLICE_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
             return arg_index == 0;
         case XI_SPAN_COPY:
         case XI_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COPY:
+        case XI_BYTE_SLICE_COMPARE:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
         case XI_CALL: {
             if (arg_index == 0)

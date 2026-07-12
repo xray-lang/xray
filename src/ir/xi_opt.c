@@ -2174,22 +2174,23 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
                        ? sr_value_typed_array_elem_rep(v->args[0])
                        : XR_REP_TAGGED;
             return true;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
-            *out = (v->op == XI_BYTES_LOAD_F32 || v->op == XI_BYTES_LOAD_F64) ? XR_REP_F64
-                                                                              : XR_REP_I64;
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
+            *out = (v->op == XI_BYTE_SLICE_LOAD_F32 || v->op == XI_BYTE_SLICE_LOAD_F64)
+                       ? XR_REP_F64
+                       : XR_REP_I64;
             return true;
         case XI_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COMPARE:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             *out = XR_REP_I64;
             return true;
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_FILL:
+        case XI_BYTE_SLICE_COPY:
+        case XI_BYTE_SLICE_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_COPY:
@@ -2486,11 +2487,11 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             }
             *out = XR_REP_TAGGED;
             return true;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
                 sr_value_has_static_typed_array_storage(user->args[0])) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
@@ -2498,11 +2499,11 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             }
             *out = arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
             return true;
-        case XI_BYTES_STORE_U16:
-        case XI_BYTES_STORE_U32:
-        case XI_BYTES_STORE_U64:
-        case XI_BYTES_STORE_F32:
-        case XI_BYTES_STORE_F64:
+        case XI_BYTE_SLICE_STORE_U16:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F32:
+        case XI_BYTE_SLICE_STORE_F64:
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
                 sr_value_has_static_typed_array_storage(user->args[0])) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
@@ -2511,15 +2512,15 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             if (arg_idx == 1) {
                 *out = XR_REP_I64;
             } else if (arg_idx == 2) {
-                *out = (user->op == XI_BYTES_STORE_F32 || user->op == XI_BYTES_STORE_F64)
+                *out = (user->op == XI_BYTE_SLICE_STORE_F32 || user->op == XI_BYTE_SLICE_STORE_F64)
                            ? XR_REP_F64
                            : XR_REP_I64;
             } else {
                 *out = XR_REP_TAGGED;
             }
             return true;
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_FILL:
+        case XI_BYTE_SLICE_REPEAT:
             *out = arg_idx == 0 && user->nargs >= 1 && user->args[0]
                        ? sr_type_native_boundary_rep(user->args[0]->type)
                        : XR_REP_I64;
@@ -2543,18 +2544,18 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             return true;
         case XI_SPAN_COPY:
         case XI_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COPY:
+        case XI_BYTE_SLICE_COMPARE:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             *out = arg_idx <= 1 && user->nargs > arg_idx && user->args[arg_idx]
                        ? sr_type_native_boundary_rep(user->args[arg_idx]->type)
                        : XR_REP_TAGGED;
             return true;
-        case XI_BYTES_COPY_WITHIN:
-        case XI_BYTES_REPEAT_FROM:
+        case XI_BYTE_ARRAY_COPY_WITHIN:
+        case XI_BYTE_ARRAY_REPEAT_FROM:
             *out = arg_idx == 0 ? XR_REP_TAGGED : XR_REP_I64;
             return true;
-        case XI_BYTES_COPY_FROM:
+        case XI_BYTE_ARRAY_COPY_FROM:
             *out = arg_idx <= 1 ? XR_REP_TAGGED : XR_REP_I64;
             return true;
         case XI_ARRAY_DATA_PTR:

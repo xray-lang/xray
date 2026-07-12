@@ -63,8 +63,8 @@ TEST(is_memory_load) {
     assert(!xi_is_memory_load(XI_CONST));
     assert(!xi_is_memory_load(XI_CALL));
     assert(!xi_is_memory_load(XI_IMPORT_REF));
-    assert(xi_is_memory_load(XI_BYTES_LOAD_U16));
-    assert(xi_is_memory_load(XI_BYTES_LOAD_U32));
+    assert(xi_is_memory_load(XI_BYTE_SLICE_LOAD_U16));
+    assert(xi_is_memory_load(XI_BYTE_SLICE_LOAD_U32));
 }
 
 TEST(is_memory_store) {
@@ -83,8 +83,8 @@ TEST(is_memory_store) {
     assert(!xi_is_memory_store(XI_LOAD_FIELD));
     assert(!xi_is_memory_store(XI_CALL));
     assert(!xi_is_memory_store(XI_TUPLE_NEW));
-    assert(xi_is_memory_store(XI_BYTES_COPY_WITHIN));
-    assert(xi_is_memory_store(XI_BYTES_STORE_U16));
+    assert(xi_is_memory_store(XI_BYTE_ARRAY_COPY_WITHIN));
+    assert(xi_is_memory_store(XI_BYTE_SLICE_STORE_U16));
 }
 
 TEST(is_memory_op) {
@@ -1049,7 +1049,7 @@ TEST(call_is_top_but_not_direct_memory_op) {
     assert(xi_is_memory_clobber(XI_TAIL_CALL));
     assert(xi_is_memory_clobber(XI_CALL_BUILTIN));
     assert(!xi_is_memory_clobber(XI_PRINT));
-    assert(!xi_is_memory_clobber(XI_BYTES_COPY_WITHIN));
+    assert(!xi_is_memory_clobber(XI_BYTE_ARRAY_COPY_WITHIN));
 }
 
 /* ========== Annotate Pass Coverage Tests ========== */

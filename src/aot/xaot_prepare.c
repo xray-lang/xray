@@ -1431,32 +1431,32 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_INDEX_GET:
         case XI_INDEX_SET:
             return arg_index == 0;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
-        case XI_BYTES_STORE_U16:
-        case XI_BYTES_STORE_U32:
-        case XI_BYTES_STORE_U64:
-        case XI_BYTES_STORE_F32:
-        case XI_BYTES_STORE_F64:
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
+        case XI_BYTE_SLICE_STORE_U16:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F32:
+        case XI_BYTE_SLICE_STORE_F64:
+        case XI_BYTE_SLICE_FILL:
+        case XI_BYTE_SLICE_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
         case XI_ARRAY_DATA_PTR:
-        case XI_BYTES_COPY_WITHIN:
-        case XI_BYTES_REPEAT_FROM:
+        case XI_BYTE_ARRAY_COPY_WITHIN:
+        case XI_BYTE_ARRAY_REPEAT_FROM:
             return arg_index == 0;
         case XI_SPAN_COPY:
         case XI_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COPY:
+        case XI_BYTE_SLICE_COMPARE:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
-        case XI_BYTES_COPY_FROM:
+        case XI_BYTE_ARRAY_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
         case XI_LEN:
             return arg_index == 0;
@@ -1811,33 +1811,33 @@ static bool prepare_span_access_kind_for_value(const XiValue *value, uint8_t *ou
         case XI_INDEX_SET:
             *out_kind = XAOT_SPAN_ACCESS_INDEX_SET;
             return true;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_LOAD;
             return true;
-        case XI_BYTES_STORE_U16:
-        case XI_BYTES_STORE_U32:
-        case XI_BYTES_STORE_U64:
-        case XI_BYTES_STORE_F32:
-        case XI_BYTES_STORE_F64:
+        case XI_BYTE_SLICE_STORE_U16:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F32:
+        case XI_BYTE_SLICE_STORE_F64:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_STORE;
             return true;
-        case XI_BYTES_SPAN_FILL:
+        case XI_BYTE_SLICE_FILL:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_FILL;
             return true;
-        case XI_BYTES_SPAN_COPY:
+        case XI_BYTE_SLICE_COPY:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_COPY;
             return true;
-        case XI_BYTES_SPAN_COMPARE:
+        case XI_BYTE_SLICE_COMPARE:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_COMPARE;
             return true;
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX;
             return true;
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_REPEAT:
             *out_kind = XAOT_SPAN_ACCESS_BYTE_REPEAT;
             return true;
         case XI_SPAN_AS_BYTES:

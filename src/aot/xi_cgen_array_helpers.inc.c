@@ -3387,32 +3387,32 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
             return arg_index == 0;
         case XI_INDEX_SET:
             return arg_index == 0;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
-        case XI_BYTES_STORE_U16:
-        case XI_BYTES_STORE_U32:
-        case XI_BYTES_STORE_U64:
-        case XI_BYTES_STORE_F32:
-        case XI_BYTES_STORE_F64:
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_REPEAT:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
+        case XI_BYTE_SLICE_STORE_U16:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F32:
+        case XI_BYTE_SLICE_STORE_F64:
+        case XI_BYTE_SLICE_FILL:
+        case XI_BYTE_SLICE_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
         case XI_ARRAY_DATA_PTR:
-        case XI_BYTES_COPY_WITHIN:
-        case XI_BYTES_REPEAT_FROM:
+        case XI_BYTE_ARRAY_COPY_WITHIN:
+        case XI_BYTE_ARRAY_REPEAT_FROM:
             return arg_index == 0;
         case XI_SPAN_COPY:
         case XI_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
+        case XI_BYTE_SLICE_COPY:
+        case XI_BYTE_SLICE_COMPARE:
+        case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
-        case XI_BYTES_COPY_FROM:
+        case XI_BYTE_ARRAY_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
         case XI_LEN:
             return arg_index == 0;
@@ -4684,11 +4684,11 @@ static bool cg_array_bytes_load_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
         return false;
 
     switch ((XiOp) v->op) {
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-        case XI_BYTES_LOAD_F32:
-        case XI_BYTES_LOAD_F64:
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_LOAD_F64:
             break;
         default:
             return false;
@@ -4741,7 +4741,7 @@ static bool cg_array_err_check_after_index_get_trusted(XiCgenCtx *ctx, const XiF
 
 static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->op != XI_BYTES_SPAN_COMMON_PREFIX || v->nargs != 2)
+    if (!v || v->op != XI_BYTE_SLICE_COMMON_PREFIX || v->nargs != 2)
         return false;
     return cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX, XAOT_SPAN_DROP_HELPER);
 }
