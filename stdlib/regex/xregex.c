@@ -116,7 +116,8 @@ XR_FUNC XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, Xr
     re->prog = prog;
 
     // 4. Create DFA if safe (no position-dependent assertions, no Unicode properties)
-    bool dfa_safe = !prog->has_empty_width && prog->unicode_range_count == 0;
+    bool dfa_safe =
+        !prog->has_empty_width && !prog->has_any_scalar && prog->unicode_range_count == 0;
     re->dfa = dfa_safe ? xr_dfa_new(prog) : NULL;
 
     if (error)

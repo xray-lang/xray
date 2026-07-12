@@ -34,7 +34,7 @@ fn bench_array(iters: int): int {
         arr.push(i)
     }
     var total = 0
-    for (var i = 0; i < arr.length; i++) {
+    for (var i = 0; i < len(arr); i++) {
         total = total + arr[i]
     }
     return total
@@ -58,7 +58,7 @@ fn bench_string(iters: int): int {
     var s = "abcdefghijklmnop"
     var total = 0
     for (var i = 0; i < iters; i++) {
-        total = total + s.length
+        total = total + len(s)
         if (s.startsWith("abc")) {
             total = total + 1
         }

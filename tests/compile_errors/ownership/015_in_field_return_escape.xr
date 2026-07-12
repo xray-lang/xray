@@ -12,4 +12,4 @@ fn leak(holder: in Holder) -> Array<int> {
 
 var holder = Holder()
 var leaked = leak(holder)
-print(leaked.length)
+print(len(leaked))

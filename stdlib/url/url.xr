@@ -31,7 +31,7 @@ class QueryParams {
         var nextNames: Array<string> = []
         var nextValues: Array<string> = []
         var replaced = false
-        for (var i = 0; i < this.names.length; i++) {
+        for (var i = 0; i < len(this.names); i++) {
             if (this.names[i] == name) {
                 if (!replaced) {
                     nextNames.push(name)
@@ -52,7 +52,7 @@ class QueryParams {
     }
 
     get(name: string) -> string? {
-        for (var i = 0; i < this.names.length; i++) {
+        for (var i = 0; i < len(this.names); i++) {
             if (this.names[i] == name) { return this.values[i] }
         }
         return null
@@ -60,7 +60,7 @@ class QueryParams {
 
     getAll(name: string) -> Array<string> {
         var out: Array<string> = []
-        for (var i = 0; i < this.names.length; i++) {
+        for (var i = 0; i < len(this.names); i++) {
             if (this.names[i] == name) { out.push(this.values[i]) }
         }
         return out
@@ -68,7 +68,7 @@ class QueryParams {
 
     entries() -> Array<(string, string)> {
         var out: Array<(string, string)> = []
-        for (var i = 0; i < this.names.length; i++) {
+        for (var i = 0; i < len(this.names); i++) {
             out.push((this.names[i], this.values[i]))
         }
         return out
@@ -76,7 +76,7 @@ class QueryParams {
 
     encode() -> string {
         var out = ""
-        for (var i = 0; i < this.names.length; i++) {
+        for (var i = 0; i < len(this.names); i++) {
             if (i > 0) { out = out + "&" }
             out = out + encodeForm(this.names[i]) + "=" + encodeForm(this.values[i])
         }
@@ -140,15 +140,15 @@ fn isUnreserved(c: int) -> bool {
 }
 
 fn byteString(b: int) -> string {
-    var one = Bytes(1)
+    var one = Array<byte>(1)
     one[0] = b
-    return one.toString()
+    return string.fromUtf8(one[:])!
 }
 
 fn encodeImpl(s: string, form: bool) -> string {
-    var src = s.toBytes()
+    var src = s.copyBytes()
     var out = ""
-    for (var i = 0; i < src.length; i++) {
+    for (var i = 0; i < len(src); i++) {
         var b = src[i]
         if (form && b == 32) {
             out = out + "+"
@@ -156,18 +156,18 @@ fn encodeImpl(s: string, form: bool) -> string {
             out = out + byteString(b)
         } else {
             out = out + "%"
-            out = out + HEX.charAt((b >> 4) & 15)
-            out = out + HEX.charAt(b & 15)
+            out = out + HEX.runes().nth((b >> 4) & 15)
+            out = out + HEX.runes().nth(b & 15)
         }
     }
     return out
 }
 
-fn decodedLen(src: Bytes) -> int {
+fn decodedLen(src: Array<byte>) -> int {
     var n = 0
     var i = 0
-    while (i < src.length) {
-        if (src[i] == 37 && i + 2 < src.length) {
+    while (i < len(src)) {
+        if (src[i] == 37 && i + 2 < len(src)) {
             var hi = hexVal(src[i + 1])
             var lo = hexVal(src[i + 2])
             if (hi >= 0 && lo >= 0) { i = i + 2 }
@@ -179,12 +179,12 @@ fn decodedLen(src: Bytes) -> int {
 }
 
 fn decodeImpl(s: string, form: bool) -> string {
-    var src = s.toBytes()
-    var out = Bytes(decodedLen(src))
+    var src = s.copyBytes()
+    var out = Array<byte>(decodedLen(src))
     var oi = 0
     var i = 0
-    while (i < src.length) {
-        if (src[i] == 37 && i + 2 < src.length) {
+    while (i < len(src)) {
+        if (src[i] == 37 && i + 2 < len(src)) {
             var hi = hexVal(src[i + 1])
             var lo = hexVal(src[i + 2])
             if (hi >= 0 && lo >= 0) {
@@ -202,17 +202,17 @@ fn decodeImpl(s: string, form: bool) -> string {
         oi = oi + 1
         i = i + 1
     }
-    return out.toString()
+    return string.fromUtf8(out[:])!
 }
 
 fn decodeQueryComponent(s: string, baseOffset: int) -> string {
-    var src = s.toBytes()
-    var out = Bytes(decodedLen(src))
+    var src = s.copyBytes()
+    var out = Array<byte>(decodedLen(src))
     var oi = 0
     var i = 0
-    while (i < src.length) {
+    while (i < len(src)) {
         if (src[i] == 37) {
-            if (i + 2 >= src.length) {
+            if (i + 2 >= len(src)) {
                 throw UrlError.InvalidPercentEncoding(baseOffset + i)
             }
             var hi = hexVal(src[i + 1])
@@ -233,47 +233,47 @@ fn decodeQueryComponent(s: string, baseOffset: int) -> string {
         oi = oi + 1
         i = i + 1
     }
-    return out.toString()
+    return string.fromUtf8(out[:])!
 }
 
-fn findChar(s: string, needle: string, start: int, end: int) -> int {
+fn findChar(s: string, needle: rune, start: int, end: int) -> int {
     var i = start
     while (i < end) {
-        if (s.charAt(i) == needle) { return i }
+        if (s.runes().nth(i) == needle) { return i }
         i = i + 1
     }
     return -1
 }
 
-fn findAny3(s: string, a: string, b: string, c: string, start: int, end: int) -> int {
+fn findAny3(s: string, a: rune, b: rune, c: rune, start: int, end: int) -> int {
     var i = start
     while (i < end) {
-        var ch = s.charAt(i)
+        var ch = s.runes().nth(i)
         if (ch == a || ch == b || ch == c) { return i }
         i = i + 1
     }
     return -1
 }
 
-fn lastChar(s: string, needle: string, start: int, end: int) -> int {
+fn lastChar(s: string, needle: rune, start: int, end: int) -> int {
     var i = end - 1
     while (i >= start) {
-        if (s.charAt(i) == needle) { return i }
+        if (s.runes().nth(i) == needle) { return i }
         i = i - 1
     }
     return -1
 }
 
 fn startsWithAt(s: string, pos: int, prefix: string) -> bool {
-    if (pos + prefix.length > s.length) { return false }
-    return s.slice(pos, pos + prefix.length) == prefix
+    if (pos + len(prefix) > len(s)) { return false }
+    return s.slice(pos, pos + len(prefix)) == prefix
 }
 
 fn portIsValid(port: string) -> bool {
-    if (port.length == 0 || port.length > 5) { return false }
+    if (len(port) == 0 || len(port) > 5) { return false }
     var v = 0
-    for (var i = 0; i < port.length; i++) {
-        var c = port.charAt(i).ord()!
+    for (var i = 0; i < len(port); i++) {
+        var c = port.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return false }
         v = v * 10 + (c - 48)
     }
@@ -282,7 +282,7 @@ fn portIsValid(port: string) -> bool {
 
 // parse - Parse URL text into a URL handle.
 fn parse(url: string) -> URL {
-    var n = url.length
+    var n = len(url)
     var protocol = ""
     var username = ""
     var password = ""
@@ -293,19 +293,19 @@ fn parse(url: string) -> URL {
     var hash = ""
 
     var p = 0
-    var colon = findChar(url, ":", 0, n)
+    var colon = findChar(url, ':', 0, n)
     if (colon >= 0 && startsWithAt(url, colon, "://")) {
         protocol = url.slice(0, colon + 1)
         p = colon + 3
     }
 
-    var authorityEnd = findAny3(url, "/", "?", "#", p, n)
+    var authorityEnd = findAny3(url, '/', '?', '#', p, n)
     if (authorityEnd < 0) { authorityEnd = n }
 
-    var at = findChar(url, "@", p, authorityEnd)
+    var at = findChar(url, '@', p, authorityEnd)
     var hostStart = p
     if (at >= 0) {
-        var userColon = findChar(url, ":", p, at)
+        var userColon = findChar(url, ':', p, at)
         if (userColon >= 0) {
             username = url.slice(p, userColon)
             password = url.slice(userColon + 1, at)
@@ -315,18 +315,18 @@ fn parse(url: string) -> URL {
         hostStart = at + 1
     }
 
-    if (hostStart < authorityEnd && url.charAt(hostStart) == "[") {
-        var bracket = findChar(url, "]", hostStart, authorityEnd)
+    if (hostStart < authorityEnd && url.runes().nth(hostStart) == '[') {
+        var bracket = findChar(url, ']', hostStart, authorityEnd)
         if (bracket >= 0) {
             hostname = url.slice(hostStart, bracket + 1)
-            if (bracket + 1 < authorityEnd && url.charAt(bracket + 1) == ":") {
+            if (bracket + 1 < authorityEnd && url.runes().nth(bracket + 1) == ':') {
                 rawPort = url.slice(bracket + 2, authorityEnd)
             }
         } else {
             hostname = url.slice(hostStart, authorityEnd)
         }
     } else {
-        var portColon = lastChar(url, ":", hostStart, authorityEnd)
+        var portColon = lastChar(url, ':', hostStart, authorityEnd)
         if (portColon >= 0) {
             hostname = url.slice(hostStart, portColon)
             rawPort = url.slice(portColon + 1, authorityEnd)
@@ -336,21 +336,21 @@ fn parse(url: string) -> URL {
     }
 
     p = authorityEnd
-    if (p < n && url.charAt(p) == "/") {
-        var pathEnd = findAny3(url, "?", "#", "\u{0}", p, n)
+    if (p < n && url.runes().nth(p) == '/') {
+        var pathEnd = findAny3(url, '?', '#', '\u{0}', p, n)
         if (pathEnd < 0) { pathEnd = n }
         pathname = url.slice(p, pathEnd)
         p = pathEnd
     }
 
-    if (p < n && url.charAt(p) == "?") {
-        var searchEnd = findChar(url, "#", p, n)
+    if (p < n && url.runes().nth(p) == '?') {
+        var searchEnd = findChar(url, '#', p, n)
         if (searchEnd < 0) { searchEnd = n }
         search = url.slice(p, searchEnd)
         p = searchEnd
     }
 
-    if (p < n && url.charAt(p) == "#") {
+    if (p < n && url.runes().nth(p) == '#') {
         hash = url.slice(p, n)
     }
 
@@ -358,10 +358,10 @@ fn parse(url: string) -> URL {
     if (portIsValid(rawPort)) { port = rawPort }
 
     var host = hostname
-    if (port.length > 0) { host = host + ":" + port }
+    if (len(port) > 0) { host = host + ":" + port }
 
     var origin = host
-    if (protocol.length > 0) { origin = protocol + "//" + host }
+    if (len(protocol) > 0) { origin = protocol + "//" + host }
 
     return URL(protocol, hostname, port, pathname, search, hash, username, password, host, origin, url)
 }
@@ -369,16 +369,16 @@ fn parse(url: string) -> URL {
 // format - Build URL text from a URL handle.
 fn format(obj: URL) -> string {
     var out = ""
-    if (obj.protocol.length > 0) {
+    if (len(obj.protocol) > 0) {
         out = out + obj.protocol + "//"
     }
-    if (obj.username.length > 0) {
+    if (len(obj.username) > 0) {
         out = out + obj.username
-        if (obj.password.length > 0) { out = out + ":" + obj.password }
+        if (len(obj.password) > 0) { out = out + ":" + obj.password }
         out = out + "@"
     }
     out = out + obj.hostname
-    if (obj.port.length > 0) { out = out + ":" + obj.port }
+    if (len(obj.port) > 0) { out = out + ":" + obj.port }
     return out + obj.pathname + obj.search + obj.hash
 }
 
@@ -406,14 +406,14 @@ fn decodeForm(s: string) -> string {
 fn parseQuery(qs: string) -> QueryParams {
     var out = QueryParams()
     var start = 0
-    if (qs.length > 0 && qs.charAt(0) == "?") { start = 1 }
+    if (len(qs) > 0 && qs.runes().nth(0) == '?') { start = 1 }
 
-    while (start < qs.length) {
-        var amp = findChar(qs, "&", start, qs.length)
+    while (start < len(qs)) {
+        var amp = findChar(qs, '&', start, len(qs))
         var pairEnd = amp
-        if (pairEnd < 0) { pairEnd = qs.length }
+        if (pairEnd < 0) { pairEnd = len(qs) }
 
-        var eq = findChar(qs, "=", start, pairEnd)
+        var eq = findChar(qs, '=', start, pairEnd)
         var keyEnd = pairEnd
         if (eq >= 0) { keyEnd = eq }
         if (pairEnd > start) {
@@ -434,26 +434,26 @@ fn parseQuery(qs: string) -> QueryParams {
 
 fn emitBaseAuthority(parts: URL) -> string {
     var out = ""
-    if (parts.protocol.length > 0) {
+    if (len(parts.protocol) > 0) {
         out = out + parts.protocol + "//"
     }
     out = out + parts.hostname
-    if (parts.port.length > 0) { out = out + ":" + parts.port }
+    if (len(parts.port) > 0) { out = out + ":" + parts.port }
     return out
 }
 
 fn removeDotSegments(path: string) -> string {
-    if (path.length == 0) { return "" }
-    var isAbs = path.charAt(0) == "/"
-    var trailing = path.length > 1 && path.charAt(path.length - 1) == "/"
+    if (len(path) == 0) { return "" }
+    var isAbs = path.runes().nth(0) == '/'
+    var trailing = len(path) > 1 && path.runes().nth(len(path) - 1) == '/'
     var segs: Array<string> = []
     var parts = path.split("/")
 
-    for (var i = 0; i < parts.length; i++) {
+    for (var i = 0; i < len(parts); i++) {
         var seg = parts[i]
-        if (seg.length == 0 || seg == ".") { continue }
+        if (len(seg) == 0 || seg == ".") { continue }
         if (seg == "..") {
-            if (segs.length > 0 && segs[segs.length - 1] != "..") {
+            if (len(segs) > 0 && segs[len(segs) - 1] != "..") {
                 segs.pop()
             } else if (!isAbs) {
                 segs.push("..")
@@ -465,25 +465,25 @@ fn removeDotSegments(path: string) -> string {
 
     var body = segs.join("/")
     if (isAbs) {
-        if (body.length == 0) { return "/" }
+        if (len(body) == 0) { return "/" }
         body = "/" + body
     }
-    if (trailing && body.length > 0 && body.charAt(body.length - 1) != "/") {
+    if (trailing && len(body) > 0 && body.runes().nth(len(body) - 1) != '/') {
         body = body + "/"
     }
     return body
 }
 
 fn splitReference(ref: string) -> (string, string, string) {
-    var hashAt = findChar(ref, "#", 0, ref.length)
-    var noHashEnd = ref.length
+    var hashAt = findChar(ref, '#', 0, len(ref))
+    var noHashEnd = len(ref)
     var hash = ""
     if (hashAt >= 0) {
         noHashEnd = hashAt
-        hash = ref.slice(hashAt, ref.length)
+        hash = ref.slice(hashAt, len(ref))
     }
 
-    var queryAt = findChar(ref, "?", 0, noHashEnd)
+    var queryAt = findChar(ref, '?', 0, noHashEnd)
     var path = ref.slice(0, noHashEnd)
     var query = ""
     if (queryAt >= 0) {
@@ -494,8 +494,8 @@ fn splitReference(ref: string) -> (string, string, string) {
 }
 
 fn dirnamePrefix(path: string) -> string {
-    if (path.length == 0) { return "/" }
-    var slash = lastChar(path, "/", 0, path.length)
+    if (len(path) == 0) { return "/" }
+    var slash = lastChar(path, '/', 0, len(path))
     if (slash >= 0) {
         return path.slice(0, slash + 1)
     }
@@ -504,7 +504,7 @@ fn dirnamePrefix(path: string) -> string {
 
 // resolve - Resolve a relative URL reference against a base URL.
 fn resolve(base: string, relative: string) -> string {
-    var colon = findChar(relative, ":", 0, relative.length)
+    var colon = findChar(relative, ':', 0, len(relative))
     if (colon >= 0 && startsWithAt(relative, colon, "://")) {
         return relative
     }
@@ -515,23 +515,23 @@ fn resolve(base: string, relative: string) -> string {
     var relQuery = parts.1
     var relHash = parts.2
 
-    if (relative.length > 1 && relative.charAt(0) == "/" && relative.charAt(1) == "/") {
-        var authorityEnd = findChar(relative, "/", 2, relPath.length)
-        if (authorityEnd < 0) { authorityEnd = relPath.length }
+    if (len(relative) > 1 && relative.runes().nth(0) == '/' && relative.runes().nth(1) == '/') {
+        var authorityEnd = findChar(relative, '/', 2, len(relPath))
+        if (authorityEnd < 0) { authorityEnd = len(relPath) }
         var out = bp.protocol + relative.slice(0, authorityEnd)
-        if (authorityEnd < relPath.length) {
-            out = out + removeDotSegments(relative.slice(authorityEnd, relPath.length))
+        if (authorityEnd < len(relPath)) {
+            out = out + removeDotSegments(relative.slice(authorityEnd, len(relPath)))
         }
         return out + relQuery + relHash
     }
 
-    if (relPath.length > 0 && relPath.charAt(0) == "/") {
+    if (len(relPath) > 0 && relPath.runes().nth(0) == '/') {
         return emitBaseAuthority(bp) + removeDotSegments(relPath) + relQuery + relHash
     }
 
-    if (relPath.length == 0) {
+    if (len(relPath) == 0) {
         var out = emitBaseAuthority(bp) + bp.pathname
-        if (relQuery.length > 0) {
+        if (len(relQuery) > 0) {
             out = out + relQuery
         } else {
             out = out + bp.search
@@ -546,14 +546,14 @@ fn resolve(base: string, relative: string) -> string {
 // join - Join URL path segments.
 fn join(...parts: string) -> string {
     var out = ""
-    for (var i = 0; i < parts.length; i++) {
+    for (var i = 0; i < len(parts); i++) {
         var seg = parts[i]
-        if (seg.length == 0) { continue }
+        if (len(seg) == 0) { continue }
 
-        if (out.length > 0 && out.charAt(out.length - 1) == "/") {
-            out = out.slice(0, out.length - 1)
+        if (len(out) > 0 && out.runes().nth(len(out) - 1) == '/') {
+            out = out.slice(0, len(out) - 1)
         }
-        if (out.length > 0 && seg.charAt(0) != "/") {
+        if (len(out) > 0 && seg.runes().nth(0) != '/') {
             out = out + "/"
         }
         out = out + seg

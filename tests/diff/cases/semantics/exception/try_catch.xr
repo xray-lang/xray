@@ -21,6 +21,6 @@ try {
 }
 order.push("after")
 
-for (i in 0..order.length) {
+for (i in 0..len(order)) {
     print(order[i])
 }

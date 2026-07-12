@@ -501,6 +501,7 @@
 (define-xi-op xi.bytes.load.u16
   :class memory-read
   :arity 3
+  :tbaa-group array
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds endian)
@@ -510,6 +511,7 @@
 (define-xi-op xi.bytes.load.u32
   :class memory-read
   :arity 3
+  :tbaa-group array
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds endian)
@@ -519,6 +521,7 @@
 (define-xi-op xi.bytes.load.u64
   :class memory-read
   :arity 3
+  :tbaa-group array
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds endian)
@@ -528,6 +531,7 @@
 (define-xi-op xi.bytes.load.f32
   :class memory-read
   :arity 3
+  :tbaa-group array
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds endian)
@@ -537,6 +541,7 @@
 (define-xi-op xi.bytes.load.f64
   :class memory-read
   :arity 3
+  :tbaa-group array
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds endian)
@@ -546,6 +551,7 @@
 (define-xi-op xi.bytes.store.u16
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-kind void
   :result-ownership none
   :own-use stored-value
@@ -557,6 +563,7 @@
 (define-xi-op xi.bytes.store.u32
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-kind void
   :result-ownership none
   :own-use stored-value
@@ -568,6 +575,7 @@
 (define-xi-op xi.bytes.store.u64
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-kind void
   :result-ownership none
   :own-use stored-value
@@ -579,6 +587,7 @@
 (define-xi-op xi.bytes.store.f32
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-kind void
   :result-ownership none
   :own-use stored-value
@@ -590,6 +599,7 @@
 (define-xi-op xi.bytes.store.f64
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-kind void
   :result-ownership none
   :own-use stored-value
@@ -698,6 +708,7 @@
 (define-xi-op xi.bytes.copy.within
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
@@ -708,6 +719,7 @@
 (define-xi-op xi.bytes.copy.from
   :class memory-write
   :arity 5
+  :tbaa-group array
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
@@ -718,6 +730,7 @@
 (define-xi-op xi.bytes.repeat.from
   :class memory-write
   :arity 4
+  :tbaa-group array
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
@@ -1195,7 +1208,7 @@
   :targets (vm-bytecode aot-c aot-verify)
   :lowering-policy special)
 
-(define-xi-op xi.par.collect
+(define-xi-op xi.par.map
   :class parallel
   :arity variadic
   :result-kind value
@@ -1203,7 +1216,7 @@
   :own-use borrow
   :effects (side-effect may-suspend may-throw memory-read memory-write)
   :requires ()
-  :observable (batch-parallel native-collect)
+  :observable (batch-parallel native-map)
   :targets (vm-bytecode aot-c aot-verify)
   :lowering-policy special)
 
@@ -1732,6 +1745,15 @@
   :arity 1
   :own-use borrow
   :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.len
+  :class memory-read
+  :arity 1
+  :own-use borrow
+  :effects (memory-read)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))

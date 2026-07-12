@@ -21,6 +21,8 @@
 #include "xjson.h"
 #include "../symbol/xsymbol_table.h"
 #include "xstring.h"
+#include "xpanic_info.h"
+#include "../xerror_codes.h"
 #include "../../base/xmalloc.h"
 #include "../mem/xobj_header.h"
 #include "../mem/xheap.h"
@@ -110,8 +112,8 @@ XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray 
     return iter;
 }
 
-// Create iterator from string (lazy, yields [index, char] pairs).
-// The index is the UTF-8 character index, matching string.charAt() semantics.
+// Create iterator from string (lazy, yields [index, rune] pairs).
+// The index is the Unicode scalar ordinal used by string.runes().
 XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
                                         struct XrVMRuntime *isolate) {
     XR_DCHECK(s != NULL, "iterator_new_from_string: NULL string");
@@ -122,7 +124,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
     iter->source.string = s;
     iter->scan_index = 0;
     iter->coro = coro;
-    iter->total_count = (uint32_t) xr_string_char_length(s);
+    iter->total_count = (uint32_t) xr_string_rune_length(s);
     xr_rc_retain((XrObjHeader *) s);
     iter->context = (void *) isolate;
     iter->mode = XR_ITER_MODE_PAIRS;
@@ -379,8 +381,8 @@ XrValue xr_iterator_next(XrIterator *iter) {
         if (!s || iter->scan_index >= iter->total_count)
             return xr_null();
         uint32_t idx = iter->scan_index++;
-        int32_t cp = xr_string_char_code_at(s, (size_t) idx);
-        XrValue ch = cp >= 0 ? xr_char((uint32_t) cp) : xr_null();
+        int32_t cp = xr_string_rune_code_at(s, (size_t) idx);
+        XrValue ch = cp >= 0 ? xr_rune((uint32_t) cp) : xr_null();
         if (iter->mode == XR_ITER_MODE_VALUES) {
             return ch;
         }
@@ -528,6 +530,32 @@ static XrValue m_iter_next(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     return value;
 }
 
+/* Consume index + 1 values and return the indexed value.  The explicit
+ * iterator operation makes the linear cost of ordinal lookup visible. */
+static XrValue m_iter_nth(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrIterator *iter = xr_value_to_iterator(self);
+    XR_DCHECK(iter != NULL, "Iterator.nth: invalid iterator");
+    if (argc != 1 || !XR_IS_INT(args[0]) || XR_TO_INT(args[0]) < 0) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+                                         "Iterator.nth index must be non-negative");
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
+    xr_Integer index = XR_TO_INT(args[0]);
+    for (xr_Integer i = 0; i <= index; i++) {
+        if (!xr_iterator_has_next(iter)) {
+            XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+                                             "Iterator.nth index out of bounds");
+            xr_vm_throw_exception(iso, exc);
+            return xr_null();
+        }
+        XrValue value = xr_iterator_next(iter);
+        if (i == index)
+            return value;
+    }
+    return xr_null();
+}
+
 static XrValue m_iter_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -556,6 +584,7 @@ void xr_iterator_register_class(XrVMRuntime *X) {
     xr_class_builder_set_native_body(b, xr_iterator_native_body_desc());
     xr_class_builder_add_method(b, "hasNext", m_iter_has_next, 0, 0);
     xr_class_builder_add_method(b, "next", m_iter_next, 0, 0);
+    xr_class_builder_add_method(b, "nth", m_iter_nth, 1, 0);
     xr_class_builder_add_method(b, "iterator", m_iter_iterator, 0, 0);
     xr_class_builder_add_method(b, "toString", m_iter_to_string, 0, 0);
 

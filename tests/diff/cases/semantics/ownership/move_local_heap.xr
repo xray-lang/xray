@@ -2,5 +2,5 @@
 var source: Array<int> = [1, 2, 3]
 var moved = move source
 moved.push(4)
-print(moved.length)
+print(len(moved))
 print(moved[0] + moved[3])

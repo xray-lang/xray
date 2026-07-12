@@ -40,8 +40,8 @@ static inline int xrt_sort_cmp_default(XrValue a, XrValue b) {
             return cmp;
         return (la > lb) - (la < lb);
     }
-    if (a.tag == XR_TAG_CHAR && b.tag == XR_TAG_CHAR) {
-        uint32_t ca = XR_TO_CHAR(a), cb = XR_TO_CHAR(b);
+    if (a.tag == XR_TAG_RUNE && b.tag == XR_TAG_RUNE) {
+        uint32_t ca = XR_TO_RUNE(a), cb = XR_TO_RUNE(b);
         return (ca > cb) - (ca < cb);
     }
     if (a.tag == XR_TAG_BOOL && b.tag == XR_TAG_BOOL) {
@@ -319,7 +319,7 @@ static XrValue xrt_array_sort(XrValue recv, xrt_closure_t *cl) {
             case XR_ELEM_U32:
                 xrt_sort_u32((uint32_t *) arr->data, n);
                 return recv;
-            case XR_ELEM_CHAR:
+            case XR_ELEM_RUNE:
                 xrt_sort_u32((uint32_t *) arr->data, n);
                 return recv;
             case XR_ELEM_I64:

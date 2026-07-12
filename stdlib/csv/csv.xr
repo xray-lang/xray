@@ -1,10 +1,12 @@
+import text
+
 // csv - typed pure-Xray CSV parser and writer.
 //
 // CSV's wire domain is textual rows. Application-specific conversion belongs
 // in an explicit schema/decode layer, never in the tokenizer.
 
 enum CsvDelimiter {
-    Exact(string),
+    Exact(rune),
     Auto
 }
 
@@ -51,8 +53,8 @@ enum CsvError {
 
 type CsvParseOptions = {
     delimiter: CsvDelimiter,
-    quoteChar: string,
-    escapeChar: string,
+    quoteChar: rune,
+    escapeChar: rune,
     header: CsvHeader,
     trimFields: bool,
     skipEmptyLines: bool,
@@ -65,17 +67,17 @@ type CsvParseOptions = {
 }
 
 type CsvWriteOptions = {
-    delimiter: string,
-    quoteChar: string,
-    escapeChar: string,
+    delimiter: rune,
+    quoteChar: rune,
+    escapeChar: rune,
     linebreak: string
 }
 
 fn defaultParseOptions() -> CsvParseOptions {
     var options: CsvParseOptions = {
-        delimiter: CsvDelimiter.Exact(","),
-        quoteChar: "\"",
-        escapeChar: "\"",
+        delimiter: CsvDelimiter.Exact(','),
+        quoteChar: '"',
+        escapeChar: '"',
         header: CsvHeader.None,
         trimFields: false,
         skipEmptyLines: true,
@@ -91,9 +93,9 @@ fn defaultParseOptions() -> CsvParseOptions {
 
 fn defaultWriteOptions() -> CsvWriteOptions {
     var options: CsvWriteOptions = {
-        delimiter: ",",
-        quoteChar: "\"",
-        escapeChar: "\"",
+        delimiter: ',',
+        quoteChar: '"',
+        escapeChar: '"',
         linebreak: "\n"
     }
     return options
@@ -122,11 +124,11 @@ class CsvDocument {
 class CsvParseReport {
     document: CsvDocument
     diagnostics: Array<CsvDiagnostic>
-    delimiter: string
+    delimiter: rune
     linebreak: string
     truncated: bool
 
-    constructor(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: string,
+    constructor(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune,
                 linebreak: string, truncated: bool) {
         this.document = document
         this.diagnostics = diagnostics
@@ -144,7 +146,7 @@ const STATE_QUOTE_END = 3
 class _CsvState {
     document: CsvDocument
     diagnostics: Array<CsvDiagnostic>
-    delimiter: string
+    delimiter: rune
     linebreak: string
     truncated: bool
     currentRow: Array<string>
@@ -154,8 +156,9 @@ class _CsvState {
     byteOffset: int
     expectedColumns: int
     firstFieldQuoted: bool
+    currentFieldBytes: int
 
-    constructor(delimiter: string) {
+    constructor(delimiter: rune) {
         this.document = CsvDocument()
         this.diagnostics = []
         this.delimiter = delimiter
@@ -168,18 +171,11 @@ class _CsvState {
         this.byteOffset = 0
         this.expectedColumns = -1
         this.firstFieldQuoted = false
-    }
-}
-
-fn _validateCharacter(name: string, value: string) {
-    if (value.length != 1) {
-        throw CsvError.InvalidOption(name + " must contain exactly one character")
+        this.currentFieldBytes = 0
     }
 }
 
 fn _validateParseOptions(options: CsvParseOptions) {
-    _validateCharacter("quoteChar", options.quoteChar)
-    _validateCharacter("escapeChar", options.escapeChar)
     if (options.skipRecords < 0 || options.maxRecords < 0 || options.maxInputBytes < 0 ||
         options.maxFieldBytes < 0 || options.maxColumns < 0) {
         throw CsvError.InvalidOption("CSV limits and record counts must be non-negative")
@@ -187,48 +183,45 @@ fn _validateParseOptions(options: CsvParseOptions) {
 }
 
 fn _validateWriteOptions(options: CsvWriteOptions) {
-    _validateCharacter("delimiter", options.delimiter)
-    _validateCharacter("quoteChar", options.quoteChar)
-    _validateCharacter("escapeChar", options.escapeChar)
     if (options.delimiter == options.quoteChar) {
         throw CsvError.InvalidOption("delimiter and quoteChar must differ")
     }
-    if (options.linebreak.length == 0) {
+    if (len(options.linebreak) == 0) {
         throw CsvError.InvalidOption("linebreak must not be empty")
     }
 }
 
-fn _isNewline(c: string) -> bool {
-    return c == "\n" || c == "\r"
+fn _isNewline(c: rune) -> bool {
+    return c == '\n' || c == '\r'
 }
 
-fn _detectDelimiter(data: string, quoteChar: string, escapeChar: string) -> string {
-    var candidates: Array<string> = [",", "\t", ";", "|"]
+fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
+    var candidates: Array<rune> = [',', '\t', ';', '|']
     var counts: Array<int> = [0, 0, 0, 0]
     var quoted = false
-    var limit = data.length
+    var limit = len(data)
     if (limit > 4096) { limit = 4096 }
 
     var i = 0
     while (i < limit) {
-        var c = data.charAt(i)
-        if (quoted && c == escapeChar && i + 1 < limit && data.charAt(i + 1) == quoteChar) {
+        var c = data.runes().nth(i)
+        if (quoted && c == escapeChar && i + 1 < limit && data.runes().nth(i + 1) == quoteChar) {
             i = i + 2
             continue
         }
         if (c == quoteChar) {
             quoted = !quoted
         } else if (!quoted && !_isNewline(c)) {
-            for (var j = 0; j < candidates.length; j++) {
+            for (var j = 0; j < len(candidates); j++) {
                 if (c == candidates[j]) { counts[j] = counts[j] + 1 }
             }
         }
         i = i + 1
     }
 
-    var best = ","
+    var best = ','
     var bestCount = 0
-    for (var j = 0; j < candidates.length; j++) {
+    for (var j = 0; j < len(candidates); j++) {
         if (counts[j] > bestCount) {
             best = candidates[j]
             bestCount = counts[j]
@@ -237,12 +230,11 @@ fn _detectDelimiter(data: string, quoteChar: string, escapeChar: string) -> stri
     return best
 }
 
-fn _resolveDelimiter(data: string, options: CsvParseOptions) -> string {
+fn _resolveDelimiter(data: string, options: CsvParseOptions) -> rune {
     var delimiter = match (options.delimiter) {
         CsvDelimiter.Exact(value) -> value,
         CsvDelimiter.Auto         -> _detectDelimiter(data, options.quoteChar, options.escapeChar)
     }
-    _validateCharacter("delimiter", delimiter)
     if (delimiter == options.quoteChar) {
         throw CsvError.InvalidOption("delimiter and quoteChar must differ")
     }
@@ -279,11 +271,32 @@ fn _addRecordDiagnostic(state: _CsvState, kind: CsvErrorKind, record: int, messa
     ))
 }
 
-fn _appendField(field: StringBuilder, value: string, options: CsvParseOptions) {
-    field.append(value)
-    if (options.maxFieldBytes > 0 && field.length > options.maxFieldBytes) {
+fn _checkFieldLimit(state: _CsvState, options: CsvParseOptions) {
+    if (options.maxFieldBytes > 0 && state.currentFieldBytes > options.maxFieldBytes) {
         throw CsvError.FieldLimitExceeded(options.maxFieldBytes)
     }
+}
+
+fn _utf8Width(value: rune) -> int {
+    var scalar = value.toUInt32()
+    if (scalar <= 0x7F) { return 1 }
+    if (scalar <= 0x7FF) { return 2 }
+    if (scalar <= 0xFFFF) { return 3 }
+    return 4
+}
+
+fn _appendRune(state: _CsvState, field: StringBuilder, value: rune,
+               options: CsvParseOptions) {
+    field.append(value)
+    state.currentFieldBytes = state.currentFieldBytes + _utf8Width(value)
+    _checkFieldLimit(state, options)
+}
+
+fn _appendText(state: _CsvState, field: StringBuilder, value: string,
+               options: CsvParseOptions) {
+    field.append(value)
+    state.currentFieldBytes = state.currentFieldBytes + len(value.bytes())
+    _checkFieldLimit(state, options)
 }
 
 fn _finishField(state: _CsvState, options: CsvParseOptions, field: StringBuilder) {
@@ -291,14 +304,15 @@ fn _finishField(state: _CsvState, options: CsvParseOptions, field: StringBuilder
         throw CsvError.ColumnLimitExceeded(options.maxColumns)
     }
     var value = field.toString()
-    if (options.trimFields) { value = value.trim() }
+    if (options.trimFields) { value = text.trim(value) }
     state.currentRow.push(value)
     state.currentColumn = state.currentColumn + 1
     field.clear()
+    state.currentFieldBytes = 0
 }
 
 fn _observeLinebreak(state: _CsvState, value: string) {
-    if (state.linebreak.length == 0) {
+    if (len(state.linebreak) == 0) {
         state.linebreak = value
     } else if (state.linebreak != value) {
         state.linebreak = "mixed"
@@ -307,7 +321,8 @@ fn _observeLinebreak(state: _CsvState, value: string) {
 }
 
 fn _newlineWidth(data: string, pos: int) -> int {
-    if (data.charAt(pos) == "\r" && pos + 1 < data.length && data.charAt(pos + 1) == "\n") {
+    if (data.runes().nth(pos) == '\r' && pos + 1 < len(data) &&
+        data.runes().nth(pos + 1) == '\n') {
         return 2
     }
     return 1
@@ -315,11 +330,11 @@ fn _newlineWidth(data: string, pos: int) -> int {
 
 fn _newlineText(data: string, pos: int, width: int) -> string {
     if (width == 2) { return "\r\n" }
-    return data.charAt(pos)
+    return data.runes().nth(pos).toString()
 }
 
 fn _startsWith(s: string, prefix: string) -> bool {
-    return prefix.length > 0 && s.length >= prefix.length && s.slice(0, prefix.length) == prefix
+    return len(prefix) > 0 && len(s) >= len(prefix) && s.slice(0, len(prefix)) == prefix
 }
 
 fn _clearRow(state: _CsvState) {
@@ -329,7 +344,7 @@ fn _clearRow(state: _CsvState) {
 }
 
 fn _isEmptyRow(row: Array<string>) -> bool {
-    return row.length == 0 || (row.length == 1 && row[0].length == 0)
+    return len(row) == 0 || (len(row) == 1 && len(row[0]) == 0)
 }
 
 fn _consumeRow(state: _CsvState, options: CsvParseOptions) -> bool {
@@ -342,7 +357,7 @@ fn _consumeRow(state: _CsvState, options: CsvParseOptions) -> bool {
         return false
     }
 
-    if (!state.firstFieldQuoted && row.length > 0 &&
+    if (!state.firstFieldQuoted && len(row) > 0 &&
         _startsWith(row[0], options.commentPrefix)) {
         _clearRow(state)
         return false
@@ -354,30 +369,30 @@ fn _consumeRow(state: _CsvState, options: CsvParseOptions) -> bool {
     }
 
     var headerConsumed = match (options.header) {
-        CsvHeader.FirstRow -> state.document.headers.length == 0,
+        CsvHeader.FirstRow -> len(state.document.headers) == 0,
         _                  -> false
     }
     if (headerConsumed) {
         state.document.headers = row
-        state.expectedColumns = row.length
+        state.expectedColumns = len(row)
         _clearRow(state)
         return false
     }
 
     if (state.expectedColumns < 0) {
-        state.expectedColumns = row.length
-    } else if (row.length != state.expectedColumns) {
+        state.expectedColumns = len(row)
+    } else if (len(row) != state.expectedColumns) {
         _addRecordDiagnostic(
             state,
             CsvErrorKind.FieldCountMismatch,
             record,
-            "Expected " + string(state.expectedColumns) + " fields, got " + string(row.length)
+            "Expected " + string(state.expectedColumns) + " fields, got " + string(len(row))
         )
     }
 
     state.document.rows.push(row)
     _clearRow(state)
-    if (options.maxRecords > 0 && state.document.rows.length >= options.maxRecords) {
+    if (options.maxRecords > 0 && len(state.document.rows) >= options.maxRecords) {
         state.truncated = true
         return true
     }
@@ -386,7 +401,7 @@ fn _consumeRow(state: _CsvState, options: CsvParseOptions) -> bool {
 
 fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
     _validateParseOptions(options)
-    if (options.maxInputBytes > 0 && data.byteLength > options.maxInputBytes) {
+    if (options.maxInputBytes > 0 && len(data.bytes()) > options.maxInputBytes) {
         throw CsvError.InputLimitExceeded(options.maxInputBytes)
     }
 
@@ -394,18 +409,23 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
     var state = _CsvState(delimiter)
     var explicitHeaders = _explicitHeaders(options.header)
     for (name in explicitHeaders) { state.document.headers.push(name) }
-    if (state.document.headers.length > 0) {
-        state.expectedColumns = state.document.headers.length
+    if (len(state.document.headers) > 0) {
+        state.expectedColumns = len(state.document.headers)
     }
 
     var field = StringBuilder()
     var parserState = STATE_FIELD_START
     var pos = 0
-    if (data.length > 0 && data.charAt(0) == "\u{FEFF}") { pos = 1 }
+    var bytePos = 0
+    if (len(data) > 0 && data.runes().nth(0) == '\u{FEFF}') {
+        pos = 1
+        bytePos = 3
+    }
 
-    while (pos < data.length) {
-        state.byteOffset = pos
-        var c = data.charAt(pos)
+    while (pos < len(data)) {
+        var startPos = pos
+        state.byteOffset = bytePos
+        var c = data.runes().nth(pos)
 
         if (parserState == STATE_FIELD_START) {
             if (c == options.quoteChar) {
@@ -420,7 +440,7 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 if (_consumeRow(state, options)) { break }
                 pos = pos + width - 1
             } else {
-                _appendField(field, c, options)
+                _appendRune(state, field, c, options)
                 parserState = STATE_UNQUOTED
             }
         } else if (parserState == STATE_UNQUOTED) {
@@ -435,23 +455,23 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 pos = pos + width - 1
                 parserState = STATE_FIELD_START
             } else {
-                _appendField(field, c, options)
+                _appendRune(state, field, c, options)
             }
         } else if (parserState == STATE_QUOTED) {
-            if (c == options.escapeChar && pos + 1 < data.length &&
-                data.charAt(pos + 1) == options.quoteChar) {
-                _appendField(field, options.quoteChar, options)
+            if (c == options.escapeChar && pos + 1 < len(data) &&
+                data.runes().nth(pos + 1) == options.quoteChar) {
+                _appendRune(state, field, options.quoteChar, options)
                 pos = pos + 1
             } else if (c == options.quoteChar) {
                 parserState = STATE_QUOTE_END
             } else if (_isNewline(c)) {
                 var width = _newlineWidth(data, pos)
                 var newline = _newlineText(data, pos, width)
-                _appendField(field, newline, options)
+                _appendText(state, field, newline, options)
                 _observeLinebreak(state, newline)
                 pos = pos + width - 1
             } else {
-                _appendField(field, c, options)
+                _appendRune(state, field, c, options)
             }
         } else {
             if (c == delimiter) {
@@ -467,25 +487,27 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
             } else {
                 _addDiagnostic(state, CsvErrorKind.InvalidEscape,
                                "Unexpected character after closing quote")
-                _appendField(field, c, options)
+                _appendRune(state, field, c, options)
                 parserState = STATE_UNQUOTED
             }
         }
+        bytePos = bytePos + _utf8Width(c)
+        if (pos > startPos) { bytePos = bytePos + _utf8Width(data.runes().nth(pos)) }
         pos = pos + 1
     }
 
-    state.byteOffset = data.length
+    state.byteOffset = len(data.bytes())
     if (parserState == STATE_QUOTED) {
         _addDiagnostic(state, CsvErrorKind.UnterminatedQuote, "Unterminated quoted field")
     }
-    if (field.length > 0 || state.currentColumn > 0 || state.currentRow.length > 0 ||
+    if (len(field) > 0 || state.currentColumn > 0 || len(state.currentRow) > 0 ||
         parserState == STATE_QUOTED || parserState == STATE_QUOTE_END) {
         _finishField(state, options, field)
     }
-    if (state.currentRow.length > 0 && !state.truncated) {
+    if (len(state.currentRow) > 0 && !state.truncated) {
         _consumeRow(state, options)
     }
-    if (state.linebreak.length == 0) { state.linebreak = "" }
+    if (len(state.linebreak) == 0) { state.linebreak = "" }
 
     return CsvParseReport(state.document, state.diagnostics, delimiter, state.linebreak,
                           state.truncated)
@@ -520,20 +542,21 @@ fn _throwDiagnostic(diagnostic: CsvDiagnostic) {
 // value error channel.
 fn parse(data: string, options: CsvParseOptions? = null) -> CsvDocument {
     var report = _parseImpl(data, _parseOptions(options))
-    if (report.diagnostics.length > 0) {
+    if (len(report.diagnostics) > 0) {
         _throwDiagnostic(report.diagnostics[0])
     }
     return report.document
 }
 
 fn _needsQuoting(value: string, options: CsvWriteOptions) -> bool {
-    if (value.length == 0) { return false }
-    if (value.charAt(0) == " " || value.charAt(0) == "\t" ||
-        value.charAt(value.length - 1) == " " || value.charAt(value.length - 1) == "\t") {
+    if (len(value) == 0) { return false }
+    if (value.runes().nth(0) == ' ' || value.runes().nth(0) == '\t' ||
+        value.runes().nth(len(value) - 1) == ' ' ||
+        value.runes().nth(len(value) - 1) == '\t') {
         return true
     }
-    for (var i = 0; i < value.length; i++) {
-        var c = value.charAt(i)
+    for (var i = 0; i < len(value); i++) {
+        var c = value.runes().nth(i)
         if (c == options.delimiter || c == options.quoteChar || c == options.escapeChar ||
             _isNewline(c)) {
             return true
@@ -549,8 +572,8 @@ fn _writeField(out: StringBuilder, value: string, options: CsvWriteOptions) {
     }
     out.append(options.quoteChar)
     var prefixMode = options.escapeChar != options.quoteChar
-    for (var i = 0; i < value.length; i++) {
-        var c = value.charAt(i)
+    for (var i = 0; i < len(value); i++) {
+        var c = value.runes().nth(i)
         if (c == options.quoteChar || (prefixMode && c == options.escapeChar)) {
             out.append(options.escapeChar)
             out.append(c)
@@ -562,7 +585,7 @@ fn _writeField(out: StringBuilder, value: string, options: CsvWriteOptions) {
 }
 
 fn _writeRow(out: StringBuilder, row: Array<string>, options: CsvWriteOptions) {
-    for (var i = 0; i < row.length; i++) {
+    for (var i = 0; i < len(row); i++) {
         if (i > 0) { out.append(options.delimiter) }
         _writeField(out, row[i], options)
     }
@@ -575,7 +598,7 @@ fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string 
     var resolved = _writeOptions(options)
     _validateWriteOptions(resolved)
     var out = StringBuilder()
-    if (document.headers.length > 0) {
+    if (len(document.headers) > 0) {
         _writeRow(out, document.headers, resolved)
     }
     for (row in document.rows) {

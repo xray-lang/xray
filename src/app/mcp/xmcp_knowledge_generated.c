@@ -118,7 +118,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     },
     {
         .name = "decodeToBytes",
-        .signature = "(data: string): Bytes?",
+        .signature = "(data: string): Array<byte>?",
         .summary = "",
     },
     {
@@ -133,7 +133,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     },
     {
         .name = "encodeBytes",
-        .signature = "(data: Bytes): string",
+        .signature = "(data: Array<byte>): string",
         .summary = "",
     },
     {
@@ -450,7 +450,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvParseReport.delimiter",
-        .signature = ": string",
+        .signature = ": rune",
         .summary = "",
     },
     {
@@ -686,7 +686,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
     {
         .name = "hexDecode",
-        .signature = "(hex: string): Bytes?",
+        .signature = "(hex: string): Array<byte>?",
         .summary = "",
     },
     {
@@ -706,12 +706,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
     {
         .name = "utf16Decode",
-        .signature = "(data: Bytes, endian: int = 0, stripBom: bool = true): string?",
+        .signature = "(data: Array<byte>, endian: int = 0, stripBom: bool = true): string?",
         .summary = "",
     },
     {
         .name = "utf16Encode",
-        .signature = "(data: string, endian: int = 0): Bytes",
+        .signature = "(data: string, endian: int = 0): Array<byte>",
         .summary = "",
     },
     {
@@ -869,7 +869,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "CookieJar.count",
-        .signature = ": int { fn() { return this.cookies.length } }",
+        .signature = ": int { fn() { return len(this.cookies) } }",
         .summary = "",
     },
     {
@@ -948,6 +948,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "Headers.contains",
+        .signature = "(name: string): bool",
+        .summary = "",
+    },
+    {
         .name = "Headers.entries",
         .signature = "(): Array<(string, string)>",
         .summary = "",
@@ -960,11 +965,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "Headers.getAll",
         .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "Headers.has",
-        .signature = "(name: string): bool",
         .summary = "",
     },
     {
@@ -1537,7 +1537,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readFileBytes",
-        .signature = "(path: string): Array<uint8>?",
+        .signature = "(path: string): Array<byte>?",
         .summary = "Read entire file as byte array",
     },
     {
@@ -1607,7 +1607,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "writeFileBytes",
-        .signature = "(path: string, data: Array<uint8>): bool",
+        .signature = "(path: string, data: Array<byte>): bool",
         .summary = "Write byte array to file",
     },
 };
@@ -1616,6 +1616,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     {
         .name = "Json",
         .signature = "Json",
+        .summary = "",
+    },
+    {
+        .name = "Json.containsKey",
+        .signature = "(obj: Json, key: string): bool",
         .summary = "",
     },
     {
@@ -1644,21 +1649,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
         .summary = "",
     },
     {
-        .name = "Json.has",
-        .signature = "(key: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "Json.has",
-        .signature = "(obj: Json, key: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "Json.isEmpty",
-        .signature = "(obj: Json): bool",
-        .summary = "",
-    },
-    {
         .name = "Json.isValid",
         .signature = "(text: string, strict?: bool): bool",
         .summary = "",
@@ -1681,11 +1671,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     {
         .name = "Json.parse",
         .signature = "(text: string): Json",
-        .summary = "",
-    },
-    {
-        .name = "Json.size",
-        .signature = "(obj: Json): int",
         .summary = "",
     },
     {
@@ -2184,12 +2169,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "cacheFlush",
-        .signature = "(ptr: RawPtr<uint8>, n: int): ()",
+        .signature = "(ptr: RawPtr<byte>, n: int): ()",
         .summary = "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
         .name = "cacheInvalidate",
-        .signature = "(ptr: RawPtr<uint8>, n: int): ()",
+        .signature = "(ptr: RawPtr<byte>, n: int): ()",
         .summary = "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
@@ -2199,12 +2184,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "compare",
-        .signature = "(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int",
+        .signature = "(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int",
         .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
     },
     {
         .name = "copy",
-        .signature = "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()",
+        .signature = "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
     },
     {
@@ -2214,17 +2199,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "fromAddress",
-        .signature = "(addr: int): RawMut<uint8>",
+        .signature = "(addr: int): RawMut<byte>",
         .summary = "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "move",
-        .signature = "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()",
+        .signature = "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (may overlap; memmove)",
     },
     {
         .name = "nontemporalStore",
-        .signature = "(ptr: RawMut<uint8>, v: int, size: int): ()",
+        .signature = "(ptr: RawMut<byte>, v: int, size: int): ()",
         .summary = "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available",
     },
     {
@@ -2234,27 +2219,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "pageAlloc",
-        .signature = "(bytes: int, prot?: int): RawMut<uint8>",
+        .signature = "(bytes: int, prot?: int): RawMut<byte>",
         .summary = "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
     },
     {
         .name = "pageFree",
-        .signature = "(ptr: RawMut<uint8>, bytes: int): bool",
+        .signature = "(ptr: RawMut<byte>, bytes: int): bool",
         .summary = "Release anonymous pages from mem.pageAlloc; returns false on OS failure",
     },
     {
         .name = "pageProtect",
-        .signature = "(ptr: RawMut<uint8>, bytes: int, prot: int): bool",
+        .signature = "(ptr: RawMut<byte>, bytes: int, prot: int): bool",
         .summary = "Change anonymous page protection bits; returns false on OS failure",
     },
     {
         .name = "prefetch",
-        .signature = "(ptr: RawPtr<uint8>, rw: int): ()",
+        .signature = "(ptr: RawPtr<byte>, rw: int): ()",
         .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
     },
     {
         .name = "set",
-        .signature = "(dst: RawMut<uint8>, byte: int, n: int): ()",
+        .signature = "(dst: RawMut<byte>, byte: int, n: int): ()",
         .summary = "Fill n bytes at dst with byte (memset)",
     },
     {
@@ -2264,12 +2249,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "volatileLoad",
-        .signature = "(ptr: RawPtr<uint8>, size: int): int",
+        .signature = "(ptr: RawPtr<byte>, size: int): int",
         .summary = "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
     {
         .name = "volatileStore",
-        .signature = "(ptr: RawMut<uint8>, v: int, size: int): ()",
+        .signature = "(ptr: RawMut<byte>, v: int, size: int): ()",
         .summary = "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
 };
@@ -2362,8 +2347,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "readInto",
-        .signature = "(conn: NetConn, buffer: Bytes, maxlen?: int): int",
-        .summary = "Read data into a reusable Bytes buffer",
+        .signature = "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int",
+        .summary = "Read data into a reusable Array<byte> buffer",
     },
     {
         .name = "recvFrom",
@@ -2427,8 +2412,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "writeBytes",
-        .signature = "(conn: NetConn, data: Bytes): int",
-        .summary = "Write Bytes data to connection",
+        .signature = "(conn: NetConn, data: Array<byte>): int",
+        .summary = "Write Array<byte> data to connection",
     },
 };
 
@@ -2907,6 +2892,19 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_strconv[] = {
+    {
+        .name = "parseFloat",
+        .signature = "(value: string): float?",
+        .summary = "",
+    },
+    {
+        .name = "parseInt",
+        .signature = "(value: string): int?",
+        .summary = "",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     {
         .name = "Barrier",
@@ -3068,7 +3066,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Dylib.symbol",
-        .signature = "(name: string): RawPtr<uint8>?",
+        .signature = "(name: string): RawPtr<byte>?",
         .summary = "",
     },
     {
@@ -3128,7 +3126,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Pipe.read",
-        .signature = "(maxBytes: int = 8192): Bytes?",
+        .signature = "(maxBytes: int = 8192): Array<byte>?",
         .summary = "",
     },
     {
@@ -3138,7 +3136,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Pipe.write",
-        .signature = "(data: Bytes): int",
+        .signature = "(data: Array<byte>): int",
         .summary = "",
     },
     {
@@ -3260,6 +3258,54 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .name = "threadYield",
         .signature = "(): ()",
         .summary = "Yield the current OS thread to another runnable OS thread",
+    },
+};
+
+static const XmcpGeneratedStdlibSymbol _symbols_text[] = {
+    {
+        .name = "lower",
+        .signature = "(value: string): string",
+        .summary = "",
+    },
+    {
+        .name = "padEnd",
+        .signature = "(value: string, targetLength: int, padding: string = \" \"): string",
+        .summary = "",
+    },
+    {
+        .name = "padStart",
+        .signature = "(value: string, targetLength: int, padding: string = \" \"): string",
+        .summary = "",
+    },
+    {
+        .name = "reverseRunes",
+        .signature = "(value: string): string",
+        .summary = "",
+    },
+    {
+        .name = "translate",
+        .signature = "(value: string, table: Map<string, string>): string",
+        .summary = "",
+    },
+    {
+        .name = "trim",
+        .signature = "(value: string): string",
+        .summary = "",
+    },
+    {
+        .name = "trimEnd",
+        .signature = "(value: string): string",
+        .summary = "",
+    },
+    {
+        .name = "trimStart",
+        .signature = "(value: string): string",
+        .summary = "",
+    },
+    {
+        .name = "upper",
+        .signature = "(value: string): string",
+        .summary = "",
     },
 };
 
@@ -3530,7 +3576,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ParsedFrame.payload",
-        .signature = ": Array<uint8>",
+        .signature = ": Array<byte>",
         .summary = "",
     },
     {
@@ -3625,7 +3671,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsMessage.data",
-        .signature = "const string | Array<uint8> | null",
+        .signature = "const string | Array<byte> | null",
         .summary = "Handle field",
     },
     {
@@ -3670,7 +3716,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "binaryFrame",
-        .signature = "(data: Bytes, mask: bool = true): Bytes",
+        .signature = "(data: Array<byte>, mask: bool = true): Array<byte>",
         .summary = "",
     },
     {
@@ -3685,7 +3731,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "closeFrame",
-        .signature = "(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes",
+        .signature = "(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>",
         .summary = "",
     },
     {
@@ -3695,7 +3741,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "frame",
-        .signature = "(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes",
+        .signature = "(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>",
         .summary = "",
     },
     {
@@ -3705,17 +3751,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "maskPayload",
-        .signature = "(payload: Bytes, key: Bytes): Bytes",
+        .signature = "(payload: Array<byte>, key: Array<byte>): Array<byte>",
         .summary = "",
     },
     {
         .name = "parseClosePayload",
-        .signature = "(payload: Bytes): ClosePayload?",
+        .signature = "(payload: Array<byte>): ClosePayload?",
         .summary = "",
     },
     {
         .name = "parseFrame",
-        .signature = "(raw: Bytes, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?",
+        .signature = "(raw: Array<byte>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?",
         .summary = "",
     },
     {
@@ -3740,12 +3786,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "pingFrame",
-        .signature = "(data: Bytes? = null, mask: bool = true): Bytes",
+        .signature = "(data: Array<byte>? = null, mask: bool = true): Array<byte>",
         .summary = "",
     },
     {
         .name = "pongFrame",
-        .signature = "(data: Bytes? = null, mask: bool = true): Bytes",
+        .signature = "(data: Array<byte>? = null, mask: bool = true): Array<byte>",
         .summary = "",
     },
     {
@@ -3760,7 +3806,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "send",
-        .signature = "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool",
+        .signature = "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool",
         .summary = "Send data over WebSocket connection",
     },
     {
@@ -3775,7 +3821,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "textFrame",
-        .signature = "(data: string, mask: bool = true): Bytes",
+        .signature = "(data: string, mask: bool = true): Array<byte>",
         .summary = "",
     },
     {
@@ -3875,7 +3921,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "builtin_functions",
         .title = "Built-in Functions",
-        .aliases_csv = "builtin,print,dump,typeof,builtins",
+        .aliases_csv = "builtin,print,dump,typeOf,builtins",
         .body =
             "[Language reference](#13-\xe5\x86\x85\xe7\xbd\xae\xe5\x87\xbd\xe6\x95\xb0-built-in-functions)\n"
             "\n"
@@ -3884,8 +3930,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Core built-ins\n"
             "- `print(value)` \xe2\x80\x94 print with newline\n"
             "- `dump(value)` \xe2\x80\x94 debug print with type info\n"
-            "- `typeof(value)` \xe2\x80\x94 return a stable TypeId / `Type.xxx` value\n"
-            "- `typename(value)` \xe2\x80\x94 return the debug/logging type name\n"
+            "- `typeOf(value)` \xe2\x80\x94 return a stable TypeId / `Type.xxx` value\n"
+            "- `typeName(value)` \xe2\x80\x94 return the debug/logging type name\n"
             "- `x is T` \xe2\x80\x94 runtime type check with analyzer narrowing\n"
             "- `int(value)` / `float(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n"
             "- `assert(condition)` and `assert_*` helpers \xe2\x80\x94 testing assertions\n"
@@ -3900,10 +3946,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Type inspection\n"
             "```xray\n"
             "var x = 42\n"
-            "print(typeof(x) == Type.int)    // true\n"
-            "print(typename(x))              // \"int\"\n"
+            "print(typeOf(x) == Type.int)    // true\n"
+            "print(typeName(x))              // \"int\"\n"
             "print(x is int)                 // true\n"
-            "// typeof(x) == \"int\"           // compile error: use Type.int or typename(x)\n"
+            "// typeOf(x) == \"int\"           // compile error: use Type.int or typeName(x)\n"
             "```\n"
             "",
     },
@@ -4072,7 +4118,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// Record/Json object literal: identifier or string key + colon ':'\n"
             "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
             "var user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
-            "typename(user)                            // \"Record\"\n"
+            "typeName(user)                            // \"Record\"\n"
             "data.name              // type: Json (field access returns Json)\n"
             "data[\"name\"]           // equivalent\n"
             "\n"
@@ -4095,11 +4141,11 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "arr[0]\n"
             "arr[0] = 10\n"
             "map[\"key\"]\n"
-            "str[i]                  // returns char\n"
+            "str[i]                  // returns rune\n"
             "```\n"
             "\n"
             "### Other collection-like types\n"
-            "- `Bytes` is a typed byte buffer backed by contiguous memory\n"
+            "- `Array<byte>` is a typed byte buffer backed by contiguous memory\n"
             "- `Channel<T>` is the coroutine communication container\n"
             "- `WeakMap` / `WeakSet` hold weak references to heap objects\n"
             "",
@@ -4133,18 +4179,18 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Move ownership\n"
             "```xray\n"
-            "var buf = Bytes(1024 * 1024)\n"
+            "var buf = Array<byte>(1024 * 1024)\n"
             "\n"
             "// hand off to a coroutine\n"
-            "var t = go fn(b: Bytes) -> int {\n"
+            "var t = go fn(b: Array<byte>) -> int {\n"
             "    return process(b)\n"
             "}(move buf)\n"
             "// compile error: buf has been moved\n"
-            "// print(buf.length)\n"
+            "// print(len(buf))\n"
             "\n"
             "// hand off to a channel\n"
-            "shared ch = Channel<Bytes>(1)\n"
-            "var payload = Bytes(4096)\n"
+            "shared ch = Channel<Array<byte>>(1)\n"
+            "var payload = Array<byte>(4096)\n"
             "ch.send(move payload)\n"
             "// compile error: payload has been moved\n"
             "```\n"
@@ -4234,7 +4280,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// Form A: two bare identifiers (more common)\n"
             "for (k, v in someMap) { print(\"${k}=${v}\") }     // Map \xe2\x86\x92 (key, value)\n"
             "for (i, e in someArray) { print(\"${i}: ${e}\") }  // Array \xe2\x86\x92 (index, element)\n"
-            "for (i, c in \"hello\") { print(\"${i}:${c}\") }     // string \xe2\x86\x92 (index, char)\n"
+            "for (i, c in \"hello\") { print(\"${i}:${c}\") }     // string \xe2\x86\x92 (index, rune)\n"
             "\n"
             "// Form B: tuple-parenthesized (pairs well with .entries())\n"
             "for ((i, e) in someArray.entries()) { print(\"${i}=${e}\") }\n"
@@ -4437,7 +4483,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    go failing(\"error2\")\n"
             "    go ok()\n"
             "}\n"
-            "print(outcomes.length)               // 3 (one outcome per child)\n"
+            "print(len(outcomes))                 // 3 (one outcome per child)\n"
             "```\n"
             "\n"
             "### select \xe2\x80\x94 multiplex channels\n"
@@ -4547,7 +4593,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "enum NetEvent {\n"
             "    Connected,\n"
             "    Disconnected(reason: string),\n"
-            "    DataReceived(bytes: Bytes),\n"
+            "    DataReceived(bytes: Array<byte>),\n"
             "    Error(code: int, message: string),\n"
             "}\n"
             "\n"
@@ -4726,7 +4772,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "}\n"
             "var c = Container<int>()\n"
             "print(c is Container<int>)     // true\n"
-            "print(typename(c))             // \"Container<int>\" when type names are enabled\n"
+            "print(typeName(c))             // \"Container<int>\" when type names are enabled\n"
             "```\n"
             "",
     },
@@ -4876,7 +4922,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Null coalescing: `x ?? default`\n"
             "### Optional chaining: `obj?.field`\n"
             "### Spread: `...arr`\n"
-            "### Type: `typeof(x)`, `x is Type`\n"
+            "### Type: `typeOf(x)`, `x is Type`\n"
             "\n"
             "### Range and null-safe operators\n"
             "```xray\n"
@@ -4891,7 +4937,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var v = nullable_expr ?? default_value\n"
             "```\n"
             "```xray\n"
-            "var len = name?.length          // returns null when name is null\n"
+            "var nameLen = name == null ? null : len(name!)\n"
             "var item = arr?[0]              // optional index\n"
             "var value = callback?.(input)   // optional function call\n"
             "```\n"
@@ -4945,15 +4991,14 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "arr[:3]                 // first 3\n"
             "arr[2:]                 // from index 2 to the end\n"
             "arr[:]                  // full slice (shallow copy)\n"
-            "str[0:5]                // string slice\n"
+            "var view: Slice<int> = arr[1:4]\n"
             "```\n"
             "\n"
             "### Common methods\n"
-            "- `s.length`\n"
-            "- `s.toLowerCase()` / `s.toUpperCase()`\n"
+            "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n"
             "- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n"
-            "- `s.indexOf(sub)` / `s.includes(sub)`\n"
-            "- `s.trim()` / `s.split(sep)` / `s.replace(old, new)`\n"
+            "- `s.indexOf(sub)` / `s.contains(sub)`\n"
+            "- `s.slice(start, end)` / `s.split(sep)` / `s.replace(old, new)`\n"
             "",
     },
     {
@@ -5065,7 +5110,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- `string` \xe2\x80\x94 UTF-8 string\n"
             "- `bool` \xe2\x80\x94 `true` / `false`\n"
             "- `()` \xe2\x80\x94 Unit, no return value\n"
-            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Bytes`, `BigInt`\n"
+            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Array<byte>`, `BigInt`\n"
             "\n"
             "### Explicit conditions\n"
             "```xray\n"
@@ -5083,7 +5128,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// if (flag) { }         // compile error: bare bool? cannot be a condition\n"
             "\n"
             "var s = \"\"\n"
-            "if (!s.isEmpty()) { }    // OK\n"
+            "if (len(s) != 0) { }     // OK\n"
             "// if (s) { }            // compile error\n"
             "```\n"
             "\n"
@@ -5307,10 +5352,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `base64.decode` | `(data: string): string?` |  |\n"
-            "| `base64.decodeToBytes` | `(data: string): Bytes?` |  |\n"
+            "| `base64.decodeToBytes` | `(data: string): Array<byte>?` |  |\n"
             "| `base64.decodeUrl` | `(data: string): string?` |  |\n"
             "| `base64.encode` | `(data: string): string` |  |\n"
-            "| `base64.encodeBytes` | `(data: Bytes): string` |  |\n"
+            "| `base64.encodeBytes` | `(data: Array<byte>): string` |  |\n"
             "| `base64.encodeUrl` | `(data: string): string` |  |\n"
             "| `base64.isValid` | `(data: string): bool` |  |\n"
             "",
@@ -5443,7 +5488,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvDocument.headers` | `: Array<string>` |  |\n"
             "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
             "| `CsvParseReport` | `CsvParseReport` |  |\n"
-            "| `CsvParseReport.delimiter` | `: string` |  |\n"
+            "| `CsvParseReport.delimiter` | `: rune` |  |\n"
             "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n"
             "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
             "| `CsvParseReport.linebreak` | `: string` |  |\n"
@@ -5525,12 +5570,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `encoding.BE` | `: int` |  |\n"
             "| `encoding.LE` | `: int` |  |\n"
-            "| `encoding.hexDecode` | `(hex: string): Bytes?` |  |\n"
+            "| `encoding.hexDecode` | `(hex: string): Array<byte>?` |  |\n"
             "| `encoding.hexDecodeString` | `(hex: string): string?` |  |\n"
             "| `encoding.hexEncode` | `(data: string): string` |  |\n"
             "| `encoding.hexValid` | `(hex: string): bool` |  |\n"
-            "| `encoding.utf16Decode` | `(data: Bytes, endian: int = 0, stripBom: bool = true): string?` |  |\n"
-            "| `encoding.utf16Encode` | `(data: string, endian: int = 0): Bytes` |  |\n"
+            "| `encoding.utf16Decode` | `(data: Array<byte>, endian: int = 0, stripBom: bool = true): string?` |  |\n"
+            "| `encoding.utf16Encode` | `(data: string, endian: int = 0): Array<byte>` |  |\n"
             "| `encoding.utf8ByteLength` | `(data: string): int` |  |\n"
             "| `encoding.utf8Count` | `(data: string): int` |  |\n"
             "| `encoding.utf8Valid` | `(data: string): bool` |  |\n"
@@ -5579,7 +5624,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CookieJar.clearDomain` | `(domain: string): ()` |  |\n"
             "| `CookieJar.constructor` | `(maxCookies: int = 300): ()` |  |\n"
             "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n"
-            "| `CookieJar.count` | `: int { fn() { return this.cookies.length } }` |  |\n"
+            "| `CookieJar.count` | `: int { fn() { return len(this.cookies) } }` |  |\n"
             "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): string?` |  |\n"
             "| `CookieJar.maxCookies` | `: int` |  |\n"
             "| `FormData` | `FormData` |  |\n"
@@ -5595,10 +5640,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Headers` | `Headers` |  |\n"
             "| `Headers.add` | `(name: string, value: string): ()` |  |\n"
             "| `Headers.constructor` | `(): ()` |  |\n"
+            "| `Headers.contains` | `(name: string): bool` |  |\n"
             "| `Headers.entries` | `(): Array<(string, string)>` |  |\n"
             "| `Headers.get` | `(name: string): string?` |  |\n"
             "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
-            "| `Headers.has` | `(name: string): bool` |  |\n"
             "| `Headers.set` | `(name: string, value: string): ()` |  |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: string` |  |\n"
@@ -5730,7 +5775,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.readDir` | `(path: string): Array<string>` | List directory entries |\n"
             "| `io.readDirRecursive` | `(path: string): Array<string>` | List directory entries recursively |\n"
             "| `io.readFile` | `(path: string): string?` | Read entire file as string |\n"
-            "| `io.readFileBytes` | `(path: string): Array<uint8>?` | Read entire file as byte array |\n"
+            "| `io.readFileBytes` | `(path: string): Array<byte>?` | Read entire file as byte array |\n"
             "| `io.readLines` | `(path: string): Array<string>` | Read file as lines |\n"
             "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
             "| `io.readlink` | `(path: string): string?` | Read symlink target |\n"
@@ -5744,7 +5789,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.tempFile` | `(): string?` | Create temporary file |\n"
             "| `io.touch` | `(path: string): bool` | Create or update file timestamp |\n"
             "| `io.writeFile` | `(path: string, data: string): bool` | Write string to file |\n"
-            "| `io.writeFileBytes` | `(path: string, data: Array<uint8>): bool` | Write byte array to file |\n"
+            "| `io.writeFileBytes` | `(path: string, data: Array<byte>): bool` | Write byte array to file |\n"
             "",
         .symbols = _symbols_io,
         .symbol_count = (int)(sizeof(_symbols_io) / sizeof(_symbols_io[0])),
@@ -5765,28 +5810,25 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "- `Json.stringify(value, indent?)`\n"
             "- `Json.isValid(text)` / `Json.tryParse(text)`\n"
             "- `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`\n"
-            "- `Json.has(obj, key)` / `Json.get(obj, key, default?)`\n"
-            "- `Json.size(obj)` / `Json.isEmpty(obj)`\n"
+            "- `Json.containsKey(obj, key)` / `Json.get(obj, key, default?)`\n"
+            "- `len(obj)` for object, array, or string variants\n"
             "\n"
             "## API\n"
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Json` | `Json` |  |\n"
+            "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
             "| `Json.encode` | `(value: unknown): Json` |  |\n"
             "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
             "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
             "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
             "| `Json.get` | `(obj: Json, key: string, default?: unknown): Json` |  |\n"
-            "| `Json.has` | `(key: string): bool` |  |\n"
-            "| `Json.has` | `(obj: Json, key: string): bool` |  |\n"
-            "| `Json.isEmpty` | `(obj: Json): bool` |  |\n"
             "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
             "| `Json.iterator` | `(): Iterator<string>` |  |\n"
             "| `Json.keys` | `(): Array<string>` |  |\n"
             "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
             "| `Json.parse` | `(text: string): Json` |  |\n"
-            "| `Json.size` | `(obj: Json): int` |  |\n"
             "| `Json.stringify` | `(value: unknown, indent?: int): string` |  |\n"
             "| `Json.toString` | `(): string` |  |\n"
             "| `Json.tryParse` | `(text: string): Json` |  |\n"
@@ -5938,24 +5980,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
             "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
             "| `mem.allocZeroed` | `(n: int): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
-            "| `mem.cacheFlush` | `(ptr: RawPtr<uint8>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
-            "| `mem.cacheInvalidate` | `(ptr: RawPtr<uint8>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheFlush` | `(ptr: RawPtr<byte>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheInvalidate` | `(ptr: RawPtr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
-            "| `mem.compare` | `(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
-            "| `mem.copy` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
+            "| `mem.compare` | `(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
+            "| `mem.copy` | `(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
-            "| `mem.fromAddress` | `(addr: int): RawMut<uint8>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.move` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
-            "| `mem.nontemporalStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
+            "| `mem.fromAddress` | `(addr: int): RawMut<byte>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
+            "| `mem.move` | `(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
+            "| `mem.nontemporalStore` | `(ptr: RawMut<byte>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
             "| `mem.offsetOf` | `(field: string): int` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
-            "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<uint8>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
-            "| `mem.pageFree` | `(ptr: RawMut<uint8>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
-            "| `mem.pageProtect` | `(ptr: RawMut<uint8>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
-            "| `mem.prefetch` | `(ptr: RawPtr<uint8>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
-            "| `mem.set` | `(dst: RawMut<uint8>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
+            "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<byte>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
+            "| `mem.pageFree` | `(ptr: RawMut<byte>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
+            "| `mem.pageProtect` | `(ptr: RawMut<byte>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
+            "| `mem.prefetch` | `(ptr: RawPtr<byte>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
+            "| `mem.set` | `(dst: RawMut<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
-            "| `mem.volatileLoad` | `(ptr: RawPtr<uint8>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.volatileStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileLoad` | `(ptr: RawPtr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileStore` | `(ptr: RawMut<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
@@ -5966,7 +6008,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# net module\n"
             "\n"
-            "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Bytes`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.\n"
+            "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<byte>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.\n"
             "\n"
             "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.\n"
             "\n"
@@ -6000,7 +6042,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "### Design rule\n"
             "- Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.\n"
             "- Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.\n"
-            "- Use `Bytes` buffers for binary protocol hot paths that must inspect payload.\n"
+            "- Use `Array<byte>` buffers for binary protocol hot paths that must inspect payload.\n"
             "- Use string reads only when the program actually needs to parse or mutate text.\n"
             "\n"
             "## API\n"
@@ -6024,7 +6066,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.listen` | `(port: int, backlog?: int): NetListener?` | Start listening on a port |\n"
             "| `net.lookup` | `(hostname: string): string?` | DNS lookup |\n"
             "| `net.read` | `(conn: NetConn, maxlen?: int): string?` | Read data from connection |\n"
-            "| `net.readInto` | `(conn: NetConn, buffer: Bytes, maxlen?: int): int` | Read data into a reusable Bytes buffer |\n"
+            "| `net.readInto` | `(conn: NetConn, buffer: Array<byte>, maxlen?: int): int` | Read data into a reusable Array<byte> buffer |\n"
             "| `net.recvFrom` | `(handle: NetConn, maxlen?: int): UdpPacket?` | Receive UDP datagram (returns flat handle: data, host, port) |\n"
             "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` | Send UDP datagram |\n"
             "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` | Set accept deadline in monotonic ms |\n"
@@ -6037,7 +6079,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.udpBind` | `(port: int, addr?: string): NetConn?` | Bind a UDP socket |\n"
             "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeout?: int): NetConn?` | Upgrade connection to TLS |\n"
             "| `net.write` | `(conn: NetConn, data: string): int` | Write data to connection |\n"
-            "| `net.writeBytes` | `(conn: NetConn, data: Bytes): int` | Write Bytes data to connection |\n"
+            "| `net.writeBytes` | `(conn: NetConn, data: Array<byte>): int` | Write Array<byte> data to connection |\n"
             "",
         .symbols = _symbols_net,
         .symbol_count = (int)(sizeof(_symbols_net) / sizeof(_symbols_net[0])),
@@ -6247,6 +6289,30 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),
     },
     {
+        .module = "strconv",
+        .summary = "Explicit string and scalar conversions",
+        .body =
+            "# strconv module\n"
+            "\n"
+            "Explicit string and scalar conversion helpers.\n"
+            "\n"
+            "Usage: `import strconv` then call `strconv.function()`.\n"
+            "\n"
+            "### Functions\n"
+            "- `strconv.parseInt(value)` returns `int?`\n"
+            "- `strconv.parseFloat(value)` returns `float?`\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `strconv.parseFloat` | `(value: string): float?` |  |\n"
+            "| `strconv.parseInt` | `(value: string): int?` |  |\n"
+            "",
+        .symbols = _symbols_strconv,
+        .symbol_count = (int)(sizeof(_symbols_strconv) / sizeof(_symbols_strconv[0])),
+    },
+    {
         .module = "sync",
         .summary = "Coroutine-domain synchronization primitives",
         .body =
@@ -6309,7 +6375,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Dylib.constructor` | `(handle: int): ()` |  |\n"
             "| `Dylib.lastError` | `(): string` |  |\n"
             "| `Dylib.open` | `(path: string): Dylib?` |  |\n"
-            "| `Dylib.symbol` | `(name: string): RawPtr<uint8>?` |  |\n"
+            "| `Dylib.symbol` | `(name: string): RawPtr<byte>?` |  |\n"
             "| `sys.OsBarrier` | `(parties: int): OsBarrier` | Create a reusable OS-domain barrier |\n"
             "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
             "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"
@@ -6321,9 +6387,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Pipe.closeWrite` | `(): bool` |  |\n"
             "| `Pipe.constructor` | `(readHandle: int, writeHandle: int): ()` |  |\n"
             "| `Pipe.open` | `(): Pipe?` |  |\n"
-            "| `Pipe.read` | `(maxBytes: int = 8192): Bytes?` |  |\n"
+            "| `Pipe.read` | `(maxBytes: int = 8192): Array<byte>?` |  |\n"
             "| `Pipe.readEnd` | `(): int` |  |\n"
-            "| `Pipe.write` | `(data: Bytes): int` |  |\n"
+            "| `Pipe.write` | `(data: Array<byte>): int` |  |\n"
             "| `Pipe.writeEnd` | `(): int` |  |\n"
             "| `Process` | `Process` |  |\n"
             "| `Process.constructor` | `(id: int, detached: bool = false): ()` |  |\n"
@@ -6351,6 +6417,40 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "",
         .symbols = _symbols_sys,
         .symbol_count = (int)(sizeof(_symbols_sys) / sizeof(_symbols_sys[0])),
+    },
+    {
+        .module = "text",
+        .summary = "Explicit Unicode text transformations",
+        .body =
+            "# text module\n"
+            "\n"
+            "Explicit Unicode text transformations for Xray strings.\n"
+            "\n"
+            "Usage: `import text` then call `text.function()`.\n"
+            "\n"
+            "### Functions\n"
+            "- `text.lower(value)` / `text.upper(value)`\n"
+            "- `text.trim(value)` / `text.trimStart(value)` / `text.trimEnd(value)`\n"
+            "- `text.reverseRunes(value)`\n"
+            "- `text.padStart(value, targetLength, padding?)` / `text.padEnd(value, targetLength, padding?)`\n"
+            "- `text.translate(value, table)`\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `text.lower` | `(value: string): string` |  |\n"
+            "| `text.padEnd` | `(value: string, targetLength: int, padding: string = \" \"): string` |  |\n"
+            "| `text.padStart` | `(value: string, targetLength: int, padding: string = \" \"): string` |  |\n"
+            "| `text.reverseRunes` | `(value: string): string` |  |\n"
+            "| `text.translate` | `(value: string, table: Map<string, string>): string` |  |\n"
+            "| `text.trim` | `(value: string): string` |  |\n"
+            "| `text.trimEnd` | `(value: string): string` |  |\n"
+            "| `text.trimStart` | `(value: string): string` |  |\n"
+            "| `text.upper` | `(value: string): string` |  |\n"
+            "",
+        .symbols = _symbols_text,
+        .symbol_count = (int)(sizeof(_symbols_text) / sizeof(_symbols_text[0])),
     },
     {
         .module = "time",
@@ -6471,7 +6571,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedFrame.fin` | `: bool` |  |\n"
             "| `ParsedFrame.masked` | `: bool` |  |\n"
             "| `ParsedFrame.opcode` | `: int` |  |\n"
-            "| `ParsedFrame.payload` | `: Array<uint8>` |  |\n"
+            "| `ParsedFrame.payload` | `: Array<byte>` |  |\n"
             "| `ParsedFrame.rsv1` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
             "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
@@ -6490,7 +6590,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
             "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
-            "| `ws.WsMessage.data` | `const string \\| Array<uint8> \\| null` | Handle field |\n"
+            "| `ws.WsMessage.data` | `const string \\| Array<byte> \\| null` | Handle field |\n"
             "| `ws.WsMessage.error` | `const string?` | Handle field |\n"
             "| `WsUrl` | `WsUrl` |  |\n"
             "| `WsUrl.constructor` | `(secure: bool, host: string, port: int, path: string): ()` |  |\n"
@@ -6499,28 +6599,28 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `WsUrl.port` | `: int` |  |\n"
             "| `WsUrl.secure` | `: bool` |  |\n"
             "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
-            "| `ws.binaryFrame` | `(data: Bytes, mask: bool = true): Bytes` |  |\n"
+            "| `ws.binaryFrame` | `(data: Array<byte>, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
-            "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes` |  |\n"
+            "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>` |  |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
-            "| `ws.frame` | `(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes` |  |\n"
+            "| `ws.frame` | `(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
-            "| `ws.maskPayload` | `(payload: Bytes, key: Bytes): Bytes` |  |\n"
-            "| `ws.parseClosePayload` | `(payload: Bytes): ClosePayload?` |  |\n"
-            "| `ws.parseFrame` | `(raw: Bytes, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?` |  |\n"
+            "| `ws.maskPayload` | `(payload: Array<byte>, key: Array<byte>): Array<byte>` |  |\n"
+            "| `ws.parseClosePayload` | `(payload: Array<byte>): ClosePayload?` |  |\n"
+            "| `ws.parseFrame` | `(raw: Array<byte>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?` |  |\n"
             "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
             "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
             "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
-            "| `ws.pingFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"
-            "| `ws.pongFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"
+            "| `ws.pingFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
+            "| `ws.pongFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.randomKey` | `(): string` |  |\n"
             "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
-            "| `ws.send` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.send` | `(conn: WsConn, data: string \\| Array<byte>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
             "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
             "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
-            "| `ws.textFrame` | `(data: string, mask: bool = true): Bytes` |  |\n"
+            "| `ws.textFrame` | `(data: string, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"
             "",
         .symbols = _symbols_ws,
@@ -6579,7 +6679,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 29;
+XR_DATADEF const int xmcp_generated_stdlib_count = 31;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
@@ -6630,7 +6730,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Types\n"
     "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
     "\n"
-    "`T?` for nullable values | `A | B` for unions | `Json`, `Bytes`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
+    "`T?` for nullable values | `A | B` for unions | `Json`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
     "\n"
     "## Control flow\n"
     "```xray\n"
@@ -6776,7 +6876,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "// Record/Json object literal: identifier or string key + colon ':'\n"
     "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
     "var user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
-    "typename(user)                            // \"Record\"\n"
+    "typeName(user)                            // \"Record\"\n"
     "data.name              // type: Json (field access returns Json)\n"
     "data[\"name\"]           // equivalent\n"
     "\n"
@@ -7005,18 +7105,18 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
     "```\n"
     "```xray\n"
-    "var buf = Bytes(1024 * 1024)\n"
+    "var buf = Array<byte>(1024 * 1024)\n"
     "\n"
     "// hand off to a coroutine\n"
-    "var t = go fn(b: Bytes) -> int {\n"
+    "var t = go fn(b: Array<byte>) -> int {\n"
     "    return process(b)\n"
     "}(move buf)\n"
     "// compile error: buf has been moved\n"
-    "// print(buf.length)\n"
+    "// print(len(buf))\n"
     "\n"
     "// hand off to a channel\n"
-    "shared ch = Channel<Bytes>(1)\n"
-    "var payload = Bytes(4096)\n"
+    "shared ch = Channel<Array<byte>>(1)\n"
+    "var payload = Array<byte>(4096)\n"
     "ch.send(move payload)\n"
     "// compile error: payload has been moved\n"
     "```\n"
@@ -7055,7 +7155,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "    go failing(\"error2\")\n"
     "    go ok()\n"
     "}\n"
-    "print(outcomes.length)               // 3 (one outcome per child)\n"
+    "print(len(outcomes))                 // 3 (one outcome per child)\n"
     "```\n"
     "\n"
     "## Select\n"

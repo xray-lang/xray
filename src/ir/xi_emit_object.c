@@ -416,7 +416,7 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg cap = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, c_field));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_LEN, dst, cap, c_field));
 }
 
 /* Array spread append: R[A]:Array.push(R[B]).  In-place store, no dst. */
@@ -1049,8 +1049,8 @@ static XrValue ast_field_default_to_value(EmitCtx *ctx, AstNode *init) {
         return xr_bool(true);
     if (init->type == AST_LITERAL_FALSE)
         return xr_bool(false);
-    if (init->type == AST_LITERAL_CHAR)
-        return xr_char(init->as.literal.raw_value.char_val);
+    if (init->type == AST_LITERAL_RUNE)
+        return xr_rune(init->as.literal.raw_value.rune_val);
     if (init->type == AST_LITERAL_STRING && ctx->isolate) {
         const char *s = init->as.literal.raw_value.string_val;
         if (s) {

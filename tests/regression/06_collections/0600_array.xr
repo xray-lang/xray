@@ -5,7 +5,7 @@
 @test
 fn test_array_literal() {
     var arr = [1, 2, 3]
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], 2)
     assert_eq(arr[2], 3)
@@ -14,21 +14,21 @@ fn test_array_literal() {
 @test
 fn test_empty_array() {
     var arr: Array<int> = []
-    assert_eq(arr.length, 0)
-    assert_eq(arr.isEmpty, true)
+    assert_eq(len(arr), 0)
+    assert_eq(len(arr) == 0, true)
 }
 
 @test
 fn test_single_element() {
     var arr = [42]
-    assert_eq(arr.length, 1)
+    assert_eq(len(arr), 1)
     assert_eq(arr[0], 42)
 }
 
 @test
 fn test_mixed_types() {
     var arr = [1, "hello", 3.14, true, null]
-    assert_eq(arr.length, 5)
+    assert_eq(len(arr), 5)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], "hello")
     assert_eq(arr[2], 3.14)
@@ -39,7 +39,7 @@ fn test_mixed_types() {
 @test
 fn test_nested_array() {
     var matrix = [[1, 2], [3, 4], [5, 6]]
-    assert_eq(matrix.length, 3)
+    assert_eq(len(matrix), 3)
     assert_eq(matrix[0][0], 1)
     assert_eq(matrix[1][1], 4)
     assert_eq(matrix[2][0], 5)
@@ -102,7 +102,7 @@ fn test_push() {
     arr.push(1)
     arr.push(2)
     arr.push(3)
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
     assert_eq(arr[0], 1)
     assert_eq(arr[2], 3)
 }
@@ -112,10 +112,10 @@ fn test_pop() {
     var arr = [1, 2, 3]
     var last = arr.pop()
     assert_eq(last, 3)
-    assert_eq(arr.length, 2)
+    assert_eq(len(arr), 2)
     last = arr.pop()
     assert_eq(last, 2)
-    assert_eq(arr.length, 1)
+    assert_eq(len(arr), 1)
 }
 
 @test
@@ -123,7 +123,7 @@ fn test_pop_empty() {
     var arr: Array<int> = []
     var result = arr.pop()
     assert_eq(result, null)
-    assert_eq(arr.length, 0)
+    assert_eq(len(arr), 0)
 }
 
 // ===== shift/unshift =====
@@ -132,7 +132,7 @@ fn test_shift() {
     var arr = [1, 2, 3]
     var first = arr.shift()
     assert_eq(first, 1)
-    assert_eq(arr.length, 2)
+    assert_eq(len(arr), 2)
     assert_eq(arr[0], 2)
 }
 
@@ -141,7 +141,7 @@ fn test_unshift() {
     var arr = [2, 3]
     arr.unshift(1)
     assert_eq(arr[0], 1)
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
 }
 
 @test
@@ -164,8 +164,8 @@ fn test_indexOf() {
 @test
 fn test_includes() {
     var arr = [1, 2, 3]
-    assert_eq(arr.includes(2), true)
-    assert_eq(arr.includes(5), false)
+    assert_eq(arr.contains(2), true)
+    assert_eq(arr.contains(5), false)
 }
 
 // ===== 转换 =====
@@ -189,8 +189,8 @@ fn test_reverse() {
 fn test_clear() {
     var arr = [1, 2, 3]
     arr.clear()
-    assert_eq(arr.length, 0)
-    assert_eq(arr.isEmpty, true)
+    assert_eq(len(arr), 0)
+    assert_eq(len(arr) == 0, true)
 }
 
 // ===== 边界条件 =====
@@ -200,7 +200,7 @@ fn test_large_array() {
     for (var i = 0; i < 100; i++) {
         arr.push(i)
     }
-    assert_eq(arr.length, 100)
+    assert_eq(len(arr), 100)
     assert_eq(arr[0], 0)
     assert_eq(arr[99], 99)
 }
@@ -210,7 +210,7 @@ fn test_array_of_arrays() {
     var arr: Array<Array<int>> = []
     arr.push([1, 2])
     arr.push([3, 4])
-    assert_eq(arr.length, 2)
+    assert_eq(len(arr), 2)
     assert_eq(arr[0][0], 1)
     assert_eq(arr[1][1], 4)
 }

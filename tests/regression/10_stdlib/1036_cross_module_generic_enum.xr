@@ -3,8 +3,8 @@
 
 import { Result, makeBytes } from "./modules/generic_result_lib"
 
-fn byteScore(payload: Bytes) -> int {
-    return payload.length + payload[0]
+fn byteScore(payload: Array<byte>) -> int {
+    return len(payload) + payload[0]
 }
 
 @test

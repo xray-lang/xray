@@ -62,8 +62,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 `unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `RawPtr<T>` / `RawMut<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
@@ -81,7 +81,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
@@ -115,7 +115,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
-- `char` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
+- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
 
 #### 3.3.2 位运算
 
@@ -125,7 +125,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
 - `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
 - bool 不参与位运算（用 `&&` `||`）。
-- `char` 不参与位运算；需要码点时显式写 `int(c)`。
+- `rune` 不参与位运算；需要码点时显式写 `int(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -200,7 +200,7 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray @id=expr-optional-chain
-var len = name?.length          // null 时返回 null
+var nameLen = name == null ? null : len(name!)
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
 ```
@@ -287,7 +287,7 @@ for (i in 0..=n) { print(i) }
 - 类型 `Range`（仅 int 范围）。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
 - `a..=b` 是闭区间 `[a, b]`：两端都包含。
-- `for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
+- `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
 - 主要用途：`for-in` 循环、模式匹配中的范围判定。
 
 #### 展开 `...`
@@ -368,7 +368,7 @@ var obj = { users }              // shorthand
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 - 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
 
-#### Bytes `Bytes(...)`
+#### Array<byte> `Array<byte>(...)`
 
 详见 §2.4.5 与 §14.5。
 
@@ -421,12 +421,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // 返回 char
+str[i]                  // 返回 rune
 ```
 
 - `Array` 索引：`int`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
-- `string` 索引：按 Unicode scalar 下标访问，返回 `char`。
+- `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
 
 #### 切片
@@ -440,12 +440,13 @@ arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全切片（浅拷贝）
-str[0:5]                // 字符串切片
+var view: Slice<int> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
-- `Array` 与 `string` 切片统一支持负索引：负数先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
-- 切片返回新对象，不修改原数组。
+- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
+- string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
+- 切片是目标类型为 `Slice<T>` 的 scoped borrowed view，不修改 owner。
 
 ### 3.12 匿名函数与 Lambda
 
@@ -536,7 +537,7 @@ var m = Map<string, int>()
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<byte>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
@@ -555,7 +556,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
-- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / char 字面量。
+- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / rune 字面量。
 - 表达式类型必须可转为字符串（实现 `toString()` 或为基本类型）。
 
 ### 3.16 `yield` 语句
@@ -628,8 +629,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 `unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `RawPtr<T>` / `RawMut<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
@@ -647,7 +648,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
@@ -681,7 +682,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
-- `char` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
+- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -691,7 +692,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
 - `bool` does not participate in bitwise operations (use `&&` `||`).
-- `char` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
+- `rune` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
@@ -766,7 +767,7 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray @id=expr-optional-chain
-var len = name?.length          // returns null when name is null
+var nameLen = name == null ? null : len(name!)
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
 ```
@@ -853,7 +854,7 @@ for (i in 0..=n) { print(i) }
 - Type: `Range` (int ranges only).
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
-- `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
+- `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
 - Primary uses: `for-in` loops, range checks in pattern matching.
 
 #### Spread `...`
@@ -934,7 +935,7 @@ var obj = { users }              // shorthand
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 - Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
-#### Bytes `Bytes(...)`
+#### Array<byte> `Array<byte>(...)`
 
 See §2.4.5 and §14.5.
 
@@ -987,12 +988,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // returns char
+str[i]                  // returns rune
 ```
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: addresses Unicode scalar positions and returns `char`.
+- Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -1006,12 +1007,13 @@ arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
 arr[:]                  // full slice (shallow copy)
-str[0:5]                // string slice
+var view: Slice<int> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
-- `Array` and `string` slicing share the same negative-index rule: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
-- Slicing returns a new object; the original array is not modified.
+- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
+- Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
+- A slice expression is a scoped borrowed `Slice<T>` selected by its target type and does not modify the owner.
 
 ### 3.12 Anonymous Functions and Lambdas
 
@@ -1102,7 +1104,7 @@ var m = Map<string, int>()
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<byte>` / `StringBuilder`, etc.; also `TypeName(args)`).
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
@@ -1121,7 +1123,7 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / char literals.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / rune literals.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement

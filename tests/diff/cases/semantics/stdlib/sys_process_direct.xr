@@ -97,19 +97,19 @@ if (invalidEnv != null) {
 var pipe = sys.Pipe.open()
 print(pipe != null)
 if (pipe != null) {
-    var payload = "pipe-ok".toBytes()
+    var payload = "pipe-ok".copyBytes()
     print(pipe!.write(payload))
     var chunk = pipe!.read(32)
     print(chunk != null)
     if (chunk != null) {
-        print(chunk!.length)
+        print(len(chunk!))
         print(chunk!.toString())
     }
     print(pipe!.closeWrite())
     var eof = pipe!.read(32)
     print(eof != null)
     if (eof != null) {
-        print(eof!.length)
+        print(len(eof!))
     }
     print(pipe!.close())
 }
@@ -122,7 +122,7 @@ if (stdinPipe != null) {
     print(stdinProc != null)
     if (stdinProc != null) {
         print(stdinPipe!.closeRead())
-        print(stdinPipe!.write("input-ok\n".toBytes()))
+        print(stdinPipe!.write("input-ok\n".copyBytes()))
         print(stdinPipe!.closeWrite())
         print(stdinProc!.wait())
     }

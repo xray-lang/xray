@@ -7,10 +7,10 @@ import time
 
 var SHORT_TASKS = 100    // 短任务数量
 var DURATION_MS = 2000   // 最长持续时间(ms)
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     SHORT_TASKS = int(process.args[0]) ?? SHORT_TASKS
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     DURATION_MS = int(process.args[1]) ?? DURATION_MS
 }
 

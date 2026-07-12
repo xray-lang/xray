@@ -1,7 +1,7 @@
 @no_alloc
 fn xray_no_alloc_string_tobytes_reject(value: string) -> int {
-    var bytes = value.toBytes()
-    return bytes.length
+    var bytes = value.copyBytes()
+    return len(bytes)
 }
 
 print(xray_no_alloc_string_tobytes_reject("edge"))

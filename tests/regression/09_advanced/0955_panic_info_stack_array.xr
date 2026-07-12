@@ -12,14 +12,14 @@ fn mkzero() -> int { return 0 }
 @test
 fn test_new_exception_stack_is_array() {
     var e = PanicInfo("hello")
-    assert_eq(typename(e.stack), "Array")
+    assert_eq(typeName(e.stack), "Array")
 }
 
 @test
 fn test_new_exception_stack_initially_empty() {
     // 直接 new 不经过 unwind 控制流，stack 为空数组
     var e = PanicInfo("hello")
-    assert_eq(e.stack.length, 0)
+    assert_eq(len(e.stack), 0)
 }
 
 @test
@@ -32,7 +32,7 @@ fn test_panic_stack_is_array() {
     try {
         inner()
     } catch panic (p) {
-        stack_type = typename(p.stack)
+        stack_type = typeName(p.stack)
     }
     assert_eq(stack_type, "Array")
 }
@@ -50,7 +50,7 @@ fn test_panic_stack_has_frames() {
     try {
         level1()
     } catch panic (p) {
-        frames = p.stack.length
+        frames = len(p.stack)
     }
     // 至少 1 帧（panic 点本身），具体数量取决于内联 / 调度细节
     assert(frames >= 1)
@@ -67,8 +67,8 @@ fn test_panic_stack_frames_are_strings() {
         inner()
     } catch panic (p) {
         var idx = 0
-        while (idx < p.stack.length) {
-            if (typename(p.stack[idx]) != "string") {
+        while (idx < len(p.stack)) {
+            if (typeName(p.stack[idx]) != "string") {
                 all_strings = false
             }
             idx = idx + 1
@@ -83,8 +83,8 @@ fn test_subclass_exception_stack_is_array() {
         constructor(m: string) { super(m) }
     }
     var e = MyErr("hi")
-    assert_eq(typename(e.stack), "Array")
-    assert_eq(e.stack.length, 0)
+    assert_eq(typeName(e.stack), "Array")
+    assert_eq(len(e.stack), 0)
 }
 
 // ===== code / data 字段（同步 spec §16.6 完整字段） =====

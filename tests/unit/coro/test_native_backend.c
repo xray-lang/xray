@@ -1300,6 +1300,19 @@ TEST(parallel_for_range_i64_runs_static_lanes) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(parallel_without_scheduler_runs_virtual_lanes_sequentially) {
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
+    ASSERT_TRUE(xr_parallel_for_range_i64(&ctx, 0, 16, 4, aot_par_for_range_sum_body, NULL));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 120);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed), 15);
+}
+
 TEST(parallel_for_auto_workers_uses_scheduler_worker_count) {
     XrAotRuntimeConfig cfg;
     aot_test_runtime_config_init(&cfg);
@@ -1668,6 +1681,7 @@ RUN_TEST(runtime_task_deferred_registry_batches_one_shot_handles);
 RUN_TEST(runtime_deferred_array_submit_cache_tracks_content_version);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 RUN_TEST(parallel_for_range_i64_runs_static_lanes);
+RUN_TEST(parallel_without_scheduler_runs_virtual_lanes_sequentially);
 RUN_TEST(parallel_for_auto_workers_uses_scheduler_worker_count);
 RUN_TEST(parallel_for_requested_workers_scales_lanes);
 RUN_TEST(parallel_executor_shape_helper_matches_runtime_lane_split);

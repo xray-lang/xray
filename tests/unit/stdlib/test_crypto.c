@@ -218,7 +218,7 @@ TEST(crypto_core_aes_empty_plaintext) {
     ASSERT_EQ_INT((int) plain_len, 0);
 }
 
-/* ========== Random Bytes ========== */
+/* ========== Random Array<byte> ========== */
 
 TEST(crypto_random_bytes) {
     uint8_t buf1[32], buf2[32];
@@ -239,7 +239,7 @@ TEST(crypto_random_bytes_zero) {
     ASSERT_EQ_INT(buf[0], 0xAA);
 }
 
-/* ========== Bytes to Hex ========== */
+/* ========== Array<byte> to Hex ========== */
 
 TEST(crypto_bytes_to_hex) {
     uint8_t data[] = {0xDE, 0xAD, 0xBE, 0xEF};

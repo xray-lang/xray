@@ -181,7 +181,7 @@ static XrValue m_range_get_end(XrVMRuntime *iso, XrValue self, XrValue *args, in
     return xr_int(rng->end);
 }
 
-static XrValue m_range_get_length(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_count(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrRange *rng = xr_value_get_range_body(iso, self);
@@ -227,14 +227,14 @@ void xr_register_range_class(XrVMRuntime *X) {
 
     xr_class_builder_add_method(builder, "toString", m_range_to_string, 0, 0);
     xr_class_builder_add_method(builder, "toArray", m_range_to_array, 0, 0);
-    xr_class_builder_add_method(builder, "includes", m_range_contains, 1, 0);
+    xr_class_builder_add_method(builder, "contains", m_range_contains, 1, 0);
+    xr_class_builder_add_method(builder, "count", m_range_count, 0, 0);
 
     /* Property getters: registered under `get:<name>` so OP_GETPROP
      * resolves them through the standard getter lookup path (no parens
      * at call site, matches DateTime / StringBuilder conventions). */
     xr_class_builder_add_method(builder, "get:start", m_range_get_start, 1, 0);
     xr_class_builder_add_method(builder, "get:end", m_range_get_end, 1, 0);
-    xr_class_builder_add_method(builder, "get:length", m_range_get_length, 1, 0);
 
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "register_range_class: finalize failed");

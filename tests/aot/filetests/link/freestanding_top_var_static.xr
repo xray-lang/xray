@@ -1,7 +1,7 @@
 var COUNTER: int = 1
 var ENABLED: bool = true
 var SCALE: float = 0.5
-var LETTER: char = 'A'
+var LETTER: rune = 'A'
 var NOTHING = null
 var LABEL: string = "boot"
 var OFFSET: int = -3

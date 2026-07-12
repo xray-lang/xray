@@ -8,8 +8,9 @@ enum Result<T> {
     Err(int),
 }
 
-export fn makeBytes() -> Result<Bytes> {
-    return Result.Ok(Bytes([65, 66]))
+export fn makeBytes() -> Result<Array<byte>> {
+    var bytes: Array<byte> = [65, 66]
+    return Result.Ok(bytes)
 }
 
 export { Result }

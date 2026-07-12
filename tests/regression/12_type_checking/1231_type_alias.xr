@@ -47,7 +47,7 @@ type StringList = Array<string>
 @test
 fn test_container_alias() {
     var names: StringList = ["Alice", "Bob", "Charlie"]
-    assert_eq(names.length, 3)
+    assert_eq(len(names), 3)
     assert_eq(names[0], "Alice")
 }
 

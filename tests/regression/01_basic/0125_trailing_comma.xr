@@ -16,7 +16,7 @@ fn test_call_trailing_comma() {
 @test
 fn test_array_trailing_comma() {
     var arr = [1, 2, 3,]
-    assert(arr.length == 3)
+    assert(len(arr) == 3)
     assert(arr[2] == 3)
 }
 

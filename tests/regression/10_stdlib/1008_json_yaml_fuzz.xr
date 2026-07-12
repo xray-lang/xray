@@ -53,7 +53,7 @@ fn test_json_fuzz_wide_arrays() {
         }
         var s = "[" + parts.join(",") + "]"
         var arr = Json.parse(s)
-        assert_eq(arr.length, width)
+        assert_eq(len(arr), width)
         assert_eq(arr[0], 0)
         assert_eq(arr[width - 1], width - 1)
     }
@@ -96,7 +96,7 @@ fn test_json_roundtrip_stress() {
     var s = Json.stringify(data)
     var parsed = Json.parse(s)
 
-    assert_eq(parsed.users.length, 20)
+    assert_eq(len(parsed.users), 20)
     assert_eq(parsed.meta.count, 20)
     assert_eq(parsed.users[0].id, 0)
     assert_eq(parsed.users[0].name, "user0")
@@ -124,7 +124,7 @@ fn test_json_fuzz_mixed_types() {
     }
     var s = "[" + parts.join(",") + "]"
     var arr = Json.parse(s)
-    assert_eq(arr.length, 30)
+    assert_eq(len(arr), 30)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], "s1")
     assert_eq(arr[2], true)
@@ -241,7 +241,7 @@ fn test_yaml_fuzz_block_sequence_nested() {
     var s = lines.join("\n")
     var obj = yaml.parse(s)
     var items = obj["items"]
-    assert_eq(items.length, 5)
+    assert_eq(len(items), 5)
     assert_eq(items[0]["id"], 0)
     assert_eq(items[0]["value"], 0)
     assert_eq(items[4]["id"], 4)
@@ -343,7 +343,7 @@ fn test_json_fuzz_many_nested_arrays() {
     }
     var s = "[" + parts.join(",") + "]"
     var arr = Json.parse(s)
-    assert_eq(arr.length, 50)
+    assert_eq(len(arr), 50)
     assert_eq(arr[0][0], 0)
     assert_eq(arr[0][1], 1)
     assert_eq(arr[49][0], 98)

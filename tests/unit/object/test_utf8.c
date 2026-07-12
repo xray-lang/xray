@@ -213,15 +213,15 @@ TEST(utf8_char_at) {
     uint32_t cp;
     size_t pos;
 
-    ASSERT_TRUE(xr_utf8_char_at(s, len, 0, &cp, &pos));
+    ASSERT_TRUE(xr_utf8_rune_at(s, len, 0, &cp, &pos));
     ASSERT_EQ_INT(cp, 'A');
     ASSERT_EQ_INT(pos, 0);
 
-    ASSERT_TRUE(xr_utf8_char_at(s, len, 1, &cp, &pos));
+    ASSERT_TRUE(xr_utf8_rune_at(s, len, 1, &cp, &pos));
     ASSERT_EQ_INT(cp, 0x4E2D);  // 中
     ASSERT_EQ_INT(pos, 1);
 
-    ASSERT_TRUE(xr_utf8_char_at(s, len, 2, &cp, &pos));
+    ASSERT_TRUE(xr_utf8_rune_at(s, len, 2, &cp, &pos));
     ASSERT_EQ_INT(cp, 'B');
     ASSERT_EQ_INT(pos, 4);
 }
@@ -247,11 +247,11 @@ TEST(utf8_validate_invalid) {
 /* ========== Char Size Tests ========== */
 
 TEST(utf8_char_size) {
-    ASSERT_EQ_INT(xr_utf8_char_size(0x00), 1);  // ASCII
-    ASSERT_EQ_INT(xr_utf8_char_size(0x7F), 1);  // ASCII
-    ASSERT_EQ_INT(xr_utf8_char_size(0xC3), 2);  // 2-byte start
-    ASSERT_EQ_INT(xr_utf8_char_size(0xE4), 3);  // 3-byte start
-    ASSERT_EQ_INT(xr_utf8_char_size(0xF0), 4);  // 4-byte start
+    ASSERT_EQ_INT(xr_utf8_rune_size(0x00), 1);  // ASCII
+    ASSERT_EQ_INT(xr_utf8_rune_size(0x7F), 1);  // ASCII
+    ASSERT_EQ_INT(xr_utf8_rune_size(0xC3), 2);  // 2-byte start
+    ASSERT_EQ_INT(xr_utf8_rune_size(0xE4), 3);  // 3-byte start
+    ASSERT_EQ_INT(xr_utf8_rune_size(0xF0), 4);  // 4-byte start
 }
 
 TEST(utf8_encode_size) {

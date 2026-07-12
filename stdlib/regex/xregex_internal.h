@@ -167,6 +167,7 @@ typedef struct XrProg {
     bool is_onepass;       // whether OnePass mode
     bool is_literal;       // whether pure literal (use strstr directly)
     bool has_empty_width;  // whether has EMPTY_WIDTH instructions (DFA unsafe)
+    bool has_any_scalar;   // pattern contains '.', which consumes one UTF-8 scalar
     char *prefix;          // fixed prefix (accelerate search)
     int prefix_len;
     char *literal;  // pure literal content (valid when is_literal)

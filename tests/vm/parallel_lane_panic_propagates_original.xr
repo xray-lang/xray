@@ -12,7 +12,7 @@ try {
     print("miss")
 } catch panic (p) {
     print(p.code == 420)
-    print(p.message.includes("division by zero"))
+    print(p.message.contains("division by zero"))
 }
 
 shared touched = Atomic<int>(0)

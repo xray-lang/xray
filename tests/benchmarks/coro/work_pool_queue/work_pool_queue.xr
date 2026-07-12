@@ -5,10 +5,10 @@ import time
 
 var WORKERS = 8
 var TASKS = 100000
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     WORKERS = int(process.args[0]) ?? WORKERS
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     TASKS = int(process.args[1]) ?? TASKS
 }
 if (WORKERS < 1) {

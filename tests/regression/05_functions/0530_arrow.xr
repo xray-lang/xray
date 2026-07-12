@@ -59,7 +59,7 @@ fn test_arrow_filter() {
     var arr = [1, 2, 3, 4, 5, 6]
     var evens = arr.filter((x) -> x % 2 == 0)
     
-    assert_eq(evens.length, 3)
+    assert_eq(len(evens), 3)
     assert_eq(evens[0], 2)
     assert_eq(evens[2], 6)
 }

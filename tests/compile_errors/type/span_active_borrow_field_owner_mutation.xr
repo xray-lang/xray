@@ -1,13 +1,13 @@
 class Box {
-    bytes: Bytes = Bytes(0)
+    bytes: Array<byte> = Array<byte>(0)
 }
 
 fn main() {
     var box = Box()
     box.bytes.push(1)
-    var view: ByteSpan = box.bytes[:]
+    var view: Slice<byte> = box.bytes[:]
     box.bytes.push(2)
-    print(view.length)
+    print(len(view))
 }
 
 main()

@@ -8,7 +8,7 @@ fn headerValue(headers: string, name: string) -> string? {
     var prefix = name + ": "
     var start = headers.indexOf(prefix)
     if (start < 0) { return null }
-    start = start + prefix.length
+    start = start + len(prefix)
     var end = headers.indexOf("\r\n", start)
     if (end < 0) { return null }
     return headers.slice(start, end)
@@ -47,9 +47,9 @@ fn test_accept_key_and_upgrade_response() {
     assert_eq(ws.acceptKey(key), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
 
     var response = ws.upgradeResponse(key)
-    assert(response.includes("HTTP/1.1 101 Switching Protocols\r\n"))
-    assert(response.includes("Upgrade: websocket\r\n"))
-    assert(response.includes("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
+    assert(response.contains("HTTP/1.1 101 Switching Protocols\r\n"))
+    assert(response.contains("Upgrade: websocket\r\n"))
+    assert(response.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
     assert(response.endsWith("\r\n\r\n"))
 }
 
@@ -144,21 +144,21 @@ fn test_serve_rejects_missing_connection_upgrade_header() {
 
 @test
 fn test_mask_payload_and_unmasked_frame() {
-    var masked = ws.maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
+    var masked = ws.maskPayload(Array<byte>([1, 2, 3, 4, 5]), Array<byte>([1, 1, 1, 1]))
     assert_eq(masked[0], 0)
     assert_eq(masked[1], 3)
     assert_eq(masked[2], 2)
     assert_eq(masked[3], 5)
     assert_eq(masked[4], 4)
 
-    var f = ws.frame("Hi".toBytes(), 1, false)
-    assert_eq(f.length, 4)
+    var f = ws.frame("Hi".copyBytes(), 1, false)
+    assert_eq(len(f), 4)
     assert_eq(f[0], 129)
     assert_eq(f[1], 2)
     assert_eq(f[2], 72)
     assert_eq(f[3], 105)
 
-    var payload = Bytes(126)
+    var payload = Array<byte>(126)
     var ext = ws.frame(payload, 2, false)
     assert_eq(ext[0], 130)
     assert_eq(ext[1], 126)

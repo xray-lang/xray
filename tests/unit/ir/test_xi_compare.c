@@ -1311,9 +1311,12 @@ TEST(cmp_try_catch) {
 
 TEST(cmp_slice) {
     run_compare((CompareSpec) {
-        .source = "var arr = [1, 2, 3, 4, 5]\n"
-                  "var s: Span<int> = arr[1:3]\n"
-                  "print(s)",
+        .source = "fn printSlice() {\n"
+                  "  var arr = [1, 2, 3, 4, 5]\n"
+                  "  var s: Slice<int> = arr[1:3]\n"
+                  "  print(s)\n"
+                  "}\n"
+                  "printSlice()",
         .label = "array slice expression",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1372,7 +1375,7 @@ TEST(cmp_array_push) {
     run_compare((CompareSpec) {
         .source = "var arr = [10, 20]\n"
                   "arr.push(30)\n"
-                  "print(arr.length)\nprint(arr[2])",
+                  "print(len(arr))\nprint(arr[2])",
         .label = "array push and length",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1382,10 +1385,11 @@ TEST(cmp_array_push) {
 
 TEST(cmp_string_method) {
     run_compare((CompareSpec) {
-        .source = "var s = \"hello\"\n"
-                  "print(s.length)\n"
-                  "print(s.toUpperCase())",
-        .label = "string length and toUpperCase",
+        .source = "import text\n"
+                  "var s = \"hello\"\n"
+                  "print(len(s))\n"
+                  "print(text.upper(s))",
+        .label = "string length and text.upper",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
@@ -1887,7 +1891,7 @@ TEST(cmp_multi_assign) {
 TEST(cmp_set_literal) {
     run_compare((CompareSpec) {
         .source = "var s = #[1, 2, 3, 2, 1]\n"
-                  "print(s.size())",
+                  "print(len(s))",
         .label = "set literal with duplicates",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1957,7 +1961,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec) {
-        .source = "shared ch = Channel()\nprint(typeof(ch))",
+        .source = "shared ch = Channel()\nprint(typeName(ch))",
         .label = "Channel() -> unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1967,7 +1971,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec) {
-        .source = "shared ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
+        .source = "shared ch: Channel<int> = Channel(4)\nprint(typeName(ch))",
         .label = "Channel(N) -> buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,

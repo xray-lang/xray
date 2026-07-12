@@ -50,10 +50,10 @@ var initializedThreads = initCount.load(Ordering.Acquire)
 var lanesSeen = lane0.load(Ordering.Relaxed) + lane1.load(Ordering.Relaxed) +
     lane2.load(Ordering.Relaxed) + lane3.load(Ordering.Relaxed)
 
-print(mapped.length == 20000)
+print(len(mapped) == 20000)
 print(mapped[0] == 0)
 print(mapped[19999] == 39998)
-print(same.length == 20000)
+print(len(same) == 20000)
 print(out[19999] == 20000)
 print(touched.load(Ordering.Relaxed) == 40000)
 print(lanesSeen == 4)

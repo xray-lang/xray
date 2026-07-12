@@ -221,7 +221,7 @@ TEST(hash_collision_rate) {
 /* ========== Main ========== */
 
 static void run_all_tests(void) {
-    RUN_TEST_SUITE("Hash Bytes");
+    RUN_TEST_SUITE("Hash Array<byte>");
     RUN_TEST(hash_bytes_empty);
     RUN_TEST(hash_bytes_single_char);
     RUN_TEST(hash_bytes_deterministic);
@@ -229,7 +229,7 @@ static void run_all_tests(void) {
     RUN_TEST(hash_bytes_length_sensitive);
     RUN_TEST(hash_bytes_binary_data);
 
-    RUN_TEST_SUITE("Hash Bytes 64-bit");
+    RUN_TEST_SUITE("Hash Array<byte> 64-bit");
     RUN_TEST(hash_bytes64_empty);
     RUN_TEST(hash_bytes64_deterministic);
     RUN_TEST(hash_bytes64_distribution);

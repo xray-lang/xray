@@ -1,27 +1,27 @@
-var m: Map<uint8, int32> = #{}
+var m: Map<byte, int32> = #{}
 m.set(255, 2147483647)
 m.set(255 + 1, 2147483647 + 1)
 m.set(1, -2147483648 - 1)
-print(m.length)
-print(m.size)
-print(m.has(0))
+print(len(m))
+print(len(m))
+print(m.containsKey(0))
 print(m.get(0))
 print(m.get(1))
 
 var keys = m.keys()
 var values = m.values()
-print(keys.length)
+print(len(keys))
 print(keys[0] + keys[1] + keys[2])
 print(values[0] + values[1] + values[2])
 print(m.delete(255))
-print(m.has(255))
+print(m.containsKey(255))
 print(m.get(255) == null)
 
 class ByteMapBag {
-    values: Map<uint8, int32>
+    values: Map<byte, int32>
 
     constructor() {
-        var values: Map<uint8, int32> = #{}
+        var values: Map<byte, int32> = #{}
         this.values = values
     }
 
@@ -31,14 +31,14 @@ class ByteMapBag {
             this.values.set(i, i * 2 + 1)
             i = i + 1
         }
-        return this.values.size
+        return len(this.values)
     }
 
     scan(n: int) -> int {
         var i = 0
         var sum = 0
         while (i < n) {
-            if (this.values.has(i)) {
+            if (this.values.containsKey(i)) {
                 sum = sum + this.values.get(i)
             }
             i = i + 1
@@ -55,7 +55,7 @@ class ByteMapBag {
             }
             i = i + 2
         }
-        return removed + this.values.length
+        return removed + len(this.values)
     }
 }
 

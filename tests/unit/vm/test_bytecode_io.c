@@ -176,6 +176,36 @@ TEST(bytecode_roundtrips_exact_string_constant_lengths) {
     xray_vm_delete(writer);
 }
 
+TEST(bytecode_roundtrips_rune_constants) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, xr_rune(0x1F642)), 0);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
+    XrValue value = PROTO_CONSTANT(roundtrip, 0);
+    ASSERT_TRUE(XR_IS_RUNE(value));
+    ASSERT_EQ_UINT(XR_TO_RUNE(value), 0x1F642);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
 TEST(bytecode_reader_assigns_unique_proto_ids) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
@@ -641,6 +671,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_roundtrips_reachable_entry_plan);
     RUN_TEST(bytecode_roundtrips_struct_area_size);
     RUN_TEST(bytecode_roundtrips_exact_string_constant_lengths);
+    RUN_TEST(bytecode_roundtrips_rune_constants);
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);

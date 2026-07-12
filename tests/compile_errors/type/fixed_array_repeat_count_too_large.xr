@@ -1,2 +1,2 @@
 var key = [0; 65536]
-print(key.length)
+print(len(key))

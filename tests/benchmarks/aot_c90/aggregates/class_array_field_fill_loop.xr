@@ -20,7 +20,7 @@ class FillBag {
         var sum = 0
         while (r < rounds) {
             var j = 0
-            while (j < this.values.length) {
+            while (j < len(this.values)) {
                 sum = sum + this.values[j]
                 j = j + 1
             }

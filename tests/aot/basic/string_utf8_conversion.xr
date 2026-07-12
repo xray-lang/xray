@@ -1,0 +1,35 @@
+var ascii: Array<byte> = [104, 105]
+var unicode: Array<byte> = [104, 195, 169]
+var invalid: Array<byte> = [65, 255, 66]
+
+print(string.fromUtf8(ascii[:]))
+print(string.fromUtf8(unicode[:]))
+print(string.fromUtf8(invalid[:]))
+print(string.fromUtf8Lossy(invalid[:]))
+print(ascii.toString())
+
+print(string.fromRune('é'))
+print(string.fromRune('🙂'))
+print(string.join(["a", "β", "中"], "|"))
+print(string.join(["a", "β", "中"]))
+
+var s = "Aé中"
+print(s.sliceBytes(0, 1))
+print(s.sliceBytes(1, 3))
+print(s.sliceBytes(3, 6))
+
+var caught_mid_scalar = false
+try {
+    s.sliceBytes(2, 3)
+} catch panic (p) {
+    caught_mid_scalar = true
+}
+print(caught_mid_scalar)
+
+var caught_oob = false
+try {
+    s.sliceBytes(0, 7)
+} catch panic (p) {
+    caught_oob = true
+}
+print(caught_oob)

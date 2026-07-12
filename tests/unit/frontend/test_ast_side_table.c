@@ -286,8 +286,8 @@ TEST(node_table_ct_value_preserves_type_entry) {
 
     AstNode n = make_node(601);
     XrType ty;
-    ty.kind = XR_KIND_CHAR;
-    XrCtValue value = {.kind = XR_CT_CHAR, .as.char_val = 'x'};
+    ty.kind = XR_KIND_RUNE;
+    XrCtValue value = {.kind = XR_CT_CHAR, .as.rune_val = 'x'};
 
     xa_node_table_set_type(t, &n, &ty);
     xa_node_table_set_ct_value(t, &n, &value);

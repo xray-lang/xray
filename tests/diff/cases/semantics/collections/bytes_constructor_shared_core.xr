@@ -3,8 +3,8 @@ ints[0] = 257
 ints[1] = -1
 ints[2] = 0
 ints[3] = 128
-var from_ints = Bytes(ints)
-print(from_ints.length)
+var from_ints = Array<byte>(ints)
+print(len(from_ints))
 print(from_ints[0])
 print(from_ints[1])
 print(from_ints[2])
@@ -14,7 +14,7 @@ var flags = Array<bool>(3, false)
 flags[0] = true
 flags[1] = false
 flags[2] = true
-var from_flags = Bytes(flags)
+var from_flags = Array<byte>(flags)
 print(from_flags[0])
 print(from_flags[1])
 print(from_flags[2])
@@ -23,18 +23,18 @@ var floats = Array<float>(3, 0.0)
 floats[0] = 3.8
 floats[1] = -2.2
 floats[2] = 260.0
-var from_floats = Bytes(floats)
+var from_floats = Array<byte>(floats)
 print(from_floats[0])
 print(from_floats[1])
 print(from_floats[2])
 
 var mixed = [1, true, "x", 258]
-var from_mixed = Bytes(mixed)
+var from_mixed = Array<byte>(mixed)
 print(from_mixed[0])
 print(from_mixed[1])
 print(from_mixed[2])
 print(from_mixed[3])
 
-var filled = Bytes(4, 257)
+var filled = Array<byte>(4, 257)
 print(filled[0])
 print(filled[3])

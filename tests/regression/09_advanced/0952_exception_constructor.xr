@@ -48,7 +48,7 @@ fn test_enum_cause_chain() {
 fn test_enum_to_string() {
     var e = TestErr.Msg("boom")
     var s = string(e)
-    assert(s.length > 0)
+    assert(len(s) > 0)
 }
 
 @test

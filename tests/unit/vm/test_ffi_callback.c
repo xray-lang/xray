@@ -15,6 +15,9 @@
 #include "runtime/closure/xclosure.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
+#include "runtime/core/xr_exec_context.h"
+#include "runtime/core/xr_runtime_core.h"
+#include "runtime/xisolate_internal.h"
 #include "xray_vm.h"
 
 #include <stdint.h>
@@ -75,6 +78,7 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
 #else
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
+    XrExecutionContext *previous = xr_exec_context_enter(xr_runtime_core_root_exec(iso->core_rt));
 
     XrProto *callback_proto = make_zero_comparator_proto();
     ASSERT_NOT_NULL(callback_proto);
@@ -102,6 +106,7 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
 
     xr_vm_proto_free(bsearch_proto);
     xr_vm_proto_free(callback_proto);
+    xr_exec_context_restore(previous);
     xray_vm_delete(iso);
 #endif
 }

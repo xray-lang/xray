@@ -31,6 +31,6 @@ for (k, v in dyn) {
 }
 print("dynamic pairs=" + dynPairs.toString())
 
-print("keys length=" + dyn.keys().length.toString())
-print("values length=" + dyn.values().length.toString())
-print("entries length=" + dyn.entries().length.toString())
+print("keys length=" + len(dyn.keys()).toString())
+print("values length=" + len(dyn.values()).toString())
+print("entries length=" + len(dyn.entries()).toString())

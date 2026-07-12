@@ -1,5 +1,5 @@
 @c_export("xray_rawptr_null_is_null")
 fn xray_rawptr_null_is_null() -> bool {
-    var p = RawPtr<uint8>.null()
+    var p = RawPtr<byte>.null()
     return p.isNull()
 }

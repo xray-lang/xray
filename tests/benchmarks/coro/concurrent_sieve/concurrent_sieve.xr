@@ -5,7 +5,7 @@
 import time
 
 var N = 10000  // 找到前 N 个素数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
 
@@ -69,7 +69,7 @@ while (count < N) {
 
     if (count < N) {
         channels.push(Channel(100))
-        var next_idx = channels.length - 1
+        var next_idx = len(channels) - 1
         tasks.push(go filter(channels[cur], channels[next_idx], prime))
         cur = next_idx
     }
@@ -89,7 +89,7 @@ for (task in tasks) {
 var elapsed = time.monotonic() - start
 
 print("找到素数:", count)
-print("最大素数:", primes[primes.length - 1])
+print("最大素数:", primes[len(primes) - 1])
 print("管道级数:", count)
 print("预期:", N)
 print("正确:", count == N)

@@ -128,7 +128,7 @@ TEST(sync_root_elides_coroutine_with_ordinary_allocation) {
     ASSERT_NULL(iso->main_coro);
 
     XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                     "var xs = [1, 2, 3]\nvar n = xs.length\n");
+                                     "var xs = [1, 2, 3]\nvar n = len(xs)\n");
     ASSERT_NOT_NULL(proto);
     ASSERT_EQ_INT(xr_execute(iso, proto), 0);
     ASSERT_NULL(iso->main_coro);
@@ -531,7 +531,7 @@ TEST(repl_function_mutates_array_cross_input) {
     xr_execute(iso, p3);
 
     XrProto *p4 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var n = arr.length\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var n = len(arr)\n");
     ASSERT_NOT_NULL(p4);
     xr_execute(iso, p4);
 

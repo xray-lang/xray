@@ -38,6 +38,7 @@
     X(ASSERT_NE, "xi.assert.ne", xicgen_assert_ne) \
     X(TYPEID, "xi.typeid", xicgen_typeid) \
     X(TYPENAME, "xi.typename", xicgen_typename) \
+    X(LEN, "xi.len", xicgen_len) \
     X(GET_BUILTIN, "xi.get.builtin", xicgen_get_builtin) \
     X(PRINT, "xi.print", xicgen_print) \
     X(CLASS_CREATE, "xi.class.create", xicgen_class_create) \

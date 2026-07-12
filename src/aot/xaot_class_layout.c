@@ -154,7 +154,7 @@ XR_FUNC bool xaot_class_field_physical_layout(const XaotTargetDataLayout *target
             class_field_scalar_layout(&layout, &target_layout->i32);
             break;
         case XG_CLASS_FIELD_TYPE_U32:
-        case XG_CLASS_FIELD_TYPE_CHAR:
+        case XG_CLASS_FIELD_TYPE_RUNE:
             layout.native_type = XR_NATIVE_U32;
             class_field_scalar_layout(&layout, &target_layout->i32);
             break;

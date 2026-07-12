@@ -13,7 +13,7 @@ fn sum_float(n: int) -> float {
 
     var sum = 0.0
     i = 0
-    while (i < values.length) {
+    while (i < len(values)) {
         sum = sum + values[i]
         i = i + 1
     }
@@ -35,7 +35,7 @@ fn sum_float32(n: int) -> float {
 
     var sum = 0.0
     i = 0
-    while (i < values.length) {
+    while (i < len(values)) {
         sum = sum + values[i]
         i = i + 1
     }

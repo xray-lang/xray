@@ -106,18 +106,18 @@ fn bench_string_lt_short() {
 }
 
 // ============================================================
-// POSITIVE: String .length property access (SSO fast path)
+// POSITIVE: String len() query (SSO fast path)
 // ============================================================
 fn bench_string_length_short() {
     var s = "hello"
     var start = time.nanos()
     var sum = 0
     for (i in 0..ITERATIONS) {
-        sum = sum + s.length
+        sum = sum + len(s)
     }
     var end = time.nanos()
     var ms = elapsed_ms(start, end)
-    print("[.length short] " + ITERATIONS.toString() + " accesses: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
+    print("[len short] " + ITERATIONS.toString() + " accesses: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
 }
 
 fn bench_string_length_long() {
@@ -125,11 +125,11 @@ fn bench_string_length_long() {
     var start = time.nanos()
     var sum = 0
     for (i in 0..ITERATIONS) {
-        sum = sum + s.length
+        sum = sum + len(s)
     }
     var end = time.nanos()
     var ms = elapsed_ms(start, end)
-    print("[.length long]  " + ITERATIONS.toString() + " accesses: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
+    print("[len long]  " + ITERATIONS.toString() + " accesses: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
 }
 
 // ============================================================
@@ -155,7 +155,7 @@ fn bench_concat_growing() {
     }
     var end = time.nanos()
     var ms = elapsed_ms(start, end)
-    print("[CONCAT grow]  1000 appends: " + ms.toString() + " ms (len=" + result.length.toString() + ")")
+    print("[CONCAT grow]  1000 appends: " + ms.toString() + " ms (len=" + len(result).toString() + ")")
 }
 
 // ============================================================
@@ -185,7 +185,7 @@ fn bench_array_join_short() {
     var result = arr.join(",")
     var end = time.nanos()
     var ms = elapsed_ms(start, end)
-    print("[JOIN short] 10000 elements: " + ms.toString() + " ms (len=" + result.length.toString() + ")")
+    print("[JOIN short] 10000 elements: " + ms.toString() + " ms (len=" + len(result).toString() + ")")
 }
 
 // ============================================================
@@ -199,7 +199,7 @@ fn bench_set_short() {
     }
     var end = time.nanos()
     var ms = elapsed_ms(start, end)
-    print("[SET short]  " + ITERATIONS.toString() + " add ops: " + ms.toString() + " ms (size=" + s.length.toString() + ")")
+    print("[SET short]  " + ITERATIONS.toString() + " add ops: " + ms.toString() + " ms (size=" + len(s).toString() + ")")
 }
 
 // ============================================================
@@ -210,11 +210,11 @@ fn bench_method_short() {
     var start = time.nanos()
     var count = 0
     for (i in 0..ITERATIONS) {
-        if (s.has("World")) { count = count + 1 }
+        if (s.contains("World")) { count = count + 1 }
     }
     var end = time.nanos()
     var ms = elapsed_ms(start, end)
-    print("[METHOD short] " + ITERATIONS.toString() + " .has(): " + ms.toString() + " ms (count=" + count.toString() + ")")
+    print("[METHOD short] " + ITERATIONS.toString() + " .contains(): " + ms.toString() + " ms (count=" + count.toString() + ")")
 }
 
 // ============================================================
@@ -225,7 +225,7 @@ fn bench_int_tostring() {
     var sum = 0
     for (i in 0..ITERATIONS) {
         var s = i.toString()
-        sum = sum + s.length
+        sum = sum + len(s)
     }
     var end = time.nanos()
     var ms = elapsed_ms(start, end)

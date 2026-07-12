@@ -3,7 +3,7 @@ var SCALE: float
 var ENABLED: bool
 var MAYBE: int?
 var MAYBE_LABEL: string?
-var MAYBE_CHAR: char?
+var MAYBE_CHAR: rune?
 
 @c_export("xray_top_var_default")
 fn xray_top_var_default() -> int {

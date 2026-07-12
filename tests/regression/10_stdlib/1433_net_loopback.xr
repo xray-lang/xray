@@ -7,7 +7,7 @@
 //     调用者寄存器（typeof 为 NetConn / string，而非 int / module）。
 //   - NetListener / NetConn 跨 `go` 边界传参后在子协程中仍然有效（fd >= 0，
 //     可读写），因为 handle 分配在共享 sysheap 上。
-//   - net.read 返回的二进制数据用 byteAt / ord 逐字节还原，高位字节 (>= 0x80)
+//   - net.read 返回的二进制数据通过 Array<byte> 逐字节还原，高位字节 (>= 0x80)
 //     保持原始 octet。
 
 import net
@@ -84,12 +84,12 @@ fn test_loopback_binary_high_bytes() {
     net.write(c, "é€")
 
     var resp = net.read(c)!
-    assert_eq(resp.byteLength, 5)
-    assert_eq(resp.byteAt(0)!.ord(), 195)
-    assert_eq(resp.byteAt(1)!.ord(), 169)
-    assert_eq(resp.byteAt(2)!.ord(), 226)
-    assert_eq(resp.byteAt(3)!.ord(), 130)
-    assert_eq(resp.byteAt(4)!.ord(), 172)
+    assert_eq(len(resp.bytes()), 5)
+    assert_eq(resp.bytes()[0]!.toUInt32(), 195)
+    assert_eq(resp.bytes()[1]!.toUInt32(), 169)
+    assert_eq(resp.bytes()[2]!.toUInt32(), 226)
+    assert_eq(resp.bytes()[3]!.toUInt32(), 130)
+    assert_eq(resp.bytes()[4]!.toUInt32(), 172)
 
     net.close(c)
     net.close(lst)

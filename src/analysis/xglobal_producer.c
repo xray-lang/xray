@@ -553,8 +553,7 @@ static uint8_t class_field_int_semantic_kind(uint8_t native_width) {
 static uint8_t class_field_named_semantic_kind(const char *name) {
     if (!name)
         return XG_CLASS_FIELD_TYPE_DYNAMIC;
-    if (strcmp(name, "Array") == 0 || strcmp(name, "Bytes") == 0 || strcmp(name, "ByteSpan") == 0 ||
-        strcmp(name, "Span") == 0 || strcmp(name, "View") == 0)
+    if (strcmp(name, "Array") == 0 || strcmp(name, "Slice") == 0)
         return XG_CLASS_FIELD_TYPE_ARRAY;
     if (strcmp(name, "Map") == 0)
         return XG_CLASS_FIELD_TYPE_MAP;
@@ -567,7 +566,7 @@ static uint8_t class_field_named_semantic_kind(const char *name) {
 
 static bool class_field_target_is_builtin_name_id(uint32_t name_id) {
     static const char *const names[] = {
-        "Array", "Bytes", "ByteSpan", "Span", "View", "Map", "Set", "string", "String",
+        "Array", "Slice", "Map", "Set", "string", "String",
     };
     if (name_id == 0)
         return false;
@@ -624,8 +623,8 @@ static void class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
         case XR_TREF_BOOL:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_BOOL;
             break;
-        case XR_TREF_CHAR:
-            row->semantic_kind = XG_CLASS_FIELD_TYPE_CHAR;
+        case XR_TREF_RUNE:
+            row->semantic_kind = XG_CLASS_FIELD_TYPE_RUNE;
             break;
         case XR_TREF_STRING:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_STRING;
@@ -685,7 +684,7 @@ static bool class_field_semantic_is_owned(uint8_t semantic_kind) {
         case XG_CLASS_FIELD_TYPE_F32:
         case XG_CLASS_FIELD_TYPE_F64:
         case XG_CLASS_FIELD_TYPE_BOOL:
-        case XG_CLASS_FIELD_TYPE_CHAR:
+        case XG_CLASS_FIELD_TYPE_RUNE:
         case XG_CLASS_FIELD_TYPE_UNIT:
         case XG_CLASS_FIELD_TYPE_NULL:
             return false;
@@ -2708,8 +2707,8 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0);
         case AST_LITERAL_STRING:
             return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
-        case AST_LITERAL_CHAR:
-            return hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0);
+        case AST_LITERAL_RUNE:
+            return hash_synthetic_tref32(XR_TREF_RUNE, NULL, NULL, 0);
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
             return hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0);
@@ -2929,8 +2928,8 @@ static uint32_t body_uint8_type_key(void) {
     return hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
 }
 
-static uint32_t body_char_type_key(void) {
-    return hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0);
+static uint32_t body_rune_type_key(void) {
+    return hash_synthetic_tref32(XR_TREF_RUNE, NULL, NULL, 0);
 }
 
 static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_sequence_kind,
@@ -2945,46 +2944,36 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
         if (out_sequence_kind)
             *out_sequence_kind = XG_SEQ_STRING;
         if (out_elem_type_key)
-            *out_elem_type_key = body_char_type_key();
+            *out_elem_type_key = body_rune_type_key();
         return true;
     }
     if (type->kind == XR_TREF_NAMED && type->name) {
-        if (strcmp(type->name, "Bytes") == 0) {
-            if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_BYTES;
-            if (out_elem_type_key)
-                *out_elem_type_key = body_uint8_type_key();
-            return true;
-        }
-        if (strcmp(type->name, "ByteSpan") == 0) {
-            if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_BYTE_SPAN;
-            if (out_elem_type_key)
-                *out_elem_type_key = body_uint8_type_key();
-            return true;
-        }
         if (strcmp(type->name, "StringBuilder") == 0) {
             if (out_sequence_kind)
                 *out_sequence_kind = XG_SEQ_STRING_BUILDER;
             if (out_elem_type_key)
-                *out_elem_type_key = body_char_type_key();
+                *out_elem_type_key = body_rune_type_key();
             return true;
         }
     }
     if ((type->kind == XR_TREF_GENERIC || type->kind == XR_TREF_NAMED) && type->name &&
         type->children && type->nchildren > 0) {
         if (strcmp(type->name, "Array") == 0) {
+            uint32_t elem_key = hash_tref32(type->children[0]);
             if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_ARRAY;
+                *out_sequence_kind =
+                    elem_key == body_uint8_type_key() ? XG_SEQ_BYTES : XG_SEQ_ARRAY;
             if (out_elem_type_key)
-                *out_elem_type_key = hash_tref32(type->children[0]);
+                *out_elem_type_key = elem_key;
             return true;
         }
-        if (strcmp(type->name, "Span") == 0) {
+        if (strcmp(type->name, "Slice") == 0) {
+            uint32_t elem_key = hash_tref32(type->children[0]);
             if (out_sequence_kind)
-                *out_sequence_kind = XG_SEQ_SPAN;
+                *out_sequence_kind =
+                    elem_key == body_uint8_type_key() ? XG_SEQ_BYTE_SPAN : XG_SEQ_SPAN;
             if (out_elem_type_key)
-                *out_elem_type_key = hash_tref32(type->children[0]);
+                *out_elem_type_key = elem_key;
             return true;
         }
     }
@@ -2995,7 +2984,7 @@ static const XrTypeRef *body_type_ref_sequence_elem_type_ref(const XrTypeRef *ty
     if (!type || (type->kind != XR_TREF_GENERIC && type->kind != XR_TREF_NAMED) || !type->name ||
         !type->children || type->nchildren == 0)
         return NULL;
-    if (strcmp(type->name, "Array") == 0 || strcmp(type->name, "Span") == 0)
+    if (strcmp(type->name, "Array") == 0 || strcmp(type->name, "Slice") == 0)
         return type->children[0];
     return NULL;
 }
@@ -3016,7 +3005,7 @@ static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
     if (type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0) ||
         type_key == hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0) ||
         type_key == hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0) ||
-        type_key == hash_synthetic_tref32(XR_TREF_CHAR, NULL, NULL, 0))
+        type_key == hash_synthetic_tref32(XR_TREF_RUNE, NULL, NULL, 0))
         return true;
     for (uint32_t i = 0; i < sizeof(int_widths) / sizeof(int_widths[0]); i++) {
         if (type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, int_widths[i]))
@@ -5680,8 +5669,8 @@ static uint32_t body_const_expr_id(const AstNode *expr) {
             h = fold_u64(h, expr->as.literal.int_bits);
             h = fold_u64(h, expr->as.literal.int_overflows_i64 ? 1 : 0);
             return hash_folded32(h);
-        case AST_LITERAL_CHAR:
-            h = fold_u64(h, expr->as.literal.raw_value.char_val);
+        case AST_LITERAL_RUNE:
+            h = fold_u64(h, expr->as.literal.raw_value.rune_val);
             return hash_folded32(h);
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
@@ -5719,8 +5708,8 @@ static uint64_t body_map_const_prehash(const AstNode *expr) {
             return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.int_bits);
         case AST_LITERAL_FLOAT:
             return body_map_runtime_hash_f64(expr->as.literal.raw_value.float_val);
-        case AST_LITERAL_CHAR:
-            return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.raw_value.char_val);
+        case AST_LITERAL_RUNE:
+            return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.raw_value.rune_val);
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
             return (uint32_t) xr_hash_core_mix_u64(
@@ -5805,7 +5794,7 @@ static uint64_t body_map_shape_hash(uint8_t container_kind, uint32_t key_type_ke
 
 static bool body_map_key_type_has_builtin_hash_eq(uint32_t key_type_key) {
     static const uint8_t builtin_kinds[] = {
-        XR_TREF_INT, XR_TREF_FLOAT, XR_TREF_STRING, XR_TREF_CHAR, XR_TREF_BOOL,
+        XR_TREF_INT, XR_TREF_FLOAT, XR_TREF_STRING, XR_TREF_RUNE, XR_TREF_BOOL,
     };
     static const uint8_t int_widths[] = {
         XR_TREF_NW_I64, XR_TREF_NW_I8,  XR_TREF_NW_I16, XR_TREF_NW_I32,   XR_TREF_NW_U8,
@@ -6698,7 +6687,7 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
         if (strcmp(member->name, "get") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_GET;
             key = call->arguments ? call->arguments[0] : NULL;
-        } else if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
+        } else if (strcmp(member->name, "containsKey") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_HAS;
             key = call->arguments ? call->arguments[0] : NULL;
         } else if (strcmp(member->name, "delete") == 0 && call->arg_count == 1) {
@@ -6714,7 +6703,7 @@ static void body_add_map_method_key_access(XgBodyCollect *bc, const AstNode *nod
             mutating = true;
         }
     } else if (receiver_shape.map_container_kind == XG_MAP_CONTAINER_SET) {
-        if (strcmp(member->name, "has") == 0 && call->arg_count == 1) {
+        if (strcmp(member->name, "contains") == 0 && call->arg_count == 1) {
             op = XG_KEY_ACCESS_HAS;
             key = call->arguments ? call->arguments[0] : NULL;
         } else if (strcmp(member->name, "delete") == 0 && call->arg_count == 1) {
@@ -6741,13 +6730,13 @@ static uint32_t body_sequence_receiver_type_key(uint8_t sequence_kind, uint32_t 
         case XG_SEQ_ARRAY:
             return hash_named_type_key32("Array", NULL, 0) ^ elem_type_key;
         case XG_SEQ_BYTES:
-            return hash_named_type_key32("Bytes", NULL, 0);
+            return hash_named_type_key32("Array", NULL, 0) ^ body_uint8_type_key();
         case XG_SEQ_STRING:
             return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
         case XG_SEQ_SPAN:
-            return hash_named_type_key32("Span", NULL, 0) ^ elem_type_key;
+            return hash_named_type_key32("Slice", NULL, 0) ^ elem_type_key;
         case XG_SEQ_BYTE_SPAN:
-            return hash_named_type_key32("ByteSpan", NULL, 0);
+            return hash_named_type_key32("Slice", NULL, 0) ^ body_uint8_type_key();
         case XG_SEQ_STRING_BUILDER:
             return hash_named_type_key32("StringBuilder", NULL, 0);
         default:
@@ -6825,18 +6814,37 @@ static void body_add_sequence_slice_access(XgBodyCollect *bc, const AstNode *nod
                                  node->as.slice_expr.end, false);
 }
 
-static void body_add_sequence_length_access(XgBodyCollect *bc, const AstNode *node) {
-    const MemberAccessNode *member;
+static bool body_add_sequence_len_call(XgBodyCollect *bc, const AstNode *node) {
     XgLocalType *local;
-    if (!bc || !node || node->type != AST_MEMBER_ACCESS)
-        return;
-    member = &node->as.member_access;
-    if (!member->name || strcmp(member->name, "length") != 0)
-        return;
-    local = body_lookup_local_sequence(bc, member->object);
+    XgLocalType field_local;
+    if (!bc || !node || node->type != AST_CALL_EXPR)
+        return false;
+    const CallExprNode *call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_VARIABLE || call->arg_count != 1 ||
+        !call->callee->as.variable.name || strcmp(call->callee->as.variable.name, "len") != 0)
+        return false;
+    local = body_lookup_local_sequence(bc, call->arguments[0]);
+    if (!local && call->arguments[0] && call->arguments[0]->type == AST_MEMBER_ACCESS) {
+        const MemberAccessNode *member = &call->arguments[0]->as.member_access;
+        if (member->object && member->object->type == AST_THIS_EXPR && member->name) {
+            const XgClassFieldSummary *field = body_find_class_field_in_hierarchy(
+                bc, bc->current_class_id, hash_name32(member->name));
+            if (field && (field->semantic_kind == XG_CLASS_FIELD_TYPE_ARRAY ||
+                          field->semantic_kind == XG_CLASS_FIELD_TYPE_STRING)) {
+                memset(&field_local, 0, sizeof(field_local));
+                field_local.type_key = field->type_key;
+                field_local.sequence_kind = field->semantic_kind == XG_CLASS_FIELD_TYPE_STRING
+                                                ? XG_SEQ_STRING
+                                                : XG_SEQ_ARRAY;
+                field_local.sequence_elem_type_key = field->element_type_key;
+                local = &field_local;
+            }
+        }
+    }
     if (!local)
-        return;
+        return true;
     body_add_sequence_access_row(bc, node, local, XG_SEQ_ACCESS_LENGTH, NULL, NULL, false);
+    return true;
 }
 
 static void body_add_capacity_op(XgBodyCollect *bc, const AstNode *node, const XgLocalType *local,
@@ -6886,7 +6894,7 @@ static void body_add_bulk_op(XgBodyCollect *bc, const AstNode *node, uint8_t op_
                                                              dst_local->sequence_elem_type_key);
     row.length_expr_id = body_const_expr_id(length_expr);
     if (dst_local->sequence_elem_type_key == body_uint8_type_key() ||
-        dst_local->sequence_elem_type_key == body_char_type_key())
+        dst_local->sequence_elem_type_key == body_rune_type_key())
         row.flags |= XG_BULK_POD;
     if (overlap_possible)
         row.flags |= XG_BULK_OVERLAP_POSSIBLE;
@@ -6985,10 +6993,10 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
         }
     }
 
-    if (strcmp(member->name, "toBytes") == 0 && call->arg_count == 0 &&
+    if (strcmp(member->name, "copyBytes") == 0 && call->arg_count == 0 &&
         body_expr_type_key(bc, member->object) ==
             hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0)) {
-        uint32_t output_type_key = hash_named_type_key32("Bytes", NULL, 0);
+        uint32_t output_type_key = hash_named_type_key32("Array", NULL, 0) ^ body_uint8_type_key();
         body_add_encoding_op(bc, node, XG_ENCODING_STRING_TO_BYTES, member->object, output_type_key,
                              XG_ENCODING_KNOWN_UTF8 | XG_ENCODING_SCALAR_BOUNDARY);
     }
@@ -7199,7 +7207,7 @@ static bool static_data_node_is_scalar_rodata(const AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
@@ -7501,7 +7509,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 }
             }
             break;
-        case AST_CALL_EXPR:
+        case AST_CALL_EXPR: {
+            bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
             if (body_builtin_method_call_may_suspend(bc, node) ||
                 body_stdlib_call_may_suspend(bc, node)) {
                 bc->effect_bits |= XG_BODY_MAY_SUSPEND;
@@ -7510,11 +7519,13 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);
             body_add_sequence_method_evidence(bc, node);
-            collect_callsite(bc, node);
+            if (!intrinsic_sequence_len)
+                collect_callsite(bc, node);
             walk_body_for_calls(bc, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.call_expr.arguments[i]);
             break;
+        }
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR: {
             const FunctionDeclNode *fn =
@@ -7824,7 +7835,6 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             body_add_json_member_access(bc, node, false);
             body_add_record_member_access(bc, node, false);
-            body_add_sequence_length_access(bc, node);
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
         }

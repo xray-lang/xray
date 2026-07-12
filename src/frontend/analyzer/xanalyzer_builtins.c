@@ -34,8 +34,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_FLOAT;
     if (XR_TYPE_IS_STRING(type))
         return XR_TID_STRING;
-    if (XR_TYPE_IS_CHAR(type))
-        return XR_TID_CHAR;
+    if (XR_TYPE_IS_RUNE(type))
+        return XR_TID_RUNE;
     if (XR_TYPE_IS_BOOL(type))
         return XR_TID_BOOL;
     if (XR_TYPE_IS_ARRAY(type))
@@ -278,7 +278,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
                 return xr_type_new_unit(NULL);
             case SYMBOL_INDEXOF:
                 return xr_type_new_int(NULL);
-            case SYMBOL_INCLUDES:
+            case SYMBOL_CONTAINS:
                 return xr_type_new_bool(NULL);
             case SYMBOL_JOIN:
                 return xr_type_new_string(NULL);
@@ -310,22 +310,11 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
     // String methods
     if (XR_TYPE_IS_STRING(container_type)) {
         switch (sym) {
-            case SYMBOL_CHARAT:
-            case SYMBOL_CONCAT:
             case SYMBOL_SLICE:
-            case SYMBOL_SUBSTRING:
-            case SYMBOL_TOLOWERCASE:
-            case SYMBOL_TOUPPERCASE:
-            case SYMBOL_TRIM:
-            case SYMBOL_TRIM_START:
-            case SYMBOL_TRIM_END:
             case SYMBOL_REPLACE:
             case SYMBOL_REPLACEALL:
             case SYMBOL_REPEAT:
-            case SYMBOL_PAD_START:
-            case SYMBOL_PAD_END:
                 return xr_type_new_string(NULL);
-            case SYMBOL_CODEPOINT_AT:
             case SYMBOL_INDEXOF:
             case SYMBOL_LASTINDEXOF:
                 return xr_type_new_int(NULL);
@@ -335,23 +324,17 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
                 return xr_type_new_bool(NULL);
             case SYMBOL_SPLIT:
                 return xr_type_new_array(X, xr_type_new_string(NULL));
-            case SYMBOL_MATCH: {
-                XrType *t = xr_type_new_array(X, xr_type_new_string(NULL));
-                if (t)
-                    t->is_nullable = true;
-                return t;
-            }
             default:
                 break;
         }
     }
 
     // char methods
-    if (XR_TYPE_IS_CHAR(container_type)) {
+    if (XR_TYPE_IS_RUNE(container_type)) {
         switch (sym) {
             case SYMBOL_TOSTRING:
                 return xr_type_new_string(NULL);
-            case SYMBOL_ORD:
+            case SYMBOL_TO_UINT32:
                 return xr_type_new_int(NULL);
             case SYMBOL_IS_LETTER:
             case SYMBOL_IS_NUMBER:
@@ -379,7 +362,8 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_CLEAR:
             case SYMBOL_FOREACH:
                 return xr_type_new_unit(NULL);
-            case SYMBOL_HAS:
+            case SYMBOL_CONTAINS_KEY:
+            case SYMBOL_CONTAINS_VALUE:
             case SYMBOL_DELETE:
                 return xr_type_new_bool(NULL);
             case SYMBOL_KEYS:
@@ -412,7 +396,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_CLEAR:
             case SYMBOL_FOREACH:
                 return xr_type_new_unit(NULL);
-            case SYMBOL_HAS:
+            case SYMBOL_CONTAINS:
             case SYMBOL_DELETE:
                 return xr_type_new_bool(NULL);
             case SYMBOL_VALUES:
@@ -561,8 +545,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
                 XrType *pair = xr_type_new_tuple(X, pair_elems, 2);
                 return xr_type_new_array(X, pair ? pair : xr_type_new_unknown(NULL));
             }
-            case SYMBOL_HAS:
-            case SYMBOL_IS_EMPTY:
+            case SYMBOL_CONTAINS_KEY:
                 return xr_type_new_bool(NULL);
             case SYMBOL_GET: {
                 return xr_type_make_nullable(X, xr_type_new_json(NULL));
@@ -974,8 +957,10 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_bool(NULL);
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
         type = xr_type_new_string(NULL);
-    } else if (base_len == 4 && strncmp(s, TYPE_NAME_CHAR, 4) == 0) {
-        type = xr_type_new_char(NULL);
+    } else if (base_len == 4 && strncmp(s, TYPE_NAME_RUNE, 4) == 0) {
+        type = xr_type_new_rune(NULL);
+    } else if (base_len == 4 && strncmp(s, "byte", 4) == 0) {
+        type = xr_type_new_int_width(X, XR_NATIVE_U8);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
         type = xr_type_new_unit(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
@@ -1003,14 +988,9 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                strncmp(s, TYPE_NAME_BUFFER, strlen(TYPE_NAME_BUFFER)) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = TYPE_NAME_BUFFER;
-    } else if (base_len == 5 && strncmp(s, "Bytes", 5) == 0) {
-        type = xr_type_new_bytes(X);
     } else if (base_len == strlen(TYPE_NAME_BYTESPAN) &&
                strncmp(s, TYPE_NAME_BYTESPAN, strlen(TYPE_NAME_BYTESPAN)) == 0) {
         type = xr_type_new_bytespan(X);
-    } else if (base_len == strlen(TYPE_NAME_BYTEVIEW) &&
-               strncmp(s, TYPE_NAME_BYTEVIEW, strlen(TYPE_NAME_BYTEVIEW)) == 0) {
-        type = xr_type_new_byteview(X);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
         type = xr_type_new_never(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_NULL, 4) == 0) {
@@ -1051,11 +1031,6 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         const char *inner = s + strlen(TYPE_NAME_SPAN) + 1;
         size_t inner_len = base_len - strlen(TYPE_NAME_SPAN) - 2;
         type = xr_type_new_span(X, parse_type_str(X, inner, inner_len));
-    } else if (base_len >= strlen(TYPE_NAME_VIEW) + 2 &&
-               strncmp(s, TYPE_NAME_VIEW "<", strlen(TYPE_NAME_VIEW) + 1) == 0) {
-        const char *inner = s + strlen(TYPE_NAME_VIEW) + 1;
-        size_t inner_len = base_len - strlen(TYPE_NAME_VIEW) - 2;
-        type = xr_type_new_view(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_MAP "<", 4) == 0) {
         // Map<K, V>: find comma separator at depth 0
         const char *inner = s + 4;

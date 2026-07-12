@@ -5,7 +5,7 @@ fn mapSetClosureCapturePlan(value: int) -> int {
     seen.add(1)
     const read = fn() -> int {
         var one = scores.get(1) ?? 0
-        if (seen.has(1)) {
+        if (seen.contains(1)) {
             return one + scores[1]
         }
         return one

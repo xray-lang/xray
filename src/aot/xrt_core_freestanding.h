@@ -135,7 +135,7 @@ typedef struct XrValue {
 
 #define XR_TAG_NULL 0
 #define XR_TAG_BOOL 1
-#define XR_TAG_CHAR 2
+#define XR_TAG_RUNE 2
 #define XR_TAG_I64 3
 #define XR_TAG_F64 4
 #define XR_TAG_PTR 5
@@ -187,18 +187,18 @@ typedef struct XrValue {
 #define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
 #define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})
 #define XR_FROM_BOOL(x) ((XrValue) {.tag = XR_TAG_BOOL, .i = (x) ? 1 : 0})
-#define XR_FROM_CHAR(cp) ((XrValue) {.tag = XR_TAG_CHAR, .i = (int64_t) (uint32_t) (cp)})
+#define XR_FROM_RUNE(cp) ((XrValue) {.tag = XR_TAG_RUNE, .i = (int64_t) (uint32_t) (cp)})
 #define XR_NULL_VAL ((XrValue) {.tag = XR_TAG_NULL})
 #define XR_TRUE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 1})
 #define XR_FALSE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 0})
 
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
-#define XR_TO_CHAR(v) ((uint32_t) (v).i)
+#define XR_TO_RUNE(v) ((uint32_t) (v).i)
 
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
-#define XR_IS_CHAR(v) ((v).tag == XR_TAG_CHAR)
+#define XR_IS_RUNE(v) ((v).tag == XR_TAG_RUNE)
 #define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
 #define XR_IS_FALSE(v) ((v).tag == XR_TAG_BOOL && (v).i == 0)
@@ -215,6 +215,7 @@ typedef struct XrValue {
 
 typedef struct {
     int64_t len;
+    int64_t rune_len;
     uint32_t hash;
     uint32_t flags;
     char *data;
@@ -236,6 +237,30 @@ static inline int64_t xr_str_len(XrValue v) {
     return ((const xrt_str_t *) v.ptr)->len;
 }
 
+static inline int64_t xr_str_rune_len(XrValue v) {
+    xrt_str_t *h = (xrt_str_t *) v.ptr;
+    if (!h || !h->data || h->len <= 0)
+        return 0;
+    if (h->rune_len >= 0)
+        return h->rune_len;
+    const unsigned char *p = (const unsigned char *) h->data;
+    const unsigned char *end = p + h->len;
+    int64_t count = 0;
+    while (p < end) {
+        unsigned char b = *p;
+        int64_t width = (b < 0x80u)              ? 1
+                        : ((b & 0xE0u) == 0xC0u) ? 2
+                        : ((b & 0xF0u) == 0xE0u) ? 3
+                        : ((b & 0xF8u) == 0xF0u) ? 4
+                                                 : 1;
+        p += width <= end - p ? width : 1;
+        count++;
+    }
+    if (!(h->flags & XRT_STR_LITERAL))
+        h->rune_len = count;
+    return count;
+}
+
 static inline XrValue xr_str_lit(const xrt_str_t *hdr) {
     XrValue r = {0};
     r.tag = XR_TAG_STR;
@@ -254,7 +279,8 @@ static inline XrValue xr_str_value_from_ptr(void *ptr) {
 }
 
 #define XRT_STR_LIT_DEF(name, s)                                                                   \
-    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, 0, XRT_STR_LITERAL, (char *) (s)}
+    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, (int64_t) sizeof(s) - 1, 0,            \
+                                   XRT_STR_LITERAL, (char *) (s)}
 
 static inline XrValue xr_mkheap(void *p, uint16_t heap_type) {
     XrValue r = {0};
@@ -480,6 +506,11 @@ static inline int xrt_buffer_is(XrValue value) {
 
 static inline xrt_buffer_object_t *xrt_buffer_obj_ptr(XrValue value) {
     return xrt_buffer_is(value) ? (xrt_buffer_object_t *) value.ptr : NULL;
+}
+
+static inline int64_t xrt_buffer_length(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
+    return buf ? buf->length : 0;
 }
 
 static inline void xrt_buffer_free_data(void *data) {
@@ -1164,7 +1195,7 @@ static inline int64_t xrt_span_bytes_load_u64_le_unchecked_raw(xr_span_t span, i
 }
 
 static inline int64_t xr_value_to_int64_coerce(XrValue v) {
-    if (XR_IS_INT(v) || XR_IS_CHAR(v) || XR_IS_BOOL(v))
+    if (XR_IS_INT(v) || XR_IS_RUNE(v) || XR_IS_BOOL(v))
         return v.i;
     if (XR_IS_FLOAT(v))
         return (int64_t) v.f;
@@ -1174,7 +1205,7 @@ static inline int64_t xr_value_to_int64_coerce(XrValue v) {
 static inline double xr_value_to_f64_coerce(XrValue v) {
     if (XR_IS_FLOAT(v))
         return v.f;
-    if (XR_IS_INT(v) || XR_IS_CHAR(v) || XR_IS_BOOL(v))
+    if (XR_IS_INT(v) || XR_IS_RUNE(v) || XR_IS_BOOL(v))
         return (double) v.i;
     return 0.0;
 }
@@ -1376,7 +1407,7 @@ static inline void xrt_print(XrValue v) {
         xrt_write_cstr(v.i ? "true" : "false");
     } else if (XR_IS_NULL(v)) {
         xrt_write_cstr("null");
-    } else if (XR_IS_CHAR(v)) {
+    } else if (XR_IS_RUNE(v)) {
         xrt_print_char((uint32_t) v.i);
     } else if (XR_IS_STR(v)) {
         xrt_write_bytes(xr_str_data(v), (size_t) xr_str_len(v));
@@ -1437,7 +1468,7 @@ static inline int64_t xrt_i64_shr_u(int64_t a, int64_t b) {
 static inline double xrt_math_number(XrValue v) {
     if (XR_IS_FLOAT(v))
         return v.f;
-    if (XR_IS_INT(v) || XR_IS_BOOL(v) || XR_IS_CHAR(v))
+    if (XR_IS_INT(v) || XR_IS_BOOL(v) || XR_IS_RUNE(v))
         return (double) v.i;
     return 0.0;
 }
@@ -1447,7 +1478,7 @@ static inline XrValue xrt_to_int(XrValue v) {
         return v;
     if (XR_IS_FLOAT(v))
         return XR_FROM_INT((int64_t) v.f);
-    if (XR_IS_BOOL(v) || XR_IS_CHAR(v))
+    if (XR_IS_BOOL(v) || XR_IS_RUNE(v))
         return XR_FROM_INT(v.i);
     return XR_FROM_INT(0);
 }
@@ -1463,7 +1494,7 @@ static inline XrValue xrt_to_bool(XrValue v) {
         return v;
     if (XR_IS_NULL(v))
         return XR_FALSE_VAL;
-    if (XR_IS_INT(v) || XR_IS_CHAR(v))
+    if (XR_IS_INT(v) || XR_IS_RUNE(v))
         return XR_FROM_BOOL(v.i != 0);
     if (XR_IS_FLOAT(v))
         return XR_FROM_BOOL(v.f != 0.0);
@@ -1479,7 +1510,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
     uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
     if (ta != tb)
         return 0;
-    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_CHAR)
+    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_RUNE)
         return a.i == b.i;
     if (ta == XR_TAG_F64)
         return a.f == b.f;

@@ -2,7 +2,7 @@
 import path
 
 print(path.sep)
-print(path.delimiter.length == 1)
+print(len(path.delimiter) == 1)
 
 print(path.dirname("/usr/local/bin"))
 print(path.dirname("foo/bar.txt"))

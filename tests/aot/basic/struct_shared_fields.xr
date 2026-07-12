@@ -2,7 +2,7 @@ struct Sample {
     x: int
     y: float
     ok: bool
-    byte: uint8
+    byte: byte
 }
 
 var p = Sample{x: 41, y: 2.5, ok: true, byte: 30}

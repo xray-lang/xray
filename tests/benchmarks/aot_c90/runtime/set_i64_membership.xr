@@ -12,7 +12,7 @@ fn run(n: int, rounds: int) -> int {
     while (r < rounds) {
         i = 0
         while (i < n * 2) {
-            if (s.has(i)) {
+            if (s.contains(i)) {
                 hits = hits + 1
             }
             i = i + 1
@@ -20,7 +20,7 @@ fn run(n: int, rounds: int) -> int {
         r = r + 1
     }
 
-    return hits + s.size
+    return hits + len(s)
 }
 
 print(run(150000, 4))

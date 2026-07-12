@@ -29,17 +29,8 @@ static XrType *address_expr_type(XaInferContext *ctx, AstNode *expr) {
 }
 
 static bool address_type_has_native_layout(XrType *type) {
-    if (!type)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
-            return !type->is_nullable;
-        default:
-            return xr_type_has_static_layout(type, NULL, NULL);
-    }
+    return xa_type_supports_const_static_data_object(type) ||
+           xr_type_has_static_layout(type, NULL, NULL);
 }
 
 static XaAddressability address_none(XaAddressRejectReason rejection) {

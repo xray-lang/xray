@@ -58,9 +58,10 @@ TEST(vm_elided_root_allocates_without_task_identity) {
     ASSERT_NOT_NULL(iso);
     ASSERT_NULL(xr_current_coro(iso));
 
-    const char *src = "var xs = [1, 2, 3]\n"
+    const char *src = "import text\n"
+                      "var xs = [1, 2, 3]\n"
                       "var ys = xs.map(fn(x) { return x * 2 })\n"
-                      "var text = \"root\".toUpperCase()\n";
+                      "var upper = text.upper(\"root\")\n";
     ASSERT_EQ_INT(xray_vm_dostring(iso, src), 0);
     ASSERT_NULL(iso->main_coro);
     ASSERT_NULL(xr_current_coro(iso));
@@ -253,7 +254,7 @@ TEST(vm_vararg_entry) {
     const char *src = "enum VmApiErr { CheckFailed }\n"
                       "fn sumAll(...nums) -> int {\n"
                       "  var total = 0\n"
-                      "  for (var i = 0; i < nums.length; i = i + 1) {\n"
+                      "  for (var i = 0; i < len(nums); i = i + 1) {\n"
                       "    total = total + nums[i]\n"
                       "  }\n"
                       "  return total\n"

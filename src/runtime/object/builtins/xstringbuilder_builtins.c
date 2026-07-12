@@ -35,9 +35,9 @@ static void append_value(XrStringBuilder *sb, XrVMRuntime *iso, XrValue value) {
         xr_stringbuilder_append_int(sb, XR_TO_INT(value));
     } else if (XR_IS_FLOAT(value)) {
         xr_stringbuilder_append_float(sb, XR_TO_FLOAT(value));
-    } else if (XR_IS_CHAR(value)) {
+    } else if (XR_IS_RUNE(value)) {
         char buf[XR_UTF8_MAX_BYTES];
-        int n = xr_utf8_encode(XR_TO_CHAR(value), buf);
+        int n = xr_utf8_encode(XR_TO_RUNE(value), buf);
         if (n > 0)
             xr_stringbuilder_append_cstr(sb, buf, (size_t) n);
     } else if (XR_IS_BOOL(value)) {
@@ -145,9 +145,6 @@ void xr_stringbuilder_register_class(XrVMRuntime *X) {
     xr_class_builder_add_method(b, "append", xr_builtin_stringbuilder_append, 1, 0);
     xr_class_builder_add_method(b, "toString", xr_builtin_stringbuilder_toString, 0, 0);
     xr_class_builder_add_method(b, "clear", xr_builtin_stringbuilder_clear, 0, 0);
-    /* `length` is a property; register under get:length so OP_GETPROP
-     * resolves it via the standard getter lookup path (no parens). */
-    xr_class_builder_add_method(b, "get:length", xr_builtin_stringbuilder_length, 1, 0);
     XrClass *cls = xr_class_builder_finalize(b);
     if (!cls)
         return;

@@ -10,7 +10,7 @@ print("nums: ${nums}")
 print("empty: ${empty}")
 
 // === Indexing ===
-print("first: ${nums[0]}, last: ${nums[nums.length - 1]}")
+print("first: ${nums[0]}, last: ${nums[len(nums) - 1]}")
 
 // === Mutation ===
 nums.push(6)
@@ -29,7 +29,7 @@ print("nums[3:]  = ${nums[3:]}")
 
 // === Search ===
 print("indexOf(3) = ${nums.indexOf(3)}")
-print("includes(5) = ${nums.includes(5)}")
+print("includes(5) = ${nums.contains(5)}")
 
 // === Join ===
 var words = ["hello", "world"]

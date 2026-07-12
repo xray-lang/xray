@@ -17,7 +17,7 @@ fn test_url_encode_decode_roundtrip() {
 @test
 fn test_url_encode_special() {
     var encoded = http.urlEncode("a+b=c&d")
-    assert(encoded.includes("%"))
+    assert(encoded.contains("%"))
     var decoded = http.urlDecode(encoded)
     assert_eq(decoded, "a+b=c&d")
 }
@@ -36,7 +36,7 @@ fn test_url_encode_symbols() {
 fn test_url_encode_chinese() {
     var original = "你好世界"
     var encoded = http.urlEncode(original)
-    assert(encoded.includes("%"))
+    assert(encoded.contains("%"))
     var decoded = http.urlDecode(encoded)
     assert_eq(decoded, original)
 }

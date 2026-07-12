@@ -34,7 +34,7 @@ fn test_eol() {
 fn test_getenv_path() {
     var path = os.getenv("PATH")
     assert(path != null)
-    assert(path!.length > 0)
+    assert(len(path!) > 0)
 }
 
 @test
@@ -91,19 +91,19 @@ fn test_getpid() {
 @test
 fn test_getcwd() {
     var cwd = os.getcwd()
-    assert(cwd.length > 0)
+    assert(len(cwd) > 0)
 }
 
 @test
 fn test_hostname() {
     var h = os.hostname()
-    assert(h.length > 0)
+    assert(len(h) > 0)
 }
 
 @test
 fn test_tmpdir() {
     var tmp = os.tmpdir()
-    assert(tmp.length > 0)
+    assert(len(tmp) > 0)
 }
 
 @test
@@ -145,7 +145,7 @@ fn test_chdir() {
     os.chdir(tmp)
     var newCwd = os.getcwd()
     // Should have changed (may differ due to symlink resolution)
-    assert(newCwd.length > 0)
+    assert(len(newCwd) > 0)
 
     // Restore
     os.chdir(original)

@@ -13,7 +13,7 @@ fn test_many_short_lived_coros() {
         for (var i = 0; i < 10; i++) {
             arr.push("item_" + string(id) + "_" + string(i))
         }
-        return arr.length
+        return len(arr)
     }
     var tasks: Array<Task> = []
     for (var i = 0; i < count; i++) {
@@ -40,7 +40,7 @@ fn test_nested_allocations() {
             var item = #{"id": i, "values": [i * 1, i * 2, i * 3], "name": "item_" + string(i)}
             data.push(item)
         }
-        return data.length
+        return len(data)
     }
     // 启动 10 个协程
     var t1 = go worker()

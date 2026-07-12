@@ -1,4 +1,4 @@
-fn read(src: ByteSpan) -> int {
+fn read(src: Slice<byte>) -> int {
     unsafe {
         var p = src.ptr()
         return int(p.loadLE(0))

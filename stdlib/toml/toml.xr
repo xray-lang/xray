@@ -1,3 +1,7 @@
+import strconv
+
+import text
+
 // toml - pure-Xray TOML parser and writer.
 //
 // TOML is an L4 format module: user-facing parse/stringify semantics live here.
@@ -9,14 +13,14 @@ import io
 const TOML_MAX_DEPTH = 256
 
 fn _isDigit(c: string) -> bool {
-    if (c.length == 0) { return false }
-    var o = c.ord()!
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
     return o >= 48 && o <= 57
 }
 
 fn _isAlpha(c: string) -> bool {
-    if (c.length == 0) { return false }
-    var o = c.ord()!
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
 }
 
@@ -25,13 +29,13 @@ fn _isAlphaNum(c: string) -> bool {
 }
 
 fn _isHexDigit(c: string) -> bool {
-    if (c.length == 0) { return false }
-    var o = c.ord()!
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
 
 fn _hexValue(c: string) -> int {
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     if (o >= 48 && o <= 57) { return o - 48 }
     if (o >= 65 && o <= 70) { return o - 55 }
     if (o >= 97 && o <= 102) { return o - 87 }
@@ -43,29 +47,29 @@ fn _isBareKeyChar(c: string) -> bool {
 }
 
 fn _isBareKey(key: string) -> bool {
-    if (key.length == 0) { return false }
-    for (var i = 0; i < key.length; i++) {
-        if (!_isBareKeyChar(key.charAt(i))) { return false }
+    if (len(key) == 0) { return false }
+    for (var i = 0; i < len(key); i++) {
+        if (!_isBareKeyChar(key.slice(i, (i) + 1))) { return false }
     }
     return true
 }
 
 fn _stripUnderscores(s: string) -> string {
     var out = StringBuilder()
-    for (var i = 0; i < s.length; i++) {
-        var c = s.charAt(i)
+    for (var i = 0; i < len(s); i++) {
+        var c = s.slice(i, (i) + 1)
         if (c != "_") { out.append(c) }
     }
     return out.toString()
 }
 
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
-    if (pos + prefix.length > s.length) { return false }
-    return s.slice(pos, pos + prefix.length) == prefix
+    if (pos + len(prefix) > len(s)) { return false }
+    return s.slice(pos, pos + len(prefix)) == prefix
 }
 
 fn _isValueTerminator(c: string) -> bool {
-    return c.length == 0 || c == "\n" || c == "\r" || c == "#" || c == "," ||
+    return len(c) == 0 || c == "\n" || c == "\r" || c == "#" || c == "," ||
            c == "]" || c == "}"
 }
 
@@ -103,23 +107,23 @@ class TomlParser {
     }
 
     atEnd() -> bool {
-        return this.pos >= this.data.length
+        return this.pos >= len(this.data)
     }
 
     peek() -> string {
         if (this.atEnd()) { return "" }
-        return this.data.charAt(this.pos)
+        return this.data.slice(this.pos, (this.pos) + 1)
     }
 
     peekAt(offset: int) -> string {
         var p = this.pos + offset
-        if (p < 0 || p >= this.data.length) { return "" }
-        return this.data.charAt(p)
+        if (p < 0 || p >= len(this.data)) { return "" }
+        return this.data.slice(p, (p) + 1)
     }
 
     advance() -> string {
         var c = this.peek()
-        if (c.length == 0) { return c }
+        if (len(c) == 0) { return c }
         this.pos = this.pos + 1
         if (c == "\n") {
             this.line = this.line + 1
@@ -336,26 +340,26 @@ class TomlParser {
         while (!this.atEnd() && !_isValueTerminator(this.peek())) {
             this.advance()
         }
-        return this.data.slice(start, this.pos).trimEnd()
+        return text.trimEnd(this.data.slice(start, this.pos))
     }
 
     parseBaseInt(raw: string, base: int) -> int {
         var s = _stripUnderscores(raw)
         var start = 0
         var sign = 1
-        if (s.length > 0 && s.charAt(0) == "-") {
+        if (len(s) > 0 && s.slice(0, (0) + 1) == "-") {
             sign = -1
             start = 1
-        } else if (s.length > 0 && s.charAt(0) == "+") {
+        } else if (len(s) > 0 && s.slice(0, (0) + 1) == "+") {
             start = 1
         }
-        if (start + 1 < s.length && s.charAt(start) == "0") {
-            var p = s.charAt(start + 1).toLowerCase()
+        if (start + 1 < len(s) && s.slice(start, (start) + 1) == "0") {
+            var p = text.lower(s.slice(start + 1, (start + 1) + 1))
             if (p == "x" || p == "o" || p == "b") { start = start + 2 }
         }
         var out = 0
-        for (var i = start; i < s.length; i++) {
-            var d = _hexValue(s.charAt(i))
+        for (var i = start; i < len(s); i++) {
+            var d = _hexValue(s.slice(i, (i) + 1))
             if (d < 0 || d >= base) { break }
             out = out * base + d
         }
@@ -370,20 +374,20 @@ class TomlParser {
 
         var signOffset = 0
         if (s.startsWith("+") || s.startsWith("-")) { signOffset = 1 }
-        if (signOffset + 1 < s.length && s.charAt(signOffset) == "0") {
-            var p = s.charAt(signOffset + 1).toLowerCase()
+        if (signOffset + 1 < len(s) && s.slice(signOffset, (signOffset) + 1) == "0") {
+            var p = text.lower(s.slice(signOffset + 1, (signOffset + 1) + 1))
             if (p == "x") { return this.parseBaseInt(s, 16) }
             if (p == "o") { return this.parseBaseInt(s, 8) }
             if (p == "b") { return this.parseBaseInt(s, 2) }
         }
 
-        if (s.includes(".") || s.includes("e") || s.includes("E")) {
-            var f = s.toFloat()
+        if (s.contains(".") || s.contains("e") || s.contains("E")) {
+            var f = strconv.parseFloat(s)
             if (f != null) { return f! }
             this.addError("InvalidNumber", "Invalid number")
             return 0.0
         }
-        var i = s.toInt()
+        var i = strconv.parseInt(s)
         if (i != null) { return i! }
         this.addError("InvalidNumber", "Invalid number")
         return 0
@@ -476,12 +480,12 @@ class TomlParser {
         if (c == "{") { return this.parseInlineTable() }
 
         var raw = this.scanLiteral()
-        if (raw.length >= 5 && _isDigit(raw.charAt(0)) && _isDigit(raw.charAt(1)) &&
-            _isDigit(raw.charAt(2)) && _isDigit(raw.charAt(3)) && raw.charAt(4) == "-") {
+        if (len(raw) >= 5 && _isDigit(raw.slice(0, (0) + 1)) && _isDigit(raw.slice(1, (1) + 1)) &&
+            _isDigit(raw.slice(2, (2) + 1)) && _isDigit(raw.slice(3, (3) + 1)) && raw.slice(4, (4) + 1) == "-") {
             return this.parseDateTimeLiteral(raw)
         }
         if (raw == "inf" || raw == "+inf" || raw == "-inf" || raw == "nan" ||
-            raw == "+nan" || raw == "-nan" || raw.length > 0) {
+            raw == "+nan" || raw == "-nan" || len(raw) > 0) {
             return this.parseNumberLiteral(raw)
         }
         this.addError("InvalidValue", "Invalid value")
@@ -490,11 +494,11 @@ class TomlParser {
 
     setNestedValue(rootObj: Json, keys: Array<string>, value: unknown) {
         var current = rootObj
-        if (keys.length == 0) { return }
-        for (var i = 0; i < keys.length - 1; i++) {
+        if (len(keys) == 0) { return }
+        for (var i = 0; i < len(keys) - 1; i++) {
             var key = keys[i]
             var existing = Json.get(current, key, null)
-            if (typename(existing) != "Json") {
+            if (typeName(existing) != "Json") {
                 var child: Json = {}
                 current[key] = child
                 current = child
@@ -502,8 +506,8 @@ class TomlParser {
                 current = existing
             }
         }
-        var last = keys[keys.length - 1]
-        if (Json.has(current, last)) {
+        var last = keys[len(keys) - 1]
+        if (Json.containsKey(current, last)) {
             this.addError("DuplicateKey", "Duplicate key")
             return
         }
@@ -513,7 +517,7 @@ class TomlParser {
 
     tablePath(keys: Array<string>) -> string {
         var out = StringBuilder()
-        for (var i = 0; i < keys.length; i++) {
+        for (var i = 0; i < len(keys); i++) {
             if (i > 0) { out.append(".") }
             out.append(keys[i])
         }
@@ -522,20 +526,20 @@ class TomlParser {
 
     getOrCreateTable(keys: Array<string>) -> Json {
         var path = this.tablePath(keys)
-        if (Json.has(this.definedTables, path)) {
+        if (Json.containsKey(this.definedTables, path)) {
             this.addError("DuplicateKey", "Table already defined")
         }
         this.definedTables[path] = true
 
         var current = this.root
-        for (var i = 0; i < keys.length; i++) {
+        for (var i = 0; i < len(keys); i++) {
             var key = keys[i]
             var existing = Json.get(current, key, null)
             if (existing == null) {
                 var child: Json = {}
                 current[key] = child
                 current = child
-            } else if (typename(existing) == "Json") {
+            } else if (typeName(existing) == "Json") {
                 current = existing
             } else {
                 this.addError("TableConflict", "Table definition conflict")
@@ -547,29 +551,29 @@ class TomlParser {
 
     getOrCreateArrayTable(keys: Array<string>) -> Json {
         var current = this.root
-        for (var i = 0; i < keys.length - 1; i++) {
+        for (var i = 0; i < len(keys) - 1; i++) {
             var key = keys[i]
             var existing = Json.get(current, key, null)
             if (existing == null) {
                 var child: Json = {}
                 current[key] = child
                 current = child
-            } else if (typename(existing) == "Json") {
+            } else if (typeName(existing) == "Json") {
                 current = existing
-            } else if (typename(existing) == "Array" && existing.length > 0 &&
-                       typename(existing[existing.length - 1]) == "Json") {
-                current = existing[existing.length - 1]
+            } else if (typeName(existing) == "Array" && len(existing) > 0 &&
+                       typeName(existing[len(existing) - 1]) == "Json") {
+                current = existing[len(existing) - 1]
             } else {
                 return this.root
             }
         }
-        if (keys.length == 0) { return current }
-        var last = keys[keys.length - 1]
+        if (len(keys) == 0) { return current }
+        var last = keys[len(keys) - 1]
         var slot = Json.get(current, last, null)
         var arr: Json = []
         if (slot == null) {
             current[last] = arr
-        } else if (typename(slot) == "Array") {
+        } else if (typeName(slot) == "Array") {
             arr = slot
         } else {
             return this.root
@@ -643,7 +647,7 @@ class TomlDateTime {
     toString() -> string {
         var s = this.raw
         if (s.endsWith("Z") || s.endsWith("z")) {
-            s = s.slice(0, s.length - 1)
+            s = s.slice(0, len(s) - 1)
         }
         var dot = s.indexOf(".")
         if (dot >= 0) { s = s.slice(0, dot) }
@@ -680,8 +684,8 @@ fn parseStrict(data: string) -> Json {
 fn _escapeString(value: string) -> string {
     var out = StringBuilder()
     out.append("\"")
-    for (var i = 0; i < value.length; i++) {
-        var c = value.charAt(i)
+    for (var i = 0; i < len(value); i++) {
+        var c = value.slice(i, (i) + 1)
         if (c == "\"") {
             out.append("\\\"")
         } else if (c == "\\") {
@@ -693,14 +697,14 @@ fn _escapeString(value: string) -> string {
         } else if (c == "\t") {
             out.append("\\t")
         } else {
-            var o = c.ord()!
+            var o = c.runes().nth(0).toUInt32()
             if (o < 32 || o == 127) {
                 out.append("\\u")
                 var hex = "0123456789ABCDEF"
-                out.append(hex.charAt((o / 4096) % 16))
-                out.append(hex.charAt((o / 256) % 16))
-                out.append(hex.charAt((o / 16) % 16))
-                out.append(hex.charAt(o % 16))
+                out.append(hex.slice((o / 4096) % 16, ((o / 4096) % 16) + 1))
+                out.append(hex.slice((o / 256) % 16, ((o / 256) % 16) + 1))
+                out.append(hex.slice((o / 16) % 16, ((o / 16) % 16) + 1))
+                out.append(hex.slice(o % 16, (o % 16) + 1))
             } else {
                 out.append(c)
             }
@@ -716,19 +720,19 @@ fn _writeKey(key: string) -> string {
 }
 
 fn _isArrayOfTables(value: Json) -> bool {
-    return typename(value) == "Array" && value.length > 0 && typename(value[0]) == "Json"
+    return typeName(value) == "Array" && len(value) > 0 && typeName(value[0]) == "Json"
 }
 
 fn _valueText(value: unknown, depth: int = 0) -> string {
     if (depth > TOML_MAX_DEPTH) { return "\"\"" }
     if (value == null) { return "\"\"" }
-    var kind = typename(value)
+    var kind = typeName(value)
     if (kind == "string") { return _escapeString(value as string) }
     if (kind == "bool") { return string(value as bool) }
     if (kind == "int") { return string(value as int) }
     if (kind == "float") {
         var s = string(value as float)
-        if (!s.includes(".") && !s.includes("e") && !s.includes("E")) { s = s + ".0" }
+        if (!s.contains(".") && !s.contains("e") && !s.contains("E")) { s = s + ".0" }
         return s
     }
     if (kind == "TomlDateTime") { return value.toISOString() }
@@ -736,7 +740,7 @@ fn _valueText(value: unknown, depth: int = 0) -> string {
         var arr = value as Array
         var out = StringBuilder()
         out.append("[")
-        for (var i = 0; i < arr.length; i++) {
+        for (var i = 0; i < len(arr); i++) {
             if (i > 0) { out.append(", ") }
             out.append(_valueText(arr[i], depth + 1))
         }
@@ -762,15 +766,15 @@ fn _valueText(value: unknown, depth: int = 0) -> string {
 }
 
 fn _tablePrefix(prefix: string, key: string) -> string {
-    if (prefix.length == 0) { return key }
+    if (len(prefix) == 0) { return key }
     return prefix + "." + key
 }
 
 fn _arrayTableText(arr: Array, prefix: string, depth: int) -> string {
     var out = StringBuilder()
-    for (var i = 0; i < arr.length; i++) {
+    for (var i = 0; i < len(arr); i++) {
         var item = arr[i]
-        if (typename(item) != "Json") { continue }
+        if (typeName(item) != "Json") { continue }
         out.append("\n[[")
         out.append(prefix)
         out.append("]]\n")
@@ -783,11 +787,11 @@ fn _tableText(obj: Json, prefix: string, depth: int = 0) -> string {
     if (depth > TOML_MAX_DEPTH) { return "" }
     var out = StringBuilder()
     var keys = obj.keys()
-    for (var ki = 0; ki < keys.length; ki++) {
+    for (var ki = 0; ki < len(keys); ki++) {
         var key = keys[ki]
         var value = obj[key]
         var p = _tablePrefix(prefix, key)
-        if (typename(value) == "Json") {
+        if (typeName(value) == "Json") {
             out.append("\n[")
             out.append(p)
             out.append("]\n")
@@ -806,7 +810,7 @@ fn _tableText(obj: Json, prefix: string, depth: int = 0) -> string {
 
 fn stringify(value: unknown) -> string {
     var obj = Json.encode(value)
-    if (typename(obj) != "Json") { return "" }
+    if (typeName(obj) != "Json") { return "" }
     return _tableText(obj, "")
 }
 

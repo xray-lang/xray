@@ -1,8 +1,8 @@
-var bytes = Bytes.withCapacity(4)
+var bytes: Array<byte> = Array.withCapacity(4)
 bytes.push(7)
 bytes.push(9)
 bytes.push(11)
 
-print(bytes.length)
+print(len(bytes))
 print(bytes.capacity)
 print(bytes[0] + bytes[1] + bytes[2])

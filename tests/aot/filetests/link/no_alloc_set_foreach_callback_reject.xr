@@ -1,7 +1,7 @@
 fn xray_no_alloc_set_foreach_allocating_callback(value: int) {
     var scratch: Array<int> = []
     scratch.push(value)
-    print(scratch.length)
+    print(len(scratch))
 }
 
 @no_alloc

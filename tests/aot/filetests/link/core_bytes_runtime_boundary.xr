@@ -1,5 +1,5 @@
 fn run_bytes_boundary() {
-    var bytes = Bytes(8, 1)
+    var bytes = Array<byte>(8, 1)
     bytes[0] = 1
     bytes[1] = 2
     bytes[2] = 3
@@ -8,8 +8,8 @@ fn run_bytes_boundary() {
     bytes[5] = 6
     bytes[6] = 7
     bytes[7] = 8
-    print(bytes.length)
-    var view: ByteSpan = bytes[:]
+    print(len(bytes))
+    var view: Slice<byte> = bytes[:]
     var u16: uint16 = view.load<uint16>(0, Endian.LE)
     var u32: uint32 = view.load<uint32>(0, Endian.LE)
     var u64: uint64 = view.load<uint64>(0, Endian.LE)
@@ -19,34 +19,34 @@ fn run_bytes_boundary() {
     print(int(u64))
     print(bytes[6])
 
-    var dst = Bytes.withCapacity(6)
-    print(dst.length)
+    var dst: Array<byte> = Array.withCapacity(6)
+    print(len(dst))
     print(dst.capacity)
     dst.appendFrom(view[1:4])
-    print(dst.length)
+    print(len(dst))
     print(dst[0])
     print(dst[2])
 
-    var repeated = Bytes.withCapacity(9)
-    var seed = Bytes(3)
+    var repeated: Array<byte> = Array.withCapacity(9)
+    var seed = Array<byte>(3)
     seed[0] = 65
     seed[1] = 66
     seed[2] = 67
-    var seedView: ByteSpan = seed[:]
+    var seedView: Slice<byte> = seed[:]
     repeated.appendFrom(seedView)
     repeated.repeatFrom(3, 6)
     print(repeated[3])
     print(repeated[8])
 
-    var filled = Bytes(5, 0)
+    var filled = Array<byte>(5, 0)
     filled.fill(7, 1, 4)
     print(filled[0])
     print(filled[1])
     print(filled[3])
     print(filled[4])
 
-    var filledView: ByteSpan = filled[1:4]
-    print(filledView.length)
+    var filledView: Slice<byte> = filled[1:4]
+    print(len(filledView))
     print(filledView[0])
 }
 

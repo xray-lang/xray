@@ -455,6 +455,7 @@ static inline void xrt_arc_init(void) {
 static inline XrValue xrt_str_alloc(size_t len) {
     xrt_str_t *h = (xrt_str_t *) xrt_arc_alloc(sizeof(xrt_str_t) + len + 1);
     h->len = (int64_t) len;
+    h->rune_len = -1;
     h->hash = 0;
     h->flags = 0;
     h->data = (char *) (h + 1);
@@ -467,6 +468,7 @@ static inline XrValue xrt_str_alloc(size_t len) {
 static inline XrValue xr_box_str(const char *s) {
     xrt_str_t *h = (xrt_str_t *) xrt_arc_alloc(sizeof(xrt_str_t));
     h->len = (int64_t) strlen(s);
+    h->rune_len = -1;
     h->hash = 0;
     h->flags = 0;
     h->data = (char *) s;

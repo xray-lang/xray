@@ -127,7 +127,7 @@ ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression
 // 形式 A：直接两标识符（更常见）
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
 for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
-for (i, c in "hello") { print("${i}:${c}") }     // string → (index, char)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 
 // 形式 B：元组括号包裹（与 .entries() 配合）
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
@@ -141,7 +141,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | `char` | (index, char) |
+| `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
 | Enum 类型 | 具体 enum 值 | — |
 | 自定义 `Iterator<T>` | T | — |
@@ -439,7 +439,7 @@ ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression
 // Form A: two bare identifiers (more common)
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
 for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
-for (i, c in "hello") { print("${i}:${c}") }     // string → (index, char)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 
 // Form B: tuple-parenthesized (pairs well with .entries())
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
@@ -453,7 +453,7 @@ Iteration source / yield mapping:
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | `char` | (index, char) |
+| `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
 | Enum type | concrete enum value | — |
 | Custom `Iterator<T>` | T | — |

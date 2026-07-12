@@ -6,10 +6,10 @@ import time
 
 var N = 10000    // 等待协程数
 var ROUNDS = 10  // 轮数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     ROUNDS = int(process.args[1]) ?? ROUNDS
 }
 

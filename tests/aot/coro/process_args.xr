@@ -1,6 +1,6 @@
 fn count_args() -> int {
     Coro.yield()
-    return process.args.length
+    return len(process.args)
 }
 
 var task = go count_args()

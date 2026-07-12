@@ -17,10 +17,12 @@
 #define XR_STDLIB_MEM_H
 
 #include "../../src/base/xdefs.h"
+#include "../../src/runtime/value/xvalue.h"
 
 struct XrVMRuntime;
 struct XrModule;
 
 XR_FUNC struct XrModule *xr_load_module_mem(struct XrVMRuntime *isolate);
+XR_FUNC int64_t xr_mem_buffer_length(XrValue value);
 
 #endif  // XR_STDLIB_MEM_H

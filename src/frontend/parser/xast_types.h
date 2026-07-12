@@ -18,23 +18,24 @@
 
 // Operator types for operator overloading
 typedef enum {
-    OPTYPE_ADD,           // +
-    OPTYPE_SUB,           // -
-    OPTYPE_MUL,           // *
-    OPTYPE_DIV,           // /
-    OPTYPE_MOD,           // %
-    OPTYPE_BAND,          // & (bitwise and)
-    OPTYPE_BOR,           // | (bitwise or)
-    OPTYPE_BXOR,          // ^ (bitwise xor)
-    OPTYPE_EQ,            // ==
-    OPTYPE_NE,            // !=
-    OPTYPE_LT,            // <
-    OPTYPE_LE,            // <=
-    OPTYPE_GT,            // >
-    OPTYPE_GE,            // >=
-    OPTYPE_UNARY,         // Unary: -, !, ~
-    OPTYPE_SUBSCRIPT,     // Subscript: []
-    OPTYPE_SUBSCRIPT_SET  // Subscript assign: []=
+    OPTYPE_ADD,            // +
+    OPTYPE_SUB,            // -
+    OPTYPE_MUL,            // *
+    OPTYPE_DIV,            // /
+    OPTYPE_MOD,            // %
+    OPTYPE_BAND,           // & (bitwise and)
+    OPTYPE_BOR,            // | (bitwise or)
+    OPTYPE_BXOR,           // ^ (bitwise xor)
+    OPTYPE_EQ,             // ==
+    OPTYPE_NE,             // !=
+    OPTYPE_LT,             // <
+    OPTYPE_LE,             // <=
+    OPTYPE_GT,             // >
+    OPTYPE_GE,             // >=
+    OPTYPE_UNARY,          // Unary: -, !, ~
+    OPTYPE_SUBSCRIPT,      // Subscript: []
+    OPTYPE_SUBSCRIPT_SET,  // Subscript assign: []=
+    OPTYPE_LEN             // named operator len()
 } OperatorType;
 
 // AST node types
@@ -44,7 +45,7 @@ typedef enum {
     AST_LITERAL_FLOAT,   // Float: 3.14
     AST_LITERAL_BIGINT,  // BigInt: 123n
     AST_LITERAL_STRING,  // String: "hello"
-    AST_LITERAL_CHAR,    // Char: 'a'
+    AST_LITERAL_RUNE,    // Char: 'a'
     AST_LITERAL_REGEX,   // Regex: /pattern/flags
     AST_LITERAL_NULL,    // null
     AST_LITERAL_TRUE,    // true
@@ -222,7 +223,7 @@ typedef enum {
     LITERAL_KIND_FLOAT,
     LITERAL_KIND_BIGINT,
     LITERAL_KIND_STRING,
-    LITERAL_KIND_CHAR,
+    LITERAL_KIND_RUNE,
     LITERAL_KIND_REGEX,
     LITERAL_KIND_BOOL,
     LITERAL_KIND_NULL

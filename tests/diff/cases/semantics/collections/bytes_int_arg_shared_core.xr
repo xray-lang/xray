@@ -6,12 +6,12 @@ var dyn: Json = {
     "badCount": null
 }
 
-var bytes = Bytes(8, 1)
-var src = Bytes(8, 2)
+var bytes = Array<byte>(8, 1)
+var src = Array<byte>(8, 2)
 
 fn show_load_u32() {
-    var loadBytes = Bytes(8, 1)
-    var view: ByteSpan = loadBytes[:]
+    var loadBytes = Array<byte>(8, 1)
+    var view: Slice<byte> = loadBytes[:]
     try {
         var value: uint32 = view.load<uint32>(dyn.badOffset, Endian.LE)
         print(int(value))
@@ -22,8 +22,8 @@ fn show_load_u32() {
 }
 
 fn show_load_u64() {
-    var loadBytes = Bytes(8, 1)
-    var view: ByteSpan = loadBytes[:]
+    var loadBytes = Array<byte>(8, 1)
+    var view: Slice<byte> = loadBytes[:]
     try {
         var value: uint64 = view.load<uint64>(dyn.badOffset, Endian.LE)
         print(int(value))

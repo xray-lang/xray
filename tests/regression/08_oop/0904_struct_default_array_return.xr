@@ -38,7 +38,7 @@ fn test_struct_default_array_return() {
 
     // === Struct in Array ===
     var points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
-    assert(points.length == 2)
+    assert(len(points) == 2)
     assert(points[0].x == 1.0)
     assert(points[1].y == 4.0)
 

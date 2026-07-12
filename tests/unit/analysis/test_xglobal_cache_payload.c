@@ -1030,7 +1030,8 @@ TEST(cache_payload_import_set_imports_multiple_payloads) {
     ASSERT_EQ_UINT(report.payloads_imported, 2);
     ASSERT_EQ_UINT(report.modules_remapped, 2);
     ASSERT_EQ_UINT(report.modules_added, 2);
-    ASSERT_EQ_UINT(report.rows_imported, 72);
+    /* The second package reuses the already imported link dependency. */
+    ASSERT_EQ_UINT(report.rows_imported, 71);
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.ndecls, 4);
     ASSERT_EQ_UINT(target.nbodies, 2);

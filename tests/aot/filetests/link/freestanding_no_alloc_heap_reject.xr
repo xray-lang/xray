@@ -4,5 +4,5 @@ import mem
 @c_export("xray_no_alloc_heap_reject")
 fn xray_no_alloc_heap_reject(n: int) -> int {
     var b = mem.alloc(n)
-    return b.length()
+    return len(b)
 }

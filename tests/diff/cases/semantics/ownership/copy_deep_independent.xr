@@ -4,29 +4,29 @@
 var nums: Array<int> = [1, 2, 3]
 var dup = copy(nums)
 nums.push(4)
-print(nums.length)
-print(dup.length)
+print(len(nums))
+print(len(dup))
 print(dup[0])
 
 var m: Map<string, int> = #{}
 m.set("a", 1)
 var mcopy = copy(m)
 m.set("b", 2)
-print(m.length)
-print(mcopy.length)
+print(len(m))
+print(len(mcopy))
 
 shared ro = copy(nums)
 nums.push(5)
-print(nums.length)
-print(ro.length)
+print(len(nums))
+print(len(ro))
 
 var grid: Array<Array<int>> = [[1, 2], [3, 4]]
 var gcopy = copy(grid)
 grid[0].push(99)
-print(grid[0].length)
-print(gcopy[0].length)
+print(len(grid[0]))
+print(len(gcopy[0]))
 
 var window = copy(grid[0:1])
 grid[0].push(100)
-print(grid[0].length)
-print(window[0].length)
+print(len(grid[0]))
+print(len(window[0]))

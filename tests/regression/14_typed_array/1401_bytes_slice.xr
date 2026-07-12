@@ -1,25 +1,25 @@
-/* Bytes slice tests: Bytes is Array<uint8>, slicing uses standard array slice */
+/* Array<byte> slice tests: Array<byte> is Array<byte>, slicing uses standard array slice */
 
 @test
 fn test_bytes_slice() {
 
     // ========== Basic slice ==========
-    var bytes = Bytes(5)
+    var bytes = Array<byte>(5)
     bytes[0] = 10
     bytes[1] = 20
     bytes[2] = 30
     bytes[3] = 40
     bytes[4] = 50
-    print(bytes.length)  // 5
+    print(len(bytes))  // 5
 
-    var s1: ByteSpan = bytes[1:4]
-    print(s1.length)  // 3
+    var s1: Slice<byte> = bytes[1:4]
+    print(len(s1))  // 3
     print(s1[0])      // 20
     print(s1[1])      // 30
     print(s1[2])      // 40
 
     // ========== Slice boundaries ==========
-    var b = Bytes(5)
+    var b = Array<byte>(5)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -27,24 +27,24 @@ fn test_bytes_slice() {
     b[4] = 5
 
     // Omit start
-    var s3: ByteSpan = b[:3]
-    print(s3.length)  // 3
+    var s3: Slice<byte> = b[:3]
+    print(len(s3))  // 3
 
     // Omit end
-    var s4: ByteSpan = b[2:]
-    print(s4.length)  // 3
+    var s4: Slice<byte> = b[2:]
+    print(len(s4))  // 3
 
     // Full slice
-    var s5: ByteSpan = b[:]
-    print(s5.length)  // 5
+    var s5: Slice<byte> = b[:]
+    print(len(s5))  // 5
 
     // Empty slice
-    var s6: ByteSpan = b[2:2]
-    print(s6.length)  // 0
+    var s6: Slice<byte> = b[2:2]
+    print(len(s6))  // 0
 
     // Negative bounds
-    var s7: ByteSpan = b[-4:-1]
-    print(s7.length)  // 3
+    var s7: Slice<byte> = b[-4:-1]
+    print(len(s7))  // 3
     print(s7[0])      // 2
     print(s7[2])      // 4
 
@@ -52,7 +52,7 @@ fn test_bytes_slice() {
     s7[1] = 99
     print(b[2])       // 99
 
-    print("Bytes slice tests passed!")
+    print("Array<byte> slice tests passed!")
 
     // expect: 5
     // expect: 3
@@ -67,5 +67,5 @@ fn test_bytes_slice() {
     // expect: 2
     // expect: 4
     // expect: 99
-    // expect: Bytes slice tests passed!
+    // expect: Array<byte> slice tests passed!
 }

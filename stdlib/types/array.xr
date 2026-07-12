@@ -2,10 +2,7 @@
 
 @native
 class Array<T> {
-    length: int
-    size: int
     capacity: int
-    isEmpty: bool
     push(value: T)
     // @lowered
     get(index: int) -> T
@@ -23,7 +20,7 @@ class Array<T> {
     resize(length: int, fill: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
     indexOf(value: T) -> int
-    includes(value: T) -> bool
+    contains(value: T) -> bool
     join(separator?: string) -> string
     reverse() -> Array<T>
     sort(compareFn?: (a: T, b: T) -> int) -> Array<T>
@@ -36,8 +33,8 @@ class Array<T> {
     every(fn: (item: T) -> bool) -> bool
     some(fn: (item: T) -> bool) -> bool
     fill(value: T, start?: int, end?: int) -> Array<T>
-    // Bytes (Array<uint8>) decodes as UTF-8 text — round-trips with
-    // string.toBytes(). Other element types render the "[a, b]" form.
+    // All arrays, including Array<byte>, render the "[a, b]" container form.
+    // Decode UTF-8 byte arrays explicitly with string.fromUtf8().
     toString() -> string
     // Iteration protocol — used by for-in lowering. Users can also
     // call them directly; iterator()/next() yields elements, while

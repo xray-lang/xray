@@ -1,6 +1,6 @@
 fn launch(data: Array<int>) -> int {
     var task = go {
-        return data.length
+        return len(data)
     }
     return await task
 }

@@ -95,7 +95,7 @@ fn test_struct_basic() {
 
     // === Struct typeof ===
     var p2 = Point()
-    assert(typename(p2) == "Point")
+    assert(typeName(p2) == "Point")
 
     // === Multiple struct instances ===
     var points: Array<Point> = []
@@ -105,7 +105,7 @@ fn test_struct_basic() {
         pt.y = float(i * 2)
         points.push(pt)
     }
-    assert(points.length == 5)
+    assert(len(points) == 5)
     assert(points[0].x == 0.0)
     assert(points[4].x == 4.0)
     assert(points[4].y == 8.0)

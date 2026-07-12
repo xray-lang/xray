@@ -716,9 +716,8 @@ TEST(mark_one_shot_await_all_keeps_visible_array) {
     await->args[0] = arr;
     await->aux_int |= XI_AWAIT_AUX_ALL;
     await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-    XiValue *len = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    XiValue *len = xi_value_new(f, blk, XI_LEN, &stub_int, 1);
     len->args[0] = arr;
-    len->aux = (void *) "length";
 
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
@@ -751,9 +750,8 @@ TEST(mark_one_shot_sequential_await_fresh_cleared_task_array) {
     push->aux = (void *) "push";
     push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
 
-    XiValue *length = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    XiValue *length = xi_value_new(f, blk, XI_LEN, &stub_int, 1);
     length->args[0] = arr;
-    length->aux = (void *) "length";
     XiValue *idx = xi_const_int(f, blk, 0, &stub_int);
     XiValue *get = xi_value_new(f, blk, XI_INDEX_GET, &stub_task, 2);
     get->args[0] = arr;
@@ -803,9 +801,8 @@ TEST(mark_one_shot_sequential_await_counted_task_array_loop) {
     xi_block_set_jump(entry, header);
     xi_block_set_jump(latch, header);
     XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
-    XiValue *length = xi_value_new(f, header, XI_LOAD_FIELD, &stub_int, 1);
+    XiValue *length = xi_value_new(f, header, XI_LEN, &stub_int, 1);
     length->args[0] = arr;
-    length->aux = (void *) "length";
     XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, length);
     xi_block_set_if(header, cond, body, exit_blk);
 
@@ -866,9 +863,8 @@ TEST(mark_one_shot_sequential_await_rejects_repeated_constant_index_loop) {
     xi_block_set_jump(entry, header);
     xi_block_set_jump(latch, header);
     XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
-    XiValue *length = xi_value_new(f, header, XI_LOAD_FIELD, &stub_int, 1);
+    XiValue *length = xi_value_new(f, header, XI_LEN, &stub_int, 1);
     length->args[0] = arr;
-    length->aux = (void *) "length";
     XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, length);
     xi_block_set_if(header, cond, body, exit_blk);
 
@@ -916,9 +912,8 @@ TEST(mark_one_shot_sequential_await_skips_persistent_task_array) {
     push->aux = (void *) "push";
     push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
 
-    XiValue *length = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    XiValue *length = xi_value_new(f, blk, XI_LEN, &stub_int, 1);
     length->args[0] = arr;
-    length->aux = (void *) "length";
     XiValue *idx = xi_const_int(f, blk, 0, &stub_int);
     XiValue *get = xi_value_new(f, blk, XI_INDEX_GET, &stub_task, 2);
     get->args[0] = arr;

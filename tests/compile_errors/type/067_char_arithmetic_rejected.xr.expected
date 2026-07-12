@@ -1,1 +1,1 @@
-operator '+' is not defined for 'char' and 'int'
+operator '+' is not defined for 'rune' and 'int'

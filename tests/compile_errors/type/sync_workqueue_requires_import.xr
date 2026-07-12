@@ -1,2 +1,2 @@
 shared queue: WorkQueue<int> = WorkQueue<int>(2, 1)
-print(queue.length)
+print(len(queue))

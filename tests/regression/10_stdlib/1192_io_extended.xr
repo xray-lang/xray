@@ -37,9 +37,9 @@ fn test_directory_ops() {
     assert(io.isDir(nested))
     io.writeFile(tmpDir + "/file1.txt", "file1")
     var entries = io.readDir(tmpDir)
-    assert(entries.length >= 1)
+    assert(len(entries) >= 1)
     var allFiles = io.readDirRecursive(tmpDir)
-    assert(allFiles.length >= 1)
+    assert(len(allFiles) >= 1)
     io.removeAll(tmpDir)
     assert(!io.exists(tmpDir))
 }

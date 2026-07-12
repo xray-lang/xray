@@ -67,7 +67,7 @@ static bool is_simple_expr(const AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:
@@ -84,7 +84,7 @@ static bool canon_type_is_eager_scalar(const XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_NULL:
             return true;
         default:
@@ -141,7 +141,7 @@ static bool canon_expr_is_eager_value_safe(XrCanonCtx *ctx, const AstNode *node,
     switch (node->type) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
@@ -940,7 +940,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:

@@ -74,11 +74,11 @@ fn test_optional_chain_basic() {
 @test
 fn test_optional_chain_method() {
     var arr: Array<int>? = null
-    var len = arr?.length
-    assert_eq(len, null)
+    var count = arr == null ? null : len(arr!)
+    assert_eq(count, null)
     arr = [1, 2, 3]
-    len = arr?.length
-    assert_eq(len, 3)
+    count = arr == null ? null : len(arr!)
+    assert_eq(count, 3)
 }
 
 // ===== Function with Nullable Parameters =====
@@ -97,7 +97,7 @@ fn test_nullable_param() {
 @test
 fn test_nullable_return() {
     fn findIndex(arr: Array<int>, target: int) -> int? {
-        for (var i = 0; i < arr.length; i++) {
+        for (var i = 0; i < len(arr); i++) {
             if (arr[i] == target) {
                 return i
             }
@@ -146,11 +146,11 @@ fn test_nullable_presence_string() {
     }
     var empty: string? = ""
     if (empty) {
-        assert_eq(empty.length, 0)
+        assert_eq(len(empty), 0)
     }
     var hello: string? = "hello"
     if (hello) {
-        assert_eq(hello.length, 5)
+        assert_eq(len(hello), 5)
     }
 }
 

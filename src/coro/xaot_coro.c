@@ -326,8 +326,13 @@ static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
         return false;
     XrAotRuntime *aot_runtime = ctx && ctx->runtime ? ctx->runtime : xr_aot_runtime_current();
     XrRuntime *scheduler = aot_runtime ? xr_aot_runtime_scheduler(aot_runtime) : NULL;
-    if (!aot_runtime || !scheduler || scheduler->worker_count <= 1)
-        return false;
+    memset(batch->reduce_valid, 0, sizeof(batch->reduce_valid));
+    atomic_store_explicit(&batch->reduce_failed, false, memory_order_relaxed);
+    if (!aot_runtime || !scheduler || scheduler->worker_count <= 1) {
+        for (int lane = 0; lane < batch->participants; lane++)
+            xr_parallel_scheduler_run_lane(batch, lane);
+        return true;
+    }
     int runtime_cap = xr_parallel_runtime_worker_cap(scheduler, XR_PARALLEL_MAX_WORKERS);
     if (batch->participants > runtime_cap)
         batch->participants = runtime_cap;
@@ -336,9 +341,6 @@ static bool xr_parallel_run_scheduler_batch(const XrAotContext *ctx,
 
     int background_lanes = (int) batch->participants - 1;
     xr_parallel_join_init(&batch->join, background_lanes);
-    memset(batch->reduce_valid, 0, sizeof(batch->reduce_valid));
-    atomic_store_explicit(&batch->reduce_failed, false, memory_order_relaxed);
-
     XrCoroutine *coros[XR_PARALLEL_MAX_WORKERS];
     memset(coros, 0, sizeof(coros));
 
@@ -408,9 +410,15 @@ static int64_t xr_parallel_resolve_workers(const XrAotContext *ctx, int64_t requ
 static int xr_parallel_resolve_participants(const XrAotContext *ctx, int64_t item_count,
                                             int64_t workers) {
     XrRuntime *scheduler = xr_parallel_scheduler_from_context(ctx);
-    if (!scheduler)
-        return -1;
-    return xr_parallel_resolve_lane_count(scheduler, item_count, workers, XR_PARALLEL_MAX_WORKERS);
+    if (scheduler)
+        return xr_parallel_resolve_lane_count(scheduler, item_count, workers,
+                                              XR_PARALLEL_MAX_WORKERS);
+    int64_t lanes = workers;
+    if (lanes > item_count)
+        lanes = item_count;
+    if (lanes > XR_PARALLEL_MAX_WORKERS)
+        lanes = XR_PARALLEL_MAX_WORKERS;
+    return lanes > 1 ? (int) lanes : 1;
 }
 
 bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end, int64_t workers,
@@ -2315,14 +2323,14 @@ static bool aot_collect_task_results_into_array(const XrAotContext *ctx, XrArray
                 tasks->length = 0;
             return true;
         }
-        case XR_ELEM_CHAR: {
+        case XR_ELEM_RUNE: {
             uint32_t *dst = (uint32_t *) results->data;
             for (int j = 0; j < count; j++) {
                 XrValue cv = aot_collect_task_input_value(tasks, task_values, j);
                 XrValue value = aot_collect_one_task_result(
                     ctx, cv, tasks_value, tasks, j, aggregate_one_shot, clear_each_task_slot);
-                if (XR_IS_CHAR(value))
-                    dst[j] = XR_TO_CHAR(value);
+                if (XR_IS_RUNE(value))
+                    dst[j] = XR_TO_RUNE(value);
             }
             if (truncate_source_tasks)
                 tasks->length = 0;
@@ -4172,7 +4180,7 @@ void xr_aot_result_group_close_void_sync(XrValue group_value) {
     xr_result_group_close(xr_value_to_result_group(group_value));
 }
 
-XrValue xr_aot_result_group_length(const XrAotContext *ctx, XrValue group_value) {
+XrValue xr_aot_result_group_ready_count(const XrAotContext *ctx, XrValue group_value) {
     (void) ctx;
     if (!xr_value_is_result_group(group_value))
         return XR_FROM_INT(0);

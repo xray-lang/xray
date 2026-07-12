@@ -8,7 +8,7 @@ fn build_data(n: int) -> Array<int> {
 
 fn sum_bounds(data: Array<int>, rounds: int) -> int {
     var total = 0
-    var n = data.length
+    var n = len(data)
     for (var r = 0; r < rounds; r++) {
         for (var i = 0; i < n; i++) {
             total = total + data[i]

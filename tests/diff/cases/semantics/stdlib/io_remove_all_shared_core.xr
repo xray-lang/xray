@@ -1,7 +1,7 @@
 import io
 
 var root = io.tempDir() ?? ""
-print(root.length > 0)
+print(len(root) > 0)
 
 var nested = root + "/x/y"
 var file = nested + "/a.txt"

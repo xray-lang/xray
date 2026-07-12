@@ -1,11 +1,11 @@
 @c_export("xray_bytes_capacity_reject")
 fn xray_bytes_capacity_reject() -> int {
-    var b = Bytes.withCapacity(8)
-    return b.length
+    var b: Array<byte> = Array.withCapacity(8)
+    return len(b)
 }
 
 @c_export("xray_bytes_from_string_reject")
 fn xray_bytes_from_string_reject() -> int {
-    var b = Bytes.fromString("abc")
-    return b.length
+    var b = Array<byte>("abc")
+    return len(b)
 }

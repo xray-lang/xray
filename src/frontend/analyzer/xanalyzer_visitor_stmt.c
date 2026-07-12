@@ -39,27 +39,6 @@ static bool xa_var_has_static_data_attr(const VarDeclNode *var) {
            xa_var_attr(var, ATTR_USED);
 }
 
-static bool xa_type_supports_const_static_data_object(const XrType *type) {
-    if (!type)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
-        case XR_KIND_STRING:
-        case XR_KIND_NULL:
-        case XR_KIND_FIXED_ARRAY:
-        case XR_KIND_TUPLE:
-            return true;
-        case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
-            return xa_type_has_fixed_layout_data_object(type);
-        default:
-            return false;
-    }
-}
-
 static bool xa_type_supports_mutable_static_data_object(const XrType *type) {
     if (!type)
         return false;
@@ -70,7 +49,7 @@ static bool xa_type_supports_mutable_static_data_object(const XrType *type) {
             case XR_KIND_FLOAT:
                 return type->native_width != XR_NATIVE_F32;
             case XR_KIND_BOOL:
-            case XR_KIND_CHAR:
+            case XR_KIND_RUNE:
                 return true;
             default:
                 break;
@@ -1555,7 +1534,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
@@ -4352,7 +4331,7 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
@@ -5593,7 +5572,7 @@ static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *c
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
         case XR_KIND_STRING:
         case XR_KIND_NULL:
             return true;
@@ -6664,7 +6643,7 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
     XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "cannot %s; Span is a borrowed view, keep it local or copy the owner data into an "
+             "cannot %s; Slice is a borrowed view, keep it local or copy the owner data into an "
              "Array",
              escape_context ? escape_context : "var Span view escape");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,

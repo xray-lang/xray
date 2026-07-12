@@ -1,3 +1,5 @@
+import text
+
 // 0710_template_string.xr
 // 作者：xingleixu@gmail.com
 // 测试：模板字符串
@@ -31,7 +33,7 @@ fn test_expression_interpolation() {
 @test
 fn test_method_call_interpolation() {
     var name = "alice"
-    var s = "Hello, ${name.toUpperCase()}!"
+    var s = "Hello, ${text.upper(name)}!"
     assert_eq(s, "Hello, ALICE!")
 }
 
@@ -52,7 +54,7 @@ fn test_multi_variable() {
 fn test_nested_quotes() {
     var name = "test"
     var s = "He said \"Hello, ${name}\""
-    assert_eq(s.includes("Hello"), true)
+    assert_eq(s.contains("Hello"), true)
 }
 
 @test
@@ -126,5 +128,5 @@ fn test_multiline() {
     var name = "Alice"
     var s = "Hello,
 ${name}!"
-    assert_eq(s.includes("Alice"), true)
+    assert_eq(s.contains("Alice"), true)
 }

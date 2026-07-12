@@ -52,16 +52,16 @@ fn test_timing_safe_equal_hmac_mismatch() {
 
 @test
 fn test_all_hash_lengths() {
-    assert_eq(crypto.md5("x").length, 32)
-    assert_eq(crypto.sha1("x").length, 40)
-    assert_eq(crypto.sha256("x").length, 64)
-    assert_eq(crypto.sha512("x").length, 128)
+    assert_eq(len(crypto.md5("x")), 32)
+    assert_eq(len(crypto.sha1("x")), 40)
+    assert_eq(len(crypto.sha256("x")), 64)
+    assert_eq(len(crypto.sha512("x")), 128)
 }
 
 @test
 fn test_all_hmac_lengths() {
-    assert_eq(crypto.hmac("md5", "k", "d")!.length, 32)
-    assert_eq(crypto.hmac("sha1", "k", "d")!.length, 40)
-    assert_eq(crypto.hmac("sha256", "k", "d")!.length, 64)
-    assert_eq(crypto.hmac("sha512", "k", "d")!.length, 128)
+    assert_eq(len(crypto.hmac("md5", "k", "d")!), 32)
+    assert_eq(len(crypto.hmac("sha1", "k", "d")!), 40)
+    assert_eq(len(crypto.hmac("sha256", "k", "d")!), 64)
+    assert_eq(len(crypto.hmac("sha512", "k", "d")!), 128)
 }

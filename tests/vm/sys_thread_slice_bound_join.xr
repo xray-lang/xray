@@ -10,5 +10,5 @@ var t = sys.Thread.spawn(fn() -> int {
 })
 
 var ys: Array<int> = copy(xs[0:t.join()])
-print(ys.length)
+print(len(ys))
 print(ys[1])

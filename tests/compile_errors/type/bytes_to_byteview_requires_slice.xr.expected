@@ -1,1 +1,1 @@
-Type 'Array<uint8>' is not assignable to type 'ByteView'
+Type 'Array<byte>' is not assignable to type 'Slice<byte>'

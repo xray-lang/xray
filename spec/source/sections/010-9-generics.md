@@ -136,7 +136,7 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 **性能影响**：
 - 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
 - class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
-- 内置特化容器（`Array<int>`、`Bytes`）进一步避免装箱开销。
+- 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
 **当前缓项**：
@@ -185,7 +185,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 
 ### 9.7 泛型与类型身份
 
-由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typename` 的冷路径名字表提供：
+由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typeName` 的冷路径名字表提供：
 
 ```xray @id=generics-type-identity
 class Container<T> {
@@ -193,7 +193,7 @@ class Container<T> {
 }
 var c = Container<int>()
 print(c is Container<int>)     // true
-print(typename(c))             // "Container<int>" when type names are enabled
+print(typeName(c))             // "Container<int>" when type names are enabled
 ```
 
 结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
@@ -336,7 +336,7 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 **Performance impact**:
 - Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
 - Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful debug type names, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
-- Built-in specialized containers (`Array<int>`, `Bytes`) further avoid boxing overhead.
+- Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
 **Deferred features**:
@@ -385,7 +385,7 @@ Explicit variance annotations (`out T` / `in T`) are not currently supported. De
 
 ### 9.7 Generics and Type Identity
 
-Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typename`'s cold-path name table:
+Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typeName`'s cold-path name table:
 
 ```xray @id=generics-type-identity
 class Container<T> {
@@ -393,7 +393,7 @@ class Container<T> {
 }
 var c = Container<int>()
 print(c is Container<int>)     // true
-print(typename(c))             // "Container<int>" when type names are enabled
+print(typeName(c))             // "Container<int>" when type names are enabled
 ```
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.

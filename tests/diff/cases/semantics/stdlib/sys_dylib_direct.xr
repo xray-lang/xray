@@ -18,7 +18,7 @@ if (os.platform == "darwin") {
 }
 
 var lib: Dylib? = null
-if (path.length > 0) {
+if (len(path) > 0) {
     lib = sys.Dylib.open(path)
 }
 print(lib != null)
@@ -26,13 +26,13 @@ if (lib != null) {
     var sym = lib!.symbol(symName)
     print(sym != null)
     if (sym != null) {
-        var symPtr: RawPtr<uint8> = sym!
+        var symPtr: RawPtr<byte> = sym!
         print(mem.addressOf(symPtr) != 0)
     }
 
     var missingSym = lib!.symbol("__xray_missing_symbol_for_dylib_test__")
     print(missingSym == null)
-    print(sys.Dylib.lastError().length > 0)
+    print(len(sys.Dylib.lastError()) > 0)
 
     print(lib!.close())
     print(lib!.close())
@@ -41,4 +41,4 @@ if (lib != null) {
 
 var missingLib = sys.Dylib.open("__xray_missing_library_for_dylib_test__")
 print(missingLib == null)
-print(sys.Dylib.lastError().length > 0)
+print(len(sys.Dylib.lastError()) > 0)

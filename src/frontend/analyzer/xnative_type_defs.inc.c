@@ -2,25 +2,24 @@
 
 static const char xr_native_def_array[] =
     "// Built-in Array<T> type — implementation in "
-    "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    length: int\n    size: "
-    "int\n    capacity: int\n    isEmpty: bool\n    push(value: T)\n    // @lowered\n    "
-    "get(index: int) -> T\n    // @lowered\n    set(index: int, value: T)\n    // @lowered\n    "
-    "ptr() -> RawPtr<T>\n    // @lowered\n    mutPtr() -> RawMut<T>\n    pop() -> T?\n    shift() "
-    "-> T?\n    unshift(value: T)\n    clear()\n    reserve(capacity: int) -> Array<T>\n    "
-    "resize(length: int, fill: T) -> Array<T>\n    concat(...arrays: Array<T>) -> Array<T>\n    "
-    "indexOf(value: T) -> int\n    includes(value: T) -> bool\n    join(separator?: string) -> "
-    "string\n    reverse() -> Array<T>\n    sort(compareFn?: (a: T, b: T) -> int) -> Array<T>\n    "
-    "map(fn: (item: T, index: int) -> U) -> Array<U>\n    filter(fn: (item: T, index: int) -> "
-    "bool) -> Array<T>\n    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U\n    forEach(fn: "
-    "(item: T, index: int) -> ())\n    find(fn: (item: T) -> bool) -> T?\n    findIndex(fn: (item: "
-    "T) -> bool) -> int\n    every(fn: (item: T) -> bool) -> bool\n    some(fn: (item: T) -> bool) "
-    "-> bool\n    fill(value: T, start?: int, end?: int) -> Array<T>\n    // Bytes (Array<uint8>) "
-    "decodes as UTF-8 text — round-trips with\n    // string.toBytes(). Other element types render "
-    "the \"[a, b]\" form.\n    toString() -> string\n    // Iteration protocol — used by for-in "
-    "lowering. Users can also\n    // call them directly; iterator()/next() yields elements, "
-    "while\n    // entriesIterator()/next() yields (index, element) tuples.\n    iterator() -> "
-    "Iterator<T>\n    entriesIterator() -> Iterator<(int, T)>\n    entries() -> Array<(int, "
-    "T)>\n}\n";
+    "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    capacity: int\n    "
+    "push(value: T)\n    // @lowered\n    get(index: int) -> T\n    // @lowered\n    set(index: "
+    "int, value: T)\n    // @lowered\n    ptr() -> RawPtr<T>\n    // @lowered\n    mutPtr() -> "
+    "RawMut<T>\n    pop() -> T?\n    shift() -> T?\n    unshift(value: T)\n    clear()\n    "
+    "reserve(capacity: int) -> Array<T>\n    resize(length: int, fill: T) -> Array<T>\n    "
+    "concat(...arrays: Array<T>) -> Array<T>\n    indexOf(value: T) -> int\n    contains(value: T) "
+    "-> bool\n    join(separator?: string) -> string\n    reverse() -> Array<T>\n    "
+    "sort(compareFn?: (a: T, b: T) -> int) -> Array<T>\n    map(fn: (item: T, index: int) -> U) -> "
+    "Array<U>\n    filter(fn: (item: T, index: int) -> bool) -> Array<T>\n    reduce(fn: (acc: U, "
+    "item: T) -> U, initial: U) -> U\n    forEach(fn: (item: T, index: int) -> ())\n    find(fn: "
+    "(item: T) -> bool) -> T?\n    findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: "
+    "T) -> bool) -> bool\n    some(fn: (item: T) -> bool) -> bool\n    fill(value: T, start?: int, "
+    "end?: int) -> Array<T>\n    // All arrays, including Array<byte>, render the \"[a, b]\" "
+    "container form.\n    // Decode UTF-8 byte arrays explicitly with string.fromUtf8().\n    "
+    "toString() -> string\n    // Iteration protocol — used by for-in lowering. Users can also\n   "
+    " // call them directly; iterator()/next() yields elements, while\n    // "
+    "entriesIterator()/next() yields (index, element) tuples.\n    iterator() -> Iterator<T>\n    "
+    "entriesIterator() -> Iterator<(int, T)>\n    entries() -> Array<(int, T)>\n}\n";
 
 static const char xr_native_def_atomic[] =
     "// Built-in Atomic<T> type; implemented by the runtime.\n\n@native\nclass Atomic<T> {\n    "
@@ -44,10 +43,10 @@ static const char xr_native_def_bool[] =
 static const char xr_native_def_channel[] =
     "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
     "Recv<T> {\n    Value(T)\n    Empty\n    Timeout\n    Closed\n}\n\nenum SendResult {\n    "
-    "Sent\n    Full\n    Timeout\n    Closed\n}\n\n@native\nclass Channel<T> {\n    length: int\n  "
-    "  capacity: int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n    "
-    "recvOr(default: T) -> T\n\n    trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n  "
-    "  sendTimeout(value: T, timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> "
+    "Sent\n    Full\n    Timeout\n    Closed\n}\n\n@native\nclass Channel<T> {\n    capacity: "
+    "int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n    recvOr(default: T) "
+    "-> T\n\n    trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n    "
+    "sendTimeout(value: T, timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> "
     "Recv<T>\n\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] =
@@ -96,24 +95,23 @@ static const char xr_native_def_json[] =
     "encode(value: unknown) -> Json\n    static isValid(text: string, strict?: bool) -> bool\n    "
     "static tryParse(text: string) -> Json\n    static keys(obj: Json) -> Array<string>\n    "
     "static values(obj: Json) -> Array<Json>\n    static entries(obj: Json) -> Array<(string, "
-    "Json)>\n    static has(obj: Json, key: string) -> bool\n    static get(obj: Json, key: "
-    "string, default?: unknown) -> Json\n    static size(obj: Json) -> int\n    static "
-    "isEmpty(obj: Json) -> bool\n\n    keys() -> Array<string>\n    values() -> Array<Json>\n    "
-    "entries() -> Array<(string, Json)>\n    // Iteration protocol — iterator() yields each field "
-    "name (used by\n    // single-variable `for (k in jsonObj)`); entriesIterator() yields\n    // "
-    "(fieldName, value) tuples (used by `for (k, v in jsonObj)`).\n    iterator() -> "
-    "Iterator<string>\n    entriesIterator() -> Iterator<(string, Json)>\n    has(key: string) -> "
-    "bool\n    toString() -> string\n}\n";
+    "Json)>\n    static containsKey(obj: Json, key: string) -> bool\n    static get(obj: Json, "
+    "key: string, default?: unknown) -> Json\n\n    keys() -> Array<string>\n    values() -> "
+    "Array<Json>\n    entries() -> Array<(string, Json)>\n    // Iteration protocol — iterator() "
+    "yields each field name (used by\n    // single-variable `for (k in jsonObj)`); "
+    "entriesIterator() yields\n    // (fieldName, value) tuples (used by `for (k, v in "
+    "jsonObj)`).\n    iterator() -> Iterator<string>\n    entriesIterator() -> Iterator<(string, "
+    "Json)>\n    toString() -> string\n}\n";
 
 static const char xr_native_def_map[] =
     "// Built-in Map<K, V> type — implementation in "
-    "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K: Hashable, V> {\n    length: int\n  "
-    "  size: int\n    get(key: K) -> V?\n    set(key: K, value: V)\n    has(key: K) -> bool\n    "
-    "delete(key: K) -> bool\n    clear()\n    keys() -> Array<K>\n    values() -> Array<V>\n    "
-    "entries() -> Array<(K, V)>\n    forEach(fn: (key: K, value: V) -> ())\n    // Iteration "
-    "protocol — iterator() yields each key K (used by\n    // single-variable `for (k in m)`); "
-    "entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n    "
-    "iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n}\n";
+    "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K: Hashable, V> {\n    get(key: K) -> "
+    "V?\n    set(key: K, value: V)\n    containsKey(key: K) -> bool\n    containsValue(value: V) "
+    "-> bool\n    delete(key: K) -> bool\n    clear()\n    keys() -> Array<K>\n    values() -> "
+    "Array<V>\n    entries() -> Array<(K, V)>\n    forEach(fn: (key: K, value: V) -> ())\n    // "
+    "Iteration protocol — iterator() yields each key K (used by\n    // single-variable `for (k in "
+    "m)`); entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n "
+    "   iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n}\n";
 
 static const char xr_native_def_panic_info[] =
     "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs "
@@ -138,10 +136,16 @@ static const char xr_native_def_regex[] =
 
 static const char xr_native_def_resultgroup[] =
     "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "
-    "integer associative reduction.\n\n@native\nclass ResultGroup {\n    length: int\n    "
+    "integer associative reduction.\n\n@native\nclass ResultGroup {\n    readyCount: int\n    "
     "pendingCount: int\n    batchSize: int\n    isClosed: bool\n    add(value: int) -> bool\n    "
     "flush()\n    reset(count: int) -> bool\n    recv(): int?\n    tryRecv(): (int?, bool)\n    "
     "close()\n}\n";
+
+static const char xr_native_def_rune[] =
+    "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar "
+    "value.\n\n@native\nclass rune {\n    toUInt32() -> uint32\n    toString() -> string\n    "
+    "isLetter() -> bool\n    isNumber() -> bool\n    isAlphanumeric() -> bool\n    isWhitespace() "
+    "-> bool\n}\n";
 
 static const char xr_native_def_semaphore[] =
     "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "
@@ -150,10 +154,10 @@ static const char xr_native_def_semaphore[] =
 
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
-    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    length: int\n    "
-    "size: int\n    add(value: T)\n    has(value: T) -> bool\n    delete(value: T) -> bool\n    "
-    "clear()\n    values() -> Array<T>\n    forEach(fn: (value: T) -> ())\n    // Iteration "
-    "protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n}\n";
+    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    add(value: T)\n   "
+    " contains(value: T) -> bool\n    delete(value: T) -> bool\n    clear()\n    values() -> "
+    "Array<T>\n    forEach(fn: (value: T) -> ())\n    // Iteration protocol — yields each element "
+    "T (used by for-in).\n    iterator() -> Iterator<T>\n}\n";
 
 static const char xr_native_def_string[] =
     "// Built-in string type — implementation in src/runtime/object/xstring_methods.c\n//\n// Most "
@@ -162,32 +166,24 @@ static const char xr_native_def_string[] =
     "table to preserve\n// zero-allocation value semantics. Methods also supported by the AOT "
     "dispatch\n// (src/aot/xrt_method.h + xi_method_sym.def) compile to native code, while\n// "
     "VM-only methods fail AOT codegen with an explicit \"unsupported AOT method\"\n// error (never "
-    "a silent null).\n\n@native\nclass string {\n    length: int\n    byteLength: int\n    "
-    "charAt(index: int) -> string\n    codePointAt(index: int) -> int\n    byteAt(index: int) -> "
-    "string?\n    ord() -> int?\n    concat(...strings: string) -> string\n    includes(search: "
-    "string) -> bool\n    indexOf(search: string, start?: int) -> int\n    lastIndexOf(search: "
-    "string) -> int\n    slice(start: int, end?: int) -> string\n    substring(start: int, end?: "
-    "int) -> string\n    isEmpty() -> bool\n    toLowerCase() -> string\n    toUpperCase() -> "
-    "string\n    toInt() -> int?\n    toFloat() -> float?\n    toString() -> string\n    trim() -> "
-    "string\n    trimStart() -> string\n    trimEnd() -> string\n    split(separator: string, "
-    "limit?: int) -> Array<string>\n    replace(search: string, replacement: string) -> string\n   "
-    " replaceAll(search: string, replacement: string) -> string\n    repeat(count: int) -> "
-    "string\n    reverse() -> string\n    startsWith(search: string) -> bool\n    endsWith(search: "
-    "string) -> bool\n    padStart(length: int, pad?: string) -> string\n    padEnd(length: int, "
-    "pad?: string) -> string\n    match(pattern: Regex) -> Array<string>?\n    // Owned UTF-8 byte "
-    "bridge — round-trips with Bytes.toString().\n    toBytes() -> Bytes\n    // Borrowed UTF-8 "
-    "bytes; readonly because strings are immutable.\n    // @lowered\n    bytes() -> ByteSpan\n    "
-    "translate(table: Map<string, string>) -> string\n    // Iteration protocol — iterator() "
-    "yields each character, while\n    // entriesIterator() yields (charIndex, character) tuples. "
-    "Both\n    // are used by for-in lowering and may be called directly.\n    iterator() -> "
-    "Iterator<char>\n    entriesIterator() -> Iterator<(int, char)>\n    entries() -> Array<(int, "
-    "char)>\n}\n";
+    "a silent null).\n\n@native\nclass string {\n    static fromUtf8(bytes: Slice<byte>) -> "
+    "string?\n    static fromUtf8Lossy(bytes: Slice<byte>) -> string\n    static fromRune(value: "
+    "rune) -> string\n    static join(parts: Array<string>, separator?: string) -> string\n    "
+    "contains(search: string) -> bool\n    indexOf(search: string, start?: int) -> int\n    "
+    "lastIndexOf(search: string) -> int\n    slice(start: int, end?: int) -> string\n    "
+    "sliceBytes(start: int, end: int) -> string\n    toString() -> string\n    split(separator: "
+    "string, limit?: int) -> Array<string>\n    replace(search: string, replacement: string) -> "
+    "string\n    replaceAll(search: string, replacement: string) -> string\n    repeat(count: int) "
+    "-> string\n    startsWith(search: string) -> bool\n    endsWith(search: string) -> bool\n    "
+    "// Owned UTF-8 byte bridge.\n    copyBytes() -> Array<byte>\n    // Borrowed UTF-8 bytes; "
+    "readonly because strings are immutable.\n    // @lowered\n    bytes() -> Slice<byte>\n    "
+    "runes() -> Iterator<rune>\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
-    "src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    length: "
-    "int\n    append(value: string | char | int | float | bool | null) -> StringBuilder\n    "
-    "toString() -> string\n    clear() -> StringBuilder\n}\n";
+    "src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    "
+    "append(value: string | rune | int | float | bool | null) -> StringBuilder\n    toString() -> "
+    "string\n    clear() -> StringBuilder\n}\n";
 
 static const char xr_native_def_thread[] =
     "// sys.Thread.spawn is compiler-defined, not a native constructor surface.\n//\n// Task 147 "
@@ -200,10 +196,10 @@ static const char xr_native_def_thread[] =
 
 static const char xr_native_def_workqueue[] =
     "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n "
-    "   length: int\n    shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> "
-    "bool\n    // WorkQueue<int> only: enqueue count consecutive integer jobs and return the "
-    "accepted count.\n    pushRange(start: int, count: int, shardStart?: int) -> int\n    "
-    "pop(workerId?: int): T?\n    tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
+    "   shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> bool\n    // "
+    "WorkQueue<int> only: enqueue count consecutive integer jobs and return the accepted count.\n  "
+    "  pushRange(start: int, count: int, shardStart?: int) -> int\n    pop(workerId?: int): T?\n   "
+    " tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X)                                                                     \
     X("array", xr_native_def_array)                                                                \
@@ -221,6 +217,7 @@ static const char xr_native_def_workqueue[] =
     X("panic_info", xr_native_def_panic_info)                                                      \
     X("regex", xr_native_def_regex)                                                                \
     X("resultgroup", xr_native_def_resultgroup)                                                    \
+    X("rune", xr_native_def_rune)                                                                  \
     X("semaphore", xr_native_def_semaphore)                                                        \
     X("set", xr_native_def_set)                                                                    \
     X("string", xr_native_def_string)                                                              \

@@ -567,7 +567,7 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMR
     l->type_float = xr_type_new_float(isolate);
     l->type_bool = xr_type_new_bool(isolate);
     l->type_string = xr_type_new_string(isolate);
-    l->type_char = xr_type_new_char(isolate);
+    l->type_rune = xr_type_new_rune(isolate);
     l->type_null = xr_type_new_null(isolate);
     l->type_unit = xr_type_new_unit(isolate);
     l->type_any = xr_type_new_unknown(isolate);
@@ -1541,10 +1541,10 @@ static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *typ
             out->type = type ? type : l->type_bool;
             out->bool_value = false;
             return true;
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
             out->kind = XI_CONST_LITERAL_CHAR;
-            out->type = type ? type : l->type_char;
-            out->int_value = (int64_t) expr->as.literal.raw_value.char_val;
+            out->type = type ? type : l->type_rune;
+            out->int_value = (int64_t) expr->as.literal.raw_value.rune_val;
             return true;
         case AST_LITERAL_STRING:
             out->kind = XI_CONST_LITERAL_STRING;
@@ -1764,8 +1764,8 @@ static bool const_literal_from_ct_value(XiLower *l, const XrCtValue *value, stru
             return true;
         case XR_CT_CHAR:
             out->kind = XI_CONST_LITERAL_CHAR;
-            out->type = type ? type : l->type_char;
-            out->int_value = (int64_t) value->as.char_val;
+            out->type = type ? type : l->type_rune;
+            out->int_value = (int64_t) value->as.rune_val;
             return true;
         case XR_CT_STRING:
             if (!value->as.string_val)

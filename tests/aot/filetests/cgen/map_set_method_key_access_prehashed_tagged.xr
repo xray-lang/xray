@@ -1,14 +1,14 @@
 fn methodTagged() -> int {
     var scores: Map<string, int> = #{}
     scores.set("ada", 8)
-    var hasAda = scores.has("ada")
+    var hasAda = scores.containsKey("ada")
     var one = scores.get("ada")
     scores.delete("ada")
     scores.clear()
 
     var seen: Set<string> = #[]
     seen.add("ada")
-    var sawAda = seen.has("ada")
+    var sawAda = seen.contains("ada")
     seen.delete("ada")
     seen.clear()
 

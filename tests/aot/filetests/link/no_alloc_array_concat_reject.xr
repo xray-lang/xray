@@ -1,6 +1,6 @@
 @no_alloc
 fn xray_no_alloc_array_concat_reject(left: Array<int>, right: Array<int>) -> int {
-    return left.concat(right).length
+    return len(left.concat(right))
 }
 
 var xs = Array<int>(0, 0)

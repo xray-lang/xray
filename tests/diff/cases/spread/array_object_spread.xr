@@ -14,11 +14,11 @@ print(tail)
 
 var middle = [...a, 42, ...b]
 print(middle)
-print(middle.length)
+print(len(middle))
 
 var only = [...a]
 print(only)
-print(only.length)
+print(len(only))
 
 var empty: Array<int> = []
 var from_empty = [...empty, ...b]
@@ -35,7 +35,7 @@ print([...s1, "mid", ...s2])
 
 // spread does not consume the source: a is still usable
 print(a)
-print(a.length)
+print(len(a))
 
 // ---- Object spread ----
 var base = { x: 1, y: 2 }

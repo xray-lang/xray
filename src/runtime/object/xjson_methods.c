@@ -129,22 +129,6 @@ static XrValue xr_json_method_entries(XrVMRuntime *iso, XrValue self, XrValue *a
     return xr_value_from_array(result);
 }
 
-/* has(key: string) → bool: check if field exists. */
-static XrValue xr_json_method_has(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
-        return xr_bool(false);
-
-    XrJson *json = json_self(self);
-    XrString *key_str = XR_TO_STRING(args[0]);
-    const char *key = XR_STRING_CHARS(key_str);
-
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(iso);
-    SymbolId sym = xr_symbol_lookup_in_table(symtab, key);
-    if (sym == SYMBOL_INVALID)
-        return xr_bool(false);
-    return xr_bool(xr_json_has_field(iso, json, sym));
-}
-
 /* Type-checking instance methods: isNull(), isInt(), isFloat(), isString(), isBool(),
  * isArray(), isObject().
  *
@@ -222,7 +206,6 @@ void xr_json_register_instance_methods(XrVMRuntime *isolate) {
     xr_class_builder_add_method(b, "keys", xr_json_method_keys, 0, 0);
     xr_class_builder_add_method(b, "values", xr_json_method_values, 0, 0);
     xr_class_builder_add_method(b, "entries", xr_json_method_entries, 0, 0);
-    xr_class_builder_add_method(b, "has", xr_json_method_has, 1, 0);
     xr_class_builder_add_method(b, "isNull", xr_json_method_is_null, 0, 0);
     xr_class_builder_add_method(b, "isInt", xr_json_method_is_int, 0, 0);
     xr_class_builder_add_method(b, "isFloat", xr_json_method_is_float, 0, 0);

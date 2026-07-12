@@ -11,17 +11,17 @@ fn readFull(conn: NetConn, size: int) -> bool {
         if (chunk == null) {
             return false
         }
-        received = received + chunk!.length
+        received = received + len(chunk!)
     }
     return true
 }
 
 fn echoOnce(conn: NetConn, payload: string) -> bool {
     var n = net.write(conn, payload)
-    if (n != payload.length) {
+    if (n != len(payload)) {
         return false
     }
-    return readFull(conn, payload.length)
+    return readFull(conn, len(payload))
 }
 
 fn printResult(name: string, fields: string) {
@@ -80,12 +80,12 @@ fn benchLatency(host: string, port: int, iterations: int) {
     latencies.sort()
     net.close(conn!)
 
-    var p95_idx = (latencies.length * 95) / 100
-    var p99_idx = (latencies.length * 99) / 100
+    var p95_idx = (len(latencies) * 95) / 100
+    var p99_idx = (len(latencies) * 99) / 100
     printResult("tls_latency",
         "iterations=" + string(iterations)
         + " avg=" + string(total / iterations)
-        + " median=" + string(latencies[latencies.length / 2])
+        + " median=" + string(latencies[len(latencies) / 2])
         + " p95=" + string(latencies[p95_idx])
         + " p99=" + string(latencies[p99_idx])
         + " complete=true")
@@ -154,17 +154,17 @@ fn benchLarge(host: string, port: int, sizeMb: int) {
 }
 
 var host = "localhost"
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     host = process.args[0]
 }
 
 var port = 9443
-if (process.args.length > 1) {
+if (len(process.args) > 1) {
     port = int(process.args[1]) ?? 9443
 }
 
 var mode = "all"
-if (process.args.length > 2) {
+if (len(process.args) > 2) {
     mode = process.args[2]
 }
 

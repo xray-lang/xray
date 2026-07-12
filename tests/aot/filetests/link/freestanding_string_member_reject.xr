@@ -1,14 +1,14 @@
 @c_export("xray_string_to_bytes_reject")
 fn xray_string_to_bytes_reject() -> int {
     var s = "abc"
-    var b = s.toBytes()
-    return b.length
+    var b = s.copyBytes()
+    return len(b)
 }
 
-@c_export("xray_string_length_reject")
-fn xray_string_length_reject() -> int {
+@c_export("xray_string_bytes_reject")
+fn xray_string_bytes_reject() -> int {
     var s = "abc"
-    return s.byteLength
+    return len(s.bytes())
 }
 
 @c_export("xray_string_index_reject")

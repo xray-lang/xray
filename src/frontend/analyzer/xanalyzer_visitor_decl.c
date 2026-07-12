@@ -2511,8 +2511,31 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             xa_validate_hashable_contract_for_class(ctx, cls_node, cls_info);
             continue;
         }
-        if (xa_is_builtin_interface_name(iface_name))
+        if (xa_is_builtin_interface_name(iface_name)) {
+            if (strcmp(iface_name, "Lengthable") == 0) {
+                XaSymbol *found = xa_class_info_lookup_member(cls_info, "__operator_len");
+                XaSymbolLinks *found_links =
+                    found ? xa_analyzer_get_links(ctx->analyzer, found) : NULL;
+                XrType *signature = found_links ? found_links->type : NULL;
+                bool valid =
+                    found && found->kind == XA_SYM_METHOD && !found->is_static &&
+                    !found->mutates_receiver && signature && signature->kind == XR_KIND_FUNCTION &&
+                    signature->function.param_count == 0 && signature->function.return_type &&
+                    signature->function.return_type->kind == XR_KIND_INT &&
+                    !signature->function.return_type->is_nullable;
+                if (!valid) {
+                    char msg[320];
+                    snprintf(msg, sizeof(msg),
+                             "Class '%s' implements Lengthable but does not provide a valid "
+                             "non-mutating 'operator len() -> int'",
+                             cls_info->name ? cls_info->name : "?");
+                    XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                }
+            }
             continue;
+        }
 
         XaSymbol *iface_sym = xa_scope_lookup(ctx->analyzer->current_scope, iface_name);
         if (!iface_sym || iface_sym->kind != XA_SYM_CLASS)
@@ -2769,7 +2792,7 @@ skip_interfaces:
                 XrLocation loc = {.file = ctx->file_path, .line = field->line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "cannot store Span view in %s field '%s'; Span is a borrowed view and "
+                         "cannot store Slice view in %s field '%s'; Slice is a borrowed view and "
                          "cannot live in long-lived storage",
                          decl_label ? decl_label : "class", fd->name ? fd->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -3102,6 +3125,18 @@ skip_layout:
             }
             if (!ret_type) {
                 ret_type = xr_type_new_unit(NULL);
+            }
+            if (md->is_operator && md->op_type == OPTYPE_LEN) {
+                bool valid = !md->is_static && md->param_count == 0 && ret_type &&
+                             ret_type->kind == XR_KIND_INT && !ret_type->is_nullable;
+                if (!valid) {
+                    XrLocation loc = {.file = ctx->file_path, .line = method->line};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "operator len must be an instance operator with signature "
+                        "'operator len() -> int'",
+                        &loc);
+                }
             }
             if (!md->return_type && !md->is_constructor && !is_accessor && md->body) {
                 if (xa_body_has_return_expr(md->body)) {

@@ -52,8 +52,8 @@ fn imported_static_strings(i: int) -> int {
 fn imported_static_addr() -> int {
     return mem.addressOf(RawPtr<int>.of(MAGIC)) +
         mem.addressOf(RawPtr<[int; 4]>.of(TABLE)) +
-        mem.addressOf(RawPtr<[uint8; 4]>.of(BYTES)) +
-        mem.addressOf(RawPtr<[[uint8; 4]; 2]>.of(MATRIX)) +
+        mem.addressOf(RawPtr<[byte; 4]>.of(BYTES)) +
+        mem.addressOf(RawPtr<[[byte; 4]; 2]>.of(MATRIX)) +
         mem.addressOf(RawPtr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
         mem.addressOf(RawPtr<string>.of(LABEL)) +
         mem.addressOf(RawPtr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
@@ -62,12 +62,12 @@ fn imported_static_addr() -> int {
         mem.addressOf(RawPtr<[(string, int); 2]>.of(LABELED_ROWS)) +
         mem.addressOf(RawPtr<[Entry; 2]>.of(ENTRIES)) +
         mem.addressOf(RawPtr<I32Bits>.of(BITS)) +
-        mem.addressOf(RawPtr<[uint8; 2]>.of(ADDR_ONLY_BYTES)) +
+        mem.addressOf(RawPtr<[byte; 2]>.of(ADDR_ONLY_BYTES)) +
         mem.addressOf(RawPtr<int?>.of(MAYBE_NONE)) +
         mem.addressOf(RawPtr<PlainHeader>.of(PLAIN_HEADER)) +
         mem.addressOf(RawPtr<(int, int)>.of(PLAIN_PAIR)) +
-        mem.addressOf(RawPtr<[uint8; 2]>.of(PLAIN_BYTES)) +
-        mem.addressOf(RawPtr<[[uint8; 2]; 2]>.of(PLAIN_MATRIX)) +
+        mem.addressOf(RawPtr<[byte; 2]>.of(PLAIN_BYTES)) +
+        mem.addressOf(RawPtr<[[byte; 2]; 2]>.of(PLAIN_MATRIX)) +
         mem.addressOf(RawPtr<[[[int; 2]; 2]; 2]>.of(PLAIN_CUBE)) +
         mem.addressOf(RawPtr<I32Bits>.of(PLAIN_BITS)) +
         mem.addressOf(RawPtr<U32Bytes>.of(PLAIN_WORD)) +

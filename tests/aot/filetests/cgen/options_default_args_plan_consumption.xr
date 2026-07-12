@@ -1,6 +1,6 @@
 fn endpoint(host: string, port: int = 80, tls: bool = false) -> int {
     if (tls) {
-        return port + host.length()
+        return port + len(host)
     }
     return port
 }

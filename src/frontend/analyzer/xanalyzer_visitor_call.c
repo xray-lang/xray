@@ -41,8 +41,8 @@ static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstN
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
         return false;
-    return strcmp(name, "string") == 0 || strcmp(name, "char") == 0 || strcmp(name, "chr") == 0 ||
-           strcmp(name, "typename") == 0 || strcmp(name, "copy") == 0 || strcmp(name, "dump") == 0;
+    return strcmp(name, "string") == 0 || strcmp(name, "rune") == 0 || strcmp(name, "chr") == 0 ||
+           strcmp(name, "typeName") == 0 || strcmp(name, "copy") == 0 || strcmp(name, "dump") == 0;
 }
 
 static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
@@ -255,7 +255,7 @@ static bool xa_rawmut_type_is_mutable_static_object(XrType *type) {
                     (!type->is_nullable &&
                      ((type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_I64) ||
                       (type->kind == XR_KIND_FLOAT && type->native_width != XR_NATIVE_F32) ||
-                      type->kind == XR_KIND_BOOL || type->kind == XR_KIND_CHAR)));
+                      type->kind == XR_KIND_BOOL || type->kind == XR_KIND_RUNE)));
 }
 
 static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *node,
@@ -1594,7 +1594,7 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             return true;
         default:
             return false;
@@ -2887,6 +2887,59 @@ static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNo
  * type parameter inference for generic functions, and callback type inference
  * for container methods (map, filter, reduce, etc.)
  * -------------------------------------------------------------------------- */
+static bool xa_len_type_supported(XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_VIEW:
+        case XR_KIND_SPAN:
+        case XR_KIND_STRING:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_JSON:
+        case XR_KIND_UNKNOWN:
+            return true;
+        case XR_KIND_TYPE_PARAM:
+            /* Unconstrained synthetic parameters are used while higher-order
+             * callback inference is still converging.  Defer their check to
+             * the specialized call site; an explicit non-Lengthable
+             * constraint is rejected immediately. */
+            return !type->type_param.constraint ||
+                   (type->type_param.constraint->kind == XR_KIND_INTERFACE &&
+                    type->type_param.constraint->instance.class_name &&
+                    strcmp(type->type_param.constraint->instance.class_name, "Lengthable") == 0);
+        case XR_KIND_UNION:
+            if (type->union_type.member_count == 0)
+                return false;
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (!xa_len_type_supported(type->union_type.members[i]))
+                    return false;
+            }
+            return true;
+        case XR_KIND_INSTANCE:
+        case XR_KIND_CLASS: {
+            const char *class_name = xr_type_get_class_name(type);
+            XrClassInfo *info = type->instance.class_ref;
+            if (info) {
+                for (int i = 0; i < info->interface_count; i++) {
+                    XrType *iface = info->interface_types ? info->interface_types[i] : NULL;
+                    if (iface && iface->instance.class_name &&
+                        strcmp(iface->instance.class_name, "Lengthable") == 0)
+                        return true;
+                }
+            }
+            return class_name &&
+                   (strcmp(class_name, "StringBuilder") == 0 || strcmp(class_name, "Buffer") == 0 ||
+                    strcmp(class_name, "WorkQueue") == 0 || strcmp(class_name, "Range") == 0);
+        }
+        default:
+            return false;
+    }
+}
+
 XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -2894,6 +2947,41 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     bool optional_function_call = call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
                                   call->callee->as.optional_chain.chain_type == 3;
+
+    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+        strcmp(call->callee->as.variable.name, "len") == 0 && call->arg_count == 1) {
+        XrType *saved_expected = ctx->expected_type;
+        bool saved_view_context = ctx->allow_view_expr_for_copy;
+        if (xa_expr_needs_contextual_view_type(call->arguments[0])) {
+            AstNode *operand = call->arguments[0];
+            while (operand && operand->type == AST_GROUPING)
+                operand = operand->as.grouping;
+            bool is_string_bytes =
+                operand && operand->type == AST_CALL_EXPR && operand->as.call_expr.callee &&
+                operand->as.call_expr.callee->type == AST_MEMBER_ACCESS &&
+                operand->as.call_expr.callee->as.member_access.name &&
+                strcmp(operand->as.call_expr.callee->as.member_access.name, "bytes") == 0;
+            ctx->expected_type =
+                is_string_bytes ? xr_type_new_bytespan(ctx->analyzer->isolate)
+                                : xr_type_new_span(ctx->analyzer->isolate,
+                                                   xr_type_new_unknown(ctx->analyzer->isolate));
+            ctx->allow_view_expr_for_copy = true;
+        }
+        XrType *operand_type = xa_visit_infer_expr(ctx, call->arguments[0]);
+        ctx->expected_type = saved_expected;
+        ctx->allow_view_expr_for_copy = saved_view_context;
+        if (!xa_len_type_supported(operand_type)) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "len() requires a Lengthable value, got '%s'; iterators and streams must "
+                     "use count()",
+                     operand_type ? xr_type_to_string(operand_type) : "unknown");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+        return xr_type_new_int(ctx->analyzer->isolate);
+    }
 
     if (xa_call_is_sys_thread_spawn(call))
         return xa_visit_sys_thread_spawn_call(ctx, node, call);
@@ -3146,7 +3234,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_check_raw_pointer_of_static_arg(ctx, node, call, raw_pointer_namespace_type);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
-        if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
+        if (xa_method_call_creates_span_borrow(callee_obj_type, method_name) &&
+            !ctx->allow_view_expr_for_copy) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
 

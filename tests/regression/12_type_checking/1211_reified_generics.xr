@@ -19,43 +19,43 @@ class Pair<A, B> {
 fn test_reified_generics() {
     // === Test 1: Runtime container names stay shape-based ===
     var arr = [1, 2, 3]
-    assert_eq(typename(arr), "Array")
+    assert_eq(typeName(arr), "Array")
 
     var map = #{"a": 1, "b": 2}
-    assert_eq(typename(map), "Map")
+    assert_eq(typeName(map), "Map")
 
     var set = Set()
-    assert_eq(typename(set), "Set")
+    assert_eq(typeName(set), "Set")
 
     // === Test 2: Typed containers keep their checked behavior ===
     var int_arr: Array<int> = [10, 20, 30]
-    assert_eq(typename(int_arr), "Array")
+    assert_eq(typeName(int_arr), "Array")
 
     var float_arr: Array<float> = [1.0, 2.0]
-    assert_eq(typename(float_arr), "Array")
+    assert_eq(typeName(float_arr), "Array")
 
     var str_arr: Array<string> = ["hello", "world"]
-    assert_eq(typename(str_arr), "Array")
+    assert_eq(typeName(str_arr), "Array")
 
     var bool_arr: Array<bool> = [true, false]
-    assert_eq(typename(bool_arr), "Array")
+    assert_eq(typeName(bool_arr), "Array")
 
-    var byte_arr: Array<uint8> = [65, 66]
-    assert_eq(typename(byte_arr), "Array")
+    var byte_arr: Array<byte> = [65, 66]
+    assert_eq(typeName(byte_arr), "Array")
 
     // === Test 3: Empty typed containers ===
     var empty_int: Array<int> = []
     empty_int.push(1)
     assert_eq(empty_int[0], 1)
 
-    // === Test 4: Non-container type names use typename() ===
-    assert_eq(typename(42), "int")
-    assert_eq(typename("hello"), "string")
+    // === Test 4: Non-container type names use typeName() ===
+    assert_eq(typeName(42), "int")
+    assert_eq(typeName("hello"), "string")
 
     // === Test 5: Slice preserves typed access behavior ===
     var src: Array<int> = [1, 2, 3, 4, 5]
-    var sliced: Span<int> = src[1:4]
-    assert_eq(typename(sliced), "Span")
+    var sliced: Slice<int> = src[1:4]
+    assert_eq(typeName(sliced), "Slice")
     assert_eq(sliced[0], 2)
 
     // === Test 6: Generic containers retain typed operations ===
@@ -65,35 +65,35 @@ fn test_reified_generics() {
     assert_eq(bool_arr[0], true)
 
     var typed_map: Map<string, int> = #{"x": 1}
-    assert_eq(typename(typed_map), "Map")
+    assert_eq(typeName(typed_map), "Map")
     assert_eq(typed_map["x"], 1)
 
     var typed_set: Set<string> = Set()
-    assert_eq(typename(typed_set), "Set")
+    assert_eq(typeName(typed_set), "Set")
 
     shared typed_channel = Channel<int>(1)
-    assert_eq(typename(typed_channel), "Channel")
+    assert_eq(typeName(typed_channel), "Channel")
     typed_channel.close()
 
     shared annotated_channel: Channel<string> = Channel(1)
-    assert_eq(typename(annotated_channel), "Channel")
+    assert_eq(typeName(annotated_channel), "Channel")
     annotated_channel.close()
 
     shared zero_channel = Channel<bool>()
-    assert_eq(typename(zero_channel), "Channel")
+    assert_eq(typeName(zero_channel), "Channel")
     zero_channel.close()
 
     shared annotated_zero: Channel<float> = Channel()
-    assert_eq(typename(annotated_zero), "Channel")
+    assert_eq(typeName(annotated_zero), "Channel")
     annotated_zero.close()
 
     // === Test 7: Typed Array compact storage + operations ===
     int_arr.push(40)
-    assert_eq(int_arr.length, 4)
+    assert_eq(len(int_arr), 4)
     assert_eq(int_arr[3], 40)
 
-    var mapped_bytes = byte_arr.map(fn(x: uint8) -> int { return x + 1 })
-    assert_eq(typename(mapped_bytes), "Array")
+    var mapped_bytes = byte_arr.map(fn(x: byte) -> int { return x + 1 })
+    assert_eq(typeName(mapped_bytes), "Array")
     assert_eq(mapped_bytes[0], 66)
 
     // === Test 8: User-defined generic classes retain origin and value behavior ===

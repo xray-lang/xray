@@ -42,6 +42,7 @@
 #include "xi_analysis.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
+#include "xi_opt_devirt.h"
 #include "../base/xdefs.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
@@ -147,7 +148,7 @@ static bool const_literal_from_value(XiFunc *owner, const XiValue *v, XiConstLit
             out->kind = XI_CONST_LITERAL_BOOL;
             out->bool_value = v->aux_int != 0;
             return true;
-        case XR_KIND_CHAR:
+        case XR_KIND_RUNE:
             out->kind = XI_CONST_LITERAL_CHAR;
             out->int_value = v->aux_int;
             return true;
@@ -1245,11 +1246,9 @@ static bool xi_task_loop_is_add_one_from_phi(const XiValue *v, const XiValue *ph
 
 static bool xi_task_loop_loads_array_length(XiFunc *f, const XiValue *v, XiValue *arr) {
     v = xi_task_loop_unwrap_identity(v);
-    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+    if (!v || v->op != XI_LEN || v->nargs != 1)
         return false;
-    const char *field = (const char *) v->aux;
-    return strcmp(field, "length") == 0 &&
-           xi_task_array_values_same(f, (XiValue *) v->args[0], arr);
+    return xi_task_array_values_same(f, (XiValue *) v->args[0], arr);
 }
 
 static bool xi_task_loop_header_checks_index_below_length(XiFunc *f, const XiBlock *header,
@@ -1372,10 +1371,8 @@ static bool xi_task_array_allowed_sequential_await_use(XiFunc *f, XiValue *user,
         return false;
     if (xi_await_all_task_array_allowed_structural_use(f, user, arg_idx, arr))
         return true;
-    if (user->op == XI_LOAD_FIELD && xi_task_array_values_same(f, user->args[0], arr)) {
-        const char *field = user->aux ? (const char *) user->aux : NULL;
-        return field && strcmp(field, "length") == 0;
-    }
+    if (user->op == XI_LEN && xi_task_array_values_same(f, user->args[0], arr))
+        return true;
     if (user->op == XI_INDEX_GET && xi_task_array_values_same(f, user->args[0], arr) &&
         xi_plain_await_consumes_task_index_get(f, user)) {
         if (saw_await)
@@ -1872,7 +1869,11 @@ static bool sr_value_is_typed_array_field_ref(const XiValue *value) {
 }
 
 static bool sr_value_has_static_index_storage(const XiValue *value) {
-    return sr_value_has_static_typed_array_storage(value) ||
+    const XiValue *v = sr_unwrap_identity_value(value);
+    bool uniform_array_container = v && v->type && !v->type->is_nullable &&
+                                   (v->type->kind == XR_KIND_ARRAY ||
+                                    v->type->kind == XR_KIND_VIEW || v->type->kind == XR_KIND_SPAN);
+    return uniform_array_container || sr_value_has_static_typed_array_storage(value) ||
            sr_value_is_typed_array_field_ref(value) || sr_value_is_fixed_array_field_ref(value);
 }
 
@@ -1881,20 +1882,16 @@ static bool sr_value_has_static_unboxed_array_elem_type(const XiValue *value) {
 }
 
 static bool sr_is_typed_array_length_field(const XiValue *v) {
-    if (!v || v->nargs < 1 || !v->args[0])
+    if (!v || v->op != XI_LEN || v->nargs != 1 || !v->args[0])
         return false;
     if (!sr_value_has_static_typed_array_storage(v->args[0]) &&
         !sr_value_is_typed_array_field_ref(v->args[0]))
         return false;
-    const char *field = (const char *) v->aux;
-    return field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0);
+    return true;
 }
 
 static bool sr_is_static_collection_length_field(const XiValue *v) {
-    if (!v || v->nargs < 1 || !v->args[0] || !v->aux)
-        return false;
-    const char *field = (const char *) v->aux;
-    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+    if (!v || v->op != XI_LEN || v->nargs != 1 || !v->args[0])
         return false;
     const XiValue *receiver = sr_unwrap_identity_value(v->args[0]);
     if (!receiver || !receiver->type)
@@ -1935,8 +1932,8 @@ static bool sr_method_name_is(const XiValue *v, const char *name) {
         return false;
 
     SymbolId symbol = (SymbolId) (v->aux_int >> 1);
-    if (strcmp(name, "has") == 0)
-        return symbol == SYMBOL_HAS;
+    if (strcmp(name, "containsKey") == 0)
+        return symbol == SYMBOL_CONTAINS_KEY;
     if (strcmp(name, "get") == 0)
         return symbol == SYMBOL_GET;
     return false;
@@ -2107,7 +2104,8 @@ static bool sr_block_has_no_guard_invalidating_effect_after(const XiBlock *blk,
 
 static bool sr_map_has_control_matches_get(const XiValue *control, const XiValue *get) {
     const XiValue *has = sr_unwrap_identity_value(control);
-    if (!has || has->op != XI_CALL_METHOD || has->nargs != 2 || !sr_method_name_is(has, "has"))
+    if (!has || has->op != XI_CALL_METHOD || has->nargs != 2 ||
+        !sr_method_name_is(has, "containsKey"))
         return false;
     if (!get || get->op != XI_CALL_METHOD || get->nargs != 2 || !sr_method_name_is(get, "get"))
         return false;
@@ -2373,6 +2371,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
                 return sr_type_native_boundary_rep(v->type);
             return XR_REP_TAGGED;
         }
+        case XI_LEN:
+            return XR_REP_I64;
         case XI_COPY:
         case XI_MOVE:
             return sr_type_native_boundary_rep(v->type);
@@ -2586,8 +2586,8 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             }
             *out = XR_REP_TAGGED;
             return true;
-        case XI_LOAD_FIELD:
-            if (arg_idx == 0 && user->nargs >= 1 &&
+        case XI_LEN:
+            if (arg_idx == 0 && user->nargs == 1 &&
                 (sr_is_typed_array_length_field(user) ||
                  sr_is_static_collection_length_field(user))) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
@@ -2685,7 +2685,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 if (arg_idx == 1)
                     return XR_REP_I64;
             }
-            if (name && strcmp(name, "Bytes") == 0 && arg_idx < user->nargs &&
+            if (name && strcmp(name, "array_byte_new") == 0 && arg_idx < user->nargs &&
                 user->args[arg_idx] && user->args[arg_idx]->type &&
                 user->args[arg_idx]->type->kind == XR_KIND_INT)
                 return XR_REP_I64;
@@ -3019,6 +3019,7 @@ static const XiPassDesc xi_pass_table[] = {
     {"loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
      XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"devirt", xi_opt_devirt, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,

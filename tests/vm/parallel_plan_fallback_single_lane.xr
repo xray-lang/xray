@@ -27,7 +27,7 @@ var reduced = plan.reduce(0..128, "", (state, i) -> {
 }, (a, b) -> a + b)
 
 print(maxForState.load(Ordering.Relaxed))
-print(mapped.length)
+print(len(mapped))
 print(maxMapState.load(Ordering.Relaxed))
-print(reduced.length)
+print(len(reduced))
 print(maxReduceState.load(Ordering.Relaxed))

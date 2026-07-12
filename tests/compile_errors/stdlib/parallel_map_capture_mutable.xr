@@ -3,7 +3,7 @@ import parallel
 fn main_logic() {
     var scale = 2
     var values = parallel.map(0..4, (i) -> i + scale, parallel.Options(2))
-    print(values.length)
+    print(len(values))
 }
 
 main_logic()

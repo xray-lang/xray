@@ -8,7 +8,7 @@ fn test_map_basic() {
     var doubled = arr.map(fn(x) {
         return x * 2
     })
-    assert_eq(doubled.length, 5)
+    assert_eq(len(doubled), 5)
     assert_eq(doubled[0], 2)
     assert_eq(doubled[4], 10)
 }
@@ -19,7 +19,7 @@ fn test_map_empty() {
     var result = arr.map(fn(x) {
         return x * 2
     })
-    assert_eq(result.length, 0)
+    assert_eq(len(result), 0)
 }
 
 @test
@@ -40,7 +40,7 @@ fn test_filter_basic() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(evens.length, 3)
+    assert_eq(len(evens), 3)
     assert_eq(evens[0], 2)
     assert_eq(evens[1], 4)
     assert_eq(evens[2], 6)
@@ -52,7 +52,7 @@ fn test_filter_none() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(evens.length, 0)
+    assert_eq(len(evens), 0)
 }
 
 @test
@@ -61,7 +61,7 @@ fn test_filter_all() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(evens.length, 4)
+    assert_eq(len(evens), 4)
 }
 
 @test
@@ -70,7 +70,7 @@ fn test_filter_empty() {
     var result = arr.filter(fn(x) {
         return true
     })
-    assert_eq(result.length, 0)
+    assert_eq(len(result), 0)
 }
 
 // ===== reduce =====
@@ -159,7 +159,7 @@ fn test_chain_map_filter() {
         return x > 5
     })
     // [6, 8, 10]
-    assert_eq(result.length, 3)
+    assert_eq(len(result), 3)
     assert_eq(result[0], 6)
 }
 
@@ -172,7 +172,7 @@ fn test_chain_filter_map() {
         return x * x
     })
     // [4, 16, 36]
-    assert_eq(result.length, 3)
+    assert_eq(len(result), 3)
     assert_eq(result[0], 4)
     assert_eq(result[2], 36)
 }
@@ -209,7 +209,7 @@ fn test_count_matches() {
     var startsWithA = words.filter(fn(w) {
         return w.startsWith("a")
     })
-    assert_eq(startsWithA.length, 2)
+    assert_eq(len(startsWithA), 2)
 }
 
 @test
@@ -221,7 +221,7 @@ fn test_flatten_single_level() {
             flat.push(x)
         }
     }
-    assert_eq(flat.length, 6)
+    assert_eq(len(flat), 6)
     assert_eq(flat[0], 1)
     assert_eq(flat[5], 6)
 }

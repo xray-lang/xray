@@ -1088,14 +1088,12 @@ static XiValue *lower_match_elem_get(XiLower *l, XiValue *subject, int idx) {
     return v;
 }
 
-/* Array length of `subject` (XI_LOAD_FIELD "length"). */
+/* Array length of `subject`. */
 static XiValue *lower_match_array_len(XiLower *l, XiValue *subject) {
-    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_int, 1);
+    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LEN, l->type_int, 1);
     if (!len)
         return NULL;
     len->args[0] = subject;
-    len->aux = (void *) "length";
-    len->aux_int = xi_lower_method_symbol(l, "length");
     return len;
 }
 
@@ -2205,7 +2203,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 /* ========== For-In Dispatcher ========== */
 
 /* Whether the collection's static type is iterable via the fast
- * length + INDEX_GET path. Only Array, Span, Set and string qualify: those
+ * length + INDEX_GET path. Only Array, Span and Set qualify: those
  * have integer indexable layouts that produce the loop variable's
  * canonical type directly. Map / Json instead route through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
@@ -2216,7 +2214,7 @@ static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
     return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_VIEW || t->kind == XR_KIND_SPAN ||
-           t->kind == XR_KIND_SET || t->kind == XR_KIND_STRING;
+           t->kind == XR_KIND_SET;
 }
 
 static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
@@ -2314,12 +2312,14 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     }
 
-    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_int, 1);
+    /* Builtin collection iteration uses the same compiler-known len query as
+     * source-level `len(coll)`.  Do not resurrect the removed `.length`
+     * property as an internal lowering shortcut. */
+    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LEN, l->type_int, 1);
     if (!len)
         return;
     len->args[0] = coll;
-    len->aux = (void *) "length";
-    len->aux_int = xi_lower_method_symbol(l, "length");
+    len->aux_int = 0;
     len->line = (uint32_t) node->line;
 
     XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
@@ -2839,7 +2839,7 @@ static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
-        case AST_LITERAL_CHAR:
+        case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_STRING:
             return true;
@@ -3081,10 +3081,13 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * annotation on a container literal (e.g. var a: Array<int> = [1,2]).
      * Only the annotation distinguishes typed from untyped containers. */
     if (node->as.var_decl.type_annotation && type) {
-        if (init_val->op == XI_ARRAY_NEW &&
+        bool is_array_factory = init_val->op == XI_CALL_BUILTIN && init_val->aux &&
+                                strcmp((const char *) init_val->aux, "array_with_capacity") == 0;
+        if ((init_val->op == XI_ARRAY_NEW || is_array_factory) &&
             (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) &&
             type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
+            init_val->type = type;
             init_val->aux_int = (int64_t) ((tid << 2) | ((uint8_t) init_val->aux_int & 0x03));
         } else if (init_val->op == XI_SET_NEW && type->kind == XR_KIND_SET &&
                    type->container.element_type) {

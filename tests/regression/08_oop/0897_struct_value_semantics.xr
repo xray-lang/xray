@@ -78,8 +78,8 @@ fn test_struct_value_semantics() {
     assert(v2.mag_sq() == 16.0)
 
     // === Typename preserved after copy ===
-    assert(typename(a) == "Point")
-    assert(typename(b) == "Point")
-    assert(typename(v1) == "Vec2")
-    assert(typename(v2) == "Vec2")
+    assert(typeName(a) == "Point")
+    assert(typeName(b) == "Point")
+    assert(typeName(v1) == "Vec2")
+    assert(typeName(v2) == "Vec2")
 }

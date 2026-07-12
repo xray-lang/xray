@@ -170,8 +170,8 @@ static inline const char *xrt_type_name(int64_t tid) {
             return TYPE_NAME_FLOAT;
         case XR_TID_STRING:
             return TYPE_NAME_STRING;
-        case XR_TID_CHAR:
-            return TYPE_NAME_CHAR;
+        case XR_TID_RUNE:
+            return TYPE_NAME_RUNE;
         case XR_TID_FUNCTION:
             return TYPE_NAME_FUNCTION;
         case XR_TID_BOUND_METHOD:

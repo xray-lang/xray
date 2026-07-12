@@ -126,15 +126,18 @@ require_build() {
 
 expect_state() {
     local log="$1" mod="$2" want="$3" name="$4"
+    # Cache units use the readable module name plus a canonical-identity hash.
+    # Match the semantic module name while preserving the hash in diagnostics.
+    local unit_pattern="${mod}(_[[:xdigit:]]+)?"
     if [ "$want" = "compiling" ]; then
-        if grep -q "compiling: $mod " "$log"; then
+        if grep -Eq "compiling: ${unit_pattern} " "$log"; then
             record_pass "$name: $mod recompiled"
         else
             record_fail "$name: expected $mod to recompile"
             show_cache_lines "$log"
         fi
     else
-        if grep -q "cache hit: $mod " "$log"; then
+        if grep -Eq "cache hit: ${unit_pattern} " "$log"; then
             record_pass "$name: $mod cache hit"
         else
             record_fail "$name: expected $mod cache hit"

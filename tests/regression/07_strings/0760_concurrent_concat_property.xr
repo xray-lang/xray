@@ -68,7 +68,7 @@ fn test_property_concurrent_concat_long() {
     for (var i = 0; i < n; i++) {
         var result = results[i]
         assert_eq(result.startsWith("x".repeat(40)), true)
-        assert_eq(result.includes("_id" + string(i) + "_"), true)
+        assert_eq(result.contains("_id" + string(i) + "_"), true)
         assert_eq(result.endsWith("y".repeat(40)), true)
     }
 }
@@ -102,7 +102,7 @@ fn test_property_concurrent_concat_mixed() {
         if (i % 2 == 0) {
             assert_eq(results[i], "short_" + string(i) + "_end")
         } else {
-            assert_eq(results[i].includes("_long_" + string(i) + "_"), true)
+            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
         }
     }
 }
@@ -142,7 +142,7 @@ fn test_property_concurrent_concat_isolation() {
         // 验证后缀
         assert_eq(result.endsWith(glyph.repeat(30)), true)
         // 验证中间包含 id
-        assert_eq(result.includes("_" + string(i) + "_"), true)
+        assert_eq(result.contains("_" + string(i) + "_"), true)
     }
 }
 
@@ -154,12 +154,12 @@ fn test_property_concurrent_concat_threshold_boundary() {
     
     fn boundary_task(id: int) -> Array<int> {
         // 根据 id 选择不同长度，跨越 64 字节阈值
-        var len = 30 + (id % 10)  // 30-39
-        var a = "a".repeat(len)
-        var b = "b".repeat(len)
+        var pieceLength = 30 + (id % 10)  // 30-39
+        var a = "a".repeat(pieceLength)
+        var b = "b".repeat(pieceLength)
         // 总长度: 60-78，跨越 64 阈值
         var result = a + b
-        return [result.length, len * 2]
+        return [len(result), pieceLength * 2]
     }
     
     var n = 30

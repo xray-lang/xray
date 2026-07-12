@@ -1,1 +1,1 @@
-var c: char = 'ab'
+var c: rune = 'ab'

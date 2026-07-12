@@ -10,7 +10,7 @@ fn run(n: int) -> int {
     var sum = 0
     i = 0
     while (i < n * 2) {
-        if (m.has(i)) {
+        if (m.containsKey(i)) {
             sum = sum + m.get(i)
         }
         i = i + 1
@@ -26,13 +26,13 @@ fn run(n: int) -> int {
 
     i = 0
     while (i < n) {
-        if (m.has(i)) {
+        if (m.containsKey(i)) {
             sum = sum + 1
         }
         i = i + 1
     }
 
-    return sum + m.size
+    return sum + len(m)
 }
 
 print(run(200000))

@@ -2,9 +2,9 @@
 // The VM stores raw pointers as address ints; AOT stores them as native pointers.
 import mem
 
-var p = RawPtr<uint8>.null()
-var q = RawMut<uint8>.null()
-var r: RawPtr<uint8> = q
+var p = RawPtr<byte>.null()
+var q = RawMut<byte>.null()
+var r: RawPtr<byte> = q
 
 print(p.isNull())
 print(q.isNull())

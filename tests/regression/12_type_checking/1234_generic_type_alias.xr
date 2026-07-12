@@ -29,7 +29,7 @@ fn test_container_and_optional_alias() {
     var xs: Vec<int> = [1, 2, 3]
     var hit: Maybe<string> = "ok"
     var miss: Maybe<string> = null
-    assert_eq(xs.length, 3)
+    assert_eq(len(xs), 3)
     assert_eq(hit ?? "no", "ok")
     assert_eq(miss ?? "no", "no")
 }

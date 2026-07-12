@@ -33,11 +33,11 @@ fn spawn_chain(level, id) {
     }
     /* 等待所有子协程 */
     var child_sum = 0
-    for (var i = 0; i < children.length; i++) {
+    for (var i = 0; i < len(children); i++) {
         var child_result = await children[i]
         child_sum = child_sum + child_result.sum
     }
-    return { "level": level, "id": id, "children": children.length, "sum": child_sum }
+    return { "level": level, "id": id, "children": len(children), "sum": child_sum }
 }
 
 /* 启动根协程 */

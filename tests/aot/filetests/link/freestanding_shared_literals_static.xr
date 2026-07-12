@@ -1,6 +1,6 @@
 shared ENABLED: bool = true
 shared SCALE: float = 0.5
-shared LETTER: char = 'A'
+shared LETTER: rune = 'A'
 shared NOTHING = null
 
 @c_export("xray_shared_literals")

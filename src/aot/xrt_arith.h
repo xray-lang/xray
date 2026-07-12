@@ -200,9 +200,9 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
         case XR_TAG_BOOL:
             xrt_fmt_cstr(sb, v.i ? "true" : "false");
             return;
-        case XR_TAG_CHAR: {
+        case XR_TAG_RUNE: {
             char buf[4];
-            int n = xrt_char_utf8_encode(XR_TO_CHAR(v), buf);
+            int n = xrt_rune_utf8_encode(XR_TO_RUNE(v), buf);
             if (n > 0)
                 xrt_fmt_puts(sb, buf, (size_t) n);
             return;
@@ -410,8 +410,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 11; /* XR_TID_FLOAT */
         case XR_TAG_BOOL:
             return 1; /* XR_TID_BOOL */
-        case XR_TAG_CHAR:
-            return 45; /* XR_TID_CHAR */
+        case XR_TAG_RUNE:
+            return 45; /* XR_TID_RUNE */
         case XR_TAG_NULL:
             return 0; /* XR_TID_NULL */
         case XR_TAG_STR:
@@ -449,7 +449,7 @@ static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_int, "int");
     XRT_STR_LIT_DEF(xs_float, "float");
     XRT_STR_LIT_DEF(xs_bool, "bool");
-    XRT_STR_LIT_DEF(xs_char, "char");
+    XRT_STR_LIT_DEF(xs_rune, "char");
     XRT_STR_LIT_DEF(xs_null, "null");
     XRT_STR_LIT_DEF(xs_string, "string");
     XRT_STR_LIT_DEF(xs_array, "Array");
@@ -472,8 +472,8 @@ static inline XrValue xrt_typename(XrValue v) {
             return xr_str_lit(&xs_float);
         case XR_TAG_BOOL:
             return xr_str_lit(&xs_bool);
-        case XR_TAG_CHAR:
-            return xr_str_lit(&xs_char);
+        case XR_TAG_RUNE:
+            return xr_str_lit(&xs_rune);
         case XR_TAG_NULL:
             return xr_str_lit(&xs_null);
         case XR_TAG_STR:

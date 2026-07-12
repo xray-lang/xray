@@ -55,7 +55,7 @@ fn test_map_then_reduce_nested() {
     // Calculate average score per student, then find max average
     var averages = students.map(fn(s) {
         var total = s.scores.reduce(fn(a, b) { return a + b }, 0)
-        return total / s.scores.length
+        return total / len(s.scores)
     })
     assert_eq(averages[0], 90)
     assert_eq(averages[1], 75)
@@ -113,7 +113,7 @@ fn test_nested_forEach_with_accumulation() {
             products.push(x * x)
         })
     })
-    assert_eq(products.length, 6)
+    assert_eq(len(products), 6)
     assert_eq(products[0], 1)
     assert_eq(products[3], 16)
     assert_eq(products[5], 36)
@@ -136,7 +136,7 @@ fn test_every_with_nested_filter() {
     var groups = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
     // Check: every group, after filtering >5, has at least 2 elements
     var result = groups.every(fn(g) {
-        return g.filter(fn(x) { return x > 5 }).length >= 2
+        return len(g.filter(fn(x) { return x > 5 })) >= 2
     })
     // group0 filter: [6] => length=1 => false
     assert_eq(result, false)
@@ -161,8 +161,8 @@ fn test_reduce_build_nested_map() {
         acc[e.group].push(e.item)
         return acc
     }, seed)
-    assert_eq(grouped.fruit.length, 2)
-    assert_eq(grouped.veg.length, 2)
+    assert_eq(len(grouped.fruit), 2)
+    assert_eq(len(grouped.veg), 2)
     assert_eq(grouped.fruit[0], "apple")
     assert_eq(grouped.veg[1], "pea")
 }
@@ -293,16 +293,16 @@ fn test_reduce_builds_grouped_arrays() {
     // Group into chunks of 3
     var seed: Array<int> = []
     var chunks = nums.reduce(fn(acc, val) {
-        var last = acc[acc.length - 1]
-        if (last.length < 3) {
+        var last = acc[len(acc) - 1]
+        if (len(last) < 3) {
             last.push(val)
         } else {
             acc.push([val])
         }
         return acc
     }, [seed])
-    assert_eq(chunks.length, 3)
-    assert_eq(chunks[0].length, 3)
+    assert_eq(len(chunks), 3)
+    assert_eq(len(chunks[0]), 3)
     assert_eq(chunks[0][0], 1)
     assert_eq(chunks[1][0], 4)
     assert_eq(chunks[2][2], 9)
@@ -318,7 +318,7 @@ fn test_interleaved_in_loop() {
         [1, 1, 1, 1, 100]
     ]
     var summaries: Array<string> = []
-    for (var i = 0; i < datasets.length; i++) {
+    for (var i = 0; i < len(datasets); i++) {
         var d = datasets[i]
         var big = d.filter(fn(x) { return x >= 10 })
         var doubled = big.map(fn(x) { return x * 2 })
@@ -385,7 +385,7 @@ fn test_forEach_with_index_accumulator() {
         })
         rowIdx = rowIdx + 1
     })
-    assert_eq(indexed.length, 6)
+    assert_eq(len(indexed), 6)
     assert_eq(indexed[0], "[0,0]=10")
     assert_eq(indexed[3], "[1,0]=40")
     assert_eq(indexed[5], "[1,2]=60")

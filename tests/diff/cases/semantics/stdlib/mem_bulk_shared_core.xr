@@ -3,8 +3,8 @@
 // pointers from address-ints, AOT uses the native .ptr — both must agree.
 // RawMut args flow into RawPtr params via mut->const coercion.
 import mem
-@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
-@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
+@extern("C") fn free(p: RawMut<byte>)
 
 print(mem.cacheLineSize())
 

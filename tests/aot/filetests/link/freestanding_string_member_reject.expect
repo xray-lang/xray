@@ -1,11 +1,9 @@
 args=--profile freestanding
 status=fail
-contains=freestanding profile rejects string.toBytes
+contains=freestanding profile rejects string.copyBytes
 contains=string literals may be passed or printed, but string member access needs hosted helpers
-contains=freestanding profile rejects string.byteLength
-contains=freestanding profile rejects string index access
-contains=string literals may be passed or printed, but string indexing needs hosted helpers
-contains=freestanding profile rejects string slice expression
-contains=string literals may be passed or printed, but string slicing needs hosted helpers
+contains=freestanding profile rejects string.bytes
+contains=string does not support integer indexing or slice syntax
+contains=use runes(), bytes(), or slice(start, end)
 not_contains=CRASH
 not_contains=unsupported AOT

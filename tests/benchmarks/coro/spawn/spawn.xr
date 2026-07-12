@@ -5,7 +5,7 @@ import time
 var N = 1000000
 // 默认100万协程
 // 从命令行读取参数
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     N = int(process.args[0]) ?? N
 }
 print("=== 协程创建测试 ===")

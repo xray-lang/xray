@@ -11,5 +11,5 @@ if (resp.error) {
     print("Error: " + resp.error)
 } else {
     print("Success! Status: " + resp.status.toString())
-    print("Body length: " + resp.body.length.toString())
+    print("Body length: " + len(resp.body).toString())
 }

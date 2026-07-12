@@ -3,8 +3,8 @@ fn main() {
     var dyn: Json = { "badStart": true, "end": 2 }
     var arr = [10, 20, 30]
     print("before-slice")
-    var view: Span<int> = arr[dyn.badStart:dyn.end]
-    print(view.length)
+    var view: Slice<int> = arr[dyn.badStart:dyn.end]
+    print(len(view))
     print("unreachable")
 }
 

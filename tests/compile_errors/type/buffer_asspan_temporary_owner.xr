@@ -1,4 +1,4 @@
 import mem
 
-var view: ByteSpan = mem.alloc(8).asSpan()
-print(view.length)
+var view: Slice<byte> = mem.alloc(8).asSpan()
+print(len(view))

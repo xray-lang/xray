@@ -28,7 +28,7 @@ fn test_channel_tuple_send_recv() {
 @test
 fn test_array_of_tuples() {
     var pairs: Array<(string, int)> = [("a", 1), ("b", 2), ("c", 3)]
-    assert_eq(pairs.length, 3)
+    assert_eq(len(pairs), 3)
     assert_eq(pairs[0].0, "a")
     assert_eq(pairs[1].1, 2)
 
@@ -81,7 +81,7 @@ fn test_map_with_tuple_values() {
     var m: Map<string, (int, bool)> = Map()
     m.set("a", (1, true))
     m.set("b", (2, false))
-    assert_eq(m.length, 2)
+    assert_eq(len(m), 2)
 
     var va = m.get("a")
     if (va != null) {

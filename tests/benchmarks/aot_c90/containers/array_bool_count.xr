@@ -8,7 +8,7 @@ fn run(n: int) -> int {
 
     var count = 0
     i = 0
-    while (i < flags.length) {
+    while (i < len(flags)) {
         if (flags[i]) {
             count = count + 1
         }

@@ -32,7 +32,7 @@ fn test_empty_headers() {
 fn test_multi_value_header_split() {
     var header = "text/html, application/json, text/plain"
     var values = header.split(", ")
-    assert_eq(values.length, 3)
+    assert_eq(len(values), 3)
     assert_eq(values[0], "text/html")
     assert_eq(values[2], "text/plain")
 }

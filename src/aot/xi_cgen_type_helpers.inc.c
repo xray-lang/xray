@@ -1,8 +1,6 @@
 static const char *cg_channel_field_helper(const char *field) {
     if (!field)
         return NULL;
-    if (strcmp(field, "length") == 0)
-        return "xr_aot_chan_length";
     if (strcmp(field, "capacity") == 0)
         return "xr_aot_chan_capacity";
     if (strcmp(field, "isClosed") == 0)
@@ -13,8 +11,6 @@ static const char *cg_channel_field_helper(const char *field) {
 static const char *cg_work_queue_field_helper(const char *field) {
     if (!field)
         return NULL;
-    if (strcmp(field, "length") == 0)
-        return "xr_aot_work_queue_length";
     if (strcmp(field, "shardCount") == 0)
         return "xr_aot_work_queue_shard_count";
     if (strcmp(field, "isClosed") == 0)
@@ -25,8 +21,8 @@ static const char *cg_work_queue_field_helper(const char *field) {
 static const char *cg_result_group_field_helper(const char *field) {
     if (!field)
         return NULL;
-    if (strcmp(field, "length") == 0)
-        return "xr_aot_result_group_length";
+    if (strcmp(field, "readyCount") == 0)
+        return "xr_aot_result_group_ready_count";
     if (strcmp(field, "pendingCount") == 0)
         return "xr_aot_result_group_pending_count";
     if (strcmp(field, "batchSize") == 0)
@@ -258,7 +254,7 @@ static bool cg_key_access_method_op(uint8_t container_kind, const char *method, 
     if (container_kind == XG_MAP_CONTAINER_MAP) {
         if (nargs == 1 && strcmp(method, "get") == 0)
             op = XG_KEY_ACCESS_GET;
-        else if (nargs == 1 && strcmp(method, "has") == 0)
+        else if (nargs == 1 && strcmp(method, "containsKey") == 0)
             op = XG_KEY_ACCESS_HAS;
         else if (nargs == 1 && strcmp(method, "delete") == 0)
             op = XG_KEY_ACCESS_DELETE;
@@ -267,7 +263,7 @@ static bool cg_key_access_method_op(uint8_t container_kind, const char *method, 
         else if (nargs == 0 && strcmp(method, "clear") == 0)
             op = XG_KEY_ACCESS_CLEAR;
     } else if (container_kind == XG_MAP_CONTAINER_SET) {
-        if (nargs == 1 && strcmp(method, "has") == 0)
+        if (nargs == 1 && strcmp(method, "contains") == 0)
             op = XG_KEY_ACCESS_HAS;
         else if (nargs == 1 && strcmp(method, "add") == 0)
             op = XG_KEY_ACCESS_ADD;

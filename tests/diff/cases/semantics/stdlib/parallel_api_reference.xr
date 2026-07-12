@@ -8,13 +8,13 @@ parallel.forEach(0..5, (i) -> {
 print(seen.load(Ordering.Relaxed))
 
 var mapped = parallel.map(0..4, (i) -> i * i, Options(0))
-print(mapped.length)
+print(len(mapped))
 print(mapped[0])
 print(mapped[3])
 
 var out: Array<int> = [99]
 var same = parallel.mapInto(1..4, out, (i) -> i + 10)
-print(same.length)
+print(len(same))
 print(same[0])
 print(out[2])
 

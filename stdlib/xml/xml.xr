@@ -1,3 +1,5 @@
+import "text" as textutil
+
 // xml - pure-Xray XML parser and writer.
 //
 // XML is an L4 format module: the public parse/stringify/node-builder
@@ -16,7 +18,7 @@ class XmlConfig {
 
     constructor(optionsValue: unknown = null) {
         var options = Json.encode(optionsValue)
-        if (typename(options) != "Json") {
+        if (typeName(options) != "Json") {
             var emptyOptions: Json = {}
             options = emptyOptions
         }
@@ -34,7 +36,7 @@ class XmlWriteConfig {
 
     constructor(optionsValue: unknown = null) {
         var options = Json.encode(optionsValue)
-        if (typename(options) != "Json") {
+        if (typeName(options) != "Json") {
             var emptyOptions: Json = {}
             options = emptyOptions
         }
@@ -42,36 +44,36 @@ class XmlWriteConfig {
         if (this.indent < 0) { this.indent = 0 }
         this.declaration = _jsonBool(options, "declaration", true)
         this.encoding = _jsonString(options, "encoding", "UTF-8")
-        if (this.encoding.length == 0) { this.encoding = "UTF-8" }
+        if (len(this.encoding) == 0) { this.encoding = "UTF-8" }
     }
 }
 
 fn _jsonBool(options: Json, key: string, fallback: bool) -> bool {
     var v = Json.get(options, key, fallback)
-    if (typename(v) == "bool") { return v }
+    if (typeName(v) == "bool") { return v }
     return fallback
 }
 
 fn _jsonInt(options: Json, key: string, fallback: int) -> int {
     var v = Json.get(options, key, fallback)
-    if (typename(v) == "int") { return v }
+    if (typeName(v) == "int") { return v }
     return fallback
 }
 
 fn _jsonString(options: Json, key: string, fallback: string) -> string {
     var v = Json.get(options, key, fallback)
-    if (typename(v) == "string") { return v }
+    if (typeName(v) == "string") { return v }
     return fallback
 }
 
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
-    if (pos < 0 || pos + prefix.length > s.length) { return false }
-    return s.slice(pos, pos + prefix.length) == prefix
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    return s.slice(pos, pos + len(prefix)) == prefix
 }
 
 fn _startsWithAtIgnoreCase(s: string, pos: int, prefix: string) -> bool {
-    if (pos < 0 || pos + prefix.length > s.length) { return false }
-    return s.slice(pos, pos + prefix.length).toLowerCase() == prefix.toLowerCase()
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    return textutil.lower(s.slice(pos, pos + len(prefix))) == textutil.lower(prefix)
 }
 
 fn _isWhitespace(c: string) -> bool {
@@ -79,14 +81,14 @@ fn _isWhitespace(c: string) -> bool {
 }
 
 fn _isAlpha(c: string) -> bool {
-    if (c.length == 0) { return false }
-    var o = c.ord()!
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
 }
 
 fn _isDigit(c: string) -> bool {
-    if (c.length == 0) { return false }
-    var o = c.ord()!
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
     return o >= 48 && o <= 57
 }
 
@@ -99,13 +101,13 @@ fn _isNameChar(c: string) -> bool {
 }
 
 fn _isHexDigit(c: string) -> bool {
-    if (c.length == 0) { return false }
-    var o = c.ord()!
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
 
 fn _hexValue(c: string) -> int {
-    var o = c.ord()!
+    var o = c.runes().nth(0).toUInt32()
     if (o >= 48 && o <= 57) { return o - 48 }
     if (o >= 65 && o <= 70) { return o - 55 }
     if (o >= 97 && o <= 102) { return o - 87 }
@@ -113,8 +115,8 @@ fn _hexValue(c: string) -> int {
 }
 
 fn _allWhitespace(s: string) -> bool {
-    for (var i = 0; i < s.length; i++) {
-        if (!_isWhitespace(s.charAt(i))) { return false }
+    for (var i = 0; i < len(s); i++) {
+        if (!_isWhitespace(s.slice(i, (i) + 1))) { return false }
     }
     return true
 }
@@ -126,7 +128,7 @@ fn _utf8Len(cp: int) -> int {
     return 4
 }
 
-fn _putUtf8(out: Bytes, oi: int, cp: int) -> int {
+fn _putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
     if (cp < 0x80) {
         out[oi] = cp
         return oi + 1
@@ -149,7 +151,7 @@ fn _putUtf8(out: Bytes, oi: int, cp: int) -> int {
 
 fn _codepointString(cp: int) -> string? {
     if (cp <= 0 || cp > 0x10FFFF) { return null }
-    var out = Bytes(_utf8Len(cp))
+    var out = Array<byte>(_utf8Len(cp))
     _putUtf8(out, 0, cp)
     return out.toString()
 }
@@ -192,21 +194,21 @@ fn _numericEntity(name: string) -> string? {
     if (!name.startsWith("#")) { return null }
     var base = 10
     var pos = 1
-    if (name.length >= 3 && (name.charAt(1) == "x" || name.charAt(1) == "X")) {
+    if (len(name) >= 3 && (name.slice(1, (1) + 1) == "x" || name.slice(1, (1) + 1) == "X")) {
         base = 16
         pos = 2
     }
-    if (pos >= name.length) { return null }
+    if (pos >= len(name)) { return null }
     var cp = 0
-    while (pos < name.length) {
-        var c = name.charAt(pos)
+    while (pos < len(name)) {
+        var c = name.slice(pos, (pos) + 1)
         var d = -1
         if (base == 16) {
             if (!_isHexDigit(c)) { return null }
             d = _hexValue(c)
         } else {
             if (!_isDigit(c)) { return null }
-            d = c.ord()! - 48
+            d = c.runes().nth(0).toUInt32() - 48
         }
         cp = cp * base + d
         if (cp > 0x10FFFF) { return null }
@@ -224,8 +226,8 @@ fn _indentText(level: int, spaces: int) -> string {
 
 fn _escapeText(value: string) -> string {
     var out = StringBuilder()
-    for (var i = 0; i < value.length; i++) {
-        var c = value.charAt(i)
+    for (var i = 0; i < len(value); i++) {
+        var c = value.slice(i, (i) + 1)
         if (c == "<") {
             out.append("&lt;")
         } else if (c == ">") {
@@ -241,8 +243,8 @@ fn _escapeText(value: string) -> string {
 
 fn _escapeAttr(value: string) -> string {
     var out = StringBuilder()
-    for (var i = 0; i < value.length; i++) {
-        var c = value.charAt(i)
+    for (var i = 0; i < len(value); i++) {
+        var c = value.slice(i, (i) + 1)
         if (c == "<") {
             out.append("&lt;")
         } else if (c == ">") {
@@ -259,7 +261,7 @@ fn _escapeAttr(value: string) -> string {
 }
 
 fn _stringValue(value: unknown, fallback: string = "") -> string {
-    if (typename(value) == "string") { return value as string }
+    if (typeName(value) == "string") { return value as string }
     return fallback
 }
 
@@ -268,7 +270,7 @@ fn _nodeType(node: Json) -> string {
 }
 
 fn _arrayValue(value: unknown) -> Array<unknown>? {
-    if (typename(value) == "Array") { return value as Array<unknown> }
+    if (typeName(value) == "Array") { return value as Array<unknown> }
     return null
 }
 
@@ -301,18 +303,18 @@ class XmlParser {
     }
 
     atEnd() -> bool {
-        return this.pos >= this.data.length
+        return this.pos >= len(this.data)
     }
 
     peek() -> string {
         if (this.atEnd()) { return "" }
-        return this.data.charAt(this.pos)
+        return this.data.slice(this.pos, (this.pos) + 1)
     }
 
     peekAt(offset: int) -> string {
         var p = this.pos + offset
-        if (p < 0 || p >= this.data.length) { return "" }
-        return this.data.charAt(p)
+        if (p < 0 || p >= len(this.data)) { return "" }
+        return this.data.slice(p, (p) + 1)
     }
 
     startsWith(prefix: string) -> bool {
@@ -325,7 +327,7 @@ class XmlParser {
 
     advance() -> string {
         var c = this.peek()
-        if (c.length == 0) { return c }
+        if (len(c) == 0) { return c }
         this.pos = this.pos + 1
         if (c == "\n") {
             this.line = this.line + 1
@@ -376,14 +378,14 @@ class XmlParser {
     decodeEntities(value: string) -> string {
         var out = StringBuilder()
         var i = 0
-        while (i < value.length) {
-            var c = value.charAt(i)
+        while (i < len(value)) {
+            var c = value.slice(i, (i) + 1)
             if (c == "&") {
                 var j = i + 1
-                while (j < value.length && value.charAt(j) != ";" && j - i < 12) {
+                while (j < len(value) && value.slice(j, (j) + 1) != ";" && j - i < 12) {
                     j = j + 1
                 }
-                if (j < value.length && value.charAt(j) == ";") {
+                if (j < len(value) && value.slice(j, (j) + 1) == ";") {
                     var name = value.slice(i + 1, j)
                     out.append(this.decodeEntity(name))
                     i = j + 1
@@ -521,7 +523,7 @@ class XmlParser {
         if (name != "xmlns" && !name.startsWith("xmlns:")) { return }
         var nsValue = Json.get(node, "namespaces", null)
         var ns: Json = {}
-        if (typename(nsValue) == "Json") {
+        if (typeName(nsValue) == "Json") {
             ns = nsValue
         } else {
             node["namespaces"] = ns
@@ -529,7 +531,7 @@ class XmlParser {
         if (name == "xmlns") {
             ns[""] = value
         } else {
-            ns[name.slice(6, name.length)] = value
+            ns[name.slice(6, len(name))] = value
         }
     }
 
@@ -541,7 +543,7 @@ class XmlParser {
         if (this.peek() != "<") { return null }
         this.advance()
         var tag = this.parseName()
-        if (tag.length == 0) {
+        if (len(tag) == 0) {
             this.addError("InvalidTag", "Invalid tag start")
             return null
         }
@@ -560,7 +562,7 @@ class XmlParser {
                 break
             }
             var attrName = this.parseName()
-            if (attrName.length == 0) {
+            if (len(attrName) == 0) {
                 this.addError("InvalidAttr", "Invalid attribute")
                 while (!this.atEnd() && this.peek() != ">" && !this.startsWith("/>")) {
                     this.advance()
@@ -675,7 +677,7 @@ fn _parseWithDetails(data: string, options: unknown = null) -> XmlParser {
 }
 
 fn _serializeNode(nodeValue: unknown, config: XmlWriteConfig, level: int, depth: int) -> string {
-    if (depth > XML_MAX_DEPTH || typename(nodeValue) != "Json") { return "" }
+    if (depth > XML_MAX_DEPTH || typeName(nodeValue) != "Json") { return "" }
     var node = nodeValue as Json
     var typ = _nodeType(node)
     var out = StringBuilder()
@@ -683,7 +685,7 @@ fn _serializeNode(nodeValue: unknown, config: XmlWriteConfig, level: int, depth:
     if (typ == "document") {
         var children = _arrayValue(Json.get(node, "children", []))
         if (children == null) { return "" }
-        for (var i = 0; i < children!.length; i++) {
+        for (var i = 0; i < len(children!); i++) {
             out.append(_serializeNode(children![i], config, level, depth + 1))
         }
         return out.toString()
@@ -691,17 +693,17 @@ fn _serializeNode(nodeValue: unknown, config: XmlWriteConfig, level: int, depth:
 
     if (typ == "element") {
         var tag = _stringValue(Json.get(node, "tag", ""), "")
-        if (tag.length == 0) { return "" }
+        if (len(tag) == 0) { return "" }
         out.append(_indentText(level, config.indent))
         out.append("<")
         out.append(tag)
 
         var attrsValue = Json.get(node, "attrs", null)
-        if (typename(attrsValue) == "Json") {
+        if (typeName(attrsValue) == "Json") {
             var attrs = attrsValue as Json
             for (key in attrs) {
                 var value = Json.get(attrs, key, null)
-                if (typename(value) == "string") {
+                if (typeName(value) == "string") {
                     out.append(" ")
                     out.append(key)
                     out.append("=\"")
@@ -712,20 +714,20 @@ fn _serializeNode(nodeValue: unknown, config: XmlWriteConfig, level: int, depth:
         }
 
         var children = _arrayValue(Json.get(node, "children", []))
-        if (children != null && children!.length > 0) {
+        if (children != null && len(children!) > 0) {
             out.append(">")
             var textOnly = false
-            if (children!.length == 1 && typename(children![0]) == "Json") {
+            if (len(children!) == 1 && typeName(children![0]) == "Json") {
                 textOnly = _nodeType(children![0] as Json) == "text"
             }
             if (textOnly) {
                 var textValue = Json.get(children![0] as Json, "text", "")
-                if (typename(textValue) == "string") {
+                if (typeName(textValue) == "string") {
                     out.append(_escapeText(textValue as string))
                 }
             } else {
                 if (config.indent > 0) { out.append("\n") }
-                for (var i = 0; i < children!.length; i++) {
+                for (var i = 0; i < len(children!); i++) {
                     out.append(_serializeNode(children![i], config, level + 1, depth + 1))
                 }
                 out.append(_indentText(level, config.indent))
@@ -821,10 +823,10 @@ fn document() -> Json {
 fn element(tag: string, attrsValue: unknown = null) -> Json {
     var attrs: Json = {}
     var encoded: Json = Json.encode(attrsValue)
-    if (typename(encoded) == "Json") {
+    if (typeName(encoded) == "Json") {
         for (key in encoded) {
             var value = Json.get(encoded, key, null)
-            if (typename(value) == "string") {
+            if (typeName(value) == "string") {
                 attrs[key] = value
             }
         }

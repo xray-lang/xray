@@ -15,7 +15,7 @@ log.setLevel(log.DEBUG)
 log.info("server started", "port", 8080, "host", "localhost")
 
 var child = log.child("module", "http")
-print(typename(child))
+print(typeName(child))
 child.warn("slow response", "ms", 42)
 
 log.setFormat("json")

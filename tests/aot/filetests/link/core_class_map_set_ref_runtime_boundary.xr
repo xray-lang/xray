@@ -10,7 +10,7 @@ class Registry {
     mark(key: int, value: int) -> int {
         this.scores.set(key, value)
         this.seen.add(key)
-        if (this.seen.has(key)) {
+        if (this.seen.contains(key)) {
             return this.scores.get(key) ?? 0
         }
         return 0

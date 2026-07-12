@@ -16,7 +16,7 @@ order: 016
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
+> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Array<byte>` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -45,7 +45,7 @@ order: 016
 `net` 的 TCP API 明确区分三类数据路径：
 
 - `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Bytes` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<byte>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
 - `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
 
 设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
@@ -148,7 +148,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
+> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Array<byte>`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -177,7 +177,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 The `net` TCP API intentionally has three data paths:
 
 - `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Bytes` buffer path for binary protocol hot loops without per-packet temporary strings.
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<byte>` buffer path for binary protocol hot loops without per-packet temporary strings.
 - `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
 
 Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.

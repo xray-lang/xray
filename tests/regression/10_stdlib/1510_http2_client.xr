@@ -4,7 +4,7 @@ import http
 
 @test
 fn test_h2_apis_exist() {
-    assert(typename(http.h2Request) == "function")
+    assert(typeName(http.h2Request) == "function")
 }
 
 @test

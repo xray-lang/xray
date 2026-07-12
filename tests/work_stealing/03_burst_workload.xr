@@ -34,7 +34,7 @@ print("创建耗时: " + string(create_time) + " ms")
 /* 等待所有协程完成 */
 print("等待所有协程完成...")
 var wait_start = time.monotonic()
-for (var i = 0; i < tasks.length; i++) {
+for (var i = 0; i < len(tasks); i++) {
     await tasks[i]
 }
 var wait_time = time.monotonic() - wait_start
@@ -46,7 +46,7 @@ var throughput = float(BURST_SIZE) / (float(total_time) / 1000)
 print("吞吐量: " + string(int(throughput)) + " 协程/秒")
 /* 验证 */
 var all_done = true
-for (var i = 0; i < tasks.length; i++) {
+for (var i = 0; i < len(tasks); i++) {
     if (!tasks[i].done) {
         all_done = false
         print("✗ 协程 " + string(i) + " 未完成")

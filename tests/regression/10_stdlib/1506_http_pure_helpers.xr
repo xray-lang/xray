@@ -22,46 +22,46 @@ fn test_url_decode_named_import() {
 @test
 fn test_response_text() {
     var resp = responseText(200, "hello")!
-    assert(resp.includes("HTTP/1.1 200 OK\r\n"))
-    assert(resp.includes("Content-Type: text/plain; charset=utf-8\r\n"))
-    assert(resp.includes("Content-Length: 5\r\n"))
+    assert(resp.contains("HTTP/1.1 200 OK\r\n"))
+    assert(resp.contains("Content-Type: text/plain; charset=utf-8\r\n"))
+    assert(resp.contains("Content-Length: 5\r\n"))
     assert(resp.endsWith("\r\n\r\nhello"))
 }
 
 @test
 fn test_response_json() {
     var resp = responseText(404, Json.stringify({error: "no"}), "application/json; charset=utf-8")!
-    assert(resp.includes("HTTP/1.1 404 Not Found\r\n"))
-    assert(resp.includes("Content-Type: application/json; charset=utf-8\r\n"))
-    assert(resp.includes("Content-Length: 14\r\n"))
+    assert(resp.contains("HTTP/1.1 404 Not Found\r\n"))
+    assert(resp.contains("Content-Type: application/json; charset=utf-8\r\n"))
+    assert(resp.contains("Content-Length: 14\r\n"))
     assert(resp.endsWith("{\"error\":\"no\"}"))
 
     var large = responseText(413, "too large")!
-    assert(large.includes("HTTP/1.1 413 Payload Too Large\r\n"))
+    assert(large.contains("HTTP/1.1 413 Payload Too Large\r\n"))
 }
 
 @test
 fn test_response_unicode_byte_length() {
     var resp = responseText(200, "é")!
-    assert(resp.includes("Content-Length: 2\r\n"))
+    assert(resp.contains("Content-Length: 2\r\n"))
     assert(resp.endsWith("\r\n\r\né"))
 }
 
 @test
 fn test_response_empty_body() {
     var resp = responseText(204)!
-    assert(resp.includes("HTTP/1.1 204 No Content\r\n"))
-    assert(resp.includes("Content-Length: 0\r\n"))
+    assert(resp.contains("HTTP/1.1 204 No Content\r\n"))
+    assert(resp.contains("Content-Length: 0\r\n"))
     assert(resp.endsWith("\r\n\r\n"))
 }
 
 @test
 fn test_response_text_custom_headers() {
     var resp = responseText(201, "created", "text/custom", withHeader("X-Trace", "abc"), false)!
-    assert(resp.includes("HTTP/1.1 201 Created\r\n"))
-    assert(resp.includes("Content-Type: text/custom\r\n"))
-    assert(resp.includes("X-Trace: abc\r\n"))
-    assert(resp.includes("Connection: close\r\n"))
+    assert(resp.contains("HTTP/1.1 201 Created\r\n"))
+    assert(resp.contains("Content-Type: text/custom\r\n"))
+    assert(resp.contains("X-Trace: abc\r\n"))
+    assert(resp.contains("Connection: close\r\n"))
     assert(resp.endsWith("\r\n\r\ncreated"))
 }
 

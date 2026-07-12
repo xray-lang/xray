@@ -42,7 +42,7 @@ typedef enum {
     XA_IFACE_STRINGABLE,  // toString() support
     XA_IFACE_INDEXABLE,   // [] index access
     XA_IFACE_EQUATABLE,   // ==, != operators
-    XA_IFACE_LENGTHABLE,  // .length property
+    XA_IFACE_LENGTHABLE,  // operator len() protocol
     XA_IFACE_CALLABLE,    // () invocation
     XA_IFACE_CLOSEABLE,   // resource management (close)
     XA_IFACE_COUNT        // total count

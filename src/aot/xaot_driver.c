@@ -843,6 +843,29 @@ static void features_apply_capability_plans(XaotFeatureSet *fs, const XaotBundle
         features_apply_capability_plan(fs, bundle->capability_plans[i].capability);
 }
 
+static void features_apply_ir_intrinsics(XaotFeatureSet *fs, const XaotBundle *bundle) {
+    if (!fs || !bundle)
+        return;
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XiFunc *func = bundle->func_plans[fi].func;
+        if (!func)
+            continue;
+        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+            const XiBlock *block = func->blocks[bi];
+            if (!block)
+                continue;
+            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                const XiValue *value = block->values[vi];
+                if (value && (value->op == XI_PAR_FOR || value->op == XI_PAR_MAP ||
+                              value->op == XI_PAR_REDUCE)) {
+                    fs->need_parallel = true;
+                    return;
+                }
+            }
+        }
+    }
+}
+
 static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {
     if (!fs || !bundle)
         return;
@@ -1665,8 +1688,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         ir_funcs[ti]->module = NULL;
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
-    xa_analyzer_free(shared_analyzer);
-    shared_analyzer = NULL;
+
+    /* Xi values and AOT plans retain pointers into the analyzer-owned type
+     * pool. Keep that pool alive through import resolution, prepare, verify,
+     * and C emission; releasing it here turns non-singleton types into dangling
+     * pointers before code generation. */
 
     /* --- Resolve XI_IMPORT_REF using graph (before graph is freed) --- */
     for (int ti = 0; ti < nmodules; ti++) {
@@ -1841,6 +1867,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XaotFeatureSet features;
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
+    features_apply_ir_intrinsics(&features, &aot_bundle);
     features_apply_link_dependency_plans(&features, &aot_bundle);
     if (!build_link_manifest(&features, options->target, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING,
@@ -1863,6 +1890,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xr_free(modules);
     xr_free(pres_arr);
     xr_free(ir_funcs);
+    xa_analyzer_free(shared_analyzer);
+    shared_analyzer = NULL;
 
     printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules in %d unit%s)\n",
            total_c_bytes, total_funcs, nmodules, n_sources, n_sources == 1 ? "" : "s");

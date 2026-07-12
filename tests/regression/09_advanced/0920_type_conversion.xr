@@ -9,7 +9,7 @@ fn test_int_to_string() {
     var x = 42
     var s = string(x)
     assert_eq(s, "42")
-    assert_eq(typename(s), "string")
+    assert_eq(typeName(s), "string")
 }
 
 @test
@@ -87,9 +87,9 @@ fn test_null_to_bool() {
 fn test_array_unique() {
     var arr = [1, 2, 2, 3, 3, 3]
     var s = #[1, 2, 3]  // 手动去重
-    assert_eq(s.length, 3)
-    assert_eq(s.has(1), true)
-    assert_eq(s.has(2), true)
-    assert_eq(s.has(3), true)
+    assert_eq(len(s), 3)
+    assert_eq(s.contains(1), true)
+    assert_eq(s.contains(2), true)
+    assert_eq(s.contains(3), true)
 }
 

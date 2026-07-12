@@ -47,16 +47,16 @@ fn test_mixed_types() {
     sb.append(", ok=")
     sb.append(true)
     var result = sb.toString()
-    assert_eq(result.includes("100"), true)
+    assert_eq(result.contains("100"), true)
 }
 
 @test
 fn test_append_char() {
     var sb = StringBuilder()
     sb.append("hex=")
-    sb.append("0123456789abcdef"[10])
+    sb.append("0123456789abcdef".runes().nth(10))
     sb.append(", unicode=")
-    sb.append("你好"[1])
+    sb.append("你好".runes().nth(1))
     assert_eq(sb.toString(), "hex=a, unicode=好")
 }
 
@@ -120,5 +120,5 @@ fn test_large_append() {
     for (i in 0..100) {
         sb.append("a")
     }
-    assert_eq(sb.toString().length, 100)
+    assert_eq(len(sb.toString()), 100)
 }

@@ -51,6 +51,7 @@
 #include "../coro/xaot_coro.h"
 #include "xrt_method_symbols.h"
 #include "../base/xmemstream.h"
+#include "../base/xutf8.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xconsteval.h"
@@ -632,6 +633,8 @@ struct XiCgenCtx {
     CgFuncReachMemo *func_reach_memo;
     int nfunc_reach_memo;
     int func_reach_memo_cap;
+    bool func_reachability_valid;
+    bool func_reachability_computing;
     CgSharedSlotReachMemo *shared_slot_reach_memo;
     int nshared_slot_reach_memo;
     int shared_slot_reach_memo_cap;
@@ -642,6 +645,8 @@ static void cg_reachability_cache_clear(XiCgenCtx *ctx) {
         return;
     ctx->nfunc_reach_memo = 0;
     ctx->nshared_slot_reach_memo = 0;
+    ctx->func_reachability_valid = false;
+    ctx->func_reachability_computing = false;
 }
 
 static void cg_ctx_set_error(XiCgenCtx *ctx) {
@@ -1908,8 +1913,6 @@ static bool cg_closure_new_value_can_emit_null_for_unreachable_body(
                             break;
                         if (!owner_mod || !owner_mod->init || user->aux_int < 0 ||
                             user->aux_int >= owner_mod->init->nshared ||
-                            (owner_mod->init->export_names &&
-                             owner_mod->init->export_names[user->aux_int]) ||
                             cg_shared_slot_has_reachable_get(ctx, owner_mod, (int) user->aux_int))
                             return false;
                         break;
@@ -2401,7 +2404,7 @@ static void cg_emit_xrvalue_literal_initializer(FILE *out, const XiConstLiteral 
             fprintf(out, "%s", lit->bool_value ? "XR_TRUE_VAL" : "XR_FALSE_VAL");
             break;
         case XI_CONST_LITERAL_CHAR:
-            fprintf(out, "XR_FROM_CHAR(UINT32_C(%" PRIu32 "))", (uint32_t) lit->int_value);
+            fprintf(out, "XR_FROM_RUNE(UINT32_C(%" PRIu32 "))", (uint32_t) lit->int_value);
             break;
         case XI_CONST_LITERAL_STRING:
             fprintf(out, "{.tag = XR_TAG_STR, .ptr = (void *) &");
@@ -2461,7 +2464,7 @@ static bool cg_const_value_matches_literal(const XiValue *value, const XiConstLi
             return v->op == XI_CONST && v->type->kind == XR_KIND_BOOL &&
                    (v->aux_int != 0) == lit->bool_value;
         case XI_CONST_LITERAL_CHAR:
-            return v->op == XI_CONST && v->type->kind == XR_KIND_CHAR &&
+            return v->op == XI_CONST && v->type->kind == XR_KIND_RUNE &&
                    v->aux_int == lit->int_value;
         case XI_CONST_LITERAL_STRING: {
             const char *value_s = v->aux ? (const char *) v->aux : "";
@@ -2536,8 +2539,8 @@ static void cg_emit_static_string_header_initializer(FILE *out, const char *s) {
     if (!s)
         s = "";
     size_t len = strlen(s);
-    fprintf(out, "{INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ", len,
-            xr_hash_core_str_hash_bytes(s, len));
+    fprintf(out, "{INT64_C(%zu), INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ", len,
+            xr_utf8_strlen(s, len), xr_hash_core_str_hash_bytes(s, len));
     emit_c_string_literal_bytes(out, s, len);
     fprintf(out, "}");
 }
@@ -2752,7 +2755,7 @@ static bool cg_emit_freestanding_static_scalar_var_store(XiCgenCtx *ctx, FILE *o
             cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
-            fprintf(out, ", XR_FROM_CHAR((uint32_t)");
+            fprintf(out, ", XR_FROM_RUNE((uint32_t)");
             cg_emit_static_scalar_var_name(ctx, out, module, slot);
             fprintf(out, "))");
             return true;
@@ -3821,8 +3824,6 @@ static bool cg_import_ref_value_use_requires_runtime_value(XiCgenCtx *ctx, const
                             return true;
                         if (!owner_mod || !owner_mod->init || user->aux_int < 0 ||
                             user->aux_int >= owner_mod->init->nshared ||
-                            (owner_mod->init->export_names &&
-                             owner_mod->init->export_names[user->aux_int]) ||
                             cg_shared_slot_has_reachable_get(ctx, owner_mod, (int) user->aux_int))
                             return true;
                         break;
@@ -3903,7 +3904,7 @@ static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char
         const char *kind;
         const char *detail;
     } allocating_builtins[] = {
-        {"Bytes", "constructor", "Bytes"},
+        {"array_byte_new", "constructor", "array_byte_new"},
         {"StringBuilder", "constructor", "StringBuilder"},
         {"map_new", "constructor", "Map"},
         {"set_new", "constructor", "Set"},
@@ -4013,7 +4014,7 @@ static bool cg_no_alloc_type_name_allocates(const char *type) {
         type++;
     if (strncmp(type, "string", 6) == 0)
         return true;
-    if (strncmp(type, "Bytes", 5) == 0)
+    if (strncmp(type, "array_byte_new", 5) == 0)
         return true;
     if (strncmp(type, "Array<", 6) == 0)
         return true;
@@ -4181,27 +4182,18 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_SET, NULL, "values", "Set.values"},
         {XR_KIND_SET, NULL, "iterator", "Set.iterator"},
         {XR_KIND_SET, NULL, "toString", "Set.toString"},
-        {XR_KIND_STRING, NULL, "charAt", "string.charAt"},
-        {XR_KIND_STRING, NULL, "byteAt", "string.byteAt"},
-        {XR_KIND_STRING, NULL, "concat", "string.concat"},
         {XR_KIND_STRING, NULL, "slice", "string.slice"},
-        {XR_KIND_STRING, NULL, "substring", "string.substring"},
-        {XR_KIND_STRING, NULL, "toLowerCase", "string.toLowerCase"},
-        {XR_KIND_STRING, NULL, "toUpperCase", "string.toUpperCase"},
-        {XR_KIND_STRING, NULL, "trim", "string.trim"},
-        {XR_KIND_STRING, NULL, "trimStart", "string.trimStart"},
-        {XR_KIND_STRING, NULL, "trimEnd", "string.trimEnd"},
         {XR_KIND_STRING, NULL, "split", "string.split"},
         {XR_KIND_STRING, NULL, "replace", "string.replace"},
         {XR_KIND_STRING, NULL, "replaceAll", "string.replaceAll"},
         {XR_KIND_STRING, NULL, "repeat", "string.repeat"},
-        {XR_KIND_STRING, NULL, "reverse", "string.reverse"},
-        {XR_KIND_STRING, NULL, "padStart", "string.padStart"},
-        {XR_KIND_STRING, NULL, "padEnd", "string.padEnd"},
-        {XR_KIND_STRING, NULL, "match", "string.match"},
-        {XR_KIND_STRING, NULL, "toBytes", "string.toBytes"},
-        {XR_KIND_STRING, NULL, "translate", "string.translate"},
-        {XR_KIND_STRING, NULL, "entries", "string.entries"},
+        {XR_KIND_STRING, NULL, "copyBytes", "string.copyBytes"},
+        {XR_KIND_STRING, NULL, "fromUtf8", "string.fromUtf8"},
+        {XR_KIND_STRING, NULL, "fromUtf8Lossy", "string.fromUtf8Lossy"},
+        {XR_KIND_STRING, NULL, "fromRune", "string.fromRune"},
+        {XR_KIND_STRING, NULL, "join", "string.join"},
+        {XR_KIND_STRING, NULL, "sliceBytes", "string.sliceBytes"},
+        {XR_KIND_STRING, NULL, "runes", "string.runes"},
         {XR_KIND_STRING, NULL, "iterator", "string.iterator"},
         {XR_KIND_STRING, NULL, "entriesIterator", "string.entriesIterator"},
         {XR_KIND_INT, NULL, "toString", "int.toString"},
@@ -4210,7 +4202,7 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_FLOAT, NULL, "toString", "float.toString"},
         {XR_KIND_FLOAT, NULL, "toFixed", "float.toFixed"},
         {XR_KIND_BOOL, NULL, "toString", "bool.toString"},
-        {XR_KIND_CHAR, NULL, "toString", "char.toString"},
+        {XR_KIND_RUNE, NULL, "toString", "char.toString"},
         {XR_KIND_NULL, NULL, "toString", "null.toString"},
         {XR_KIND_ENUM, NULL, "toString", "enum.toString"},
         {XR_KIND_UNKNOWN, "BigInt", "toString", "BigInt.toString"},
@@ -7653,6 +7645,7 @@ static bool cg_value_allocates_closure_for_func(const XiValue *v, const XiFunc *
 }
 
 static bool cg_debug_boxed_adapter_enabled(void);
+static bool cg_func_is_exported_class_member(const XiCgenCtx *ctx, const XiFunc *f);
 
 static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc *owner,
                                                    const XiFunc *target, const char *prefix) {
@@ -7791,7 +7784,8 @@ static bool cg_native_receiver_ctor_call_needs_boxed_adapter(XiCgenCtx *ctx, con
         return false;
 
     int shared_slot = -1;
-    if (cg_class_native_ctor_can_inline(ctx, owner, call) ||
+    if (cg_value_plan_storage_rep(ctx, call) == XR_REP_PTR ||
+        cg_class_native_ctor_can_inline(ctx, owner, call) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, owner, call, &shared_slot))
         return false;
     return true;
@@ -7842,6 +7836,9 @@ typedef struct {
     CgSharedNativeInstance *shared_native_instances;
     CgMethodEntry *methods;
 } CgModuleScanSnapshot;
+
+static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner,
+                                             const XiFunc *target);
 
 /* Boxed-adapter discovery scans other modules' IR, but shared slots and method
  * tables are interpreted through the current CGen context.  Snapshot the
@@ -7921,6 +7918,26 @@ static void cg_module_scan_snapshot_restore(XiCgenCtx *ctx, CgModuleScanSnapshot
     cg_module_scan_snapshot_free(snap);
 }
 
+static bool cg_func_body_has_static_func_use_in_owner_module(XiCgenCtx *ctx, const XiFunc *source,
+                                                             const XiFunc *target) {
+    if (!ctx || !source || !target)
+        return false;
+    const XiModule *owner = cg_module_for_func(ctx, source);
+    if (!owner || owner == ctx->module)
+        return cg_func_body_has_static_func_use(ctx, source, target);
+
+    CgModuleScanSnapshot snap;
+    if (!cg_module_scan_snapshot_save(ctx, &snap)) {
+        cg_module_scan_snapshot_free(&snap);
+        return false;
+    }
+    cg_init_from_module(ctx, (XiModule *) owner);
+    cg_register_imported_classes(ctx);
+    bool found = cg_func_body_has_static_func_use(ctx, source, target);
+    cg_module_scan_snapshot_restore(ctx, &snap);
+    return found;
+}
+
 static bool cg_func_has_native_receiver_boxed_use_in_module(XiCgenCtx *ctx, const XiModule *module,
                                                             const XiFunc *target,
                                                             const char *prefix) {
@@ -7967,13 +7984,19 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
         return true;
     if (!typed_abi && !native_receiver)
         return false;
+    /* Exported class methods are an open dynamic ABI surface even in an
+     * executable: values may cross an `unknown` boundary in another module and
+     * dispatch through the boxed receiver contract. */
+    if (native_receiver && cg_func_is_exported_class_member(ctx, f))
+        return true;
 
     bool native_class_ptr_param = cg_func_has_native_class_ptr_param(ctx, f);
     const XiFunc *root = ctx && ctx->module ? ctx->module->init : NULL;
     if (cg_func_is_shared_slot_value(ctx, f)) {
         int func_slot = cg_shared_slot_for_func(ctx, f);
         if (func_slot >= 0) {
-            if (!cg_shared_static_function_slot_can_elide(ctx, root, func_slot, f))
+            if (!native_receiver &&
+                !cg_shared_static_function_slot_can_elide(ctx, root, func_slot, f))
                 return true;
         } else if (!native_receiver) {
             return true;
@@ -8526,26 +8549,43 @@ static bool cg_func_is_module_export(const XiCgenCtx *ctx, const XiFunc *f) {
     return false;
 }
 
+static bool cg_func_is_member_of_class_data(const XiModule *mod, const XiClassData *cd,
+                                            const XiFunc *f) {
+    if (!mod || !mod->init || !cd || !f)
+        return false;
+    if (cd->child_idx) {
+        uint16_t total = (uint16_t) (cd->ninst + cd->nstat);
+        if (total > cd->nmethod)
+            total = cd->nmethod;
+        for (uint16_t mi = 0; mi < total; mi++) {
+            uint16_t child_idx = cd->child_idx[mi];
+            if (child_idx < mod->init->nchildren && mod->init->children[child_idx] == f)
+                return true;
+        }
+    }
+    return cd->clinit_child_idx >= 0 && cd->clinit_child_idx < mod->init->nchildren &&
+           mod->init->children[cd->clinit_child_idx] == f;
+}
+
 static bool cg_func_is_class_member(const XiCgenCtx *ctx, const XiFunc *f) {
     const XiModule *mod = cg_module_for_func(ctx, f);
     if (!mod || !mod->init || !f)
         return false;
     for (uint16_t ci = 0; ci < mod->nclasses; ci++) {
         const XiClassData *cd = mod->classes ? mod->classes[ci] : NULL;
-        if (!cd)
-            continue;
-        if (cd->child_idx) {
-            uint16_t total = (uint16_t) (cd->ninst + cd->nstat);
-            if (total > cd->nmethod)
-                total = cd->nmethod;
-            for (uint16_t mi = 0; mi < total; mi++) {
-                uint16_t child_idx = cd->child_idx[mi];
-                if (child_idx < mod->init->nchildren && mod->init->children[child_idx] == f)
-                    return true;
-            }
-        }
-        if (cd->clinit_child_idx >= 0 && cd->clinit_child_idx < mod->init->nchildren &&
-            mod->init->children[cd->clinit_child_idx] == f)
+        if (cg_func_is_member_of_class_data(mod, cd, f))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_func_is_exported_class_member(const XiCgenCtx *ctx, const XiFunc *f) {
+    const XiModule *mod = cg_module_for_func(ctx, f);
+    if (!mod || !f)
+        return false;
+    for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+        const XiClassData *cd = mod->exports[ei].class_data;
+        if (cd && cg_func_is_member_of_class_data(mod, cd, f))
             return true;
     }
     return false;
@@ -8670,6 +8710,7 @@ static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner
                                              const XiFunc *target) {
     if (!ctx || !owner || !target)
         return false;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
         const XiBlock *blk = owner->blocks[bi];
         if (!blk)
@@ -8682,16 +8723,70 @@ static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner
                 continue;
             if (cg_parallel_op_targets_func(v, target))
                 return true;
+            if (bundle &&
+                (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+                xaot_boundary_resolve_direct_call_target(bundle, owner, v, NULL) == target)
+                return true;
             if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1) {
                 CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, owner, v->args[0]);
                 if (call.func == target)
                     return true;
+                const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+                if (class_name && cg_lookup_class_ctor_global(ctx, class_name, NULL) == target)
+                    return true;
+                const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+                if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
+                    const XiClassData *cd = (const XiClassData *) callee->aux;
+                    for (const XiFunc *parent = owner; parent; parent = parent->parent_func) {
+                        if (cg_find_constructor(parent, cd) == target)
+                            return true;
+                    }
+                }
             }
             if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) {
+                const char *method = (const char *) v->aux;
+                if (method) {
+                    CgStaticFunctionCall module_call =
+                        cg_resolve_module_member_call(ctx, owner, v, method);
+                    if (module_call.func == target)
+                        return true;
+                }
+                if (method && strcmp(method, "constructor") == 0) {
+                    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+                    if (class_name && cg_lookup_class_ctor_global(ctx, class_name, NULL) == target)
+                        return true;
+                }
+                if (method && v->nargs >= 1) {
+                    const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
+                    const XiModule *owner_mod = cg_module_for_func(ctx, owner);
+                    const XiClassData *receiver_class = NULL;
+                    if (receiver && receiver->op == XI_GET_SHARED && owner_mod &&
+                        owner_mod->slot_classes && receiver->aux_int >= 0 &&
+                        receiver->aux_int < owner_mod->nslots)
+                        receiver_class = owner_mod->slot_classes[receiver->aux_int];
+                    if (!receiver_class)
+                        receiver_class = cg_class_native_class_value_data(ctx, owner, receiver);
+                    if (receiver_class && receiver_class->methods && receiver_class->child_idx) {
+                        const XiModule *class_mod =
+                            cg_class_native_module_for_data(ctx, receiver_class);
+                        if (class_mod && class_mod->init) {
+                            for (uint16_t mi = 0; mi < receiver_class->nmethod; mi++) {
+                                const XiClassMethod *candidate = &receiver_class->methods[mi];
+                                if (!candidate->is_static || candidate->is_static_constructor ||
+                                    !candidate->name || strcmp(candidate->name, method) != 0)
+                                    continue;
+                                uint16_t child_idx = receiver_class->child_idx[mi];
+                                if (child_idx < class_mod->init->nchildren &&
+                                    class_mod->init->children[child_idx] == target)
+                                    return true;
+                            }
+                        }
+                    }
+                }
                 const char *method_prefix = NULL;
-                const XiFunc *method =
+                const XiFunc *class_method =
                     cg_class_native_resolve_method_call(ctx, owner, v, &method_prefix);
-                if (method == target)
+                if (class_method == target)
                     return true;
             }
             if (cg_value_is_static_func_ref(ctx, owner, v, target) &&
@@ -8704,24 +8799,6 @@ static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner
 
 static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth);
 
-static bool cg_reachable_func_tree_uses_target(XiCgenCtx *ctx, const XiFunc *source,
-                                               const XiFunc *target, int depth) {
-    if (!ctx || !source || !target)
-        return false;
-    if (cg_func_tree_contains(target, source))
-        return false;
-    bool source_reachable = cg_func_body_is_reachable_from_roots(ctx, source, depth + 1);
-    if (!source_reachable)
-        return false;
-    if (cg_func_body_has_static_func_use(ctx, source, target))
-        return true;
-    for (uint16_t ci = 0; ci < source->nchildren; ci++) {
-        if (cg_reachable_func_tree_uses_target(ctx, source->children[ci], target, depth))
-            return true;
-    }
-    return false;
-}
-
 static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
     const XiModule *mod = cg_module_for_func(ctx, f);
     if (!f)
@@ -8731,51 +8808,91 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
     if (f->c_export || f->aot_used || f->aot_naked || f->aot_weak || f->aot_section ||
         (f->aot_interrupt_abi && f->aot_interrupt_abi[0]))
         return true;
+    /* Shared-library class descriptors are open-world ABI tables. Executable
+     * class members remain closed-world and are retained by actual constructor,
+     * direct-call, or dispatch reachability below. */
     if (cg_func_is_class_member(ctx, f))
-        return !ctx->emit_main;
-    /* An executable is closed-world: language-level module exports are not
-     * external roots.  Only explicit @c_export/interrupt/used roots above
-     * survive.  Shared-library emission keeps module exports as roots. */
+        return !ctx->emit_main || cg_func_is_exported_class_member(ctx, f);
+    /* Executables are closed-world: a language-level export is retained only
+     * when a reachable import/shared-slot read consumes it. Shared-library
+     * emission remains an open-world boundary and keeps exports as roots. */
     return !ctx->emit_main && cg_func_is_module_export(ctx, f);
 }
 
-static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth) {
-    if (!ctx || !target)
-        return false;
-    if (depth > 64)
-        return true;
-    CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, true);
-    if (!memo)
-        return true;
-    if (memo->state == 2)
-        return memo->reachable;
-    if (memo->state == 1)
-        return false;
+static bool cg_func_body_has_static_func_use_in_owner_module(XiCgenCtx *ctx, const XiFunc *source,
+                                                             const XiFunc *target);
 
-    memo->state = 1;
-    bool reachable = false;
-    if (cg_func_has_forced_body_root(ctx, target)) {
-        reachable = true;
-    } else if (!ctx->all_modules || ctx->all_nmodules <= 0) {
-        const XiModule *mod = cg_module_for_func(ctx, target);
-        reachable = mod && mod->init &&
-                    cg_reachable_func_tree_uses_target(ctx, mod->init, target, depth + 1);
-    } else {
-        for (int mi = 0; mi < ctx->all_nmodules; mi++) {
-            const XiModule *mod = ctx->all_modules[mi];
-            if (mod && mod->init &&
-                cg_reachable_func_tree_uses_target(ctx, mod->init, target, depth + 1)) {
-                reachable = true;
-                break;
+static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return;
+    CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, f, true);
+    if (memo && cg_func_has_forced_body_root(ctx, f)) {
+        memo->reachable = true;
+        memo->state = 2;
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        cg_func_reach_collect_tree(ctx, f->children[i]);
+}
+
+/* Compute executable function reachability as a monotonic fixed point over the
+ * resolved call/reference graph.  The previous per-target recursive query
+ * cached provisional negative answers while callers were still in the
+ * visiting state; later-discovered root paths could therefore leave a live C
+ * call with its callee body pruned. */
+static void cg_func_reachability_compute(XiCgenCtx *ctx) {
+    if (!ctx || ctx->func_reachability_valid || ctx->func_reachability_computing)
+        return;
+
+    ctx->func_reachability_computing = true;
+    ctx->nfunc_reach_memo = 0;
+    if (ctx->all_modules && ctx->all_nmodules > 0) {
+        for (int i = 0; i < ctx->all_nmodules; i++) {
+            const XiModule *mod = ctx->all_modules[i];
+            if (mod && mod->init)
+                cg_func_reach_collect_tree(ctx, mod->init);
+        }
+    } else if (ctx->module && ctx->module->init) {
+        cg_func_reach_collect_tree(ctx, ctx->module->init);
+    }
+
+    bool changed;
+    do {
+        changed = false;
+        /* Shared-slot reachability depends on the current live-function set;
+         * discard its provisional cache on each fixed-point round. */
+        ctx->nshared_slot_reach_memo = 0;
+        for (int si = 0; si < ctx->nfunc_reach_memo; si++) {
+            CgFuncReachMemo *source = &ctx->func_reach_memo[si];
+            if (!source->reachable)
+                continue;
+            for (int ti = 0; ti < ctx->nfunc_reach_memo; ti++) {
+                CgFuncReachMemo *target = &ctx->func_reach_memo[ti];
+                if (target->reachable || source->func == target->func)
+                    continue;
+                if (cg_func_body_has_static_func_use_in_owner_module(ctx, source->func,
+                                                                     target->func)) {
+                    target->reachable = true;
+                    target->state = 2;
+                    changed = true;
+                }
             }
         }
-    }
-    memo = cg_func_reach_memo_entry(ctx, target, false);
-    if (!memo)
-        return reachable;
-    memo->reachable = reachable;
-    memo->state = 2;
-    return memo->reachable;
+    } while (changed);
+
+    for (int i = 0; i < ctx->nfunc_reach_memo; i++)
+        ctx->func_reach_memo[i].state = 2;
+    ctx->func_reachability_computing = false;
+    ctx->func_reachability_valid = true;
+}
+
+static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth) {
+    (void) depth;
+    if (!ctx || !target)
+        return false;
+    if (!ctx->func_reachability_valid && !ctx->func_reachability_computing)
+        cg_func_reachability_compute(ctx);
+    CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, false);
+    return memo && memo->reachable;
 }
 
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {

@@ -67,6 +67,7 @@
 #include "../base/xarena.h"
 #include "../os/os_time.h"
 #include "../runtime/object/xstringbuilder.h"
+#include "../../stdlib/mem/mem.h"
 
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xjson_serde.h"
@@ -75,6 +76,7 @@
 #include "../runtime/class/xclass_descriptor.h"
 #include "../module/xmodule.h"
 #include "../coro/xchannel.h"
+#include "../coro/xwork_queue.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xdeep_copy.h"
 #include "../runtime/object/xbigint.h"

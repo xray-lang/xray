@@ -1,25 +1,25 @@
 /*
 ** 0525_typeof.xr
-** typename() 内置函数测试
+** typeName() 内置函数测试
 **
 ** 作者：xingleixu@gmail.com
 **
-** 测试 typename() 函数返回变量类型名称字符串
+** 测试 typeName() 函数返回变量类型名称字符串
 */
 // 测试基本类型
-assert_eq(typename(123), "int")
-assert_eq(typename(3.14), "float")
-assert_eq(typename("hello"), "string")
-assert_eq(typename(true), "bool")
-assert_eq(typename(false), "bool")
-assert_eq(typename(null), "null")
+assert_eq(typeName(123), "int")
+assert_eq(typeName(3.14), "float")
+assert_eq(typeName("hello"), "string")
+assert_eq(typeName(true), "bool")
+assert_eq(typeName(false), "bool")
+assert_eq(typeName(null), "null")
 // 测试容器类型
 var arr = [1, 2, 3]
-assert_eq(typename(arr), "Array")
+assert_eq(typeName(arr), "Array")
 var map = #{"a": 1}
-assert_eq(typename(map), "Map")
+assert_eq(typeName(map), "Map")
 var s = #[1, 2, 3]
-assert_eq(typename(s), "Set")
+assert_eq(typeName(s), "Set")
 
 // 测试函数类型
 @test
@@ -27,18 +27,18 @@ fn test_fn() -> int {
     return 42
 }
 
-assert_eq(typename(test_fn), "function")
+assert_eq(typeName(test_fn), "function")
 // 测试闭包
 var closure = fn() {
     return 1
 }
-assert_eq(typename(closure), "function")
+assert_eq(typeName(closure), "function")
 // 测试变量类型
 var x = 10
-assert_eq(typename(x), "int")
+assert_eq(typeName(x), "int")
 var y = 3.14
-assert_eq(typename(y), "float")
+assert_eq(typeName(y), "float")
 // 测试表达式结果类型
-assert_eq(typename(1 + 2), "int")
-assert_eq(typename("a" + "b"), "string")
-print("typename() 测试通过!")
+assert_eq(typeName(1 + 2), "int")
+assert_eq(typeName("a" + "b"), "string")
+print("typeName() 测试通过!")

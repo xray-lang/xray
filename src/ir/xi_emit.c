@@ -336,7 +336,7 @@ XR_FUNC int add_const_float(EmitCtx *ctx, double val) {
 }
 
 XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp) {
-    XrValue xv = xr_char(cp);
+    XrValue xv = xr_rune(cp);
     int idx = xr_vm_proto_add_constant(ctx->proto, xv);
     if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
@@ -451,7 +451,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             else
                 emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, dst, 0, 0));
             break;
-        case XR_KIND_CHAR: {
+        case XR_KIND_RUNE: {
             int ki = add_const_char(ctx, (uint32_t) v->aux_int);
             if (ctx->status != XI_EMIT_OK)
                 return;

@@ -17,11 +17,11 @@ try {
         (a, b) -> a + b,
         parallel.Options(4)
     )
-    print(failed.length)
+    print(len(failed))
     print("miss")
 } catch panic (p) {
     print(p.code == 420)
-    print(p.message.includes("division by zero"))
+    print(p.message.contains("division by zero"))
 }
 
 print(touched.load(Ordering.Relaxed) > 0)
@@ -34,4 +34,4 @@ var after = parallel.reduce(
     parallel.Options(4)
 )
 
-print(after.length)
+print(len(after))

@@ -76,7 +76,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     xr_core_init(isolate);
     xr_scope_transfer_enable_core(isolate->core_rt);
 
-    // Json utility class (static methods: Json.keys(), Json.has(), etc.)
+    // Json utility class (static methods: Json.keys(), Json.containsKey(), etc.)
     xr_json_api_init(isolate);
 
     // Global object + core classes + builtins

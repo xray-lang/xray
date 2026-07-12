@@ -20,8 +20,10 @@
 #include "../xisolate_api.h"
 #include "../class/xclass.h"
 #include "../class/xclass_system.h"
+#include "../../base/xutf8.h"
 #include <string.h>
 #include <stdio.h>
+#include <stddef.h>
 
 /* ========== Creation and Destruction ========== */
 
@@ -38,6 +40,7 @@ XrStringBuilder *xr_stringbuilder_new(struct XrCoroutine *coro) {
         return NULL;
     }
     sb->klass = cls;
+    sb->rune_length = 0;
 
     // Create internal buffer
     sb->buffer = xr_strbuf_new(X, 64);
@@ -54,6 +57,7 @@ void xr_stringbuilder_init_inplace(XrStringBuilder *sb) {
     if (!sb)
         return;
 
+    sb->rune_length = 0;
     // Create internal buffer (malloc, not coroutine heap)
     sb->buffer = (XrStrBuf *) xr_malloc(sizeof(XrStrBuf));
     if (sb->buffer) {
@@ -82,24 +86,30 @@ void xr_stringbuilder_append_str(XrStringBuilder *sb, XrString *s) {
     if (!sb || !sb->buffer || !s)
         return;
     xr_strbuf_append_str(sb->buffer, s);
+    sb->rune_length += xr_utf8_strlen(s->data, s->length);
 }
 
 void xr_stringbuilder_append_cstr(XrStringBuilder *sb, const char *s, size_t len) {
     if (!sb || !sb->buffer || !s)
         return;
     xr_strbuf_append_cstr(sb->buffer, s, len);
+    sb->rune_length += xr_utf8_strlen(s, len);
 }
 
 void xr_stringbuilder_append_int(XrStringBuilder *sb, int64_t val) {
     if (!sb || !sb->buffer)
         return;
+    size_t before = sb->buffer->length;
     xr_strbuf_append_int(sb->buffer, val);
+    sb->rune_length += sb->buffer->length - before;
 }
 
 void xr_stringbuilder_append_float(XrStringBuilder *sb, double val) {
     if (!sb || !sb->buffer)
         return;
+    size_t before = sb->buffer->length;
     xr_strbuf_append_float(sb->buffer, val);
+    sb->rune_length += sb->buffer->length - before;
 }
 
 XrString *xr_stringbuilder_to_string(XrStringBuilder *sb) {
@@ -123,13 +133,14 @@ XrString *xr_stringbuilder_to_string(XrStringBuilder *sb) {
 size_t xr_stringbuilder_length(XrStringBuilder *sb) {
     if (!sb || !sb->buffer)
         return 0;
-    return sb->buffer->length;
+    return sb->rune_length;
 }
 
 void xr_stringbuilder_clear(XrStringBuilder *sb) {
     if (!sb || !sb->buffer)
         return;
     xr_strbuf_reset(sb->buffer);
+    sb->rune_length = 0;
 }
 
 /* ========== XrValue Conversion ========== */
@@ -154,7 +165,7 @@ XrStringBuilder *xr_to_stringbuilder(XrValue v) {
 /* ========== Native Body Lifecycle ========== */
 
 // Destroy hook for XrNativeBodyDesc — called by xr_obj_destroy_instance.
-// The body pointer points to the XrStrBuf* field inside the instance.
+// The body pointer points to the buffer field inside the instance.
 static void stringbuilder_body_destroy(void *body) {
     XrStrBuf **buf_ptr = (XrStrBuf **) body;
     if (*buf_ptr) {
@@ -172,12 +183,13 @@ static bool stringbuilder_body_to_shared(XrVMRuntime *X, XrInstance *src, XrInst
     if (src_sb->buffer && src_sb->buffer->length > 0) {
         xr_strbuf_append_cstr(dst_sb->buffer, src_sb->buffer->data, src_sb->buffer->length);
     }
+    dst_sb->rune_length = src_sb->rune_length;
     return true;
 }
 
 // Shared descriptor for all StringBuilder instances.
 static XrNativeBodyDesc sb_native_body_desc = {
-    .body_size = sizeof(XrStrBuf *),
+    .body_size = sizeof(XrStringBuilder) - offsetof(XrStringBuilder, buffer),
     .body_align = _Alignof(XrStrBuf *),
     .copy_policy = XR_NATIVE_BODY_COPY_SHARED,
     .destroy = stringbuilder_body_destroy,

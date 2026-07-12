@@ -140,7 +140,7 @@ typedef struct XrValue {
 
 #define XR_TAG_NULL 0     /* null singleton */
 #define XR_TAG_BOOL 1     /* bool: payload 0=false, 1=true */
-#define XR_TAG_CHAR 2     /* char: Unicode scalar value in .i */
+#define XR_TAG_RUNE 2     /* char: Unicode scalar value in .i */
 #define XR_TAG_I64 3      /* integer (stored in .i as int64) */
 #define XR_TAG_F64 4      /* float (stored in .f as double) */
 #define XR_TAG_PTR 5      /* generic heap object pointer */
@@ -330,8 +330,9 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
 #define XRT_STR_LITERAL 0x1u
 
 typedef struct {
-    int64_t len;   /* byte length, excluding NUL */
-    uint32_t hash; /* cached content hash, 0 = unset (literals: precomputed) */
+    int64_t len;      /* byte length, excluding NUL */
+    int64_t rune_len; /* Unicode scalar count; -1 until first finalized query */
+    uint32_t hash;    /* cached content hash, 0 = unset (literals: precomputed) */
     uint32_t flags;
     char *data; /* NUL-terminated bytes (trailing block for heap strings) */
 } xrt_str_t;
@@ -351,6 +352,30 @@ static inline char *xr_str_buf(XrValue v) {
 
 static inline int64_t xr_str_len(XrValue v) {
     return ((const xrt_str_t *) v.ptr)->len;
+}
+
+static inline int64_t xr_str_rune_len(XrValue v) {
+    xrt_str_t *h = (xrt_str_t *) v.ptr;
+    if (!h || !h->data || h->len <= 0)
+        return 0;
+    if (h->rune_len >= 0)
+        return h->rune_len;
+    const unsigned char *p = (const unsigned char *) h->data;
+    const unsigned char *end = p + h->len;
+    int64_t count = 0;
+    while (p < end) {
+        unsigned char b = *p;
+        int64_t width = (b < 0x80u)              ? 1
+                        : ((b & 0xE0u) == 0xC0u) ? 2
+                        : ((b & 0xF0u) == 0xE0u) ? 3
+                        : ((b & 0xF8u) == 0xF0u) ? 4
+                                                 : 1;
+        p += width <= end - p ? width : 1;
+        count++;
+    }
+    if (!(h->flags & XRT_STR_LITERAL))
+        h->rune_len = count;
+    return count;
 }
 
 /* Wrap a static literal header into a value. */
@@ -375,7 +400,8 @@ static inline XrValue xr_str_value_from_ptr(void *ptr) {
  * (hand-written headers cannot precompute it); xrt_str_hash recomputes on
  * demand without caching into const storage. */
 #define XRT_STR_LIT_DEF(name, s)                                                                   \
-    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, 0, XRT_STR_LITERAL, (char *) (s)}
+    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, (int64_t) sizeof(s) - 1, 0,            \
+                                   XRT_STR_LITERAL, (char *) (s)}
 
 /* Content hash of a string value, cached in the header when writable.
  * The relaxed atomic store keeps concurrent lazy hashing well-defined:
@@ -491,7 +517,7 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
 #define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})
 #define XR_FROM_BOOL(x) ((XrValue) {.tag = XR_TAG_BOOL, .i = (x) ? 1 : 0})
-#define XR_FROM_CHAR(cp) ((XrValue) {.tag = XR_TAG_CHAR, .i = (int64_t) (uint32_t) (cp)})
+#define XR_FROM_RUNE(cp) ((XrValue) {.tag = XR_TAG_RUNE, .i = (int64_t) (uint32_t) (cp)})
 #define XR_NULL_VAL ((XrValue) {.tag = XR_TAG_NULL})
 #define XR_TRUE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 1})
 #define XR_FALSE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 0})
@@ -499,7 +525,7 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
 #define XR_TO_BOOL(v) ((int) (v).i)
-#define XR_TO_CHAR(v) ((uint32_t) (v).i)
+#define XR_TO_RUNE(v) ((uint32_t) (v).i)
 
 typedef struct xrt_bigint_view_s {
     XrObjHeader hdr;
@@ -702,7 +728,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         return xrt_enum_key_eq(a, b);
     if (ta == XR_TAG_BIGINT)
         return xrt_bigint_eq_value(a, b);
-    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_CHAR)
+    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_RUNE)
         return a.i == b.i;
     if (ta == XR_TAG_F64)
         return a.f == b.f;
@@ -747,7 +773,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
 
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
-#define XR_IS_CHAR(v) ((v).tag == XR_TAG_CHAR)
+#define XR_IS_RUNE(v) ((v).tag == XR_TAG_RUNE)
 #define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
 #define XR_IS_FALSE(v) ((v).tag == XR_TAG_BOOL && (v).i == 0)
@@ -802,7 +828,7 @@ static inline int xrt_format_float(char *buf, size_t bufsz, double value) {
     return xr_format_float(buf, bufsz, value);
 }
 
-static inline int xrt_char_utf8_encode(uint32_t cp, char *buf) {
+static inline int xrt_rune_utf8_encode(uint32_t cp, char *buf) {
     if (!buf)
         return 0;
     if (cp <= 0x7Fu) {
@@ -851,8 +877,8 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
             return buf;
         case XR_TAG_BOOL:
             return v.i ? "true" : "false";
-        case XR_TAG_CHAR: {
-            int n = (bufsz > 0) ? xrt_char_utf8_encode(XR_TO_CHAR(v), buf) : 0;
+        case XR_TAG_RUNE: {
+            int n = (bufsz > 0) ? xrt_rune_utf8_encode(XR_TO_RUNE(v), buf) : 0;
             if (bufsz > 0)
                 buf[(n > 0 && (size_t) n < bufsz) ? n : 0] = '\0';
             return buf;

@@ -164,7 +164,7 @@ fn test_sequential() {
     var s14: Array<string> = []
     try { s14.push("a"); throw AppErr.Msg("x") } catch (e) { s14.push("b") }
     try { s14.push("c"); throw AppErr.Msg("y") } catch (e) { s14.push("d") }
-    assert_eq(s14.length, 4)
+    assert_eq(len(s14), 4)
     assert_eq(s14[0], "a")
     assert_eq(s14[1], "b")
     assert_eq(s14[2], "c")
@@ -188,7 +188,7 @@ fn test_catch_rethrow_propagates() {
         a20.push("outer-catch")
         match (e) { AppErr.Msg(s) -> { outer_msg = s } }
     }
-    assert_eq(a20.length, 2)
+    assert_eq(len(a20), 2)
     assert_eq(a20[0], "inner-catch")
     assert_eq(a20[1], "outer-catch")
     assert_eq(outer_msg, "b")
@@ -215,7 +215,7 @@ fn test_defer_lifo_cleanup() {
         throw AppErr.Msg("boom")
     }
     try { body() } catch (e) { order.push("handled") }
-    assert_eq(order.length, 4)
+    assert_eq(len(order), 4)
     assert_eq(order[0], "work")
     assert_eq(order[1], "close-2")
     assert_eq(order[2], "close-1")

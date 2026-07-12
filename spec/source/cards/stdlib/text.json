@@ -1,0 +1,17 @@
+{
+  "module": "text",
+  "summary": "Explicit Unicode text transformations",
+  "lead": "Explicit Unicode text transformations for Xray strings.",
+  "sections": [
+    {
+      "heading": "Functions",
+      "bullets": [
+        "`text.lower(value)` / `text.upper(value)`",
+        "`text.trim(value)` / `text.trimStart(value)` / `text.trimEnd(value)`",
+        "`text.reverseRunes(value)`",
+        "`text.padStart(value, targetLength, padding?)` / `text.padEnd(value, targetLength, padding?)`",
+        "`text.translate(value, table)`"
+      ]
+    }
+  ]
+}

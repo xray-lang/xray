@@ -84,7 +84,7 @@ fn test_return_null() {
 fn test_return_array() {
     fn getArray() -> Array<int> { return [1, 2, 3] }
     var arr = getArray()
-    assert_eq(arr.length, 3)
+    assert_eq(len(arr), 3)
 }
 
 // ===== 提前返回 =====

@@ -20,7 +20,7 @@ var box = Box<int>((lane) -> {
     return 100 + lane
 })
 
-print(seen.length)
+print(len(seen))
 print(seen[0])
 print(seen[2])
 print(box.get(0))

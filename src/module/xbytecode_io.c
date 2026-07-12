@@ -258,6 +258,7 @@ static char *bc_get_string(BcReader *r) {
 #define BC_VAL_DYNAMIC_SHAPE 5
 #define BC_VAL_CLASS_DESCRIPTOR 6
 #define BC_VAL_ENUM_TYPE 7
+#define BC_VAL_RUNE 8
 
 #define BC_SHAPE_JSON 1
 #define BC_SHAPE_RECORD 2
@@ -468,6 +469,10 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
         if (!bc_put_u8(w, BC_VAL_INT))
             return false;
         return bc_put_i64(w, XR_TO_INT(val));
+    } else if (XR_IS_RUNE(val)) {
+        if (!bc_put_u8(w, BC_VAL_RUNE))
+            return false;
+        return bc_put_u32(w, XR_TO_RUNE(val));
     } else if (XR_IS_FLOAT(val)) {
         if (!bc_put_u8(w, BC_VAL_FLOAT))
             return false;
@@ -790,6 +795,8 @@ static XrValue bc_read_value(BcReader *r) {
             return xr_bool(bc_get_u8(r) != 0);
         case BC_VAL_INT:
             return xr_int(bc_get_i64(r));
+        case BC_VAL_RUNE:
+            return xr_rune(bc_get_u32(r));
         case BC_VAL_FLOAT:
             return xr_float(bc_get_f64(r));
         case BC_VAL_STRING: {

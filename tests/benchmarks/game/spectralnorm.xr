@@ -83,7 +83,7 @@ fn spectralnorm(n) {
 
 // 运行基准测试
 var n = 500
-if (process.args.length > 0) {
+if (len(process.args) > 0) {
     n = int(process.args[0])
 }
 var result = spectralnorm(n)

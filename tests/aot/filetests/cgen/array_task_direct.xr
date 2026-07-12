@@ -6,7 +6,7 @@ fn taskArrayOps() -> int {
     var tasks: Array<Task<int>> = []
     tasks.push(go worker())
     var result = await tasks[0]
-    return result + tasks.length
+    return result + len(tasks)
 }
 
 print(taskArrayOps())

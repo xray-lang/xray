@@ -1,6 +1,6 @@
 /*
  * 切片语法测试
- * 仅 Array 和 Bytes 支持切片语法
+ * 仅 Array 和 Array<byte> 支持切片语法
  */
 
 @test
@@ -10,23 +10,23 @@ fn test_slice_syntax() {
     var arr = [1, 2, 3, 4, 5]
 
     // 完整切片 [start:end]
-    var slice1: Span<int> = arr[1:4]
+    var slice1: Slice<int> = arr[1:4]
     print(slice1)  // [2, 3, 4]
 
     // 省略 start [:end]
-    var slice2: Span<int> = arr[:3]
+    var slice2: Slice<int> = arr[:3]
     print(slice2)  // [1, 2, 3]
 
     // 省略 end [start:]
-    var slice3: Span<int> = arr[2:]
+    var slice3: Slice<int> = arr[2:]
     print(slice3)  // [3, 4, 5]
 
     // 全切片 [:]
-    var slice4: Span<int> = arr[:]
+    var slice4: Slice<int> = arr[:]
     print(slice4)  // [1, 2, 3, 4, 5]
 
     // 负索引从尾部计算
-    var slice5: Span<int> = arr[-4:-1]
+    var slice5: Slice<int> = arr[-4:-1]
     print(slice5)  // [2, 3, 4]
 
     // 切片是零拷贝 view

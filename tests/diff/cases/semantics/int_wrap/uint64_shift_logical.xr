@@ -38,10 +38,10 @@ print(s >> 1)                         // -4
 var sn: int = 1
 print(s >> sn)                        // -4
 
-// uint32/uint8 右移（零扩展 payload，语义不变回归）
+// uint32/byte 右移（零扩展 payload，语义不变回归）
 var u32top: uint32 = 0x8000_0000
 print(u32top >> 31)                   // 1
-var u8top: uint8 = 128
+var u8top: byte = 128
 print(u8top >> 7)                     // 1
 
 // 常量折叠路径（两操作数均编译期常量）

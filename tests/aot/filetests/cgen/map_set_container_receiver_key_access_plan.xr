@@ -18,8 +18,8 @@ fn mapSetContainerReceiverPlan(value: int) -> int {
     seenSets.push(makeSeen(value))
     var one = scoreMaps[0].get(1) ?? 0
     var two = scoreMaps[0][2]
-    var hasOne = scoreMaps[0].has(1)
-    var sawOne = seenSets[0].has(1)
+    var hasOne = scoreMaps[0].containsKey(1)
+    var sawOne = seenSets[0].contains(1)
     if (hasOne) {
         if (sawOne) {
             return one + two

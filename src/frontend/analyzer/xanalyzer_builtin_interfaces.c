@@ -67,8 +67,9 @@ static XaInterfaceMethod iterable_methods[] = {
  * and return a built-in iterator type.
  */
 static XaInterfaceMethod iterator_methods[] = {
-    {"next", NULL, NULL, 0},    // return type: T? (nullable element type)
-    {"hasNext", NULL, NULL, 0}  // return type: bool
+    {"next", NULL, NULL, 0},     // return type: T? (nullable element type)
+    {"hasNext", NULL, NULL, 0},  // return type: bool
+    {"nth", NULL, NULL, 1}       // return type: T, param: index: int
 };
 
 /*
@@ -286,8 +287,7 @@ static XaInterfaceMethod equatable_methods[] = {
  * Equivalent xray code for Lengthable:
  *
  *   interface Lengthable {
- *       // Returns the number of elements/characters
- *       length: int  // property, not method
+ *       operator len() -> int
  *   }
  *
  * Built-in types that implement Lengthable:
@@ -299,19 +299,16 @@ static XaInterfaceMethod equatable_methods[] = {
  *
  * Usage:
  *   fn isEmpty<T: Lengthable>(container: T): bool {
- *       return container.length == 0
+ *       return len(container) == 0
  *   }
  *
  *   fn last<T: Lengthable & Indexable>(arr: T) {
- *       return arr[arr.length - 1]
+ *       return arr[len(arr) - 1]
  *   }
  *
- * Note: Lengthable is a property-based interface, not method-based.
- * The compiler checks for .length property access.
+ * The compiler keeps this named operator outside ordinary member lookup.
  */
-static XaInterfaceMethod lengthable_methods[] = {
-    {"length", NULL, NULL, 0}  // property getter, return: int
-};
+static XaInterfaceMethod lengthable_methods[] = {{"__operator_len", NULL, NULL, 0}};
 
 /*
  * Equivalent xray code for Callable:
@@ -377,7 +374,7 @@ static XaInterfaceMethod closeable_methods[] = {
 
 static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
     [XA_IFACE_ITERABLE] = {"Iterable", iterable_methods, 1},
-    [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 2},
+    [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 3},
     [XA_IFACE_COMPARABLE] = {"Comparable", comparable_methods, 1},
     [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 2},
     [XA_IFACE_STRINGABLE] = {"Stringable", stringable_methods, 1},
@@ -565,4 +562,7 @@ void xa_register_builtin_interfaces(XrVMRuntime *X, XaScope *global_scope) {
     hashable_methods[0].return_type = xr_type_new_int(NULL);
     stringable_methods[0].return_type = xr_type_new_string(NULL);
     iterator_methods[1].return_type = xr_type_new_bool(NULL);
+    static XrType *nth_params[1];
+    nth_params[0] = xr_type_new_int(NULL);
+    iterator_methods[2].param_types = nth_params;
 }

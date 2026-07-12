@@ -5,8 +5,8 @@
 @test
 fn test_slice_basic() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Span<int> = arr[1:4]
-    assert_eq(s.length, 3)
+    var s: Slice<int> = arr[1:4]
+    assert_eq(len(s), 3)
     assert_eq(s[0], 2)
     assert_eq(s[2], 4)
 }
@@ -14,34 +14,34 @@ fn test_slice_basic() {
 @test
 fn test_slice_from_start() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Span<int> = arr[:2]
-    assert_eq(s.length, 2)
+    var s: Slice<int> = arr[:2]
+    assert_eq(len(s), 2)
     assert_eq(s[0], 1)
 }
 
 @test
 fn test_slice_to_end() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Span<int> = arr[3:]
-    assert_eq(s.length, 2)
+    var s: Slice<int> = arr[3:]
+    assert_eq(len(s), 2)
     assert_eq(s[1], 5)
 }
 
 @test
 fn test_slice_negative_bounds() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Span<int> = arr[-4:-1]
-    assert_eq(s.length, 3)
+    var s: Slice<int> = arr[-4:-1]
+    assert_eq(len(s), 3)
     assert_eq(s[0], 2)
     assert_eq(s[2], 4)
-    var empty: Span<int> = arr[4:2]
-    assert_eq(empty.length, 0)
+    var empty: Slice<int> = arr[4:2]
+    assert_eq(len(empty), 0)
 }
 
 @test
 fn test_slice_is_view() {
     var arr = [10, 20, 30, 40]
-    var s: Span<int> = arr[1:3]
+    var s: Slice<int> = arr[1:3]
     arr[1] = 21
     assert_eq(s[0], 21)
     s[1] = 31
@@ -64,7 +64,7 @@ fn test_concat_arrays() {
     var a = [1, 2]
     var b = [3, 4]
     var c = a.concat(b)
-    assert_eq(c.length, 4)
+    assert_eq(len(c), 4)
     assert_eq(c[0], 1)
     assert_eq(c[3], 4)
 }
@@ -112,8 +112,8 @@ fn test_index_of_and_includes() {
     var arr = [10, 20, 30]
     assert_eq(arr.indexOf(20), 1)
     assert_eq(arr.indexOf(99), -1)
-    assert_eq(arr.includes(30), true)
-    assert_eq(arr.includes(99), false)
+    assert_eq(arr.contains(30), true)
+    assert_eq(arr.contains(99), false)
 }
 
 // ===== every =====

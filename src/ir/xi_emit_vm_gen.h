@@ -40,6 +40,7 @@
     X(ASSERT_THROWS, xi_emit_assert_throws) \
     X(TYPEID, xi_emit_typeid) \
     X(TYPENAME, xi_emit_typename) \
+    X(LEN, xi_emit_len) \
     X(GET_BUILTIN, xi_emit_get_builtin) \
     X(GET_GLOBAL, xi_emit_get_global) \
     X(SET_GLOBAL, xi_emit_set_global) \

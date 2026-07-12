@@ -1,6 +1,6 @@
 fn main() {
     var owner = [1, 2, 3]
-    var view: Span<int> = owner[0:2]
-    var views = Array<Span<int>>(1, view)
-    print(views.length)
+    var view: Slice<int> = owner[0:2]
+    var views = Array<Slice<int>>(1, view)
+    print(len(views))
 }
