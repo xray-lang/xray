@@ -62,7 +62,7 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
  * elem_type determines storage layout:
  *   XR_ELEM_ANY  -> data is XrValue[], may contain object references
  *   XR_ELEM_I8   -> data is int8_t[], no object references
- *   XR_ELEM_U8   -> data is uint8_t[], no object references (replaces Bytes)
+ *   XR_ELEM_U8   -> data is uint8_t[], no object references (Array<byte>)
  *   XR_ELEM_I64  -> data is int64_t[], no object references (Array<int>)
  *   XR_ELEM_F64  -> data is double[], no object references (Array<float>)
  *   XR_ELEM_RUNE -> data is uint32_t[], no object references (Array<char>)
@@ -187,7 +187,7 @@ static inline void xr_array_set_f64(XrArray *arr, int32_t index, double value) {
     ((double *) arr->data)[index] = value;
 }
 
-/* ====== Bytes Convenience API (Array<uint8>) ====== */
+/* ====== Byte-array Convenience API (Array<byte>) ====== */
 
 static inline XrArray *xr_array_bytes_new(struct XrCoroutine *coro, int32_t size) {
     return xr_array_with_capacity_typed(coro, size, XR_ELEM_U8);

@@ -395,7 +395,7 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
     printf("  Alloc: %llu, Free: %llu, Reuse: %llu\n", (unsigned long long) stats.coro_alloc_count,
            (unsigned long long) stats.coro_free_count, (unsigned long long) stats.coro_reuse_count);
     printf("Class Arena:\n");
-    printf("  Classes: %llu, Bytes: %llu\n", (unsigned long long) stats.class_alloc_count,
+    printf("  Classes: %llu, Allocated bytes: %llu\n", (unsigned long long) stats.class_alloc_count,
            (unsigned long long) stats.class_alloc_bytes);
     printf("  Modules: %llu\n", (unsigned long long) stats.module_alloc_count);
     printf("System objects:\n");

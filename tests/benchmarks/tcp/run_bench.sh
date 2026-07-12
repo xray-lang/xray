@@ -385,7 +385,7 @@ run_phase1_suite() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    log_info "Phase 1 scenario: Xray string path vs Bytes path"
+    log_info "Phase 1 scenario: Xray string path vs byte-array path"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     run_xray "message" "xray_string_path" "latency,throughput,msg_sweep" "" "string_path"

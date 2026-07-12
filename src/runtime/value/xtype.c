@@ -1375,7 +1375,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     }
 
     // Span compatibility is explicit and target-typed: only Span<T> flows into
-    // Span<T>. Array<T>/Bytes owner-to-view conversion is produced by slice or a
+    // Span<T>. Array<T>/Array<byte> owner-to-view conversion is produced by slice or a
     // typed view-producing expression, not by general assignment.
     if (XR_TYPE_IS_SPAN(target) && XR_TYPE_IS_SPAN(source)) {
         if (!target->container.element_type || !source->container.element_type)
@@ -1388,7 +1388,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     }
 
     // View compatibility is explicit and target-typed: only View<T> flows into
-    // View<T>. Array<T>/Bytes owner-to-view conversion is produced by slice.
+    // View<T>. Array<T>/Array<byte> owner-to-view conversion is produced by slice.
     if (XR_TYPE_IS_VIEW(target) && XR_TYPE_IS_VIEW(source)) {
         if (!target->container.element_type || !source->container.element_type)
             return true;

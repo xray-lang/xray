@@ -156,7 +156,7 @@ static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t 
     if (!type_is_u8_contiguous_view(user->args[0] ? user->args[0]->type : NULL))
         return false;
 
-    /* Bytes append copies from src during the call and never stores it. Treat
+    /* Byte-array append copies from src during the call and never stores it. Treat
      * the source buffer as borrowed so ARC does not retain/release it inside
      * hot copy loops. */
     if (strcmp(method, "appendFrom") == 0)

@@ -324,7 +324,7 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
  *
  * `len` makes length O(1); `hash` caches the content hash for map keys and
  * equality short-circuits (0 = not computed yet; real hashes are never 0).
- * Bytes stay NUL-terminated so C interop (`xr_str_data`) remains free.
+ * UTF-8 payloads stay NUL-terminated so C interop (`xr_str_data`) remains free.
  * ========================================================================= */
 
 #define XRT_STR_LITERAL 0x1u

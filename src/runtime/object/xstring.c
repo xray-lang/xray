@@ -194,7 +194,7 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         return NULL;
     }
     // An empty string reads no bytes, so tolerate a NULL data pointer (e.g. an
-    // empty Bytes value whose backing store was never allocated -> toString()).
+    // empty byte array whose backing store was never allocated -> toString()).
     if (length == 0)
         chars = "";
     if (!chars) {
