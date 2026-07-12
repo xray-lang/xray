@@ -354,6 +354,16 @@ typedef enum {
     XA_BUILTIN_EFFECT_MUTATES_RECEIVER,
 } XaBuiltinMethodEffect;
 
+typedef enum {
+    XA_BUILTIN_ALLOCATION_NO_HEAP,
+    XA_BUILTIN_ALLOCATION_MAY_HEAP,
+} XaBuiltinMethodAllocation;
+
+typedef enum {
+    XA_BUILTIN_UNSAFE_NONE,
+    XA_BUILTIN_UNSAFE_REQUIRED,
+} XaBuiltinMethodUnsafeRequirement;
+
 typedef struct XaBuiltinReceiverMethodSpec {
     const char *id;
     const char *source_name;
@@ -365,18 +375,21 @@ typedef struct XaBuiltinReceiverMethodSpec {
     bool is_variadic;
     XaBuiltinMethodTypeParams type_params;
     XaBuiltinMethodEffect effect;
+    XaBuiltinMethodAllocation allocation;
+    XaBuiltinMethodUnsafeRequirement unsafe_requirement;
     const char *lowering;
 } XaBuiltinReceiverMethodSpec;
 
 static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
 #define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
-                           type_params, effect, lowering)                                          \
-    {#id,        source_name, receiver,    result, {p0, p1, p2}, param_count,                      \
-     min_params, false,       type_params, effect, lowering},
+                           type_params, effect, allocation, unsafe_requirement, lowering)          \
+    {#id,   source_name, receiver, result,     {p0, p1, p2},       param_count, min_params,        \
+     false, type_params, effect,   allocation, unsafe_requirement, lowering},
 #define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
-                                    min_params, type_params, effect, lowering)                     \
-    {#id,        source_name, receiver,    result, {p0, p1, p2}, param_count,                      \
-     min_params, true,        type_params, effect, lowering},
+                                    min_params, type_params, effect, allocation,                   \
+                                    unsafe_requirement, lowering)                                  \
+    {#id,  source_name, receiver, result,     {p0, p1, p2},       param_count, min_params,         \
+     true, type_params, effect,   allocation, unsafe_requirement, lowering},
 #include "xbuiltin_receiver_method.def"
 #undef XB_RECEIVER_VARIADIC_METHOD
 #undef XB_RECEIVER_METHOD
@@ -395,6 +408,37 @@ static bool xa_builtin_receiver_matches(XrType *receiver, XaBuiltinReceiverKind 
                    xa_type_is_pod_span_elem(receiver->container.element_type);
     }
     return false;
+}
+
+static const XaBuiltinReceiverMethodSpec *xa_find_builtin_receiver_method_spec(XrType *receiver,
+                                                                               const char *name) {
+    if (!name)
+        return NULL;
+    for (size_t i = 0;
+         i < sizeof(xa_builtin_receiver_methods) / sizeof(xa_builtin_receiver_methods[0]); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (strcmp(spec->source_name, name) == 0 &&
+            xa_builtin_receiver_matches(receiver, spec->receiver))
+            return spec;
+    }
+    return NULL;
+}
+
+static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMethodSpec *spec,
+                                                    XrType *receiver) {
+    if (!spec)
+        return "receiver";
+    switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return "Array<byte>";
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return xa_type_is_bytes(receiver) ? "Array<byte>" : "Array";
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return "Slice<byte>";
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return xa_type_is_bytespan(receiver) ? "Slice<byte>" : "Slice";
+    }
+    return "receiver";
 }
 
 static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMethodTypeKind kind,
@@ -526,38 +570,42 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
     return xr_type_new_unknown(X);
 }
 
-static XrType *xa_builtin_receiver_method_type(XaInferContext *ctx, XrType *receiver,
-                                               const char *name) {
-    if (!ctx || !ctx->analyzer || !name)
+static XrType *xa_builtin_receiver_method_type_from_spec(XaInferContext *ctx, XrType *receiver,
+                                                         const XaBuiltinReceiverMethodSpec *spec) {
+    if (!ctx || !ctx->analyzer || !spec)
         return NULL;
-    for (size_t i = 0;
-         i < sizeof(xa_builtin_receiver_methods) / sizeof(xa_builtin_receiver_methods[0]); i++) {
-        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
-        if (strcmp(spec->source_name, name) != 0 ||
-            !xa_builtin_receiver_matches(receiver, spec->receiver))
-            continue;
-
-        XrVMRuntime *X = ctx->analyzer->isolate;
-        const char *type_param0_name = spec->type_params == XA_BUILTIN_TYPE_PARAMS_U ? "U" : "T";
-        XrType *type_param0 = spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE
-                                  ? xr_type_new_type_param(X, type_param0_name, 0)
-                                  : NULL;
-        XrType *params[3] = {NULL, NULL, NULL};
-        for (int p = 0; p < spec->param_count && p < 3; p++)
-            params[p] =
-                xa_builtin_method_component_type(ctx, spec->params[p], receiver, type_param0);
-        XrType *ret = xa_builtin_method_component_type(ctx, spec->result, receiver, type_param0);
-        XrType *fn = xr_type_new_function(X, spec->param_count > 0 ? params : NULL,
-                                          spec->param_count, ret, spec->is_variadic);
-        if (fn && spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE) {
-            const char *names[1] = {type_param0_name};
-            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
-        }
-        if (fn)
-            fn->function.min_params = spec->min_params;
-        return fn;
+    XrVMRuntime *X = ctx->analyzer->isolate;
+    const char *type_param0_name = spec->type_params == XA_BUILTIN_TYPE_PARAMS_U ? "U" : "T";
+    XrType *type_param0 = spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE
+                              ? xr_type_new_type_param(X, type_param0_name, 0)
+                              : NULL;
+    XrType *params[3] = {NULL, NULL, NULL};
+    for (int p = 0; p < spec->param_count && p < 3; p++)
+        params[p] = xa_builtin_method_component_type(ctx, spec->params[p], receiver, type_param0);
+    XrType *ret = xa_builtin_method_component_type(ctx, spec->result, receiver, type_param0);
+    XrType *fn = xr_type_new_function(X, spec->param_count > 0 ? params : NULL, spec->param_count,
+                                      ret, spec->is_variadic);
+    if (fn && spec->type_params != XA_BUILTIN_TYPE_PARAMS_NONE) {
+        const char *names[1] = {type_param0_name};
+        xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
     }
-    return NULL;
+    if (fn)
+        fn->function.min_params = spec->min_params;
+    return fn;
+}
+
+static void xa_report_builtin_receiver_unsafe_requirement(XaInferContext *ctx, AstNode *node,
+                                                          XrType *receiver,
+                                                          const XaBuiltinReceiverMethodSpec *spec) {
+    if (!ctx || !ctx->analyzer || !node || !spec || ctx->unsafe_depth != 0 ||
+        spec->unsafe_requirement != XA_BUILTIN_UNSAFE_REQUIRED)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[128];
+    snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
+             xa_builtin_receiver_display_name(spec, receiver), spec->source_name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE, msg,
+                               &loc);
 }
 
 static bool xa_has_view_target_context(XaInferContext *ctx) {
@@ -1884,19 +1932,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (prop_sym == SYMBOL_CAPACITY && XR_TYPE_IS_ARRAY(obj_type)) {
         return xr_type_new_int(NULL);
     }
-    if (XR_TYPE_IS_ARRAY(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
-        (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "set") == 0 ||
-         strcmp(ma->name, "ptr") == 0 || strcmp(ma->name, "mutPtr") == 0)) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        char msg[128];
-        snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
-                 xa_type_is_bytes(obj_type) ? "Array<byte>" : "Array", ma->name);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                                   msg, &loc);
-    }
     if (XR_TYPE_IS_SPAN(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
-        (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "ptr") == 0 ||
-         strcmp(ma->name, "mutPtr") == 0)) {
+        (strcmp(ma->name, "ptr") == 0 || strcmp(ma->name, "mutPtr") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
@@ -1918,9 +1955,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (xa_contextual_view_method_without_target(ctx, obj_type, ma->name, node))
         return xr_type_new_unknown(NULL);
 
-    XrType *builtin_receiver_method = xa_builtin_receiver_method_type(ctx, obj_type, ma->name);
-    if (builtin_receiver_method)
+    const XaBuiltinReceiverMethodSpec *builtin_receiver_spec =
+        xa_find_builtin_receiver_method_spec(obj_type, ma->name);
+    if (builtin_receiver_spec) {
+        xa_report_builtin_receiver_unsafe_requirement(ctx, node, obj_type, builtin_receiver_spec);
+        XrType *builtin_receiver_method =
+            xa_builtin_receiver_method_type_from_spec(ctx, obj_type, builtin_receiver_spec);
         return builtin_receiver_method;
+    }
 
     XrType *string_view_method = xa_string_view_method_type(ctx, obj_type, ma->name, node);
     if (string_view_method)
