@@ -1,4 +1,4 @@
-/* AOT Array capacity and Bytes helpers. */
+/* AOT Array capacity and byte-array helpers. */
 
 static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     if (cap < 0)

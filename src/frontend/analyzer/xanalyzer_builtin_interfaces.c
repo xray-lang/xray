@@ -40,7 +40,7 @@
  *   - Set<T>    : iterates over elements
  *   - Map<K,V>  : iterates over keys
  *   - string    : iterates over characters
- *   - Bytes     : iterates over bytes
+ *   - Array<byte>: iterates over bytes
  *
  * Usage:
  *   fn process<T: Iterable>(collection: T) {
