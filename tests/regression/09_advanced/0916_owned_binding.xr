@@ -62,6 +62,21 @@ fn test_owned_move_to_shared_ref_free_array() {
     assert_eq(frozen[2], 30)
 }
 
+@test
+fn test_owned_move_to_shared_after_slice_last_use() {
+    owned bytes = Array<byte>(2, 0)
+    bytes[0] = 41
+    bytes[1] = 42
+    var view: Slice<byte> = bytes[:]
+    assert_eq(len(view), 2)
+
+    shared frozen = move bytes
+
+    assert_eq(len(frozen), 2)
+    assert_eq(frozen[0], 41)
+    assert_eq(frozen[1], 42)
+}
+
 fn make_owned_return_buffer() -> Array<byte> {
     owned bytes = Array<byte>(2, 0)
     bytes[0] = 11

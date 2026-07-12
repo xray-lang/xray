@@ -1,0 +1,9 @@
+fn main() {
+    var bytes = Array<byte>(0)
+    bytes.push(1)
+    var view: Slice<byte> = bytes[:]
+    var moved = move bytes
+    print(len(view))
+}
+
+main()

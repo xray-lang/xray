@@ -4128,6 +4128,7 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
+    xa_check_active_span_borrow_owner_mutation(ctx, node, move_sym, "moving the owner");
     // Mark the variable as moved — subsequent accesses are compile errors
     if (move_sym) {
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, move_sym);
