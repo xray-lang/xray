@@ -309,6 +309,7 @@ static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
 typedef enum {
     XA_BUILTIN_RECEIVER_U8_ARRAY,
     XA_BUILTIN_RECEIVER_U8_SLICE,
+    XA_BUILTIN_RECEIVER_POD_SLICE,
 } XaBuiltinReceiverKind;
 
 typedef enum {
@@ -321,6 +322,9 @@ typedef enum {
     XA_BUILTIN_TYPE_ENDIAN,
     XA_BUILTIN_TYPE_PARAM_0,
     XA_BUILTIN_TYPE_SLICE_OF_PARAM_0,
+    XA_BUILTIN_TYPE_RECEIVER,
+    XA_BUILTIN_TYPE_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM,
 } XaBuiltinMethodTypeKind;
 
 typedef enum {
@@ -361,12 +365,15 @@ static bool xa_builtin_receiver_matches(XrType *receiver, XaBuiltinReceiverKind 
             return xr_type_is_u8_array(receiver);
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver && XR_TYPE_IS_SPAN(receiver) && receiver->container.element_type &&
+                   xa_type_is_pod_span_elem(receiver->container.element_type);
     }
     return false;
 }
 
 static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMethodTypeKind kind,
-                                                XrType *type_param0) {
+                                                XrType *receiver, XrType *type_param0) {
     XrVMRuntime *X = ctx->analyzer->isolate;
     switch (kind) {
         case XA_BUILTIN_TYPE_NONE:
@@ -388,6 +395,15 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
         case XA_BUILTIN_TYPE_SLICE_OF_PARAM_0:
             return xr_type_new_span(X,
                                     type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0));
+        case XA_BUILTIN_TYPE_RECEIVER:
+            return receiver ? receiver : xr_type_new_unknown(X);
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM:
+            return receiver && receiver->container.element_type ? receiver->container.element_type
+                                                                : xr_type_new_unknown(X);
+        case XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM:
+            return xr_type_new_span(X, receiver && receiver->container.element_type
+                                           ? receiver->container.element_type
+                                           : xr_type_new_unknown(X));
     }
     return xr_type_new_unknown(X);
 }
@@ -409,8 +425,9 @@ static XrType *xa_builtin_receiver_method_type(XaInferContext *ctx, XrType *rece
                                   : NULL;
         XrType *params[3] = {NULL, NULL, NULL};
         for (int p = 0; p < spec->param_count && p < 3; p++)
-            params[p] = xa_builtin_method_component_type(ctx, spec->params[p], type_param0);
-        XrType *ret = xa_builtin_method_component_type(ctx, spec->result, type_param0);
+            params[p] =
+                xa_builtin_method_component_type(ctx, spec->params[p], receiver, type_param0);
+        XrType *ret = xa_builtin_method_component_type(ctx, spec->result, receiver, type_param0);
         XrType *fn = xr_type_new_function(X, spec->param_count > 0 ? params : NULL,
                                           spec->param_count, ret, false);
         if (fn && spec->type_params == XA_BUILTIN_TYPE_PARAMS_T) {
@@ -468,43 +485,6 @@ static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType
         return false;
     xa_report_view_expr_requires_target(ctx, node, name);
     return true;
-}
-
-static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
-    if (!receiver || !XR_TYPE_IS_SPAN(receiver) || !receiver->container.element_type || !name)
-        return NULL;
-    if (strcmp(name, "asBytes") == 0) {
-        if (!xa_type_is_pod_span_elem(receiver->container.element_type))
-            return NULL;
-        XrVMRuntime *X = ctx->analyzer->isolate;
-        return xr_type_new_function(X, NULL, 0, xr_type_new_u8_slice(X), false);
-    }
-    if (strcmp(name, "fill") == 0) {
-        if (!xa_type_is_pod_span_elem(receiver->container.element_type))
-            return NULL;
-        XrVMRuntime *X = ctx->analyzer->isolate;
-        XrType *params[1] = {receiver->container.element_type};
-        return xr_type_new_function(X, params, 1, receiver, false);
-    }
-    if (strcmp(name, "copyFrom") == 0) {
-        if (!xa_type_is_pod_span_elem(receiver->container.element_type))
-            return NULL;
-        XrVMRuntime *X = ctx->analyzer->isolate;
-        XrType *params[1] = {xr_type_new_span(X, receiver->container.element_type)};
-        return xr_type_new_function(X, params, 1, receiver, false);
-    }
-    if (strcmp(name, "compare") == 0) {
-        if (!xa_type_is_pod_span_elem(receiver->container.element_type))
-            return NULL;
-        XrVMRuntime *X = ctx->analyzer->isolate;
-        XrType *params[1] = {xr_type_new_span(X, receiver->container.element_type)};
-        return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
-    }
-    if (strcmp(name, "get") != 0)
-        return NULL;
-    XrVMRuntime *X = ctx->analyzer->isolate;
-    XrType *params[1] = {xr_type_new_int(X)};
-    return xr_type_new_function(X, params, 1, receiver->container.element_type, false);
 }
 
 static XrType *xa_array_data_ptr_method_type(XaInferContext *ctx, XrType *receiver,
@@ -1830,10 +1810,6 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     XrType *array_view_method = xa_array_view_method_type(ctx, obj_type, ma->name, node);
     if (array_view_method)
         return array_view_method;
-
-    XrType *span_method = xa_span_method_type(ctx, obj_type, ma->name);
-    if (span_method)
-        return span_method;
 
     XrType *data_ptr_method = xa_array_data_ptr_method_type(ctx, obj_type, ma->name);
     if (data_ptr_method)
