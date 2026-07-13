@@ -1226,6 +1226,25 @@ static void report_undefined_public_type(XaAnalyzer *analyzer, const char *name)
     xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
 }
 
+XR_FUNC bool xa_reject_error_type_success_type(XaAnalyzer *analyzer, const XrType *type,
+                                               const char *role, const char *owner, int line,
+                                               int column) {
+    if (!analyzer || !xr_type_contains_error(type))
+        return false;
+    XrLocation loc = {.file = analyzer->current_file, .line = line, .column = column};
+    char msg[256];
+    if (owner && *owner) {
+        snprintf(msg, sizeof(msg), "%s '%s' cannot contain compiler recovery ErrorType",
+                 role ? role : "type", owner);
+    } else {
+        snprintf(msg, sizeof(msg), "%s cannot contain compiler recovery ErrorType",
+                 role ? role : "type");
+    }
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg,
+                               &loc);
+    return true;
+}
+
 static int active_type_param_index(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return -1;
@@ -1330,6 +1349,25 @@ static bool is_known_generic_head(XrVMRuntime *X, const char *name) {
     return symbols && xr_prelude_lookup_type(symbols, name, strlen(name)) != NULL;
 }
 
+static bool generic_head_is_container_like(const char *name) {
+    return name && (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
+                    strcmp(name, "Set") == 0 || strcmp(name, "Channel") == 0);
+}
+
+static bool reject_error_type_args(XaAnalyzer *analyzer, XrType **args, int count,
+                                   const char *head) {
+    bool rejected = false;
+    for (int i = 0; i < count; i++) {
+        const char *role = generic_head_is_container_like(head)           ? "container element type"
+                           : (head && strcmp(head, "Map") == 0 && i == 0) ? "container key type"
+                           : (head && strcmp(head, "Map") == 0 && i == 1) ? "container value type"
+                                                                          : "generic type argument";
+        if (xa_reject_error_type_success_type(analyzer, args ? args[i] : NULL, role, head, 0, 0))
+            rejected = true;
+    }
+    return rejected;
+}
+
 static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!analyzer || !tref || !tref->name || !is_known_generic_head(analyzer->isolate, tref->name))
         return NULL;
@@ -1345,6 +1383,12 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
 
     XrVMRuntime *X = analyzer->isolate;
     const char *name = tref->name;
+    if (reject_error_type_args(analyzer, args, nargs, name)) {
+        if (args != stack_args)
+            xr_free(args);
+        return xr_type_new_error(NULL);
+    }
+
     XrType *result = NULL;
     if (strcmp(name, "Array") == 0 && nargs >= 1) {
         result = xr_type_new_array(X, args[0]);
@@ -1433,6 +1477,11 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             if (args) {
                 for (int i = 0; i < nargs; i++)
                     args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+                if (reject_error_type_args(analyzer, args, nargs, tref->name)) {
+                    if (args != stack_args)
+                        xr_free(args);
+                    return xr_type_new_error(NULL);
+                }
                 XrType *result =
                     head->kind == XR_KIND_INTERFACE
                         ? xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs)
@@ -1532,6 +1581,9 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         XrType *elem = tref->nchildren > 0
                            ? xr_tref_resolve_in_analyzer(analyzer, tref->children[0])
                            : xr_type_new_unknown(NULL);
+        if (xa_reject_error_type_success_type(analyzer, elem, "container element type",
+                                              "fixed array", 0, 0))
+            return xr_type_new_error(NULL);
         int64_t length = tref->fixed_length;
         const AstNode *length_expr = tref->fixed_length_expr;
         if (length_expr) {
