@@ -29,6 +29,8 @@
 #define XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG "Array.reserve(capacity) expects an integer"
 #define XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG "Array.reserve failed"
 #define XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG "Array.resize(length, fill) expects integer length"
+#define XR_ERROR_CORE_ARRAY_RESIZE_REQUIRES_FILL_MSG                                               \
+    "Array.resize(length, fill) requires fill value"
 #define XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG "Array.resize failed"
 #define XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG "cannot push to array slice"
 #define XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG                                                   \

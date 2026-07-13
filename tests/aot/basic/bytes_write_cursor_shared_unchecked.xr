@@ -1,16 +1,20 @@
-var src = Array<byte>(4)
-src[0] = 65
-src[1] = 66
-src[2] = 67
-src[3] = 68
+fn makeCursorBytes() -> Array<byte> {
+    var src = Array<byte>(4)
+    src[0] = 65
+    src[1] = 66
+    src[2] = 67
+    src[3] = 68
 
-var out: Array<byte> = Array.withCapacity(8)
-out.resize(8)
-var prefix: Slice<byte> = out[0:4]
-prefix.copyFrom(src[:])
-var full: Slice<byte> = out[0:8]
-full.repeatFrom(4, 4, 4)
+    var out: Array<byte> = Array.withCapacity(8)
+    out.resize(8, 0)
+    var prefix: Slice<byte> = out[0:4]
+    prefix.copyFrom(src[:])
+    var full: Slice<byte> = out[0:8]
+    full.repeatFrom(4, 4, 4)
+    return out
+}
 
+var out = makeCursorBytes()
 print(len(out))
 
 print(len(out))

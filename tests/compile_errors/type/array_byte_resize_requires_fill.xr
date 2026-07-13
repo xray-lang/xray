@@ -1,0 +1,4 @@
+fn bad() {
+    var bytes = Array<byte>(2)
+    bytes.resize(4)
+}

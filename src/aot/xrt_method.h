@@ -745,8 +745,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_APPEND_FROM)
             return xrt_bytes_append_from_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
-            return xrt_array_resize_value(
-                recv, arg0, a->elem_type == XR_ELEM_RUNE ? XR_FROM_RUNE(0) : XR_FROM_INT(0));
+            xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_RESIZE_REQUIRES_FILL_MSG);
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_check_store_or_abort(a, arg0, "Array.unshift");
             if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
