@@ -8487,9 +8487,57 @@ static XaScope *xa_find_enclosing_function_scope(XaInferContext *ctx) {
     return scope;
 }
 
-static void xa_check_out_params_assigned_before_return(XaInferContext *ctx, XaScope *function_scope,
-                                                       AstNode *return_node) {
-    if (!ctx || !ctx->analyzer || !function_scope || !return_node)
+static bool xa_statement_can_fall_through(AstNode *node) {
+    if (!node)
+        return true;
+
+    switch (node->type) {
+        case AST_RETURN_STMT:
+        case AST_THROW_STMT:
+            return false;
+        case AST_BLOCK:
+        case AST_PROGRAM: {
+            AstNode **statements = NULL;
+            int count = 0;
+            if (!xa_block_node_statements(node, &statements, &count) || count <= 0)
+                return true;
+            return xa_statement_can_fall_through(statements[count - 1]);
+        }
+        case AST_IF_STMT:
+            return !node->as.if_stmt.else_branch ||
+                   xa_statement_can_fall_through(node->as.if_stmt.then_branch) ||
+                   xa_statement_can_fall_through(node->as.if_stmt.else_branch);
+        case AST_TRY_CATCH: {
+            TryCatchNode *tc = &node->as.try_catch;
+            if (xa_statement_can_fall_through(tc->try_body))
+                return true;
+            for (int i = 0; i < tc->catch_count; i++) {
+                XrCatchClause *cc = tc->catch_clauses ? tc->catch_clauses[i] : NULL;
+                if (!cc || xa_statement_can_fall_through(cc->body))
+                    return true;
+            }
+            return false;
+        }
+        case AST_MATCH_EXPR: {
+            MatchExprNode *m = &node->as.match_expr;
+            if (!m->arms || m->arm_count <= 0)
+                return true;
+            for (int i = 0; i < m->arm_count; i++) {
+                AstNode *arm = m->arms[i];
+                if (!arm || arm->type != AST_MATCH_ARM ||
+                    xa_statement_can_fall_through(arm->as.match_arm.body))
+                    return true;
+            }
+            return false;
+        }
+        default:
+            return true;
+    }
+}
+
+static void xa_report_unassigned_out_params(XaInferContext *ctx, XaScope *function_scope,
+                                            AstNode *loc_node, const char *exit_label) {
+    if (!ctx || !ctx->analyzer || !function_scope || !loc_node)
         return;
 
     int symbol_count = 0;
@@ -8503,14 +8551,29 @@ static void xa_check_out_params_assigned_before_return(XaInferContext *ctx, XaSc
             continue;
 
         XrLocation loc = {
-            .file = ctx->file_path, .line = return_node->line, .column = return_node->column};
+            .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
         char msg[256];
-        snprintf(msg, sizeof(msg), "out parameter '%s' must be assigned before returning",
-                 sym->name ? sym->name : "?");
+        snprintf(msg, sizeof(msg), "out parameter '%s' must be assigned before %s",
+                 sym->name ? sym->name : "?", exit_label ? exit_label : "function exits");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
     }
     xr_free(symbols);
+}
+
+static void xa_check_out_params_assigned_before_return(XaInferContext *ctx, XaScope *function_scope,
+                                                       AstNode *return_node) {
+    xa_report_unassigned_out_params(ctx, function_scope, return_node, "returning");
+}
+
+XR_FUNC void xa_check_out_params_assigned_at_function_exit(XaInferContext *ctx,
+                                                           XaScope *function_scope,
+                                                           AstNode *body_node) {
+    if (!ctx || !ctx->analyzer || !function_scope || !body_node)
+        return;
+    if (!xa_statement_can_fall_through(body_node))
+        return;
+    xa_report_unassigned_out_params(ctx, function_scope, body_node, "function exits");
 }
 
 void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {

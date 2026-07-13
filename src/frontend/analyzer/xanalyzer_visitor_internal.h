@@ -71,6 +71,9 @@ XR_FUNC void xa_validate_hashable_contract_for_class(XaInferContext *ctx, AstNod
 XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, XaSymbol *sym,
                                        bool is_write);
 XR_FUNC void xa_parallel_callback_effect_check(XaInferContext *ctx, AstNode *body);
+XR_FUNC void xa_check_out_params_assigned_at_function_exit(XaInferContext *ctx,
+                                                           XaScope *function_scope,
+                                                           AstNode *body_node);
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
 XR_FUNC const char *xa_concurrency_handle_label(const XrType *type);
 XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr);
