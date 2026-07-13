@@ -1,0 +1,6 @@
+fn bad(x: out int) {
+    123(ref x)
+}
+
+var value = 0
+bad(out value)

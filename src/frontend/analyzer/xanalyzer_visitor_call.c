@@ -2089,7 +2089,7 @@ static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
     return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
 }
 
-static XrType *xa_out_direct_variable_type_without_read(XaInferContext *ctx, AstNode *arg_node) {
+static XrType *xa_call_direct_variable_type_without_read(XaInferContext *ctx, AstNode *arg_node) {
     AstNode *place = xa_call_unwrap_grouping(arg_node);
     if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
         return NULL;
@@ -2111,11 +2111,44 @@ static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *ar
                                                 const char *callback_label, XrCallArgAccess access,
                                                 XrParamMode param_mode) {
     if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT) {
-        XrType *type = xa_out_direct_variable_type_without_read(ctx, arg_node);
+        XrType *type = xa_call_direct_variable_type_without_read(ctx, arg_node);
         if (type)
             return type;
     }
     return xa_visit_call_arg_with_parallel_context(ctx, arg_node, callback_label);
+}
+
+static void xa_report_arg_access_requires_known_contract(XaInferContext *ctx, AstNode *call_node,
+                                                         AstNode *arg_node, XrCallArgAccess access,
+                                                         int slot) {
+    if (!ctx || !ctx->analyzer || access == XR_CALL_ARG_VALUE || slot < 0)
+        return;
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node    ? arg_node->line
+                              : call_node ? call_node->line
+                                          : 0,
+                      .column = arg_node    ? arg_node->column
+                                : call_node ? call_node->column
+                                            : 0};
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "Argument %d uses `%s`, but ref/out call authorization requires a known function "
+             "parameter contract",
+             slot + 1, xr_call_arg_access_label(access));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
+static void xa_report_arg_accesses_require_known_contract(XaInferContext *ctx, AstNode *call_node,
+                                                          const CallExprNode *call) {
+    if (!ctx || !call)
+        return;
+    for (int i = 0; i < call->arg_count; i++) {
+        XrCallArgAccess access = xa_call_arg_access(call, i);
+        if (access != XR_CALL_ARG_VALUE)
+            xa_report_arg_access_requires_known_contract(
+                ctx, call_node, call->arguments ? call->arguments[i] : NULL, access, i);
+    }
 }
 
 static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
@@ -3826,8 +3859,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             continue;
         XrCallArgAccess access = xa_call_arg_access(call, i);
         XrParamMode param_mode = xa_call_param_mode(callee_type, i);
+        if (access != XR_CALL_ARG_VALUE && (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type)) &&
+            xa_call_direct_variable_type_without_read(ctx, arg))
+            continue;
         if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT &&
-            xa_out_direct_variable_type_without_read(ctx, arg))
+            xa_call_direct_variable_type_without_read(ctx, arg))
             continue;
         if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
@@ -3916,6 +3952,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
             }
         }
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
         // Container method with callback: infer fn expr arg types even though
         // the method's own return type resolved to unknown (e.g. reduce).
         if (container_elem_type && method_name) {
@@ -3930,8 +3967,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 ctx->callback_array_type = callee_obj_type;
             }
             for (int i = 0; i < call->arg_count; i++) {
-                if (call->arguments[i])
-                    xa_visit_infer_expr(ctx, call->arguments[i]);
+                AstNode *arg = call->arguments[i];
+                if (!arg)
+                    continue;
+                XrCallArgAccess access = xa_call_arg_access(call, i);
+                if (access != XR_CALL_ARG_VALUE &&
+                    xa_call_direct_variable_type_without_read(ctx, arg))
+                    continue;
+                xa_visit_infer_expr(ctx, arg);
             }
             ctx->callback_element_type = saved_elem;
             ctx->callback_index_type = saved_idx;
@@ -4006,11 +4049,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Accept primitive/container return types without warning.
         if (call->callee && call->callee->type == AST_MEMBER_ACCESS && callee_type &&
             !XR_TYPE_IS_UNKNOWN(callee_type)) {
+            xa_report_arg_accesses_require_known_contract(ctx, node, call);
             return callee_type;
         }
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    "Value is not callable", &loc);
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
         return xr_type_new_unknown(NULL);
     }
 
