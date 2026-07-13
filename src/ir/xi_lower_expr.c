@@ -4535,7 +4535,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             if (!v)
                 return NULL;
             v->args[0] = recv;
-            v->aux = (void *) "string_bytes_span";
+            v->aux = (void *) "string_byte_slice";
             v->flags |= XI_FLAG_READS_MEM | XI_FLAG_MAY_THROW;
             v->line = (uint32_t) node->line;
             return v;

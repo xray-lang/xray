@@ -20,8 +20,8 @@ regex=array-storage [0-9]+ func=read32BE value=v[0-9]+ origin=v[0-9]+ flags=0x1 
 regex=array-storage [0-9]+ func=write16 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-storage [0-9]+ func=writeI16 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-storage [0-9]+ func=writeF32 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
-regex=span-access [0-9]+ func=read16 value=v[0-9]+ kind=byte_load evidence=recv_agg\+byte_span\+pod\+endian_const drop=type\+helper
-regex=span-access [0-9]+ func=write16 value=v[0-9]+ kind=byte_store evidence=recv_agg\+byte_span\+pod\+endian_const drop=type\+helper
+regex=span-access [0-9]+ func=read16 value=v[0-9]+ kind=byte_load evidence=recv_agg\+byte_slice\+pod\+endian_const drop=type\+helper
+regex=span-access [0-9]+ func=write16 value=v[0-9]+ kind=byte_store evidence=recv_agg\+byte_slice\+pod\+endian_const drop=type\+helper
 c_contains=xrt_byte_slice_load_u16_le_unchecked_raw(
 c_contains=xrt_byte_slice_load_u32_le_unchecked_raw(
 c_contains=xrt_byte_slice_load_u64_le_unchecked_raw(

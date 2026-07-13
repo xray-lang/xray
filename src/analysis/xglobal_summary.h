@@ -196,7 +196,7 @@ typedef enum XgSequenceKind {
     XG_SEQ_BYTES,
     XG_SEQ_STRING,
     XG_SEQ_SPAN,
-    XG_SEQ_BYTE_SPAN,
+    XG_SEQ_BYTE_SLICE,
     XG_SEQ_STRING_BUILDER,
 } XgSequenceKind;
 

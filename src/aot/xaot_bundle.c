@@ -3087,7 +3087,7 @@ static bool sequence_kind_valid(uint8_t kind) {
         case XG_SEQ_BYTES:
         case XG_SEQ_STRING:
         case XG_SEQ_SPAN:
-        case XG_SEQ_BYTE_SPAN:
+        case XG_SEQ_BYTE_SLICE:
         case XG_SEQ_STRING_BUILDER:
             return true;
         default:
@@ -6781,7 +6781,7 @@ static void print_span_access_bits(FILE *out, uint32_t bits, bool evidence) {
     } while (0)
     if (evidence) {
         PRINT_BIT(XAOT_SPAN_EV_RECV_AGGREGATE, "recv_agg");
-        PRINT_BIT(XAOT_SPAN_EV_RECV_BYTE_SPAN, "byte_span");
+        PRINT_BIT(XAOT_SPAN_EV_RECV_BYTE_SLICE, "byte_slice");
         PRINT_BIT(XAOT_SPAN_EV_RECV_POD, "pod");
         PRINT_BIT(XAOT_SPAN_EV_ELEM_MATCH, "elem_match");
         PRINT_BIT(XAOT_SPAN_EV_WRITABLE, "writable");
@@ -6811,8 +6811,8 @@ static const char *span_access_reason_name(uint8_t reason) {
             return "none";
         case XAOT_SPAN_UNPROVEN_DYNAMIC_RECV:
             return "dynamic_recv";
-        case XAOT_SPAN_UNPROVEN_NOT_BYTE_SPAN:
-            return "not_byte_span";
+        case XAOT_SPAN_UNPROVEN_NOT_BYTE_SLICE:
+            return "not_byte_slice";
         case XAOT_SPAN_UNPROVEN_NOT_POD:
             return "not_pod";
         case XAOT_SPAN_UNPROVEN_READONLY_MAYBE:
