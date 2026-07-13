@@ -1,0 +1,10 @@
+class Box {
+    constructor() {}
+}
+
+fn bad(x: out int) {
+    Box(ref x)
+}
+
+var value = 0
+bad(out value)

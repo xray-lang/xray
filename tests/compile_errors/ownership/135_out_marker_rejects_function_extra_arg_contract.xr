@@ -1,0 +1,8 @@
+fn f() {}
+
+fn bad(x: out int) {
+    f(out x)
+}
+
+var value = 0
+bad(out value)
