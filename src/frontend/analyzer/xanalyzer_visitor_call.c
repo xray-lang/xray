@@ -2931,6 +2931,53 @@ static void xa_check_shared_mutating_param_arg(XaInferContext *ctx, AstNode *cal
                                &loc);
 }
 
+static bool xa_call_is_unknown_function_value_callee(CallExprNode *call, XaSymbol *fn_sym,
+                                                     XaSymbolLinks *fn_links, XrType *callee_type,
+                                                     int slot) {
+    if (!call || !call->callee || !callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0)
+        return false;
+    if (call->callee->type != AST_VARIABLE)
+        return false;
+    if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION)
+        return false;
+    if (fn_sym && fn_sym->kind == XA_SYM_CLASS)
+        return false;
+    return !fn_links || !fn_links->param_mutations || slot >= fn_links->param_mutation_count;
+}
+
+static void xa_check_shared_unknown_function_value_arg(XaInferContext *ctx, AstNode *call_node,
+                                                       CallExprNode *call, XaSymbol *fn_sym,
+                                                       XaSymbolLinks *fn_links, XrType *callee_type,
+                                                       AstNode *arg_node, XrType *arg_type,
+                                                       int slot) {
+    if (!ctx || !call_node || !call ||
+        !xa_call_is_unknown_function_value_callee(call, fn_sym, fn_links, callee_type, slot))
+        return;
+    if (!xa_type_needs_borrow_escape_guard(arg_type))
+        return;
+    if (xa_type_allows_shared_interior_mutation(arg_type))
+        return;
+    if (!xa_expr_yields_shared_provenance(ctx, arg_node ? arg_node : call_node, arg_type))
+        return;
+
+    XaSymbol *root = xa_call_root_variable_symbol(ctx, arg_node);
+    const char *callee_name = call->callee && call->callee->type == AST_VARIABLE
+                                  ? call->callee->as.variable.name
+                                  : "function value";
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
+                      .column =
+                          arg_node && arg_node->column ? arg_node->column : call_node->column};
+    char msg[288];
+    snprintf(msg, sizeof(msg),
+             "cannot pass shared-derived value '%s' to function value '%s' with unknown mutation "
+             "summary; pass copy(%s) or call a known function directly",
+             root && root->name ? root->name : "?", callee_name ? callee_name : "?",
+             root && root->name ? root->name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static void xa_check_owned_storage_param_arg(XaInferContext *ctx, AstNode *call_node,
                                              XaSymbolLinks *callee_links, const char *callee_name,
                                              AstNode *arg_node, XrType *arg_type, int slot) {
@@ -3975,6 +4022,29 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                  arg_type, direct_slot);
             xa_check_shared_mutating_param_arg(ctx, node, escape_links, escape_name, arg_node,
                                                arg_type, direct_slot);
+            direct_slot++;
+        }
+    }
+    if (call->arg_count > 0) {
+        int direct_slot = 0;
+        for (int i = 0; i < call->arg_count; i++) {
+            AstNode *arg_node = call->arguments[i];
+            if (!arg_node)
+                continue;
+            if (arg_node->type == AST_SPREAD_EXPR) {
+                XrType *src =
+                    xa_analyzer_get_node_type(ctx->analyzer, arg_node->as.spread_expr.expr);
+                if (!src)
+                    src = xa_visit_infer_expr(ctx, arg_node->as.spread_expr.expr);
+                if (src && XR_TYPE_IS_TUPLE(src))
+                    direct_slot += src->tuple.element_count;
+                continue;
+            }
+            XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
+                                   ? effective_arg_types[direct_slot]
+                                   : xa_visit_infer_expr(ctx, arg_node);
+            xa_check_shared_unknown_function_value_arg(
+                ctx, node, call, fn_sym, fn_links, callee_type, arg_node, arg_type, direct_slot);
             direct_slot++;
         }
     }

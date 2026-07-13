@@ -311,6 +311,8 @@ XR_FUNC XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links);
 XR_FUNC XrType **xa_symbol_links_get_param_types(XaSymbolLinks *links, int *count);
 XR_FUNC const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *count);
 XR_FUNC bool xa_symbol_is_function(XaSymbol *symbol);
+XR_FUNC void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst,
+                                                         const XaSymbolLinks *src);
 
 // API: Generic type parameters
 //

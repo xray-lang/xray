@@ -1,0 +1,12 @@
+fn overwrite(view: Slice<byte>) {
+    view[0] = 1
+}
+
+fn main() {
+    shared bytes = Array<byte>(4, 0)
+    var view: Slice<byte> = bytes[:]
+    var f = overwrite
+    f(view)
+}
+
+main()
