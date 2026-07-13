@@ -121,6 +121,23 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         g_passed++;                                                                                \
     } while (0)
 
+#define EXPECT_READONLY_SPAN_THROW(stmt, msg)                                                      \
+    do {                                                                                           \
+        g_thrown_exc = XR_NULL_VAL;                                                                \
+        g_expect_throw = 1;                                                                        \
+        if (setjmp(g_throw_jmp) == 0) {                                                            \
+            stmt;                                                                                  \
+            g_expect_throw = 0;                                                                    \
+            ASSERT_TRUE(false, msg);                                                               \
+        }                                                                                          \
+        g_expect_throw = 0;                                                                        \
+        XrValue _code = xrt_json_get_name(g_thrown_exc, "code");                                   \
+        ASSERT_TRUE(XR_IS_INT(_code), msg " code is int");                                         \
+        ASSERT_EQ_INT(XR_TO_INT(_code), XR_ERR_CMP_CONST_ASSIGN, msg " code");                     \
+        ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),                               \
+                         "cannot write through readonly Span", msg " message");                    \
+    } while (0)
+
 static void reset_alloc_counts(void) {
     g_malloc_count = 0;
     g_free_count = 0;
@@ -493,6 +510,33 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     free_test_array(span_ops);
 }
 
+static void test_byte_slice_readonly_mutators_throw_before_write(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new_typed_exact(8, XR_ELEM_U8);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+    for (int64_t i = 0; i < 8; i++)
+        xrt_array_push(value, XR_FROM_INT(10 + i));
+
+    xr_span_t readonly = xrt_span_from_array_slice(value, 0, 8);
+    readonly.flags |= XRT_SPAN_FLAG_READONLY;
+    xr_span_t src = xrt_span_from_array_slice(value, 0, 4);
+
+    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_fill_checked_raw(readonly, 0xff),
+                               "readonly Slice<byte>.fill throws");
+    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_copy_checked_raw(readonly, src),
+                               "readonly Slice<byte>.copyFrom throws");
+    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_repeat_from_checked_raw(readonly, 4, 4, 4),
+                               "readonly Slice<byte>.repeatFrom throws");
+    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_store_u16_checked_raw(readonly, 0, 0xffff, 1),
+                               "readonly Slice<byte>.store throws");
+
+    for (int64_t i = 0; i < 8; i++)
+        ASSERT_EQ_INT(((uint8_t *) a->data)[i], 10 + i,
+                      "readonly mutator guards leave byte storage unchanged");
+
+    free_test_array(a);
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -530,6 +574,7 @@ int main(void) {
     test_resize_reserve_type_errors_are_structured();
     test_indexof_typed_fast_path_shared_rules();
     test_byte_array_raw_helpers_share_core_rules();
+    test_byte_slice_readonly_mutators_throw_before_write();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
