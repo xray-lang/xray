@@ -1,0 +1,10 @@
+fn readFirst(view: Slice<byte>) -> int {
+    return int(view[0]) + len(view)
+}
+
+@test
+fn test_shared_provenance_readonly_param() {
+    shared bytes = Array<byte>(2, 4)
+    var view: Slice<byte> = bytes[:]
+    assert_eq(readFirst(view), 6)
+}

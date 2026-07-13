@@ -185,6 +185,8 @@ static void links_release_dynamic(XaSymbolLinks *links) {
     }
     if (links->param_escapes)
         xr_free(links->param_escapes);
+    if (links->param_mutations)
+        xr_free(links->param_mutations);
     if (links->param_storage_requirements)
         xr_free(links->param_storage_requirements);
     if (links->c_export_symbol)
@@ -573,6 +575,11 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         links->param_escapes = NULL;
         links->param_escape_count = 0;
     }
+    if (links->param_mutations) {
+        xr_free(links->param_mutations);
+        links->param_mutations = NULL;
+        links->param_mutation_count = 0;
+    }
     if (links->param_storage_requirements) {
         xr_free(links->param_storage_requirements);
         links->param_storage_requirements = NULL;
@@ -785,6 +792,14 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
             memcpy(dst->param_escapes, src->param_escapes,
                    (size_t) src->param_escape_count * sizeof(uint8_t));
             dst->param_escape_count = src->param_escape_count;
+        }
+    }
+    if (src->param_mutations && src->param_mutation_count > 0) {
+        dst->param_mutations = xr_malloc((size_t) src->param_mutation_count * sizeof(uint8_t));
+        if (dst->param_mutations) {
+            memcpy(dst->param_mutations, src->param_mutations,
+                   (size_t) src->param_mutation_count * sizeof(uint8_t));
+            dst->param_mutation_count = src->param_mutation_count;
         }
     }
     if (src->param_storage_requirements && src->param_storage_requirement_count > 0) {

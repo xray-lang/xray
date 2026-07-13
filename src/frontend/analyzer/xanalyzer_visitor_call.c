@@ -2903,6 +2903,34 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
                                &loc);
 }
 
+static void xa_check_shared_mutating_param_arg(XaInferContext *ctx, AstNode *call_node,
+                                               XaSymbolLinks *callee_links, const char *callee_name,
+                                               AstNode *arg_node, XrType *arg_type, int slot) {
+    if (!ctx || !call_node || !callee_links || !callee_links->param_mutations || slot < 0 ||
+        slot >= callee_links->param_mutation_count || !callee_links->param_mutations[slot])
+        return;
+    if (!xa_type_needs_borrow_escape_guard(arg_type))
+        return;
+    if (xa_type_allows_shared_interior_mutation(arg_type))
+        return;
+    if (!xa_expr_yields_shared_provenance(ctx, arg_node ? arg_node : call_node, arg_type))
+        return;
+
+    XaSymbol *root = xa_call_root_variable_symbol(ctx, arg_node);
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
+                      .column =
+                          arg_node && arg_node->column ? arg_node->column : call_node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot pass shared-derived value '%s' to mutating parameter %d of '%s'; pass "
+             "copy(%s) or use an audited shared synchronization handle",
+             root && root->name ? root->name : "?", slot + 1, callee_name ? callee_name : "callee",
+             root && root->name ? root->name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static void xa_check_owned_storage_param_arg(XaInferContext *ctx, AstNode *call_node,
                                              XaSymbolLinks *callee_links, const char *callee_name,
                                              AstNode *arg_node, XrType *arg_type, int slot) {
@@ -3945,6 +3973,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                              arg_type, direct_slot);
             xa_check_borrowed_escaping_param_arg(ctx, node, escape_links, escape_name, arg_node,
                                                  arg_type, direct_slot);
+            xa_check_shared_mutating_param_arg(ctx, node, escape_links, escape_name, arg_node,
+                                               arg_type, direct_slot);
             direct_slot++;
         }
     }

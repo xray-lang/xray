@@ -347,6 +347,7 @@ typedef struct XaParamEscapeSummary {
     const char **param_names;
     int param_count;
     uint8_t *escapes;
+    uint8_t *mutations;
     uint8_t *storage_requirements;
     XrType *return_type;
     const char *aliases[128];
@@ -431,12 +432,14 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
 static bool xa_summary_method_stores_argument(const char *method_name, int slot);
 static bool xa_summary_call_requires_owned_move_argument(XaParamEscapeSummary *summary,
                                                          AstNode *callee, int slot);
+static bool xa_summary_member_call_mutates_receiver(XaParamEscapeSummary *summary, AstNode *callee);
 static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee);
 static XrClassInfo *xa_type_class_info(XrType *type);
 static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, XrType *type);
 static XaSymbol *xa_receiver_method_symbol_for_call(XrClassInfo *receiver_info, AstNode *object,
                                                     const char *method_name);
 static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr);
+static void xa_summary_mark_mutation(XaParamEscapeSummary *summary, AstNode *expr);
 static void xa_summary_mark_owned_move_requirement(XaParamEscapeSummary *summary, AstNode *expr);
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node);
 
@@ -513,6 +516,12 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
                 xa_summary_mark_expr(summary, call->arguments[i]);
         }
     }
+    if (fn_links && fn_links->param_mutations) {
+        for (int i = 0; i < call->arg_count && i < fn_links->param_mutation_count; i++) {
+            if (fn_links->param_mutations[i])
+                xa_summary_mark_mutation(summary, call->arguments[i]);
+        }
+    }
     if (fn_links && fn_links->param_storage_requirements) {
         for (int i = 0; i < call->arg_count && i < fn_links->param_storage_requirement_count; i++) {
             if (fn_links->param_storage_requirements[i] == XR_STORAGE_OWNED_SYSTEM)
@@ -521,6 +530,8 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
     }
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         const char *method_name = call->callee->as.member_access.name;
+        if (xa_summary_member_call_mutates_receiver(summary, call->callee))
+            xa_summary_mark_mutation(summary, call->callee->as.member_access.object);
         for (int i = 0; i < call->arg_count; i++) {
             if (xa_summary_method_stores_argument(method_name, i))
                 xa_summary_mark_expr(summary, call->arguments[i]);
@@ -532,6 +543,12 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
             for (int i = 0; i < call->arg_count && i < method_links->param_escape_count; i++) {
                 if (method_links->param_escapes[i])
                     xa_summary_mark_expr(summary, call->arguments[i]);
+            }
+        }
+        if (method_links && method_links->param_mutations) {
+            for (int i = 0; i < call->arg_count && i < method_links->param_mutation_count; i++) {
+                if (method_links->param_mutations[i])
+                    xa_summary_mark_mutation(summary, call->arguments[i]);
             }
         }
         if (method_links && method_links->param_storage_requirements) {
@@ -732,6 +749,14 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
     }
 }
 
+static void xa_summary_mark_mutation(XaParamEscapeSummary *summary, AstNode *expr) {
+    if (!summary || !summary->mutations || !expr)
+        return;
+    int slot = xa_summary_expr_root_param_slot(summary, expr);
+    if (slot >= 0 && slot < summary->param_count)
+        summary->mutations[slot] = 1;
+}
+
 static void xa_summary_mark_owned_move_requirement(XaParamEscapeSummary *summary, AstNode *expr) {
     if (!summary || !expr || expr->type != AST_MOVE_EXPR || !summary->storage_requirements)
         return;
@@ -789,6 +814,26 @@ static XrType *xa_summary_expr_type(XaParamEscapeSummary *summary, AstNode *node
         default:
             return NULL;
     }
+}
+
+static bool xa_summary_member_call_mutates_receiver(XaParamEscapeSummary *summary,
+                                                    AstNode *callee) {
+    if (!summary || !callee || callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return false;
+
+    XrType *receiver_type = xa_summary_expr_type(summary, ma->object);
+    if (receiver_type && XR_TYPE_IS_STRING(receiver_type))
+        return false;
+
+    XrClassInfo *target_info = xa_summary_expr_class_info(summary, ma->object);
+    XaSymbol *method_sym = target_info ? xa_class_info_lookup_member(target_info, ma->name) : NULL;
+    if (method_sym && method_sym->kind == XA_SYM_METHOD)
+        return method_sym->mutates_receiver;
+
+    return xa_method_name_mutates_receiver(ma->name);
 }
 
 static bool xa_summary_call_requires_owned_move_argument(XaParamEscapeSummary *summary,
@@ -963,6 +1008,8 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         const char *method_name = call->callee->as.member_access.name;
+        if (xa_summary_member_call_mutates_receiver(summary, call->callee))
+            xa_summary_mark_mutation(summary, call->callee->as.member_access.object);
         for (int i = 0; i < call->arg_count; i++) {
             AstNode *arg = call->arguments[i];
             if (xa_summary_method_stores_argument(method_name, i))
@@ -976,6 +1023,12 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
             for (int i = 0; i < call->arg_count && i < method_links->param_escape_count; i++) {
                 if (method_links->param_escapes[i])
                     xa_summary_mark_expr(summary, call->arguments[i]);
+            }
+        }
+        if (method_links && method_links->param_mutations) {
+            for (int i = 0; i < call->arg_count && i < method_links->param_mutation_count; i++) {
+                if (method_links->param_mutations[i])
+                    xa_summary_mark_mutation(summary, call->arguments[i]);
             }
         }
         if (method_links && method_links->param_storage_requirements) {
@@ -994,6 +1047,12 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
         for (int i = 0; i < call->arg_count && i < fn_links->param_escape_count; i++) {
             if (fn_links->param_escapes[i])
                 xa_summary_mark_expr(summary, call->arguments[i]);
+        }
+    }
+    if (fn_links && fn_links->param_mutations) {
+        for (int i = 0; i < call->arg_count && i < fn_links->param_mutation_count; i++) {
+            if (fn_links->param_mutations[i])
+                xa_summary_mark_mutation(summary, call->arguments[i]);
         }
     }
     if (fn_links && fn_links->param_storage_requirements) {
@@ -1065,15 +1124,22 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
             break;
         }
         case AST_MEMBER_SET:
+            xa_summary_mark_mutation(summary, node->as.member_set.object);
             xa_summary_walk(summary, node->as.member_set.object);
             xa_summary_mark_expr(summary, node->as.member_set.value);
             xa_summary_walk(summary, node->as.member_set.value);
             break;
         case AST_INDEX_SET:
+            xa_summary_mark_mutation(summary, node->as.index_set.array);
             xa_summary_walk(summary, node->as.index_set.array);
             xa_summary_walk(summary, node->as.index_set.index);
             xa_summary_mark_expr(summary, node->as.index_set.value);
             xa_summary_walk(summary, node->as.index_set.value);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            xa_summary_mark_mutation(summary, node->as.compound_assignment.object);
+            xa_summary_walk(summary, node->as.compound_assignment.object);
+            xa_summary_walk(summary, node->as.compound_assignment.value);
             break;
         case AST_CALL_EXPR:
             xa_summary_walk_call(summary, node);
@@ -1196,9 +1262,11 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
     if (!links || param_count <= 0 || !body)
         return false;
     uint8_t *escapes = xr_calloc((size_t) param_count, sizeof(uint8_t));
+    uint8_t *mutations = xr_calloc((size_t) param_count, sizeof(uint8_t));
     uint8_t *storage_requirements = xr_calloc((size_t) param_count, sizeof(uint8_t));
-    if (!escapes || !storage_requirements) {
+    if (!escapes || !mutations || !storage_requirements) {
         xr_free(escapes);
+        xr_free(mutations);
         xr_free(storage_requirements);
         return false;
     }
@@ -1206,6 +1274,7 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
                                     .param_names = param_names,
                                     .param_count = param_count,
                                     .escapes = escapes,
+                                    .mutations = mutations,
                                     .storage_requirements = storage_requirements,
                                     .return_type = return_type,
                                     .ctx = ctx,
@@ -1216,6 +1285,17 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
     if (!changed) {
         for (int i = 0; i < param_count; i++) {
             if (links->param_escapes[i] != escapes[i]) {
+                changed = true;
+                break;
+            }
+        }
+    }
+    if (!changed) {
+        changed = links->param_mutation_count != param_count || !links->param_mutations;
+    }
+    if (!changed) {
+        for (int i = 0; i < param_count; i++) {
+            if (links->param_mutations[i] != mutations[i]) {
                 changed = true;
                 break;
             }
@@ -1235,10 +1315,14 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
     }
     if (links->param_escapes)
         xr_free(links->param_escapes);
+    if (links->param_mutations)
+        xr_free(links->param_mutations);
     if (links->param_storage_requirements)
         xr_free(links->param_storage_requirements);
     links->param_escapes = escapes;
     links->param_escape_count = param_count;
+    links->param_mutations = mutations;
+    links->param_mutation_count = param_count;
     links->param_storage_requirements = storage_requirements;
     links->param_storage_requirement_count = param_count;
     return changed;
