@@ -1,0 +1,6 @@
+fn bad(x: out int) {
+    return
+}
+
+var y = 0
+bad(out y)

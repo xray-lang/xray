@@ -2845,7 +2845,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                 if (md->is_variadic && i == md->param_count - 1)
                     param_type = xr_type_new_array(ctx->analyzer->isolate, param_type);
                 plinks->type = param_type;
-                plinks->is_definitely_assigned = true;
+                plinks->is_definitely_assigned = param->passing_mode != XR_PARAM_OUT;
             }
         }
 

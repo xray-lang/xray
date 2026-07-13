@@ -2344,7 +2344,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
                                         ? links->param_types[i]
                                         : xr_type_new_unknown(NULL);
             }
-            param_links->is_definitely_assigned = true;
+            param_links->is_definitely_assigned = p->passing_mode != XR_PARAM_OUT;
         }
     }
 
@@ -3595,7 +3595,7 @@ skip_layout:
                     param_type = xr_type_new_array(ctx->analyzer->isolate, param_type);
                 }
                 plinks->type = param_type;
-                plinks->is_definitely_assigned = true;
+                plinks->is_definitely_assigned = param->passing_mode != XR_PARAM_OUT;
             }
         }
 

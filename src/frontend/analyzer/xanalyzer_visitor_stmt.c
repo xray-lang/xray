@@ -8478,6 +8478,41 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
+static XaScope *xa_find_enclosing_function_scope(XaInferContext *ctx) {
+    if (!ctx || !ctx->analyzer)
+        return NULL;
+    XaScope *scope = ctx->analyzer->current_scope;
+    while (scope && scope->kind != XA_SCOPE_FUNCTION)
+        scope = scope->parent;
+    return scope;
+}
+
+static void xa_check_out_params_assigned_before_return(XaInferContext *ctx, XaScope *function_scope,
+                                                       AstNode *return_node) {
+    if (!ctx || !ctx->analyzer || !function_scope || !return_node)
+        return;
+
+    int symbol_count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(function_scope, &symbol_count);
+    for (int i = 0; i < symbol_count; i++) {
+        XaSymbol *sym = symbols ? symbols[i] : NULL;
+        if (!sym || sym->kind != XA_SYM_PARAMETER || sym->passing_mode != XR_PARAM_OUT)
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        if (!links || links->is_definitely_assigned)
+            continue;
+
+        XrLocation loc = {
+            .file = ctx->file_path, .line = return_node->line, .column = return_node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "out parameter '%s' must be assigned before returning",
+                 sym->name ? sym->name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
+    }
+    xr_free(symbols);
+}
+
 void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -8485,16 +8520,12 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
     ReturnStmtNode *ret = &node->as.return_stmt;
 
     /* Top-level return is illegal — must be inside a function body. */
-    {
-        XaScope *s = ctx->analyzer->current_scope;
-        while (s && s->kind != XA_SCOPE_FUNCTION)
-            s = s->parent;
-        if (!s) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_INVALID_RETURN,
-                                       "'return' outside of a function body", &loc);
-            return;
-        }
+    XaScope *function_scope = xa_find_enclosing_function_scope(ctx);
+    if (!function_scope) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_INVALID_RETURN,
+                                   "'return' outside of a function body", &loc);
+        return;
     }
 
     XrType *return_type = xr_type_new_unit(NULL);
@@ -8625,6 +8656,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             }
         }
     }
+
+    xa_check_out_params_assigned_before_return(ctx, function_scope, node);
 
     // Mark flow as unreachable after return
     if (ctx->flow) {

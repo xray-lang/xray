@@ -1,0 +1,6 @@
+const bad = fn(x: out int) -> int {
+    return x
+}
+
+var y = 0
+print(bad(out y))
