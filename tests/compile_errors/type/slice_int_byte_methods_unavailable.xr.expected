@@ -1,1 +1,4 @@
 Span view has no member 'load'; use len(view) or indexed access
+Span view has no member 'store'
+Span view has no member 'commonPrefix'
+Span view has no member 'repeatFrom'
