@@ -456,6 +456,20 @@ static bool xr_parse_current_is_move_param_prefix(Parser *parser) {
     return is_prefix;
 }
 
+XR_FUNC void xr_parse_reject_ref_out_default_param(Parser *parser, const XrParamNode *param) {
+    if (!param || (param->passing_mode != XR_PARAM_REF && param->passing_mode != XR_PARAM_OUT))
+        return;
+
+    const char *mode = param->passing_mode == XR_PARAM_REF ? "ref" : "out";
+    const char *name = param->name ? param->name : "<anonymous>";
+    char message[192];
+    snprintf(message, sizeof(message),
+             "%s parameter '%s' cannot have a default value; callers must pass %s place "
+             "explicitly",
+             mode, name, mode);
+    xr_parser_error_at_previous(parser, message);
+}
+
 XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
     XR_DCHECK(parser != NULL, "xr_parse_parameter: NULL parser");
     bool is_rest = false;

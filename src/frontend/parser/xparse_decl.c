@@ -745,6 +745,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
                 // Parse optional default value
                 if (xr_parser_match(parser, TK_ASSIGN)) {
+                    xr_parse_reject_ref_out_default_param(parser, param);
                     param->default_value = xr_parse_expression(parser);
                     seen_default = true;
 

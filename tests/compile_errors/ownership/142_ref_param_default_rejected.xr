@@ -1,0 +1,3 @@
+fn bump(x: ref int = 0) {
+    x = x + 1
+}
