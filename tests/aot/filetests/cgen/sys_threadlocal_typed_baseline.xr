@@ -1,0 +1,9 @@
+import sys
+
+shared local = sys.ThreadLocal<int>(fn() -> int {
+    return 10
+})
+
+print(local.get())
+local.set(20)
+print(local.get())

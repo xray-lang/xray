@@ -1,0 +1,8 @@
+import http
+
+fn handle(req: Json) -> Json {
+    return { ok: true, path: req.path }
+}
+
+http.route("GET", "/hello", handle)
+print("registered")
