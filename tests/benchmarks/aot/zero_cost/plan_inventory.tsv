@@ -110,11 +110,11 @@ user_hash_eq_direct_backend|covered|map_set_user_hash_eq_direct_backend_.*_hash_
 fixed_layout_enum_scalarization|covered|enum-scalar-plan .*action=compact_aggregate|tests/aot/filetests/cgen|Enum compact aggregate scalarization ABI is a XaotEnumPlan decision consumed by ABI and prepare.
 derive_clone_plan|covered|derive-plan .*kind=clone action=field_table_sidecar|tests/aot/filetests/cgen|Clone derive emits a verified field-table sidecar plan without pulling reflection metadata.
 sequence_access_plan|covered|sequence-access-plan|tests/aot/filetests/link|Sequence access summaries lower into verified sequence access plans.
-sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array/Bytes/StringBuilder capacity operations lower into verified capacity plans.
+sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array<byte>/StringBuilder capacity operations lower into verified capacity plans.
 sequence_capacity_reserve_once|covered|capacity-plan .*action=reserve_once|tests/aot/filetests/link|Array push capacity evidence fixes the reserve-once action in plan output.
 sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evidence lowers into verified bulk operation plans.
-sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/Bytes encoding evidence lowers into verified encoding plans.
-sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tests/aot/filetests/link|Bytes-to-string encoding evidence fixes the validate-once action in plan output.
+sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/byte-array encoding evidence lowers into verified encoding plans.
+sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tests/aot/filetests/link|byte-array-to-string encoding evidence fixes the validate-once action in plan output.
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, body summary, and global payloads materialize back into validated summary rows.
 summary_payload_global_materialization|covered|cache_payload_materializes_global_evidence|tests/unit/analysis|Global evidence payload materializes every row family and rechecks the global content key.
 summary_payload_request_key|covered|xg-cache-request v1|tests/unit/analysis|Payload v2 separates producer-precomputable request identity from content-key row validation.
