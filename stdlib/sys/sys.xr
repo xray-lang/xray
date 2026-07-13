@@ -217,7 +217,7 @@ class ThreadLocal<T> {
             _threadLocalPruneDeadSlots(this._values)
             if (this._values.containsKey(key)) {
                 var slot = this._values.get(key)!
-                return slot.value as T
+                return slot.value
             }
             _threadLocalPruneDeadFlags(this._initializing)
             if (this._initializing.containsKey(key)) {
