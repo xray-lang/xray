@@ -37,9 +37,15 @@ static bool xa_path_is_parallel_stdlib_module(const char *file);
 static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info);
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
                                                        const char *callback_label);
+static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
+                                                const char *callback_label, XrCallArgAccess access,
+                                                XrParamMode param_mode);
+static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
+                                          XrCallArgAccess access, XrParamMode param_mode);
 static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
                                                    const CallExprNode *call, AstNode *arg_node,
                                                    int arg_index, int slot, XrParamMode param_mode);
+static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
@@ -144,12 +150,13 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
             ctx->expected_type = resolved;
         const char *parallel_callback_label =
             is_parallel_plan_ctor && i == 1 ? "parallel.Plan init callback" : NULL;
+        XrParamMode param_mode = xr_type_function_param_mode(ctor_type, i);
+        XrCallArgAccess access = xa_call_arg_access(call, i);
         XrType *arg_type =
-            xa_visit_call_arg_with_parallel_context(ctx, arg, parallel_callback_label);
+            xa_visit_call_arg_for_param_mode(ctx, arg, parallel_callback_label, access, param_mode);
         ctx->expected_type = saved_expected;
         if (!resolved || XR_TYPE_IS_UNKNOWN(resolved) || !arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
             continue;
-        XrParamMode param_mode = xr_type_function_param_mode(ctor_type, i);
         xa_check_call_arg_access_authorization(ctx, node, call, arg, i, i, param_mode);
         if (!xa_typecheck_assignable(resolved, arg_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
@@ -162,6 +169,7 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
         }
+        xa_mark_out_call_arg_assigned(ctx, arg, access, param_mode);
     }
 
     if (param_names && param_names != param_names_buf)
@@ -2081,6 +2089,54 @@ static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
     return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
 }
 
+static XrType *xa_out_direct_variable_type_without_read(XaInferContext *ctx, AstNode *arg_node) {
+    AstNode *place = xa_call_unwrap_grouping(arg_node);
+    if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *sym = xa_call_variable_symbol(ctx, place);
+    if (!sym)
+        return NULL;
+    place->as.variable.symbol_id = sym->id;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    XrType *type = xa_analyzer_get_type(ctx->analyzer, sym);
+    if (!type && links)
+        type = links->type ? links->type : links->declared_type;
+    if (!type)
+        return NULL;
+    xa_analyzer_set_node_type(ctx->analyzer, place, type);
+    return type;
+}
+
+static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
+                                                const char *callback_label, XrCallArgAccess access,
+                                                XrParamMode param_mode) {
+    if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT) {
+        XrType *type = xa_out_direct_variable_type_without_read(ctx, arg_node);
+        if (type)
+            return type;
+    }
+    return xa_visit_call_arg_with_parallel_context(ctx, arg_node, callback_label);
+}
+
+static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
+                                          XrCallArgAccess access, XrParamMode param_mode) {
+    if (access != XR_CALL_ARG_OUT || param_mode != XR_PARAM_OUT)
+        return;
+    AstNode *place = xa_call_unwrap_grouping(arg_node);
+    if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
+        return;
+    XaSymbol *sym = xa_call_variable_symbol(ctx, place);
+    if (!sym)
+        return;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links) {
+        uint32_t end_col =
+            place->column + (place->as.variable.name ? strlen(place->as.variable.name) : 0);
+        xa_symbol_add_ref(links, place->line, place->column, end_col, true);
+        links->is_definitely_assigned = true;
+    }
+}
+
 #define XA_CALL_ALIAS_PATH_MAX 256
 
 static bool xa_call_alias_path_copy(char *dst, size_t dst_size, const char *src) {
@@ -3765,8 +3821,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * the callee's parameter signature (set in the detailed loop below).
      * Visiting them eagerly without context triggers spurious E0365. */
     for (int i = 0; i < call->arg_count; i++) {
-        if (call->arguments[i] && call->arguments[i]->type != AST_FUNCTION_EXPR &&
-            !xa_expr_needs_contextual_view_type(call->arguments[i]))
+        AstNode *arg = call->arguments[i];
+        if (!arg || arg->type == AST_FUNCTION_EXPR || xa_expr_needs_contextual_view_type(arg))
+            continue;
+        XrCallArgAccess access = xa_call_arg_access(call, i);
+        XrParamMode param_mode = xa_call_param_mode(callee_type, i);
+        if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT &&
+            xa_out_direct_variable_type_without_read(ctx, arg))
+            continue;
+        if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
 
@@ -4185,15 +4248,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             ctx->allow_view_expr_for_copy = true;
         const char *parallel_callback_label =
             xa_parallel_callback_label_for_plan(parallel_call_plan, i);
-        XrType *arg_type =
-            xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
+        XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
+        XrCallArgAccess access = xa_call_arg_access(call, i);
+        XrType *arg_type = xa_visit_call_arg_for_param_mode(ctx, arg_node, parallel_callback_label,
+                                                            access, param_mode);
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
         xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,
                                            arg_type, slot);
-        XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;
         xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
@@ -4248,6 +4312,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
             }
         }
+        xa_mark_out_call_arg_assigned(ctx, arg_node, access, param_mode);
         slot++;
     }
     xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_names,
@@ -4279,7 +4344,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
             XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
                                    ? effective_arg_types[direct_slot]
-                                   : xa_visit_infer_expr(ctx, arg_node);
+                                   : NULL;
+            if (!arg_type) {
+                XrParamMode param_mode = xa_call_param_mode(callee_type, direct_slot);
+                XrCallArgAccess access = xa_call_arg_access(call, i);
+                arg_type =
+                    xa_visit_call_arg_for_param_mode(ctx, arg_node, NULL, access, param_mode);
+            }
             xa_check_owned_storage_param_arg(ctx, node, escape_links, escape_name, arg_node,
                                              arg_type, direct_slot);
             xa_check_borrowed_escaping_param_arg(ctx, node, escape_links, escape_name, arg_node,
@@ -4306,7 +4377,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
             XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
                                    ? effective_arg_types[direct_slot]
-                                   : xa_visit_infer_expr(ctx, arg_node);
+                                   : NULL;
+            if (!arg_type) {
+                XrParamMode param_mode = xa_call_param_mode(callee_type, direct_slot);
+                XrCallArgAccess access = xa_call_arg_access(call, i);
+                arg_type =
+                    xa_visit_call_arg_for_param_mode(ctx, arg_node, NULL, access, param_mode);
+            }
             xa_check_shared_unknown_function_value_arg(
                 ctx, node, call, fn_sym, fn_links, callee_type, arg_node, arg_type, direct_slot);
             direct_slot++;
@@ -4329,7 +4406,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
             XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
                                    ? effective_arg_types[direct_slot]
-                                   : xa_visit_infer_expr(ctx, arg_node);
+                                   : NULL;
+            if (!arg_type) {
+                XrParamMode param_mode = xa_call_param_mode(callee_type, direct_slot);
+                XrCallArgAccess access = xa_call_arg_access(call, i);
+                arg_type =
+                    xa_visit_call_arg_for_param_mode(ctx, arg_node, NULL, access, param_mode);
+            }
             xa_check_borrowed_mutator_arg_escape(ctx, node, callee_obj_type, method_name, arg_node,
                                                  arg_type, direct_slot);
             direct_slot++;
