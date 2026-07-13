@@ -190,10 +190,7 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, ", ");
         XrParamNode *param = fn->params[i];
         xfmt_write_str(ctx, param->name);
-        if (param->type) {
-            xfmt_write_str(ctx, ": ");
-            xfmt_emit_type(ctx, param->type);
-        }
+        xfmt_emit_param_annotation(ctx, param->passing_mode, param->type);
         if (param->default_value) {
             xfmt_write_str(ctx, " = ");
             xfmt_emit_expression(ctx, param->default_value);
@@ -417,8 +414,10 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                         xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, setter->parameters[j]);
                     if (setter->param_types && setter->param_types[j]) {
-                        xfmt_write_str(ctx, ": ");
-                        xfmt_emit_type(ctx, setter->param_types[j]);
+                        XrParamMode mode = setter->param_passing_modes
+                                               ? setter->param_passing_modes[j]
+                                               : XR_PARAM_VALUE;
+                        xfmt_emit_param_annotation(ctx, mode, setter->param_types[j]);
                     }
                 }
                 xfmt_write_str(ctx, ") ");
@@ -474,8 +473,9 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, ", ");
             xfmt_write_str(ctx, m->parameters[j]);
             if (m->param_types && m->param_types[j]) {
-                xfmt_write_str(ctx, ": ");
-                xfmt_emit_type(ctx, m->param_types[j]);
+                XrParamMode mode =
+                    m->param_passing_modes ? m->param_passing_modes[j] : XR_PARAM_VALUE;
+                xfmt_emit_param_annotation(ctx, mode, m->param_types[j]);
             }
         }
         xfmt_write_char(ctx, ')');
@@ -576,8 +576,9 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, ", ");
             xfmt_write_str(ctx, m->parameters[j]);
             if (m->param_types && m->param_types[j]) {
-                xfmt_write_str(ctx, ": ");
-                xfmt_emit_type(ctx, m->param_types[j]);
+                XrParamMode mode =
+                    m->param_passing_modes ? m->param_passing_modes[j] : XR_PARAM_VALUE;
+                xfmt_emit_param_annotation(ctx, mode, m->param_types[j]);
             }
         }
         xfmt_write_char(ctx, ')');

@@ -241,7 +241,8 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
 | `cancelled` | `cancelled()` 协程取消检查（实际上是 builtin 函数）|
-| `ref` | 函数参数修饰符 (`fn f(p: ref T)`) |
+| `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
+| `out` | 输出参数模式与调用授权 (`fn f(p: out T)` / `f(out p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `supervisor` | `supervisor scope` 修饰符 |
@@ -1993,11 +1994,12 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
-Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
-Modifier  ::= 'in' | 'ref'
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
 FnBody ::= Block
@@ -2060,9 +2062,9 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 - 单返回值不写括号：`: int`。
 - `return (a, b)` 必须带括号；裸逗号 `return a, b` 是编译错误（`E0801`）。
 
-#### 5.2.4 参数修饰符
+#### 5.2.4 参数模式
 
-仅适用于 **`struct` 值类型参数**。
+参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。旧的前缀写法 `ref name: T` 已删除。
 
 ```xray
 fn length_sq(v: in Vec2) -> float {
@@ -2077,11 +2079,12 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 }
 ```
 
-| 修饰符 | 语义 |
+| 参数模式 | 语义 |
 |--|--|
 | 无 | 按值传递（struct 拷贝） |
 | `in` | 按只读引用传递（不拷贝、不可写） |
-| `ref` | 按可变引用传递（不拷贝、可写、修改可见） |
+| `ref` | 按可变引用传递（不拷贝、可写、修改可见）；调用点必须写 `ref place` |
+| `out` | 按输出位置传递；调用点必须写 `out place`，callee 必须在正常返回前写入 |
 
 #### 5.2.5 rest 参数
 
@@ -5556,10 +5559,12 @@ ObjectBinding ::= Identifier (':' Identifier)?
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
 ParamList ::= Param (',' Param)* ','?
-Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // 公开可见性是默认语义；final 只作为 class 前缀
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'

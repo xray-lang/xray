@@ -31,6 +31,7 @@
 #include "xfmt.h"
 #include "../parser/xast.h"
 #include "../../base/xdefs.h"
+#include "../../shared/xr_param_mode.h"
 
 // ---------------------------------------------------------------------------
 // Buffer helpers (defined in xfmt.c)
@@ -82,6 +83,7 @@ XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia);
 // ---------------------------------------------------------------------------
 
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref);
+XR_FUNC void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref);
 XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count);
 XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count);
 XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern);

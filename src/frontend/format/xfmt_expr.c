@@ -861,10 +861,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, fn->params[i]->name);
-                    if (fn->params[i]->type) {
-                        xfmt_write_str(ctx, ": ");
-                        xfmt_emit_type(ctx, fn->params[i]->type);
-                    }
+                    xfmt_emit_param_annotation(ctx, fn->params[i]->passing_mode,
+                                               fn->params[i]->type);
                 }
                 xfmt_write_char(ctx, ')');
                 if (fn->return_type) {
@@ -884,10 +882,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                         if (i > 0)
                             xfmt_write_str(ctx, ", ");
                         xfmt_write_str(ctx, fn->params[i]->name);
-                        if (fn->params[i]->type) {
-                            xfmt_write_str(ctx, ": ");
-                            xfmt_emit_type(ctx, fn->params[i]->type);
-                        }
+                        xfmt_emit_param_annotation(ctx, fn->params[i]->passing_mode,
+                                                   fn->params[i]->type);
                     }
                     xfmt_write_char(ctx, ')');
                 }

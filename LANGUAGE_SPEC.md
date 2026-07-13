@@ -240,7 +240,8 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `to` | `select` send arm (`value to ch`) |
 | `default` | reserved, currently disabled |
 | `cancelled` | `cancelled()` cancellation check (actually a builtin function) |
-| `ref` | function parameter modifier (`fn f(p: ref T)`) |
+| `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
+| `out` | output parameter mode and call-site authorization (`fn f(p: out T)` / `f(out p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |
@@ -2000,11 +2001,12 @@ Constraints:
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
-Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
-Modifier  ::= 'in' | 'ref'
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
 FnBody ::= Block
@@ -2067,9 +2069,9 @@ var result = divmod(10, 3)        // result has type (int, int)
 - A single return value omits the parentheses: `: int`.
 - `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
 
-#### 5.2.4 Parameter modifiers
+#### 5.2.4 Parameter modes
 
-Apply only to **`struct` value-type parameters**.
+Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`. The old prefix spelling `ref name: T` has been removed.
 
 ```xray
 fn length_sq(v: in Vec2) -> float {
@@ -2084,11 +2086,12 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 }
 ```
 
-| Modifier | Semantics |
+| Parameter mode | Semantics |
 |--|--|
 | (none) | Pass by value (struct copy) |
 | `in` | Pass by read-only reference (no copy, not writable) |
-| `ref` | Pass by mutable reference (no copy, writable, observable to caller) |
+| `ref` | Pass by mutable reference (no copy, writable, observable to caller); the call site must write `ref place` |
+| `out` | Pass an output place; the call site must write `out place`, and the callee must write before normal return |
 
 #### 5.2.5 Rest parameters
 
@@ -5569,10 +5572,12 @@ ObjectBinding ::= Identifier (':' Identifier)?
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // empty body is only allowed for @extern
 ParamList ::= Param (',' Param)* ','?
-Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'

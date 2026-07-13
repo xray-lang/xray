@@ -88,11 +88,12 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
-Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
-Modifier  ::= 'in' | 'ref'
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
 FnBody ::= Block
@@ -155,9 +156,9 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 - 单返回值不写括号：`: int`。
 - `return (a, b)` 必须带括号；裸逗号 `return a, b` 是编译错误（`E0801`）。
 
-#### 5.2.4 参数修饰符
+#### 5.2.4 参数模式
 
-仅适用于 **`struct` 值类型参数**。
+参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。旧的前缀写法 `ref name: T` 已删除。
 
 ```xray
 fn length_sq(v: in Vec2) -> float {
@@ -172,11 +173,12 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 }
 ```
 
-| 修饰符 | 语义 |
+| 参数模式 | 语义 |
 |--|--|
 | 无 | 按值传递（struct 拷贝） |
 | `in` | 按只读引用传递（不拷贝、不可写） |
-| `ref` | 按可变引用传递（不拷贝、可写、修改可见） |
+| `ref` | 按可变引用传递（不拷贝、可写、修改可见）；调用点必须写 `ref place` |
+| `out` | 按输出位置传递；调用点必须写 `out place`，callee 必须在正常返回前写入 |
 
 #### 5.2.5 rest 参数
 
@@ -936,11 +938,12 @@ Constraints:
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
-Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
-Modifier  ::= 'in' | 'ref'
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
 FnBody ::= Block
@@ -1003,9 +1006,9 @@ var result = divmod(10, 3)        // result has type (int, int)
 - A single return value omits the parentheses: `: int`.
 - `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
 
-#### 5.2.4 Parameter modifiers
+#### 5.2.4 Parameter modes
 
-Apply only to **`struct` value-type parameters**.
+Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`. The old prefix spelling `ref name: T` has been removed.
 
 ```xray
 fn length_sq(v: in Vec2) -> float {
@@ -1020,11 +1023,12 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 }
 ```
 
-| Modifier | Semantics |
+| Parameter mode | Semantics |
 |--|--|
 | (none) | Pass by value (struct copy) |
 | `in` | Pass by read-only reference (no copy, not writable) |
-| `ref` | Pass by mutable reference (no copy, writable, observable to caller) |
+| `ref` | Pass by mutable reference (no copy, writable, observable to caller); the call site must write `ref place` |
+| `out` | Pass an output place; the call site must write `out place`, and the callee must write before normal return |
 
 #### 5.2.5 Rest parameters
 
