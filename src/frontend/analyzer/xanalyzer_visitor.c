@@ -24,6 +24,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
+#include "../../shared/xr_derive_flags.h"
 #include "../../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <string.h>
@@ -1655,6 +1656,9 @@ static bool xa_validate_hashable_type(XaInferContext *ctx, XrType *type,
 
     XrClassInfo *info = xa_hashable_class_info_for_type(ctx, type);
     if (info && info->name) {
+        if ((info->derive_flags & (XR_DERIVE_EQ | XR_DERIVE_HASH)) ==
+            (XR_DERIVE_EQ | XR_DERIVE_HASH))
+            return true;
         XaSymbol *eq = xa_class_info_lookup_member(info, "==");
         XaSymbol *hash = xa_class_info_lookup_member(info, "hash");
         bool has_eq = xa_eq_method_valid(eq, info->name);

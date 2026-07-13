@@ -1644,6 +1644,15 @@ XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, As
     }
 }
 
+static uint32_t xa_class_decl_derive_flags(XrAttribute **attrs, int count) {
+    uint32_t flags = 0;
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
+            flags |= attrs[i]->derive_flags;
+    }
+    return flags;
+}
+
 // Recursively collect all return types from a statement tree
 static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***types, int *count,
                                  int *cap) {
@@ -2823,6 +2832,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!info) {
         info = xa_class_info_new(cls->name);
         info->explicit_final = cls->explicit_final;
+        info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
         if (cls->super_name) {
@@ -2831,6 +2841,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->class_info = info;
     } else {
         info->explicit_final = cls->explicit_final;
+        info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
     }

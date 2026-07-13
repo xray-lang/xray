@@ -1,0 +1,23 @@
+fn endpoint(host: string, port: int = 80, tls: bool = false) -> int {
+    if (tls) {
+        return port + len(host)
+    }
+    return port
+}
+
+fn run(n: int) -> int {
+    var base = { x: 1, y: 2 }
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        var user = { name: "ada", age: i % 97 }
+        var merged = { ...base, y: i % 11 }
+        sum = sum + user.age + merged.x + merged.y
+        sum = sum + endpoint("api", 443, true)
+        sum = sum + endpoint("local")
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(20000))

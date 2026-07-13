@@ -107,9 +107,36 @@ static const XiModule *cg_class_native_module_for_data(const XiCgenCtx *ctx,
     return NULL;
 }
 
+static bool cg_class_native_decl_module_contains(const XiModule *module, const XiClassData *cd) {
+    if (!module || !cd || !module->classes)
+        return false;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        if (cg_class_native_data_matches(module->classes[i], cd))
+            return true;
+    }
+    return false;
+}
+
+static const XiModule *cg_class_native_decl_module_for_data(const XiCgenCtx *ctx,
+                                                            const XiClassData *cd) {
+    if (!ctx || !cd)
+        return NULL;
+    if (ctx->module && cg_class_native_decl_module_contains(ctx->module, cd))
+        return ctx->module;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *module = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        if (cg_class_native_decl_module_contains(module, cd))
+            return module;
+    }
+    return NULL;
+}
+
 static const char *cg_class_native_prefix_for_data(const XiCgenCtx *ctx, const XiClassData *cd,
                                                    const char *fallback) {
     const XiModule *module = cg_class_native_module_for_data(ctx, cd);
+    if (module && module->name)
+        return module->name;
+    module = cg_class_native_decl_module_for_data(ctx, cd);
     if (module && module->name)
         return module->name;
     for (int i = 0; ctx && i < ctx->nimports; i++) {
