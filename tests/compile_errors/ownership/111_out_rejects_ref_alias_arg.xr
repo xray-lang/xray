@@ -1,0 +1,7 @@
+fn bump_and_fill(target: ref int, result: out int) {
+    target = target + 1
+    result = 0
+}
+
+var value = 1
+bump_and_fill(ref value, out value)
