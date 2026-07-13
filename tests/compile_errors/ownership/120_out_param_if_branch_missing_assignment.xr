@@ -1,0 +1,8 @@
+fn bad(flag: bool, x: out int) {
+    if (flag) {
+        x = 1
+    }
+}
+
+var y = 0
+bad(true, out y)
