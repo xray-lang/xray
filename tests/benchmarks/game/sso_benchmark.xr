@@ -192,7 +192,7 @@ fn bench_array_join_short() {
 // POSITIVE: Set with short string values
 // ============================================================
 fn bench_set_short() {
-    var s = #[]
+    var s: Set<string> = #[]
     var start = time.nanos()
     for (i in 0..ITERATIONS) {
         s.add("k" + (i % 10000).toString())

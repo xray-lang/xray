@@ -156,7 +156,8 @@ fn test_reduce_build_nested_map() {
     var seed: Json = {}
     var grouped = entries.reduce(fn(acc, e) {
         if (acc[e.group] == null) {
-            acc[e.group] = []
+            var emptyItems: Json = []
+            acc[e.group] = emptyItems
         }
         acc[e.group].push(e.item)
         return acc

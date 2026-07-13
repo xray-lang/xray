@@ -178,7 +178,7 @@ fn test_typeof_empty_map() {
 
 @test
 fn test_typeof_empty_set() {
-    var s = #[]
+    var s: Set<int> = #[]
     assert_eq(typeName(s), "Set")
 }
 
