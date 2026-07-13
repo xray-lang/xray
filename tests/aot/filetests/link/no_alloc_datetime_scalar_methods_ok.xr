@@ -1,4 +1,5 @@
 import datetime
+import { DateTime } from datetime
 
 var xray_no_alloc_datetime_scalar_start = datetime.fromTimestamp(0)
 var xray_no_alloc_datetime_scalar_end = datetime.fromTimestamp(86400)

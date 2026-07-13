@@ -14,7 +14,7 @@ fn xray_enum_error_channel(n: int) -> int {
     var out = 0
     try {
         out = mayFail(n)
-    } catch (e) {
+    } catch (e: FsErr) {
         if (e == FsErr.Bad) {
             out = -1
         } else {

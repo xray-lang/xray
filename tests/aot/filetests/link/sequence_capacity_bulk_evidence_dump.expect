@@ -9,6 +9,7 @@ contains=capacity-op
 contains=kind=array op=push
 contains=kind=bytes op=append
 contains=kind=bytes op=to_string
+contains=kind=string_builder op=to_string
 contains=bulk-op
 contains=op=copy
 contains=op=fill
@@ -21,3 +22,4 @@ regex=capacity-plan [0-9]+ .*action=reserve_once
 contains=bulk-plan
 contains=encoding-plan
 regex=encoding-plan [0-9]+ .*action=runtime_validate
+regex=encoding-plan [0-9]+ .*action=validate_once

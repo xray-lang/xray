@@ -218,10 +218,11 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     bool aggregate_error = xicgen_value_is_enum_aggregate_error(ctx, v);
     bool freestanding_aggregate = ctx->freestanding_profile && aggregate_error;
+    XrRep catch_rep = aggregate_error ? cg_rep(v) : cg_value_plan_storage_rep(ctx, v);
     fprintf(out, "    ");
     if (!ctx->pre_decl_all) {
         fprintf(out, "%s ",
-                aggregate_error ? local_ctype_str_ctx(ctx, f, v) : ctype_str(cg_rep(v)));
+                aggregate_error ? local_ctype_str_ctx(ctx, f, v) : ctype_str(catch_rep));
         emit_vref(out, v);
         fprintf(out, " = ");
     } else {
@@ -240,7 +241,10 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             fprintf(out, ")");
         fprintf(out, ";\n");
     } else {
-        fprintf(out, "xrt_pending_error;\n");
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, catch_rep);
+        fprintf(out, "xrt_pending_error");
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ";\n");
     }
     fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
     xicgen_emit_clear_freestanding_enum_error(ctx, out);
