@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include "../base/xdefs.h"
 #include "../base/xconstants.h"
+#include "../shared/xr_param_mode.h"
 #include "../runtime/value/xtransfer_mode.h"
 
 /* Forward declarations for types defined in other modules */
@@ -1067,7 +1068,7 @@ typedef struct XiFunc {
 
     /* Function parameters as SSA values (in entry block) */
     XiValue **params;
-    uint8_t *param_passing_modes; /* NULL means every parameter uses XR_PARAM_VALUE */
+    XrParamMode *param_passing_modes; /* NULL means every parameter uses XR_PARAM_VALUE */
     uint16_t nparams;
 
     /* Source variable metadata captured during lowering.  XiValue::var_id

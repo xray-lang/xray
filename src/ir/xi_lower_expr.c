@@ -526,8 +526,9 @@ static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
 }
 
 static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
-                                                const uint8_t *explicit_modes, int explicit_count,
-                                                uint8_t *out_modes, int mode_count) {
+                                                const XrParamMode *explicit_modes,
+                                                int explicit_count, XrParamMode *out_modes,
+                                                int mode_count) {
     if (!out_modes || mode_count <= 0)
         return;
     for (int i = 0; i < mode_count; i++) {
@@ -3575,7 +3576,7 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
  * semantics to value-type slots; spread-expanded slots are not copied
  * (the source tuple already owns the element). */
 static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowerArgList *args,
-                                          int max_args, const uint8_t *pmodes, int pcount,
+                                          int max_args, const XrParamMode *pmodes, int pcount,
                                           int line) {
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *child = call->arguments[i];
@@ -3604,7 +3605,7 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
         XiValue *a = xi_lower_expr(l, child);
         if (!a)
             return false;
-        uint8_t mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_VALUE;
+        XrParamMode mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_VALUE;
         if (xi_lower_value_needs_value_clone(l, a) && !xi_lower_value_is_fresh_value_struct(a) &&
             mode == XR_PARAM_VALUE) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
@@ -3626,7 +3627,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
         return NULL;
     callee_type = xr_type_non_nullable(l->isolate, callee_type);
 
-    const uint8_t *pmodes = NULL;
+    const XrParamMode *pmodes = NULL;
     int pcount = 0;
     if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
         pmodes = callee_type->function.param_passing_modes;
@@ -3634,16 +3635,16 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     }
 
     XiFunc *static_callee = lower_resolve_static_callee_func(l, callee_val);
-    uint8_t stack_auto_modes[64];
-    const uint8_t *effective_pmodes = pmodes;
+    XrParamMode stack_auto_modes[64];
+    const XrParamMode *effective_pmodes = pmodes;
     int effective_pcount = pcount;
     int auto_count = pcount > 0 ? pcount : (static_callee ? (int) static_callee->nparams : 0);
     if (static_callee && auto_count > 0) {
-        uint8_t *auto_modes =
+        XrParamMode *auto_modes =
             auto_count <= (int) (sizeof(stack_auto_modes) / sizeof(stack_auto_modes[0]))
                 ? stack_auto_modes
-                : (uint8_t *) xi_func_arena_alloc(
-                      l->func, (uint32_t) ((size_t) auto_count * sizeof(uint8_t)));
+                : (XrParamMode *) xi_func_arena_alloc(
+                      l->func, (uint32_t) ((size_t) auto_count * sizeof(XrParamMode)));
         if (auto_modes) {
             lower_apply_auto_borrow_param_modes(l, static_callee, pmodes, pcount, auto_modes,
                                                 auto_count);
@@ -3797,7 +3798,7 @@ static XiValue *lower_enum_method_direct_call(XiLower *l, AstNode *node, CallExp
             return NULL;
     }
 
-    const uint8_t *pmodes = NULL;
+    const XrParamMode *pmodes = NULL;
     int pcount = 0;
     if (sel->result_type && sel->result_type->kind == XR_KIND_FUNCTION) {
         pmodes = sel->result_type->function.param_passing_modes;

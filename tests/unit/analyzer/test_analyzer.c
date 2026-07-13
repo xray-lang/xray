@@ -526,7 +526,7 @@ TEST(type_function_copy_preserves_metadata) {
     XrType *fn = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(fn != NULL);
 
-    uint8_t modes[] = {XR_PARAM_IN, XR_PARAM_REF};
+    XrParamMode modes[] = {XR_PARAM_IN, XR_PARAM_REF};
     fn->function.min_params = 1;
     fn->function.param_passing_modes = modes;
     fn->function.is_c_abi = true;

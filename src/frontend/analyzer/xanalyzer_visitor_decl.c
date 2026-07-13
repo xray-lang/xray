@@ -2062,7 +2062,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
                 has_modes = true;
         }
         if (has_modes) {
-            uint8_t *modes = xr_calloc(fn->param_count, sizeof(uint8_t));
+            XrParamMode *modes = xr_calloc(fn->param_count, sizeof(XrParamMode));
             if (modes) {
                 for (int i = 0; i < fn->param_count; i++) {
                     if (fn->params[i])
@@ -3488,7 +3488,7 @@ skip_layout:
                         has_modes = true;
                 }
                 if (has_modes) {
-                    uint8_t *modes = xr_calloc(md->param_count, sizeof(uint8_t));
+                    XrParamMode *modes = xr_calloc(md->param_count, sizeof(XrParamMode));
                     if (modes) {
                         for (int j = 0; j < md->param_count; j++)
                             modes[j] = md->param_passing_modes[j];

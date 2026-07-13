@@ -289,8 +289,9 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
         ml.func->params[base + i] = p;
-        uint8_t mode = (m->param_passing_modes && i < m->param_count) ? m->param_passing_modes[i]
-                                                                      : XR_PARAM_VALUE;
+        XrParamMode mode = (m->param_passing_modes && i < m->param_count)
+                               ? m->param_passing_modes[i]
+                               : XR_PARAM_VALUE;
         if ((base + i) < fixed_params && mode != XR_PARAM_VALUE &&
             !xi_func_set_param_passing_mode(ml.func, (uint16_t) (base + i), mode)) {
             xi_func_free(ml.func);
