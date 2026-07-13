@@ -1,0 +1,2 @@
+fn bad([x]: ref [int; 1]) {
+}

@@ -404,7 +404,19 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
         return false;
 
     XrParamMode mode = XR_PARAM_VALUE;
-    xr_parse_optional_param_mode(parser, allow_mode, &mode);
+    if (allow_mode) {
+        xr_parse_optional_param_mode(parser, true, &mode);
+    } else {
+        XrParamMode rejected_mode = XR_PARAM_VALUE;
+        if (xr_parse_optional_param_mode(parser, true, &rejected_mode) &&
+            rejected_mode != XR_PARAM_VALUE) {
+            char message[128];
+            snprintf(message, sizeof(message),
+                     "parameter mode '%s' is not allowed in this parameter position",
+                     xr_param_mode_label(rejected_mode));
+            xr_parser_error_at_previous(parser, message);
+        }
+    }
 
     XrTypeRef *type = xr_parse_type_annotation(parser);
     if (out_mode)
