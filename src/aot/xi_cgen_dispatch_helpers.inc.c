@@ -4531,7 +4531,7 @@ static XgClassId xicgen_class_id_for_data(XiCgenCtx *ctx, const XiClassData *cd)
     return XG_NO_ID;
 }
 
-static bool xicgen_func_is_itable_target(XiCgenCtx *ctx, const XiFunc *func) {
+static bool xicgen_func_is_boxed_dispatch_target(XiCgenCtx *ctx, const XiFunc *func) {
     const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
     const XgBodySummary *body = xicgen_evidence_body_for_func(ev, func);
     const XgMethodSummary *method = body ? xicgen_evidence_method(ev, body->owner_method_id) : NULL;
@@ -4542,8 +4542,8 @@ static bool xicgen_func_is_itable_target(XiCgenCtx *ctx, const XiFunc *func) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     for (uint32_t i = 0; bundle && i < bundle->nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
-        if (plan->kind != XAOT_DISPATCH_ITABLE || plan->receiver_static_interface_id == XG_NO_ID ||
-            plan->dispatch_slot == UINT32_MAX)
+        if ((plan->kind != XAOT_DISPATCH_ITABLE && plan->kind != XAOT_DISPATCH_TYPE_SWITCH) ||
+            plan->receiver_static_interface_id == XG_NO_ID || plan->dispatch_slot == UINT32_MAX)
             continue;
         const XgInterfaceMethodSummary *iface_method = xicgen_evidence_interface_method_for_slot(
             ev, plan->receiver_static_interface_id, plan->dispatch_slot);
