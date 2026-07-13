@@ -64,6 +64,12 @@ fn test_tostring() {
     // === 8. Array<byte> toString (Array<byte> is Array<byte>) ===
     var buf = Array<byte>(3, 0)
     assert_eq(string(buf), "[0, 0, 0]")
+    var binary = Array<byte>(4, 0)
+    binary[0] = 65
+    binary[1] = 66
+    binary[3] = 255
+    assert_eq(binary.toString(), "[65, 66, 0, 255]")
+    assert_eq(string(binary), "[65, 66, 0, 255]")
 
     // === 9. Channel toString ===
     shared ch = Channel(5)
@@ -93,4 +99,3 @@ fn test_tostring() {
     assert_eq("x=${x}", "x=42")
     assert_eq("arr=${arr2}", "arr=[1, 2]")
 }
-
