@@ -15,6 +15,7 @@
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认只输出 inventory=0；`--fail-on-public` 命中 public 残余=1 | < 2s |
+| `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_error_effect_convergence.py` | 205：unchecked error-effect graph 收敛前的 `XrErrorSet`、`function.error_set`、`MAY_THROW`、pending-error、LSP 与 `.xrd` 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 
@@ -62,6 +63,20 @@ CTest 的 `parallel_backend_abi_convergence`。
 非空时返回 1，等 resolver/type-name/docs/spec 清零后可接入 CI。历史 `XI_BYTES_*`、
 `OP_BYTES_*`、`xr_array_bytes_*`、`emit_bytes_*` 与 `cg_bytes_*` 名称应保持为 0；若后续
 backend 切片重新引入这些 internal legacy 命名，inventory 会把它们列为回流证据。
+
+### `check_source_unknown_convergence.py`
+
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/`、`scripts/` 与 active language spec，
+把 202 source `unknown` 删除与 typed erasure 边界收敛前的事实分成
+`SOURCE_UNKNOWN_TYPE_SURFACE`、`UNKNOWN_IDENTIFIER_ALLOWED_GUARD`、
+`REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC`、`TREF_UNKNOWN_RECOVERY`、
+`RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY`、`XR_TYPE_IS_UNKNOWN_CONSUMER`、
+`ASSIGNABILITY_OR_GENERIC_UNKNOWN_COMPAT`、`TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK`、
+`IR_UNKNOWN_ERASURE_CONSUMER`、`AOT_UNKNOWN_ERASURE_CONSUMER`、
+`FORMATTER_LSP_UNKNOWN_SURFACE`、`TASK_ERASED_RESULT_RESIDUE`、
+`STDLIB_DYNAMIC_UNKNOWN_API` 和 `PUBLIC_SPEC_UNKNOWN_RESIDUE`。默认模式只打印 inventory
+并返回 0，便于 P0 固定 source `unknown`、runtime unknown singleton、type_any / dynamic slot
+fallback、TaskResult/TaskOutcome erased payload 与 active spec residue；后续 202 P1-P7 可按类别逐步增加 fail gate。
 
 ### `check_error_effect_convergence.py`
 
@@ -113,3 +128,4 @@ backend 切片重新引入这些 internal legacy 命名，inventory 会把它们
 | 2026-07-13 | 增加 Bytes type residue inventory，接 204 P0/P7 public 表面与 internal legacy 命名分类 | Codex |
 | 2026-07-13 | 增加 parameter mode convergence inventory，接 206 P0 参数契约与调用授权收敛基线 | Codex |
 | 2026-07-14 | 增加 unchecked error-effect convergence inventory，接 205 P0 旧 error-set / MAY_THROW / tooling metadata 分类 | Codex |
+| 2026-07-14 | 增加 source unknown convergence inventory，接 202 P0 source unknown 与 typed erasure 边界分类 | Codex |
