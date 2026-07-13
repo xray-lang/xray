@@ -108,6 +108,28 @@ static uint32_t class_method_evidence_source_node_id(XiLower *l, const ClassDecl
     return match && match->source_node_id != 0 ? match->source_node_id : fallback;
 }
 
+static XrType *class_method_analyzer_signature(XiLower *l, const ClassDeclNode *cd,
+                                               const MethodDeclNode *m) {
+    if (!l || !l->analyzer || !cd || !m || !m->name)
+        return NULL;
+
+    XaSymbol *class_sym =
+        cd->symbol_id ? xa_scope_lookup_by_id(l->analyzer->global_scope, cd->symbol_id) : NULL;
+    if (!class_sym && cd->name)
+        class_sym = xa_analyzer_lookup(l->analyzer, cd->name);
+    if (!class_sym && cd->name)
+        class_sym = xa_analyzer_lookup_deep(l->analyzer, cd->name);
+
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(l->analyzer, class_sym) : NULL;
+    XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
+    XaSymbol *method_sym = m->is_static ? xa_class_info_lookup_static_member(class_info, m->name)
+                                        : xa_class_info_lookup_instance_member(class_info, m->name);
+    XaSymbolLinks *method_links =
+        method_sym ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
+    XrType *method_type = method_links ? method_links->type : NULL;
+    return (method_type && method_type->kind == XR_KIND_FUNCTION) ? method_type : NULL;
+}
+
 static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
                                                             uint16_t *out_inherited) {
     if (!l || !l->func || !l->isolate || !cd)
@@ -197,12 +219,15 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     ml.repl_mode = l->repl_mode;
     xi_lower_inherit_evidence(&ml, l);
 
-    /* MethodDeclNode->return_type is XrTypeRef* (AST syntax). Resolve it
-     * to a runtime XrType* before assigning to XiFunc->return_type;
-     * mixing the two struct layouts produces garbage downstream when
-     * lowering reads bool fields like is_value_type / is_nullable. */
+    XrType *method_sig = class_method_analyzer_signature(l, cd, m);
+    /* Prefer the analyzer-owned method signature: it was resolved in the
+     * class lexical scope, so self-references and same-module class names do
+     * not depend on whatever scope the backend lowering happens to be in. */
     struct XrType *m_ret =
-        m->return_type ? xr_tref_resolve_in_analyzer(l->analyzer, m->return_type) : ml.type_unit;
+        (method_sig && method_sig->function.return_type)
+            ? method_sig->function.return_type
+            : (m->return_type ? xr_tref_resolve_in_analyzer(l->analyzer, m->return_type)
+                              : ml.type_unit);
     if (!m_ret)
         m_ret = ml.type_unit;
     ml.func = xi_func_new(m->name, m_ret);
@@ -254,7 +279,10 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
      * resolver so XiValue->type carries a real runtime type. */
     for (int i = 0; i < m->param_count; i++) {
         struct XrType *pt = ml.type_any;
-        if (m->param_types && m->param_types[i]) {
+        if (method_sig && method_sig->function.param_types &&
+            i < method_sig->function.param_count && method_sig->function.param_types[i]) {
+            pt = method_sig->function.param_types[i];
+        } else if (m->param_types && m->param_types[i]) {
             struct XrType *resolved = xr_tref_resolve_in_analyzer(l->analyzer, m->param_types[i]);
             if (resolved)
                 pt = resolved;

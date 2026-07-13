@@ -1,0 +1,30 @@
+// Class method signatures must resolve self-typed params/returns in class scope.
+// AOT should keep native class pointers instead of falling back to dynamic getprop.
+
+class Chain {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    step(amount: int) -> Chain {
+        return Chain(this.value + amount)
+    }
+
+    delta(other: Chain) -> int {
+        return this.value - other.value
+    }
+
+    same(other: Chain) -> bool {
+        return this.value == other.value
+    }
+}
+
+var a = Chain(10)
+var b = a.step(5)
+print(b.value)
+print(b.delta(a))
+print(a.delta(Chain(3)))
+print(a.step(1).value)
+print(a.same(Chain(10)))
