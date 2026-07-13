@@ -2,3 +2,19 @@ fn check(values: Array<int>) -> int {
     var view: Slice<int> = values[:]
     return int(view.load<uint16>(0, Endian.LE))
 }
+
+fn checkStore(values: Array<int>) {
+    var view: Slice<int> = values[:]
+    view.store<uint16>(0, 1, Endian.LE)
+}
+
+fn checkCommonPrefix(left: Array<int>, right: Array<int>) -> int {
+    var leftView: Slice<int> = left[:]
+    var rightView: Slice<int> = right[:]
+    return leftView.commonPrefix(rightView)
+}
+
+fn checkRepeat(values: Array<int>) {
+    var view: Slice<int> = values[:]
+    view.repeatFrom(0, 1, 2)
+}
