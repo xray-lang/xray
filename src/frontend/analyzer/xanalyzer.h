@@ -138,8 +138,10 @@ struct XaAnalyzer {
     // Consumed by lowerer/backend before falling back to textual rediscovery.
     void *parallel_call_plan_table;  // XaParallelCallPlanTable* (forward declared)
 
-    // Type inference quality metric: how many expressions resolved to unknown
-    int unknown_type_count;
+    // Type inference/recovery telemetry. Unknown tracks legacy unresolved inference;
+    // ErrorType tracks compiler recovery poison that must not reach executable IR.
+    int unresolved_inference_count;
+    int recovery_poison_type_count;
 
     // Module dependency graph (optional, set for graph-driven analysis).
     // When set, cross-module import types are resolved from the graph's

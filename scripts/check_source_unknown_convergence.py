@@ -65,7 +65,7 @@ ERROR_TYPE_RECOVERY_RE = re.compile(
 )
 RUNTIME_UNKNOWN_RE = re.compile(
     r"\b(?:XR_KIND_UNKNOWN|XR_TYPE_IS_UNKNOWN|xr_type_new_unknown|g_type_unknown|"
-    r"TYPE_NAME_UNKNOWN|unknown_type_count)\b"
+    r"TYPE_NAME_UNKNOWN)\b"
 )
 XR_TYPE_IS_UNKNOWN_RE = re.compile(r"\bXR_TYPE_IS_UNKNOWN\s*\(")
 ASSIGNABILITY_GENERIC_RE = re.compile(

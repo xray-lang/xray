@@ -20,6 +20,7 @@
 #include "xtype_ref_resolve.h"
 #include "xtype_pool.h"
 #include "xhashmap.h"
+#include "xarena.h"
 #include "xray_vm.h"
 #include "module/xmodule_graph.h"
 #include "toolchain/xcompiler_session.h"
@@ -318,6 +319,8 @@ TEST(analyzer_create) {
     ASSERT(a != NULL);
     ASSERT(a->global_scope != NULL);
     ASSERT(a->current_scope == a->global_scope);
+    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->recovery_poison_type_count == 0);
 
     xa_analyzer_free(a);
     setup_pool();  // Restore global pool after test
@@ -341,6 +344,39 @@ TEST(analyzer_diagnostics) {
     xa_analyzer_clear_diagnostics(a);
     diags = xa_analyzer_get_diagnostics(a, &count);
     ASSERT(count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();  // Restore global pool after test
+}
+
+TEST(analyzer_type_telemetry_splits_unknown_and_error) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *missing_program = xr_parse(g_session, "missing;");
+    ASSERT(missing_program != NULL);
+    xa_analyzer_analyze(a, "telemetry_unresolved_inference.xr", missing_program);
+    ASSERT(a->unresolved_inference_count >= 1);
+    ASSERT(a->recovery_poison_type_count == 0);
+    xa_analyzer_free(a);
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope scope;
+    ASSERT(
+        xr_compiler_session_push_arena(g_session, &arena, "telemetry_error_recovery.xr", &scope));
+    AstNode *error_expr = xr_ast_as_expr(g_session, xr_ast_literal_int(g_session, 1, 1),
+                                         xr_tref_error(g_session), false, 1);
+    ASSERT(error_expr != NULL);
+    XrType *error_type = xa_analyzer_infer_expr_type(a, error_expr);
+    ASSERT(error_type != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(error_type));
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->recovery_poison_type_count >= 1);
 
     xa_analyzer_free(a);
     setup_pool();  // Restore global pool after test
@@ -942,6 +978,7 @@ int main(void) {
     printf("\nAnalyzer tests:\n");
     RUN_TEST(analyzer_create);
     RUN_TEST(analyzer_diagnostics);
+    RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
 
     printf("\nFlow analysis tests:\n");
