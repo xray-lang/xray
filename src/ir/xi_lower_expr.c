@@ -1981,6 +1981,32 @@ static bool xi_lower_receiver_method_matches(struct XrType *receiver_type, const
            xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver);
 }
 
+static bool xi_lower_receiver_method_arg_count_matches(const XaBuiltinReceiverMethodSpec *spec,
+                                                       int arg_count) {
+    if (!spec || arg_count < spec->min_params)
+        return false;
+    if (spec->is_variadic)
+        return true;
+    return arg_count <= spec->param_count;
+}
+
+static bool xi_lower_receiver_method_call_matches(struct XrType *receiver_type, const char *method,
+                                                  int arg_count,
+                                                  XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    return spec && method && strcmp(method, spec->source_name) == 0 &&
+           xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver) &&
+           xi_lower_receiver_method_arg_count_matches(spec, arg_count);
+}
+
+static bool xi_lower_receiver_method_call_matches_either(struct XrType *receiver_type,
+                                                         const char *method, int arg_count,
+                                                         XaBuiltinReceiverMethodId left,
+                                                         XaBuiltinReceiverMethodId right) {
+    return xi_lower_receiver_method_call_matches(receiver_type, method, arg_count, left) ||
+           xi_lower_receiver_method_call_matches(receiver_type, method, arg_count, right);
+}
+
 static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
     if (!xi_type_is_pod_span_elem(type))
         return XR_ELEM_ANY;
@@ -4198,30 +4224,54 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
     is_string_builder = xr_type_is_named_class(receiver_type, "StringBuilder");
 
     if (is_sequence) {
-        if (strcmp(member->name, "push") == 0 && call->arg_count == 1)
+        if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH))
             capacity_kind = XG_CAPACITY_PUSH;
         else if (strcmp(member->name, "append") == 0 && call->arg_count >= 1)
             capacity_kind = XG_CAPACITY_APPEND;
         else if (strcmp(member->name, "extend") == 0 && call->arg_count >= 1)
             capacity_kind = XG_CAPACITY_EXTEND;
-        else if (strcmp(member->name, "reserve") == 0 && call->arg_count == 1)
+        else if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE))
             capacity_kind = XG_CAPACITY_RESERVE;
-        else if (strcmp(member->name, "clear") == 0 && call->arg_count == 0)
+        else if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR))
             capacity_kind = XG_CAPACITY_CLEAR;
-        else if (strcmp(member->name, "toString") == 0 && call->arg_count == 0) {
+        else if (xi_lower_receiver_method_call_matches(
+                     receiver_type, member->name, call->arg_count,
+                     XA_BUILTIN_RECEIVER_METHOD_ARRAY_TO_STRING) ||
+                 (is_string_builder && strcmp(member->name, "toString") == 0 &&
+                  call->arg_count == 0)) {
             capacity_kind = XG_CAPACITY_TO_STRING;
             if (is_string_builder)
                 encoding_kind = XG_ENCODING_BYTES_TO_STRING;
-        } else if (strcmp(member->name, "appendFrom") == 0 && call->arg_count >= 1) {
+        } else if (xi_lower_receiver_method_call_matches(
+                       receiver_type, member->name, call->arg_count,
+                       XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM)) {
             capacity_kind = XG_CAPACITY_APPEND;
             bulk_kind = XG_BULK_COPY;
-        } else if (strcmp(member->name, "copyFrom") == 0 && call->arg_count >= 1) {
+        } else if (xi_lower_receiver_method_call_matches_either(
+                       receiver_type, member->name, call->arg_count,
+                       XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM,
+                       XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM)) {
             bulk_kind = XG_BULK_COPY;
-        } else if (strcmp(member->name, "fill") == 0 && call->arg_count >= 1) {
+        } else if (xi_lower_receiver_method_call_matches(receiver_type, member->name,
+                                                         call->arg_count,
+                                                         XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL) ||
+                   xi_lower_receiver_method_call_matches_either(
+                       receiver_type, member->name, call->arg_count,
+                       XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL,
+                       XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL)) {
             bulk_kind = XG_BULK_FILL;
-        } else if (strcmp(member->name, "compare") == 0 && call->arg_count == 1) {
+        } else if (xi_lower_receiver_method_call_matches_either(
+                       receiver_type, member->name, call->arg_count,
+                       XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE,
+                       XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE)) {
             bulk_kind = XG_BULK_COMPARE;
-        } else if (strcmp(member->name, "repeatFrom") == 0 && call->arg_count >= 2) {
+        } else if (xi_lower_receiver_method_call_matches_either(
+                       receiver_type, member->name, call->arg_count,
+                       XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM,
+                       XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM)) {
             bulk_kind = XG_BULK_REPEAT;
         }
     }
@@ -4493,8 +4543,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             lower_math_call_arity_ok(ma->name, n))
             result_type = lower_math_call_result_type(l, ma->name, arg_vals, n);
 
-        if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
-            strcmp(ma->name, "clear") == 0 && n == 0) {
+        if (xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR)) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 1);
             if (!v)
                 return NULL;
@@ -4541,8 +4591,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
-            strcmp(ma->name, "reserve") == 0 && n == 1) {
+        if (xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE)) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
             if (!v)
                 return NULL;
@@ -4555,8 +4605,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
-            strcmp(ma->name, "resize") == 0 && n == 2) {
+        if (xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE)) {
             XiValue *fill = arg_vals[1];
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 3);
             if (!v)
@@ -4782,8 +4832,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             uint16_t byte_slice_op = 0;
             uint16_t expected_args = 0;
             XrType *target = NULL;
-            bool byte_slice_typed_load = strcmp(ma->name, "load") == 0;
-            bool byte_slice_typed_store = strcmp(ma->name, "store") == 0;
+            bool byte_slice_typed_load = xi_lower_receiver_method_matches(
+                recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD);
+            bool byte_slice_typed_store = xi_lower_receiver_method_matches(
+                recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE);
             if (byte_slice_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
                 call->type_args && call->type_args[0]) {
                 target = xr_tref_resolve(l->isolate, call->type_args[0]);
