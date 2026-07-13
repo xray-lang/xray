@@ -1,0 +1,2 @@
+var value = "text" as int
+print(value)
