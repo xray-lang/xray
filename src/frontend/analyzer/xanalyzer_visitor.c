@@ -2341,6 +2341,54 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     }
 }
 
+static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_TYPE_ALIAS)
+        return NULL;
+    TypeAliasNode *ta = &node->as.type_alias;
+    if (!ta->name)
+        return NULL;
+
+    XaSymbol *existing = xa_scope_lookup_local(ctx->analyzer->current_scope, ta->name);
+    if (existing) {
+        if (existing->kind == XA_SYM_TYPE_ALIAS) {
+            ta->symbol_id = existing->id;
+            existing->type_alias_node = node;
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, existing);
+            if (links && !links->file_path)
+                links->file_path = ctx->file_path;
+            return existing;
+        }
+        return existing;
+    }
+
+    XaSymbol *sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
+    if (!sym)
+        return NULL;
+    sym->location.line = node->line;
+    sym->location.column = node->column;
+    sym->is_const = true;
+    sym->type_alias_node = node;
+    xa_visit_add_symbol_checked(ctx, sym, 0);
+    ta->symbol_id = sym->id;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links) {
+        links->file_path = ctx->file_path;
+        if (ta->type_param_count > 0 && ta->type_params) {
+            const char **type_param_names =
+                (const char **) xr_calloc((size_t) ta->type_param_count, sizeof(const char *));
+            if (type_param_names) {
+                for (int i = 0; i < ta->type_param_count; i++)
+                    type_param_names[i] = ta->type_params[i] ? ta->type_params[i]->name : NULL;
+                xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
+                                                ta->type_param_count);
+                xr_free(type_param_names);
+            }
+        }
+    }
+    return sym;
+}
+
 static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node);
 
 static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
@@ -2473,6 +2521,21 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
                    stmt->as.export_stmt.declaration->type == AST_ENUM_DECL) {
             xa_visit_predeclare_enum_decl(ctx, stmt->as.export_stmt.declaration);
+        }
+    }
+
+    // Phase 0.8: predeclare all type alias names before resolving alias RHS or
+    // signatures. Alias expansion still requires a real symbol and never falls
+    // back to an unknown class-name placeholder.
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = stmts[i];
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_TYPE_ALIAS) {
+            xa_visit_predeclare_type_alias(ctx, stmt);
+        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
+                   stmt->as.export_stmt.declaration->type == AST_TYPE_ALIAS) {
+            xa_visit_predeclare_type_alias(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -2973,9 +3036,18 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         case AST_TYPE_ALIAS: {
             TypeAliasNode *ta = &node->as.type_alias;
             if (ta->name) {
-                XaSymbol *sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
-                sym->location.line = node->line;
-                sym->is_const = true;
+                XaSymbol *sym = xa_scope_lookup_local(ctx->analyzer->current_scope, ta->name);
+                if (!sym || sym->kind != XA_SYM_TYPE_ALIAS) {
+                    sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
+                    if (!sym)
+                        break;
+                    sym->location.line = node->line;
+                    sym->location.column = node->column;
+                    sym->is_const = true;
+                    xa_visit_add_symbol_checked(ctx, sym, 0);
+                }
+                ta->symbol_id = sym->id;
+                sym->type_alias_node = node;
                 // Parser stashes the resolved type in
                 // TypeAliasNode::resolved_type. Mirror it into the side
                 // table so downstream readers (codegen, LSP) get the
@@ -2988,12 +3060,13 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
                 sym->alias_type = resolved;
-                xa_visit_add_symbol_checked(ctx, sym, 0);
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {
                     links->type = resolved ? resolved : xr_type_new_unknown(NULL);
                     links->declared_type = links->type;
+                    if (!links->file_path)
+                        links->file_path = ctx->file_path;
                 }
             }
             break;
