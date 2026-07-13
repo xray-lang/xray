@@ -246,6 +246,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
                     for (int p = 0; p < m->payload_count; p++) {
                         payload_types[p] =
                             xr_tref_resolve_in_analyzer(l->analyzer, m->payload_types[p]);
+                        payload_types[p] =
+                            xi_lower_type_or_any(l, payload_types[p], "enum payload type", 0);
                     }
                     enum_members[i].payload_types = payload_types;
                 }

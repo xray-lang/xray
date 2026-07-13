@@ -123,6 +123,25 @@ TEST(unresolved_variable_in_function) {
     assert(f == NULL && "lowerer must reject unresolved variable in function");
 }
 
+TEST(error_return_type_rejected) {
+    XiFunc *f = try_lower("fn bad() -> unknown {\n"
+                          "    return 1\n"
+                          "}\n");
+    assert(f == NULL && "lowerer must reject ErrorType function returns");
+}
+
+TEST(error_parameter_type_rejected) {
+    XiFunc *f = try_lower("fn bad(x: unknown) -> int {\n"
+                          "    return 1\n"
+                          "}\n");
+    assert(f == NULL && "lowerer must reject ErrorType function parameters");
+}
+
+TEST(error_expression_type_rejected) {
+    XiFunc *f = try_lower("var x = 1 as unknown\n");
+    assert(f == NULL && "lowerer must reject ErrorType expression metadata");
+}
+
 TEST(resolved_variable_accepted) {
     /* Declared variable should lower successfully. */
     XiFunc *f = try_lower("var x = 42\nprint(x)");
@@ -145,6 +164,9 @@ int main(void) {
     run_unresolved_variable_in_print();
     run_unresolved_variable_in_expression();
     run_unresolved_variable_in_function();
+    run_error_return_type_rejected();
+    run_error_parameter_type_rejected();
+    run_error_expression_type_rejected();
     run_resolved_variable_accepted();
     run_declared_and_assigned_accepted();
 

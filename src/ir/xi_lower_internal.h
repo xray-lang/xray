@@ -96,6 +96,10 @@ static inline bool xi_top_binding_valid(XiTopBinding b) {
 XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMRuntime *isolate);
 XR_FUNC void xi_lower_cleanup(XiLower *l);
 XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent);
+XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
+                                        int line);
+XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,
+                                            int line);
 XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const struct AstNode *node);
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l);
 XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id);

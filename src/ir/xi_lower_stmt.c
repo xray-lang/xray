@@ -2370,7 +2370,7 @@ static XrType *xi_lower_catch_clause_type(XiLower *l, XrCatchClause *cc) {
     if (!l || !cc || cc->is_panic || !cc->type)
         return l ? l->type_any : NULL;
     XrType *type = xr_tref_resolve_in_analyzer(l->analyzer, cc->type);
-    return type ? type : l->type_any;
+    return xi_lower_type_or_any(l, type, "catch clause type", cc->var_line);
 }
 
 static XrType *xi_lower_error_catch_result_type(XiLower *l, XrCatchClause **errc, int errn) {
