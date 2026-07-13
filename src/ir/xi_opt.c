@@ -47,6 +47,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../os/os_time.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
@@ -1939,14 +1940,60 @@ static bool sr_method_name_is(const XiValue *v, const char *name) {
     return false;
 }
 
+static bool sr_type_is_pod_span_elem(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
+                                                 XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver_type);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver_type);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+                   sr_type_is_pod_span_elem(receiver_type->container.element_type);
+    }
+    return false;
+}
+
+static bool sr_call_method_matches_receiver_registry_id(const XiValue *v,
+                                                        XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    if (!spec || !v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
+        v->nargs < 1 || !v->args[0] || !v->aux)
+        return false;
+    return strcmp((const char *) v->aux, spec->source_name) == 0 &&
+           sr_builtin_receiver_registry_matches(v->args[0]->type, spec->receiver);
+}
+
 static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
-        !v->args[0] || !sr_value_has_static_typed_array_storage(v->args[0]) || !v->aux)
+        !v->args[0] || !sr_value_has_static_typed_array_storage(v->args[0]))
         return false;
-    const char *method = (const char *) v->aux;
-    return strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
-           strcmp(method, "resize") == 0 || strcmp(method, "appendFrom") == 0 ||
-           strcmp(method, "repeatFrom") == 0 || strcmp(method, "fill") == 0;
+    return sr_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
+           sr_call_method_matches_receiver_registry_id(v,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
+           sr_call_method_matches_receiver_registry_id(v,
+                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE) ||
+           sr_call_method_matches_receiver_registry_id(
+               v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
+           sr_call_method_matches_receiver_registry_id(
+               v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM) ||
+           sr_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL);
 }
 
 static bool sr_type_is_named_instance(const XrType *type, const char *name) {
