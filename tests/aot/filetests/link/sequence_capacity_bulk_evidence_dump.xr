@@ -10,5 +10,6 @@ fn touch(xs: Array<int>, b: Array<byte>, s: string, span: Slice<byte>, sb: Strin
     var bytes = s.copyBytes()
     sb.append(text)
     sb.append(decoded)
-    return n + first
+    var built = sb.toString()
+    return n + first + len(built)
 }

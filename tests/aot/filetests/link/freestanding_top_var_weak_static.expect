@@ -1,13 +1,13 @@
 args=--profile freestanding
 c_contains=xray_top_var_weak_static
-c_contains=struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE
+c_contains=struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } xray_var_freestanding_top_var_weak_static_STATE
 c_contains=int64_t xray_var_freestanding_top_var_weak_static_TICKS
 c_contains=XRT_ATTR_SECTION("__DATA,.xr_weak_state") XRT_ATTR_WEAK XRT_ATTR_USED
-c_contains=xray_var_freestanding_top_var_weak_static_STATE.value =
+c_contains=xray_var_freestanding_top_var_weak_static_STATE.f0 =
 c_contains=xray_var_freestanding_top_var_weak_static_TICKS =
-c_not_contains=static struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE
+c_not_contains=static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } xray_var_freestanding_top_var_weak_static_STATE
 c_not_contains=static int64_t xray_var_freestanding_top_var_weak_static_TICKS
-c_not_contains=const struct { int64_t value; int64_t limit; } xray_var_freestanding_top_var_weak_static_STATE
+c_not_contains=const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } xray_var_freestanding_top_var_weak_static_STATE
 c_not_contains=xrt_shared[0] =
 c_not_contains=xrt_shared[1] =
 c_not_contains=xrt_arc_alloc

@@ -1,9 +1,9 @@
 args=--profile freestanding
 c_contains=xray_rawmut_top_var_aggregate_addr
-c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_
-c_contains=.value =
+c_contains=static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_
+c_contains=.f0 =
 c_contains=&_xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_
-c_not_contains=const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_
+c_not_contains=const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_rawmut_of_top_var_aggregate_addr_
 c_not_contains=xrt_shared[0] =
 c_not_contains=xrt_arc_alloc
 c_not_contains=xr_aggregate_ref

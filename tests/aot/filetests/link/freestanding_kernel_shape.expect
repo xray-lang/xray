@@ -11,9 +11,9 @@ c_contains=#include "xrt_core_freestanding.h"
 c_contains=XRT_ATTR_SECTION("__DATA,.xray_multiboot") XRT_ATTR_USED
 c_contains=XRT_ATTR_SECTION("__TEXT,.xray_boot") XRT_ATTR_USED int32_t xray_kernel_entry
 c_contains=static const struct
-c_contains=.magic =
-c_contains=.flags =
-c_contains=.checksum =
+c_contains=.f0 =
+c_contains=.f1 =
+c_contains=.f2 =
 c_contains=xrt_mem_from_address
 c_contains=xrt_mem_volatile_store
 c_not_contains=xrt_shared[
