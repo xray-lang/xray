@@ -160,6 +160,7 @@ uint8_t xr_type_to_tid(const XrType *type) {
     XR_DCHECK(type->kind < XR_KIND_COUNT, "type_to_tid: invalid kind");
     switch (type->kind) {
         case XR_KIND_UNKNOWN:
+        case XR_KIND_ERROR:
             return 0;
         case XR_KIND_INT:
             switch (type->native_width) {

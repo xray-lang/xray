@@ -60,7 +60,9 @@ REMOVED_UNKNOWN_DIAGNOSTIC_RE = re.compile(r"'unknown' type has been removed")
 UNKNOWN_IDENTIFIER_GUARD_RE = re.compile(
     r"\b(?:var|const|let)\s+unknown\b|scan_single\(\"unknown\"\)"
 )
-TREF_ERROR_RE = re.compile(r"\b(?:XR_TREF_ERROR|xr_tref_error)\b")
+ERROR_TYPE_RECOVERY_RE = re.compile(
+    r"\b(?:XR_TREF_ERROR|xr_tref_error|XR_KIND_ERROR|xr_type_new_error)\b"
+)
 RUNTIME_UNKNOWN_RE = re.compile(
     r"\b(?:XR_KIND_UNKNOWN|XR_TYPE_IS_UNKNOWN|xr_type_new_unknown|g_type_unknown|"
     r"TYPE_NAME_UNKNOWN|unknown_type_count)\b"
@@ -93,7 +95,7 @@ CATEGORIES = (
     "SOURCE_UNKNOWN_TYPE_SURFACE",
     "UNKNOWN_IDENTIFIER_ALLOWED_GUARD",
     "REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC",
-    "TREF_ERROR_RECOVERY",
+    "ERROR_TYPE_RECOVERY",
     "RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY",
     "XR_TYPE_IS_UNKNOWN_CONSUMER",
     "ASSIGNABILITY_OR_GENERIC_UNKNOWN_COMPAT",
@@ -170,8 +172,8 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         categories.append("UNKNOWN_IDENTIFIER_ALLOWED_GUARD")
     if REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
         categories.append("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC")
-    if TREF_ERROR_RE.search(line):
-        categories.append("TREF_ERROR_RECOVERY")
+    if ERROR_TYPE_RECOVERY_RE.search(line):
+        categories.append("ERROR_TYPE_RECOVERY")
     if RUNTIME_UNKNOWN_RE.search(line):
         categories.append("RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY")
     if XR_TYPE_IS_UNKNOWN_RE.search(line):

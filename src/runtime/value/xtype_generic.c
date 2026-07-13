@@ -304,11 +304,11 @@ static void indexable_kv_of(XrType *type, XrType **key_out, XrType **value_out) 
     }
 }
 
-// Compare two type-arg slots tolerantly: unknown / type-param / NULL pass.
+// Compare two type-arg slots tolerantly: recovery / unknown / type-param / NULL pass.
 static bool type_arg_match(XrType *expected, XrType *actual) {
     if (!expected || !actual)
         return true;
-    if (XR_TYPE_IS_UNKNOWN(expected) || XR_TYPE_IS_UNKNOWN(actual))
+    if (XR_TYPE_IS_UNKNOWN_OR_ERROR(expected) || XR_TYPE_IS_UNKNOWN_OR_ERROR(actual))
         return true;
     if (expected->kind == XR_KIND_TYPE_PARAM || actual->kind == XR_KIND_TYPE_PARAM)
         return true;

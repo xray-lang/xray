@@ -33,6 +33,8 @@ const char *xr_type_to_string(XrType *type) {
     // Simple types: return static constants (no allocation)
     if (XR_TYPE_IS_UNKNOWN(type))
         return TYPE_NAME_UNKNOWN;
+    if (XR_TYPE_IS_ERROR(type))
+        return "<error>";
     if (XR_TYPE_IS_NEVER(type))
         return TYPE_NAME_NEVER;
     if (XR_TYPE_IS_UNIT(type))
