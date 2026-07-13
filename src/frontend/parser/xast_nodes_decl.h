@@ -16,6 +16,7 @@
 #define XAST_NODES_DECL_H
 
 #include "xast_nodes_common.h"
+#include "../../shared/xr_param_mode.h"
 
 /* ========== Generic / Function Param Helpers ========== */
 
@@ -26,17 +27,12 @@ typedef struct XrGenericParam {
     int constraint_count;     // Number of constraints (0 if unconstrained)
 } XrGenericParam;
 
-// Function parameter passing mode for struct value types
-#define XR_PARAM_VALUE 0  // Default: deep copy at function entry
-#define XR_PARAM_IN 1     // Readonly reference: no copy, no mutation allowed
-#define XR_PARAM_REF 2    // Mutable reference: no copy, mutation reflected to caller
-
 // Function parameter node — each parameter has its own position info for LSP.
 typedef struct XrParamNode {
     char *name;                     // Parameter name
     int line;                       // Line number (1-indexed)
     int column;                     // Column number (1-indexed, for LSP)
-    uint8_t passing_mode;           // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF
+    XrParamMode passing_mode;       // value / in / ref / out parameter contract
     XrTypeRef *type;                // Type annotation (can be NULL)
     AstNode *default_value;         // Default value expression (can be NULL)
     XrDestructurePattern *pattern;  // Destructure pattern (can be NULL)
@@ -140,7 +136,7 @@ typedef struct MethodDeclNode {
     char *name;
     char **parameters;
     XrTypeRef **param_types;
-    uint8_t *param_passing_modes;  // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF per param
+    XrParamMode *param_passing_modes;
     int param_count;
     XrTypeRef *return_type;
     AstNode *body;

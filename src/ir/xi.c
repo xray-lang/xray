@@ -85,23 +85,25 @@ void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
 }
 
-XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, uint8_t mode) {
+XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode) {
     if (!f || index >= f->nparams)
+        return false;
+    if (!xr_param_mode_is_valid(mode))
         return false;
     if (mode == XR_PARAM_VALUE && !f->param_passing_modes)
         return true;
     if (!f->param_passing_modes) {
         f->param_passing_modes =
-            (uint8_t *) xi_func_arena_alloc(f, (uint32_t) f->nparams * sizeof(uint8_t));
+            (XrParamMode *) xi_func_arena_alloc(f, (uint32_t) f->nparams * sizeof(XrParamMode));
         if (!f->param_passing_modes)
             return false;
-        memset(f->param_passing_modes, XR_PARAM_VALUE, (size_t) f->nparams * sizeof(uint8_t));
+        memset(f->param_passing_modes, XR_PARAM_VALUE, (size_t) f->nparams * sizeof(XrParamMode));
     }
     f->param_passing_modes[index] = mode;
     return true;
 }
 
-XR_FUNC uint8_t xi_func_param_passing_mode(const XiFunc *f, uint16_t index) {
+XR_FUNC XrParamMode xi_func_param_passing_mode(const XiFunc *f, uint16_t index) {
     if (!f || index >= f->nparams || !f->param_passing_modes)
         return XR_PARAM_VALUE;
     return f->param_passing_modes[index];

@@ -889,7 +889,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     char **parameters = NULL;
     XrTypeRef **param_types = NULL;
-    uint8_t *param_passing_modes = NULL;
+    XrParamMode *param_passing_modes = NULL;
     AstNode **default_values = NULL;
     int param_count = 0;
     int param_capacity = 0;
@@ -919,11 +919,11 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 }
                 param_types = _new_param_types;
 
-                uint8_t *_new_modes = (uint8_t *) ast_alloc_array(
-                    parser->compiler_session, sizeof(uint8_t), (size_t) param_capacity);
+                XrParamMode *_new_modes = (XrParamMode *) ast_alloc_array(
+                    parser->compiler_session, sizeof(XrParamMode), (size_t) param_capacity);
                 if (old_capacity > 0 && param_passing_modes) {
                     memcpy(_new_modes, param_passing_modes,
-                           sizeof(uint8_t) * (size_t) old_capacity);
+                           sizeof(XrParamMode) * (size_t) old_capacity);
                 }
                 param_passing_modes = _new_modes;
 

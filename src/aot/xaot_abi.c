@@ -147,7 +147,7 @@ static bool fixed_array_ref_param_can_use_ptr_abi(const XiFunc *func, const XiVa
         value->op != XI_PARAM || value->aux_int < 0 || !type || type->kind != XR_KIND_FIXED_ARRAY)
         return false;
     uint16_t index = (uint16_t) value->aux_int;
-    uint8_t mode = xi_func_param_passing_mode(func, index);
+    XrParamMode mode = xi_func_param_passing_mode(func, index);
     if (mode != XR_PARAM_REF && mode != XR_PARAM_IN)
         return false;
     return fixed_array_lane_native_info(type, NULL, elem_ctype_out);

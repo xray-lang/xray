@@ -158,10 +158,11 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
             if (result) {
                 result->function.min_params = type->function.min_params;
                 if (type->function.param_passing_modes && pc > 0) {
-                    result->function.param_passing_modes = xr_calloc(pc, sizeof(uint8_t));
+                    result->function.param_passing_modes = xr_calloc(pc, sizeof(XrParamMode));
                     if (result->function.param_passing_modes) {
                         memcpy(result->function.param_passing_modes,
-                               type->function.param_passing_modes, sizeof(uint8_t) * (size_t) pc);
+                               type->function.param_passing_modes,
+                               sizeof(XrParamMode) * (size_t) pc);
                     }
                 }
                 if (type->function.type_param_count > 0 && type->function.type_param_names) {

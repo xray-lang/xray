@@ -40,7 +40,7 @@ typedef struct {
     const char *name;
     AstNode *decl_node;  // AST_VAR_DECL or AST_CONST_DECL node
     bool is_param;
-    uint8_t param_passing_mode;
+    XrParamMode param_passing_mode;
     // If this variable was initialized with a function-expression literal
     // (`var f = fn() {...}`), points to that FUNCTION_EXPR node. Lets
     // `go f()` apply the same capture enforcement as an inline `go fn(){}()`
@@ -117,7 +117,7 @@ static void ea_pop_scope(EaContext *ctx) {
 }
 
 static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *decl, bool is_param,
-                                  uint8_t param_passing_mode) {
+                                  XrParamMode param_passing_mode) {
     if (ctx->depth >= ctx->scopes_capacity)
         return;  // defensive: only reachable if a push was OOM-skipped
     EaScope *scope = &ctx->scopes[ctx->depth];
@@ -214,7 +214,7 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
             if (scope->vars[i].name && strcmp(scope->vars[i].name, name) == 0) {
                 EaVarEntry *entry = &scope->vars[i];
                 if (entry->is_param) {
-                    uint8_t mode = entry->param_passing_mode;
+                    XrParamMode mode = entry->param_passing_mode;
                     if (mode == XR_PARAM_IN || mode == XR_PARAM_REF) {
                         ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                                       "go closure cannot capture borrowed parameter '%s'\n"

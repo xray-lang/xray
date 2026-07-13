@@ -3842,7 +3842,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 has_modes = true;
         }
         if (has_modes) {
-            uint8_t *modes = xr_calloc(fn->param_count, sizeof(uint8_t));
+            XrParamMode *modes = xr_calloc(fn->param_count, sizeof(XrParamMode));
             if (modes) {
                 for (int i = 0; i < fn->param_count; i++) {
                     if (fn->params[i])

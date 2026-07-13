@@ -1011,8 +1011,8 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                 memcpy(copy->function.param_types, type->function.param_types, param_size);
                 if (type->function.param_passing_modes) {
                     size_t mode_size;
-                    copy->function.param_passing_modes = (uint8_t *) type_alloc_array(
-                        pool, sizeof(uint8_t), type->function.param_count, &mode_size);
+                    copy->function.param_passing_modes = (XrParamMode *) type_alloc_array(
+                        pool, sizeof(XrParamMode), type->function.param_count, &mode_size);
                     if (!copy->function.param_passing_modes)
                         return NULL;
                     memcpy(copy->function.param_passing_modes, type->function.param_passing_modes,
@@ -1582,7 +1582,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     return false;
 }
 
-static uint8_t function_param_mode(XrType *type, int index) {
+static XrParamMode function_param_mode(XrType *type, int index) {
     if (!type || type->kind != XR_KIND_FUNCTION || index < 0 ||
         index >= type->function.param_count || !type->function.param_passing_modes)
         return XR_PARAM_VALUE;

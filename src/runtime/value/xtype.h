@@ -24,6 +24,7 @@
 #include "xstruct_layout.h"
 #include "xenum_layout.h"
 #include "../../base/xdefs.h"
+#include "../../shared/xr_param_mode.h"
 
 typedef struct XrErrorSet XrErrorSet;
 
@@ -107,13 +108,6 @@ static inline bool xr_kind_is_object_like(XrTypeKind k) {
     return xr_kind_has_object_shape(k) || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
 }
 
-// Function parameter passing modes (used by XrType.function.param_passing_modes)
-#ifndef XR_PARAM_VALUE
-#define XR_PARAM_VALUE 0  // Default: deep copy at function entry
-#define XR_PARAM_IN 1     // Readonly reference: no copy, no mutation allowed
-#define XR_PARAM_REF 2    // Mutable reference: no copy, mutation visible to caller
-#endif
-
 // Forward declarations
 typedef struct XrType XrType;
 typedef struct XrClassInfo XrClassInfo;
@@ -165,7 +159,7 @@ struct XrType {
             int param_count;
             int min_params;  // Minimum required params (for default params)
             XrType *return_type;
-            uint8_t *param_passing_modes;  // NULL or [param_count] of XR_PARAM_*
+            XrParamMode *param_passing_modes;  // NULL or [param_count]
             bool is_variadic;
             bool is_c_abi;  // C function pointer ABI (`CFn<...>`), no Xray closure header
             const char **type_param_names;

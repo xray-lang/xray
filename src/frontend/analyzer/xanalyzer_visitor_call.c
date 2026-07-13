@@ -2061,19 +2061,15 @@ static void xa_check_freestanding_math_call(XaInferContext *ctx, AstNode *node, 
         "libm-backed or floating math helpers are hosted-only");
 }
 
-static uint8_t xa_call_param_mode(XrType *callee_type, int slot) {
+static XrParamMode xa_call_param_mode(XrType *callee_type, int slot) {
     if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0 ||
         slot >= callee_type->function.param_count || !callee_type->function.param_passing_modes)
         return XR_PARAM_VALUE;
     return callee_type->function.param_passing_modes[slot];
 }
 
-static const char *xa_call_param_mode_label(uint8_t mode) {
-    if (mode == XR_PARAM_IN)
-        return "in";
-    if (mode == XR_PARAM_REF)
-        return "ref";
-    return "value";
+static const char *xa_call_param_mode_label(XrParamMode mode) {
+    return xr_param_mode_label(mode);
 }
 
 static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
@@ -2159,7 +2155,7 @@ static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) 
 }
 
 static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *call_node,
-                                               AstNode *arg_node, int slot, uint8_t mode) {
+                                               AstNode *arg_node, int slot, XrParamMode mode) {
     if (!ctx || !ctx->analyzer || mode != XR_PARAM_REF || !arg_node)
         return;
     XaSymbol *root = xa_call_root_variable_symbol(ctx, arg_node);
@@ -2179,7 +2175,7 @@ static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *cal
 
 static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_node,
                                           uint32_t *arg_symbol_ids, const char **arg_names,
-                                          uint8_t *arg_modes, int arg_count) {
+                                          XrParamMode *arg_modes, int arg_count) {
     if (!ctx || !ctx->analyzer || !arg_symbol_ids || !arg_names || !arg_modes)
         return;
     for (int i = 0; i < arg_count; i++) {
@@ -3763,11 +3759,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         effective_arg_types = (XrType **) xr_calloc((size_t) arg_count, sizeof(XrType *));
     uint32_t *effective_arg_symbol_ids = NULL;
     const char **effective_arg_names = NULL;
-    uint8_t *effective_arg_modes = NULL;
+    XrParamMode *effective_arg_modes = NULL;
     if (arg_count > 0) {
         effective_arg_symbol_ids = (uint32_t *) xr_calloc((size_t) arg_count, sizeof(uint32_t));
         effective_arg_names = (const char **) xr_calloc((size_t) arg_count, sizeof(const char *));
-        effective_arg_modes = (uint8_t *) xr_calloc((size_t) arg_count, sizeof(uint8_t));
+        effective_arg_modes = (XrParamMode *) xr_calloc((size_t) arg_count, sizeof(XrParamMode));
     }
 
     // Check argument count (use min_params for functions with default parameters)
@@ -3942,7 +3938,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             effective_arg_types[slot] = arg_type;
         xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,
                                            arg_type, slot);
-        uint8_t param_mode = xa_call_param_mode(callee_type, param_slot);
+        XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);

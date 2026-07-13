@@ -2804,7 +2804,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                 has_modes = true;
         }
         if (has_modes) {
-            uint8_t *modes = xr_calloc(md->param_count, sizeof(uint8_t));
+            XrParamMode *modes = xr_calloc(md->param_count, sizeof(XrParamMode));
             if (modes) {
                 for (int i = 0; i < md->param_count; i++)
                     modes[i] = md->param_passing_modes[i];
