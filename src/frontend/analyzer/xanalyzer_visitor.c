@@ -1237,6 +1237,98 @@ static AstNode *unwrap_grouping(AstNode *node) {
     return node;
 }
 
+static XrCallArgAccess xa_super_call_arg_access(const SuperCallNode *call, int index) {
+    if (!call || index < 0 || !call->arg_accesses)
+        return XR_CALL_ARG_VALUE;
+    return call->arg_accesses[index];
+}
+
+static XaSymbol *xa_super_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
+    expr = unwrap_grouping(expr);
+    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return NULL;
+    return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
+}
+
+static XrType *xa_super_out_direct_variable_type_without_read(XaInferContext *ctx,
+                                                              AstNode *arg_node) {
+    AstNode *place = unwrap_grouping(arg_node);
+    if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *sym = xa_super_call_variable_symbol(ctx, place);
+    if (!sym)
+        return NULL;
+    place->as.variable.symbol_id = sym->id;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    XrType *type = xa_analyzer_get_type(ctx->analyzer, sym);
+    if (!type && links)
+        type = links->type ? links->type : links->declared_type;
+    if (!type)
+        return NULL;
+    xa_analyzer_set_node_type(ctx->analyzer, place, type);
+    return type;
+}
+
+static XrType *xa_visit_super_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
+                                                 XrCallArgAccess access, XrParamMode param_mode) {
+    if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT) {
+        XrType *type = xa_super_out_direct_variable_type_without_read(ctx, arg_node);
+        if (type)
+            return type;
+    }
+    return xa_visit_infer_expr(ctx, arg_node);
+}
+
+static void xa_mark_super_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
+                                                XrCallArgAccess access, XrParamMode param_mode) {
+    if (access != XR_CALL_ARG_OUT || param_mode != XR_PARAM_OUT)
+        return;
+    AstNode *place = unwrap_grouping(arg_node);
+    if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
+        return;
+    XaSymbol *sym = xa_super_call_variable_symbol(ctx, place);
+    if (!sym)
+        return;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links)
+        return;
+    uint32_t end_col =
+        place->column + (place->as.variable.name ? strlen(place->as.variable.name) : 0);
+    xa_symbol_add_ref(links, place->line, place->column, end_col, true);
+    links->is_definitely_assigned = true;
+}
+
+static void xa_visit_super_args_without_contract(XaInferContext *ctx, const SuperCallNode *call) {
+    if (!ctx || !call)
+        return;
+    for (int si = 0; si < call->arg_count; si++) {
+        if (call->arguments && call->arguments[si])
+            xa_visit_infer_expr(ctx, call->arguments[si]);
+    }
+}
+
+static void xa_visit_super_args_for_function(XaInferContext *ctx, AstNode *node,
+                                             XrType *function_type) {
+    if (!ctx || !node || node->type != AST_SUPER_CALL || !function_type ||
+        !XR_TYPE_IS_FUNCTION(function_type))
+        return;
+    const SuperCallNode *call = &node->as.super_call;
+    int pc = function_type->function.param_count;
+    for (int si = 0; si < call->arg_count; si++) {
+        AstNode *arg = call->arguments ? call->arguments[si] : NULL;
+        if (!arg)
+            continue;
+        XrParamMode param_mode =
+            si < pc ? xr_type_function_param_mode(function_type, si) : XR_PARAM_VALUE;
+        XrCallArgAccess access = xa_super_call_arg_access(call, si);
+        xa_visit_super_arg_for_param_mode(ctx, arg, access, param_mode);
+        if (si < pc) {
+            xa_check_arg_access_authorization(ctx, node, arg, access, si, param_mode);
+            xa_mark_super_out_call_arg_assigned(ctx, arg, access, param_mode);
+        }
+    }
+}
+
 typedef struct XaContextualIntLiteral {
     bool negative;
     bool signed_valid;
@@ -4533,13 +4625,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xa_visit_move_expr(ctx, node);
             break;
         case AST_SUPER_CALL: {
-            /* Visit all arguments to resolve symbol_ids. */
-            for (int si = 0; si < node->as.super_call.arg_count; si++) {
-                if (node->as.super_call.arguments[si])
-                    xa_visit_infer_expr(ctx, node->as.super_call.arguments[si]);
-            }
             /* Resolve super.method() return type by looking up the method
              * in the base class chain via class_info. */
+            bool visited_args = false;
             XaScope *s = ctx->analyzer->current_scope;
             while (s && s->kind != XA_SCOPE_CLASS)
                 s = s->parent;
@@ -4553,19 +4641,11 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                             XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                             if (ml && ml->type) {
                                 if (XR_TYPE_IS_FUNCTION(ml->type)) {
-                                    int pc = ml->type->function.param_count;
-                                    int check_count = pc < node->as.super_call.arg_count
-                                                          ? pc
-                                                          : node->as.super_call.arg_count;
-                                    for (int si = 0; si < check_count; si++) {
-                                        XrCallArgAccess access =
-                                            node->as.super_call.arg_accesses
-                                                ? node->as.super_call.arg_accesses[si]
-                                                : XR_CALL_ARG_VALUE;
-                                        xa_check_arg_access_authorization(
-                                            ctx, node, node->as.super_call.arguments[si], access,
-                                            si, xr_type_function_param_mode(ml->type, si));
-                                    }
+                                    xa_visit_super_args_for_function(ctx, node, ml->type);
+                                    visited_args = true;
+                                } else {
+                                    xa_visit_super_args_without_contract(ctx, &node->as.super_call);
+                                    visited_args = true;
                                 }
                                 /* Method type is a function type; extract
                                  * return type for the call result. */
@@ -4586,22 +4666,14 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                             ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
                         XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
                         if (ctor_type && XR_TYPE_IS_FUNCTION(ctor_type)) {
-                            int pc = ctor_type->function.param_count;
-                            int check_count = pc < node->as.super_call.arg_count
-                                                  ? pc
-                                                  : node->as.super_call.arg_count;
-                            for (int si = 0; si < check_count; si++) {
-                                XrCallArgAccess access = node->as.super_call.arg_accesses
-                                                             ? node->as.super_call.arg_accesses[si]
-                                                             : XR_CALL_ARG_VALUE;
-                                xa_check_arg_access_authorization(
-                                    ctx, node, node->as.super_call.arguments[si], access, si,
-                                    xr_type_function_param_mode(ctor_type, si));
-                            }
+                            xa_visit_super_args_for_function(ctx, node, ctor_type);
+                            visited_args = true;
                         }
                     }
                 }
             }
+            if (!visited_args)
+                xa_visit_super_args_without_contract(ctx, &node->as.super_call);
             result = xr_type_new_unknown(NULL);
             break;
         }
