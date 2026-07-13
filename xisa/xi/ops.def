@@ -614,7 +614,7 @@
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-write)
-  :requires (bytespan bounds)
+  :requires (byte-slice bounds)
   :observable (span-fill)
   :targets (vm-bytecode aot-c aot-verify))
 
@@ -624,7 +624,7 @@
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
-  :requires (bytespan bounds overlap-safe)
+  :requires (byte-slice bounds overlap-safe)
   :observable (span-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
@@ -633,7 +633,7 @@
   :arity 2
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (bytespan bounds)
+  :requires (byte-slice bounds)
   :observable (span-compare)
   :targets (vm-bytecode aot-c aot-verify))
 
@@ -642,7 +642,7 @@
   :arity 2
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (bytespan bounds)
+  :requires (byte-slice bounds)
   :observable (span-common-prefix)
   :targets (vm-bytecode aot-c aot-verify))
 
@@ -652,7 +652,7 @@
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
-  :requires (bytespan bounds overlap-repeat)
+  :requires (byte-slice bounds overlap-repeat)
   :observable (span-repeat)
   :targets (vm-bytecode aot-c aot-verify))
 
@@ -701,7 +701,7 @@
   :result-ownership borrowed
   :own-use borrow
   :effects (may-throw)
-  :requires (bytespan pod aligned-length)
+  :requires (byte-slice pod aligned-length)
   :observable (span-reinterpret)
   :targets (vm-bytecode aot-c aot-verify))
 
