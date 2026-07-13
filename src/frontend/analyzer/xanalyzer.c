@@ -517,6 +517,12 @@ static bool xa_symbol_exportable(const XaSymbol *sym) {
     return sym->links.type || (sym->kind == XA_SYM_CLASS && sym->links.class_info);
 }
 
+static bool xa_symbol_export_metadata_poisoned(const XaSymbol *sym) {
+    return sym && (xr_type_contains_error(sym->links.type) ||
+                   xr_type_contains_error(sym->links.declared_type) ||
+                   xr_type_contains_error((const XrType *) sym->alias_type));
+}
+
 static bool xa_export_map_set_symbol(XrHashMap **exports, const char *name, XaSymbol *sym) {
     if (!name || !xa_symbol_exportable(sym))
         return false;
@@ -527,7 +533,7 @@ static bool xa_export_map_set_symbol(XrHashMap **exports, const char *name, XaSy
     return xr_hashmap_set(*exports, name, sym);
 }
 
-static const XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode *ast) {
+static XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode *ast) {
     XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
     if (!graph || !ast)
         return NULL;
@@ -538,8 +544,34 @@ static const XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode
     return NULL;
 }
 
+static void xa_report_poisoned_export_metadata(XaAnalyzer *analyzer, const AstNode *node,
+                                               const char *name) {
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "Export '%s' contains compiler recovery ErrorType metadata; module export table is "
+             "invalid",
+             name ? name : "<unknown>");
+    XrLocation loc = {.file = analyzer ? analyzer->current_file : NULL,
+                      .line = node ? node->line : 0,
+                      .column = node ? node->column : 0};
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+static bool xa_export_map_try_set_symbol(XaAnalyzer *analyzer, XrHashMap **exports,
+                                         const char *name, XaSymbol *sym, const AstNode *loc_node) {
+    if (xa_symbol_export_metadata_poisoned(sym)) {
+        xa_report_poisoned_export_metadata(analyzer, loc_node, name);
+        return false;
+    }
+    (void) xa_export_map_set_symbol(exports, name, sym);
+    return true;
+}
+
 static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNode *ast,
-                                                   const char *from_path) {
+                                                   const char *from_path, bool *out_invalid) {
+    if (out_invalid)
+        *out_invalid = false;
     XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
     if (!graph || !graph->resolver || !from_path)
         return NULL;
@@ -558,26 +590,42 @@ static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNo
     xr_module_id_cleanup(&mid);
     if (idx < 0)
         return NULL;
+    if (graph->specs[idx].export_symbols_invalid) {
+        if (out_invalid)
+            *out_invalid = true;
+        return NULL;
+    }
     return graph->specs[idx].export_symbols;
 }
 
 typedef struct XaReexportAllCtx {
+    XaAnalyzer *analyzer;
     XrHashMap **exports;
+    const AstNode *loc_node;
+    bool invalid;
 } XaReexportAllCtx;
 
 static void xa_reexport_all_symbol_cb(const char *key, void *value, void *userdata) {
     XaReexportAllCtx *ctx = (XaReexportAllCtx *) userdata;
     if (!ctx || !ctx->exports)
         return;
-    (void) xa_export_map_set_symbol(ctx->exports, key, (XaSymbol *) value);
+    if (!xa_export_map_try_set_symbol(ctx->analyzer, ctx->exports, key, (XaSymbol *) value,
+                                      ctx->loc_node))
+        ctx->invalid = true;
 }
 
-XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast) {
-    if (!analyzer || !ast || ast->type != AST_PROGRAM)
-        return NULL;
+bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode *ast,
+                                                XrHashMap **out_exports) {
+    if (out_exports)
+        *out_exports = NULL;
+    if (!analyzer || !ast || ast->type != AST_PROGRAM || !out_exports)
+        return false;
 
     ProgramNode *prog = &ast->as.program;
     XrHashMap *exports = NULL;
+    XrModuleSpec *owner = xa_graph_spec_for_ast(analyzer, ast);
+    if (owner)
+        owner->export_symbols_invalid = false;
 
     for (int i = 0; i < prog->count; i++) {
         AstNode *stmt = prog->statements[i];
@@ -593,7 +641,8 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
                 XaScope *export_scope =
                     analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
                 XaSymbol *sym = xa_scope_lookup(export_scope, name);
-                (void) xa_export_map_set_symbol(&exports, name, sym);
+                if (!xa_export_map_try_set_symbol(analyzer, &exports, name, sym, exp->declaration))
+                    goto invalid;
             }
         }
 
@@ -605,18 +654,28 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
             XaScope *export_scope =
                 analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
             XaSymbol *sym = xa_scope_lookup(export_scope, name);
-            (void) xa_export_map_set_symbol(&exports, name, sym);
+            if (!xa_export_map_try_set_symbol(analyzer, &exports, name, sym, stmt))
+                goto invalid;
         }
 
         /* Case 3: export { a, b as c } from "./file" / export * from "./file" */
         if (exp->from_path) {
+            bool source_invalid = false;
             XrHashMap *source_exports =
-                xa_graph_reexport_source_exports(analyzer, ast, exp->from_path);
-            if (!source_exports)
+                xa_graph_reexport_source_exports(analyzer, ast, exp->from_path, &source_invalid);
+            if (!source_exports) {
+                if (source_invalid) {
+                    xa_report_poisoned_export_metadata(analyzer, stmt, exp->from_path);
+                    goto invalid;
+                }
                 continue;
+            }
             if (exp->is_reexport_all) {
-                XaReexportAllCtx ctx = {.exports = &exports};
+                XaReexportAllCtx ctx = {
+                    .analyzer = analyzer, .exports = &exports, .loc_node = stmt, .invalid = false};
                 xr_hashmap_foreach(source_exports, xa_reexport_all_symbol_cb, &ctx);
+                if (ctx.invalid)
+                    goto invalid;
                 continue;
             }
             for (int j = 0; j < exp->reexport_count; j++) {
@@ -625,11 +684,33 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
                     continue;
                 XaSymbol *sym = (XaSymbol *) xr_hashmap_get(source_exports, member->name);
                 const char *export_name = member->alias ? member->alias : member->name;
-                (void) xa_export_map_set_symbol(&exports, export_name, sym);
+                if (!xa_export_map_try_set_symbol(analyzer, &exports, export_name, sym, stmt))
+                    goto invalid;
             }
         }
     }
 
+    *out_exports = exports;
+    return true;
+
+invalid:
+    if (exports)
+        xr_hashmap_free(exports);
+    if (owner) {
+        owner->export_symbols_invalid = true;
+        if (owner->export_symbols) {
+            xr_hashmap_free(owner->export_symbols);
+            owner->export_symbols = NULL;
+        }
+    }
+    *out_exports = NULL;
+    return false;
+}
+
+XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast) {
+    XrHashMap *exports = NULL;
+    if (!xa_analyzer_collect_export_symbols_checked(analyzer, ast, &exports))
+        return NULL;
     return exports;
 }
 

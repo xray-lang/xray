@@ -2716,6 +2716,9 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
     if (idx < 0)
         return NULL;
 
+    if (graph->specs[idx].export_symbols_invalid)
+        return NULL;
+
     return graph->specs[idx].export_symbols;
 }
 

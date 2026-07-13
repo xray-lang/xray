@@ -272,6 +272,10 @@ XR_FUNC bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType 
 // Symbol pointers are borrowed from analyzer scopes and live until analyzer is freed.
 // Returns NULL if no exports found.
 XR_FUNC struct XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast);
+// Checked variant used by module-graph drivers. Returns false when the module's
+// export metadata is poisoned and the whole table must be treated as invalid.
+XR_FUNC bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode *ast,
+                                                        struct XrHashMap **out_exports);
 
 // Internal: Add diagnostic
 XR_FUNC void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity, int code,

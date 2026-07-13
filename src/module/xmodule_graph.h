@@ -59,8 +59,11 @@ typedef struct XrModuleSpec {
     /* Exported semantic symbols: name -> XaSymbol* (populated by analyzer).
      * The symbol pointers are borrowed from analyzer-owned scopes; their links
      * carry type, class, enum, ADT payload, and generic metadata. Only valid
-     * while the analyzer that filled the graph is alive. */
+     * while the analyzer that filled the graph is alive. If export collection
+     * observes compiler-only recovery metadata, the whole export table is
+     * invalid rather than partially populated. */
     XrHashMap *export_symbols;
+    bool export_symbols_invalid;
 
     /* Topological sort metadata */
     int topo_index; /* Position in topo_order (-1 if not yet assigned) */
