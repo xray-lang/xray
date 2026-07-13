@@ -1452,6 +1452,7 @@ static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *c
 
     XrType *target = l->analyzer ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
                                  : xr_tref_resolve(l->isolate, call->type_args[0]);
+    target = xi_lower_type_or_any(l, target, "mem layout type argument", node->line);
     uint32_t size = 0;
     uint32_t align = 0;
     if (!xr_type_has_static_layout(target, &size, &align))
@@ -3706,7 +3707,9 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
                     if (callee_type->function.type_param_names[ti] && tp_name &&
                         strcmp(callee_type->function.type_param_names[ti], tp_name) == 0 &&
                         ti < call->type_arg_count && call->type_args[ti]) {
-                        pt = xr_tref_resolve(l->isolate, call->type_args[ti]);
+                        pt = xi_lower_type_or_any(l,
+                                                  xr_tref_resolve(l->isolate, call->type_args[ti]),
+                                                  "call type argument", node ? node->line : 0);
                         break;
                     }
                 }
@@ -3975,6 +3978,7 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
     }
 
     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+    target = xi_lower_type_or_any(l, target, "byte-slice type argument", node->line);
     uint16_t byte_slice_op = lower_byte_slice_typed_op_for_target(target, byte_slice_typed_load);
     if (!byte_slice_op)
         return NULL;
@@ -4047,6 +4051,8 @@ static XrType *xi_raw_pointer_type_namespace(XiLower *l, AstNode *object) {
         return NULL;
     }
     XrType *pointee = xr_tref_resolve(l->isolate, ne->type_args[0]);
+    pointee =
+        xi_lower_type_or_any(l, pointee, "raw pointer pointee type", object ? object->line : 0);
     if (!pointee)
         pointee = xr_type_new_unknown(l->isolate);
     return xr_type_new_pointer(l->isolate, pointee, is_mut);
@@ -4702,6 +4708,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             if (strcmp(ma->name, "loadLE") == 0 && n == 1 && xi_pointer_pointee_is_u8(recv->type) &&
                 call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
                 XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                target = xi_lower_type_or_any(l, target, "pointer load type argument",
+                                              node ? node->line : 0);
                 uint8_t code = xr_ffi_type_from_xrtype(target, false);
                 if (code == XR_FFI_T_U16 || code == XR_FFI_T_U32 || code == XR_FFI_T_U64) {
                     XiValue *addr = xi_lower_ptr_scaled_addr(l, node, recv, arg_vals[0], recv->type,
@@ -4724,6 +4732,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 xi_pointer_pointee_is_u8(recv->type) && call->type_arg_count == 1 &&
                 call->type_args && call->type_args[0]) {
                 XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                target = xi_lower_type_or_any(l, target, "pointer store type argument",
+                                              node ? node->line : 0);
                 uint8_t code = xr_ffi_type_from_xrtype(target, false);
                 if (code == XR_FFI_T_U16 || code == XR_FFI_T_U32 || code == XR_FFI_T_U64) {
                     XiValue *addr = xi_lower_ptr_scaled_addr(l, node, recv, arg_vals[0], recv->type,
@@ -4866,12 +4876,16 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             if (byte_slice_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
                 call->type_args && call->type_args[0]) {
                 target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                target = xi_lower_type_or_any(l, target, "byte-slice type argument",
+                                              node ? node->line : 0);
                 byte_slice_op = lower_byte_slice_typed_op_for_target(target, true);
                 if (byte_slice_op)
                     expected_args = 3;
             } else if (byte_slice_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
                        call->type_args && call->type_args[0]) {
                 target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                target = xi_lower_type_or_any(l, target, "byte-slice type argument",
+                                              node ? node->line : 0);
                 byte_slice_op = lower_byte_slice_typed_op_for_target(target, false);
                 if (byte_slice_op)
                     expected_args = 4;
@@ -4914,6 +4928,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     xi_lower_receiver_method_matches(
                         recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REINTERPRET)) {
                     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                    target = xi_lower_type_or_any(l, target, "span reinterpret type argument",
+                                                  node ? node->line : 0);
                     if (xi_type_is_pod_span_elem(target)) {
                         XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_REINTERPRET,
                                                   result_type, 1);
@@ -5587,10 +5603,12 @@ static struct XrType *parallel_call_param_type(XiLower *l, XrParamNode *param,
         XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, param->symbol_id);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
         if (links && links->type)
-            return links->type;
+            return xi_lower_type_or_any(l, links->type, "parallel lambda parameter type",
+                                        param->line);
     }
     struct XrType *type = (param && param->type) ? xr_tref_resolve(l->isolate, param->type) : NULL;
-    return type ? type : fallback;
+    return type ? xi_lower_type_or_any(l, type, "parallel lambda parameter type", param->line)
+                : fallback;
 }
 
 typedef struct ParallelCallParamBinding {
@@ -7288,6 +7306,7 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
      * AsExprNode.type is XrTypeRef*, not XrType*. */
     XrTypeRef *tref = as->type;
     struct XrType *cast_type = tref ? xr_tref_resolve(l->isolate, tref) : NULL;
+    cast_type = xi_lower_type_or_any(l, cast_type, "cast target type", node->line);
     if (!as->is_safe && cast_type) {
         if (XR_TYPE_IS_INT(cast_type) && val->type && XR_TYPE_IS_INT(val->type) &&
             cast_type->native_width != 0) {

@@ -185,6 +185,7 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
         if (!f->name || !f->field_type)
             return NULL;
         XrType *type = xr_tref_resolve(l->isolate, f->field_type);
+        type = xi_lower_type_or_any(l, type, "class field type", 0);
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
         int native = xr_type_kind_to_native(type->kind, type->native_width);
@@ -230,6 +231,10 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
                               : ml.type_unit);
     if (!m_ret)
         m_ret = ml.type_unit;
+    if (xi_lower_reject_error_type(&ml, m_ret, "method return type", 0)) {
+        xi_lower_cleanup(&ml);
+        return NULL;
+    }
     ml.func = xi_func_new(m->name, m_ret);
     if (!ml.func) {
         xi_lower_cleanup(&ml);
@@ -286,6 +291,11 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
             struct XrType *resolved = xr_tref_resolve_in_analyzer(l->analyzer, m->param_types[i]);
             if (resolved)
                 pt = resolved;
+        }
+        if (xi_lower_reject_error_type(&ml, pt, "method parameter type", 0)) {
+            xi_func_free(ml.func);
+            xi_lower_cleanup(&ml);
+            return NULL;
         }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
         ml.func->params[base + i] = p;
@@ -363,9 +373,11 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
     }
 
-    xi_lower_capture_source_vars(&ml);
+    XiFunc *result = ml.had_error ? NULL : ml.func;
+    if (result)
+        xi_lower_capture_source_vars(&ml);
     xi_lower_cleanup(&ml);
-    return ml.func;
+    return result;
 }
 
 /* Lower AST_CLASS_DECL: compile methods as child XiFuncs,
@@ -411,8 +423,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
 
         XiFunc *mf = xi_lower_method_as_func(
             l, m, true, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
-        if (!mf)
+        if (!mf) {
+            l->had_error = true;
             continue;
+        }
         xi_lower_func_add_child(l->func, mf);
         if (cidx)
             cidx[ci] = (uint16_t) (l->func->nchildren - 1);
@@ -431,6 +445,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 cidx[ci] = (uint16_t) (l->func->nchildren - 1);
             ci++;
             emitted_synth_ctor = true;
+        } else {
+            l->had_error = true;
         }
     }
 
@@ -443,8 +459,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
 
         XiFunc *mf = xi_lower_method_as_func(
             l, m, false, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
-        if (!mf)
+        if (!mf) {
+            l->had_error = true;
             continue;
+        }
         xi_lower_func_add_child(l->func, mf);
         if (cidx)
             cidx[ci] = (uint16_t) (l->func->nchildren - 1);
@@ -502,6 +520,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (cf) {
             xi_lower_func_add_child(l->func, cf);
             clinit_idx = (int) (l->func->nchildren - 1);
+        } else {
+            l->had_error = true;
         }
         break;
     }
