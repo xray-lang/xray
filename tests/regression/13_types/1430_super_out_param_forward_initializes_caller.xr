@@ -1,0 +1,36 @@
+class SuperOutForwardBase {
+    fill(x: out int) {
+        x = 42
+    }
+}
+
+class SuperOutForwardChild extends SuperOutForwardBase {
+    forward(x: out int) {
+        super.fill(out x)
+    }
+}
+
+class SuperOutCtorBase {
+    constructor(x: out int) {
+        x = 7
+    }
+}
+
+class SuperOutCtorChild extends SuperOutCtorBase {
+    constructor(x: out int) {
+        super(out x)
+    }
+}
+
+@test
+fn test_super_out_param_forward_initializes_caller() {
+    var value = 0
+    var child = SuperOutForwardChild()
+    child.forward(out value)
+}
+
+@test
+fn test_super_constructor_out_param_initializes_caller() {
+    var value = 0
+    var child = SuperOutCtorChild(out value)
+}
