@@ -2327,11 +2327,11 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_le_unchecked_raw(") > 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u16_le_unchecked_raw(") > 0 &&
            "Slice<byte>.load<uint16>(Endian.LE) must lower to the trusted LE load helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_le_unchecked_raw(") > 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u32_le_unchecked_raw(") > 0 &&
            "Slice<byte>.load<uint32>(Endian.LE) must lower to the trusted LE load helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_le_unchecked_raw(") > 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u64_le_unchecked_raw(") > 0 &&
            "Slice<byte>.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_store_u16(") > 0 &&
            "Slice<byte>.store<uint16> must lower to the plan-driven core store helper");
@@ -2361,21 +2361,21 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_append_from_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_repeat_from_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_span_bytes_copy_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_slice_copy_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
            "Array<byte> hot path must not call boxed value helpers");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_checked_raw(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_checked_raw(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_checked_raw(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u16_checked_raw(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_slice_load_u32_checked_raw(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_slice_load_u64_checked_raw(") == 0 &&
            "static Slice<byte>.load hot path must not keep dynamic span checks");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_store_u16_checked_raw(") == 0 &&
            "static Slice<byte>.store hot path must not keep dynamic span checks");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_checked_raw(") == 0 &&
            "static Slice<byte>.commonPrefix hot path must not keep dynamic span checks");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_repeat_from_checked_raw(") == 0 &&
            "static Slice<byte>.repeatFrom hot path must not keep dynamic span checks");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_copy_checked_raw(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_copy_checked_raw(") == 0 &&
            "static Slice<byte>.copyFrom hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
@@ -2900,7 +2900,7 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
            "RawMut.storeLE should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "RawMut.storeLE hot path must not round-trip through integer pointer casts");
-    assert(count_between(fn, fn_end, "xrt_span_bytes_store_") == 0 &&
+    assert(count_between(fn, fn_end, "xrt_byte_slice_store_") == 0 &&
            "RawMut.storeLE must not route back through Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "RawMut.storeLE hot path must not keep a dead ERR_CHECK");

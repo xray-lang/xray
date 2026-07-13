@@ -1317,11 +1317,11 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "xr_array_core_bytes_store_u16" \
             "freestanding-profile/fixed-array: Slice<byte>.store<uint16> uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_load_u16_le_unchecked_raw" \
-            "freestanding-profile/fixed-array: Slice<byte>.load<uint16> uses freestanding span bytes helper"
+            "xrt_byte_slice_load_u16_le_unchecked_raw" \
+            "freestanding-profile/fixed-array: Slice<byte>.load<uint16> uses freestanding byte-slice helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_load_u64_le_unchecked_raw" \
-            "freestanding-profile/fixed-array: Slice<byte>.load<uint64> uses freestanding span bytes helper"
+            "xrt_byte_slice_load_u64_le_unchecked_raw" \
+            "freestanding-profile/fixed-array: Slice<byte>.load<uint64> uses freestanding byte-slice helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_store_f32" \
             "freestanding-profile/fixed-array: Slice<byte>.store<float32> uses freestanding bytes helper"
@@ -1362,19 +1362,19 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_exception" \
             "freestanding-profile/fixed-array: generated C avoids hosted exception objects"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_store_u64_checked_raw" \
+            "xrt_byte_slice_store_u64_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.store"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_load_f64_value" \
+            "xrt_byte_slice_load_f64_value" \
             "freestanding-profile/fixed-array: generated C avoids hosted boxed Slice<byte>.load"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_copy_checked_raw" \
+            "xrt_byte_slice_copy_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.copyFrom"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_common_prefix_checked_raw" \
+            "xrt_byte_slice_common_prefix_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.commonPrefix"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "xrt_span_bytes_repeat_from_checked_raw" \
+            "xrt_byte_slice_repeat_from_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.repeatFrom"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_fill_checked_raw" \

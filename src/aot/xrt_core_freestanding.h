@@ -1180,19 +1180,19 @@ static inline bool xr_array_core_bytes_store_f64(void *data, int64_t length, uin
     return xr_array_core_bytes_store_u64(data, length, elem_type, offset, bits, endian);
 }
 
-static inline int64_t xrt_span_bytes_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
+static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
     bool ok = false;
     return (int64_t) xr_array_core_bytes_load_u16_le(span.data, span.length, span.elem_type, off,
                                                      &ok);
 }
 
-static inline int64_t xrt_span_bytes_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
+static inline int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
     bool ok = false;
     return (int64_t) xr_array_core_bytes_load_u32_le(span.data, span.length, span.elem_type, off,
                                                      &ok);
 }
 
-static inline int64_t xrt_span_bytes_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
+static inline int64_t xrt_byte_slice_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
     bool ok = false;
     return (int64_t) xr_array_core_bytes_load_u64_le(span.data, span.length, span.elem_type, off,
                                                      &ok);

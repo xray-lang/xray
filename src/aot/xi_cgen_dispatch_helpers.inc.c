@@ -8080,7 +8080,7 @@ static void xicgen_byte_array_box_result(FILE *out, bool boxed) {
         fprintf(out, ", XR_TAG_ARRAY)");
 }
 
-static bool xicgen_emit_span_bytes_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                         const char *core_helper, const char *le_unchecked_helper,
                                         const char *ctype, int64_t byte_width,
                                         const char *bounds_message) {
@@ -8123,7 +8123,7 @@ static bool xicgen_emit_span_bytes_load(XiCgenCtx *ctx, FILE *out, const XiValue
     return true;
 }
 
-static bool xicgen_emit_span_bytes_float_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+static bool xicgen_emit_byte_slice_float_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                               const char *core_helper, const char *ctype,
                                               const char *bounds_message) {
     CgArrayElemInfo info;
@@ -8149,7 +8149,7 @@ static bool xicgen_emit_span_bytes_float_load(XiCgenCtx *ctx, FILE *out, const X
     return true;
 }
 
-static bool xicgen_emit_span_bytes_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                          const char *checked_helper, const char *core_helper,
                                          const char *value_ctype, const char *bounds_message) {
     CgArrayElemInfo info;
@@ -8187,7 +8187,7 @@ static bool xicgen_emit_span_bytes_store(XiCgenCtx *ctx, FILE *out, const XiValu
     return true;
 }
 
-static bool xicgen_emit_span_bytes_float_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+static bool xicgen_emit_byte_slice_float_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                const char *checked_helper, const char *core_helper,
                                                const char *value_ctype,
                                                const char *bounds_message) {
@@ -8230,13 +8230,13 @@ static void xicgen_byte_slice_load_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u16",
-                                    "xrt_span_bytes_load_u16_le_unchecked_raw", "uint16_t", 2,
+    if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u16",
+                                    "xrt_byte_slice_load_u16_le_unchecked_raw", "uint16_t", 2,
                                     "Slice<byte>.load<uint16>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "XR_TO_INT(xrt_span_bytes_load_u16_value(");
+    fprintf(out, "XR_TO_INT(xrt_byte_slice_load_u16_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8250,13 +8250,13 @@ static void xicgen_byte_slice_load_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u32",
-                                    "xrt_span_bytes_load_u32_le_unchecked_raw", "uint32_t", 4,
+    if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u32",
+                                    "xrt_byte_slice_load_u32_le_unchecked_raw", "uint32_t", 4,
                                     "Slice<byte>.load<uint32>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "XR_TO_INT(xrt_span_bytes_load_u32_value(");
+    fprintf(out, "XR_TO_INT(xrt_byte_slice_load_u32_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8270,13 +8270,13 @@ static void xicgen_byte_slice_load_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u64",
-                                    "xrt_span_bytes_load_u64_le_unchecked_raw", "uint64_t", 8,
+    if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u64",
+                                    "xrt_byte_slice_load_u64_le_unchecked_raw", "uint64_t", 8,
                                     "Slice<byte>.load<uint64>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "XR_TO_INT(xrt_span_bytes_load_u64_value(");
+    fprintf(out, "XR_TO_INT(xrt_byte_slice_load_u64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8290,12 +8290,12 @@ static void xicgen_byte_slice_load_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_float_load(ctx, out, v, "xr_array_core_bytes_load_f32", "float",
+    if (xicgen_emit_byte_slice_float_load(ctx, out, v, "xr_array_core_bytes_load_f32", "float",
                                           "Slice<byte>.load<float32>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "XR_TO_FLOAT(xrt_span_bytes_load_f32_value(");
+    fprintf(out, "XR_TO_FLOAT(xrt_byte_slice_load_f32_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8309,12 +8309,12 @@ static void xicgen_byte_slice_load_f64(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_float_load(ctx, out, v, "xr_array_core_bytes_load_f64", "double",
+    if (xicgen_emit_byte_slice_float_load(ctx, out, v, "xr_array_core_bytes_load_f64", "double",
                                           "Slice<byte>.load<float64>() offset out of bounds"))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "XR_TO_FLOAT(xrt_span_bytes_load_f64_value(");
+    fprintf(out, "XR_TO_FLOAT(xrt_byte_slice_load_f64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8328,11 +8328,11 @@ static void xicgen_byte_slice_store_u16(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u16_checked_raw",
+    if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u16_checked_raw",
                                      "xr_array_core_bytes_store_u16", "uint16_t",
                                      "Slice<byte>.store<uint16>() offset out of bounds"))
         return;
-    fprintf(out, "xrt_span_bytes_store_u16_value(");
+    fprintf(out, "xrt_byte_slice_store_u16_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8347,11 +8347,11 @@ static void xicgen_byte_slice_store_u32(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u32_checked_raw",
+    if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u32_checked_raw",
                                      "xr_array_core_bytes_store_u32", "uint32_t",
                                      "Slice<byte>.store<uint32>() offset out of bounds"))
         return;
-    fprintf(out, "xrt_span_bytes_store_u32_value(");
+    fprintf(out, "xrt_byte_slice_store_u32_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8366,11 +8366,11 @@ static void xicgen_byte_slice_store_u64(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u64_checked_raw",
+    if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u64_checked_raw",
                                      "xr_array_core_bytes_store_u64", "uint64_t",
                                      "Slice<byte>.store<uint64>() offset out of bounds"))
         return;
-    fprintf(out, "xrt_span_bytes_store_u64_value(");
+    fprintf(out, "xrt_byte_slice_store_u64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8385,11 +8385,11 @@ static void xicgen_byte_slice_store_f32(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_float_store(ctx, out, v, "xrt_span_bytes_store_f32_checked_raw",
+    if (xicgen_emit_byte_slice_float_store(ctx, out, v, "xrt_byte_slice_store_f32_checked_raw",
                                            "xr_array_core_bytes_store_f32", "float",
                                            "Slice<byte>.store<float32>() offset out of bounds"))
         return;
-    fprintf(out, "xrt_span_bytes_store_f32_value(");
+    fprintf(out, "xrt_byte_slice_store_f32_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8404,11 +8404,11 @@ static void xicgen_byte_slice_store_f64(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_float_store(ctx, out, v, "xrt_span_bytes_store_f64_checked_raw",
+    if (xicgen_emit_byte_slice_float_store(ctx, out, v, "xrt_byte_slice_store_f64_checked_raw",
                                            "xr_array_core_bytes_store_f64", "double",
                                            "Slice<byte>.store<float64>() offset out of bounds"))
         return;
-    fprintf(out, "xrt_span_bytes_store_f64_value(");
+    fprintf(out, "xrt_byte_slice_store_f64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8428,7 +8428,7 @@ static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         return;
     }
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_span_bytes_fill_checked_raw(");
+        fprintf(out, "xrt_byte_slice_fill_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -8466,7 +8466,7 @@ static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, "; _s; })");
         return;
     }
-    fprintf(out, "xrt_span_bytes_fill_checked_raw(");
+    fprintf(out, "xrt_byte_slice_fill_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -8515,7 +8515,7 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         return;
     }
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_span_bytes_copy_checked_raw(");
+        fprintf(out, "xrt_byte_slice_copy_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
@@ -8570,7 +8570,7 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, " _dst; })");
         return;
     }
-    fprintf(out, "xrt_span_bytes_copy_checked_raw(");
+    fprintf(out, "xrt_byte_slice_copy_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
@@ -8590,7 +8590,7 @@ static void xicgen_byte_slice_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_span_bytes_compare_checked_raw(");
+        fprintf(out, "xrt_byte_slice_compare_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
@@ -8625,7 +8625,7 @@ static void xicgen_byte_slice_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    fprintf(out, "xrt_span_bytes_compare_checked_raw(");
+    fprintf(out, "xrt_byte_slice_compare_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
@@ -8687,7 +8687,7 @@ static void xicgen_byte_slice_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    fprintf(out, "xrt_span_bytes_common_prefix_checked_raw(");
+    fprintf(out, "xrt_byte_slice_common_prefix_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
@@ -8706,7 +8706,7 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return;
     }
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_span_bytes_repeat_from_checked_raw(");
+        fprintf(out, "xrt_byte_slice_repeat_from_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -8748,7 +8748,7 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                      "_count); _span; })");
         return;
     }
-    fprintf(out, "xrt_span_bytes_repeat_from_checked_raw(");
+    fprintf(out, "xrt_byte_slice_repeat_from_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
