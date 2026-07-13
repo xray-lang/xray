@@ -7479,15 +7479,26 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
 
 /* A phi eligible to share a C variable with another phi: any non-tagged local
  * (the declaration the int64-phi audit counts) that gets an ordinary declaration
- * (not an inlined-struct / heap-alias phi). A source var_id is deliberately NOT
- * required: loop-lowered induction phis can carry no var_id at all, and merge
- * correctness rests on the liveness non-interference test plus an exact declared
- * C-type match (see cg_build_phi_coalesce), not on any source-variable identity. */
+ * (not an inlined-struct / heap-alias phi).  Source var_id is not required:
+ * loop-lowered induction phis can carry no var_id at all.  When source var_ids
+ * are present, though, they form destructive-update domains; different source
+ * variables must not be collapsed onto the same C slot even if their block-level
+ * liveness appears disjoint. */
 static bool cg_phi_coalesce_candidate(XiCgenCtx *ctx, const XiFunc *f, const XiPhi *phi) {
     const XiValue *v = &phi->value;
     if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
         return false;
     if (cg_value_traces_to_inlined_struct(f, v) || cg_value_is_elided_heap_struct_alias(ctx, f, v))
+        return false;
+    return true;
+}
+
+static bool cg_phis_share_var_domain(const XiPhi *a, const XiPhi *b) {
+    bool a_has_var = a && xi_var_id_is_valid(a->value.var_id);
+    bool b_has_var = b && xi_var_id_is_valid(b->value.var_id);
+    if (a_has_var != b_has_var)
+        return false;
+    if (a_has_var && a->value.var_id != b->value.var_id)
         return false;
     return true;
 }
@@ -7566,8 +7577,10 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (dbg)
-                fprintf(stderr, "[phi-coalesce] phi%u ctype=%s cand=%d blk=%u\n", phi->value.id,
-                        local_ctype_str_ctx(ctx, f, &phi->value),
+                fprintf(stderr, "[phi-coalesce] phi%u ctype=%s var=%u cand=%d blk=%u\n",
+                        phi->value.id, local_ctype_str_ctx(ctx, f, &phi->value),
+                        xi_var_id_is_valid(phi->value.var_id) ? (unsigned) phi->value.var_id
+                                                              : UINT_MAX,
                         (int) cg_phi_coalesce_candidate(ctx, f, phi),
                         phi->value.block ? phi->value.block->id : 9999u);
             if (!cg_phi_coalesce_candidate(ctx, f, phi))
@@ -7580,6 +7593,8 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
                  * (i32 and i64 both map to XR_REP_I64 yet differ in width). */
                 if (strcmp(local_ctype_str_ctx(ctx, f, &rep->value),
                            local_ctype_str_ctx(ctx, f, &phi->value)) != 0)
+                    continue;
+                if (!cg_phis_share_var_domain(rep, phi))
                     continue;
                 /* phi may join rep's class only if it interferes with no member
                  * already mapped to rep (rep included via identity). */
