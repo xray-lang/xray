@@ -544,6 +544,28 @@ static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
     }
 }
 
+static XrParamMode *lower_function_param_modes(XiLower *l, struct XrType *fn_type,
+                                               XrParamMode *stack_modes, int stack_count,
+                                               int *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (!fn_type || fn_type->kind != XR_KIND_FUNCTION || fn_type->function.param_count <= 0)
+        return NULL;
+
+    int count = fn_type->function.param_count;
+    XrParamMode *modes = count <= stack_count
+                             ? stack_modes
+                             : (XrParamMode *) xi_func_arena_alloc(
+                                   l->func, (uint32_t) ((size_t) count * sizeof(XrParamMode)));
+    if (!modes)
+        return NULL;
+    for (int i = 0; i < count; i++)
+        modes[i] = xr_type_function_param_mode(fn_type, i);
+    if (out_count)
+        *out_count = count;
+    return modes;
+}
+
 static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,
                                                  uint8_t native_type);
 static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fallback,
@@ -3627,11 +3649,13 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
         return NULL;
     callee_type = xr_type_non_nullable(l->isolate, callee_type);
 
+    XrParamMode stack_sig_modes[64];
     const XrParamMode *pmodes = NULL;
     int pcount = 0;
     if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
-        pmodes = callee_type->function.param_passing_modes;
-        pcount = callee_type->function.param_count;
+        pmodes = lower_function_param_modes(
+            l, callee_type, stack_sig_modes,
+            (int) (sizeof(stack_sig_modes) / sizeof(stack_sig_modes[0])), &pcount);
     }
 
     XiFunc *static_callee = lower_resolve_static_callee_func(l, callee_val);
@@ -3669,10 +3693,10 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
             ? callee_import->member_name
             : NULL;
 
-    if (callee_type && callee_type->kind == XR_KIND_FUNCTION && callee_type->function.param_types) {
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
         int pc = callee_type->function.param_count;
         for (int i = 0; i < n && i < pc; i++) {
-            struct XrType *pt = callee_type->function.param_types[i];
+            struct XrType *pt = xr_type_function_param_type(callee_type, i);
             if (!pt || !arg_vals[i] || !arg_vals[i]->type)
                 continue;
             if (pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
@@ -3798,11 +3822,13 @@ static XiValue *lower_enum_method_direct_call(XiLower *l, AstNode *node, CallExp
             return NULL;
     }
 
+    XrParamMode stack_sig_modes[64];
     const XrParamMode *pmodes = NULL;
     int pcount = 0;
     if (sel->result_type && sel->result_type->kind == XR_KIND_FUNCTION) {
-        pmodes = sel->result_type->function.param_passing_modes;
-        pcount = sel->result_type->function.param_count;
+        pmodes = lower_function_param_modes(
+            l, sel->result_type, stack_sig_modes,
+            (int) (sizeof(stack_sig_modes) / sizeof(stack_sig_modes[0])), &pcount);
     }
 
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];

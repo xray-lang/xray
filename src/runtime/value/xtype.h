@@ -112,6 +112,11 @@ static inline bool xr_kind_is_object_like(XrTypeKind k) {
 typedef struct XrType XrType;
 typedef struct XrClassInfo XrClassInfo;
 
+typedef struct XrFunctionParam {
+    XrType *type;
+    XrParamMode mode;
+} XrFunctionParam;
+
 // ObjectShape metadata shared by Record and Json object values.
 // is_sealed=true means fixed fields (no runtime extension).
 typedef struct XrObjectType {
@@ -155,11 +160,10 @@ struct XrType {
 
         // For function type
         struct {
-            XrType **param_types;
+            XrFunctionParam *params;
             int param_count;
             int min_params;  // Minimum required params (for default params)
             XrType *return_type;
-            XrParamMode *param_passing_modes;  // NULL or [param_count]
             bool is_variadic;
             bool is_c_abi;  // C function pointer ABI (`CFn<...>`), no Xray closure header
             const char **type_param_names;
@@ -825,8 +829,26 @@ static inline int xr_type_get_param_count(XrType *t) {
     return t ? t->function.param_count : 0;
 }
 
-static inline XrType **xr_type_get_param_types(XrType *t) {
-    return t ? t->function.param_types : NULL;
+static inline XrType *xr_type_function_param_type(const XrType *t, int index) {
+    if (!t || t->kind != XR_KIND_FUNCTION || index < 0 || index >= t->function.param_count ||
+        !t->function.params)
+        return NULL;
+    return t->function.params[index].type;
+}
+
+static inline XrParamMode xr_type_function_param_mode(const XrType *t, int index) {
+    if (!t || t->kind != XR_KIND_FUNCTION || index < 0 || index >= t->function.param_count ||
+        !t->function.params)
+        return XR_PARAM_VALUE;
+    return t->function.params[index].mode;
+}
+
+static inline bool xr_type_function_set_param_mode(XrType *t, int index, XrParamMode mode) {
+    if (!t || t->kind != XR_KIND_FUNCTION || index < 0 || index >= t->function.param_count ||
+        !t->function.params || !xr_param_mode_is_valid(mode))
+        return false;
+    t->function.params[index].mode = mode;
+    return true;
 }
 
 // ============================================================================

@@ -443,9 +443,8 @@ static bool prepare_type_plans_for_type(XaotBundle *bundle, const XrType *type, 
             return prepare_type_plans_for_type(bundle, type->fixed_array.element_type, depth + 1);
         case XR_KIND_FUNCTION:
             for (int i = 0; i < type->function.param_count; i++) {
-                if (!prepare_type_plans_for_type(
-                        bundle, type->function.param_types ? type->function.param_types[i] : NULL,
-                        depth + 1))
+                if (!prepare_type_plans_for_type(bundle, xr_type_function_param_type(type, i),
+                                                 depth + 1))
                     return false;
             }
             return prepare_type_plans_for_type(bundle, type->function.return_type, depth + 1);

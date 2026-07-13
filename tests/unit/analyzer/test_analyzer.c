@@ -491,8 +491,8 @@ TEST(type_function_complex) {
 
     ASSERT(XR_TYPE_IS_FUNCTION(fn));
     ASSERT(fn->function.param_count == 2);
-    ASSERT(XR_TYPE_IS_INT(fn->function.param_types[0]));
-    ASSERT(XR_TYPE_IS_STRING(fn->function.param_types[1]));
+    ASSERT(XR_TYPE_IS_INT(xr_type_function_param_type(fn, 0)));
+    ASSERT(XR_TYPE_IS_STRING(xr_type_function_param_type(fn, 1)));
     ASSERT(XR_TYPE_IS_ARRAY(fn->function.return_type));
 }
 
@@ -526,9 +526,9 @@ TEST(type_function_copy_preserves_metadata) {
     XrType *fn = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(fn != NULL);
 
-    XrParamMode modes[] = {XR_PARAM_IN, XR_PARAM_REF};
     fn->function.min_params = 1;
-    fn->function.param_passing_modes = modes;
+    ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(fn, 1, XR_PARAM_REF));
     fn->function.is_c_abi = true;
 
     XrType *copy = xr_type_copy(g_isolate, fn);
@@ -536,10 +536,11 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(copy != fn);
     ASSERT(copy->function.param_count == 2);
     ASSERT(copy->function.min_params == 1);
-    ASSERT(copy->function.param_types != fn->function.param_types);
-    ASSERT(copy->function.param_passing_modes != fn->function.param_passing_modes);
-    ASSERT(copy->function.param_passing_modes[0] == XR_PARAM_IN);
-    ASSERT(copy->function.param_passing_modes[1] == XR_PARAM_REF);
+    ASSERT(copy->function.params != fn->function.params);
+    ASSERT(xr_type_function_param_type(copy, 0) == xr_type_function_param_type(fn, 0));
+    ASSERT(xr_type_function_param_type(copy, 1) == xr_type_function_param_type(fn, 1));
+    ASSERT(xr_type_function_param_mode(copy, 0) == XR_PARAM_IN);
+    ASSERT(xr_type_function_param_mode(copy, 1) == XR_PARAM_REF);
     ASSERT(copy->function.is_c_abi);
 
     XrType *normal = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
@@ -653,8 +654,8 @@ TEST(compile_type_function) {
         xr_type_new_function(g_analyzer->isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(XR_TYPE_IS_FUNCTION(fn));
     ASSERT(fn->function.param_count == 2);
-    ASSERT(XR_TYPE_IS_INT(fn->function.param_types[0]));
-    ASSERT(XR_TYPE_IS_STRING(fn->function.param_types[1]));
+    ASSERT(XR_TYPE_IS_INT(xr_type_function_param_type(fn, 0)));
+    ASSERT(XR_TYPE_IS_STRING(xr_type_function_param_type(fn, 1)));
     ASSERT(XR_TYPE_IS_BOOL(fn->function.return_type));
 }
 

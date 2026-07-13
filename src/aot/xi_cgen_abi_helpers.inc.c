@@ -351,7 +351,7 @@ static bool cg_cfn_function_signature_supported(const XrType *fn_type) {
     if (!cg_cfn_value_type_supported(fn_type->function.return_type, true))
         return false;
     for (int i = 0; i < fn_type->function.param_count; i++) {
-        const XrType *pt = fn_type->function.param_types ? fn_type->function.param_types[i] : NULL;
+        const XrType *pt = xr_type_function_param_type(fn_type, i);
         if (!cg_cfn_value_type_supported(pt, false))
             return false;
     }
@@ -380,8 +380,7 @@ static bool cg_cfn_xray_func_matches_expected(const XiFunc *f, const XrType *exp
         return false;
     for (uint16_t i = 0; i < f->nparams; i++) {
         const XrType *actual = f->params && f->params[i] ? f->params[i]->type : NULL;
-        const XrType *want =
-            expected->function.param_types ? expected->function.param_types[i] : NULL;
+        const XrType *want = xr_type_function_param_type(expected, i);
         if (!xr_type_equals((XrType *) actual, (XrType *) want))
             return false;
     }
@@ -407,8 +406,7 @@ static void emit_cfn_pointer_type(XiCgenCtx *ctx, FILE *out, const XrType *fn_ty
         for (int i = 0; i < fn_type->function.param_count; i++) {
             if (i > 0)
                 fprintf(out, ", ");
-            const XrType *pt =
-                fn_type->function.param_types ? fn_type->function.param_types[i] : NULL;
+            const XrType *pt = xr_type_function_param_type(fn_type, i);
             fprintf(out, "%s", cg_cfn_value_c_type(pt, false));
         }
     }

@@ -564,11 +564,14 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
 
     if (param_count > 0 && param_types) {
         size_t param_size;
-        type->function.param_types =
-            (XrType **) type_alloc_array(pool, sizeof(XrType *), param_count, &param_size);
-        if (!type->function.param_types)
+        type->function.params = (XrFunctionParam *) type_alloc_array(pool, sizeof(XrFunctionParam),
+                                                                     param_count, &param_size);
+        if (!type->function.params)
             return NULL;
-        memcpy(type->function.param_types, param_types, param_size);
+        for (int i = 0; i < param_count; i++) {
+            type->function.params[i].type = param_types[i];
+            type->function.params[i].mode = XR_PARAM_VALUE;
+        }
     }
     type->function.param_count = param_count;
     type->function.min_params = param_count;  // Default: all params required
@@ -1000,24 +1003,15 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
         case XR_KIND_FUNCTION:
             if (type->function.param_count < 0)
                 return NULL;
-            if (type->function.param_count > 0 && !type->function.param_types)
+            if (type->function.param_count > 0 && !type->function.params)
                 return NULL;
             if (type->function.param_count > 0) {
                 size_t param_size;
-                copy->function.param_types = (XrType **) type_alloc_array(
-                    pool, sizeof(XrType *), type->function.param_count, &param_size);
-                if (!copy->function.param_types)
+                copy->function.params = (XrFunctionParam *) type_alloc_array(
+                    pool, sizeof(XrFunctionParam), type->function.param_count, &param_size);
+                if (!copy->function.params)
                     return NULL;
-                memcpy(copy->function.param_types, type->function.param_types, param_size);
-                if (type->function.param_passing_modes) {
-                    size_t mode_size;
-                    copy->function.param_passing_modes = (XrParamMode *) type_alloc_array(
-                        pool, sizeof(XrParamMode), type->function.param_count, &mode_size);
-                    if (!copy->function.param_passing_modes)
-                        return NULL;
-                    memcpy(copy->function.param_passing_modes, type->function.param_passing_modes,
-                           mode_size);
-                }
+                memcpy(copy->function.params, type->function.params, param_size);
             }
             copy->function.param_count = type->function.param_count;
             copy->function.min_params = type->function.min_params;
@@ -1512,8 +1506,8 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         // Parameters: contravariant over the prefix that source declares.
         // Simplified: allow if types match or either side is unknown/type_param.
         for (int i = 0; i < source->function.param_count; i++) {
-            XrType *t_param = target->function.param_types ? target->function.param_types[i] : NULL;
-            XrType *s_param = source->function.param_types ? source->function.param_types[i] : NULL;
+            XrType *t_param = xr_type_function_param_type(target, i);
+            XrType *s_param = xr_type_function_param_type(source, i);
 
             if (!t_param || !s_param)
                 continue;
@@ -1580,13 +1574,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     }
 
     return false;
-}
-
-static XrParamMode function_param_mode(XrType *type, int index) {
-    if (!type || type->kind != XR_KIND_FUNCTION || index < 0 ||
-        index >= type->function.param_count || !type->function.param_passing_modes)
-        return XR_PARAM_VALUE;
-    return type->function.param_passing_modes[index];
 }
 
 static bool function_type_params_equal(XrType *a, XrType *b) {
@@ -1689,9 +1676,10 @@ bool xr_type_equals(XrType *a, XrType *b) {
         if (!xr_type_equals(a->function.return_type, b->function.return_type))
             return false;
         for (int i = 0; i < a->function.param_count; i++) {
-            if (function_param_mode(a, i) != function_param_mode(b, i))
+            if (xr_type_function_param_mode(a, i) != xr_type_function_param_mode(b, i))
                 return false;
-            if (!xr_type_equals(a->function.param_types[i], b->function.param_types[i])) {
+            if (!xr_type_equals(xr_type_function_param_type(a, i),
+                                xr_type_function_param_type(b, i))) {
                 return false;
             }
         }

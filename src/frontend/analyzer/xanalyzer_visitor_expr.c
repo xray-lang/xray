@@ -3125,11 +3125,10 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                         }
 
                         int ctor_pc = ctor_links->type->function.param_count;
-                        XrType **ctor_params = ctor_links->type->function.param_types;
                         int check_count = ctor_pc < ne->arg_count ? ctor_pc : ne->arg_count;
 
                         for (int i = 0; i < check_count; i++) {
-                            XrType *expected = ctor_params ? ctor_params[i] : NULL;
+                            XrType *expected = xr_type_function_param_type(ctor_links->type, i);
                             if (!expected || XR_TYPE_IS_UNKNOWN(expected))
                                 continue;
                             // Substitute T -> actual type arg
@@ -3176,7 +3175,6 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             if (ctor && ctor->kind == XA_SYM_METHOD) {
                 XaSymbolLinks *ctor_links = xa_analyzer_get_links(ctx->analyzer, ctor);
                 if (ctor_links && ctor_links->type && XR_TYPE_IS_FUNCTION(ctor_links->type)) {
-                    XrType **ctor_params = ctor_links->type->function.param_types;
                     int ctor_param_count = ctor_links->type->function.param_count;
 
                     // Build type parameter names
@@ -3195,7 +3193,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
                         // Find constructor parameter that uses this type parameter
                         for (int j = 0; j < ctor_param_count && j < ne->arg_count; j++) {
-                            XrType *pt = ctor_params ? ctor_params[j] : NULL;
+                            XrType *pt = xr_type_function_param_type(ctor_links->type, j);
                             if (pt && (pt->kind == XR_KIND_TYPE_PARAM) && pt->type_param.name &&
                                 strcmp(pt->type_param.name, tp_name) == 0) {
                                 // Infer from argument type
@@ -3597,8 +3595,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             }
             // Use expected function type (bidirectional inference)
             else if (expected_fn && i < expected_fn->function.param_count &&
-                     expected_fn->function.param_types[i]) {
-                param_types[i] = expected_fn->function.param_types[i];
+                     xr_type_function_param_type(expected_fn, i)) {
+                param_types[i] = xr_type_function_param_type(expected_fn, i);
             }
             // Use generic inference from callback context
             else if (i == 0 && ctx->callback_accumulator_type) {
@@ -3836,20 +3834,9 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                                           return_type, has_rest);
     if (result) {
         result->function.min_params = fn->required_count;
-        bool has_modes = false;
-        for (int i = 0; i < fn->param_count && !has_modes; i++) {
-            if (fn->params[i] && fn->params[i]->passing_mode != XR_PARAM_VALUE)
-                has_modes = true;
-        }
-        if (has_modes) {
-            XrParamMode *modes = xr_calloc(fn->param_count, sizeof(XrParamMode));
-            if (modes) {
-                for (int i = 0; i < fn->param_count; i++) {
-                    if (fn->params[i])
-                        modes[i] = fn->params[i]->passing_mode;
-                }
-                result->function.param_passing_modes = modes;
-            }
+        for (int i = 0; i < fn->param_count; i++) {
+            if (fn->params[i])
+                xr_type_function_set_param_mode(result, i, fn->params[i]->passing_mode);
         }
     }
     xa_set_function_type_params_from_ast(ctx, result, fn->type_params, fn->type_param_count);
