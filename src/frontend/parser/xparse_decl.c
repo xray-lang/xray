@@ -714,9 +714,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 rest_param->is_rest = true;
 
                 /* Optional element type annotation: ...args: int */
-                if (xr_parser_match(parser, TK_COLON)) {
-                    rest_param->type = xr_parse_type_annotation(parser);
-                }
+                xr_parse_optional_param_type_annotation(parser, false, &rest_param->passing_mode,
+                                                        &rest_param->type);
                 params[param_count++] = rest_param;
 
                 if (xr_parser_check(parser, TK_COMMA)) {
@@ -747,9 +746,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                  * so the analyzer can infer the constituent types. The
                  * annotation lives on the outer XrParamNode and applies
                  * to the temp variable that the destructure binds to. */
-                if (xr_parser_match(parser, TK_COLON)) {
-                    param->type = xr_parse_type_annotation(parser);
-                }
+                xr_parse_optional_param_type_annotation(parser, false, &param->passing_mode,
+                                                        &param->type);
 
                 params[param_count++] = param;
                 required_count++;
@@ -766,15 +764,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 XrParamNode *param = xr_param_node_new(parser->compiler_session, param_name,
                                                        param_token.line, param_token.column);
 
-                // Parse optional type annotation with in/ref modifier
-                if (xr_parser_match(parser, TK_COLON)) {
-                    if (xr_parser_match(parser, TK_IN)) {
-                        param->passing_mode = XR_PARAM_IN;
-                    } else if (xr_parser_match_name(parser, "ref")) {
-                        param->passing_mode = XR_PARAM_REF;
-                    }
-                    param->type = xr_parse_type_annotation(parser);
-                }
+                xr_parse_optional_param_type_annotation(parser, true, &param->passing_mode,
+                                                        &param->type);
 
                 // Parse optional default value
                 if (xr_parser_match(parser, TK_ASSIGN)) {

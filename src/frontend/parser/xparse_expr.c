@@ -751,9 +751,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
         snprintf(name_buf, sizeof(name_buf), "%.*s", first_name.length, first_name.start);
         params[param_count] = xr_param_node_new(parser->compiler_session, name_buf, first_name.line,
                                                 first_name.column);
-        if (xr_parser_match(parser, TK_COLON)) {
-            params[param_count]->type = xr_parse_type_annotation(parser);
-        }
+        xr_parse_optional_param_type_annotation(parser, true, &params[param_count]->passing_mode,
+                                                &params[param_count]->type);
         param_count++;
 
         while (xr_parser_match(parser, TK_COMMA)) {
@@ -764,9 +763,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
             snprintf(name_buf, sizeof(name_buf), "%.*s", param.length, param.start);
             params[param_count] =
                 xr_param_node_new(parser->compiler_session, name_buf, param.line, param.column);
-            if (xr_parser_match(parser, TK_COLON)) {
-                params[param_count]->type = xr_parse_type_annotation(parser);
-            }
+            xr_parse_optional_param_type_annotation(
+                parser, true, &params[param_count]->passing_mode, &params[param_count]->type);
             param_count++;
         }
 
@@ -937,10 +935,8 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
             XrParamNode *param = xr_param_node_new(parser->compiler_session, param_name,
                                                    param_token.line, param_token.column);
 
-            // Parse optional type annotation
-            if (xr_parser_match(parser, TK_COLON)) {
-                param->type = xr_parse_type_annotation(parser);
-            }
+            xr_parse_optional_param_type_annotation(parser, true, &param->passing_mode,
+                                                    &param->type);
 
             XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));

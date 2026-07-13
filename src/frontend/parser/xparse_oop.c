@@ -946,9 +946,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 default_values[param_count] = NULL;
                 is_variadic = true;
 
-                if (xr_parser_match(parser, TK_COLON)) {
-                    param_types[param_count] = xr_parse_type_annotation(parser);
-                }
+                xr_parse_optional_param_type_annotation(
+                    parser, false, &param_passing_modes[param_count], &param_types[param_count]);
 
                 param_count++;
                 if (xr_parser_check(parser, TK_COMMA)) {
@@ -963,17 +962,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
             parameters[param_count] = token_to_string(parser, &parser->previous);
             param_passing_modes[param_count] = XR_PARAM_VALUE;
 
-            // Parse parameter type with optional in/ref modifier
-            if (xr_parser_match(parser, TK_COLON)) {
-                if (xr_parser_match(parser, TK_IN)) {
-                    param_passing_modes[param_count] = XR_PARAM_IN;
-                } else if (xr_parser_match_name(parser, "ref")) {
-                    param_passing_modes[param_count] = XR_PARAM_REF;
-                }
-                param_types[param_count] = xr_parse_type_annotation(parser);
-            } else {
-                param_types[param_count] = NULL;
-            }
+            xr_parse_optional_param_type_annotation(parser, true, &param_passing_modes[param_count],
+                                                    &param_types[param_count]);
 
             if (xr_parser_match(parser, TK_ASSIGN)) {
                 default_values[param_count] = xr_parse_expression(parser);
