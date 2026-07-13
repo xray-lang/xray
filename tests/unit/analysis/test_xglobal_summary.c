@@ -8709,6 +8709,46 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_rejects_error_class_field_type) {
+    setup_parser_session();
+    const char *source = "class Bad {\n"
+                         "    value: int\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_UINT(ast->type, AST_PROGRAM);
+    ASSERT_EQ_UINT(ast->as.program.count, 1);
+    AstNode *class_node = ast->as.program.statements[0];
+    ASSERT_NOT_NULL(class_node);
+    ASSERT_EQ_UINT(class_node->type, AST_CLASS_DECL);
+    ASSERT_EQ_UINT(class_node->as.class_decl.field_count, 1);
+    AstNode *field_node = class_node->as.class_decl.fields[0];
+    ASSERT_NOT_NULL(field_node);
+    ASSERT_EQ_UINT(field_node->type, AST_FIELD_DECL);
+    XrCompilerSessionScope tref_scope;
+    ASSERT_TRUE(
+        xr_compiler_session_push_arena(g_session, ast->as.program.arena, "test.xr", &tref_scope));
+    field_node->as.field_decl.field_type = xr_tref_error(g_session);
+    xr_compiler_session_pop_arena(&tref_scope);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        !xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    teardown_parser_session();
+}
+
 TEST(global_evidence_class_layout_failure_is_atomic) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.module_id = 1, .profile = XG_BUILD_NATIVE_RELEASE};
@@ -16285,6 +16325,7 @@ RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_records_interface_object_storage_uses);
 RUN_TEST(global_evidence_producer_derives_verified_class_field_layouts);
+RUN_TEST(global_evidence_producer_rejects_error_class_field_type);
 RUN_TEST(global_evidence_class_layout_failure_is_atomic);
 RUN_TEST(global_evidence_class_layout_uses_selected_target_abi);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
