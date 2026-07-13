@@ -7536,6 +7536,10 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
            "fire-and-forget ResultGroup producers should stay task-less");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "deferred fire-and-forget producer loops should not poll before the blocking recv");
+    assert(contains(code, "xr_aot_result_group_add_bool_sync(") &&
+           "sync go ResultGroup producer should keep typed add helper dispatch");
+    assert(contains(code, "xr_aot_result_group_close_void_sync(") &&
+           "sync go ResultGroup producer should keep typed close helper dispatch");
 
     printf("  Generated ResultGroup fire-and-forget deferred path %zu bytes of C code\n",
            strlen(code));
