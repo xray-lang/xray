@@ -288,6 +288,32 @@ TEST(parser_function_decl) {
     teardown();
 }
 
+TEST(parser_parameter_modes_share_annotation_parser) {
+    setup();
+
+    AstNode *decl = parse_first("fn touch(a: in int, b: ref int) {\n}");
+    ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
+    ASSERT_EQ_INT(decl->as.function_decl.param_count, 2);
+    ASSERT_EQ_INT(decl->as.function_decl.params[0]->passing_mode, XR_PARAM_IN);
+    ASSERT_EQ_INT(decl->as.function_decl.params[1]->passing_mode, XR_PARAM_REF);
+
+    AstNode *stmt = parse_first("var f = fn(a: in int, b: ref int) {\n  return a\n}");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
+    ASSERT_EQ_INT(init->as.function_expr.param_count, 2);
+    ASSERT_EQ_INT(init->as.function_expr.params[0]->passing_mode, XR_PARAM_IN);
+    ASSERT_EQ_INT(init->as.function_expr.params[1]->passing_mode, XR_PARAM_REF);
+
+    AstNode *arrow_stmt = parse_first("var g = (a: in int, b: ref int) -> a");
+    AstNode *arrow = arrow_stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(arrow->type, AST_FUNCTION_EXPR);
+    ASSERT_EQ_INT(arrow->as.function_expr.param_count, 2);
+    ASSERT_EQ_INT(arrow->as.function_expr.params[0]->passing_mode, XR_PARAM_IN);
+    ASSERT_EQ_INT(arrow->as.function_expr.params[1]->passing_mode, XR_PARAM_REF);
+
+    teardown();
+}
+
 TEST(parser_function_no_params) {
     setup();
     AstNode *stmt = parse_first("fn greet() {\n  print(\"hi\")\n}");
@@ -736,6 +762,7 @@ int main(void) {
 
     // Functions
     RUN_TEST(parser_function_decl);
+    RUN_TEST(parser_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_function_no_params);
     RUN_TEST(parser_return_stmt);
 

@@ -356,6 +356,33 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
     return result;
 }
 
+XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
+                                                     XrParamMode *out_mode, XrTypeRef **out_type) {
+    XR_DCHECK(parser != NULL, "xr_parse_optional_param_type_annotation: NULL parser");
+    if (out_mode)
+        *out_mode = XR_PARAM_VALUE;
+    if (out_type)
+        *out_type = NULL;
+    if (!xr_parser_match(parser, TK_COLON))
+        return false;
+
+    XrParamMode mode = XR_PARAM_VALUE;
+    if (allow_mode) {
+        if (xr_parser_match(parser, TK_IN)) {
+            mode = XR_PARAM_IN;
+        } else if (xr_parser_match_name(parser, "ref")) {
+            mode = XR_PARAM_REF;
+        }
+    }
+
+    XrTypeRef *type = xr_parse_type_annotation(parser);
+    if (out_mode)
+        *out_mode = mode;
+    if (out_type)
+        *out_type = type;
+    return true;
+}
+
 /* ---- Base type (no trailing ? or |) ---- */
 
 static XrTypeRef *parse_type_annotation_base(Parser *parser) {
