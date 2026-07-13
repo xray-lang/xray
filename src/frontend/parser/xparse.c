@@ -1123,7 +1123,6 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
     parser->error_count = 0;
     parser->max_errors = 0;
 
-    parser->allow_bare_container = false;
     parser->parsing_native_class = false;
     parser->parsing_extern_fn = false;
     parser->scope_depth = 0;

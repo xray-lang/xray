@@ -1135,15 +1135,10 @@ AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
 }
 
 // Parse 'is' expression: expr is Type
-// Bare container types allowed: 'x is Array' checks runtime type without element type.
 AstNode *xr_parse_is(Parser *parser, AstNode *left) {
     int line = parser->previous.line;
 
-    // Allow bare container types for runtime type checks
-    bool saved = parser->allow_bare_container;
-    parser->allow_bare_container = true;
     XrTypeRef *type = xr_parse_type_annotation(parser);
-    parser->allow_bare_container = saved;
     if (!type) {
         xr_parser_error(parser, "expected type after 'is'");
         return NULL;
@@ -1184,15 +1179,10 @@ AstNode *xr_parse_force_unwrap(Parser *parser, AstNode *operand) {
 }
 
 // Parse as cast: expr as Type / expr as Type?
-// Bare container types allowed: 'x as Array' for runtime type casts.
 AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     XR_DCHECK(parser != NULL, "parse_as_cast: NULL parser");
     int line = parser->previous.line;
-    // Allow bare container types for runtime type casts
-    bool saved = parser->allow_bare_container;
-    parser->allow_bare_container = true;
     XrTypeRef *target_type = xr_parse_type_annotation(parser);
-    parser->allow_bare_container = saved;
     if (!target_type) {
         xr_parser_error(parser, "expected type after 'as'");
         return left;

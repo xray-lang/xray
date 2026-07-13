@@ -163,7 +163,7 @@ fn _codepointString(cp: int) -> string? {
     if (cp <= 0 || cp > 0x10FFFF) { return null }
     var out = Array<byte>(_utf8Len(cp))
     _putUtf8(out, 0, cp)
-    return out.toString()
+    return string.fromUtf8(out[:])
 }
 
 fn _namedEntity(name: string) -> string? {

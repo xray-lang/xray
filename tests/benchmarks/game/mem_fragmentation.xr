@@ -111,5 +111,3 @@ fn run(n: int) {
 
 var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500
 run(n)
-var a = []
-var b:Array;

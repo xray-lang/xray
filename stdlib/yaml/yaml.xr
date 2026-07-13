@@ -163,7 +163,7 @@ fn _codepointString(cp: int) -> string {
     if (cp <= 0 || cp > 0x10FFFF) { return "" }
     var out = Array<byte>(_utf8Len(cp))
     _putUtf8(out, 0, cp)
-    return out.toString()
+    return string.fromUtf8(out[:])!
 }
 
 fn _decodeDoubleQuotedBody(body: string) -> string {
@@ -802,7 +802,7 @@ fn _emitValue(value: Json, level: int, indent: int) -> string {
     if (_isScalar(value)) { return _scalarText(value) }
     var kind = typeName(value)
     if (kind == "Array") {
-        var arr = value as Array
+        var arr = value as Array<Json>
         if (len(arr) == 0) { return "[]" }
         var out = StringBuilder()
         for (var i = 0; i < len(arr); i++) {
