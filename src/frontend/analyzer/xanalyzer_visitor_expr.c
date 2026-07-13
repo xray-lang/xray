@@ -3528,9 +3528,52 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     return xr_type_new_unknown(NULL);
 }
 
-/* as type cast: expr as T — returns T (non-safe), or T? (safe)
- * Analyzer simply returns the target type without checking operand type.
- * Runtime will perform the actual type check. */
+static bool xa_cast_type_is_uncertain(XrType *type) {
+    if (!type)
+        return true;
+    if (XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NEVER(type) || XR_TYPE_IS_TYPE_PARAM(type) ||
+        XR_TYPE_IS_UNION(type) || XR_TYPE_IS_JSON(type))
+        return true;
+    return false;
+}
+
+static XrType *xa_cast_non_nullable_type(XrType *type) {
+    if (type && type->is_nullable)
+        return xr_type_non_nullable(NULL, type);
+    return type;
+}
+
+static bool xa_cast_types_have_builtin_conversion(XrType *source, XrType *target) {
+    XrType *source_base = xa_cast_non_nullable_type(source);
+    XrType *target_base = xa_cast_non_nullable_type(target);
+    if (!source_base || !target_base)
+        return true;
+
+    if (XR_TYPE_IS_NUMERIC(source_base)) {
+        return XR_TYPE_IS_NUMERIC(target_base) || XR_TYPE_IS_STRING(target_base) ||
+               XR_TYPE_IS_BOOL(target_base);
+    }
+    if ((XR_TYPE_IS_BOOL(source_base) || XR_TYPE_IS_RUNE(source_base)) &&
+        XR_TYPE_IS_STRING(target_base))
+        return true;
+    if (XR_TYPE_IS_ENUM(source_base) && XR_TYPE_IS_INT(target_base))
+        return true;
+    return false;
+}
+
+static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
+    if (xa_cast_type_is_uncertain(source) || xa_cast_type_is_uncertain(target))
+        return true;
+    if (xa_cast_types_have_builtin_conversion(source, target))
+        return true;
+    if (xr_type_assignable(target, source))
+        return true;
+    if (xr_type_assignable(source, target))
+        return true;
+    return false;
+}
+
+/* as type cast: expr as T — returns T (non-safe), or T? (safe). */
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -3543,6 +3586,14 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
                          : NULL;
     if (!target)
         return xr_type_new_unknown(NULL);
+    if (!xa_cast_types_may_overlap(source, target)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Cannot cast type '%s' to unrelated type '%s'",
+                 xr_type_to_string(source), xr_type_to_string(target));
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
     if (xa_type_contains_span_view(source) && !xa_type_contains_span_view(target)) {
         xa_check_span_value_escape(ctx, node->as.as_expr.expr ? node->as.as_expr.expr : node,
                                    source, "erase Span view with cast");

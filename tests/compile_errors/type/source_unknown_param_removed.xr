@@ -1,0 +1,5 @@
+fn accept(value: unknown) {
+    print(value)
+}
+
+accept(1)
