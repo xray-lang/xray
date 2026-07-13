@@ -1,0 +1,16 @@
+fn initialize(values: Array<int>, x: out int) {
+    x = 0
+    for (item in values) {
+        x = item
+        return
+    }
+}
+
+@test
+fn test_out_param_for_in_preassigned() {
+    var value = 0
+    var values = [1, 2]
+    var empty: Array<int> = []
+    initialize(values, out value)
+    initialize(empty, out value)
+}

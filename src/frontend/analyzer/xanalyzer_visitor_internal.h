@@ -74,6 +74,10 @@ XR_FUNC void xa_parallel_callback_effect_check(XaInferContext *ctx, AstNode *bod
 XR_FUNC void xa_check_out_params_assigned_at_function_exit(XaInferContext *ctx,
                                                            XaScope *function_scope,
                                                            AstNode *body_node);
+typedef struct XaOutParamDaState XaOutParamDaState;
+XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count);
+XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count);
+XR_FUNC void xa_out_param_da_free(XaOutParamDaState *states);
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
 XR_FUNC const char *xa_concurrency_handle_label(const XrType *type);
 XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr);
