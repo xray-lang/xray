@@ -231,6 +231,52 @@ static void test_builtin_receiver_registry_method_ids(void) {
                 "U8_ARRAY_REPEAT_FROM registry id must resolve repeatFrom");
 }
 
+static void test_builtin_receiver_registry_metadata(void) {
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        char msg[192];
+        const XaBuiltinReceiverMethodSpec *spec =
+            xa_builtin_receiver_method_by_id((XaBuiltinReceiverMethodId) i);
+        if (!spec)
+            continue;
+
+        XaBuiltinMethodDocumentationGroup group =
+            xa_builtin_receiver_method_documentation_group(spec);
+        XaBuiltinMethodProfileAvailability profile =
+            xa_builtin_receiver_method_profile_availability(spec);
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' missing documentation group",
+                 spec->id);
+        ASSERT_TRUE(xa_builtin_receiver_documentation_group_label(group)[0] != '\0', msg);
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' missing profile label", spec->id);
+        ASSERT_TRUE(xa_builtin_receiver_profile_availability_label(profile)[0] != '\0', msg);
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' missing effect label", spec->id);
+        ASSERT_TRUE(xa_builtin_receiver_effect_label(spec->effect)[0] != '\0', msg);
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' missing allocation label",
+                 spec->id);
+        ASSERT_TRUE(xa_builtin_receiver_allocation_label(spec->allocation)[0] != '\0', msg);
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' missing unsafe label", spec->id);
+        ASSERT_TRUE(
+            xa_builtin_receiver_unsafe_requirement_label(spec->unsafe_requirement)[0] != '\0', msg);
+    }
+
+    const XaBuiltinReceiverMethodSpec *append =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM);
+    ASSERT_TRUE(append && xa_builtin_receiver_method_documentation_group(append) ==
+                              XA_BUILTIN_DOC_GROUP_U8_ARRAY,
+                "appendFrom must document under Array<byte> byte bulk methods");
+    ASSERT_TRUE(append && xa_builtin_receiver_method_profile_availability(append) ==
+                              XA_BUILTIN_PROFILE_HEAP_CAPABLE,
+                "appendFrom must be marked heap-capable");
+
+    const XaBuiltinReceiverMethodSpec *common_prefix =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX);
+    ASSERT_TRUE(common_prefix && xa_builtin_receiver_method_documentation_group(common_prefix) ==
+                                     XA_BUILTIN_DOC_GROUP_U8_SLICE,
+                "commonPrefix must document under Slice<byte> byte range methods");
+    ASSERT_TRUE(common_prefix && xa_builtin_receiver_method_profile_availability(common_prefix) ==
+                                     XA_BUILTIN_PROFILE_ALL,
+                "commonPrefix must be available in all profiles");
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -248,6 +294,7 @@ int main(void) {
     test_method_sym_count();
     test_builtin_receiver_registry_method_symbols();
     test_builtin_receiver_registry_method_ids();
+    test_builtin_receiver_registry_metadata();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

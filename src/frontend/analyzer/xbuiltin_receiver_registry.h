@@ -73,6 +73,19 @@ typedef enum {
 } XaBuiltinMethodUnsafeRequirement;
 
 typedef enum {
+    XA_BUILTIN_PROFILE_ALL,
+    XA_BUILTIN_PROFILE_HEAP_CAPABLE,
+} XaBuiltinMethodProfileAvailability;
+
+typedef enum {
+    XA_BUILTIN_DOC_GROUP_GENERAL,
+    XA_BUILTIN_DOC_GROUP_ARRAY,
+    XA_BUILTIN_DOC_GROUP_U8_ARRAY,
+    XA_BUILTIN_DOC_GROUP_U8_SLICE,
+    XA_BUILTIN_DOC_GROUP_POD_SLICE,
+} XaBuiltinMethodDocumentationGroup;
+
+typedef enum {
 #define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
                            type_params, effect, allocation, unsafe_requirement, lowering)          \
     XA_BUILTIN_RECEIVER_METHOD_##id,
@@ -152,6 +165,91 @@ xa_builtin_receiver_method_by_id(XaBuiltinReceiverMethodId method_id) {
         return NULL;
     const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[method_id];
     return spec->method_id == method_id ? spec : NULL;
+}
+
+static inline XaBuiltinMethodProfileAvailability
+xa_builtin_receiver_method_profile_availability(const XaBuiltinReceiverMethodSpec *spec) {
+    if (!spec)
+        return XA_BUILTIN_PROFILE_ALL;
+    return spec->allocation == XA_BUILTIN_ALLOCATION_MAY_HEAP ? XA_BUILTIN_PROFILE_HEAP_CAPABLE
+                                                              : XA_BUILTIN_PROFILE_ALL;
+}
+
+static inline XaBuiltinMethodDocumentationGroup
+xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec *spec) {
+    if (!spec)
+        return XA_BUILTIN_DOC_GROUP_GENERAL;
+    switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return XA_BUILTIN_DOC_GROUP_U8_ARRAY;
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return XA_BUILTIN_DOC_GROUP_ARRAY;
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return XA_BUILTIN_DOC_GROUP_U8_SLICE;
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return XA_BUILTIN_DOC_GROUP_POD_SLICE;
+    }
+    return XA_BUILTIN_DOC_GROUP_GENERAL;
+}
+
+static inline const char *
+xa_builtin_receiver_profile_availability_label(XaBuiltinMethodProfileAvailability profile) {
+    switch (profile) {
+        case XA_BUILTIN_PROFILE_ALL:
+            return "all build profiles";
+        case XA_BUILTIN_PROFILE_HEAP_CAPABLE:
+            return "heap-capable profiles";
+    }
+    return "unknown profile";
+}
+
+static inline const char *
+xa_builtin_receiver_documentation_group_label(XaBuiltinMethodDocumentationGroup group) {
+    switch (group) {
+        case XA_BUILTIN_DOC_GROUP_ARRAY:
+            return "Array<T> collection methods";
+        case XA_BUILTIN_DOC_GROUP_U8_ARRAY:
+            return "Array<byte> byte bulk methods";
+        case XA_BUILTIN_DOC_GROUP_U8_SLICE:
+            return "Slice<byte> byte range methods";
+        case XA_BUILTIN_DOC_GROUP_POD_SLICE:
+            return "Slice<T> POD range methods";
+        case XA_BUILTIN_DOC_GROUP_GENERAL:
+            return "receiver-specialized builtin methods";
+    }
+    return "receiver-specialized builtin methods";
+}
+
+static inline const char *xa_builtin_receiver_effect_label(XaBuiltinMethodEffect effect) {
+    switch (effect) {
+        case XA_BUILTIN_EFFECT_READS_RECEIVER:
+            return "reads receiver";
+        case XA_BUILTIN_EFFECT_MUTATES_RECEIVER:
+            return "mutates receiver";
+    }
+    return "unknown effect";
+}
+
+static inline const char *
+xa_builtin_receiver_allocation_label(XaBuiltinMethodAllocation allocation) {
+    switch (allocation) {
+        case XA_BUILTIN_ALLOCATION_NO_HEAP:
+            return "no heap allocation";
+        case XA_BUILTIN_ALLOCATION_MAY_HEAP:
+            return "may allocate";
+    }
+    return "unknown allocation";
+}
+
+static inline const char *
+xa_builtin_receiver_unsafe_requirement_label(XaBuiltinMethodUnsafeRequirement requirement) {
+    switch (requirement) {
+        case XA_BUILTIN_UNSAFE_NONE:
+            return "safe call";
+        case XA_BUILTIN_UNSAFE_REQUIRED:
+            return "requires unsafe";
+    }
+    return "unknown unsafe requirement";
 }
 
 #endif  // XBUILTIN_RECEIVER_REGISTRY_H

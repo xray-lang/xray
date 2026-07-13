@@ -55,6 +55,19 @@ static bool json_array_contains_label(XrJsonValue *items, const char *label) {
     return false;
 }
 
+static XrJsonValue *json_array_find_label(XrJsonValue *items, const char *label) {
+    if (!items || !label)
+        return NULL;
+    int n = xjson_array_len(items);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *candidate = xjson_get_string(item, "label");
+        if (candidate && strcmp(candidate, label) == 0)
+            return item;
+    }
+    return NULL;
+}
+
 static const char *hover_markdown_value(XrJsonValue *hover) {
     XrJsonValue *contents = xjson_get_object(hover, "contents");
     return contents ? xjson_get_string(contents, "value") : NULL;
@@ -305,6 +318,13 @@ TEST(completion_u8_array_registry_methods) {
     ASSERT(json_array_contains_label(items, "appendFrom"));
     ASSERT(json_array_contains_label(items, "repeatFrom"));
     ASSERT(json_array_contains_label(items, "push"));
+    XrJsonValue *append = json_array_find_label(items, "appendFrom");
+    ASSERT(append != NULL);
+    const char *doc_text = xjson_get_string(append, "documentation");
+    ASSERT(doc_text != NULL);
+    ASSERT(strstr(doc_text, "Array<byte> byte bulk methods") != NULL);
+    ASSERT(strstr(doc_text, "Availability: heap-capable profiles") != NULL);
+    ASSERT(strstr(doc_text, "Lowering: xi.byte.array.copy.from") != NULL);
 
     xjson_free(items);
     xlsp_server_free(server);
@@ -371,6 +391,9 @@ TEST(hover_u8_array_registry_method) {
     ASSERT(value != NULL);
     ASSERT(strstr(value, "Array<byte>.appendFrom") != NULL);
     ASSERT(strstr(value, "Slice<byte>") != NULL);
+    ASSERT(strstr(value, "Array<byte> byte bulk methods") != NULL);
+    ASSERT(strstr(value, "Availability: heap-capable profiles") != NULL);
+    ASSERT(strstr(value, "Lowering: xi.byte.array.copy.from") != NULL);
 
     xjson_free(hover);
     xlsp_server_free(server);
