@@ -70,7 +70,7 @@ fn test_map_basic() {
 
 @test
 fn test_map_empty() {
-    var m = #{}
+    var m: Map<string, int> = #{}
     assert_eq(typeName(m), "Map")
 }
 

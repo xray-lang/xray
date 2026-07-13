@@ -787,6 +787,22 @@ TEST(analyzer_empty_set_uses_unsolved_infer_var) {
     setup_pool();
 }
 
+TEST(analyzer_empty_map_uses_unsolved_infer_var) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var xs = #{}\nvar ys: Map<string, int> = #{}\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "empty_map_infer_var.xr", program);
+
+    ASSERT(analyzer_diag_contains(a, "cannot infer key/value types for empty map literal"));
+    ASSERT(a->unresolved_inference_count >= 1);
+    ASSERT(a->recovery_poison_type_count >= 1);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_container_success_types) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1141,6 +1157,7 @@ int main(void) {
     RUN_TEST(compile_type_ref_function_modes);
     RUN_TEST(analyzer_empty_array_uses_unsolved_infer_var);
     RUN_TEST(analyzer_empty_set_uses_unsolved_infer_var);
+    RUN_TEST(analyzer_empty_map_uses_unsolved_infer_var);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);

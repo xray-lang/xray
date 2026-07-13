@@ -27,7 +27,7 @@ fn test_translate_unicode() {
 
 @test
 fn test_translate_empty_table() {
-    var empty = #{}
+    var empty: Map<string, string> = #{}
     assert_eq(text.translate("ABC", empty), "ABC")
 }
 

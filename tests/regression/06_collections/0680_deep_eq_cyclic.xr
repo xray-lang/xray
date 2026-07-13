@@ -24,8 +24,8 @@ fn deep_eq_many_shared_arrays() {
 @test
 fn deep_eq_nested_maps() {
     // Same idea for maps: 100 keys, each holding a small array.
-    var m1 = #{}
-    var m2 = #{}
+    var m1: Map<string, Array<int>> = #{}
+    var m2: Map<string, Array<int>> = #{}
     for (var k = 0; k < 100; k++) {
         var key = "k" + k.toString()
         m1.set(key, [k, k * 2])
