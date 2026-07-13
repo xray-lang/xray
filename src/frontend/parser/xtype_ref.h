@@ -33,14 +33,14 @@ struct AstNode;
 
 typedef enum {
     /* Primitive keywords */
-    XR_TREF_INT,     /* int                              */
-    XR_TREF_FLOAT,   /* float                            */
-    XR_TREF_STRING,  /* string                           */
-    XR_TREF_BOOL,    /* bool                             */
-    XR_TREF_RUNE,    /* char (Unicode scalar value)      */
-    XR_TREF_UNIT,    /* unit `()` - the 0-arity tuple    */
-    XR_TREF_NULL,    /* null                             */
-    XR_TREF_UNKNOWN, /* error recovery / unresolved      */
+    XR_TREF_INT,    /* int                              */
+    XR_TREF_FLOAT,  /* float                            */
+    XR_TREF_STRING, /* string                           */
+    XR_TREF_BOOL,   /* bool                             */
+    XR_TREF_RUNE,   /* char (Unicode scalar value)      */
+    XR_TREF_UNIT,   /* unit `()` - the 0-arity tuple    */
+    XR_TREF_NULL,   /* null                             */
+    XR_TREF_ERROR,  /* compiler-only error recovery      */
 
     /* Native-width scalars: native_width carries the width tag */
     XR_TREF_INT_WIDTH,   /* int8 / int16 / int32 / int64 /
@@ -113,7 +113,7 @@ XR_FUNC XrTypeRef *xr_tref_bool(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_char(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_unit(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_null(struct XrCompilerSession *session);
-XR_FUNC XrTypeRef *xr_tref_unknown(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_error(struct XrCompilerSession *session);
 
 /* Native-width scalars */
 XR_FUNC XrTypeRef *xr_tref_int_width(struct XrCompilerSession *session, uint8_t nw);

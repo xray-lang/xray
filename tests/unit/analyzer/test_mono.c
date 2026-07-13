@@ -21,13 +21,13 @@ TEST(mono_type_tag_basic) {
     XrTypeRef float_t = {.kind = XR_TREF_FLOAT};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
-    XrTypeRef unknown_t = {.kind = XR_TREF_UNKNOWN};
+    XrTypeRef error_t = {.kind = XR_TREF_ERROR};
 
     ASSERT_STR_EQ(xr_mono_type_tag(&int_t), "i64");
     ASSERT_STR_EQ(xr_mono_type_tag(&float_t), "f64");
     ASSERT_STR_EQ(xr_mono_type_tag(&str_t), "str");
     ASSERT_STR_EQ(xr_mono_type_tag(&bool_t), "bool");
-    ASSERT_STR_EQ(xr_mono_type_tag(&unknown_t), "unknown");
+    ASSERT_STR_EQ(xr_mono_type_tag(&error_t), "err");
     ASSERT_STR_EQ(xr_mono_type_tag(NULL), "unknown");
 }
 

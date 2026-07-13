@@ -89,9 +89,9 @@ XR_FUNC XrTypeRef *xr_tref_null(struct XrCompilerSession *session) {
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_unknown(struct XrCompilerSession *session) {
+XR_FUNC XrTypeRef *xr_tref_error(struct XrCompilerSession *session) {
     XrTypeRef *t = tref_alloc(session);
-    t->kind = XR_TREF_UNKNOWN;
+    t->kind = XR_TREF_ERROR;
     return t;
 }
 
@@ -286,8 +286,8 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
         case XR_TREF_NULL:
             tref_append(buf, pos, cap, "null");
             break;
-        case XR_TREF_UNKNOWN:
-            tref_append(buf, pos, cap, "unknown");
+        case XR_TREF_ERROR:
+            tref_append(buf, pos, cap, "<error>");
             break;
 
         case XR_TREF_INT_WIDTH: {
