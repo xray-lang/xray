@@ -110,6 +110,8 @@ struct XaSymbolLinks {
     int param_count;
     uint8_t *param_escapes;  // Per-parameter summary: value may be stored/returned/captured
     int param_escape_count;
+    uint8_t *param_mutations;  // Per-parameter summary: callee may write through the value graph
+    int param_mutation_count;
     uint8_t *param_storage_requirements;  // XrStorageOwner required by callee body per parameter
     int param_storage_requirement_count;
     XrType *return_type;

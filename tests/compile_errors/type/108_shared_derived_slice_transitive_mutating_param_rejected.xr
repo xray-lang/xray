@@ -1,0 +1,15 @@
+fn overwrite(view: Slice<byte>) {
+    view.fill(1)
+}
+
+fn wrapper(view: Slice<byte>) {
+    overwrite(view)
+}
+
+fn main() {
+    shared bytes = Array<byte>(4, 0)
+    var view: Slice<byte> = bytes[:]
+    wrapper(view)
+}
+
+main()
