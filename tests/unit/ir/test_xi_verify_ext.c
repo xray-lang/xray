@@ -451,6 +451,38 @@ TEST(nested_error_return_type_fails) {
     xi_func_free(f);
 }
 
+TEST(error_source_var_type_fails) {
+    XiFunc *f = make_func("error_source_var_type");
+    ASSERT(f != NULL);
+    const char *names[] = {"bad"};
+    XrType *types[] = {&stub_array_error};
+    f->source_var_count = 1;
+    f->source_var_names = names;
+    f->source_var_types = types;
+
+    xi_block_set_return(f->entry, xi_const_int(f, f->entry, 1, &stub_int));
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(error_capture_type_fails) {
+    XiFunc *f = make_func("error_capture_type");
+    ASSERT(f != NULL);
+    f->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .index = 0,
+        .name = "bad",
+        .type = &stub_array_error,
+    };
+    f->ncaptures = 1;
+
+    xi_block_set_return(f->entry, xi_const_int(f, f->entry, 1, &stub_int));
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 TEST(error_value_type_fails) {
     XiFunc *f = make_func("error_value_type");
     ASSERT(f != NULL);
@@ -1292,6 +1324,8 @@ int main(void) {
     run_comparison_must_produce_bool_fails();
     run_error_return_type_fails();
     run_nested_error_return_type_fails();
+    run_error_source_var_type_fails();
+    run_error_capture_type_fails();
     run_error_value_type_fails();
     run_error_phi_type_fails();
     run_call_method_missing_aux_fails();

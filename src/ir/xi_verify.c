@@ -66,6 +66,20 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
         verr(ctx, "func '%s': return type is compiler-only ErrorType", f->name);
         return;
     }
+    if (f->source_var_types) {
+        for (uint32_t i = 0; i < f->source_var_count; i++) {
+            if (xr_type_contains_error(f->source_var_types[i])) {
+                verr(ctx, "func '%s': source var %u uses compiler-only ErrorType", f->name, i);
+                return;
+            }
+        }
+    }
+    for (uint16_t i = 0; i < f->ncaptures; i++) {
+        if (xr_type_contains_error(f->captures[i].type)) {
+            verr(ctx, "func '%s': capture %u uses compiler-only ErrorType", f->name, i);
+            return;
+        }
+    }
     if (f->nblocks == 0) {
         verr(ctx, "func '%s': no blocks", f->name);
         return;
