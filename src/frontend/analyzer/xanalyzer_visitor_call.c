@@ -40,6 +40,12 @@ static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstN
 static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
                                                 const char *callback_label, XrCallArgAccess access,
                                                 XrParamMode param_mode);
+static bool xa_call_has_ref_out_arg_access(const CallExprNode *call);
+static void xa_report_arg_accesses_require_known_contract(XaInferContext *ctx, AstNode *call_node,
+                                                          const CallExprNode *call);
+static void xa_report_arg_access_without_matching_contract(XaInferContext *ctx, AstNode *call_node,
+                                                           AstNode *arg_node,
+                                                           XrCallArgAccess access, int slot);
 static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
                                           XrCallArgAccess access, XrParamMode param_mode);
 static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
@@ -111,11 +117,21 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
     XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
     XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
     XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
-    if (!ctor_type || !XR_TYPE_IS_FUNCTION(ctor_type))
+    if (!ctor_type || !XR_TYPE_IS_FUNCTION(ctor_type)) {
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
         return;
+    }
 
     int ctor_pc = ctor_type->function.param_count;
     int check_count = ctor_pc < call->arg_count ? ctor_pc : call->arg_count;
+    if (!ctor_type->function.is_variadic && call->arg_count > ctor_pc) {
+        for (int i = ctor_pc; i < call->arg_count; i++) {
+            XrCallArgAccess access = xa_call_arg_access(call, i);
+            if (access != XR_CALL_ARG_VALUE)
+                xa_report_arg_access_without_matching_contract(
+                    ctx, node, call->arguments ? call->arguments[i] : NULL, access, i);
+        }
+    }
     int class_tp_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
     const char **param_names = NULL;
     const char *param_names_buf[8] = {0};
@@ -246,9 +262,13 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                         for (int pi = 0;
                              pi < ctor_type->function.param_count && pi < call->arg_count; pi++) {
                             XrType *pt = xr_type_function_param_type(ctor_type, pi);
-                            XrType *arg_type = call->arguments[pi]
-                                                   ? xa_visit_infer_expr(ctx, call->arguments[pi])
-                                                   : NULL;
+                            XrCallArgAccess access = xa_call_arg_access(call, pi);
+                            XrParamMode param_mode = xr_type_function_param_mode(ctor_type, pi);
+                            XrType *arg_type =
+                                call->arguments[pi]
+                                    ? xa_visit_call_arg_for_param_mode(ctx, call->arguments[pi],
+                                                                       NULL, access, param_mode)
+                                    : NULL;
                             inferred[ti] = xa_infer_type_param_from_arg(pt, arg_type, tp_name, 0);
                             if (inferred[ti])
                                 break;
@@ -2151,6 +2171,45 @@ static void xa_report_arg_accesses_require_known_contract(XaInferContext *ctx, A
     }
 }
 
+static void xa_report_arg_access_without_matching_contract(XaInferContext *ctx, AstNode *call_node,
+                                                           AstNode *arg_node,
+                                                           XrCallArgAccess access, int slot) {
+    if (!ctx || !ctx->analyzer || access == XR_CALL_ARG_VALUE || slot < 0)
+        return;
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node    ? arg_node->line
+                              : call_node ? call_node->line
+                                          : 0,
+                      .column = arg_node    ? arg_node->column
+                                : call_node ? call_node->column
+                                            : 0};
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "Argument %d uses `%s`, but no matching parameter exists in the known function "
+             "parameter contract",
+             slot + 1, xr_call_arg_access_label(access));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
+static bool xa_call_has_ref_out_arg_access(const CallExprNode *call) {
+    if (!call)
+        return false;
+    for (int i = 0; i < call->arg_count; i++) {
+        if (xa_call_arg_access(call, i) != XR_CALL_ARG_VALUE)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_call_slot_has_function_param_contract(XrType *callee_type, int slot) {
+    if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0)
+        return false;
+    if (slot < callee_type->function.param_count)
+        return true;
+    return callee_type->function.is_variadic && callee_type->function.param_count > 0;
+}
+
 static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
                                           XrCallArgAccess access, XrParamMode param_mode) {
     if (access != XR_CALL_ARG_OUT || param_mode != XR_PARAM_OUT)
@@ -3428,6 +3487,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "len") == 0 && call->arg_count == 1) {
+        if (xa_call_has_ref_out_arg_access(call)) {
+            xa_report_arg_accesses_require_known_contract(ctx, node, call);
+            return xr_type_new_int(ctx->analyzer->isolate);
+        }
         XrType *saved_expected = ctx->expected_type;
         bool saved_view_context = ctx->allow_view_expr_for_copy;
         if (xa_expr_needs_contextual_view_type(call->arguments[0])) {
@@ -3681,6 +3744,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
 
             // Visit argument to ensure it's analyzed
+            if (xa_call_has_ref_out_arg_access(call)) {
+                xa_report_arg_accesses_require_known_contract(ctx, node, call);
+                return xr_type_new_unknown(NULL);
+            }
             xa_visit_infer_expr(ctx, call->arguments[0]);
 
             // Return T? (decode can fail, returning null)
@@ -3859,7 +3926,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             continue;
         XrCallArgAccess access = xa_call_arg_access(call, i);
         XrParamMode param_mode = xa_call_param_mode(callee_type, i);
-        if (access != XR_CALL_ARG_VALUE && (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type)) &&
+        if (access != XR_CALL_ARG_VALUE &&
+            !xa_call_slot_has_function_param_contract(callee_type, i) &&
             xa_call_direct_variable_type_without_read(ctx, arg))
             continue;
         if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT &&
@@ -3883,6 +3951,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         XrType *ns_instance = xa_module_member_class_instance_type(ctx, call);
         if (ns_instance) {
+            xa_report_arg_accesses_require_known_contract(ctx, node, call);
             xa_check_threadlocal_initializer(ctx, node, call, ns_instance);
             xa_freestanding_report_unavailable(
                 ctx, node, "class construction",
@@ -3902,8 +3971,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             /* Atomic(expr): infer Atomic<T> from argument type */
             if (strcmp(name, "Atomic") == 0) {
                 XrType *et = NULL;
-                if (call->arg_count > 0 && call->arguments[0])
+                if (xa_call_has_ref_out_arg_access(call)) {
+                    xa_report_arg_accesses_require_known_contract(ctx, node, call);
+                } else if (call->arg_count > 0 && call->arguments[0]) {
                     et = xa_visit_infer_expr(ctx, call->arguments[0]);
+                }
                 if (!et)
                     et = xr_type_new_unknown(NULL);
                 XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
@@ -3914,9 +3986,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
             XaSymbol *visible_class = xa_lookup_visible_symbol(ctx, name);
-            if (xa_symbol_is_sync_runtime_class(ctx, visible_class, name))
+            if (xa_symbol_is_sync_runtime_class(ctx, visible_class, name)) {
+                xa_report_arg_accesses_require_known_contract(ctx, node, call);
                 return xa_sync_runtime_construct_type(ctx, name, call);
+            }
             if (strcmp(name, "Thread") == 0) {
+                xa_report_arg_accesses_require_known_contract(ctx, node, call);
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
@@ -3942,13 +4017,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     return xa_class_constructor_instance_type(ctx, node, call, name, links,
                                                               links->class_info);
                 }
-                if (xa_symbol_is_sync_runtime_class(ctx, sym, name))
+                if (xa_symbol_is_sync_runtime_class(ctx, sym, name)) {
+                    xa_report_arg_accesses_require_known_contract(ctx, node, call);
                     return xa_sync_runtime_construct_type(ctx, name, call);
+                }
             }
 
             // Built-in primitive class Exception (and bare construction of it):
             // `Exception(msg)` constructs the runtime exception instance.
             if (strcmp(name, "PanicInfo") == 0) {
+                xa_report_arg_accesses_require_known_contract(ctx, node, call);
                 return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
             }
         }
@@ -4271,14 +4349,19 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (param_slot < 0 || param_slot >= param_count) {
             const char *parallel_callback_label =
                 xa_parallel_callback_label_for_plan(parallel_call_plan, i);
-            XrType *arg_type =
-                xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
+            XrCallArgAccess access = xa_call_arg_access(call, i);
+            XrType *arg_type = NULL;
+            if (access != XR_CALL_ARG_VALUE) {
+                arg_type = xa_call_direct_variable_type_without_read(ctx, arg_node);
+                xa_report_arg_access_without_matching_contract(ctx, node, arg_node, access, slot);
+            }
+            if (!arg_type)
+                arg_type =
+                    xa_visit_call_arg_with_parallel_context(ctx, arg_node, parallel_callback_label);
             if (effective_arg_types && slot < arg_count)
                 effective_arg_types[slot] = arg_type;
             if (effective_arg_modes && slot < arg_count)
                 effective_arg_modes[slot] = xa_call_param_mode(callee_type, param_slot);
-            xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot,
-                                                   XR_PARAM_VALUE);
             slot++;
             continue;
         }
