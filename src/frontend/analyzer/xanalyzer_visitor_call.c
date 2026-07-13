@@ -2181,7 +2181,8 @@ static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index) {
     return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
 }
 
-static bool xa_ref_call_arg_is_place(XaInferContext *ctx, AstNode *arg_node, const char **reason) {
+static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
+                                         const char **reason) {
     while (arg_node && arg_node->type == AST_GROUPING)
         arg_node = arg_node->as.grouping;
     if (!arg_node) {
@@ -2243,15 +2244,16 @@ XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *cal
         return;
     }
 
-    if (access == XR_CALL_ARG_REF) {
+    if (access == XR_CALL_ARG_REF || access == XR_CALL_ARG_OUT) {
         const char *reason = NULL;
-        if (!xa_ref_call_arg_is_place(ctx, arg_node, &reason)) {
+        if (!xa_call_arg_is_mutable_place(ctx, arg_node, &reason)) {
             XrLocation loc = {.file = ctx->file_path,
                               .line = arg_node ? arg_node->line : call_node->line,
                               .column = arg_node ? arg_node->column : call_node->column};
             char msg[192];
-            snprintf(msg, sizeof(msg), "Argument %d passed as `ref` must be a mutable place%s%s",
-                     slot + 1, reason ? ": " : "", reason ? reason : "");
+            snprintf(msg, sizeof(msg), "Argument %d passed as `%s` must be a mutable place%s%s",
+                     slot + 1, xr_call_arg_access_label(access), reason ? ": " : "",
+                     reason ? reason : "");
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                        msg, &loc);
         }

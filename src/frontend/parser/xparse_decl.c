@@ -898,9 +898,18 @@ fail:
 // A bare `_` argument is accepted as a wildcard placeholder so that
 // ADT pattern parsing (`R.Err(_)`) can later detect it; in normal call
 // position the analyzer rejects it.
-static bool xr_parse_call_argument_ref_marker_starts(Parser *parser) {
-    if (!parser || !(xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")))
+static bool xr_parse_call_argument_access_marker_starts(Parser *parser,
+                                                        XrCallArgAccess *out_access) {
+    if (!parser)
         return false;
+    XrCallArgAccess access = XR_CALL_ARG_VALUE;
+    if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
+        access = XR_CALL_ARG_REF;
+    } else if (xr_parser_check_name(parser, "out")) {
+        access = XR_CALL_ARG_OUT;
+    } else {
+        return false;
+    }
 
     Scanner saved_scan = parser->scanner;
     Token saved_cur = parser->current;
@@ -910,6 +919,8 @@ static bool xr_parse_call_argument_ref_marker_starts(Parser *parser) {
     parser->scanner = saved_scan;
     parser->current = saved_cur;
     parser->previous = saved_prev;
+    if (marker && out_access)
+        *out_access = access;
     return marker;
 }
 
@@ -917,10 +928,11 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
     if (out_access)
         *out_access = XR_CALL_ARG_VALUE;
     int line = parser->current.line;
-    if (xr_parse_call_argument_ref_marker_starts(parser)) {
+    XrCallArgAccess marker_access = XR_CALL_ARG_VALUE;
+    if (xr_parse_call_argument_access_marker_starts(parser, &marker_access)) {
         xr_parser_advance(parser);
         if (out_access)
-            *out_access = XR_CALL_ARG_REF;
+            *out_access = marker_access;
         AstNode *place = xr_parse_expression(parser);
         if (!place)
             return NULL;
