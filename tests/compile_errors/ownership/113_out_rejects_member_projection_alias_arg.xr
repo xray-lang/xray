@@ -14,4 +14,4 @@ fn fill_pair(left: out int, right: out int) {
 }
 
 var pair = Pair()
-fill_pair(out pair.left, out pair.right)
+fill_pair(out pair.left, out pair.left)
