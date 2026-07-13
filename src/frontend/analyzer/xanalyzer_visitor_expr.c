@@ -1796,6 +1796,13 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
         if (joined)
             return joined;
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "union type '%s' has no member '%s'",
+                 xr_type_to_string(obj_type), ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
     }
 
     // Handle built-in properties
