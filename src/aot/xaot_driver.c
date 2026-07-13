@@ -1477,8 +1477,14 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             fprintf(stderr, "Error: semantic analysis failed for '%s'\n", spec->source_path);
             goto fail_free_analyzer;
         }
-        spec->export_symbols =
-            xa_analyzer_collect_export_symbols(shared_analyzer, (XrAstNode *) spec->ast);
+        XrHashMap *exports = NULL;
+        if (!xa_analyzer_collect_export_symbols_checked(shared_analyzer, (XrAstNode *) spec->ast,
+                                                        &exports)) {
+            (void) report_analyzer_diagnostics(shared_analyzer, spec->source_path);
+            fprintf(stderr, "Error: export metadata invalid for '%s'\n", spec->source_path);
+            goto fail_free_analyzer;
+        }
+        spec->export_symbols = exports;
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
 
@@ -1519,8 +1525,15 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         }
         if (spec->export_symbols)
             xr_hashmap_free(spec->export_symbols);
-        spec->export_symbols =
-            xa_analyzer_collect_export_symbols(shared_analyzer, (XrAstNode *) spec->ast);
+        XrHashMap *exports = NULL;
+        if (!xa_analyzer_collect_export_symbols_checked(shared_analyzer, (XrAstNode *) spec->ast,
+                                                        &exports)) {
+            (void) report_analyzer_diagnostics(shared_analyzer, spec->source_path);
+            fprintf(stderr, "Error: post-monomorphization export metadata invalid for '%s'\n",
+                    spec->source_path);
+            goto fail_free_analyzer;
+        }
+        spec->export_symbols = exports;
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
 

@@ -21,6 +21,7 @@
 #include "xtype_pool.h"
 #include "xhashmap.h"
 #include "xray_vm.h"
+#include "module/xmodule_graph.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
 
@@ -706,7 +707,7 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
-TEST(export_symbols_skip_nested_error_type) {
+TEST(export_symbols_invalidate_table_on_nested_error_type) {
     const char *source = "export fn bad() -> int { return 1 }\n"
                          "export fn good() -> int { return 1 }\n";
     AstNode *program = xr_parse(g_session, source);
@@ -715,6 +716,11 @@ TEST(export_symbols_skip_nested_error_type) {
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
+    XrModuleSpec spec = {.canonical = "export_error_type_test.xr",
+                         .source_path = "export_error_type_test.xr",
+                         .ast = program};
+    XrModuleGraph graph = {.specs = &spec, .spec_count = 1};
+    xa_analyzer_set_graph(a, &graph);
     xa_analyzer_analyze(a, "export_error_type_test.xr", program);
 
     XaSymbol *bad = xa_scope_lookup(a->current_scope, "bad");
@@ -725,12 +731,25 @@ TEST(export_symbols_skip_nested_error_type) {
     bad->links.type = poisoned_fn;
     bad->links.declared_type = poisoned_fn;
 
-    XrHashMap *exports = xa_analyzer_collect_export_symbols(a, (XrAstNode *) program);
-    ASSERT(exports != NULL);
-    ASSERT(xr_hashmap_get(exports, "good") != NULL);
-    ASSERT(xr_hashmap_get(exports, "bad") == NULL);
+    XrHashMap *exports = NULL;
+    ASSERT(!xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) program, &exports));
+    ASSERT(exports == NULL);
+    ASSERT(spec.export_symbols == NULL);
+    ASSERT(spec.export_symbols_invalid);
 
-    xr_hashmap_free(exports);
+    int diag_count = 0;
+    XaDiagnostic *diag = xa_analyzer_get_diagnostics(a, &diag_count);
+    ASSERT(diag_count > 0);
+    bool saw_export_diag = false;
+    for (; diag; diag = diag->next) {
+        if (diag->message && strstr(diag->message, "Export 'bad'") &&
+            strstr(diag->message, "module export table is invalid")) {
+            saw_export_diag = true;
+            break;
+        }
+    }
+    ASSERT(saw_export_diag);
+
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -949,7 +968,7 @@ int main(void) {
     RUN_TEST(compile_type_containers);
     RUN_TEST(compile_type_function);
     RUN_TEST(compile_type_ref_function_modes);
-    RUN_TEST(export_symbols_skip_nested_error_type);
+    RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
     RUN_TEST(compile_type_optional);
     RUN_TEST(type_substitute_preserves_nullable_type_param);
