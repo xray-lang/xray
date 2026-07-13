@@ -691,9 +691,10 @@ fn _serializeNode(nodeValue: Json, config: XmlWriteConfig, level: int, depth: in
     var node = nodeValue as Json
     var typ = _nodeType(node)
     var out = StringBuilder()
+    var emptyChildren: Json = []
 
     if (typ == "document") {
-        var children = _arrayValue(Json.get(node, "children", []))
+        var children = _arrayValue(Json.get(node, "children", emptyChildren))
         if (children == null) { return "" }
         for (var i = 0; i < len(children!); i++) {
             out.append(_serializeNode(children![i], config, level, depth + 1))
@@ -723,7 +724,7 @@ fn _serializeNode(nodeValue: Json, config: XmlWriteConfig, level: int, depth: in
             }
         }
 
-        var children = _arrayValue(Json.get(node, "children", []))
+        var children = _arrayValue(Json.get(node, "children", emptyChildren))
         if (children != null && len(children!) > 0) {
             out.append(">")
             var textOnly = false

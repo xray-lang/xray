@@ -11,6 +11,7 @@
 #include "xanalyzer_infer.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
+#include <stdio.h>
 #include <string.h>
 
 // Create inference context
@@ -44,6 +45,14 @@ void xa_infer_context_free(XaInferContext *ctx) {
         xa_flow_cache_free(ctx->cache);
     if (ctx->return_types)
         xr_free(ctx->return_types);
+    while (ctx->infer_vars) {
+        XaInferVar *next = ctx->infer_vars->next;
+        xr_free(ctx->infer_vars->lower_bounds);
+        xr_free(ctx->infer_vars->upper_bounds);
+        xr_free(ctx->infer_vars->constraints);
+        xr_free(ctx->infer_vars);
+        ctx->infer_vars = next;
+    }
     while (ctx->active_span_borrows) {
         XaActiveSpanBorrow *next = ctx->active_span_borrows->next;
         xr_free(ctx->active_span_borrows->owner_path);
@@ -52,6 +61,42 @@ void xa_infer_context_free(XaInferContext *ctx) {
     }
 
     xr_free(ctx);
+}
+
+XaInferVar *xa_infer_var_new(XaInferContext *ctx, const char *reason, const XrLocation *loc) {
+    if (!ctx)
+        return NULL;
+
+    XaInferVar *var = xr_calloc(1, sizeof(XaInferVar));
+    if (!var)
+        return NULL;
+
+    var->id = ++ctx->next_infer_var_id;
+    var->reason = reason;
+    if (loc)
+        var->loc = *loc;
+    var->next = ctx->infer_vars;
+    ctx->infer_vars = var;
+    ctx->infer_var_count++;
+    return var;
+}
+
+XrType *xa_infer_var_report_unsolved(XaInferContext *ctx, XaInferVar *var, const char *message) {
+    if (!ctx || !ctx->analyzer)
+        return xr_type_new_error(NULL);
+
+    if (var && !var->reported_unsolved) {
+        const char *base = message ? message : "cannot infer type";
+        char msg[256];
+        snprintf(msg, sizeof(msg), "%s", base);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, var->loc.file ? &var->loc : NULL);
+        var->reported_unsolved = true;
+        ctx->unresolved_infer_var_count++;
+        ctx->analyzer->unresolved_inference_count++;
+    }
+
+    return xr_type_new_error(ctx->analyzer->isolate);
 }
 
 // Add return type (for function return type inference)

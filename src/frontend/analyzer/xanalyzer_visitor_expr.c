@@ -2630,7 +2630,12 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             return xr_type_new_array(ctx->analyzer->isolate,
                                      ctx->expected_type->container.element_type);
         }
-        return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        XaInferVar *var = xa_infer_var_new(ctx, "empty array element", &loc);
+        return xa_infer_var_report_unsolved(
+            ctx, var,
+            "cannot infer element type for empty array literal; add an explicit Array<T> "
+            "annotation or contextual type");
     }
 
     // Propagate expected element type to children. A `...spread` element

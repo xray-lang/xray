@@ -72,13 +72,18 @@ static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind k
     return NULL;
 }
 
-static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults, int count) {
+static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
+                                        XrType **param_types, int count) {
     if (!ctx || !defaults || count <= 0)
         return;
+    XrType *saved_expected = ctx->expected_type;
     for (int i = 0; i < count; i++) {
-        if (defaults[i])
+        if (defaults[i]) {
+            ctx->expected_type = param_types ? param_types[i] : NULL;
             xa_visit_infer_expr(ctx, defaults[i]);
+        }
     }
+    ctx->expected_type = saved_expected;
 }
 
 static bool xa_c_symbol_is_identifier(const char *name) {
@@ -2105,7 +2110,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         if (defs) {
             for (int i = 0; i < fn->param_count; i++)
                 defs[i] = fn->params[i] ? fn->params[i]->default_value : NULL;
-            xa_bind_param_default_exprs(ctx, defs, fn->param_count);
+            xa_bind_param_default_exprs(ctx, defs, param_types, fn->param_count);
             xa_symbol_links_set_param_defaults(links, defs, fn->param_count);
             xr_free(defs);
         }
@@ -3494,7 +3499,7 @@ skip_layout:
             // Record method/constructor default expressions for caller-side
             // default filling (methods store defaults in md->default_values).
             if (md->param_count > 0) {
-                xa_bind_param_default_exprs(ctx, md->default_values, md->param_count);
+                xa_bind_param_default_exprs(ctx, md->default_values, param_types, md->param_count);
                 xa_symbol_links_set_param_defaults(method_links, md->default_values,
                                                    md->param_count);
             }
