@@ -189,6 +189,12 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         xr_free(links->param_mutations);
     if (links->param_storage_requirements)
         xr_free(links->param_storage_requirements);
+    if (links->return_fn_param_escapes)
+        xr_free(links->return_fn_param_escapes);
+    if (links->return_fn_param_mutations)
+        xr_free(links->return_fn_param_mutations);
+    if (links->return_fn_param_storage_requirements)
+        xr_free(links->return_fn_param_storage_requirements);
     if (links->c_export_symbol)
         xr_free((void *) links->c_export_symbol);
     if (links->type_param_names) {
@@ -585,6 +591,9 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         links->param_storage_requirements = NULL;
         links->param_storage_requirement_count = 0;
     }
+    xa_symbol_links_clear_return_function_effect_summary(links);
+    links->return_fn_effect_scanned = false;
+    links->return_fn_effect_scan_in_progress = false;
     // Default-value expressions are reset together with the signature; call
     // xa_symbol_links_set_param_defaults afterwards to repopulate them.
     if (links->param_defaults) {
@@ -701,6 +710,67 @@ void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst, const XaSym
     xa_copy_u8_summary(&dst->param_storage_requirements, &dst->param_storage_requirement_count,
                        src ? src->param_storage_requirements : NULL,
                        src ? src->param_storage_requirement_count : 0);
+}
+
+void xa_symbol_links_clear_return_function_effect_summary(XaSymbolLinks *links) {
+    if (!links)
+        return;
+    xa_copy_u8_summary(&links->return_fn_param_escapes, &links->return_fn_param_escape_count, NULL,
+                       0);
+    xa_copy_u8_summary(&links->return_fn_param_mutations, &links->return_fn_param_mutation_count,
+                       NULL, 0);
+    xa_copy_u8_summary(&links->return_fn_param_storage_requirements,
+                       &links->return_fn_param_storage_requirement_count, NULL, 0);
+    links->return_fn_effect_mixed = false;
+}
+
+void xa_symbol_links_set_return_function_effect_summary(XaSymbolLinks *dst,
+                                                        const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_u8_summary(&dst->return_fn_param_escapes, &dst->return_fn_param_escape_count,
+                       src ? src->param_escapes : NULL, src ? src->param_escape_count : 0);
+    xa_copy_u8_summary(&dst->return_fn_param_mutations, &dst->return_fn_param_mutation_count,
+                       src ? src->param_mutations : NULL, src ? src->param_mutation_count : 0);
+    xa_copy_u8_summary(&dst->return_fn_param_storage_requirements,
+                       &dst->return_fn_param_storage_requirement_count,
+                       src ? src->param_storage_requirements : NULL,
+                       src ? src->param_storage_requirement_count : 0);
+    dst->return_fn_effect_mixed = false;
+}
+
+void xa_symbol_links_copy_return_function_effect_summary(XaSymbolLinks *dst,
+                                                         const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_u8_summary(&dst->return_fn_param_escapes, &dst->return_fn_param_escape_count,
+                       src ? src->return_fn_param_escapes : NULL,
+                       src ? src->return_fn_param_escape_count : 0);
+    xa_copy_u8_summary(&dst->return_fn_param_mutations, &dst->return_fn_param_mutation_count,
+                       src ? src->return_fn_param_mutations : NULL,
+                       src ? src->return_fn_param_mutation_count : 0);
+    xa_copy_u8_summary(&dst->return_fn_param_storage_requirements,
+                       &dst->return_fn_param_storage_requirement_count,
+                       src ? src->return_fn_param_storage_requirements : NULL,
+                       src ? src->return_fn_param_storage_requirement_count : 0);
+    dst->return_fn_effect_mixed = src ? src->return_fn_effect_mixed : false;
+    dst->return_fn_effect_scanned = src ? src->return_fn_effect_scanned : false;
+    dst->return_fn_effect_scan_in_progress = false;
+}
+
+void xa_symbol_links_copy_return_function_effect_to_param_summaries(XaSymbolLinks *dst,
+                                                                    const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_u8_summary(&dst->param_escapes, &dst->param_escape_count,
+                       src ? src->return_fn_param_escapes : NULL,
+                       src ? src->return_fn_param_escape_count : 0);
+    xa_copy_u8_summary(&dst->param_mutations, &dst->param_mutation_count,
+                       src ? src->return_fn_param_mutations : NULL,
+                       src ? src->return_fn_param_mutation_count : 0);
+    xa_copy_u8_summary(&dst->param_storage_requirements, &dst->param_storage_requirement_count,
+                       src ? src->return_fn_param_storage_requirements : NULL,
+                       src ? src->return_fn_param_storage_requirement_count : 0);
 }
 
 // Set generic type parameters for a function/class.  Each parameter may
@@ -823,6 +893,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->return_storage_mixed = src->return_storage_mixed;
     dst->return_storage_scanned = src->return_storage_scanned;
     dst->return_storage_scan_in_progress = false;
+    xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;
     dst->is_extern = src->is_extern;
     dst->is_c_export = src->is_c_export;

@@ -6794,6 +6794,8 @@ static bool xa_call_is_copy_builtin(AstNode *node) {
 }
 
 static void xa_ensure_function_return_storage_prepass(XaInferContext *ctx, XaSymbolLinks *links);
+static void xa_ensure_function_return_function_effect_prepass(XaInferContext *ctx,
+                                                              XaSymbolLinks *links);
 static AstNode *xa_storage_boundary_identity_source(AstNode *expr);
 
 static bool xa_call_return_storage_summary(XaInferContext *ctx, AstNode *node, uint8_t *owner_out,
@@ -6875,6 +6877,99 @@ static XaSymbol *xa_function_value_source_symbol(XaInferContext *ctx, AstNode *s
     return member_sym && member_sym->kind == XA_SYM_FUNCTION ? member_sym : NULL;
 }
 
+static XrType *xa_links_function_return_type(XaSymbolLinks *links) {
+    if (!links)
+        return NULL;
+    if (links->return_type)
+        return links->return_type;
+    if (links->type && XR_TYPE_IS_FUNCTION(links->type))
+        return links->type->function.return_type;
+    return NULL;
+}
+
+static bool xa_links_return_function_effect_is_ready(XaSymbolLinks *links) {
+    XrType *return_type = xa_links_function_return_type(links);
+    if (!return_type || !XR_TYPE_IS_FUNCTION(return_type))
+        return false;
+    int param_count = return_type->function.param_count;
+    if (param_count <= 0)
+        return true;
+    return links && links->return_fn_param_mutations &&
+           links->return_fn_param_mutation_count >= param_count;
+}
+
+static bool xa_param_effect_summary_is_ready(XaSymbolLinks *links) {
+    if (!links)
+        return false;
+    int param_count = links->param_count;
+    if (param_count <= 0 && links->type && XR_TYPE_IS_FUNCTION(links->type))
+        param_count = links->type->function.param_count;
+    if (param_count <= 0)
+        return true;
+    return links->param_mutations && links->param_mutation_count >= param_count;
+}
+
+static bool xa_u8_summary_equal(const uint8_t *a, int a_count, const uint8_t *b, int b_count) {
+    if (a_count != b_count)
+        return false;
+    if (a_count <= 0)
+        return true;
+    if (!a || !b)
+        return false;
+    return memcmp(a, b, (size_t) a_count * sizeof(uint8_t)) == 0;
+}
+
+static bool xa_return_function_effect_matches_param_summary(XaSymbolLinks *dst,
+                                                            XaSymbolLinks *src) {
+    if (!dst || !src)
+        return false;
+    return xa_u8_summary_equal(dst->return_fn_param_escapes, dst->return_fn_param_escape_count,
+                               src->param_escapes, src->param_escape_count) &&
+           xa_u8_summary_equal(dst->return_fn_param_mutations, dst->return_fn_param_mutation_count,
+                               src->param_mutations, src->param_mutation_count) &&
+           xa_u8_summary_equal(dst->return_fn_param_storage_requirements,
+                               dst->return_fn_param_storage_requirement_count,
+                               src->param_storage_requirements,
+                               src->param_storage_requirement_count);
+}
+
+static bool xa_return_function_effect_matches_return_summary(XaSymbolLinks *dst,
+                                                             XaSymbolLinks *src) {
+    if (!dst || !src)
+        return false;
+    return xa_u8_summary_equal(dst->return_fn_param_escapes, dst->return_fn_param_escape_count,
+                               src->return_fn_param_escapes, src->return_fn_param_escape_count) &&
+           xa_u8_summary_equal(dst->return_fn_param_mutations, dst->return_fn_param_mutation_count,
+                               src->return_fn_param_mutations,
+                               src->return_fn_param_mutation_count) &&
+           xa_u8_summary_equal(dst->return_fn_param_storage_requirements,
+                               dst->return_fn_param_storage_requirement_count,
+                               src->return_fn_param_storage_requirements,
+                               src->return_fn_param_storage_requirement_count);
+}
+
+static XaSymbolLinks *xa_call_return_function_effect_links(XaInferContext *ctx, AstNode *node,
+                                                           const char **name_out) {
+    if (name_out)
+        *name_out = NULL;
+    AstNode *direct = xa_storage_boundary_identity_source(node);
+    if (!ctx || !direct || direct->type != AST_CALL_EXPR)
+        return NULL;
+
+    CallExprNode *call = &direct->as.call_expr;
+    AstNode *callee = xa_direct_function_value_source(call->callee);
+    XaSymbol *sym = xa_function_value_source_symbol(ctx, callee);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    XrType *return_type = xa_links_function_return_type(links);
+    if (!return_type || !XR_TYPE_IS_FUNCTION(return_type))
+        return NULL;
+    if (name_out && callee && callee->type == AST_VARIABLE)
+        *name_out = callee->as.variable.name;
+    if (links && !links->return_fn_effect_scanned && !links->return_fn_effect_scan_in_progress)
+        xa_ensure_function_return_function_effect_prepass(ctx, links);
+    return links;
+}
+
 static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *dst_sym,
                                                 AstNode *initializer, XrType *init_type) {
     if (!ctx || !ctx->analyzer || !dst_sym || !initializer || !XR_TYPE_IS_FUNCTION(init_type))
@@ -6882,31 +6977,46 @@ static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *d
     if (!dst_sym->is_const)
         return;
 
-    AstNode *source = xa_direct_function_value_source(initializer);
-    if (!source)
-        return;
-
-    XaSymbol *src_sym = xa_function_value_source_symbol(ctx, source);
-    if (!src_sym)
-        return;
-    XaSymbolLinks *src_links = xa_analyzer_get_links(ctx->analyzer, src_sym);
     XaSymbolLinks *dst_links = xa_analyzer_get_links(ctx->analyzer, dst_sym);
-    if (!src_links || !dst_links)
+    if (!dst_links)
         return;
 
-    xa_symbol_links_copy_param_effect_summaries(dst_links, src_links);
+    AstNode *source = xa_direct_function_value_source(initializer);
+    if (source) {
+        XaSymbol *src_sym = xa_function_value_source_symbol(ctx, source);
+        if (!src_sym)
+            return;
+        XaSymbolLinks *src_links = xa_analyzer_get_links(ctx->analyzer, src_sym);
+        if (!src_links)
+            return;
 
-    if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_storage_scanned &&
-        !src_links->return_storage_scan_in_progress)
-        xa_ensure_function_return_storage_prepass(ctx, src_links);
-    if (!src_links->return_storage_scanned)
+        xa_symbol_links_copy_param_effect_summaries(dst_links, src_links);
+
+        if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_storage_scanned &&
+            !src_links->return_storage_scan_in_progress)
+            xa_ensure_function_return_storage_prepass(ctx, src_links);
+        if (src_links->return_storage_scanned) {
+            dst_links->return_storage_owner = src_links->return_storage_owner;
+            dst_links->return_storage_known = src_links->return_storage_known;
+            dst_links->return_storage_mixed = src_links->return_storage_mixed;
+            dst_links->return_storage_scanned = true;
+            dst_links->return_storage_scan_in_progress = false;
+        }
+
+        if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_fn_effect_scanned &&
+            !src_links->return_fn_effect_scan_in_progress)
+            xa_ensure_function_return_function_effect_prepass(ctx, src_links);
+        if (src_links->return_fn_effect_scanned)
+            xa_symbol_links_copy_return_function_effect_summary(dst_links, src_links);
         return;
+    }
 
-    dst_links->return_storage_owner = src_links->return_storage_owner;
-    dst_links->return_storage_known = src_links->return_storage_known;
-    dst_links->return_storage_mixed = src_links->return_storage_mixed;
-    dst_links->return_storage_scanned = true;
-    dst_links->return_storage_scan_in_progress = false;
+    XaSymbolLinks *callee_links = xa_call_return_function_effect_links(ctx, initializer, NULL);
+    if (!callee_links || !callee_links->return_fn_effect_scanned ||
+        callee_links->return_fn_effect_mixed ||
+        !xa_links_return_function_effect_is_ready(callee_links))
+        return;
+    xa_symbol_links_copy_return_function_effect_to_param_summaries(dst_links, callee_links);
 }
 
 static bool xa_call_is_unknown_storage_function_value(XaInferContext *ctx, AstNode *node,
@@ -7277,6 +7387,200 @@ static void xa_return_storage_prepass_scan_stmt(XaReturnStoragePrepass *scan, As
         default:
             return;
     }
+}
+
+typedef struct XaReturnFunctionEffectPrepass {
+    XaInferContext *ctx;
+    XaSymbolLinks *target;
+    bool known;
+    bool mixed;
+    bool unknown;
+} XaReturnFunctionEffectPrepass;
+
+static void xa_return_function_effect_record_unknown(XaReturnFunctionEffectPrepass *scan) {
+    if (!scan)
+        return;
+    if (scan->known)
+        scan->mixed = true;
+    scan->unknown = true;
+}
+
+static void xa_return_function_effect_record_param_summary(XaReturnFunctionEffectPrepass *scan,
+                                                           XaSymbolLinks *src) {
+    if (!scan || !scan->target || !src)
+        return;
+    if (!xa_param_effect_summary_is_ready(src)) {
+        xa_return_function_effect_record_unknown(scan);
+        return;
+    }
+    if (!scan->known) {
+        xa_symbol_links_set_return_function_effect_summary(scan->target, src);
+        scan->known = true;
+        if (scan->unknown)
+            scan->mixed = true;
+        return;
+    }
+    if (!xa_return_function_effect_matches_param_summary(scan->target, src))
+        scan->mixed = true;
+}
+
+static void xa_return_function_effect_record_return_summary(XaReturnFunctionEffectPrepass *scan,
+                                                            XaSymbolLinks *src) {
+    if (!scan || !scan->target || !src)
+        return;
+    if (!src->return_fn_effect_scanned || src->return_fn_effect_mixed ||
+        !xa_links_return_function_effect_is_ready(src)) {
+        xa_return_function_effect_record_unknown(scan);
+        return;
+    }
+    if (!scan->known) {
+        xa_symbol_links_copy_return_function_effect_summary(scan->target, src);
+        scan->target->return_fn_effect_scan_in_progress = true;
+        scan->known = true;
+        if (scan->unknown)
+            scan->mixed = true;
+        return;
+    }
+    if (!xa_return_function_effect_matches_return_summary(scan->target, src))
+        scan->mixed = true;
+}
+
+static bool xa_return_function_effect_prepass_record_expr(XaReturnFunctionEffectPrepass *scan,
+                                                          AstNode *expr) {
+    if (!scan || !expr)
+        return false;
+
+    AstNode *block_value = NULL;
+    if ((expr->type == AST_BLOCK || expr->type == AST_PROGRAM) &&
+        (block_value = xa_lifecycle_lint_single_expr_block_value(expr)))
+        return xa_return_function_effect_prepass_record_expr(scan, block_value);
+
+    AstNode *source = xa_direct_function_value_source(expr);
+    if (source) {
+        XaSymbol *sym = xa_function_value_source_symbol(scan->ctx, source);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(scan->ctx->analyzer, sym) : NULL;
+        if (!links) {
+            xa_return_function_effect_record_unknown(scan);
+            return true;
+        }
+        xa_return_function_effect_record_param_summary(scan, links);
+        return true;
+    }
+
+    XaSymbolLinks *callee_links = xa_call_return_function_effect_links(scan->ctx, expr, NULL);
+    if (callee_links) {
+        xa_return_function_effect_record_return_summary(scan, callee_links);
+        return true;
+    }
+
+    return false;
+}
+
+static void xa_return_function_effect_prepass_scan_stmt(XaReturnFunctionEffectPrepass *scan,
+                                                        AstNode *stmt);
+
+static void xa_return_function_effect_prepass_scan_block(XaReturnFunctionEffectPrepass *scan,
+                                                         AstNode *block) {
+    if (!scan || !block)
+        return;
+    if (block->type == AST_BLOCK) {
+        BlockNode *body = &block->as.block;
+        for (int i = 0; i < body->count; i++)
+            xa_return_function_effect_prepass_scan_stmt(scan, body->statements[i]);
+    } else if (block->type == AST_PROGRAM) {
+        ProgramNode *body = &block->as.program;
+        for (int i = 0; i < body->count; i++)
+            xa_return_function_effect_prepass_scan_stmt(scan, body->statements[i]);
+    } else {
+        xa_return_function_effect_prepass_scan_stmt(scan, block);
+    }
+}
+
+static void xa_return_function_effect_prepass_scan_stmt(XaReturnFunctionEffectPrepass *scan,
+                                                        AstNode *stmt) {
+    if (!scan || !stmt)
+        return;
+    switch (stmt->type) {
+        case AST_RETURN_STMT: {
+            ReturnStmtNode *ret = &stmt->as.return_stmt;
+            if (ret->value_count != 1 ||
+                !xa_return_function_effect_prepass_record_expr(scan, ret->values[0]))
+                xa_return_function_effect_record_unknown(scan);
+            return;
+        }
+        case AST_BLOCK:
+        case AST_PROGRAM:
+            xa_return_function_effect_prepass_scan_block(scan, stmt);
+            return;
+        case AST_IF_STMT:
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.if_stmt.then_branch);
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.if_stmt.else_branch);
+            return;
+        case AST_WHILE_STMT:
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.while_stmt.body);
+            return;
+        case AST_FOR_STMT:
+            xa_return_function_effect_prepass_scan_stmt(scan, stmt->as.for_stmt.initializer);
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.for_stmt.body);
+            return;
+        case AST_FOR_IN_STMT:
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.for_in_stmt.body);
+            return;
+        case AST_TRY_CATCH:
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.try_catch.try_body);
+            for (int i = 0; i < stmt->as.try_catch.catch_count; i++) {
+                XrCatchClause *clause = stmt->as.try_catch.catch_clauses[i];
+                if (clause)
+                    xa_return_function_effect_prepass_scan_block(scan, clause->body);
+            }
+            return;
+        case AST_MATCH_EXPR:
+            for (int i = 0; i < stmt->as.match_expr.arm_count; i++)
+                xa_return_function_effect_prepass_scan_stmt(scan, stmt->as.match_expr.arms[i]);
+            return;
+        case AST_MATCH_ARM:
+            xa_return_function_effect_prepass_scan_block(scan, stmt->as.match_arm.body);
+            return;
+        default:
+            return;
+    }
+}
+
+static void xa_ensure_function_return_function_effect_prepass(XaInferContext *ctx,
+                                                              XaSymbolLinks *links) {
+    if (!ctx || !links || links->return_fn_effect_scan_in_progress)
+        return;
+    if (links->return_fn_effect_scanned)
+        return;
+
+    XrType *return_type = xa_links_function_return_type(links);
+    if (!return_type || !XR_TYPE_IS_FUNCTION(return_type)) {
+        links->return_fn_effect_scanned = true;
+        return;
+    }
+
+    AstNode *fn_node = links->function_decl_node;
+    if (!fn_node || fn_node->type != AST_FUNCTION_DECL || !fn_node->as.function_decl.body) {
+        links->return_fn_effect_scanned = true;
+        return;
+    }
+
+    links->return_fn_effect_scan_in_progress = true;
+    xa_symbol_links_clear_return_function_effect_summary(links);
+    XaReturnFunctionEffectPrepass scan = {.ctx = ctx, .target = links};
+    xa_return_function_effect_prepass_scan_block(&scan, fn_node->as.function_decl.body);
+
+    if (scan.known && !scan.mixed && !scan.unknown) {
+        links->return_fn_effect_mixed = false;
+    } else if (scan.mixed || (scan.known && scan.unknown)) {
+        xa_symbol_links_clear_return_function_effect_summary(links);
+        links->return_fn_effect_mixed = true;
+    } else {
+        xa_symbol_links_clear_return_function_effect_summary(links);
+        links->return_fn_effect_mixed = false;
+    }
+    links->return_fn_effect_scanned = true;
+    links->return_fn_effect_scan_in_progress = false;
 }
 
 static void xa_ensure_function_return_storage_prepass(XaInferContext *ctx, XaSymbolLinks *links) {

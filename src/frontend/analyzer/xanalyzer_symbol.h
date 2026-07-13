@@ -121,6 +121,15 @@ struct XaSymbolLinks {
     bool return_storage_mixed;
     bool return_storage_scanned;
     bool return_storage_scan_in_progress;
+    uint8_t *return_fn_param_escapes;  // Summary for a function value returned by this function
+    int return_fn_param_escape_count;
+    uint8_t *return_fn_param_mutations;
+    int return_fn_param_mutation_count;
+    uint8_t *return_fn_param_storage_requirements;
+    int return_fn_param_storage_requirement_count;
+    bool return_fn_effect_mixed;
+    bool return_fn_effect_scanned;
+    bool return_fn_effect_scan_in_progress;
     struct AstNode *function_decl_node;
     bool is_extern;    // @extern foreign function (FFI): calls require unsafe { }
     bool is_c_export;  // @c_export AOT C ABI wrapper
@@ -313,6 +322,14 @@ XR_FUNC const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *
 XR_FUNC bool xa_symbol_is_function(XaSymbol *symbol);
 XR_FUNC void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst,
                                                          const XaSymbolLinks *src);
+XR_FUNC void xa_symbol_links_clear_return_function_effect_summary(XaSymbolLinks *links);
+XR_FUNC void xa_symbol_links_set_return_function_effect_summary(XaSymbolLinks *dst,
+                                                                const XaSymbolLinks *src);
+XR_FUNC void xa_symbol_links_copy_return_function_effect_summary(XaSymbolLinks *dst,
+                                                                 const XaSymbolLinks *src);
+XR_FUNC void
+xa_symbol_links_copy_return_function_effect_to_param_summaries(XaSymbolLinks *dst,
+                                                               const XaSymbolLinks *src);
 
 // API: Generic type parameters
 //
