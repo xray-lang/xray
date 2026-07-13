@@ -9,6 +9,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_lower.h"
+#include "../../../src/ir/xi_lower_internal.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -142,6 +143,58 @@ TEST(error_expression_type_rejected) {
     assert(f == NULL && "lowerer must reject ErrorType expression metadata");
 }
 
+TEST(error_source_var_metadata_rejected) {
+    xr_compiler_session_install_analyzer_pool(g_session);
+
+    XiLower l;
+    xi_lower_init(&l, NULL, g_iso);
+    l.func = xi_func_new("error_source_var_metadata", l.type_unit);
+    assert(l.func != NULL);
+
+    XrType *error_array = xr_type_new_array(NULL, xr_type_new_error(NULL));
+    assert(error_array != NULL);
+    int var_id = xi_lower_var_create(&l, 77, "bad", error_array);
+    assert(var_id >= 0);
+
+    bool ok = xi_lower_capture_source_vars(&l);
+    assert(!ok && "source variable metadata must reject compiler-only ErrorType");
+    assert(l.had_error && "source variable metadata rejection must hard-fail lowering");
+    assert(l.func->source_var_count == 0);
+
+    xi_func_free(l.func);
+    xi_lower_cleanup(&l);
+}
+
+TEST(error_capture_metadata_rejected) {
+    xr_compiler_session_install_analyzer_pool(g_session);
+
+    XiLower parent;
+    XiLower child;
+    xi_lower_init(&parent, NULL, g_iso);
+    xi_lower_init(&child, NULL, g_iso);
+    parent.func = xi_func_new("error_capture_parent", parent.type_unit);
+    child.func = xi_func_new("error_capture_child", child.type_unit);
+    assert(parent.func != NULL);
+    assert(child.func != NULL);
+    child.parent = &parent;
+
+    XrType *error_array = xr_type_new_array(NULL, xr_type_new_error(NULL));
+    assert(error_array != NULL);
+    int var_id = xi_lower_var_create(&parent, 88, "bad", error_array);
+    assert(var_id >= 0);
+
+    XrType *out_type = NULL;
+    int capture_id = xi_lower_resolve_upvalue(&child, 88, "bad", &out_type);
+    assert(capture_id < 0 && "capture metadata must reject compiler-only ErrorType");
+    assert(child.had_error && "capture metadata rejection must hard-fail child lowering");
+    assert(child.func->ncaptures == 0);
+
+    xi_func_free(child.func);
+    xi_func_free(parent.func);
+    xi_lower_cleanup(&child);
+    xi_lower_cleanup(&parent);
+}
+
 TEST(resolved_variable_accepted) {
     /* Declared variable should lower successfully. */
     XiFunc *f = try_lower("var x = 42\nprint(x)");
@@ -167,6 +220,8 @@ int main(void) {
     run_error_return_type_rejected();
     run_error_parameter_type_rejected();
     run_error_expression_type_rejected();
+    run_error_source_var_metadata_rejected();
+    run_error_capture_metadata_rejected();
     run_resolved_variable_accepted();
     run_declared_and_assigned_accepted();
 

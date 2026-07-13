@@ -301,6 +301,8 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
     /* Dedup: if this variable is already captured, return existing index */
     for (uint16_t ci = 0; ci < l->func->ncaptures; ci++) {
         if (l->func->captures[ci].name && strcmp(l->func->captures[ci].name, name) == 0) {
+            if (xi_lower_reject_error_type(l, l->func->captures[ci].type, "capture metadata", 0))
+                return -1;
             if (out_type)
                 *out_type = l->func->captures[ci].type;
             return (int) ci;
@@ -316,6 +318,10 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         if (parent->is_program && parent->shared_map && parent->shared_map[var_id] >= 0)
             return -1;
 
+        struct XrType *capture_type = parent->vars[var_id].type;
+        if (xi_lower_reject_error_type(l, capture_type, "capture metadata", 0))
+            return -1;
+
         /* Read the current SSA value from the parent's scope.  The value's
          * register will be resolved at emit time via reg_of(). */
         XiValue *parent_val = xi_lower_braun_read(parent, var_id, parent->cur_block);
@@ -325,7 +331,7 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].source = XI_CAPTURE_SRC_REG;
         l->func->captures[idx].index = 0;
         l->func->captures[idx].name = name;
-        l->func->captures[idx].type = parent->vars[var_id].type;
+        l->func->captures[idx].type = capture_type;
         l->func->captures[idx].value = parent_val;
         l->func->captures[idx].cell_index = -1;
         l->func->captures[idx].env_offset = -1;
@@ -343,20 +349,28 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].needs_cell = parent->vars[var_id].hoisted || forward_ref;
         l->func->ncaptures++;
         if (out_type)
-            *out_type = parent->vars[var_id].type;
+            *out_type = capture_type;
         return idx;
     }
 
     /* Not a local in parent — try grandparent (transitive capture) */
+    bool parent_had_error_before = parent->had_error;
     int parent_upval = xi_lower_resolve_upvalue(parent, symbol_id, name, out_type);
+    if (parent->had_error && !parent_had_error_before) {
+        l->had_error = true;
+        return -1;
+    }
     if (parent_upval >= 0) {
+        struct XrType *capture_type = out_type ? *out_type : l->type_any;
+        if (xi_lower_reject_error_type(l, capture_type, "capture metadata", 0))
+            return -1;
         if (l->func->ncaptures >= XI_MAX_CAPTURES)
             return -1;
         int idx = l->func->ncaptures;
         l->func->captures[idx].source = XI_CAPTURE_SRC_UPVAL;
         l->func->captures[idx].index = (uint16_t) parent_upval;
         l->func->captures[idx].name = name;
-        l->func->captures[idx].type = out_type ? *out_type : l->type_any;
+        l->func->captures[idx].type = capture_type;
         l->func->captures[idx].cell_index = -1;
         l->func->captures[idx].env_offset = -1;
         l->func->captures[idx].is_reassigned = false;
@@ -414,11 +428,21 @@ XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk) {
     return braun_read_recursive(l, var_id, blk);
 }
 
-XR_FUNC void xi_lower_capture_source_vars(XiLower *l) {
-    if (!l || !l->func || l->var_count <= 0) {
-        if (l && l->func)
+XR_FUNC bool xi_lower_capture_source_vars(XiLower *l) {
+    if (!l || !l->func)
+        return false;
+    if (l->var_count <= 0) {
+        l->func->source_var_count = 0;
+        return true;
+    }
+
+    for (int i = 0; i < l->var_count; i++) {
+        if (xi_lower_reject_error_type(l, l->vars[i].type, "source variable metadata", 0)) {
             l->func->source_var_count = 0;
-        return;
+            l->func->source_var_names = NULL;
+            l->func->source_var_types = NULL;
+            return false;
+        }
     }
 
     uint32_t count = (uint32_t) l->var_count;
@@ -430,7 +454,7 @@ XR_FUNC void xi_lower_capture_source_vars(XiLower *l) {
         l->func->source_var_count = 0;
         l->func->source_var_names = NULL;
         l->func->source_var_types = NULL;
-        return;
+        return true;
     }
 
     for (uint32_t i = 0; i < count; i++) {
@@ -441,6 +465,7 @@ XR_FUNC void xi_lower_capture_source_vars(XiLower *l) {
     l->func->source_var_count = count;
     l->func->source_var_names = names;
     l->func->source_var_types = types;
+    return true;
 }
 
 /* Try to remove trivial phi: if all operands are the same (or self),
@@ -1485,11 +1510,11 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         }
     }
 
-    XiFunc *result = l.had_error ? NULL : l.func;
-    if (result) {
+    XiFunc *result = NULL;
+    if (!l.had_error && xi_lower_capture_source_vars(&l)) {
+        result = l.func;
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
-        xi_lower_capture_source_vars(&l);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
@@ -2466,11 +2491,11 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
         xi_func_compute_effects(l.func);
     }
 
-    XiFunc *result = l.had_error ? NULL : l.func;
-    if (result) {
+    XiFunc *result = NULL;
+    if (!l.had_error && xi_lower_capture_source_vars(&l)) {
+        result = l.func;
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
-        xi_lower_capture_source_vars(&l);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
