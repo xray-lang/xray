@@ -17,6 +17,26 @@ export fn greet(name: string) -> string {
     return "Hello, " + name
 }
 
+export fn first_byte(xs: Array<byte>) -> int {
+    return xs[0]
+}
+
+export fn second_uint8(xs: Array<uint8>) -> int {
+    return xs[1]
+}
+
+export fn sum_byte_slice(xs: Slice<byte>) -> int {
+    return xs[0] + xs[1]
+}
+
+export fn sum_uint8_slice(xs: Slice<uint8>) -> int {
+    return xs[0] + xs[1]
+}
+
+export fn make_uint8_bytes() -> Array<uint8> {
+    return [7, 8, 9]
+}
+
 export const MAGIC: int = 42
 
 export class Point {
