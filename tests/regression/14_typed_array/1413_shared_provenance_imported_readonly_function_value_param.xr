@@ -1,0 +1,18 @@
+import { readFirst } from "../../fixtures/shared_mutation_lib"
+import "../../fixtures/shared_mutation_lib" as mut
+
+@test
+fn test_shared_provenance_imported_readonly_function_value_param() {
+    shared bytes = Array<byte>(2, 5)
+    var view: Slice<byte> = bytes[:]
+    const f = readFirst
+    assert_eq(f(view), 7)
+}
+
+@test
+fn test_shared_provenance_namespace_readonly_function_value_param() {
+    shared bytes = Array<byte>(3, 6)
+    var view: Slice<byte> = bytes[:]
+    const f = mut.readFirst
+    assert_eq(f(view), 9)
+}

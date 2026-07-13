@@ -1,0 +1,10 @@
+import { overwrite } from "../../fixtures/shared_mutation_lib"
+
+fn main() {
+    shared bytes = Array<byte>(4, 0)
+    var view: Slice<byte> = bytes[:]
+    const f = overwrite
+    f(view)
+}
+
+main()
