@@ -1,0 +1,10 @@
+fn plus_one(x: int) -> int {
+    return x + 1
+}
+
+@test
+fn test_out_identifier_call_argument_not_marker() {
+    var out = 41
+    assert_eq(plus_one(out), 42)
+    assert_eq(plus_one(out + 1), 43)
+}

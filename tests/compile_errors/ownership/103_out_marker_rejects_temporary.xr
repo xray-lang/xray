@@ -1,0 +1,9 @@
+fn make() -> int {
+    return 1
+}
+
+fn fill(x: out int) {
+    x = 1
+}
+
+fill(out make())
