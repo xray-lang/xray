@@ -3544,8 +3544,8 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             emit_vref(out, arg);
             return;
         }
-        if (cg_type_is_byte_span(v->type)) {
-            fprintf(out, "xrt_byte_span_from_value(");
+        if (cg_type_is_byte_slice(v->type)) {
+            fprintf(out, "xrt_byte_slice_from_value(");
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
             fprintf(out, ", \"Slice<byte> argument expects Array<byte> or Slice<byte>\")");
             return;
@@ -8479,7 +8479,7 @@ static void xicgen_emit_byte_slice_operand(XiCgenCtx *ctx, FILE *out, const XiVa
         emit_span_ref_expr(out, arg);
         return;
     }
-    fprintf(out, "xrt_byte_span_from_value(");
+    fprintf(out, "xrt_byte_slice_from_value(");
     emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
     fprintf(out, ", \"%s\")", message);
 }

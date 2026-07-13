@@ -211,7 +211,7 @@ static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     return xr_int((xr_Integer) xr_array_index_of(array_self(self), args[0]));
 }
 
-static bool bytespan_arg(XrValue value, const void **data, int64_t *length, const void **guard) {
+static bool byte_slice_arg(XrValue value, const void **data, int64_t *length, const void **guard) {
     if (XR_IS_SPAN_REF(value)) {
         XrSpanView *span = XR_TO_SPAN_REF(value);
         if (!span || span->elem_type != XR_ELEM_U8)
@@ -244,7 +244,7 @@ static XrValue m_append_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     const void *src_data = NULL;
     const void *src_guard = NULL;
     int64_t src_length = 0;
-    if (argc != 1 || !bytespan_arg(args[0], &src_data, &src_length, &src_guard)) {
+    if (argc != 1 || !byte_slice_arg(args[0], &src_data, &src_length, &src_guard)) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
                                          XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG);
         xr_vm_unwind_with_trace(iso, exc);

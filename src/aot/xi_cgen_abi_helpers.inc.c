@@ -145,7 +145,7 @@ static bool cg_value_rep_is_span_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_SPAN) != 0;
 }
 
-static bool cg_type_is_byte_span(const XrType *type) {
+static bool cg_type_is_byte_slice(const XrType *type) {
     return xr_type_is_u8_span(type);
 }
 
@@ -580,19 +580,19 @@ static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
     return xaot_abi_slot_value_rep(&plan->abi.params[param_idx]);
 }
 
-static bool cg_func_param_abi_is_byte_span_aggregate(XiCgenCtx *ctx, const XiFunc *f,
-                                                     uint16_t param_idx) {
+static bool cg_func_param_abi_is_byte_slice_aggregate(XiCgenCtx *ctx, const XiFunc *f,
+                                                      uint16_t param_idx) {
     XaotValueRep rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
     return cg_value_rep_is_span_aggregate(rep) &&
-           cg_type_is_byte_span(cg_func_param_type(f, param_idx));
+           cg_type_is_byte_slice(cg_func_param_type(f, param_idx));
 }
 
 static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                uint16_t param_idx, const char *boxed_expr) {
     const XrType *param_type = cg_func_param_type(f, param_idx);
-    if (cg_func_param_abi_is_byte_span_aggregate(ctx, f, param_idx)) {
+    if (cg_func_param_abi_is_byte_slice_aggregate(ctx, f, param_idx)) {
         fprintf(out,
-                "xrt_byte_span_from_value(%s, \"Slice<byte> argument expects Array<byte> or "
+                "xrt_byte_slice_from_value(%s, \"Slice<byte> argument expects Array<byte> or "
                 "Slice<byte>\")",
                 boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
@@ -885,8 +885,8 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         }
         if (arg_plan && arg_plan->rep.kind != XAOT_VALUE_AGGREGATE &&
             cg_value_rep_is_span_aggregate(slot_rep) &&
-            cg_type_is_byte_span(cg_func_param_type(target, arg_index))) {
-            fprintf(out, "xrt_byte_span_from_value(");
+            cg_type_is_byte_slice(cg_func_param_type(target, arg_index))) {
+            fprintf(out, "xrt_byte_slice_from_value(");
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
             fprintf(out, ", \"Slice<byte> argument expects Array<byte> or Slice<byte>\")");
             return;
