@@ -434,6 +434,8 @@ static bool xa_summary_call_requires_owned_move_argument(XaParamEscapeSummary *s
                                                          AstNode *callee, int slot);
 static bool xa_summary_member_call_mutates_receiver(XaParamEscapeSummary *summary, AstNode *callee);
 static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee);
+static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *summary,
+                                                        CallExprNode *call);
 static XrClassInfo *xa_type_class_info(XrType *type);
 static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, XrType *type);
 static XaSymbol *xa_receiver_method_symbol_for_call(XrClassInfo *receiver_info, AstNode *object,
@@ -528,6 +530,8 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
                 xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
         }
     }
+    if (!fn_links)
+        xa_summary_mark_unknown_function_value_args(summary, call);
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         const char *method_name = call->callee->as.member_access.name;
         if (xa_summary_member_call_mutates_receiver(summary, call->callee))
@@ -856,9 +860,34 @@ static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, A
         xa_scope_lookup(summary->ctx->analyzer->current_scope, callee->as.variable.name);
     if (!sym && summary->ctx->analyzer->global_scope)
         sym = xa_scope_lookup(summary->ctx->analyzer->global_scope, callee->as.variable.name);
-    if (!sym || sym->kind != XA_SYM_FUNCTION)
+    if (!sym)
         return NULL;
-    return xa_analyzer_get_links(summary->ctx->analyzer, sym);
+    XaSymbolLinks *links = xa_analyzer_get_links(summary->ctx->analyzer, sym);
+    if (sym->kind == XA_SYM_FUNCTION)
+        return links;
+    if (sym->is_const && links && links->type && XR_TYPE_IS_FUNCTION(links->type) &&
+        (links->param_escapes || links->param_mutations || links->param_storage_requirements))
+        return links;
+    return NULL;
+}
+
+static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *summary,
+                                                        CallExprNode *call) {
+    if (!summary || !call || !call->callee)
+        return;
+    if (xa_summary_function_links(summary, call->callee))
+        return;
+    XrType *callee_type = xa_summary_expr_type(summary, call->callee);
+    if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type))
+        return;
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        XrType *arg_type = xa_summary_expr_type(summary, arg);
+        if (!xa_type_needs_borrow_escape_guard(arg_type))
+            continue;
+        xa_summary_mark_expr(summary, arg);
+        xa_summary_mark_mutation(summary, arg);
+    }
 }
 
 static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode *node) {
@@ -1061,6 +1090,8 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
                 xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
         }
     }
+    if (!fn_links)
+        xa_summary_mark_unknown_function_value_args(summary, call);
     xa_summary_walk(summary, call->callee);
     for (int i = 0; i < call->arg_count; i++)
         xa_summary_walk(summary, call->arguments[i]);

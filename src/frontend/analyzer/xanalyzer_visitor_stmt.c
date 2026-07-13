@@ -6848,8 +6848,8 @@ static AstNode *xa_direct_function_value_source(AstNode *expr) {
     return source && source->type == AST_VARIABLE ? source : NULL;
 }
 
-static void xa_propagate_function_value_return_storage(XaInferContext *ctx, XaSymbol *dst_sym,
-                                                       AstNode *initializer, XrType *init_type) {
+static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *dst_sym,
+                                                AstNode *initializer, XrType *init_type) {
     if (!ctx || !ctx->analyzer || !dst_sym || !initializer || !XR_TYPE_IS_FUNCTION(init_type))
         return;
     if (!dst_sym->is_const)
@@ -6866,6 +6866,8 @@ static void xa_propagate_function_value_return_storage(XaInferContext *ctx, XaSy
     XaSymbolLinks *dst_links = xa_analyzer_get_links(ctx->analyzer, dst_sym);
     if (!src_links || !dst_links)
         return;
+
+    xa_symbol_links_copy_param_effect_summaries(dst_links, src_links);
 
     if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_storage_scanned &&
         !src_links->return_storage_scan_in_progress)
@@ -7749,7 +7751,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         // Store inferred initializer type in the analyzer side table
         // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
-        xa_propagate_function_value_return_storage(ctx, sym, var->initializer, init_type);
+        xa_propagate_function_value_summary(ctx, sym, var->initializer, init_type);
         xa_check_shared_initializer_boundary(ctx, node, init_type);
         xa_check_owned_initializer_boundary(ctx, node, init_type);
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);

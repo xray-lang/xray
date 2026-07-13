@@ -673,6 +673,36 @@ bool xa_symbol_is_function(XaSymbol *symbol) {
     return symbol->kind == XA_SYM_FUNCTION || symbol->kind == XA_SYM_METHOD;
 }
 
+static void xa_copy_u8_summary(uint8_t **dst, int *dst_count, const uint8_t *src, int src_count) {
+    if (!dst || !dst_count)
+        return;
+    if (*dst) {
+        xr_free(*dst);
+        *dst = NULL;
+    }
+    *dst_count = 0;
+    if (!src || src_count <= 0)
+        return;
+    uint8_t *copy = xr_malloc((size_t) src_count * sizeof(uint8_t));
+    if (!copy)
+        return;
+    memcpy(copy, src, (size_t) src_count * sizeof(uint8_t));
+    *dst = copy;
+    *dst_count = src_count;
+}
+
+void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst, const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_u8_summary(&dst->param_escapes, &dst->param_escape_count,
+                       src ? src->param_escapes : NULL, src ? src->param_escape_count : 0);
+    xa_copy_u8_summary(&dst->param_mutations, &dst->param_mutation_count,
+                       src ? src->param_mutations : NULL, src ? src->param_mutation_count : 0);
+    xa_copy_u8_summary(&dst->param_storage_requirements, &dst->param_storage_requirement_count,
+                       src ? src->param_storage_requirements : NULL,
+                       src ? src->param_storage_requirement_count : 0);
+}
+
 // Set generic type parameters for a function/class.  Each parameter may
 // carry an intersection-style constraint list (T: A & B & C); the lists
 // are deep-copied into the symbol storage so callers retain ownership of
@@ -786,31 +816,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
                                      src->return_type);
     if (src->param_defaults)
         xa_symbol_links_set_param_defaults(dst, src->param_defaults, src->param_count);
-    if (src->param_escapes && src->param_escape_count > 0) {
-        dst->param_escapes = xr_malloc((size_t) src->param_escape_count * sizeof(uint8_t));
-        if (dst->param_escapes) {
-            memcpy(dst->param_escapes, src->param_escapes,
-                   (size_t) src->param_escape_count * sizeof(uint8_t));
-            dst->param_escape_count = src->param_escape_count;
-        }
-    }
-    if (src->param_mutations && src->param_mutation_count > 0) {
-        dst->param_mutations = xr_malloc((size_t) src->param_mutation_count * sizeof(uint8_t));
-        if (dst->param_mutations) {
-            memcpy(dst->param_mutations, src->param_mutations,
-                   (size_t) src->param_mutation_count * sizeof(uint8_t));
-            dst->param_mutation_count = src->param_mutation_count;
-        }
-    }
-    if (src->param_storage_requirements && src->param_storage_requirement_count > 0) {
-        dst->param_storage_requirements =
-            xr_malloc((size_t) src->param_storage_requirement_count * sizeof(uint8_t));
-        if (dst->param_storage_requirements) {
-            memcpy(dst->param_storage_requirements, src->param_storage_requirements,
-                   (size_t) src->param_storage_requirement_count * sizeof(uint8_t));
-            dst->param_storage_requirement_count = src->param_storage_requirement_count;
-        }
-    }
+    xa_symbol_links_copy_param_effect_summaries(dst, src);
     dst->return_type_inferred = src->return_type_inferred;
     dst->return_storage_owner = src->return_storage_owner;
     dst->return_storage_known = src->return_storage_known;
