@@ -8228,7 +8228,7 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
         fprintf(out, "; ");
         if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_READONLY)) {
             fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
         }
         fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
                 value_ctype);
@@ -8267,7 +8267,7 @@ static bool xicgen_emit_byte_slice_float_store(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "; ");
         if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_READONLY)) {
             fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
         }
         fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
                 value_ctype);
@@ -8514,7 +8514,7 @@ static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, "; ");
         if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_FILL, XAOT_SPAN_DROP_READONLY)) {
             fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
         }
         fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || (_s.length > 0 && !_s.data))) "
                      "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
@@ -8610,7 +8610,7 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, "; ");
         if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COPY, XAOT_SPAN_DROP_READONLY)) {
             fprintf(out, "if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
-                         "\"cannot write through readonly Span\"); ");
+                         "XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
         }
         fprintf(out,
                 "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
@@ -8801,7 +8801,7 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         fprintf(out, "; ");
         if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_REPEAT, XAOT_SPAN_DROP_READONLY)) {
             fprintf(out, "if (xrt_span_is_readonly(_span)) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
         }
         fprintf(out, "if (XR_UNLIKELY(_span.length < 0 || _dst_offset < 0 || _distance <= 0 || "
                      "_count < 0 || _distance > _dst_offset || _dst_offset > _span.length || "

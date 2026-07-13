@@ -1432,6 +1432,32 @@ vmcase(OP_ARRAY_RESIZE) {
         }                                                                                          \
     } while (0)
 
+#define VM_BYTE_SLICE_VIEW(value, out_data, out_length, out_readonly, out_elem_type, message)      \
+    do {                                                                                           \
+        XrValue _span_value = (value);                                                             \
+        if (XR_IS_SPAN_REF(_span_value)) {                                                         \
+            XrSpanView *_span = XR_TO_SPAN_REF(_span_value);                                       \
+            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
+            }                                                                                      \
+            (out_data) = _span->data;                                                              \
+            (out_length) = _span->length;                                                          \
+            (out_readonly) = ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0);                     \
+            (out_elem_type) = _span->elem_type;                                                    \
+        } else if (XR_IS_ARRAY(_span_value)) {                                                     \
+            XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
+            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
+            }                                                                                      \
+            (out_data) = _arr->data;                                                               \
+            (out_length) = _arr->length;                                                           \
+            (out_readonly) = false;                                                                \
+            (out_elem_type) = _arr->elem_type;                                                     \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                     \
+        }                                                                                          \
+    } while (0)
+
 #define VM_BYTE_SLICE_LOAD_CASE(opcode, load_fn, width_name)                                       \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
@@ -1445,29 +1471,11 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
         void *_data = NULL;                                                                        \
         int64_t _length = 0;                                                                       \
+        bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        if (XR_IS_SPAN_REF(_recv)) {                                                               \
-            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
-            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
-            }                                                                                      \
-            _data = _span->data;                                                                   \
-            _length = _span->length;                                                               \
-            _elem_type = _span->elem_type;                                                         \
-        } else if (XR_IS_ARRAY(_recv)) {                                                           \
-            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
-            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
-            }                                                                                      \
-            _data = _arr->data;                                                                    \
-            _length = _arr->length;                                                                \
-            _elem_type = _arr->elem_type;                                                          \
-        } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.load<" width_name ">() expects Slice<byte>");            \
-        }                                                                                          \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
+                           "Slice<byte>.load<" width_name ">() expects Slice<byte>");              \
+        (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
         uint64_t _value =                                                                          \
             (uint64_t) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);     \
@@ -1493,31 +1501,12 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
         void *_data = NULL;                                                                        \
         int64_t _length = 0;                                                                       \
+        bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        if (XR_IS_SPAN_REF(_recv)) {                                                               \
-            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
-            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
-            }                                                                                      \
-            if ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                  \
-                VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");   \
-            }                                                                                      \
-            _data = _span->data;                                                                   \
-            _length = _span->length;                                                               \
-            _elem_type = _span->elem_type;                                                         \
-        } else if (XR_IS_ARRAY(_recv)) {                                                           \
-            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
-            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
-            }                                                                                      \
-            _data = _arr->data;                                                                    \
-            _length = _arr->length;                                                                \
-            _elem_type = _arr->elem_type;                                                          \
-        } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.store<" width_name ">() expects Slice<byte>");           \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
+                           "Slice<byte>.store<" width_name ">() expects Slice<byte>");             \
+        if (_readonly) {                                                                           \
+            VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
         bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
                             (value_type) XR_TO_INT(_value), _endian);                              \
@@ -1542,29 +1531,11 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
         void *_data = NULL;                                                                        \
         int64_t _length = 0;                                                                       \
+        bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        if (XR_IS_SPAN_REF(_recv)) {                                                               \
-            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
-            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
-            }                                                                                      \
-            _data = _span->data;                                                                   \
-            _length = _span->length;                                                               \
-            _elem_type = _span->elem_type;                                                         \
-        } else if (XR_IS_ARRAY(_recv)) {                                                           \
-            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
-            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.load<" width_name ">() expects Slice<byte>");        \
-            }                                                                                      \
-            _data = _arr->data;                                                                    \
-            _length = _arr->length;                                                                \
-            _elem_type = _arr->elem_type;                                                          \
-        } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.load<" width_name ">() expects Slice<byte>");            \
-        }                                                                                          \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
+                           "Slice<byte>.load<" width_name ">() expects Slice<byte>");              \
+        (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
         double _value =                                                                            \
             (double) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);       \
@@ -1590,31 +1561,12 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
         void *_data = NULL;                                                                        \
         int64_t _length = 0;                                                                       \
+        bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        if (XR_IS_SPAN_REF(_recv)) {                                                               \
-            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
-            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
-            }                                                                                      \
-            if ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                  \
-                VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");   \
-            }                                                                                      \
-            _data = _span->data;                                                                   \
-            _length = _span->length;                                                               \
-            _elem_type = _span->elem_type;                                                         \
-        } else if (XR_IS_ARRAY(_recv)) {                                                           \
-            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
-            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
-                                 "Slice<byte>.store<" width_name ">() expects Slice<byte>");       \
-            }                                                                                      \
-            _data = _arr->data;                                                                    \
-            _length = _arr->length;                                                                \
-            _elem_type = _arr->elem_type;                                                          \
-        } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.store<" width_name ">() expects Slice<byte>");           \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
+                           "Slice<byte>.store<" width_name ">() expects Slice<byte>");             \
+        if (_readonly) {                                                                           \
+            VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
         bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
                             (value_type) XR_TO_FLOAT(_value), _endian);                            \
@@ -1645,39 +1597,17 @@ VM_BYTE_SLICE_STORE_FLOAT_CASE(OP_BYTE_SLICE_STORE_F64, xr_array_core_bytes_stor
 #undef VM_BYTE_SLICE_LOAD_CASE
 #undef VM_PARSE_ENDIAN_ARG
 
-#define VM_BYTE_SLICE_VIEW(value, out_data, out_length, out_readonly, message)                     \
-    do {                                                                                           \
-        XrValue _span_value = (value);                                                             \
-        if (XR_IS_SPAN_REF(_span_value)) {                                                         \
-            XrSpanView *_span = XR_TO_SPAN_REF(_span_value);                                       \
-            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
-            }                                                                                      \
-            (out_data) = _span->data;                                                              \
-            (out_length) = _span->length;                                                          \
-            (out_readonly) = ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0);                     \
-        } else if (XR_IS_ARRAY(_span_value)) {                                                     \
-            XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
-            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
-            }                                                                                      \
-            (out_data) = _arr->data;                                                               \
-            (out_length) = _arr->length;                                                           \
-            (out_readonly) = false;                                                                \
-        } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                     \
-        }                                                                                          \
-    } while (0)
-
 vmcase(OP_BYTE_SLICE_FILL) {
     int a = GETARG_A(i);
     void *dst_data = NULL;
     int64_t dst_length = 0;
     bool dst_readonly = false;
-    VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly,
+    uint8_t dst_elem_type = XR_ELEM_ANY;
+    VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly, dst_elem_type,
                        "Slice<byte>.fill(value) expects Slice<byte>");
+    (void) dst_elem_type;
     if (dst_readonly) {
-        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!XR_IS_INT(R(a + 1))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
@@ -1697,16 +1627,18 @@ vmcase(OP_BYTE_SLICE_COPY) {
     int64_t src_length = 0;
     bool dst_readonly = false;
     bool src_readonly = false;
-    VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly,
+    uint8_t dst_elem_type = XR_ELEM_ANY;
+    uint8_t src_elem_type = XR_ELEM_ANY;
+    VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly, dst_elem_type,
                        "Slice<byte>.copyFrom(src) receiver must be Slice<byte>");
-    VM_BYTE_SLICE_VIEW(R(a + 1), src_data, src_length, src_readonly,
+    VM_BYTE_SLICE_VIEW(R(a + 1), src_data, src_length, src_readonly, src_elem_type,
                        "Slice<byte>.copyFrom(src) source must be Slice<byte>");
     (void) src_readonly;
     if (dst_readonly) {
-        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
-    if (!xr_array_core_bytes_copy_from(dst_data, dst_length, XR_ELEM_U8, src_data, src_length,
-                                       XR_ELEM_U8, 0, 0, src_length, false)) {
+    if (!xr_array_core_bytes_copy_from(dst_data, dst_length, dst_elem_type, src_data, src_length,
+                                       src_elem_type, 0, 0, src_length, false)) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                          "Slice<byte>.copyFrom(src) range out of bounds");
     }
@@ -1721,12 +1653,16 @@ vmcase(OP_BYTE_SLICE_COMPARE) {
     int64_t right_length = 0;
     bool left_readonly = false;
     bool right_readonly = false;
-    VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly,
+    uint8_t left_elem_type = XR_ELEM_ANY;
+    uint8_t right_elem_type = XR_ELEM_ANY;
+    VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly, left_elem_type,
                        "Slice<byte>.compare(other) receiver must be Slice<byte>");
-    VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly,
+    VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly, right_elem_type,
                        "Slice<byte>.compare(other) operand must be Slice<byte>");
     (void) left_readonly;
     (void) right_readonly;
+    (void) left_elem_type;
+    (void) right_elem_type;
     int64_t n = left_length < right_length ? left_length : right_length;
     int cmp = 0;
     if (n > 0) {
@@ -1755,15 +1691,17 @@ vmcase(OP_BYTE_SLICE_COMMON_PREFIX) {
     int64_t right_length = 0;
     bool left_readonly = false;
     bool right_readonly = false;
-    VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly,
+    uint8_t left_elem_type = XR_ELEM_ANY;
+    uint8_t right_elem_type = XR_ELEM_ANY;
+    VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly, left_elem_type,
                        "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>");
-    VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly,
+    VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly, right_elem_type,
                        "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
     (void) left_readonly;
     (void) right_readonly;
     bool ok = false;
-    int64_t prefix = xr_array_core_bytes_common_prefix(left_data, left_length, XR_ELEM_U8,
-                                                       right_data, right_length, XR_ELEM_U8, &ok);
+    int64_t prefix = xr_array_core_bytes_common_prefix(
+        left_data, left_length, left_elem_type, right_data, right_length, right_elem_type, &ok);
     if (!ok) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.commonPrefix(other) span has no data");
     }
@@ -1776,16 +1714,17 @@ vmcase(OP_BYTE_SLICE_REPEAT) {
     void *data = NULL;
     int64_t length = 0;
     bool readonly = false;
-    VM_BYTE_SLICE_VIEW(R(a), data, length, readonly,
+    uint8_t elem_type = XR_ELEM_ANY;
+    VM_BYTE_SLICE_VIEW(R(a), data, length, readonly, elem_type,
                        "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
     if (readonly) {
-        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) || !XR_IS_INT(R(a + 3))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          "Slice<byte>.repeatFrom(dstOffset, distance, count) expects integers");
     }
-    if (!xr_array_core_bytes_repeat_from(data, length, XR_ELEM_U8, XR_TO_INT(R(a + 1)),
+    if (!xr_array_core_bytes_repeat_from(data, length, elem_type, XR_TO_INT(R(a + 1)),
                                          XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                          "Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds");

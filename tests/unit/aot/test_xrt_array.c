@@ -121,7 +121,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         g_passed++;                                                                                \
     } while (0)
 
-#define EXPECT_READONLY_SPAN_THROW(stmt, msg)                                                      \
+#define EXPECT_READONLY_BYTE_SLICE_THROW(stmt, msg)                                                \
     do {                                                                                           \
         g_thrown_exc = XR_NULL_VAL;                                                                \
         g_expect_throw = 1;                                                                        \
@@ -135,7 +135,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         ASSERT_TRUE(XR_IS_INT(_code), msg " code is int");                                         \
         ASSERT_EQ_INT(XR_TO_INT(_code), XR_ERR_CMP_CONST_ASSIGN, msg " code");                     \
         ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),                               \
-                         "cannot write through readonly Span", msg " message");                    \
+                         XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG, msg " message");                   \
     } while (0)
 
 static void reset_alloc_counts(void) {
@@ -521,14 +521,14 @@ static void test_byte_slice_readonly_mutators_throw_before_write(void) {
     readonly.flags |= XRT_SPAN_FLAG_READONLY;
     xr_span_t src = xrt_span_from_array_slice(value, 0, 4);
 
-    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_fill_checked_raw(readonly, 0xff),
-                               "readonly Slice<byte>.fill throws");
-    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_copy_checked_raw(readonly, src),
-                               "readonly Slice<byte>.copyFrom throws");
-    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_repeat_from_checked_raw(readonly, 4, 4, 4),
-                               "readonly Slice<byte>.repeatFrom throws");
-    EXPECT_READONLY_SPAN_THROW(xrt_byte_slice_store_u16_checked_raw(readonly, 0, 0xffff, 1),
-                               "readonly Slice<byte>.store throws");
+    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_fill_checked_raw(readonly, 0xff),
+                                     "readonly Slice<byte>.fill throws");
+    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_copy_checked_raw(readonly, src),
+                                     "readonly Slice<byte>.copyFrom throws");
+    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_repeat_from_checked_raw(readonly, 4, 4, 4),
+                                     "readonly Slice<byte>.repeatFrom throws");
+    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_store_u16_checked_raw(readonly, 0, 0xffff, 1),
+                                     "readonly Slice<byte>.store throws");
 
     for (int64_t i = 0; i < 8; i++)
         ASSERT_EQ_INT(((uint8_t *) a->data)[i], 10 + i,

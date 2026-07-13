@@ -59,6 +59,8 @@ TEST(error_core_defines_bytes_messages) {
                   "Slice<byte>.load<uint64>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG,
                   "Slice<byte>.load<uint64>() offset out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG,
+                  "cannot write through readonly Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG,
                   "Slice<byte>.copyFrom expects integer offsets and count");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG,
