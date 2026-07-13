@@ -196,17 +196,26 @@ TEST(analyzer_check_assignment_rejects_unknown_source) {
 
 TEST(type_to_string) {
     XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_u8 = xr_type_new_int_width(NULL, XR_NATIVE_U8);
     XrType *t_u64 = xr_type_new_int_width(NULL, XR_NATIVE_U64);
     XrType *t_arr = xr_type_new_array(g_isolate, xr_type_new_string(NULL));
+    XrType *t_byte_arr = xr_type_new_array(g_isolate, t_u8);
+    XrType *t_byte_slice = xr_type_new_span(g_isolate, t_u8);
     XrType *fn_params[] = {xr_type_new_int_width(NULL, XR_NATIVE_I32)};
     XrType *t_cfn = xr_type_new_function(g_isolate, fn_params, 1,
                                          xr_type_new_int_width(NULL, XR_NATIVE_I32), false);
     t_cfn->function.is_c_abi = true;
+    XrType *byte_fn_params[] = {t_u8};
+    XrType *t_byte_fn = xr_type_new_function(g_isolate, byte_fn_params, 1, t_u8, false);
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_u8), "byte") == 0);
     ASSERT(strcmp(xr_type_to_string(t_u64), "uint64") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_arr), "Array<byte>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<byte>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int32): int32>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte): byte") == 0);
 }
 
 TEST(type_narrowing) {

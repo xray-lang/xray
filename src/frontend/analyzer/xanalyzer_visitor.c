@@ -1317,7 +1317,7 @@ static const char *int_native_width_label(uint8_t native_width) {
         case XR_NATIVE_I8:
             return "int8";
         case XR_NATIVE_U8:
-            return "uint8";
+            return "byte";
         case XR_NATIVE_I16:
             return "int16";
         case XR_NATIVE_U16:

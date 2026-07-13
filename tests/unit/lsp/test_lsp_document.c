@@ -330,6 +330,31 @@ TEST(completion_u8_array_registry_methods) {
     xlsp_server_free(server);
 }
 
+TEST(completion_uint8_array_uses_canonical_byte_docs) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<uint8>(0)\n"
+                          "bytes.\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///uint8_array.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    XrJsonValue *append = json_array_find_label(items, "appendFrom");
+    ASSERT(append != NULL);
+    const char *doc_text = xjson_get_string(append, "documentation");
+    ASSERT(doc_text != NULL);
+    ASSERT(strstr(doc_text, "Array<byte> byte bulk methods") != NULL);
+    ASSERT(strstr(doc_text, "Array<uint8>") == NULL);
+    ASSERT(strstr(doc_text, "Slice<uint8>") == NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
 TEST(completion_int_array_excludes_u8_registry_methods) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -561,6 +586,7 @@ int main(int argc, char **argv) {
     printf("\nCompletion tests:\n");
     RUN_TEST(completion_shared_channel_member);
     RUN_TEST(completion_u8_array_registry_methods);
+    RUN_TEST(completion_uint8_array_uses_canonical_byte_docs);
     RUN_TEST(completion_int_array_excludes_u8_registry_methods);
     RUN_TEST(completion_u8_slice_registry_methods);
     RUN_TEST(hover_u8_array_registry_method);
