@@ -38,13 +38,18 @@ static const char *object_shape_type_label_local(XrType *type) {
     return xr_type_to_string(type);
 }
 
-static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults, int count) {
+static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
+                                        XrType **param_types, int count) {
     if (!ctx || !defaults || count <= 0)
         return;
+    XrType *saved_expected = ctx->expected_type;
     for (int i = 0; i < count; i++) {
-        if (defaults[i])
+        if (defaults[i]) {
+            ctx->expected_type = param_types ? param_types[i] : NULL;
             xa_visit_infer_expr(ctx, defaults[i]);
+        }
     }
+    ctx->expected_type = saved_expected;
 }
 
 static void xa_reset_symbol_move_state_cb(const char *key, void *value, void *userdata) {
@@ -2918,7 +2923,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
                                      ret_type);
     if (md->param_count > 0) {
-        xa_bind_param_default_exprs(ctx, md->default_values, md->param_count);
+        xa_bind_param_default_exprs(ctx, md->default_values, param_types, md->param_count);
         xa_symbol_links_set_param_defaults(method_links, md->default_values, md->param_count);
     }
 

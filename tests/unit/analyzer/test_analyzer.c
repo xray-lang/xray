@@ -755,6 +755,22 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     return false;
 }
 
+TEST(analyzer_empty_array_uses_unsolved_infer_var) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var xs = []\nvar ys: Array<int> = []\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "empty_array_infer_var.xr", program);
+
+    ASSERT(analyzer_diag_contains(a, "cannot infer element type for empty array literal"));
+    ASSERT(a->unresolved_inference_count >= 1);
+    ASSERT(a->recovery_poison_type_count >= 1);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_container_success_types) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1107,6 +1123,7 @@ int main(void) {
     RUN_TEST(compile_type_containers);
     RUN_TEST(compile_type_function);
     RUN_TEST(compile_type_ref_function_modes);
+    RUN_TEST(analyzer_empty_array_uses_unsolved_infer_var);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);

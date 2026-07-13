@@ -35,6 +35,24 @@ typedef struct XaActiveSpanBorrow {
     struct XaActiveSpanBorrow *next;
 } XaActiveSpanBorrow;
 
+typedef struct XaInferVar {
+    uint32_t id;
+    const char *reason;
+    XrLocation loc;
+    XrType **lower_bounds;
+    int lower_bound_count;
+    int lower_bound_capacity;
+    XrType **upper_bounds;
+    int upper_bound_count;
+    int upper_bound_capacity;
+    XrType **constraints;
+    int constraint_count;
+    int constraint_capacity;
+    XrType *solution;
+    bool reported_unsolved;
+    struct XaInferVar *next;
+} XaInferVar;
+
 #define XA_BLOCK_CURSOR_MAX 64
 
 // Inference context (for a single file/function)
@@ -71,6 +89,14 @@ typedef struct XaInferContext {
     // Expected type for bidirectional inference (contextual typing)
     // Propagated from declaration to initializer expression
     XrType *expected_type;
+
+    // Analyzer-owned inference variables. These are not XrTypeKind values:
+    // unresolved variables must be diagnosed and converted to ErrorType recovery
+    // before any semantic XrType is exposed to later phases.
+    uint32_t next_infer_var_id;
+    XaInferVar *infer_vars;
+    int infer_var_count;
+    int unresolved_infer_var_count;
 
     // `copy(view-producing-expr)` is the one context where a slice may first be
     // typed as a Span without an explicit Span target; the copy result is owned.
@@ -146,6 +172,12 @@ typedef struct XaInferContext {
 // API: Context lifecycle
 XR_FUNC XaInferContext *xa_infer_context_new(XaAnalyzer *analyzer);
 XR_FUNC void xa_infer_context_free(XaInferContext *ctx);
+
+// Inference variables
+XR_FUNC XaInferVar *xa_infer_var_new(XaInferContext *ctx, const char *reason,
+                                     const XrLocation *loc);
+XR_FUNC XrType *xa_infer_var_report_unsolved(XaInferContext *ctx, XaInferVar *var,
+                                             const char *message);
 
 // Return type inference
 XR_FUNC void xa_infer_add_return_type(XaInferContext *ctx, XrType *type);
