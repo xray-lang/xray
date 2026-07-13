@@ -103,6 +103,26 @@ TEST(aot_type_fingerprint_includes_param_modes) {
     TEST_REQUIRE(in_hash != ref_hash, "in and ref param modes must hash differently");
 }
 
+TEST(aot_type_fingerprint_separates_error_recovery) {
+    XrType *error_type = xr_type_new_error(NULL);
+    XrType *unknown_type = xr_type_new_unknown(NULL);
+    XrType *error_array = xr_type_new_array(g_iso, error_type);
+    XrType *unknown_array = xr_type_new_array(g_iso, unknown_type);
+    TEST_REQUIRE(error_type && unknown_type && error_array && unknown_array,
+                 "error and unknown fingerprint fixtures created");
+
+    uint64_t error_hash = xaot_type_fingerprint(error_type);
+    uint64_t error_hash_again = xaot_type_fingerprint(xr_type_new_error(NULL));
+    uint64_t unknown_hash = xaot_type_fingerprint(unknown_type);
+    uint64_t error_array_hash = xaot_type_fingerprint(error_array);
+    uint64_t unknown_array_hash = xaot_type_fingerprint(unknown_array);
+
+    TEST_REQUIRE(error_hash == error_hash_again, "ErrorType fingerprint is stable");
+    TEST_REQUIRE(error_hash != unknown_hash, "ErrorType fingerprint differs from unknown");
+    TEST_REQUIRE(error_array_hash != unknown_array_hash,
+                 "nested ErrorType fingerprint differs from nested unknown");
+}
+
 /* CGen fixtures bypass the global producer, so synthesize strong body anchors for strict plans. */
 typedef struct TestAotEvidenceIds {
     XgFuncId next_func_id;
@@ -8070,6 +8090,7 @@ int main(void) {
     setup();
 
     run_aot_type_fingerprint_includes_param_modes();
+    run_aot_type_fingerprint_separates_error_recovery();
     run_cgen_simple_arith();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();

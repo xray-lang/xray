@@ -1709,6 +1709,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return false;
     if ((a->kind == XR_KIND_INT || a->kind == XR_KIND_FLOAT) && a->native_width != b->native_width)
         return false;
+    if (a->kind == XR_KIND_ERROR)
+        return true;
 
     // Check type-specific data
     if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SPAN || a->kind == XR_KIND_VIEW ||

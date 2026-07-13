@@ -295,6 +295,10 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
             h ^= type_hash_depth(type->function.return_type, depth + 1);
             h *= UINT64_C(1099511628211);
             break;
+        case XR_KIND_ERROR:
+            h ^= UINT64_C(0x4572726f72547970);
+            h *= UINT64_C(1099511628211);
+            break;
         default:
             break;
     }
