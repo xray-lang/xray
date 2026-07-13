@@ -44,6 +44,8 @@ static const char *xi_type_name(const struct XrType *type) {
             return "null";
         case XR_KIND_UNKNOWN:
             return "any";
+        case XR_KIND_ERROR:
+            return "<error>";
         case XR_KIND_UNIT:
             return "void";
         case XR_KIND_ARRAY:

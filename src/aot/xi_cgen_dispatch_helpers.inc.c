@@ -10568,6 +10568,8 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
             return "function";
         case XR_KIND_UNKNOWN:
             return "unknown";
+        case XR_KIND_ERROR:
+            return "<error>";
         case XR_KIND_NEVER:
             return "never";
         case XR_KIND_UNIT:

@@ -35,6 +35,7 @@ static XrType g_type_bool;
 static XrType g_type_rune;
 static XrType g_type_null;
 static XrType g_type_unknown;
+static XrType g_type_error;
 static XrType g_type_never;
 static XrType g_type_unit;
 static XrType g_type_json;
@@ -67,6 +68,7 @@ static void xr_type_global_init_once(void) {
     init_singleton(&g_type_rune, XR_KIND_RUNE, id++, false, 0);
     init_singleton(&g_type_null, XR_KIND_NULL, id++, false, 0);
     init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, 0);
+    init_singleton(&g_type_error, XR_KIND_ERROR, id++, false, 0);
     init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
     // Unit type singleton: dedicated XR_KIND_UNIT kind, spelled `()` in user
     // syntax. Acts as the canonical "no meaningful value" type for functions
@@ -159,6 +161,10 @@ XrType *xr_type_new_null(XrVMRuntime *X) {
 XrType *xr_type_new_unknown(XrVMRuntime *X) {
     (void) X;
     return &g_type_unknown;
+}
+XrType *xr_type_new_error(XrVMRuntime *X) {
+    (void) X;
+    return &g_type_error;
 }
 XrType *xr_type_new_never(XrVMRuntime *X) {
     (void) X;
@@ -837,6 +843,10 @@ XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b) {
         return a;
     if (xr_type_equals(a, b))
         return a;
+
+    // ErrorType is compiler recovery poison; unioning it stays poison.
+    if (XR_TYPE_IS_ERROR(a) || XR_TYPE_IS_ERROR(b))
+        return xr_type_new_error(X);
 
     // unknown | T = unknown
     if (XR_TYPE_IS_UNKNOWN(a) || XR_TYPE_IS_UNKNOWN(b))

@@ -26,7 +26,8 @@ struct XaAnalyzer;
 struct AstNode;
 
 /* Resolve a single XrTypeRef to its runtime XrType*.
- * Returns xr_type_new_unknown() on NULL input or unresolvable refs. */
+ * Returns xr_type_new_unknown() on NULL input or unresolvable refs. XR_TREF_ERROR
+ * resolves to the compiler-only recovery error type instead of unknown. */
 XR_FUNC struct XrType *xr_tref_resolve(struct XrVMRuntime *X, const struct XrTypeRef *tref);
 
 /* Analyzer-aware variant.

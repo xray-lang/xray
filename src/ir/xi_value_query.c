@@ -115,7 +115,7 @@ XR_FUNC bool xi_value_type_is_event_count(const XiValue *v) {
 
 XR_FUNC bool xi_value_type_is_unknown(const XiValue *v) {
     v = xi_value_unwrap_identity(v);
-    return !v || !v->type || v->type->kind == XR_KIND_UNKNOWN;
+    return !v || !v->type || XR_TYPE_IS_UNKNOWN_OR_ERROR(v->type);
 }
 
 static bool xi_value_const_int(const XiValue *value, int64_t *out) {

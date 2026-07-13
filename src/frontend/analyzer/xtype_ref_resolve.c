@@ -1012,7 +1012,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
         case XR_TREF_NULL:
             return xr_type_new_null(NULL);
         case XR_TREF_ERROR:
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
 
         case XR_TREF_INT_WIDTH:
             return xr_type_new_int_width(X, t->native_width);

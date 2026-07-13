@@ -68,6 +68,7 @@ typedef enum XrTypeKind {
     XR_KIND_INTERFACE,
     XR_KIND_FUNCTION,
     XR_KIND_UNKNOWN,
+    XR_KIND_ERROR,  // Compiler-only recovery poison; never a source type.
     XR_KIND_NEVER,
     XR_KIND_UNIT,  // Unit (0-arity tuple): canonical "no meaningful value" type
     XR_KIND_ENUM,
@@ -279,6 +280,8 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_C_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION && (t)->function.is_c_abi)
 #define XR_TYPE_IS_INSTANCE(t) ((t)->kind == XR_KIND_INSTANCE)
 #define XR_TYPE_IS_UNKNOWN(t) ((t)->kind == XR_KIND_UNKNOWN)
+#define XR_TYPE_IS_ERROR(t) ((t)->kind == XR_KIND_ERROR)
+#define XR_TYPE_IS_UNKNOWN_OR_ERROR(t) ((t)->kind == XR_KIND_UNKNOWN || (t)->kind == XR_KIND_ERROR)
 #define XR_TYPE_IS_NEVER(t) ((t)->kind == XR_KIND_NEVER)
 #define XR_TYPE_IS_CLASS(t) ((t)->kind == XR_KIND_CLASS)
 #define XR_TYPE_IS_INTERFACE(t) ((t)->kind == XR_KIND_INTERFACE)
@@ -418,6 +421,7 @@ XR_FUNC XrType *xr_type_new_bool(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_rune(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_null(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_unknown(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_error(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_never(XrVMRuntime *X);
 // Unit type singleton (XR_KIND_UNIT, spelled `()` in user syntax). The
 // canonical "no meaningful value" type used for functions that return

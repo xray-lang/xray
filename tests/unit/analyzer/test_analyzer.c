@@ -145,6 +145,25 @@ TEST(type_union) {
     ASSERT(XR_TYPE_IS_INT(same));
 }
 
+TEST(type_error_recovery) {
+    XrType *t_error = xr_type_new_error(NULL);
+    ASSERT(t_error != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(t_error));
+    ASSERT(XR_TYPE_IS_UNKNOWN_OR_ERROR(t_error));
+    ASSERT(!XR_TYPE_IS_UNKNOWN(t_error));
+    ASSERT(strcmp(xr_type_to_string(t_error), "<error>") == 0);
+
+    XrTypeRef error_ref = {.kind = XR_TREF_ERROR};
+    XrType *resolved = xr_tref_resolve(g_isolate, &error_ref);
+    ASSERT(resolved != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(resolved));
+    ASSERT(resolved == t_error);
+
+    XrType *poisoned = xr_type_union(g_isolate, xr_type_new_int(NULL), t_error);
+    ASSERT(poisoned != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(poisoned));
+}
+
 TEST(type_assignable) {
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_float = xr_type_new_float(NULL);
@@ -856,6 +875,7 @@ int main(void) {
     RUN_TEST(type_primitives);
     RUN_TEST(type_containers);
     RUN_TEST(type_union);
+    RUN_TEST(type_error_recovery);
     RUN_TEST(type_assignable);
     RUN_TEST(typecheck_assignable_rejects_unknown_source);
     RUN_TEST(typecheck_assignable_rejects_unknown_container_member);
