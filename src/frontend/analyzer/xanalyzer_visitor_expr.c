@@ -3782,6 +3782,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         uint32_t saved_initializing_symbol_id = ctx->initializing_symbol_id;
         ctx->initializing_symbol_id = 0;
         xa_visit_function_body_unified(ctx, fn->body);
+        xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope, fn->body);
         xa_parallel_callback_effect_check(ctx, fn->body);
         ctx->initializing_symbol_id = saved_initializing_symbol_id;
 

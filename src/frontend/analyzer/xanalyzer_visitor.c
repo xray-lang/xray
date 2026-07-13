@@ -5224,6 +5224,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
             // Unified body visitor: idempotent collect + direct traversal
             xa_visit_function_body_unified(ctx, fn_decl->body);
+            xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope,
+                                                          fn_decl->body);
 
             if (ctx->current_fn_has_yield) {
                 /* `yield expr` in the body makes this a generator. The required
@@ -5390,6 +5392,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         ctx->expected_return_type = NULL;
                     }
                     xa_visit_function_body_unified(ctx, md->body);
+                    xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope,
+                                                                  md->body);
                     ctx->expected_return_type = saved_ret;
                     ctx->current_method_is_constructor = saved_is_ctor;
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -6121,6 +6125,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     md->return_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
                                     : NULL;
                 xa_visit_function_body_unified(ctx, md->body);
+                xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope,
+                                                              md->body);
                 ctx->expected_return_type = saved_ret;
                 xa_analyzer_exit_scope(ctx->analyzer);
             }

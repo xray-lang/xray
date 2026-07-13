@@ -1,0 +1,5 @@
+const bad = fn(x: out int) {
+}
+
+var y = 0
+bad(out y)
