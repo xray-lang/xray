@@ -19,6 +19,7 @@
 #include "xtype_ref.h"
 #include "xtype_ref_resolve.h"
 #include "xtype_pool.h"
+#include "xhashmap.h"
 #include "xray_vm.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
@@ -705,6 +706,35 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
+TEST(export_symbols_skip_nested_error_type) {
+    const char *source = "export fn bad() -> int { return 1 }\n"
+                         "export fn good() -> int { return 1 }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    ASSERT(program->type == AST_PROGRAM);
+
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    xa_analyzer_analyze(a, "export_error_type_test.xr", program);
+
+    XaSymbol *bad = xa_scope_lookup(a->current_scope, "bad");
+    ASSERT(bad != NULL);
+    XrType *poisoned_return = xr_type_new_array(a->isolate, xr_type_new_error(NULL));
+    XrType *poisoned_fn = xr_type_new_function(a->isolate, NULL, 0, poisoned_return, false);
+    ASSERT(poisoned_fn != NULL);
+    bad->links.type = poisoned_fn;
+    bad->links.declared_type = poisoned_fn;
+
+    XrHashMap *exports = xa_analyzer_collect_export_symbols(a, (XrAstNode *) program);
+    ASSERT(exports != NULL);
+    ASSERT(xr_hashmap_get(exports, "good") != NULL);
+    ASSERT(xr_hashmap_get(exports, "bad") == NULL);
+
+    xr_hashmap_free(exports);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(compile_type_class) {
     // Class type using new API
     XrType *cls = xr_type_new_class(g_isolate, "MyClass");
@@ -919,6 +949,7 @@ int main(void) {
     RUN_TEST(compile_type_containers);
     RUN_TEST(compile_type_function);
     RUN_TEST(compile_type_ref_function_modes);
+    RUN_TEST(export_symbols_skip_nested_error_type);
     RUN_TEST(compile_type_class);
     RUN_TEST(compile_type_optional);
     RUN_TEST(type_substitute_preserves_nullable_type_param);

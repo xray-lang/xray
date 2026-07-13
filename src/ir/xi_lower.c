@@ -50,87 +50,9 @@ static XiValue *xi_lower_wrap_shared_store_copy(XiLower *l, XiValue *val) {
     return val;
 }
 
-static bool xi_lower_type_contains_error_impl(const struct XrType *type, int depth) {
-    if (!type || depth > 64)
-        return false;
-    if (XR_TYPE_IS_ERROR(type))
-        return true;
-
-    switch (type->kind) {
-        case XR_KIND_ARRAY:
-        case XR_KIND_SET:
-        case XR_KIND_CHANNEL:
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
-            return xi_lower_type_contains_error_impl(type->container.element_type, depth + 1);
-        case XR_KIND_FIXED_ARRAY:
-        case XR_KIND_POINTER:
-            return xi_lower_type_contains_error_impl(type->fixed_array.element_type, depth + 1);
-        case XR_KIND_MAP:
-            return xi_lower_type_contains_error_impl(type->map.key_type, depth + 1) ||
-                   xi_lower_type_contains_error_impl(type->map.value_type, depth + 1);
-        case XR_KIND_JSON:
-        case XR_KIND_RECORD:
-            for (int i = 0; i < type->object.field_count; i++) {
-                if (xi_lower_type_contains_error_impl(
-                        type->object.field_types ? type->object.field_types[i] : NULL, depth + 1))
-                    return true;
-            }
-            return false;
-        case XR_KIND_INSTANCE:
-        case XR_KIND_CLASS:
-        case XR_KIND_INTERFACE:
-            if (xi_lower_type_contains_error_impl(type->instance.superclass, depth + 1))
-                return true;
-            for (int i = 0; i < type->instance.type_arg_count; i++) {
-                if (xi_lower_type_contains_error_impl(
-                        type->instance.type_args ? type->instance.type_args[i] : NULL, depth + 1))
-                    return true;
-            }
-            return false;
-        case XR_KIND_FUNCTION:
-            for (int i = 0; i < type->function.param_count; i++) {
-                if (xi_lower_type_contains_error_impl(
-                        type->function.params ? type->function.params[i].type : NULL, depth + 1))
-                    return true;
-            }
-            return xi_lower_type_contains_error_impl(type->function.return_type, depth + 1);
-        case XR_KIND_TYPE_PARAM:
-            return xi_lower_type_contains_error_impl(type->type_param.constraint, depth + 1);
-        case XR_KIND_TUPLE:
-            for (int i = 0; i < type->tuple.element_count; i++) {
-                if (xi_lower_type_contains_error_impl(
-                        type->tuple.element_types ? type->tuple.element_types[i] : NULL, depth + 1))
-                    return true;
-            }
-            return false;
-        case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
-                if (xi_lower_type_contains_error_impl(
-                        type->union_type.members ? type->union_type.members[i] : NULL, depth + 1))
-                    return true;
-            }
-            return false;
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_STRING:
-        case XR_KIND_BOOL:
-        case XR_KIND_NULL:
-        case XR_KIND_UNKNOWN:
-        case XR_KIND_ERROR:
-        case XR_KIND_NEVER:
-        case XR_KIND_UNIT:
-        case XR_KIND_ENUM:
-        case XR_KIND_RUNE:
-        case XR_KIND_COUNT:
-            return false;
-    }
-    return false;
-}
-
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line) {
-    if (!xi_lower_type_contains_error_impl(type, 0))
+    if (!xr_type_contains_error(type))
         return false;
     if (l)
         l->had_error = true;
@@ -154,7 +76,7 @@ static struct XrType *xi_lower_param_type(XiLower *l, XrParamNode *param) {
     if (l && l->analyzer && param && param->symbol_id != 0) {
         XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, param->symbol_id);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
-        if (links && links->type && xi_lower_type_contains_error_impl(links->type, 0))
+        if (links && links->type && xr_type_contains_error(links->type))
             return links->type;
         if (links && links->type && !XR_TYPE_IS_UNKNOWN(links->type))
             return links->type;

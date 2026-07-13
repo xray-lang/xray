@@ -508,7 +508,13 @@ static bool xa_symbol_exportable(const XaSymbol *sym) {
     /* Classes may be exported as namespace values for construction/static
      * method lookup even when they do not carry an ordinary expression type
      * in links.type (notably stdlib script overlays on native modules). */
-    return sym && (sym->links.type || (sym->kind == XA_SYM_CLASS && sym->links.class_info));
+    if (!sym)
+        return false;
+    if (xr_type_contains_error(sym->links.type) ||
+        xr_type_contains_error(sym->links.declared_type) ||
+        xr_type_contains_error((const XrType *) sym->alias_type))
+        return false;
+    return sym->links.type || (sym->kind == XA_SYM_CLASS && sym->links.class_info);
 }
 
 static bool xa_export_map_set_symbol(XrHashMap **exports, const char *name, XaSymbol *sym) {
