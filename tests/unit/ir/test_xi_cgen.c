@@ -13,6 +13,7 @@
 #include "../../../src/aot/xaot_bundle.h"
 #include "../../../src/aot/xaot_class_layout.h"
 #include "../../../src/aot/xaot_prepare.h"
+#include "../../../src/aot/xaot_struct_name.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_own.h"
@@ -78,6 +79,29 @@ static void teardown(void) {
         xray_vm_delete(g_iso);
         g_iso = NULL;
     }
+}
+
+TEST(aot_type_fingerprint_includes_param_modes) {
+    XrType *param_types[] = {xr_type_new_int(NULL)};
+    XrType *ret = xr_type_new_bool(NULL);
+
+    XrType *value_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
+    XrType *in_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
+    XrType *ref_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
+    TEST_REQUIRE(value_fn && in_fn && ref_fn, "function types created");
+
+    XrParamMode in_modes[] = {XR_PARAM_IN};
+    XrParamMode ref_modes[] = {XR_PARAM_REF};
+    in_fn->function.param_passing_modes = in_modes;
+    ref_fn->function.param_passing_modes = ref_modes;
+
+    uint64_t value_hash = xaot_type_fingerprint(value_fn);
+    uint64_t in_hash = xaot_type_fingerprint(in_fn);
+    uint64_t ref_hash = xaot_type_fingerprint(ref_fn);
+
+    TEST_REQUIRE(value_hash != in_hash, "value and in param modes must hash differently");
+    TEST_REQUIRE(value_hash != ref_hash, "value and ref param modes must hash differently");
+    TEST_REQUIRE(in_hash != ref_hash, "in and ref param modes must hash differently");
 }
 
 /* CGen fixtures bypass the global producer, so synthesize strong body anchors for strict plans. */
@@ -8046,6 +8070,7 @@ int main(void) {
 
     setup();
 
+    run_aot_type_fingerprint_includes_param_modes();
     run_cgen_simple_arith();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
