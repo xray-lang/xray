@@ -3,4 +3,5 @@ fn read_and_fill(snapshot: in int, target: out int) {
 }
 
 var values = [1, 2]
-read_and_fill(values[0], out values[1])
+var i = 0
+read_and_fill(values[i], out values[1])

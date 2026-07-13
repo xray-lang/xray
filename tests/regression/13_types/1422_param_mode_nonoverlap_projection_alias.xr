@@ -1,0 +1,30 @@
+class Pair {
+    left: int
+    right: int
+
+    constructor() {
+        this.left = 0
+        this.right = 0
+    }
+}
+
+fn fill_pair(left: out int, right: out int) {
+    left = 3
+    right = 7
+}
+
+fn read_and_fill(snapshot: in int, target: out int) {
+    target = snapshot + 5
+}
+
+@test
+fn test_member_nonoverlap_compile_surface() {
+    var pair = Pair()
+    fill_pair(out pair.left, out pair.right)
+}
+
+@test
+fn test_index_nonoverlap_compile_surface() {
+    var values = [2, 0]
+    read_and_fill(values[0], out values[1])
+}

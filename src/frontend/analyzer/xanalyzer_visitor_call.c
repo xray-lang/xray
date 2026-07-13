@@ -2081,6 +2081,36 @@ static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
     return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
 }
 
+#define XA_CALL_ALIAS_PATH_MAX 256
+
+static bool xa_call_alias_path_copy(char *dst, size_t dst_size, const char *src) {
+    if (!dst || dst_size == 0 || !src)
+        return false;
+    int n = snprintf(dst, dst_size, "%s", src);
+    return n >= 0 && (size_t) n < dst_size;
+}
+
+static bool xa_call_alias_path_append(char *dst, size_t dst_size, const char *suffix) {
+    if (!dst || dst_size == 0 || !suffix)
+        return false;
+    size_t len = strlen(dst);
+    if (len >= dst_size)
+        return false;
+    int n = snprintf(dst + len, dst_size - len, "%s", suffix);
+    return n >= 0 && (size_t) n < dst_size - len;
+}
+
+static bool xa_call_alias_index_segment(AstNode *index, char *buf, size_t buf_size) {
+    if (!index || !buf || buf_size == 0)
+        return false;
+    while (index && (index->type == AST_GROUPING || index->type == AST_FORCE_UNWRAP))
+        index = index->type == AST_GROUPING ? index->as.grouping : index->as.unary.operand;
+    if (!index || index->type != AST_LITERAL_INT)
+        return false;
+    int n = snprintf(buf, buf_size, "[%lld]", (long long) index->as.literal.raw_value.int_val);
+    return n >= 0 && (size_t) n < buf_size;
+}
+
 static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr) {
     while (expr) {
         switch (expr->type) {
@@ -2109,6 +2139,96 @@ static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr
         }
     }
     return NULL;
+}
+
+static XaSymbol *xa_call_alias_path_symbol(XaInferContext *ctx, AstNode *expr, char *path,
+                                           size_t path_size, bool *out_precise) {
+    if (out_precise)
+        *out_precise = true;
+    if (!ctx || !ctx->analyzer || !expr || !path || path_size == 0)
+        return NULL;
+    path[0] = '\0';
+
+    while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP ||
+                    expr->type == AST_AS_EXPR)) {
+        if (expr->type == AST_GROUPING)
+            expr = expr->as.grouping;
+        else if (expr->type == AST_FORCE_UNWRAP)
+            expr = expr->as.unary.operand;
+        else
+            expr = expr->as.as_expr.expr;
+    }
+    if (!expr)
+        return NULL;
+
+    switch (expr->type) {
+        case AST_VARIABLE: {
+            XaSymbol *sym = xa_call_variable_symbol(ctx, expr);
+            if (!sym || !sym->name || !xa_call_alias_path_copy(path, path_size, sym->name))
+                return NULL;
+            return sym;
+        }
+        case AST_MEMBER_ACCESS: {
+            bool precise = true;
+            XaSymbol *root = xa_call_alias_path_symbol(ctx, expr->as.member_access.object, path,
+                                                       path_size, &precise);
+            if (!root)
+                return NULL;
+            if (precise && expr->as.member_access.name) {
+                if (!xa_call_alias_path_append(path, path_size, ".") ||
+                    !xa_call_alias_path_append(path, path_size, expr->as.member_access.name))
+                    precise = false;
+            }
+            if (out_precise)
+                *out_precise = precise;
+            return root;
+        }
+        case AST_INDEX_GET: {
+            bool precise = true;
+            XaSymbol *root =
+                xa_call_alias_path_symbol(ctx, expr->as.index_get.array, path, path_size, &precise);
+            if (!root)
+                return NULL;
+            char segment[64];
+            if (precise &&
+                xa_call_alias_index_segment(expr->as.index_get.index, segment, sizeof(segment))) {
+                if (!xa_call_alias_path_append(path, path_size, segment))
+                    precise = false;
+            } else {
+                xa_call_alias_path_copy(path, path_size, root->name ? root->name : "");
+                precise = false;
+            }
+            if (out_precise)
+                *out_precise = precise;
+            return root;
+        }
+        case AST_SLICE_EXPR: {
+            bool precise = true;
+            XaSymbol *root = xa_call_alias_path_symbol(ctx, expr->as.slice_expr.source, path,
+                                                       path_size, &precise);
+            if (out_precise)
+                *out_precise = precise;
+            return root;
+        }
+        default:
+            return NULL;
+    }
+}
+
+static bool xa_call_alias_path_is_same_or_nested(const char *path, const char *prefix) {
+    if (!path || !prefix)
+        return true;
+    size_t len = strlen(prefix);
+    if (strncmp(path, prefix, len) != 0)
+        return false;
+    return path[len] == '\0' || path[len] == '.' || path[len] == '[';
+}
+
+static bool xa_call_alias_paths_may_overlap(const char *a, bool a_precise, const char *b,
+                                            bool b_precise) {
+    if (!a_precise || !b_precise || !a || !b || a[0] == '\0' || b[0] == '\0')
+        return true;
+    return xa_call_alias_path_is_same_or_nested(a, b) || xa_call_alias_path_is_same_or_nested(b, a);
 }
 
 static bool xa_method_call_creates_span_borrow(XrType *receiver_type, const char *method_name) {
@@ -2287,7 +2407,9 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
 
 static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_node,
                                           uint32_t *arg_symbol_ids, const char **arg_names,
-                                          XrParamMode *arg_modes, int arg_count) {
+                                          XrParamMode *arg_modes,
+                                          char (*arg_paths)[XA_CALL_ALIAS_PATH_MAX],
+                                          bool *arg_path_precise, int arg_count) {
     if (!ctx || !ctx->analyzer || !arg_symbol_ids || !arg_names || !arg_modes)
         return;
     for (int i = 0; i < arg_count; i++) {
@@ -2299,6 +2421,10 @@ static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_nod
             if (arg_symbol_ids[i] != arg_symbol_ids[j])
                 continue;
             if (arg_modes[i] == XR_PARAM_IN && arg_modes[j] == XR_PARAM_IN)
+                continue;
+            if (arg_paths && arg_path_precise &&
+                !xa_call_alias_paths_may_overlap(arg_paths[i], arg_path_precise[i], arg_paths[j],
+                                                 arg_path_precise[j]))
                 continue;
 
             XrLocation loc = {
@@ -3881,10 +4007,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     uint32_t *effective_arg_symbol_ids = NULL;
     const char **effective_arg_names = NULL;
     XrParamMode *effective_arg_modes = NULL;
+    char (*effective_arg_paths)[XA_CALL_ALIAS_PATH_MAX] = NULL;
+    bool *effective_arg_path_precise = NULL;
     if (arg_count > 0) {
         effective_arg_symbol_ids = (uint32_t *) xr_calloc((size_t) arg_count, sizeof(uint32_t));
         effective_arg_names = (const char **) xr_calloc((size_t) arg_count, sizeof(const char *));
         effective_arg_modes = (XrParamMode *) xr_calloc((size_t) arg_count, sizeof(XrParamMode));
+        effective_arg_paths = (char (*)[XA_CALL_ALIAS_PATH_MAX]) xr_calloc(
+            (size_t) arg_count, sizeof(*effective_arg_paths));
+        effective_arg_path_precise = (bool *) xr_calloc((size_t) arg_count, sizeof(bool));
     }
 
     // Check argument count (use min_params for functions with default parameters)
@@ -4068,10 +4199,21 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);
         if (param_mode == XR_PARAM_IN || param_mode == XR_PARAM_REF || param_mode == XR_PARAM_OUT) {
-            XaSymbol *arg_sym = xa_call_root_variable_symbol(ctx, arg_node);
+            bool path_precise = false;
+            char local_path[XA_CALL_ALIAS_PATH_MAX];
+            XaSymbol *arg_sym = xa_call_alias_path_symbol(ctx, arg_node, local_path,
+                                                          sizeof(local_path), &path_precise);
+            if (!arg_sym)
+                arg_sym = xa_call_root_variable_symbol(ctx, arg_node);
             if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
                 effective_arg_names[slot] = arg_sym->name;
+                if (effective_arg_paths && effective_arg_path_precise) {
+                    xa_call_alias_path_copy(effective_arg_paths[slot], XA_CALL_ALIAS_PATH_MAX,
+                                            local_path[0] ? local_path
+                                                          : (arg_sym->name ? arg_sym->name : ""));
+                    effective_arg_path_precise[slot] = path_precise && local_path[0] != '\0';
+                }
             }
         }
 
@@ -4109,7 +4251,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         slot++;
     }
     xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_names,
-                                  effective_arg_modes, arg_count);
+                                  effective_arg_modes, effective_arg_paths,
+                                  effective_arg_path_precise, arg_count);
     XaSymbolLinks *escape_links = fn_links;
     const char *escape_name = NULL;
     if (call->callee && call->callee->type == AST_VARIABLE)
@@ -4382,5 +4525,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     xr_free(effective_arg_symbol_ids);
     xr_free(effective_arg_names);
     xr_free(effective_arg_modes);
+    xr_free(effective_arg_paths);
+    xr_free(effective_arg_path_precise);
     return final_type;
 }
