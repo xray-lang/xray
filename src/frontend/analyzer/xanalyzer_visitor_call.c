@@ -1534,7 +1534,7 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "Thread", NULL, args, 1);
 }
 
-static bool xa_type_is_bytespan_view(XrType *type) {
+static bool xa_type_is_byte_slice_view(XrType *type) {
     return xr_type_is_u8_span(type);
 }
 
@@ -1542,24 +1542,24 @@ static bool xa_type_is_raw_u8_ptr_view(XrType *type) {
     return xr_type_is_u8_pointer(type);
 }
 
-static bool xa_call_is_bytespan_typed_load(CallExprNode *call, XrType *receiver_type) {
-    if (!call || !receiver_type || !xa_type_is_bytespan_view(receiver_type) || !call->callee ||
+static bool xa_call_is_byte_slice_typed_load(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_byte_slice_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
     return ma->name && strcmp(ma->name, "load") == 0;
 }
 
-static bool xa_call_is_bytespan_typed_store(CallExprNode *call, XrType *receiver_type) {
-    if (!call || !receiver_type || !xa_type_is_bytespan_view(receiver_type) || !call->callee ||
+static bool xa_call_is_byte_slice_typed_store(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_byte_slice_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
     return ma->name && strcmp(ma->name, "store") == 0;
 }
 
-static bool xa_call_is_bytespan_reinterpret(CallExprNode *call, XrType *receiver_type) {
-    if (!call || !receiver_type || !xa_type_is_bytespan_view(receiver_type) || !call->callee ||
+static bool xa_call_is_byte_slice_reinterpret(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_byte_slice_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
@@ -1588,7 +1588,7 @@ static bool xa_type_is_supported_raw_load_le_result(XrType *type) {
             type->native_width == XR_NATIVE_U64);
 }
 
-static bool xa_type_is_supported_bytes_typed_scalar(XrType *type) {
+static bool xa_type_is_supported_byte_slice_typed_scalar(XrType *type) {
     if (!type)
         return false;
     if (XR_TYPE_IS_INT(type)) {
@@ -1622,8 +1622,8 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
     }
 }
 
-static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallExprNode *call,
-                                       const char *label, bool allow_signed) {
+static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                            const char *label, bool allow_signed) {
     if (!ctx || !call)
         return xr_type_new_unknown(NULL);
     XrLocation loc = {
@@ -1636,7 +1636,7 @@ static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallE
         return xr_type_new_unknown(NULL);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
-    bool supported = allow_signed ? xa_type_is_supported_bytes_typed_scalar(target)
+    bool supported = allow_signed ? xa_type_is_supported_byte_slice_typed_scalar(target)
                                   : xa_type_is_supported_raw_load_le_result(target);
     if (!supported) {
         char msg[192];
@@ -1652,11 +1652,11 @@ static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallE
 
 static XrType *xa_load_le_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                       const char *label, bool allow_signed) {
-    return xa_bytes_typed_type_arg(ctx, node, call, label, allow_signed);
+    return xa_byte_slice_typed_type_arg(ctx, node, call, label, allow_signed);
 }
 
-static XrType *xa_bytespan_reinterpret_return_type(XaInferContext *ctx, AstNode *node,
-                                                   CallExprNode *call) {
+static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNode *node,
+                                                     CallExprNode *call) {
     if (!ctx || !call)
         return xr_type_new_unknown(NULL);
     XrLocation loc = {
@@ -2134,7 +2134,7 @@ static bool xa_expr_needs_contextual_view_type(AstNode *expr) {
                     strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
-static bool xa_type_is_bytes_like_view_or_owner(XrType *type) {
+static bool xa_type_is_u8_view_or_owner(XrType *type) {
     return xr_type_is_u8_array(type) || xr_type_is_u8_slice(type);
 }
 
@@ -2143,7 +2143,7 @@ static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) 
         return NULL;
     XrType *result = NULL;
     if (XR_TYPE_IS_SPAN(arg_type) || XR_TYPE_IS_VIEW(arg_type)) {
-        if (xa_type_is_bytes_like_view_or_owner(arg_type)) {
+        if (xa_type_is_u8_view_or_owner(arg_type)) {
             result = xr_type_new_u8_array(ctx->analyzer->isolate);
         } else {
             XrType *elem = arg_type->container.element_type ? arg_type->container.element_type
@@ -4054,22 +4054,22 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type = owned ? owned : effective_arg_types[0];
     }
 
-    if (xa_call_is_bytespan_typed_load(call, callee_obj_type))
+    if (xa_call_is_byte_slice_typed_load(call, callee_obj_type))
         return_type = xa_load_le_return_type(ctx, node, call, "Slice<byte>.load<T>()", true);
 
-    if (xa_call_is_bytespan_typed_store(call, callee_obj_type)) {
-        (void) xa_bytes_typed_type_arg(ctx, node, call, "Slice<byte>.store<T>()", true);
+    if (xa_call_is_byte_slice_typed_store(call, callee_obj_type)) {
+        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "Slice<byte>.store<T>()", true);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 
-    if (xa_call_is_bytespan_reinterpret(call, callee_obj_type))
-        return_type = xa_bytespan_reinterpret_return_type(ctx, node, call);
+    if (xa_call_is_byte_slice_reinterpret(call, callee_obj_type))
+        return_type = xa_byte_slice_reinterpret_return_type(ctx, node, call);
 
     if (xa_call_is_rawptr_load_le(call, callee_obj_type))
         return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLE<T>()", false);
 
     if (xa_call_is_rawmut_store_le(call, callee_obj_type)) {
-        (void) xa_bytes_typed_type_arg(ctx, node, call, "RawMut.storeLE<T>()", false);
+        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "RawMut.storeLE<T>()", false);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 

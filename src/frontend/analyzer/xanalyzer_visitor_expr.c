@@ -71,11 +71,11 @@ static XrType *class_info_field_type(XaInferContext *ctx, XrClassInfo *info, con
     return links->type ? links->type : links->declared_type;
 }
 
-static bool xa_type_is_bytes(XrType *type) {
+static bool xa_type_is_u8_array_type(XrType *type) {
     return xr_type_is_u8_array(type);
 }
 
-static bool xa_type_is_bytespan(XrType *type) {
+static bool xa_type_is_u8_slice_type(XrType *type) {
     return xr_type_is_u8_span(type);
 }
 
@@ -344,11 +344,11 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return "Array<byte>";
         case XA_BUILTIN_RECEIVER_ARRAY:
-            return xa_type_is_bytes(receiver) ? "Array<byte>" : "Array";
+            return xa_type_is_u8_array_type(receiver) ? "Array<byte>" : "Array";
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return "Slice<byte>";
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return xa_type_is_bytespan(receiver) ? "Slice<byte>" : "Slice";
+            return xa_type_is_u8_slice_type(receiver) ? "Slice<byte>" : "Slice";
     }
     return "receiver";
 }
@@ -1849,7 +1849,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
-                 xa_type_is_bytespan(obj_type) ? "Slice<byte>" : "Slice", ma->name);
+                 xa_type_is_u8_slice_type(obj_type) ? "Slice<byte>" : "Slice", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
@@ -2048,7 +2048,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
         snprintf(msg, sizeof(msg), "%s has no member '%s'",
-                 xa_type_is_bytes(obj_type) ? "Array<byte>" : "Array", ma->name);
+                 xa_type_is_u8_array_type(obj_type) ? "Array<byte>" : "Array", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_unknown(NULL);
