@@ -286,6 +286,11 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
             h ^= (uint64_t) (type->function.param_count < 0 ? 0 : type->function.param_count);
             h *= UINT64_C(1099511628211);
             for (int i = 0; i < type->function.param_count; i++) {
+                XrParamMode mode = type->function.param_passing_modes
+                                       ? type->function.param_passing_modes[i]
+                                       : XR_PARAM_VALUE;
+                h ^= (uint64_t) mode;
+                h *= UINT64_C(1099511628211);
                 h ^= type_hash_depth(
                     type->function.param_types ? type->function.param_types[i] : NULL, depth + 1);
                 h *= UINT64_C(1099511628211);
