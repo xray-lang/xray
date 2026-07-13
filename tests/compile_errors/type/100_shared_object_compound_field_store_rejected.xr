@@ -1,0 +1,10 @@
+class Counter {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+shared counter = Counter(1)
+counter.value += 1
