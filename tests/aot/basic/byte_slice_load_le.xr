@@ -22,24 +22,28 @@ fn write16LE(dst: Slice<byte>, pos: int, value: uint16) {
     dst.store<uint16>(pos, value, Endian.LE)
 }
 
-var bytes: Array<byte> = Array.withCapacity(8)
-unsafe {
-    bytes.push(1)
-    bytes.push(2)
-    bytes.push(3)
-    bytes.push(4)
-    bytes.push(5)
-    bytes.push(6)
-    bytes.push(7)
-    bytes.push(8)
+fn main() {
+    var bytes: Array<byte> = Array.withCapacity(8)
+    unsafe {
+        bytes.push(1)
+        bytes.push(2)
+        bytes.push(3)
+        bytes.push(4)
+        bytes.push(5)
+        bytes.push(6)
+        bytes.push(7)
+        bytes.push(8)
+    }
+
+    var view: Slice<byte> = bytes[:]
+    print(read16(view, 0))
+    print(read16(view, 3))
+    print(read32(view, 0))
+    print(read32(view, 1))
+    print(read64(view, 0))
+    print(read32BE(view, 2))
+    write16LE(view, 6, 0x0a09)
+    print(read16(view, 6))
 }
 
-var view: Slice<byte> = bytes[:]
-print(read16(view, 0))
-print(read16(view, 3))
-print(read32(view, 0))
-print(read32(view, 1))
-print(read64(view, 0))
-print(read32BE(view, 2))
-write16LE(view, 6, 0x0a09)
-print(read16(view, 6))
+main()

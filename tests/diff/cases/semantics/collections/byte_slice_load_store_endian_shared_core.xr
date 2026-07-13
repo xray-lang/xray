@@ -1,4 +1,4 @@
-// anchor: bytespan-load-store-endian-shared-core
+// anchor: byte-slice-load-store-endian-shared-core
 fn main() {
     var bytes = Array<byte>(12)
     var view: Slice<byte> = bytes[:]

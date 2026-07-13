@@ -1,6 +1,6 @@
 @no_alloc
-@c_export("xray_no_alloc_span_bytes_methods_ok")
-fn xray_no_alloc_span_bytes_methods_ok(seed: int) -> int {
+@c_export("xray_no_alloc_byte_slice_methods_ok")
+fn xray_no_alloc_byte_slice_methods_ok(seed: int) -> int {
     var raw: [byte; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     var srcRaw: [byte; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
     var wordsRaw: [uint32; 2] = [11, 12]
