@@ -17,6 +17,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/frontend/parser/xparse.h"
+#include "../../../src/frontend/parser/xtype_ref.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/module/xmodule_graph.h"
@@ -165,6 +166,39 @@ static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *e
             return &ev->bodies[i];
     }
     return NULL;
+}
+
+static void assert_byte_uint8_sequence_type_keys_canonical(const XgGlobalEvidence *ev) {
+    uint32_t expected_u8_key = xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+    uint32_t array_receiver_key = 0;
+    uint32_t slice_receiver_key = 0;
+    uint32_t array_count = 0;
+    uint32_t slice_count = 0;
+
+    ASSERT_NOT_NULL(ev);
+    ASSERT_EQ_UINT(ev->nsequence_accesses, 4);
+    for (uint32_t i = 0; i < ev->nsequence_accesses; i++) {
+        const XgSequenceAccessSummary *access = &ev->sequence_accesses[i];
+        ASSERT_EQ_UINT(access->access_kind, XG_SEQ_ACCESS_INDEX_GET);
+        ASSERT_EQ_UINT(access->elem_type_key, expected_u8_key);
+        if (access->sequence_kind == XG_SEQ_BYTES) {
+            if (array_receiver_key == 0)
+                array_receiver_key = access->receiver_type_key;
+            ASSERT_EQ_UINT(access->receiver_type_key, array_receiver_key);
+            array_count++;
+        } else if (access->sequence_kind == XG_SEQ_BYTE_SLICE) {
+            if (slice_receiver_key == 0)
+                slice_receiver_key = access->receiver_type_key;
+            ASSERT_EQ_UINT(access->receiver_type_key, slice_receiver_key);
+            slice_count++;
+        } else {
+            ASSERT_TRUE(false);
+        }
+    }
+    ASSERT_EQ_UINT(array_count, 2);
+    ASSERT_EQ_UINT(slice_count, 2);
+    ASSERT_NE(array_receiver_key, 0);
+    ASSERT_NE(slice_receiver_key, 0);
 }
 
 static const XgDeclSummary *evidence_find_decl_by_id(const XgGlobalEvidence *ev, XgDeclId decl_id) {
@@ -10557,7 +10591,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nsequence_accesses, 3);
+    ASSERT_EQ_UINT(ev.nsequence_accesses, 4);
     ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
     ASSERT_EQ_UINT(ev.nbulk_ops, 2);
     ASSERT_EQ_UINT(ev.nencoding_ops, 2);
@@ -10617,6 +10651,48 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_NOT_NULL(strstr(dump, "bulk-op"));
     ASSERT_NOT_NULL(strstr(dump, "encoding-op"));
     xr_free(dump);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys) {
+    setup_parser_session();
+    const char *source =
+        "fn touch(b: Array<byte>, u: Array<uint8>, bs: Slice<byte>, us: Slice<uint8>) -> int {\n"
+        "    var a = b[0]\n"
+        "    var c = u[0]\n"
+        "    var d = bs[0]\n"
+        "    var e = us[0]\n"
+        "    return a + c + d + e\n"
+        "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    assert_byte_uint8_sequence_type_keys_canonical(&ev);
+
+    char *payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    XgGlobalEvidence materialized = {0};
+    ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
+    assert_byte_uint8_sequence_type_keys_canonical(&materialized);
+
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
 }
@@ -16230,6 +16306,7 @@ RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);
 RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
+RUN_TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_records_json_codec_calls);
 RUN_TEST(global_evidence_producer_records_json_computed_key_access);
