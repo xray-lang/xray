@@ -1,0 +1,10 @@
+class Box {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+shared b = Box(1)
+b.value = 2

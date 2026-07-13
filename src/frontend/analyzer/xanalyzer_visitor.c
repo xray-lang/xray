@@ -4878,6 +4878,23 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
+            if (ca->object) {
+                XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ca->object);
+                bool readonly_object = xr_type_is_const(ca_obj_type);
+                if ((root && (root->is_readonly_binding || root->is_shared)) || readonly_object) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[192];
+                    const char *label = root && root->is_shared             ? "shared binding"
+                                        : root && root->is_readonly_binding ? "const binding"
+                                                                            : "readonly value";
+                    snprintf(msg, sizeof(msg), "Cannot modify field '%s' of %s '%s'",
+                             ca->name ? ca->name : "?", label,
+                             root && root->name ? root->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                }
+            }
             break;
         }
         case AST_MEMBER_SET: {
@@ -4886,11 +4903,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
             XaSymbol *readonly_root = xa_root_variable_symbol_for_expr(ctx, ms->object);
             bool readonly_object = xr_type_is_const(obj_type);
-            if ((readonly_root && readonly_root->is_readonly_binding) || readonly_object) {
+            if ((readonly_root &&
+                 (readonly_root->is_readonly_binding || readonly_root->is_shared)) ||
+                readonly_object) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label = readonly_root && readonly_root->is_readonly_binding
+                const char *label = readonly_root && readonly_root->is_shared ? "shared binding"
+                                    : readonly_root && readonly_root->is_readonly_binding
                                         ? "const binding"
                                         : "readonly value";
                 snprintf(msg, sizeof(msg), "Cannot modify field '%s' of %s '%s'",
@@ -5821,12 +5841,17 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             if (array_type && (XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
-                if (root && root->is_const) {
+                if (root && (root->is_const || root->is_shared)) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    snprintf(msg, sizeof(msg), "Cannot assign through const view '%s'",
-                             root->name ? root->name : "?");
+                    if (root->is_shared) {
+                        snprintf(msg, sizeof(msg), "Cannot assign through shared binding '%s'",
+                                 root->name ? root->name : "?");
+                    } else {
+                        snprintf(msg, sizeof(msg), "Cannot assign through const view '%s'",
+                                 root->name ? root->name : "?");
+                    }
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                 }
@@ -5834,12 +5859,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (array_type && !(XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
                 bool readonly_array = xr_type_is_const(array_type);
-                if ((root && root->is_readonly_binding) || readonly_array) {
+                if ((root && (root->is_readonly_binding || root->is_shared)) || readonly_array) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    const char *label =
-                        root && root->is_readonly_binding ? "const binding" : "readonly value";
+                    const char *label = root && root->is_shared             ? "shared binding"
+                                        : root && root->is_readonly_binding ? "const binding"
+                                                                            : "readonly value";
                     snprintf(msg, sizeof(msg), "Cannot assign through %s '%s'", label,
                              root && root->name ? root->name : "?");
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

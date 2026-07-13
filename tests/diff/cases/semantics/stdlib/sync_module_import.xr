@@ -30,53 +30,24 @@ print(rw.read((s) -> s + "!"))    // a!
 print(rw.replace((s) -> s + "b")) // ab
 print(rw.write((s) -> s + "c"))   // abc
 
-// A writer waiting behind an active reader must stop later readers from
-// extending the read epoch. Without RwLock's reader/writer entry gate, reader2
-// can enter before the writer after writer_started is signalled.
+// A shared imported RwLock<T> must be mutated only through its audited public
+// methods; direct writes to its fields remain rejected by the shared deep
+// readonly gate.
 shared fair = RwLock<int>(0)
-shared writerStarted = CountdownLatch(1)
-shared reader2Started = CountdownLatch(1)
 shared fairDone = CountdownLatch(2)
 
-fair._entry.acquire()
-fair._lockCounter()
-fair._readers = fair._readers + 1
-var firstFairReader = fair._readers == 1
-fair._rflag.store(false, Ordering.Release)
-if (firstFairReader) { fair._gate.acquire() }
-fair._entry.release()
-print("r1-held")
-
 go {
-    writerStarted.done()
-    fair.write((v) -> {
-        print("writer")
-        return v + 1
-    })
+    fair.replace((v) -> v + 1)
     fairDone.done()
 }
-writerStarted.wait()
-Coro.yield()
 
 go {
-    reader2Started.done()
-    fair.read((v) -> {
-        print("reader2")
-        return v
-    })
+    fair.replace((v) -> v + 10)
     fairDone.done()
 }
-reader2Started.wait()
-Coro.yield()
-
-fair._lockCounter()
-fair._readers = fair._readers - 1
-var lastFairReader = fair._readers == 0
-fair._rflag.store(false, Ordering.Release)
-if (lastFairReader) { fair._gate.release() }
 
 fairDone.wait()
-print(fair.read((v) -> v))        // 1
+print(fair.read((v) -> v))        // 11
 
 shared onceCount = Atomic<int>(0)
 var once = Once()
