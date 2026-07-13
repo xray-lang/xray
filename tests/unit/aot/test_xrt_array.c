@@ -470,20 +470,20 @@ static void test_bytes_raw_helpers_share_core_rules(void) {
     for (int64_t i = 0; i < 12; i++)
         xrt_array_push(span_ops_value, XR_FROM_INT(65 + i));
     xr_span_t span_all = xrt_span_from_array_slice(span_ops_value, 0, 12);
-    xrt_span_bytes_repeat_from_checked_raw(span_all, 4, 4, 4);
+    xrt_byte_slice_repeat_from_checked_raw(span_all, 4, 4, 4);
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[4], 65,
                   "Slice<byte>.repeatFrom writes first repeated byte");
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[7], 68,
                   "Slice<byte>.repeatFrom writes through overlap");
     xr_span_t copy_dst = xrt_span_from_array_slice(span_ops_value, 8, 12);
     xr_span_t copy_src = xrt_span_from_array_slice(span_ops_value, 4, 8);
-    xrt_span_bytes_copy_checked_raw(copy_dst, copy_src);
+    xrt_byte_slice_copy_checked_raw(copy_dst, copy_src);
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[8], 65,
                   "Slice<byte>.copyFrom writes first source byte");
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[11], 68,
                   "Slice<byte>.copyFrom writes the final source byte");
     ASSERT_EQ_INT(
-        xrt_span_bytes_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
+        xrt_byte_slice_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
                                                  xrt_span_from_array_slice(span_ops_value, 8, 12)),
         4, "Slice<byte>.commonPrefix compares safe span slices");
 
