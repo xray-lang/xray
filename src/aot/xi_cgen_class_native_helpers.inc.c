@@ -41,6 +41,118 @@ static const XgClassSummary *cg_class_native_evidence_class_by_id(const XgGlobal
     return NULL;
 }
 
+static const XgClassSummary *cg_class_native_evidence_class_by_decl_id(const XgGlobalEvidence *ev,
+                                                                       XgDeclId decl_id) {
+    if (!ev || decl_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].decl_id == decl_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
+static const XgDeriveSummary *cg_class_native_evidence_derive_by_id(const XgGlobalEvidence *ev,
+                                                                    XgDeriveId derive_id) {
+    if (!ev || derive_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        if (ev->derives[i].derive_id == derive_id)
+            return &ev->derives[i];
+    }
+    return NULL;
+}
+
+static const XgDeriveSummary *
+cg_class_native_evidence_derive_by_decl_kind(const XgGlobalEvidence *ev, XgDeclId owner_decl_id,
+                                             uint8_t derive_kind) {
+    if (!ev || owner_decl_id == XG_NO_ID || derive_kind == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        if (ev->derives[i].owner_decl_id == owner_decl_id &&
+            ev->derives[i].derive_kind == derive_kind)
+            return &ev->derives[i];
+    }
+    return NULL;
+}
+
+static bool cg_class_native_data_name_matches_id(const XiClassData *cd, uint32_t name_id) {
+    if (!cd || name_id == 0)
+        return false;
+    if (xg_name_id(cd->class_name) == name_id)
+        return true;
+    if (xg_name_id(cd->display_name) == name_id)
+        return true;
+    return xg_name_id(cd->generic_origin_name) == name_id;
+}
+
+static const XiClassData *cg_class_native_find_data_in_module_by_name_id(const XiModule *module,
+                                                                         uint32_t name_id) {
+    if (!module || name_id == 0)
+        return NULL;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        const XiClassData *cd = module->classes ? module->classes[i] : NULL;
+        if (cg_class_native_data_name_matches_id(cd, name_id))
+            return cd;
+    }
+    for (uint16_t i = 0; i < module->nslots; i++) {
+        const XiClassData *cd = module->slot_classes ? module->slot_classes[i] : NULL;
+        if (cg_class_native_data_name_matches_id(cd, name_id))
+            return cd;
+    }
+    return NULL;
+}
+
+static const XiClassData *cg_class_native_data_for_evidence_class(XiCgenCtx *ctx,
+                                                                  const XaotBundle *bundle,
+                                                                  const XgClassSummary *summary) {
+    if (!ctx || !summary || summary->name_id == 0)
+        return NULL;
+    for (uint32_t mi = 0; bundle && mi < bundle->nmodules; mi++) {
+        const XiModule *module = bundle->modules ? bundle->modules[mi] : NULL;
+        if (summary->module_id != 0 && summary->module_id != mi + 1)
+            continue;
+        const XiClassData *cd =
+            cg_class_native_find_data_in_module_by_name_id(module, summary->name_id);
+        if (cd)
+            return cd;
+    }
+    if (ctx->module) {
+        const XiClassData *cd =
+            cg_class_native_find_data_in_module_by_name_id(ctx->module, summary->name_id);
+        if (cd)
+            return cd;
+    }
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *module = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        const XiClassData *cd =
+            cg_class_native_find_data_in_module_by_name_id(module, summary->name_id);
+        if (cd)
+            return cd;
+    }
+    for (int i = 0; i < ctx->nimports; i++) {
+        const XiClassData *cd = ctx->imports[i].target_class;
+        if (cg_class_native_data_name_matches_id(cd, summary->name_id))
+            return cd;
+    }
+    return NULL;
+}
+
+static const XiClassData *
+cg_class_native_data_for_derived_hash_eq_plan(XiCgenCtx *ctx, const XaotBundle *bundle,
+                                              const XaotHashEqPlan *hash_plan) {
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    const XgDeriveSummary *derive = NULL;
+    const XgClassSummary *summary = NULL;
+    if (!ev || !hash_plan || hash_plan->action != XAOT_HASH_EQ_DERIVE_INLINE)
+        return NULL;
+    derive = cg_class_native_evidence_derive_by_id(ev, hash_plan->eq_derive_id);
+    if (!derive)
+        derive = cg_class_native_evidence_derive_by_id(ev, hash_plan->hash_derive_id);
+    summary = derive ? cg_class_native_evidence_class_by_decl_id(ev, derive->owner_decl_id) : NULL;
+    return cg_class_native_data_for_evidence_class(ctx, bundle, summary);
+}
+
 static XgClassId cg_class_native_class_id_for_data(XiCgenCtx *ctx, const XiClassData *cd) {
     const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
     XgClassId class_id;
@@ -53,6 +165,15 @@ static XgClassId cg_class_native_class_id_for_data(XiCgenCtx *ctx, const XiClass
     if (class_id != XG_NO_ID)
         return class_id;
     return cg_class_native_class_id_for_name(ev, cd->generic_origin_name);
+}
+
+static const XgDeriveSummary *
+cg_class_native_derive_for_data_kind(XiCgenCtx *ctx, const XiClassData *cd, uint8_t derive_kind) {
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    XgClassId class_id = cg_class_native_class_id_for_data(ctx, cd);
+    const XgClassSummary *summary = cg_class_native_evidence_class_by_id(ev, class_id);
+    return summary ? cg_class_native_evidence_derive_by_decl_kind(ev, summary->decl_id, derive_kind)
+                   : NULL;
 }
 
 static bool cg_class_native_class_is_descendant_or_self(const XgGlobalEvidence *ev,
@@ -435,15 +556,302 @@ static void emit_class_native_inspect_fields_name(FILE *out, const char *prefix,
     fprintf(out, "_inspect_fields");
 }
 
+static bool cg_class_native_has_derived_eq_hash(const XiClassData *cd) {
+    return cd && cd->instance_layout &&
+           (cd->derive_flags & (XR_DERIVE_EQ | XR_DERIVE_HASH)) == (XR_DERIVE_EQ | XR_DERIVE_HASH);
+}
+
+static bool cg_class_native_decl_has_derived_eq_hash(const XiClassData *cd) {
+    return cd &&
+           (cd->derive_flags & (XR_DERIVE_EQ | XR_DERIVE_HASH)) == (XR_DERIVE_EQ | XR_DERIVE_HASH);
+}
+
+static void emit_class_native_derived_hash_name(FILE *out, const char *prefix,
+                                                const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_derived_hash");
+}
+
+static void emit_class_native_derived_eq_name(FILE *out, const char *prefix,
+                                              const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_derived_eq");
+}
+
+static bool cg_class_native_derived_field_supported(const XrAggregateFieldLayout *field) {
+    if (!field)
+        return false;
+    switch (field->native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+        case XR_NATIVE_F32:
+        case XR_NATIVE_F64:
+        case XR_NATIVE_BOOL:
+        case XR_NATIVE_STRING:
+        case XR_NATIVE_VALUE:
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_class_native_derived_layout_supported(XiCgenCtx *ctx, const XiClassData *cd) {
+    if (!cd || !cd->instance_layout)
+        return false;
+    for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+        const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, fi);
+        if (cg_class_native_derived_field_supported(field))
+            continue;
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: derived Hash/Eq for class %s has unsupported field "
+                "native_type=%u at ordinal %u\n",
+                cd->class_name ? cd->class_name : "?", field ? (unsigned) field->native_type : 0u,
+                (unsigned) fi);
+        return false;
+    }
+    return true;
+}
+
+static bool emit_class_native_derived_field_box(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                                uint16_t idx, const char *object_expr) {
+    const XrAggregateFieldLayout *field =
+        cd && cd->instance_layout ? cg_struct_field(cd->instance_layout, idx) : NULL;
+    if (!cg_class_native_derived_field_supported(field)) {
+        cg_ctx_set_error(ctx);
+        fprintf(out, "XR_NULL_VAL");
+        return false;
+    }
+    switch (field->native_type) {
+        case XR_NATIVE_F32:
+        case XR_NATIVE_F64:
+            fprintf(out, "XR_FROM_FLOAT((double)");
+            emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+            fprintf(out, ")");
+            return true;
+        case XR_NATIVE_BOOL:
+            fprintf(out, "XR_FROM_BOOL(");
+            emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+            fprintf(out, " != 0)");
+            return true;
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            fprintf(out, "XR_FROM_INT((int64_t)");
+            emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+            fprintf(out, ")");
+            return true;
+        case XR_NATIVE_STRING:
+        case XR_NATIVE_VALUE:
+            emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+            return true;
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF: {
+            const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
+            fprintf(out, "(");
+            emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+            fprintf(out, " ? xr_mkptr((void*)");
+            emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+            fprintf(out, ", %s) : XR_NULL_VAL)", tag_name ? tag_name : "XR_TAG_PTR");
+            return true;
+        }
+        default:
+            cg_ctx_set_error(ctx);
+            fprintf(out, "XR_NULL_VAL");
+            return false;
+    }
+}
+
+static void emit_class_native_derived_eq_hash_callbacks(XiCgenCtx *ctx, FILE *out,
+                                                        const XiClassData *cd, const char *prefix) {
+    if (!cg_class_native_has_derived_eq_hash(cd))
+        return;
+    if (!cg_class_native_derived_layout_supported(ctx, cd))
+        return;
+
+    fprintf(out, "static int64_t ");
+    emit_class_native_derived_hash_name(out, prefix, cd);
+    fprintf(out, "(xrt_closure_t *_cl, void *value) {\n");
+    fprintf(out, "    (void)_cl;\n");
+    fprintf(out, "    const ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *self = (const ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)value;\n");
+    fprintf(out, "    if (!self) return 0;\n");
+    fprintf(out, "    uint64_t h = 14695981039346656037ull;\n");
+    for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+        fprintf(out, "    h = xr_hash_core_mix_u64(h ^ xrt_hash_value(");
+        (void) emit_class_native_derived_field_box(ctx, out, cd, fi, "self");
+        fprintf(out, "));\n");
+    }
+    fprintf(out, "    return (int64_t)(uint32_t)(h ? h : UINT64_C(1));\n");
+    fprintf(out, "}\n");
+
+    fprintf(out, "static uint8_t ");
+    emit_class_native_derived_eq_name(out, prefix, cd);
+    fprintf(out, "(xrt_closure_t *_cl, void *a, void *b) {\n");
+    fprintf(out, "    (void)_cl;\n");
+    fprintf(out, "    const ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *lhs = (const ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)a;\n");
+    fprintf(out, "    const ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *rhs = (const ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)b;\n");
+    fprintf(out, "    if (lhs == rhs) return 1;\n");
+    fprintf(out, "    if (!lhs || !rhs) return 0;\n");
+    if (cd->instance_layout->field_count == 0) {
+        fprintf(out, "    return 1;\n");
+    } else {
+        fprintf(out, "    return (uint8_t)(");
+        for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+            if (fi > 0)
+                fprintf(out, " && ");
+            fprintf(out, "(xrt_eq(");
+            (void) emit_class_native_derived_field_box(ctx, out, cd, fi, "lhs");
+            fprintf(out, ", ");
+            (void) emit_class_native_derived_field_box(ctx, out, cd, fi, "rhs");
+            fprintf(out, ") != 0)");
+        }
+        fprintf(out, ");\n");
+    }
+    fprintf(out, "}\n");
+}
+
+static const char *cg_class_native_boxed_derived_field_name(const XgGlobalEvidence *ev,
+                                                            const XgDeriveSummary *derive,
+                                                            const XiClassData *cd,
+                                                            uint16_t field_idx) {
+    if (!ev || !derive || field_idx >= derive->field_count || derive->field_start == 0)
+        return NULL;
+    uint32_t idx = derive->field_start - 1u + (uint32_t) field_idx;
+    if (idx >= ev->nderived_fields)
+        return NULL;
+    const XgDerivedFieldSummary *derived_field = &ev->derived_fields[idx];
+    const XgClassFieldSummary *class_field =
+        xg_global_evidence_find_class_field(ev, derived_field->source_field_id);
+    if (!class_field || (class_field->flags & XG_CLASS_FIELD_STATIC) != 0 ||
+        class_field->instance_slot == UINT32_MAX)
+        return NULL;
+    ClassDeclNode *cls =
+        cd && cd->ast && cd->ast->type == AST_CLASS_DECL ? &cd->ast->as.class_decl : NULL;
+    if (!cls)
+        return NULL;
+    uint32_t non_static_ordinal = 0;
+    for (int i = 0; i < cls->field_count; i++) {
+        AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
+        if (!field_node || field_node->type != AST_FIELD_DECL)
+            continue;
+        FieldDeclNode *field = &field_node->as.field_decl;
+        if (field->is_static)
+            continue;
+        if (field_node->node_id == class_field->source_node_id)
+            return field->name;
+        if (non_static_ordinal == derived_field->field_ordinal)
+            return field->name;
+        non_static_ordinal++;
+    }
+    return NULL;
+}
+
+static void emit_class_boxed_derived_eq_hash_callbacks(XiCgenCtx *ctx, FILE *out,
+                                                       const XiClassData *cd, const char *prefix) {
+    if (!ctx || !out || !cg_class_native_decl_has_derived_eq_hash(cd))
+        return;
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    const XgDeriveSummary *eq = cg_class_native_derive_for_data_kind(ctx, cd, XG_DERIVE_EQ);
+    const XgDeriveSummary *hash = cg_class_native_derive_for_data_kind(ctx, cd, XG_DERIVE_HASH);
+    if (!ev || !eq || !hash || eq->field_count != hash->field_count) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: derived Hash/Eq callbacks for class %s have stale evidence\n",
+                cd && cd->class_name ? cd->class_name : "?");
+        return;
+    }
+
+    fprintf(out, "static int64_t ");
+    emit_class_native_derived_hash_name(out, prefix, cd);
+    fprintf(out, "(xrt_closure_t *closure, void *value) {\n");
+    fprintf(out, "    (void)closure;\n");
+    fprintf(out, "    if (!value) return 0;\n");
+    fprintf(out, "    xrt_map_t *self = (xrt_map_t *)value;\n");
+    fprintf(out, "    uint64_t h = 14695981039346656037ull;\n");
+    for (uint16_t fi = 0; fi < hash->field_count; fi++) {
+        const char *field_name = cg_class_native_boxed_derived_field_name(ev, hash, cd, fi);
+        if (!field_name) {
+            cg_ctx_set_error(ctx);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: derived Hash for class %s has unsupported boxed field %u\n",
+                    cd && cd->class_name ? cd->class_name : "?", (unsigned) fi);
+            return;
+        }
+        fprintf(out, "    h = xr_hash_core_mix_u64(h ^ xrt_hash_value(xrt_map_get(self, ");
+        fprintf(out, "xr_box_str(");
+        emit_c_string_literal(out, field_name);
+        fprintf(out, "))));\n");
+    }
+    fprintf(out, "    return (int64_t)(uint32_t)(h ? h : UINT64_C(1));\n");
+    fprintf(out, "}\n");
+
+    fprintf(out, "static uint8_t ");
+    emit_class_native_derived_eq_name(out, prefix, cd);
+    fprintf(out, "(xrt_closure_t *closure, void *a, void *b) {\n");
+    fprintf(out, "    (void)closure;\n");
+    fprintf(out, "    if (a == b) return 1;\n");
+    fprintf(out, "    if (!a || !b) return 0;\n");
+    fprintf(out, "    xrt_map_t *lhs = (xrt_map_t *)a;\n");
+    fprintf(out, "    xrt_map_t *rhs = (xrt_map_t *)b;\n");
+    for (uint16_t fi = 0; fi < eq->field_count; fi++) {
+        const char *field_name = cg_class_native_boxed_derived_field_name(ev, eq, cd, fi);
+        if (!field_name) {
+            cg_ctx_set_error(ctx);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: derived Eq for class %s has unsupported boxed field %u\n",
+                    cd && cd->class_name ? cd->class_name : "?", (unsigned) fi);
+            return;
+        }
+        fprintf(out, "    if (xrt_eq(xrt_map_get(lhs, xr_box_str(");
+        emit_c_string_literal(out, field_name);
+        fprintf(out, ")), xrt_map_get(rhs, xr_box_str(");
+        emit_c_string_literal(out, field_name);
+        fprintf(out, "))) == 0) return 0;\n");
+    }
+    fprintf(out, "    return 1;\n");
+    fprintf(out, "}\n");
+}
+
 static void emit_class_native_type_derive_init(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                                const char *prefix, const char *type_id_expr) {
     (void) ctx;
     if (!cd)
         return;
-    uint32_t sidecar_flags = cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON);
-    if (sidecar_flags == 0)
+    uint32_t derive_flags = cd->derive_flags & XR_DERIVE_KNOWN_MASK;
+    if (derive_flags == 0)
         return;
-    fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) sidecar_flags);
+    fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) derive_flags);
     if (cg_class_native_has_inspect_sidecar(cd) && cd->instance_layout->field_count > 0) {
         emit_class_native_inspect_fields_name(out, prefix, cd);
         fprintf(out, ", %u", (unsigned) cd->instance_layout->field_count);
@@ -907,6 +1315,66 @@ typedef struct CgUserHashEqDirectPlan {
     const char *eq_prefix;
 } CgUserHashEqDirectPlan;
 
+typedef struct CgDerivedHashEqPlan {
+    const XaotHashEqPlan *hash_eq_plan;
+    const XaotDerivedEqHashPlan *derived_plan;
+    const XiClassData *key_class;
+    const char *class_prefix;
+} CgDerivedHashEqPlan;
+
+static bool cg_derived_hash_eq_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *key_plan,
+                                    const XiValue *key_value, CgDerivedHashEqPlan *out,
+                                    const char *site) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!key_plan || key_plan->action != XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP)
+        return false;
+    const XaotHashEqPlan *hash_plan = cg_key_access_hash_eq_plan(ctx, key_plan);
+    if (!hash_plan || hash_plan->action != XAOT_HASH_EQ_DERIVE_INLINE)
+        return false;
+    if (!out) {
+        cg_ctx_set_error(ctx);
+        return false;
+    }
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotDerivedEqHashPlan *derived =
+        xaot_bundle_find_derived_eq_hash_plan(bundle, key_plan->key_type_key);
+    const XrType *key_type = key_value ? key_value->type : NULL;
+    const XiClassData *key_class = cg_class_native_data_for_abi_type(ctx, key_type);
+    if (!key_class)
+        key_class = cg_class_native_data_for_derived_hash_eq_plan(ctx, bundle, hash_plan);
+    const char *class_prefix = cg_class_native_prefix_for_data(ctx, key_class, NULL);
+    if (!derived || derived->action != XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE || !key_class ||
+        !cg_class_native_decl_has_derived_eq_hash(key_class) || !class_prefix) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: specialized key-access plan for %s cannot resolve verified "
+                "derived Hash/Eq backend (key_access=%u type=%u class=%s flags=0x%x)\n",
+                site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key,
+                key_class && key_class->class_name ? key_class->class_name : "?",
+                key_class ? key_class->derive_flags : 0u);
+        return false;
+    }
+    if (key_class->instance_layout &&
+        derived->field_count != key_class->instance_layout->field_count) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: derived Hash/Eq field count mismatch for %s "
+                "(key_access=%u type=%u plan_fields=%u layout_fields=%u)\n",
+                site ? site : "Map/Set", key_plan->access_id, key_plan->key_type_key,
+                (unsigned) (derived ? derived->field_count : 0),
+                (unsigned) (key_class && key_class->instance_layout
+                                ? key_class->instance_layout->field_count
+                                : 0));
+        return false;
+    }
+    out->hash_eq_plan = hash_plan;
+    out->derived_plan = derived;
+    out->key_class = key_class;
+    out->class_prefix = class_prefix;
+    return true;
+}
+
 static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *key_plan,
                                         const XiValue *key_value, CgUserHashEqDirectPlan *out,
                                         const char *site) {
@@ -916,6 +1384,8 @@ static bool cg_user_hash_eq_direct_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan 
         return false;
     const XaotHashEqPlan *hash_plan = cg_key_access_hash_eq_plan(ctx, key_plan);
     if (hash_plan && hash_plan->action == XAOT_HASH_EQ_BUILTIN_INLINE)
+        return false;
+    if (hash_plan && hash_plan->action == XAOT_HASH_EQ_DERIVE_INLINE)
         return false;
     if (!hash_plan || hash_plan->action != XAOT_HASH_EQ_DIRECT_CALL || !out) {
         cg_ctx_set_error(ctx);
@@ -1049,10 +1519,33 @@ static bool cg_emit_user_hash_eq_direct_args(XiCgenCtx *ctx, FILE *out,
         cg_ctx_set_error(ctx);
         return false;
     }
-    fprintf(out, ", (xrt_user_hash_fn_t)");
+    fprintf(out, ", NULL, (xrt_user_hash_fn_t)");
     emit_fname(ctx, out, plan->hash_prefix, plan->hash_func);
     fprintf(out, ", (xrt_user_eq_fn_t)");
     emit_fname(ctx, out, plan->eq_prefix, plan->eq_func);
+    return true;
+}
+
+static bool cg_emit_derived_hash_eq_args(XiCgenCtx *ctx, FILE *out,
+                                         const CgDerivedHashEqPlan *plan) {
+    if (!ctx || !out || !plan || !plan->hash_eq_plan || !plan->derived_plan || !plan->key_class ||
+        !plan->class_prefix)
+        return false;
+    fprintf(out, ", ");
+    if (!emit_class_native_type_id_expr(ctx, out, plan->key_class)) {
+        cg_ctx_set_error(ctx);
+        return false;
+    }
+    fprintf(out, ", ");
+    if (plan->key_class->instance_layout) {
+        fprintf(out, "NULL");
+    } else {
+        emit_c_string_literal(out, plan->key_class->class_name ? plan->key_class->class_name : "");
+    }
+    fprintf(out, ", (xrt_user_hash_fn_t)");
+    emit_class_native_derived_hash_name(out, plan->class_prefix, plan->key_class);
+    fprintf(out, ", (xrt_user_eq_fn_t)");
+    emit_class_native_derived_eq_name(out, plan->class_prefix, plan->key_class);
     return true;
 }
 
@@ -1066,6 +1559,114 @@ static void cg_emit_user_hash_eq_tagged_key(XiCgenCtx *ctx, FILE *out, const XiV
         emit_conversion_prefix(out, value ? value->type : NULL, rep, XR_REP_TAGGED);
     emit_vref(out, value);
     emit_conversion_suffix(out, conv_suffix);
+}
+
+static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
+                                                      const XiValue *recv, const XiValue *v,
+                                                      const XaotKeyAccessPlan *key_plan, uint8_t op,
+                                                      uint16_t nargs, const char *site) {
+    CgDerivedHashEqPlan derived_hash_eq;
+    if (!cg_derived_hash_eq_plan(ctx, key_plan, v && v->nargs > 1 ? v->args[1] : NULL,
+                                 &derived_hash_eq, site)) {
+        if (ctx && ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        return false;
+    }
+    if (op == XG_KEY_ACCESS_GET) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_map_get_user_hash_eq_owned(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+        if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+        const char *helper =
+            op == XG_KEY_ACCESS_HAS ? "xrt_map_has_user_hash_eq" : "xrt_map_delete_user_hash_eq";
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+        if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_SET && nargs == 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_map_set_user_hash_eq(");
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
+}
+
+static bool cg_emit_tagged_set_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
+                                                      const XiValue *recv, const XiValue *v,
+                                                      const XaotKeyAccessPlan *key_plan, uint8_t op,
+                                                      const char *site) {
+    CgDerivedHashEqPlan derived_hash_eq;
+    if (!cg_derived_hash_eq_plan(ctx, key_plan, v && v->nargs > 1 ? v->args[1] : NULL,
+                                 &derived_hash_eq, site)) {
+        if (ctx && ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        return false;
+    }
+    if (op == XG_KEY_ACCESS_ADD) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_set_add_user_hash_eq(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+        if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
+        const char *helper =
+            op == XG_KEY_ACCESS_HAS ? "xrt_set_has_user_hash_eq" : "xrt_set_delete_user_hash_eq";
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+        if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
 }
 
 static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
@@ -1178,6 +1779,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
     }
+    if (cg_emit_tagged_map_derived_hash_eq_method(ctx, out, recv, v, key_plan, op, nargs, method))
+        return true;
     CgUserHashEqDirectPlan user_hash_eq;
     if (cg_user_hash_eq_direct_plan(ctx, key_plan, v->args[1], &user_hash_eq, method)) {
         if (op == XG_KEY_ACCESS_GET) {
@@ -1852,6 +2455,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
+    if (cg_emit_tagged_set_derived_hash_eq_method(ctx, out, recv, v, key_plan, op, method))
+        return true;
     CgUserHashEqDirectPlan user_hash_eq;
     if (cg_user_hash_eq_direct_plan(ctx, key_plan, v->args[1], &user_hash_eq, method)) {
         if (op == XG_KEY_ACCESS_ADD) {
@@ -4436,8 +5041,12 @@ static bool cg_class_native_err_check_after_nothrow_call(XiCgenCtx *ctx, const X
  * classes defined in other modules (cross-module classes). */
 static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                           const char *prefix) {
-    if (!cd || !cd->instance_layout)
+    if (!cd)
         return;
+    if (!cd->instance_layout) {
+        emit_class_boxed_derived_eq_hash_callbacks(ctx, out, cd, prefix);
+        return;
+    }
     fprintf(out, "typedef struct ");
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, " { ");
@@ -4467,6 +5076,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         }
         fprintf(out, "};\n");
     }
+    emit_class_native_derived_eq_hash_callbacks(ctx, out, cd, prefix);
     if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
         return;
     fprintf(out, "static void ");

@@ -1,0 +1,46 @@
+@derive(Eq, Hash)
+class Key {
+    id: int
+    name: string
+
+    constructor(id: int, name: string) {
+        this.id = id
+        this.name = name
+    }
+}
+
+@derive(Clone)
+class Snapshot {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+fn run(n: int) -> int {
+    var values: Map<Key, int> = #{}
+    var keys: Set<Key> = #[]
+    var inserted = Key(7, "alpha")
+    var snapshot = Snapshot(5)
+    values.set(inserted, 41)
+    keys.add(inserted)
+
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        var equal = Key(7, "alpha")
+        if (values.containsKey(equal)) {
+            sum = sum + values.get(equal)
+        }
+        if (keys.contains(equal)) {
+            sum = sum + 1
+        }
+        var cloned = copy(snapshot)
+        sum = sum + cloned.value
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(20000))

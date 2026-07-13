@@ -6330,6 +6330,73 @@ static bool body_eq_method_valid(const MethodDeclNode *method, const char *type_
            body_type_ref_is_bool(method->return_type);
 }
 
+static const XgDeriveSummary *body_find_derive_by_type_kind(XgBodyCollect *bc, uint32_t type_key,
+                                                            XgDeclId owner_decl_id, uint8_t kind) {
+    if (!bc || !bc->evidence || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bc->evidence->nderives; i++) {
+        const XgDeriveSummary *derive = &bc->evidence->derives[i];
+        if (derive->type_key == type_key && derive->owner_decl_id == owner_decl_id &&
+            derive->derive_kind == kind)
+            return derive;
+    }
+    return NULL;
+}
+
+static bool body_derive_fields_match(XgBodyCollect *bc, const XgDeriveSummary *eq,
+                                     const XgDeriveSummary *hash) {
+    if (!bc || !bc->evidence || !eq || !hash || eq->field_count != hash->field_count)
+        return false;
+    if (eq->field_count == 0)
+        return eq->field_start == 0 && hash->field_start == 0;
+    if (eq->field_start == 0 || hash->field_start == 0)
+        return false;
+    uint32_t eq_end = eq->field_start + (uint32_t) eq->field_count - 1;
+    uint32_t hash_end = hash->field_start + (uint32_t) hash->field_count - 1;
+    if (eq_end < eq->field_start || hash_end < hash->field_start ||
+        eq_end > bc->evidence->nderived_fields || hash_end > bc->evidence->nderived_fields)
+        return false;
+    for (uint32_t i = 0; i < eq->field_count; i++) {
+        const XgDerivedFieldSummary *eq_field =
+            &bc->evidence->derived_fields[eq->field_start - 1 + i];
+        const XgDerivedFieldSummary *hash_field =
+            &bc->evidence->derived_fields[hash->field_start - 1 + i];
+        if (eq_field->field_ordinal != hash_field->field_ordinal ||
+            eq_field->name_id != hash_field->name_id ||
+            eq_field->type_key != hash_field->type_key ||
+            eq_field->source_field_id != hash_field->source_field_id ||
+            eq_field->flags != hash_field->flags)
+            return false;
+    }
+    return true;
+}
+
+static void body_ensure_derived_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+    const char *type_name = NULL;
+    const XgClassSummary *cls = body_find_class_by_type_key(bc, key_type_key, &type_name);
+    XgHashEqSummary row;
+    if (!bc || !bc->evidence || !cls || !type_name)
+        return;
+    if (xg_global_evidence_find_hash_eq(bc->evidence, key_type_key))
+        return;
+    const XgDeriveSummary *eq =
+        body_find_derive_by_type_kind(bc, key_type_key, cls->decl_id, XG_DERIVE_EQ);
+    const XgDeriveSummary *hash =
+        body_find_derive_by_type_kind(bc, key_type_key, cls->decl_id, XG_DERIVE_HASH);
+    if (!eq || !hash || eq->type_key != hash->type_key || !body_derive_fields_match(bc, eq, hash))
+        return;
+    memset(&row, 0, sizeof(row));
+    row.hash_eq_id = (XgHashEqId) (bc->evidence->nhash_eqs + 1);
+    row.type_key = key_type_key;
+    row.kind = XG_HASH_EQ_DERIVE;
+    row.eq_derive_id = eq->derive_id;
+    row.hash_derive_id = hash->derive_id;
+    row.flags = XG_HASH_EQ_NO_ALLOC | XG_HASH_EQ_NO_THROW | XG_HASH_EQ_PURE;
+    if ((cls->flags & (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL)) != 0)
+        row.flags |= XG_HASH_EQ_FINAL;
+    (void) xg_global_evidence_add_hash_eq(bc->evidence, &row);
+}
+
 static void body_ensure_user_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
     const char *type_name = NULL;
     const XgClassSummary *cls = body_find_class_by_type_key(bc, key_type_key, &type_name);
@@ -6368,6 +6435,7 @@ static void body_ensure_user_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
 
 static void body_ensure_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
     body_ensure_builtin_hash_eq(bc, key_type_key);
+    body_ensure_derived_hash_eq(bc, key_type_key);
     body_ensure_user_hash_eq(bc, key_type_key);
 }
 

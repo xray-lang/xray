@@ -9264,6 +9264,23 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     const char *source = "@derive(Eq, Hash)\n"
                          "class Key {\n"
                          "    id: int\n"
+                         "    name: string\n"
+                         "    constructor(id: int, name: string) {\n"
+                         "        this.id = id\n"
+                         "        this.name = name\n"
+                         "    }\n"
+                         "}\n"
+                         "fn derivedKeyPlan() -> int {\n"
+                         "    var key = Key(7, \"alpha\")\n"
+                         "    var values: Map<Key, int> = #{}\n"
+                         "    var seen: Set<Key> = #[]\n"
+                         "    values.set(key, 99)\n"
+                         "    seen.add(key)\n"
+                         "    if (values.containsKey(Key(7, \"alpha\")) && "
+                         "seen.contains(Key(7, \"alpha\"))) {\n"
+                         "        return values.get(Key(7, \"alpha\"))\n"
+                         "    }\n"
+                         "    return 0\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -9288,11 +9305,22 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     ASSERT_EQ_UINT(ev.derives[1].derive_kind, XG_DERIVE_HASH);
     ASSERT_EQ_UINT(ev.derives[0].type_key, ev.derives[1].type_key);
     ASSERT_EQ_UINT(ev.derives[0].field_count, ev.derives[1].field_count);
+    ASSERT_EQ_UINT(ev.nhash_eqs, 1);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_DERIVE);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].type_key, ev.derives[0].type_key);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].eq_derive_id, ev.derives[0].derive_id);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].hash_derive_id, ev.derives[1].derive_id);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nderived_eq_hash_plans, 1);
+    const XaotHashEqPlan *hash_eq_plan =
+        xaot_bundle_find_hash_eq_plan(&bundle, ev.derives[0].type_key);
+    ASSERT_NOT_NULL(hash_eq_plan);
+    ASSERT_EQ_UINT(hash_eq_plan->action, XAOT_HASH_EQ_DERIVE_INLINE);
+    ASSERT_EQ_UINT(hash_eq_plan->eq_derive_id, ev.derives[0].derive_id);
+    ASSERT_EQ_UINT(hash_eq_plan->hash_derive_id, ev.derives[1].derive_id);
     const XaotDerivedEqHashPlan *plan =
         xaot_bundle_find_derived_eq_hash_plan(&bundle, ev.derives[0].type_key);
     ASSERT_NOT_NULL(plan);
@@ -9306,6 +9334,8 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "derived-eq-hash-plan 0"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=builtin_fields_inline"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "kind=derive action=derive_inline"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=specialized_hash_lookup"));
     ASSERT_NOT_NULL(strstr(plan_dump, "reason=none"));
     xr_free(plan_dump);
 

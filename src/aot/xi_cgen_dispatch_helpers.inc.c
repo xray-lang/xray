@@ -7767,6 +7767,35 @@ static bool xicgen_emit_map_index_get_user_hash_eq(XiCgenCtx *ctx, FILE *out, co
     return true;
 }
 
+static bool xicgen_emit_map_index_get_derived_hash_eq(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                      const XaotKeyAccessPlan *plan) {
+    if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_MAP || !plan ||
+        plan->action != XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP)
+        return false;
+    CgDerivedHashEqPlan derived_hash_eq;
+    if (!cg_derived_hash_eq_plan(ctx, plan, v->args[1], &derived_hash_eq, "Map.index_get")) {
+        if (ctx && ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        return false;
+    }
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_map_get_user_hash_eq_owned(");
+    xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
+    fprintf(out, ", ");
+    cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+    if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static bool xicgen_emit_map_index_set_prehashed(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                 const XaotKeyAccessPlan *plan) {
     if (!v || v->nargs < 3 || !v->args[0] || !v->args[0]->type ||
@@ -7779,6 +7808,32 @@ static bool xicgen_emit_map_index_set_prehashed(XiCgenCtx *ctx, FILE *out, const
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) plan->key_prehash);
+    return true;
+}
+
+static bool xicgen_emit_map_index_set_derived_hash_eq(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                      const XaotKeyAccessPlan *plan) {
+    if (!v || v->nargs < 3 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_MAP || !plan ||
+        plan->action != XAOT_KEY_ACCESS_SPECIALIZED_HASH_LOOKUP)
+        return false;
+    CgDerivedHashEqPlan derived_hash_eq;
+    if (!cg_derived_hash_eq_plan(ctx, plan, v->args[1], &derived_hash_eq, "Map.index_set")) {
+        if (ctx && ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        return false;
+    }
+    fprintf(out, "xrt_map_set_user_hash_eq(");
+    xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
+    fprintf(out, ", ");
+    cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq))
+        return true;
+    fprintf(out, ")");
     return true;
 }
 
@@ -7826,6 +7881,8 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     if (xicgen_emit_map_index_get_bool_direct(ctx, out, v, key_plan))
         return;
     if (xicgen_emit_map_index_get_dense_index(ctx, out, v, key_plan))
+        return;
+    if (xicgen_emit_map_index_get_derived_hash_eq(ctx, out, v, key_plan))
         return;
     if (xicgen_emit_map_index_get_user_hash_eq(ctx, out, v, key_plan))
         return;
@@ -7884,6 +7941,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     if (emit_typed_array_index_set_expr(ctx, out, f, v, prefix))
         return;
     if (emit_class_native_array_index_set_expr(ctx, out, f, v))
+        return;
+    if (xicgen_emit_map_index_set_derived_hash_eq(ctx, out, v, key_plan))
         return;
     if (xicgen_emit_map_index_set_user_hash_eq(ctx, out, v, key_plan))
         return;
