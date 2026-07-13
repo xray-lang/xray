@@ -4816,9 +4816,10 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Track unknown type count for inference quality metric
-    if (result && XR_TYPE_IS_UNKNOWN(result)) {
-        ctx->analyzer->unknown_type_count++;
+    if (result && XR_TYPE_IS_ERROR(result)) {
+        ctx->analyzer->recovery_poison_type_count++;
+    } else if (result && XR_TYPE_IS_UNKNOWN(result)) {
+        ctx->analyzer->unresolved_inference_count++;
     }
 
     check_contextual_int_literal_range(ctx, node, ctx->expected_type);
