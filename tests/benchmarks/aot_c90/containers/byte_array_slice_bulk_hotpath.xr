@@ -1,0 +1,36 @@
+fn run(n: int, rounds: int) -> int {
+    var seed = Array<byte>(n)
+    var i = 0
+    while (i < n) {
+        seed[i] = i * 17 + 3
+        i = i + 1
+    }
+
+    var out: Array<byte> = Array.withCapacity(n * 2)
+    out.appendFrom(seed[:])
+    out.repeatFrom(n, n)
+
+    var copy = Array<byte>(n * 2, 0)
+    var outView: Slice<byte> = out[:]
+    var copyView: Slice<byte> = copy[:]
+    var total = 0
+    var r = 0
+    while (r < rounds) {
+        var copied: Slice<byte> = copyView.copyFrom(outView)
+        total = total + len(copied)
+
+        var p = 0
+        while (p < n * 2) {
+            var word: uint16 = copyView.load<uint16>(p, Endian.LE)
+            copyView.store<uint16>(p, word + 1, Endian.LE)
+            p = p + 64
+        }
+
+        total = total + copyView.commonPrefix(outView)
+        total = total + copyView.compare(outView)
+        r = r + 1
+    }
+    return total + int(copy[0]) + int(copy[n]) + len(out)
+}
+
+print(run(4096, 800))

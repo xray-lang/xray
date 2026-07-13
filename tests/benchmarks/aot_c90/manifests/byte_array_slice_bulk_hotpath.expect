@@ -1,0 +1,25 @@
+min_ratio=0.90
+# Array<byte>/Slice<byte> bulk methods must stay on byte-specialized storage
+# and direct byte-slice helpers, not dynamic method dispatch or generic typed
+# array runtime helpers.
+hot_function=^byte_array_slice_bulk_hotpath_[0-9a-f]+_run_[0-9]+$
+hot_function_count=1
+hot_xrvalue_local_count=20
+hot_box_count=11
+hot_unbox_count=3
+hot_runtime_arith_calls=0
+hot_runtime_int_checked_arith_calls=0
+hot_typed_array_runtime_calls=0
+hot_typed_array_bounds_check_count=3
+hot_typed_array_capacity_check_count=0
+hot_typed_array_per_iter_len_store_count=0
+hot_runtime_array_calls=4
+hot_runtime_map_calls=0
+hot_runtime_property_calls=0
+hot_dynamic_dispatch_calls=0
+hot_pending_error_check_count=0
+typed_array_runtime_calls=0
+runtime_map_calls=0
+runtime_property_calls=0
+dynamic_dispatch_calls=0
+vm_jit_include_count=0
