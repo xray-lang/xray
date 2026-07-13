@@ -695,13 +695,27 @@ static const XrTypeRef *class_field_target_type(const XrTypeRef *type) {
     return target;
 }
 
-static void class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRef *type) {
+static bool tref_contains_error(const XrTypeRef *type, uint32_t depth) {
+    if (!type || depth > 64)
+        return false;
+    if (type->kind == XR_TREF_ERROR)
+        return true;
+    for (int i = 0; i < type->nchildren; i++) {
+        if (tref_contains_error(type->children ? type->children[i] : NULL, depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRef *type) {
     const XrTypeRef *target;
     if (!row)
-        return;
+        return false;
     row->semantic_kind = XG_CLASS_FIELD_TYPE_DYNAMIC;
     if (!type)
-        return;
+        return true;
+    if (tref_contains_error(type, 0))
+        return false;
     row->native_width = type->native_width;
     target = class_field_target_type(type);
     if (target && (target->kind == XR_TREF_NAMED || target->kind == XR_TREF_GENERIC) &&
@@ -772,11 +786,11 @@ static void class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
             row->semantic_kind = XG_CLASS_FIELD_TYPE_NULL;
             row->flags |= XG_CLASS_FIELD_NULLABLE;
             break;
-        case XR_TREF_ERROR:
         default:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_DYNAMIC;
             break;
     }
+    return true;
 }
 
 static bool class_field_semantic_is_owned(uint8_t semantic_kind) {
@@ -9223,7 +9237,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             p, module_id, producer_source_node_id(module_id, field_node), class_id, summary.name_id,
             summary.decl_ordinal);
         summary.instance_slot = field->is_static ? UINT32_MAX : instance_field_count++;
-        class_field_fill_type_facts(&summary, field->field_type);
+        if (!class_field_fill_type_facts(&summary, field->field_type))
+            return false;
         summary.flags = class_field_flags(field, summary.semantic_kind, summary.flags);
         if (!xg_global_evidence_add_class_field(p->evidence, &summary))
             return false;
