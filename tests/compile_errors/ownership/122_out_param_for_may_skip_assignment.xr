@@ -1,0 +1,8 @@
+fn bad(limit: int, x: out int) {
+    for (var i = 0; i < limit; i++) {
+        x = 1
+    }
+}
+
+var y = 0
+bad(0, out y)

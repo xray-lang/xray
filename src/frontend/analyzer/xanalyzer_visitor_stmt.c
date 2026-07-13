@@ -8510,6 +8510,9 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
         xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
     }
 
+    int out_da_count = 0;
+    XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
+
     /* Analyze body. A block body goes through xa_visit_block_stmt so it
      * gets its own scope keyed on the body node, matching Pass 1. */
     XaLoopScope loop_scope;
@@ -8522,6 +8525,8 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
     if (ctx->flow && loop_start) {
         xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
     }
+    xa_out_param_da_restore_before(out_da, out_da_count);
+    xr_free(out_da);
 
     // Exit condition
     if (ctx->flow) {
@@ -8554,6 +8559,9 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         xa_check_condition_type(ctx, for_stmt->condition, cond_type);
     }
 
+    int out_da_count = 0;
+    XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
+
     // Analyze body - inline block to match Pass 1 scope structure
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
@@ -8573,6 +8581,8 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     if (for_stmt->increment) {
         xa_visit_infer_stmt(ctx, for_stmt->increment);
     }
+    xa_out_param_da_restore_before(out_da, out_da_count);
+    xr_free(out_da);
 
     xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);

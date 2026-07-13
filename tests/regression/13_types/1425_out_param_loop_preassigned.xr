@@ -1,0 +1,14 @@
+fn initialize(flag: bool, x: out int) {
+    x = 0
+    while (flag) {
+        x = 1
+        return
+    }
+}
+
+@test
+fn test_out_param_loop_preassigned() {
+    var value = 0
+    initialize(false, out value)
+    initialize(true, out value)
+}
