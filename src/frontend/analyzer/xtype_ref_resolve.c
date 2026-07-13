@@ -1051,6 +1051,10 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                                            : xr_type_new_unit(NULL);
             XrType *result =
                 xr_type_new_function(X, nparam > 0 ? params : NULL, nparam, ret, false);
+            if (result && t->function_param_modes) {
+                for (int i = 0; i < nparam; i++)
+                    xr_type_function_set_param_mode(result, i, t->function_param_modes[i]);
+            }
             if (params != stack_params)
                 xr_free(params);
             return result;
@@ -1477,6 +1481,10 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 : xr_type_new_unit(NULL);
         XrType *result =
             xr_type_new_function(analyzer->isolate, nparam > 0 ? params : NULL, nparam, ret, false);
+        if (result && tref->function_param_modes) {
+            for (int i = 0; i < nparam; i++)
+                xr_type_function_set_param_mode(result, i, tref->function_param_modes[i]);
+        }
         if (params != stack_params)
             xr_free(params);
         return result;

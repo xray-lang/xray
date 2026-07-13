@@ -1029,12 +1029,13 @@ AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *name, XrT
 
 // Create interface method signature node
 AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, char **parameters,
-                                 XrTypeRef **param_types, int param_count, XrTypeRef *return_type,
-                                 int line) {
+                                 XrTypeRef **param_types, XrParamMode *param_passing_modes,
+                                 int param_count, XrTypeRef *return_type, int line) {
     AstNode *node = alloc_node(session, AST_INTERFACE_METHOD, line);
     node->as.interface_method.name = (char *) name;
     node->as.interface_method.parameters = parameters;
     node->as.interface_method.param_types = param_types;
+    node->as.interface_method.param_passing_modes = param_passing_modes;
     node->as.interface_method.param_count = param_count;
     node->as.interface_method.return_type = return_type;
     return node;

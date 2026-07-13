@@ -231,12 +231,17 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                 return xr_tref_function(parser->compiler_session, NULL, 0,
                                         xr_tref_unit(parser->compiler_session));
             XrTypeRef *params[256];
+            XrParamMode modes[256];
             int nparam = total - 1;
-            for (int i = 0; i < nparam; i++)
+            for (int i = 0; i < nparam; i++) {
                 params[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+                modes[i] =
+                    src->function_param_modes ? src->function_param_modes[i] : XR_PARAM_VALUE;
+            }
             XrTypeRef *ret =
                 clone_subst_type_ref(parser, src->children[total - 1], subst_alias, type_args);
-            return xr_tref_function(parser->compiler_session, params, nparam, ret);
+            return xr_tref_function_with_modes(parser->compiler_session, params, modes, nparam,
+                                               ret);
         }
         case XR_TREF_TUPLE: {
             XrTypeRef *elems[256];
@@ -356,6 +361,29 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
     return result;
 }
 
+static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrParamMode *out_mode) {
+    if (out_mode)
+        *out_mode = XR_PARAM_VALUE;
+    if (!allow_mode)
+        return false;
+    if (xr_parser_match(parser, TK_IN)) {
+        if (out_mode)
+            *out_mode = XR_PARAM_IN;
+        return true;
+    }
+    if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
+        if (out_mode)
+            *out_mode = XR_PARAM_REF;
+        return true;
+    }
+    if (xr_parser_match_name(parser, "out")) {
+        if (out_mode)
+            *out_mode = XR_PARAM_OUT;
+        return true;
+    }
+    return false;
+}
+
 XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
                                                      XrParamMode *out_mode, XrTypeRef **out_type) {
     XR_DCHECK(parser != NULL, "xr_parse_optional_param_type_annotation: NULL parser");
@@ -367,13 +395,7 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
         return false;
 
     XrParamMode mode = XR_PARAM_VALUE;
-    if (allow_mode) {
-        if (xr_parser_match(parser, TK_IN)) {
-            mode = XR_PARAM_IN;
-        } else if (xr_parser_match_name(parser, "ref")) {
-            mode = XR_PARAM_REF;
-        }
-    }
+    xr_parse_optional_param_mode(parser, allow_mode, &mode);
 
     XrTypeRef *type = xr_parse_type_annotation(parser);
     if (out_mode)
@@ -381,6 +403,31 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
     if (out_type)
         *out_type = type;
     return true;
+}
+
+XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
+    XR_DCHECK(parser != NULL, "xr_parse_parameter: NULL parser");
+    bool is_rest = false;
+    if (flags & XR_PARSE_PARAMETER_ALLOW_REST)
+        is_rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
+
+    xr_parser_consume(parser, TK_NAME,
+                      is_rest ? "expected parameter name after ..." : "expected parameter name");
+    Token name_token = parser->previous;
+
+    char param_name[256];
+    snprintf(param_name, sizeof(param_name), "%.*s", name_token.length, name_token.start);
+
+    XrParamNode *param =
+        xr_param_node_new(parser->compiler_session, param_name, name_token.line, name_token.column);
+    param->is_rest = is_rest;
+
+    bool allow_mode = (flags & XR_PARSE_PARAMETER_ALLOW_MODE) && !is_rest;
+    bool has_type = xr_parse_optional_param_type_annotation(parser, allow_mode,
+                                                            &param->passing_mode, &param->type);
+    if ((flags & XR_PARSE_PARAMETER_REQUIRE_TYPE) && !has_type)
+        xr_parser_error(parser, "expected ':' and type annotation after parameter name");
+    return param;
 }
 
 /* ---- Base type (no trailing ? or |) ---- */
@@ -538,11 +585,17 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
         int cap = 8;
         XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
-        if (!elems) {
+        XrParamMode *param_modes = (XrParamMode *) xr_malloc((size_t) cap * sizeof(XrParamMode));
+        if (!elems || !param_modes) {
+            if (elems)
+                xr_free(elems);
+            if (param_modes)
+                xr_free(param_modes);
             xr_parser_error(parser, "out of memory while parsing type list");
             return xr_tref_unknown(parser->compiler_session);
         }
         int count = 0;
+        bool saw_param_mode = false;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
             if (count > 0)
                 xr_parser_match(parser, TK_COMMA);
@@ -550,30 +603,47 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 int new_cap = cap * 2;
                 XrTypeRef **resized =
                     (XrTypeRef **) xr_realloc(elems, (size_t) new_cap * sizeof(XrTypeRef *));
-                if (!resized) {
+                XrParamMode *resized_modes =
+                    (XrParamMode *) xr_realloc(param_modes, (size_t) new_cap * sizeof(XrParamMode));
+                if (!resized || !resized_modes) {
+                    if (resized)
+                        elems = resized;
+                    if (resized_modes)
+                        param_modes = resized_modes;
                     xr_free(elems);
+                    xr_free(param_modes);
                     xr_parser_error(parser, "out of memory while growing type list");
                     return xr_tref_unknown(parser->compiler_session);
                 }
                 elems = resized;
+                param_modes = resized_modes;
                 cap = new_cap;
             }
+            param_modes[count] = XR_PARAM_VALUE;
+            if (xr_parse_optional_param_mode(parser, true, &param_modes[count]))
+                saw_param_mode = true;
             elems[count++] = xr_parse_type_annotation(parser);
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
         if (xr_parser_match(parser, TK_ARROW)) {
             XrTypeRef *ret = xr_parse_type_annotation(parser);
-            XrTypeRef *result = xr_tref_function(parser->compiler_session, elems, count, ret);
+            XrTypeRef *result = xr_tref_function_with_modes(parser->compiler_session, elems,
+                                                            param_modes, count, ret);
             xr_free(elems);
+            xr_free(param_modes);
             return result;
         }
+        if (saw_param_mode)
+            xr_parser_error(parser, "parameter modes are only valid in function types");
         // `()` with no trailing `->` is the unit type, not an empty tuple.
         if (count == 0) {
             xr_free(elems);
+            xr_free(param_modes);
             return xr_tref_unit(parser->compiler_session);
         }
         XrTypeRef *result = xr_tref_tuple(parser->compiler_session, elems, count);
         xr_free(elems);
+        xr_free(param_modes);
         return result;
     }
 

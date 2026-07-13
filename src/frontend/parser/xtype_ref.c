@@ -153,18 +153,31 @@ XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef **params,
-                                    int nparam, XrTypeRef *ret) {
+XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session,
+                                               XrTypeRef **params, const XrParamMode *param_modes,
+                                               int nparam, XrTypeRef *ret) {
     XR_DCHECK(ret != NULL, "xr_tref_function: NULL return type");
     int total = nparam + 1; /* params + return type at the end */
     XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FUNCTION;
     t->nchildren = (uint8_t) total;
     t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) total);
-    for (int i = 0; i < nparam; i++)
+    if (nparam > 0) {
+        t->function_param_modes =
+            (XrParamMode *) ast_alloc_array(session, sizeof(XrParamMode), (size_t) nparam);
+    }
+    for (int i = 0; i < nparam; i++) {
         t->children[i] = params[i];
+        XrParamMode mode = param_modes ? param_modes[i] : XR_PARAM_VALUE;
+        t->function_param_modes[i] = xr_param_mode_is_valid(mode) ? mode : XR_PARAM_VALUE;
+    }
     t->children[nparam] = ret;
     return t;
+}
+
+XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef **params,
+                                    int nparam, XrTypeRef *ret) {
+    return xr_tref_function_with_modes(session, params, NULL, nparam, ret);
 }
 
 XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count) {
@@ -330,6 +343,12 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             for (int i = 0; i < nparam; i++) {
                 if (i > 0)
                     tref_append(buf, pos, cap, ", ");
+                XrParamMode mode =
+                    t->function_param_modes ? t->function_param_modes[i] : XR_PARAM_VALUE;
+                if (mode != XR_PARAM_VALUE) {
+                    tref_append(buf, pos, cap, xr_param_mode_label(mode));
+                    tref_append(buf, pos, cap, " ");
+                }
                 tref_to_str_impl(t->children[i], buf, pos, cap);
             }
             tref_append(buf, pos, cap, ") -> ");

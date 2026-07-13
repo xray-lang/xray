@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../../base/xdefs.h"
+#include "../../shared/xr_param_mode.h"
 
 struct XrCompilerSession;
 struct AstNode;
@@ -52,7 +53,7 @@ typedef enum {
     XR_TREF_GENERIC,     /* Name<T1, T2, ...>                */
     XR_TREF_OPTIONAL,    /* T?  — children[0] = inner        */
     XR_TREF_UNION,       /* T | U — children[0..n-1]         */
-    XR_TREF_FUNCTION,    /* fn(P1,..): R — children[0..n-2] = params,
+    XR_TREF_FUNCTION,    /* (P1,..) -> R — children[0..n-2] = params,
                             children[n-1] = return type       */
     XR_TREF_TUPLE,       /* (T1, T2, ...) — children[0..n-1] */
     XR_TREF_OBJECT,      /* { f1: T1, ... } — field_names +
@@ -94,7 +95,8 @@ typedef struct XrTypeRef {
                                           (arena-allocated, NUL-terminated) */
     const char **field_names;          /* OBJECT: per-field names         */
     bool *field_readonly;
-    struct XrTypeRef **children; /* child type refs (arena array) */
+    XrParamMode *function_param_modes; /* FUNCTION: per-param modes       */
+    struct XrTypeRef **children;       /* child type refs (arena array)   */
 } XrTypeRef;
 
 /* ========== Arena Constructors ========================================
@@ -130,10 +132,13 @@ XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef
 /* Union: T | U | ... */
 XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **members, int count);
 
-/* Function type: fn(P1, ...): R
+/* Function type: (P1, ...) -> R.
  * |params| has |nparam| entries; |ret| is the return type. */
 XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef **params,
                                     int nparam, XrTypeRef *ret);
+XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session,
+                                               XrTypeRef **params, const XrParamMode *param_modes,
+                                               int nparam, XrTypeRef *ret);
 
 /* Tuple: (T1, T2, ...) */
 XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count);

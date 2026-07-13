@@ -58,6 +58,7 @@ CANON_DECL_MODE_RE = re.compile(
 CALL_MARKER_RE = re.compile(
     rf"[(,]\s*(?:ref|out)\s+(?!{MODE_STOPWORDS}){IDENT}(?:\b|[.[])"
 )
+FUNCTION_TYPE_PARAM_MODE_RE = re.compile(r"\([^)]*\b(?:in|ref|out)\s+[^)]*\)\s*->")
 MOVE_PARAM_RE = re.compile(
     rf"{PARAM_BOUNDARY}\s*(?:move\s+{IDENT}\s*:|{IDENT}\s*:\s*move\b)"
 )
@@ -135,7 +136,7 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         categories.append("PREFIX_DECL_MODE_SPELLING")
     if CANON_DECL_MODE_RE.search(line):
         categories.append("CANON_DECL_MODE_SPELLING")
-    if CALL_MARKER_RE.search(line):
+    if CALL_MARKER_RE.search(line) and not FUNCTION_TYPE_PARAM_MODE_RE.search(line):
         categories.append("CALL_SITE_REF_OUT_MARKER")
     if STALE_EBNF_RE.search(line):
         categories.append("STALE_MODIFIER_EBNF")

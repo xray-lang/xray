@@ -207,9 +207,16 @@ XR_FUNC AstNode *xr_parse_export_declaration(Parser *parser);
 
 /* ========== Type Annotations ========== */
 
+typedef enum XrParseParameterFlags {
+    XR_PARSE_PARAMETER_ALLOW_MODE = 1u << 0,
+    XR_PARSE_PARAMETER_ALLOW_REST = 1u << 1,
+    XR_PARSE_PARAMETER_REQUIRE_TYPE = 1u << 2,
+} XrParseParameterFlags;
+
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
 XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
                                                      XrParamMode *out_mode, XrTypeRef **out_type);
+XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags);
 
 // True for built-in heap type names constructed via `T(args)` (Map/Array/...).
 XR_FUNC bool xr_is_construct_only_type_name(const char *name);
