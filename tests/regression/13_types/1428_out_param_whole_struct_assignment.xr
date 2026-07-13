@@ -1,0 +1,14 @@
+struct OutPairWholeGate {
+    left: int
+    right: int
+}
+
+fn initialize(p: out OutPairWholeGate) {
+    p = OutPairWholeGate{left: 3, right: 7}
+}
+
+@test
+fn test_out_param_whole_struct_assignment() {
+    var value = OutPairWholeGate{left: 0, right: 0}
+    initialize(out value)
+}
