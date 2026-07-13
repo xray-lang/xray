@@ -8335,14 +8335,14 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 }
 
-typedef struct XaOutParamDaState {
+struct XaOutParamDaState {
     XaSymbolLinks *links;
     bool before_assigned;
     bool then_assigned;
     bool else_assigned;
-} XaOutParamDaState;
+};
 
-static XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count) {
+XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count) {
     if (out_count)
         *out_count = 0;
     XaScope *function_scope = xa_find_enclosing_function_scope(ctx);
@@ -8386,11 +8386,15 @@ static XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_
     return states;
 }
 
-static void xa_out_param_da_restore_before(XaOutParamDaState *states, int count) {
+XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count) {
     for (int i = 0; states && i < count; i++) {
         if (states[i].links)
             states[i].links->is_definitely_assigned = states[i].before_assigned;
     }
+}
+
+XR_FUNC void xa_out_param_da_free(XaOutParamDaState *states) {
+    xr_free(states);
 }
 
 static void xa_out_param_da_record_then(XaOutParamDaState *states, int count) {
@@ -8471,7 +8475,7 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
     }
     xa_out_param_da_record_else(out_da, out_da_count);
     xa_out_param_da_apply_if_merge(out_da, out_da_count, then_falls_through, else_falls_through);
-    xr_free(out_da);
+    xa_out_param_da_free(out_da);
 
     // Merge branches
     if (ctx->flow) {
@@ -8526,7 +8530,7 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
         xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
     }
     xa_out_param_da_restore_before(out_da, out_da_count);
-    xr_free(out_da);
+    xa_out_param_da_free(out_da);
 
     // Exit condition
     if (ctx->flow) {
@@ -8582,7 +8586,7 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_stmt(ctx, for_stmt->increment);
     }
     xa_out_param_da_restore_before(out_da, out_da_count);
-    xr_free(out_da);
+    xa_out_param_da_free(out_da);
 
     xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);

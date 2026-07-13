@@ -5646,6 +5646,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
+            int out_da_count = 0;
+            XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
+
             // Infer body - process block statements inline (without xa_visit_block_stmt)
             // to match Pass 1 scope structure: Pass 1 processes for-in body block
             // statements in the for-in scope, so Pass 2 must do the same.
@@ -5662,6 +5665,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
             xa_loop_scope_pop(ctx, &loop_scope);
+            xa_out_param_da_restore_before(out_da, out_da_count);
+            xa_out_param_da_free(out_da);
 
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
