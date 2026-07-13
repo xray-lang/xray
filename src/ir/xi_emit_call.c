@@ -541,7 +541,7 @@ XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_DATA_PTR, dst, arr, 0));
 }
 
-static void emit_builtin_string_bytes_span(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+static void emit_builtin_string_byte_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -778,8 +778,8 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_array_copy_new(ctx, v, dst);
         return;
     }
-    if (bname && strcmp(bname, "string_bytes_span") == 0) {
-        emit_builtin_string_bytes_span(ctx, v, dst);
+    if (bname && strcmp(bname, "string_byte_slice") == 0) {
+        emit_builtin_string_byte_slice(ctx, v, dst);
         return;
     }
     if (bname && strcmp(bname, "bytes_load_u16") == 0) {

@@ -4707,7 +4707,7 @@ static bool verify_sequence_kind_valid(uint8_t kind) {
         case XG_SEQ_BYTES:
         case XG_SEQ_STRING:
         case XG_SEQ_SPAN:
-        case XG_SEQ_BYTE_SPAN:
+        case XG_SEQ_BYTE_SLICE:
         case XG_SEQ_STRING_BUILDER:
             return true;
         default:

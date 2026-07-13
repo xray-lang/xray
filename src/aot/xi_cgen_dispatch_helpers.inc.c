@@ -3963,8 +3963,8 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_array_new(ctx, out, f, v, prefix);
     } else if (emit_array_bytes_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the array/bytes helper. */
-    } else if (strcmp(bn, "string_bytes_span") == 0) {
-        XR_DCHECK(v->nargs >= 1, "builtin string_bytes_span: need string arg");
+    } else if (strcmp(bn, "string_byte_slice") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin string_byte_slice: need string arg");
         if (cg_value_plan_is_span_aggregate(ctx, v)) {
             fprintf(out, "xrt_span_from_string_bytes(");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);

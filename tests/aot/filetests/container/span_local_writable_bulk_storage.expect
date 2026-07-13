@@ -1,9 +1,9 @@
 contains=function 1 name=byte_ops module=0 depth=1 abi=native boundary=none params=0 ret=int64_t/scalar/i64
 contains=function 2 name=word_ops module=0 depth=1 abi=native boundary=none params=0 ret=int64_t/scalar/i64
-regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_fill evidence=recv_agg\+byte_span\+pod\+writable drop=readonly\+type\+helper
-regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_store evidence=recv_agg\+byte_span\+pod\+writable\+endian_const drop=readonly\+type\+helper
-regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_copy evidence=recv_agg\+byte_span\+pod\+elem_match\+writable drop=readonly\+type\+helper
-regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_repeat evidence=recv_agg\+byte_span\+pod\+writable drop=readonly\+type\+helper
+regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_fill evidence=recv_agg\+byte_slice\+pod\+writable drop=readonly\+type\+helper
+regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_store evidence=recv_agg\+byte_slice\+pod\+writable\+endian_const drop=readonly\+type\+helper
+regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_copy evidence=recv_agg\+byte_slice\+pod\+elem_match\+writable drop=readonly\+type\+helper
+regex=span-access [0-9]+ func=byte_ops value=v[0-9]+ kind=byte_repeat evidence=recv_agg\+byte_slice\+pod\+writable drop=readonly\+type\+helper
 regex=span-access [0-9]+ func=word_ops value=v[0-9]+ kind=span_fill evidence=recv_agg\+pod\+writable drop=readonly\+type\+pod\+helper
 regex=span-access [0-9]+ func=word_ops value=v[0-9]+ kind=span_copy evidence=recv_agg\+pod\+elem_match\+writable drop=readonly\+type\+pod\+helper
 c_contains=memset(_s.data, (uint8_t)

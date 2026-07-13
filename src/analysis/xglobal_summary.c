@@ -839,8 +839,8 @@ XR_FUNC const char *xg_sequence_kind_name(uint8_t kind) {
             return "string";
         case XG_SEQ_SPAN:
             return "span";
-        case XG_SEQ_BYTE_SPAN:
-            return "byte_span";
+        case XG_SEQ_BYTE_SLICE:
+            return "byte_slice";
         case XG_SEQ_STRING_BUILDER:
             return "string_builder";
         default:

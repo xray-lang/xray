@@ -2153,7 +2153,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
     }
     evidence |= XAOT_SPAN_EV_RECV_AGGREGATE;
     if (prepare_span_elem_is_byte(&recv_elem))
-        evidence |= XAOT_SPAN_EV_RECV_BYTE_SPAN;
+        evidence |= XAOT_SPAN_EV_RECV_BYTE_SLICE;
     if (prepare_span_elem_is_pod(&recv_elem))
         evidence |= XAOT_SPAN_EV_RECV_POD;
     if (prepare_span_access_is_write(kind) &&
@@ -2175,8 +2175,8 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
         goto done;
     }
 
-    if (prepare_span_access_is_byte(kind) && (evidence & XAOT_SPAN_EV_RECV_BYTE_SPAN) == 0) {
-        reason = XAOT_SPAN_UNPROVEN_NOT_BYTE_SPAN;
+    if (prepare_span_access_is_byte(kind) && (evidence & XAOT_SPAN_EV_RECV_BYTE_SLICE) == 0) {
+        reason = XAOT_SPAN_UNPROVEN_NOT_BYTE_SLICE;
         goto done;
     }
 

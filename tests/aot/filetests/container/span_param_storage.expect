@@ -1,6 +1,6 @@
 regex=array-storage [0-9]+ func=sum_bytes value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=bounds [0-9]+ func=sum_bytes access=v[0-9]+ op=index_get evidence=[^ ]*no_clobber
-regex=span-access [0-9]+ func=sum_bytes value=v[0-9]+ kind=index_get evidence=recv_agg\+byte_span\+pod\+range\+no_clobber drop=bounds
+regex=span-access [0-9]+ func=sum_bytes value=v[0-9]+ kind=index_get evidence=recv_agg\+byte_slice\+pod\+range\+no_clobber drop=bounds
 c_contains=({ xrt_array_t *_a = ((xrt_array_t*)
 c_contains=((uint8_t*)_a->data)[
 c_contains=->length
