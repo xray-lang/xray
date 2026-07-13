@@ -3,12 +3,12 @@ fn sink(value: Array<int>, out: ref Array<Array<int>>) {
 }
 
 fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
-    sink(copy(data), out)
+    sink(copy(data), ref out)
 }
 
 var values: Array<int> = [1, 2, 3, 4]
 var out: Array<Array<int>> = []
-stash(values, out)
+stash(values, ref out)
 values.push(5)
 print(len(out[0]))
 print(len(values))

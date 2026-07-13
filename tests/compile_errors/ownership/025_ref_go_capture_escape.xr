@@ -7,4 +7,4 @@ fn launch(data: ref Array<int>) {
 }
 
 var values: Array<int> = [1, 2, 3]
-launch(values)
+launch(ref values)

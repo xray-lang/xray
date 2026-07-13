@@ -24,7 +24,7 @@ fn stash(data: in Array<int>, holder: ref Holder) {
 
 var values: Array<int> = [1, 2, 3]
 var holder = Holder()
-stash(values, holder)
+stash(values, ref holder)
 values.push(4)
 print(len(holder.items[0]))
 print(len(values))

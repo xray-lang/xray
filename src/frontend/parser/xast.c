@@ -582,7 +582,7 @@ AstNode *xr_ast_function_expr(XrCompilerSession *session, XrParamNode **params, 
 // arguments: argument list (expression array)
 // arg_count: argument count
 AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode **arguments,
-                          int arg_count, int line) {
+                          XrCallArgAccess *arg_accesses, int arg_count, int line) {
     AstNode *node = alloc_node(session, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
@@ -598,6 +598,17 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
     } else {
         node->as.call_expr.arguments = NULL;
     }
+    if (arg_count > 0) {
+        node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+            session, sizeof(XrCallArgAccess), (size_t) arg_count);
+        for (int i = 0; i < arg_count; i++) {
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            node->as.call_expr.arg_accesses[i] =
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+        }
+    } else {
+        node->as.call_expr.arg_accesses = NULL;
+    }
 
     // No generic type arguments
     node->as.call_expr.type_args = NULL;
@@ -609,8 +620,8 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
 // Create function call node with generic type arguments
 // e.g.: foo<int, string>(arg1, arg2)
 AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, AstNode **arguments,
-                                  int arg_count, XrTypeRef **type_args, int type_arg_count,
-                                  int line) {
+                                  XrCallArgAccess *arg_accesses, int arg_count,
+                                  XrTypeRef **type_args, int type_arg_count, int line) {
     AstNode *node = alloc_node(session, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
@@ -625,6 +636,17 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
         }
     } else {
         node->as.call_expr.arguments = NULL;
+    }
+    if (arg_count > 0) {
+        node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+            session, sizeof(XrCallArgAccess), (size_t) arg_count);
+        for (int i = 0; i < arg_count; i++) {
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            node->as.call_expr.arg_accesses[i] =
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+        }
+    } else {
+        node->as.call_expr.arg_accesses = NULL;
     }
 
     // Copy generic type arguments
@@ -1108,13 +1130,24 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, char *
 //   new module.ClassName()    - module_name = "module"
 // Also supports generic type arguments: new Box<int>(42)
 AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,
-                         const char *class_name, AstNode **arguments, int arg_count,
-                         XrTypeRef **type_args, int type_arg_count, int line) {
+                         const char *class_name, AstNode **arguments, XrCallArgAccess *arg_accesses,
+                         int arg_count, XrTypeRef **type_args, int type_arg_count, int line) {
     AstNode *node = alloc_node(session, AST_NEW_EXPR, line);
     node->as.new_expr.module_name = ast_strdup(session, module_name);
     node->as.new_expr.class_name = (char *) class_name;
     node->as.new_expr.arguments = arguments;
     node->as.new_expr.arg_count = arg_count;
+    if (arg_count > 0) {
+        node->as.new_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+            session, sizeof(XrCallArgAccess), (size_t) arg_count);
+        for (int i = 0; i < arg_count; i++) {
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            node->as.new_expr.arg_accesses[i] =
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+        }
+    } else {
+        node->as.new_expr.arg_accesses = NULL;
+    }
 
     // Copy generic type arguments
     node->as.new_expr.type_arg_count = type_arg_count;
@@ -1139,11 +1172,22 @@ AstNode *xr_ast_this_expr(XrCompilerSession *session, int line) {
 
 // Create super call node
 AstNode *xr_ast_super_call(XrCompilerSession *session, const char *method_name, AstNode **arguments,
-                           int arg_count, int line) {
+                           XrCallArgAccess *arg_accesses, int arg_count, int line) {
     AstNode *node = alloc_node(session, AST_SUPER_CALL, line);
     node->as.super_call.method_name = (char *) method_name;
     node->as.super_call.arguments = arguments;
     node->as.super_call.arg_count = arg_count;
+    if (arg_count > 0) {
+        node->as.super_call.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
+            session, sizeof(XrCallArgAccess), (size_t) arg_count);
+        for (int i = 0; i < arg_count; i++) {
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            node->as.super_call.arg_accesses[i] =
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+        }
+    } else {
+        node->as.super_call.arg_accesses = NULL;
+    }
     return node;
 }
 

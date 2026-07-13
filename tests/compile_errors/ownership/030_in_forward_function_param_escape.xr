@@ -1,5 +1,5 @@
 fn wrap(data: in Array<int>, out: ref Array<Array<int>>) {
-    stash(data, out)
+    stash(data, ref out)
 }
 
 fn stash(value: Array<int>, out: ref Array<Array<int>>) {
@@ -8,4 +8,4 @@ fn stash(value: Array<int>, out: ref Array<Array<int>>) {
 
 var values: Array<int> = [1, 2]
 var out: Array<Array<int>> = []
-wrap(values, out)
+wrap(values, ref out)

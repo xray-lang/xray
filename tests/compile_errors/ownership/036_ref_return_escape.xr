@@ -3,5 +3,5 @@ fn leak(data: ref Array<int>) -> Array<int> {
 }
 
 var values: Array<int> = [1, 2]
-var leaked = leak(values)
+var leaked = leak(ref values)
 print(len(leaked))

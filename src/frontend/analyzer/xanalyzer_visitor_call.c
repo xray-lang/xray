@@ -37,6 +37,9 @@ static bool xa_path_is_parallel_stdlib_module(const char *file);
 static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info);
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
                                                        const char *callback_label);
+static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
+                                                   const CallExprNode *call, AstNode *arg_node,
+                                                   int arg_index, int slot, XrParamMode param_mode);
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
@@ -146,6 +149,8 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         ctx->expected_type = saved_expected;
         if (!resolved || XR_TYPE_IS_UNKNOWN(resolved) || !arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
             continue;
+        XrParamMode param_mode = xr_type_function_param_mode(ctor_type, i);
+        xa_check_call_arg_access_authorization(ctx, node, call, arg, i, i, param_mode);
         if (!xa_typecheck_assignable(resolved, arg_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
             char msg[256];
@@ -2169,6 +2174,100 @@ static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *cal
                                &loc);
 }
 
+static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index) {
+    if (!call || index < 0 || index >= call->arg_count || !call->arg_accesses)
+        return XR_CALL_ARG_VALUE;
+    XrCallArgAccess access = call->arg_accesses[index];
+    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+}
+
+static bool xa_ref_call_arg_is_place(XaInferContext *ctx, AstNode *arg_node, const char **reason) {
+    while (arg_node && arg_node->type == AST_GROUPING)
+        arg_node = arg_node->as.grouping;
+    if (!arg_node) {
+        if (reason)
+            *reason = "empty argument";
+        return false;
+    }
+
+    switch (arg_node->type) {
+        case AST_VARIABLE:
+        case AST_MEMBER_ACCESS:
+        case AST_INDEX_GET:
+            break;
+        default:
+            if (reason)
+                *reason = "temporary expression";
+            return false;
+    }
+
+    XaSymbol *root = xa_call_root_variable_symbol(ctx, arg_node);
+    if (root && (root->is_const || root->is_readonly_binding)) {
+        if (reason)
+            *reason = "readonly storage";
+        return false;
+    }
+    return true;
+}
+
+XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
+                                               AstNode *arg_node, XrCallArgAccess access, int slot,
+                                               XrParamMode param_mode) {
+    if (!ctx || !ctx->analyzer || slot < 0)
+        return;
+    if (access == XR_CALL_ARG_VALUE) {
+        if (param_mode == XR_PARAM_REF || param_mode == XR_PARAM_OUT) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = arg_node ? arg_node->line : call_node->line,
+                              .column = arg_node ? arg_node->column : call_node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "Argument %d must be passed as `%s` because parameter %d is %s", slot + 1,
+                     xr_param_mode_label(param_mode), slot + 1, xr_param_mode_label(param_mode));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+        return;
+    }
+
+    XrParamMode required = access == XR_CALL_ARG_REF ? XR_PARAM_REF : XR_PARAM_OUT;
+    if (param_mode != required) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = arg_node ? arg_node->line : call_node->line,
+                          .column = arg_node ? arg_node->column : call_node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Argument %d uses `%s`, but parameter %d is %s", slot + 1,
+                 xr_call_arg_access_label(access), slot + 1, xr_param_mode_label(param_mode));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+        return;
+    }
+
+    if (access == XR_CALL_ARG_REF) {
+        const char *reason = NULL;
+        if (!xa_ref_call_arg_is_place(ctx, arg_node, &reason)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = arg_node ? arg_node->line : call_node->line,
+                              .column = arg_node ? arg_node->column : call_node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg), "Argument %d passed as `ref` must be a mutable place%s%s",
+                     slot + 1, reason ? ": " : "", reason ? reason : "");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+    }
+}
+
+static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
+                                                   const CallExprNode *call, AstNode *arg_node,
+                                                   int arg_index, int slot,
+                                                   XrParamMode param_mode) {
+    if (!call)
+        return;
+    xa_check_arg_access_authorization(ctx, call_node, arg_node, xa_call_arg_access(call, arg_index),
+                                      slot, param_mode);
+}
+
 static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_node,
                                           uint32_t *arg_symbol_ids, const char **arg_names,
                                           XrParamMode *arg_modes, int arg_count) {
@@ -2736,8 +2835,16 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
     AstNode **new_args = (AstNode **) xr_calloc((size_t) param_count, sizeof(AstNode *));
     if (!new_args)
         return false;
-    for (int i = 0; i < call->arg_count; i++)
+    XrCallArgAccess *new_accesses =
+        (XrCallArgAccess *) xr_calloc((size_t) param_count, sizeof(XrCallArgAccess));
+    if (!new_accesses) {
+        xr_free(new_args);
+        return false;
+    }
+    for (int i = 0; i < call->arg_count; i++) {
         new_args[i] = call->arguments[i];
+        new_accesses[i] = call->arg_accesses ? call->arg_accesses[i] : XR_CALL_ARG_VALUE;
+    }
     XrHashMap *decl_exports = xa_default_arg_decl_exports(ctx, links);
     XaDefaultArgBindCtx bind = {
         .ctx = ctx,
@@ -2749,6 +2856,7 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
         xa_bind_default_arg_export_symbols(new_args[i], &bind);
     }
     call->arguments = new_args;
+    call->arg_accesses = new_accesses;
     call->arg_count = param_count;
     call->supplied_arg_count = supplied_arg_count;
     call->default_arg_count = param_count - supplied_arg_count;
@@ -3872,6 +3980,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                    arg_node, arg_type, slot);
                 if (param_slot < 0 || param_slot >= param_count)
                     continue;
+                XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
+                xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot,
+                                                       param_mode);
                 XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
@@ -3910,6 +4021,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 effective_arg_types[slot] = arg_type;
             if (effective_arg_modes && slot < arg_count)
                 effective_arg_modes[slot] = xa_call_param_mode(callee_type, param_slot);
+            xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot,
+                                                   XR_PARAM_VALUE);
             slot++;
             continue;
         }
@@ -3935,6 +4048,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;
+        xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);
         if (param_mode == XR_PARAM_IN || param_mode == XR_PARAM_REF) {
             XaSymbol *arg_sym = xa_call_variable_symbol(ctx, arg_node);

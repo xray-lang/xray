@@ -3,7 +3,7 @@ fn mutate(data: ref Array<int>) {
 }
 
 fn view(data: in Array<int>) {
-    mutate(data)
+    mutate(ref data)
 }
 
 var values: Array<int> = []

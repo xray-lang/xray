@@ -4,5 +4,5 @@ fn stashLength(data: in Array<int>, out: ref Array<int>) {
 
 var values: Array<int> = [1, 2, 3, 4, 5]
 var out: Array<int> = []
-stashLength(values, out)
+stashLength(values, ref out)
 print(out[0])

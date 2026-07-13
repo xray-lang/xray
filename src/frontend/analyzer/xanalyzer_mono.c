@@ -221,6 +221,16 @@ static AstNode **clone_node_array(AstNode **arr, int count, XrMonoTypeMap *map, 
     return result;
 }
 
+static XrCallArgAccess *clone_call_arg_accesses(XrCallArgAccess *arr, int count) {
+    if (!arr || count <= 0)
+        return NULL;
+    XrCallArgAccess *result =
+        (XrCallArgAccess *) xr_calloc((size_t) count, sizeof(XrCallArgAccess));
+    for (int i = 0; i < count; i++)
+        result[i] = xr_call_arg_access_is_valid(arr[i]) ? arr[i] : XR_CALL_ARG_VALUE;
+    return result;
+}
+
 /* Substitute type parameters in an XrTypeRef tree.
  * Returns a new XrTypeRef if substitution occurred,
  * or the original pointer unchanged. */
@@ -472,6 +482,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.call_expr.required_arg_count = node->as.call_expr.required_arg_count;
             n->as.call_expr.arguments = clone_node_array(
                 node->as.call_expr.arguments, node->as.call_expr.arg_count, map, mc, clone_ctx);
+            n->as.call_expr.arg_accesses = clone_call_arg_accesses(node->as.call_expr.arg_accesses,
+                                                                   node->as.call_expr.arg_count);
             n->as.call_expr.type_args = clone_tref_array(
                 node->as.call_expr.type_args, node->as.call_expr.type_arg_count, map, mc);
             n->as.call_expr.type_arg_count = node->as.call_expr.type_arg_count;
@@ -643,6 +655,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.new_expr.arg_count = node->as.new_expr.arg_count;
             n->as.new_expr.arguments = clone_node_array(
                 node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc, clone_ctx);
+            n->as.new_expr.arg_accesses = clone_call_arg_accesses(node->as.new_expr.arg_accesses,
+                                                                  node->as.new_expr.arg_count);
             n->as.new_expr.type_args = clone_tref_array(node->as.new_expr.type_args,
                                                         node->as.new_expr.type_arg_count, map, mc);
             n->as.new_expr.type_arg_count = node->as.new_expr.type_arg_count;
@@ -656,6 +670,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.super_call.arg_count = node->as.super_call.arg_count;
             n->as.super_call.arguments = clone_node_array(
                 node->as.super_call.arguments, node->as.super_call.arg_count, map, mc, clone_ctx);
+            n->as.super_call.arg_accesses = clone_call_arg_accesses(
+                node->as.super_call.arg_accesses, node->as.super_call.arg_count);
             break;
 
         // === Match expression ===

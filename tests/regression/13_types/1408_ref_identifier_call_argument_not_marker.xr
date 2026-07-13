@@ -1,0 +1,12 @@
+fn accept_int(value: int) -> int {
+    return value
+}
+
+fn ref_identifier_expression(ref: int) -> int {
+    return accept_int(ref + 1)
+}
+
+@test
+fn test_ref_identifier_call_argument_not_marker() {
+    assert(ref_identifier_expression(41) == 42)
+}

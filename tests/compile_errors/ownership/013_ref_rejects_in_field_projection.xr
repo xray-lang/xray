@@ -11,7 +11,7 @@ fn mutate(data: ref Array<int>) {
 }
 
 fn view(holder: in Holder) {
-    mutate(holder.items)
+    mutate(ref holder.items)
 }
 
 var holder = Holder()

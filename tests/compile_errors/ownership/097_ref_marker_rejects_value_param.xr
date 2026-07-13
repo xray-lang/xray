@@ -1,0 +1,6 @@
+fn read(data: Array<int>) -> int {
+    return len(data)
+}
+
+var values: Array<int> = []
+print(read(ref values))

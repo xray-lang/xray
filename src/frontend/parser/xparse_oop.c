@@ -1137,12 +1137,18 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     xr_parser_consume(parser, TK_LPAREN, "expected '(' to start argument list");
 
     AstNode **arguments = NULL;
+    XrCallArgAccess *arg_accesses = NULL;
     int arg_count = 0;
     int arg_capacity = 0;
+    int access_count = 0;
+    int access_capacity = 0;
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+            XrCallArgAccess access = XR_CALL_ARG_VALUE;
+            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
@@ -1152,7 +1158,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     // class_name / arguments / type_args, but deep-copies module_name,
     // so release our copy of module_name here.
     AstNode *node = xr_ast_new_expr(parser->compiler_session, module_name, class_name, arguments,
-                                    arg_count, type_args, type_arg_count, line);
+                                    arg_accesses, arg_count, type_args, type_arg_count, line);
     return node;
 }
 
@@ -1200,19 +1206,26 @@ AstNode *xr_parse_super_expression(Parser *parser) {
 
     // Parse arguments
     AstNode **arguments = NULL;
+    XrCallArgAccess *arg_accesses = NULL;
     int arg_count = 0;
     int arg_capacity = 0;
+    int access_count = 0;
+    int access_capacity = 0;
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+            XrCallArgAccess access = XR_CALL_ARG_VALUE;
+            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end argument list");
 
     // Create super call node
-    return xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_count, line);
+    return xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_accesses,
+                             arg_count, line);
 }
 
 /* ========== Operator Method Parsing ========== */

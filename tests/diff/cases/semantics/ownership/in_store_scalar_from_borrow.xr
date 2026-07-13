@@ -12,5 +12,5 @@ fn stashLength(data: in Array<int>, counter: ref Counter) {
 
 var values: Array<int> = [1, 2, 3, 4]
 var counter = Counter()
-stashLength(values, counter)
+stashLength(values, ref counter)
 print(counter.value)

@@ -448,7 +448,7 @@ AstNode *xr_parse_type_cast(Parser *parser) {
         (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), 1);
     arguments[0] = arg;
 
-    return xr_ast_call_expr(parser->compiler_session, callee, arguments, 1, line);
+    return xr_ast_call_expr(parser->compiler_session, callee, arguments, NULL, 1, line);
 }
 
 AstNode *xr_parse_comptime_expr(Parser *parser) {
@@ -1041,13 +1041,18 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
     xr_parser_advance(parser);  // consume '('
 
     AstNode **arguments = NULL;
+    XrCallArgAccess *arg_accesses = NULL;
     int arg_count = 0;
     int arg_capacity = 0;
+    int access_count = 0;
+    int access_capacity = 0;
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
-                          xr_parse_call_argument(parser));
+            XrCallArgAccess access = XR_CALL_ARG_VALUE;
+            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
@@ -1058,11 +1063,11 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
     // generic type arguments drive element/key/value layout.
     if (callee->type == AST_VARIABLE && xr_is_construct_only_type_name(callee->as.variable.name)) {
         return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
-                               arg_count, type_args, type_arg_count, line);
+                               arg_accesses, arg_count, type_args, type_arg_count, line);
     }
 
-    return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_count,
-                                    type_args, type_arg_count, line);
+    return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_accesses,
+                                    arg_count, type_args, type_arg_count, line);
 }
 
 // Parse '<' which could be comparison or generic call

@@ -14,7 +14,7 @@ fn read_pair(acc: in [uint32; 4]) -> uint32 {
 
 fn run() -> uint32 {
     var acc: [uint32; 4] = [1, 2, 3, 4]
-    bump(acc, 7)
+    bump(ref acc, 7)
     return read_pair(acc)
 }
 

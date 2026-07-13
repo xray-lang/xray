@@ -898,8 +898,34 @@ fail:
 // A bare `_` argument is accepted as a wildcard placeholder so that
 // ADT pattern parsing (`R.Err(_)`) can later detect it; in normal call
 // position the analyzer rejects it.
-AstNode *xr_parse_call_argument(Parser *parser) {
+static bool xr_parse_call_argument_ref_marker_starts(Parser *parser) {
+    if (!parser || !(xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")))
+        return false;
+
+    Scanner saved_scan = parser->scanner;
+    Token saved_cur = parser->current;
+    Token saved_prev = parser->previous;
+    xr_parser_advance(parser);
+    bool marker = xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_THIS);
+    parser->scanner = saved_scan;
+    parser->current = saved_cur;
+    parser->previous = saved_prev;
+    return marker;
+}
+
+AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out_access) {
+    if (out_access)
+        *out_access = XR_CALL_ARG_VALUE;
     int line = parser->current.line;
+    if (xr_parse_call_argument_ref_marker_starts(parser)) {
+        xr_parser_advance(parser);
+        if (out_access)
+            *out_access = XR_CALL_ARG_REF;
+        AstNode *place = xr_parse_expression(parser);
+        if (!place)
+            return NULL;
+        return place;
+    }
     if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
         AstNode *inner = xr_parse_expression(parser);
         if (!inner)
@@ -938,6 +964,10 @@ AstNode *xr_parse_call_argument(Parser *parser) {
     return xr_parse_expression(parser);
 }
 
+AstNode *xr_parse_call_argument(Parser *parser) {
+    return xr_parse_call_argument_with_access(parser, NULL);
+}
+
 // Parse function call: add(1, 2) or add(...t, 3)
 // Built-in heap types are constructed with `T(args)` (no `new`). These names
 // have no callable function binding, so a call on them is a construction.
@@ -960,13 +990,18 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     int line = parser->previous.line;
 
     AstNode **arguments = NULL;
+    XrCallArgAccess *arg_accesses = NULL;
     int arg_count = 0;
     int arg_capacity = 0;
+    int access_count = 0;
+    int access_capacity = 0;
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
-                          xr_parse_call_argument(parser));
+            XrCallArgAccess access = XR_CALL_ARG_VALUE;
+            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
@@ -976,10 +1011,11 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     if (callee && callee->type == AST_VARIABLE &&
         xr_is_construct_only_type_name(callee->as.variable.name)) {
         return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
-                               arg_count, NULL, 0, line);
+                               arg_accesses, arg_count, NULL, 0, line);
     }
 
-    return xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_count, line);
+    return xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses, arg_count,
+                            line);
 }
 
 /* ========== Array Parsing ========== */
