@@ -1,0 +1,6 @@
+fn read_and_fill(snapshot: in int, target: out int) {
+    target = snapshot + 1
+}
+
+var values = [1, 2]
+read_and_fill(values[0], out values[1])
