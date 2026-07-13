@@ -510,7 +510,7 @@ static inline xr_span_t xrt_span_bytes_repeat_from_checked_raw(xr_span_t span, i
     return span;
 }
 
-static inline xr_span_t xrt_byte_span_from_value(XrValue recv, const char *message) {
+static inline xr_span_t xrt_byte_slice_from_value(XrValue recv, const char *message) {
     if (XR_IS_ARRAY(recv) && recv.ptr) {
         xrt_array_t *arr = (xrt_array_t *) recv.ptr;
         if (arr->elem_type != XR_ELEM_U8)
@@ -532,7 +532,7 @@ static inline XrValue xrt_span_bytes_load_u16_value(XrValue recv, XrValue off_va
     if (!XR_IS_INT(off_value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.load<uint16>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.load<uint16>() expects Slice<byte>");
     int64_t value = xrt_span_bytes_load_u16_checked_raw(span, XR_TO_INT(off_value),
                                                         xrt_endian_arg(endian_value));
     return XR_FROM_INT(value);
@@ -543,7 +543,7 @@ static inline XrValue xrt_span_bytes_load_u32_value(XrValue recv, XrValue off_va
     if (!XR_IS_INT(off_value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.load<uint32>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.load<uint32>() expects Slice<byte>");
     int64_t value = xrt_span_bytes_load_u32_checked_raw(span, XR_TO_INT(off_value),
                                                         xrt_endian_arg(endian_value));
     return XR_FROM_INT(value);
@@ -554,7 +554,7 @@ static inline XrValue xrt_span_bytes_load_u64_value(XrValue recv, XrValue off_va
     if (!XR_IS_INT(off_value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.load<uint64>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.load<uint64>() expects Slice<byte>");
     int64_t value = xrt_span_bytes_load_u64_checked_raw(span, XR_TO_INT(off_value),
                                                         xrt_endian_arg(endian_value));
     return XR_FROM_INT(value);
@@ -565,7 +565,7 @@ static inline XrValue xrt_span_bytes_load_f32_value(XrValue recv, XrValue off_va
     if (!XR_IS_INT(off_value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.load<float32>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.load<float32>() expects Slice<byte>");
     double value = xrt_span_bytes_load_f32_checked_raw(span, XR_TO_INT(off_value),
                                                        xrt_endian_arg(endian_value));
     return XR_FROM_FLOAT(value);
@@ -576,7 +576,7 @@ static inline XrValue xrt_span_bytes_load_f64_value(XrValue recv, XrValue off_va
     if (!XR_IS_INT(off_value))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.load<T>() expects integer offset");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.load<float64>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.load<float64>() expects Slice<byte>");
     double value = xrt_span_bytes_load_f64_checked_raw(span, XR_TO_INT(off_value),
                                                        xrt_endian_arg(endian_value));
     return XR_FROM_FLOAT(value);
@@ -588,7 +588,7 @@ static inline void xrt_span_bytes_store_u16_value(XrValue recv, XrValue off_valu
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.store<T>() expects integer offset and value");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.store<uint16>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.store<uint16>() expects Slice<byte>");
     xrt_span_bytes_store_u16_checked_raw(span, XR_TO_INT(off_value), XR_TO_INT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -599,7 +599,7 @@ static inline void xrt_span_bytes_store_u32_value(XrValue recv, XrValue off_valu
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.store<T>() expects integer offset and value");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.store<uint32>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.store<uint32>() expects Slice<byte>");
     xrt_span_bytes_store_u32_checked_raw(span, XR_TO_INT(off_value), XR_TO_INT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -610,7 +610,7 @@ static inline void xrt_span_bytes_store_u64_value(XrValue recv, XrValue off_valu
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.store<T>() expects integer offset and value");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.store<uint64>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.store<uint64>() expects Slice<byte>");
     xrt_span_bytes_store_u64_checked_raw(span, XR_TO_INT(off_value), XR_TO_INT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -621,7 +621,7 @@ static inline void xrt_span_bytes_store_f32_value(XrValue recv, XrValue off_valu
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.store<T>() expects integer offset and float value");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.store<float32>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.store<float32>() expects Slice<byte>");
     xrt_span_bytes_store_f32_checked_raw(span, XR_TO_INT(off_value), XR_TO_FLOAT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -632,7 +632,7 @@ static inline void xrt_span_bytes_store_f64_value(XrValue recv, XrValue off_valu
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.store<T>() expects integer offset and float value");
     xr_span_t span =
-        xrt_byte_span_from_value(recv, "Slice<byte>.store<float64>() expects Slice<byte>");
+        xrt_byte_slice_from_value(recv, "Slice<byte>.store<float64>() expects Slice<byte>");
     xrt_span_bytes_store_f64_checked_raw(span, XR_TO_INT(off_value), XR_TO_FLOAT(value),
                                          xrt_endian_arg(endian_value));
 }
@@ -855,7 +855,7 @@ static inline XrValue xrt_bytes_append_from_value(XrValue arr_value, XrValue src
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG);
     xr_span_t src =
-        xrt_byte_span_from_value(src_value, XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG);
+        xrt_byte_slice_from_value(src_value, XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG);
     xrt_bytes_append_from_span_raw((xrt_array_t *) arr_value.ptr, src);
     return arr_value;
 }

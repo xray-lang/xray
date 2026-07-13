@@ -2428,7 +2428,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     xi_func_free(ir);
 }
 
-TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
+TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
     const char *src = "fn sum(src: in Slice<byte>) -> int {\n"
                       "    var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
                       "    return int(v)\n"
@@ -2450,7 +2450,7 @@ TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "direct Array<byte> -> in Slice<byte> calls should generate");
-    assert(contains(code, "xrt_byte_span_from_value(") &&
+    assert(contains(code, "xrt_byte_slice_from_value(") &&
            "direct call should convert the Array<byte> argument to a raw Slice<byte>");
     assert(contains(code, "test_sum_") && "helper should be emitted as a direct call target");
     assert(!contains(code, "cannot pass non-aggregate") &&
@@ -2463,7 +2463,7 @@ TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
     xi_func_free(ir);
 }
 
-TEST(cgen_boxed_adapter_converts_bytespan_arg) {
+TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
     const char *src = "fn apply(f: (Slice<byte>) -> int, src: Array<byte>) -> int {\n"
                       "    return f(src)\n"
                       "}\n"
@@ -2489,7 +2489,7 @@ TEST(cgen_boxed_adapter_converts_bytespan_arg) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "boxed Slice<byte> adapter should generate");
     assert(stats.boxed_adapters >= 1 && "dynamic Slice<byte> callback should keep a boxed adapter");
-    assert(contains(code, "xrt_byte_span_from_value(p0") &&
+    assert(contains(code, "xrt_byte_slice_from_value(p0") &&
            "boxed adapter should convert its boxed parameter to a raw Slice<byte>");
     assert(!contains(code, "_cl, p0)") &&
            "boxed adapter must not pass XrValue directly to a raw Slice<byte> ABI slot");
@@ -8074,8 +8074,8 @@ int main(void) {
     run_cgen_typed_array_zero_fill_range_uses_memset();
     run_cgen_bytes_safe_span_methods_use_raw_memory_helpers();
     run_cgen_borrowed_bytes_param_reserve_skips_arc();
-    run_cgen_direct_call_converts_bytes_to_bytespan_arg();
-    run_cgen_boxed_adapter_converts_bytespan_arg();
+    run_cgen_direct_call_converts_bytes_to_byte_slice_arg();
+    run_cgen_boxed_adapter_converts_byte_slice_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
     run_cgen_rawptr_parallel_for_each_capture_keeps_owner_alive();
     run_cgen_span_index_get_elides_dead_err_check();
