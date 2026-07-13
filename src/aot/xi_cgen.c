@@ -8180,7 +8180,7 @@ static bool cg_func_has_native_receiver_boxed_use_in_bundle(XiCgenCtx *ctx, cons
 
 static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
                                         bool typed_abi, bool native_receiver) {
-    if (xicgen_func_is_itable_target(ctx, f))
+    if (xicgen_func_is_boxed_dispatch_target(ctx, f))
         return true;
     if (!typed_abi && !native_receiver)
         return false;
@@ -9058,6 +9058,24 @@ static void cg_func_reach_mark_hash_eq_roots(XiCgenCtx *ctx) {
     }
 }
 
+static void cg_func_reach_mark_dispatch_roots(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!ctx || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
+        const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
+        if (plan->target_count == 0 || plan->target_start == 0 ||
+            plan->target_start - 1 + plan->target_count > bundle->ndispatch_target_cases)
+            continue;
+        for (uint16_t ti = 0; ti < plan->target_count; ti++) {
+            const XaotDispatchTargetCase *target =
+                &bundle->dispatch_target_cases[plan->target_start - 1 + ti];
+            cg_func_reach_mark_root(ctx,
+                                    xaot_bundle_find_dispatch_target_func(bundle, target, NULL));
+        }
+    }
+}
+
 /* Compute executable function reachability as a monotonic fixed point over the
  * resolved call/reference graph.  The previous per-target recursive query
  * cached provisional negative answers while callers were still in the
@@ -9079,6 +9097,7 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
         cg_func_reach_collect_tree(ctx, ctx->module->init);
     }
     cg_func_reach_mark_hash_eq_roots(ctx);
+    cg_func_reach_mark_dispatch_roots(ctx);
 
     bool changed;
     do {
