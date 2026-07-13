@@ -3911,7 +3911,7 @@ bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
         return false;
     const char *name = arg_node->as.variable.name;
     XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
-    return sym && sym->is_shared;
+    return xa_symbol_has_shared_provenance(sym);
 }
 
 XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node) {

@@ -3358,17 +3358,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
+            bool shared_receiver = xa_symbol_has_shared_provenance(root);
             bool shared_interior_mutation =
-                root && root->is_shared &&
-                (xa_type_allows_shared_interior_mutation(callee_obj_type) ||
-                 xa_type_allows_shared_interior_mutation(root->links.type));
+                shared_receiver && (xa_type_allows_shared_interior_mutation(callee_obj_type) ||
+                                    xa_type_allows_shared_interior_mutation(root->links.type));
             if ((root &&
-                 (root->is_readonly_binding || (root->is_shared && !shared_interior_mutation))) ||
+                 (root->is_readonly_binding || (shared_receiver && !shared_interior_mutation))) ||
                 readonly_receiver) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label = root && root->is_shared             ? "shared binding"
+                const char *label = root && shared_receiver             ? "shared binding"
                                     : root && root->is_readonly_binding ? "const binding"
                                                                         : "readonly value";
                 snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on %s '%s'",
@@ -3381,12 +3381,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             (XR_TYPE_IS_SPAN(callee_obj_type) || XR_TYPE_IS_VIEW(callee_obj_type)) &&
             xa_method_name_mutates_receiver(method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
-            if (root && root->is_const) {
+            if (root && (root->is_const || root->is_readonly_binding ||
+                         xa_symbol_has_shared_provenance(root))) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on const view '%s'",
-                         method_name, root->name ? root->name : "?");
+                const char *label = xa_symbol_has_shared_provenance(root) ? "shared binding"
+                                    : root->is_const                      ? "const view"
+                                                                          : "readonly view";
+                snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on %s '%s'",
+                         method_name, label, root->name ? root->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }

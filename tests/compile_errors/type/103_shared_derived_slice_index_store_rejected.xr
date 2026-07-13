@@ -1,0 +1,5 @@
+fn main() {
+    shared bytes = Array<byte>(4, 0)
+    var view: Slice<byte> = bytes[:]
+    view[0] = 1
+}

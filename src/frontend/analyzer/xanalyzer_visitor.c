@@ -4881,11 +4881,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (ca->object) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ca->object);
                 bool readonly_object = xr_type_is_const(ca_obj_type);
-                if ((root && (root->is_readonly_binding || root->is_shared)) || readonly_object) {
+                if ((root &&
+                     (root->is_readonly_binding || xa_symbol_has_shared_provenance(root))) ||
+                    readonly_object) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    const char *label = root && root->is_shared             ? "shared binding"
+                    const char *label = root && xa_symbol_has_shared_provenance(root)
+                                            ? "shared binding"
                                         : root && root->is_readonly_binding ? "const binding"
                                                                             : "readonly value";
                     snprintf(msg, sizeof(msg), "Cannot modify field '%s' of %s '%s'",
@@ -4903,13 +4906,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
             XaSymbol *readonly_root = xa_root_variable_symbol_for_expr(ctx, ms->object);
             bool readonly_object = xr_type_is_const(obj_type);
-            if ((readonly_root &&
-                 (readonly_root->is_readonly_binding || readonly_root->is_shared)) ||
+            if ((readonly_root && (readonly_root->is_readonly_binding ||
+                                   xa_symbol_has_shared_provenance(readonly_root))) ||
                 readonly_object) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label = readonly_root && readonly_root->is_shared ? "shared binding"
+                const char *label = readonly_root && xa_symbol_has_shared_provenance(readonly_root)
+                                        ? "shared binding"
                                     : readonly_root && readonly_root->is_readonly_binding
                                         ? "const binding"
                                         : "readonly value";
@@ -5841,11 +5845,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             if (array_type && (XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
-                if (root && (root->is_const || root->is_shared)) {
+                if (root && (root->is_const || xa_symbol_has_shared_provenance(root))) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    if (root->is_shared) {
+                    if (xa_symbol_has_shared_provenance(root)) {
                         snprintf(msg, sizeof(msg), "Cannot assign through shared binding '%s'",
                                  root->name ? root->name : "?");
                     } else {
@@ -5859,11 +5863,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (array_type && !(XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
                 bool readonly_array = xr_type_is_const(array_type);
-                if ((root && (root->is_readonly_binding || root->is_shared)) || readonly_array) {
+                if ((root &&
+                     (root->is_readonly_binding || xa_symbol_has_shared_provenance(root))) ||
+                    readonly_array) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    const char *label = root && root->is_shared             ? "shared binding"
+                    const char *label = root && xa_symbol_has_shared_provenance(root)
+                                            ? "shared binding"
                                         : root && root->is_readonly_binding ? "const binding"
                                                                             : "readonly value";
                     snprintf(msg, sizeof(msg), "Cannot assign through %s '%s'", label,
