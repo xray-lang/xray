@@ -154,6 +154,8 @@ TEST(type_error_recovery) {
     ASSERT(XR_TYPE_IS_UNKNOWN_OR_ERROR(t_error));
     ASSERT(!XR_TYPE_IS_UNKNOWN(t_error));
     ASSERT(strcmp(xr_type_to_string(t_error), "<error>") == 0);
+    ASSERT(xr_type_equals(t_error, xr_type_new_error(NULL)));
+    ASSERT(!xr_type_equals(t_error, xr_type_new_unknown(NULL)));
 
     XrTypeRef error_ref = {.kind = XR_TREF_ERROR};
     XrType *resolved = xr_tref_resolve(g_isolate, &error_ref);
