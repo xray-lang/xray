@@ -3336,12 +3336,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
-            if ((root && root->is_readonly_binding) || readonly_receiver) {
+            if ((root && (root->is_readonly_binding || root->is_shared)) || readonly_receiver) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label =
-                    root && root->is_readonly_binding ? "const binding" : "readonly value";
+                const char *label = root && root->is_shared             ? "shared binding"
+                                    : root && root->is_readonly_binding ? "const binding"
+                                                                        : "readonly value";
                 snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on %s '%s'",
                          method_name, label, root && root->name ? root->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

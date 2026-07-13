@@ -1,0 +1,2 @@
+shared bytes = copy(Array<byte>(2, 0))
+bytes.appendFrom(bytes[:])

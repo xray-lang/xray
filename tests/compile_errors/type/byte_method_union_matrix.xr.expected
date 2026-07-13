@@ -1,0 +1,2 @@
+union type 'Array<byte> | Array<int>' has no member 'appendFrom'
+union type 'Slice<byte> | Slice<int>' has no member 'load'

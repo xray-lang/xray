@@ -1,0 +1,20 @@
+fn genericArray<T>(values: Array<T>, src: Slice<T>) {
+    values.appendFrom(src)
+    values.repeatFrom(1, 1)
+}
+
+fn genericSlice<T>(values: Array<T>) {
+    var view: Slice<T> = values[:]
+    view.load<uint16>(0, Endian.LE)
+    view.store<uint16>(0, 1, Endian.LE)
+}
+
+fn inferredNonU8() {
+    var values = [1, 2, 3]
+    values.appendFrom(values[:])
+    values.repeatFrom(1, 1)
+
+    var view: Slice<int> = values[:]
+    view.load<uint16>(0, Endian.LE)
+    view.store<uint16>(0, 1, Endian.LE)
+}
