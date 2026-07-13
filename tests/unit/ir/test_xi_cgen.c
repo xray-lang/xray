@@ -2505,7 +2505,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
                       "    src[0] = 7\n"
                       "    src[1] = 9\n"
                       "    var out = Array<byte>(4)\n"
-                      "    out.resize(2)\n"
+                      "    out.resize(2, 0)\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
                       "        var p = out.mutPtr()\n"

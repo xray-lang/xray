@@ -4556,10 +4556,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
-            strcmp(ma->name, "resize") == 0 &&
-            (n == 2 || (n == 1 && xi_type_is_bytes(recv->type)))) {
-            XiValue *fill =
-                n == 2 ? arg_vals[1] : xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            strcmp(ma->name, "resize") == 0 && n == 2) {
+            XiValue *fill = arg_vals[1];
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 3);
             if (!v)
                 return NULL;

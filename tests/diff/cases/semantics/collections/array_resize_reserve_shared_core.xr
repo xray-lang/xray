@@ -26,7 +26,7 @@ fn main() {
     print(view[2])
     print(len(source))
     var bytes = Array<byte>(3, 5)
-    bytes.resize(-9)
+    bytes.resize(-9, 0)
     print(len(bytes))
 }
 

@@ -92,6 +92,8 @@ TEST(error_core_defines_array_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG, "Array.reserve failed");
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG,
                   "Array.resize(length, fill) expects integer length");
+    ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESIZE_REQUIRES_FILL_MSG,
+                  "Array.resize(length, fill) requires fill value");
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG, "Array.resize failed");
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG, "cannot push to array slice");
 }

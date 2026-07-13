@@ -164,12 +164,14 @@ static XrValue m_reserve(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
 static XrValue m_resize(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
+    if (argc < 2) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_ARRAY_RESIZE_REQUIRES_FILL_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return self;
+    }
     XrArray *arr = array_self(self);
-    XrValue fill = argc >= 2 ? args[1] : xr_null();
-    if (arr->elem_type == XR_ELEM_U8 && argc < 2)
-        fill = xr_int(0);
-    if (arr->elem_type == XR_ELEM_RUNE && argc < 2)
-        fill = XR_FROM_RUNE(0);
+    XrValue fill = args[1];
     if (!array_accepts_value(iso, arr, fill))
         return self;
     xr_array_resize(arr, XR_TO_INT(args[0]), fill);
@@ -485,7 +487,7 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"reverse", m_reverse, 0},
         {"fill", m_fill, 1},
         {"reserve", m_reserve, 1},
-        {"resize", m_resize, 1},
+        {"resize", m_resize, 2},
         {"sort", m_sort, 0},
         /* Query */
         {"contains", m_includes, 1},

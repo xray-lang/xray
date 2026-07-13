@@ -6,7 +6,7 @@ fn makeCursorBytes() -> Array<byte> {
     src[3] = 68
 
     var out: Array<byte> = Array.withCapacity(8)
-    out.resize(8)
+    out.resize(8, 0)
     var prefix: Slice<byte> = out[0:4]
     prefix.copyFrom(src[:])
     var full: Slice<byte> = out[0:8]
