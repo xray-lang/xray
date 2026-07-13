@@ -374,7 +374,7 @@ static inline void xrt_byte_slice_store_u16_checked_raw(xr_span_t span, int64_t 
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<uint16>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_store_u16(span.data, span.length, span.elem_type, off,
                                        (uint16_t) value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
@@ -386,7 +386,7 @@ static inline void xrt_byte_slice_store_u32_checked_raw(xr_span_t span, int64_t 
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<uint32>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_store_u32(span.data, span.length, span.elem_type, off,
                                        (uint32_t) value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
@@ -398,7 +398,7 @@ static inline void xrt_byte_slice_store_u64_checked_raw(xr_span_t span, int64_t 
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<uint64>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_store_u64(span.data, span.length, span.elem_type, off,
                                        (uint64_t) value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
@@ -410,7 +410,7 @@ static inline void xrt_byte_slice_store_f32_checked_raw(xr_span_t span, int64_t 
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<float32>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_store_f32(span.data, span.length, span.elem_type, off, (float) value,
                                        endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
@@ -422,7 +422,7 @@ static inline void xrt_byte_slice_store_f64_checked_raw(xr_span_t span, int64_t 
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.store<float64>() expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_store_f64(span.data, span.length, span.elem_type, off, value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
                         "Slice<byte>.store<float64>() offset out of bounds");
@@ -432,7 +432,7 @@ static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t 
     if (span.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice<byte>.fill(value) expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (span.length > 0 && !span.data)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.fill(value) range out of bounds");
     if (span.length > 0)
@@ -448,7 +448,7 @@ static inline xr_span_t xrt_byte_slice_copy_checked_raw(xr_span_t dst, xr_span_t
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.copyFrom(src) source must be Slice<byte>");
     if (xrt_span_is_readonly(dst))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_copy_from(dst.data, dst.length, dst.elem_type, src.data, src.length,
                                        src.elem_type, 0, 0, src.length, false))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
@@ -502,7 +502,7 @@ static inline xr_span_t xrt_byte_slice_repeat_from_checked_raw(xr_span_t span, i
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
     if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (!xr_array_core_bytes_repeat_from(span.data, span.length, span.elem_type, dst_offset,
                                          distance, count))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
