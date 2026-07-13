@@ -17,7 +17,7 @@ if (BLOCK < 1) {
     BLOCK = 1
 }
 
-fn makeBytes(n: int) -> Array<byte> {
+fn makeByteArray(n: int) -> Array<byte> {
     var out = Array<byte>(0)
     var i = 0
     while (i < n) {
@@ -79,15 +79,15 @@ fn worker(src: Array<byte>, queue: WorkQueue<int>, id: int, blockSize: int) -> i
         }
         var index = item
         var start = index * blockSize
-        var count = blockLenAt(len(src), blockSize, index)
-        var chunk: Slice<byte> = src[start:start + count]
+        var chunkLen = blockLenAt(len(src), blockSize, index)
+        var chunk: Slice<byte> = src[start:start + chunkLen]
         sum = (sum + checksum(chunk)) & 0xFFFFFFFF
         count = count + 1
     }
     return pack(sum, count)
 }
 
-var src = makeBytes(SIZE)
+var src = makeByteArray(SIZE)
 var blocks = blockCountFor(len(src), BLOCK)
 shared sharedSrc = copy(src)
 shared queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)

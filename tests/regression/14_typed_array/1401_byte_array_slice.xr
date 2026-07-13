@@ -1,7 +1,7 @@
 /* Array<byte> slice tests: Array<byte> is Array<byte>, slicing uses standard array slice */
 
 @test
-fn test_bytes_slice() {
+fn test_byte_array_slice() {
 
     // ========== Basic slice ==========
     var bytes = Array<byte>(5)

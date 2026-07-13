@@ -1,7 +1,7 @@
 /* Array<byte> basic tests: Array<byte> is Array<byte> */
 
 @test
-fn test_bytes_basic() {
+fn test_byte_array_basic() {
 
     // ========== Create Array<byte> ==========
 

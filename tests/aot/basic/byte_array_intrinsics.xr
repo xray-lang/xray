@@ -1,0 +1,57 @@
+fn runByteArrayIntrinsics() {
+    var b = Array<byte>(16)
+    b[0] = 1
+    b[1] = 2
+    b[2] = 3
+    b[3] = 4
+    b[4] = 5
+    b[5] = 6
+    b[6] = 7
+    b[7] = 8
+
+    var view: Slice<byte> = b[:]
+    var u32: uint32 = view.load<uint32>(0, Endian.LE)
+    var u64: uint64 = view.load<uint64>(0, Endian.LE)
+    print(int(u32))
+    print(int(u64))
+
+    var dst: Array<byte> = Array.withCapacity(6)
+    print(len(dst))
+    print(dst.capacity)
+    dst.appendFrom(view[1:4])
+    print(dst[0])
+    print(dst[1])
+    print(dst[2])
+
+    var rep: Array<byte> = Array.withCapacity(9)
+    var seed = Array<byte>(3)
+    seed[0] = 65
+    seed[1] = 66
+    seed[2] = 67
+    rep.appendFrom(seed[:])
+    rep.repeatFrom(3, 6)
+    print(rep[3])
+    print(rep[4])
+    print(rep[5])
+    print(rep[6])
+    print(rep[7])
+    print(rep[8])
+
+    var xs = Array<int>(4, 9)
+    print(len(xs))
+    print(xs[0])
+    print(xs[3])
+
+    var u: uint32 = 4294967295
+    var wrapped = u + 1
+    print(wrapped)
+
+    var assigned: uint32 = 4294967295 + 1
+    print(assigned)
+
+    var octet: byte = 255
+    var byte_wrapped = octet + 1
+    print(byte_wrapped)
+}
+
+runByteArrayIntrinsics()

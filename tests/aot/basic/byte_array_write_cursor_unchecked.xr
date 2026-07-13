@@ -1,4 +1,4 @@
-fn makeCursorBytes() -> Array<byte> {
+fn makeCursorByteArray() -> Array<byte> {
     var src = Array<byte>(4)
     src[0] = 65
     src[1] = 66
@@ -11,11 +11,10 @@ fn makeCursorBytes() -> Array<byte> {
     prefix.copyFrom(src[:])
     var full: Slice<byte> = out[0:8]
     full.repeatFrom(4, 4, 4)
+
     return out
 }
 
-var out = makeCursorBytes()
-print(len(out))
-
+var out = makeCursorByteArray()
 print(len(out))
 print(string(out[0]) + "," + string(out[3]) + "," + string(out[4]) + "," + string(out[7]))

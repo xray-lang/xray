@@ -3679,18 +3679,18 @@ else
         "freestanding-profile: rejects string slice syntax"
 fi
 
-FREESTANDING_BYTES_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_bytes_static_reject.xr"
-FREESTANDING_BYTES_STATIC_LOG="$WORK/freestanding_bytes_static_reject.log"
+FREESTANDING_BYTE_ARRAY_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_byte_array_static_reject.xr"
+FREESTANDING_BYTE_ARRAY_STATIC_LOG="$WORK/freestanding_byte_array_static_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_bytes_static_reject" \
-        "$FREESTANDING_BYTES_STATIC_SRC" >"$FREESTANDING_BYTES_STATIC_LOG" 2>&1; then
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_byte_array_static_reject" \
+        "$FREESTANDING_BYTE_ARRAY_STATIC_SRC" >"$FREESTANDING_BYTE_ARRAY_STATIC_LOG" 2>&1; then
     record_fail "freestanding-profile: rejects owned Array<byte> static constructors"
-    sed 's/^/      /' "$FREESTANDING_BYTES_STATIC_LOG" | sed -n '1,120p'
+    sed 's/^/      /' "$FREESTANDING_BYTE_ARRAY_STATIC_LOG" | sed -n '1,120p'
 else
-    expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \
+    expect_log_contains "$FREESTANDING_BYTE_ARRAY_STATIC_LOG" \
         "freestanding profile rejects Array.withCapacity" \
         "freestanding-profile: rejects Array.withCapacity"
-    expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \
+    expect_log_contains "$FREESTANDING_BYTE_ARRAY_STATIC_LOG" \
         "freestanding profile rejects class construction" \
         "freestanding-profile: rejects heap Array<byte> construction"
 fi

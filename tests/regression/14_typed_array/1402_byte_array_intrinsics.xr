@@ -1,7 +1,7 @@
 /* Array<byte> intrinsic and capacity tests. */
 
 @test
-fn test_bytes_intrinsics_and_capacity() {
+fn test_byte_array_intrinsics_and_capacity() {
     var b = Array<byte>(16)
     b[0] = 1
     b[1] = 2
