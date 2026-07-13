@@ -1,0 +1,32 @@
+fn common(src: Slice<byte>, left: int, right: int, maxCount: int) -> int {
+    var a: Slice<byte> = src[left:left + maxCount]
+    var b: Slice<byte> = src[right:right + maxCount]
+    return a.commonPrefix(b)
+}
+
+fn main() {
+    var bytes = Array<byte>(16)
+    bytes[0] = 65
+    bytes[1] = 66
+    bytes[2] = 67
+    bytes[3] = 68
+    bytes[4] = 65
+    bytes[5] = 66
+    bytes[6] = 67
+    bytes[7] = 88
+    bytes[8] = 65
+    bytes[9] = 66
+    bytes[10] = 67
+    bytes[11] = 68
+    bytes[12] = 69
+    bytes[13] = 70
+    bytes[14] = 71
+    bytes[15] = 72
+
+    var view: Slice<byte> = bytes[:]
+    print(common(view, 0, 4, 4))
+    print(common(view, 0, 8, 8))
+    print(common(view, 2, 6, 2))
+}
+
+main()

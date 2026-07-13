@@ -1,4 +1,4 @@
-// anchor: bytespan-bulk-ops-shared-core
+// anchor: byte-slice-bulk-ops-shared-core
 fn main() {
     var dst = Array<byte>(8)
     var src = Array<byte>(4)

@@ -4528,10 +4528,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         if (recv->type && recv->type->kind == XR_KIND_STRING && ma->name &&
             strcmp(ma->name, "bytes") == 0 && n == 0) {
-            struct XrType *bytespan_type = result_type;
-            if (!bytespan_type || xi_lower_type_is_unknown(bytespan_type))
-                bytespan_type = xr_type_new_u8_slice(l->isolate);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, bytespan_type, 1);
+            struct XrType *byte_slice_type = result_type;
+            if (!byte_slice_type || xi_lower_type_is_unknown(byte_slice_type))
+                byte_slice_type = xr_type_new_u8_slice(l->isolate);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, byte_slice_type, 1);
             if (!v)
                 return NULL;
             v->args[0] = recv;

@@ -1,4 +1,4 @@
-// anchor: bytespan-float-load-store-shared-core
+// anchor: byte-slice-float-load-store-shared-core
 fn main() {
     var bytes = Array<byte>(16)
     var view: Slice<byte> = bytes[:]
