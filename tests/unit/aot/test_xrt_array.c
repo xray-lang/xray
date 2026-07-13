@@ -121,7 +121,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         g_passed++;                                                                                \
     } while (0)
 
-#define EXPECT_READONLY_BYTE_SLICE_THROW(stmt, msg)                                                \
+#define EXPECT_XRT_ERROR_THROW(stmt, expected_code, expected_message, msg)                         \
     do {                                                                                           \
         g_thrown_exc = XR_NULL_VAL;                                                                \
         g_expect_throw = 1;                                                                        \
@@ -133,9 +133,15 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         g_expect_throw = 0;                                                                        \
         XrValue _code = xrt_json_get_name(g_thrown_exc, "code");                                   \
         ASSERT_TRUE(XR_IS_INT(_code), msg " code is int");                                         \
-        ASSERT_EQ_INT(XR_TO_INT(_code), XR_ERR_CMP_CONST_ASSIGN, msg " code");                     \
-        ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),                               \
-                         XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG, msg " message");                   \
+        ASSERT_EQ_INT(XR_TO_INT(_code), expected_code, msg " code");                               \
+        ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"), expected_message,             \
+                         msg " message");                                                          \
+    } while (0)
+
+#define EXPECT_READONLY_BYTE_SLICE_THROW(stmt, msg)                                                \
+    do {                                                                                           \
+        EXPECT_XRT_ERROR_THROW(stmt, XR_ERR_CMP_CONST_ASSIGN,                                      \
+                               XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG, msg);                        \
     } while (0)
 
 static void reset_alloc_counts(void) {
@@ -453,6 +459,24 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(((uint8_t *) dst->data)[2], 2, "copyFrom writes first source byte");
     ASSERT_EQ_INT(((uint8_t *) dst->data)[3], 1, "copyFrom preserves shared source state");
     ASSERT_EQ_INT(((uint8_t *) dst->data)[4], 2, "copyFrom writes count bytes");
+
+    EXPECT_XRT_ERROR_THROW(xrt_bytes_copy_within_checked_raw(a, 7, 0, 2),
+                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG,
+                           "Array<byte> copy-within checked helper throws on range");
+    XrValue int_arr_value = xrt_array_new_typed_exact(0, XR_ELEM_I64);
+    xrt_array_t *int_arr = (xrt_array_t *) int_arr_value.ptr;
+    EXPECT_XRT_ERROR_THROW(xrt_bytes_copy_from_checked_raw(dst, int_arr, 0, 0, 1),
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
+                           "Array<byte> copy range checked helper throws on typed operand");
+    EXPECT_XRT_ERROR_THROW(
+        xrt_bytes_copy_from_value(dst_value, value, XR_NULL_VAL, XR_FROM_INT(0), XR_FROM_INT(1)),
+        XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG,
+        "Array<byte> copy range value helper rejects non-integer offset");
+    EXPECT_XRT_ERROR_THROW(xrt_bytes_copy_from_value(dst_value, value, XR_FROM_INT(100),
+                                                     XR_FROM_INT(0), XR_FROM_INT(1)),
+                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG,
+                           "Array<byte> copy range value helper throws on range");
+
     XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8);
     xrt_array_t *rep = (xrt_array_t *) rep_value.ptr;
     uint8_t seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
@@ -506,6 +530,7 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
 
     free_test_array(a);
     free_test_array(dst);
+    free_test_array(int_arr);
     free_test_array(rep);
     free_test_array(span_ops);
 }

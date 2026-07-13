@@ -1765,15 +1765,14 @@ vmcase(OP_BYTE_ARRAY_COPY_WITHIN) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.copyFrom expects integer offsets and count");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.copyFrom receiver must be Array<byte>");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG);
     if (!xr_byte_array_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.copyFrom range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG);
     }
     vmbreak;
 }
@@ -1782,16 +1781,15 @@ vmcase(OP_BYTE_ARRAY_COPY_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.copyFrom expects Slice<byte> and integer ranges");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.copyFrom operands must be Slice<byte>");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG);
     if (!xr_byte_array_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
                                  (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.copyFrom range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG);
     }
     vmbreak;
 }
