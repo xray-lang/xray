@@ -436,6 +436,8 @@ static XaSymbol *xa_lifecycle_lint_function_param_symbol(XaInferContext *ctx, As
 }
 
 static bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, int *out_count);
+static XaScope *xa_find_enclosing_function_scope(XaInferContext *ctx);
+static bool xa_statement_can_fall_through(AstNode *node);
 
 typedef struct XaThreadHandleLintAlias {
     XaSymbol *sym;
@@ -8333,6 +8335,93 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 }
 
+typedef struct XaOutParamDaState {
+    XaSymbolLinks *links;
+    bool before_assigned;
+    bool then_assigned;
+    bool else_assigned;
+} XaOutParamDaState;
+
+static XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count) {
+    if (out_count)
+        *out_count = 0;
+    XaScope *function_scope = xa_find_enclosing_function_scope(ctx);
+    if (!ctx || !ctx->analyzer || !function_scope || !out_count)
+        return NULL;
+
+    int symbol_count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(function_scope, &symbol_count);
+    if (!symbols || symbol_count <= 0) {
+        xr_free(symbols);
+        return NULL;
+    }
+
+    XaOutParamDaState *states = xr_calloc((size_t) symbol_count, sizeof(XaOutParamDaState));
+    if (!states) {
+        xr_free(symbols);
+        return NULL;
+    }
+
+    int count = 0;
+    for (int i = 0; i < symbol_count; i++) {
+        XaSymbol *sym = symbols[i];
+        if (!sym || sym->kind != XA_SYM_PARAMETER || sym->passing_mode != XR_PARAM_OUT)
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        if (!links)
+            continue;
+        states[count].links = links;
+        states[count].before_assigned = links->is_definitely_assigned;
+        states[count].then_assigned = links->is_definitely_assigned;
+        states[count].else_assigned = links->is_definitely_assigned;
+        count++;
+    }
+    xr_free(symbols);
+
+    if (count <= 0) {
+        xr_free(states);
+        return NULL;
+    }
+    *out_count = count;
+    return states;
+}
+
+static void xa_out_param_da_restore_before(XaOutParamDaState *states, int count) {
+    for (int i = 0; states && i < count; i++) {
+        if (states[i].links)
+            states[i].links->is_definitely_assigned = states[i].before_assigned;
+    }
+}
+
+static void xa_out_param_da_record_then(XaOutParamDaState *states, int count) {
+    for (int i = 0; states && i < count; i++)
+        states[i].then_assigned =
+            states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned;
+}
+
+static void xa_out_param_da_record_else(XaOutParamDaState *states, int count) {
+    for (int i = 0; states && i < count; i++)
+        states[i].else_assigned =
+            states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned;
+}
+
+static void xa_out_param_da_apply_if_merge(XaOutParamDaState *states, int count,
+                                           bool then_falls_through, bool else_falls_through) {
+    for (int i = 0; states && i < count; i++) {
+        if (!states[i].links)
+            continue;
+        bool merged = states[i].before_assigned;
+        if (then_falls_through && else_falls_through) {
+            merged = states[i].then_assigned && states[i].else_assigned;
+        } else if (then_falls_through) {
+            merged = states[i].then_assigned;
+        } else if (else_falls_through) {
+            merged = states[i].else_assigned;
+        }
+        states[i].links->is_definitely_assigned = merged;
+    }
+}
+
 void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -8350,6 +8439,12 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
     // its flow becomes unreachable → merge label only has the false-condition
     // path → opposite narrowing applies to subsequent code.
 
+    int out_da_count = 0;
+    XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
+    bool then_falls_through = xa_statement_can_fall_through(if_stmt->then_branch);
+    bool else_falls_through =
+        if_stmt->else_branch ? xa_statement_can_fall_through(if_stmt->else_branch) : true;
+
     XaFlowNode *saved = ctx->flow ? ctx->flow->current_flow : NULL;
 
     // Then branch: flow enters TRUE_CONDITION
@@ -8357,11 +8452,13 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
         ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, if_stmt->condition, true);
     }
     xa_visit_infer_stmt(ctx, if_stmt->then_branch);
+    xa_out_param_da_record_then(out_da, out_da_count);
     XaFlowNode *then_end = ctx->flow ? ctx->flow->current_flow : NULL;
 
     // Else branch: flow enters FALSE_CONDITION
     if (ctx->flow)
         ctx->flow->current_flow = saved;
+    xa_out_param_da_restore_before(out_da, out_da_count);
 
     XaFlowNode *else_end = NULL;
     if (if_stmt->else_branch) {
@@ -8372,6 +8469,9 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_stmt(ctx, if_stmt->else_branch);
         else_end = ctx->flow ? ctx->flow->current_flow : NULL;
     }
+    xa_out_param_da_record_else(out_da, out_da_count);
+    xa_out_param_da_apply_if_merge(out_da, out_da_count, then_falls_through, else_falls_through);
+    xr_free(out_da);
 
     // Merge branches
     if (ctx->flow) {
