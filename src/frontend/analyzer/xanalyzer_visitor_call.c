@@ -2074,6 +2074,8 @@ static const char *xa_call_param_mode_label(XrParamMode mode) {
 }
 
 static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
+    while (expr && expr->type == AST_GROUPING)
+        expr = expr->as.grouping;
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return NULL;
     return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
@@ -2283,7 +2285,7 @@ static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_nod
                 continue;
             if (arg_symbol_ids[i] != arg_symbol_ids[j])
                 continue;
-            if (arg_modes[i] != XR_PARAM_REF && arg_modes[j] != XR_PARAM_REF)
+            if (arg_modes[i] == XR_PARAM_IN && arg_modes[j] == XR_PARAM_IN)
                 continue;
 
             XrLocation loc = {
@@ -4052,7 +4054,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             effective_arg_modes[slot] = param_mode;
         xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);
-        if (param_mode == XR_PARAM_IN || param_mode == XR_PARAM_REF) {
+        if (param_mode == XR_PARAM_IN || param_mode == XR_PARAM_REF || param_mode == XR_PARAM_OUT) {
             XaSymbol *arg_sym = xa_call_variable_symbol(ctx, arg_node);
             if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
