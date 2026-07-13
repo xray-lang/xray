@@ -1,0 +1,2 @@
+cannot pass shared-derived value 'view' to mutating parameter 1 of 'f'
+

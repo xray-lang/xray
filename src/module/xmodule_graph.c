@@ -175,7 +175,54 @@ XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical) 
 
 /* ========== BFS Build ========== */
 
-/* Collect import specifiers from an AST program node and resolve each.
+static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char *specifier,
+                                      bool is_bare) {
+    if (!g || spec_idx < 0 || spec_idx >= g->spec_count || !specifier)
+        return;
+
+    XrModuleSpec *from_spec = &g->specs[spec_idx];
+    XrModuleId mid;
+    char *err = NULL;
+    int rc = xr_module_resolver_resolve(g->resolver, specifier, is_bare, from_spec->source_path,
+                                        &mid, &err);
+    if (rc != 0) {
+        /* Resolution failed — skip (stdlib native modules won't have source). */
+        xr_free(err);
+        return;
+    }
+    xr_free(err);
+
+    /* Stdlib native modules without a script layer need no graph node. */
+    if (mid.kind == XR_MOD_STDLIB && !mid.source_path) {
+        char embedded_path[XR_PATH_MAX];
+        if (graph_stdlib_embedded_path(mid.canonical, embedded_path, sizeof(embedded_path))) {
+            mid.source_path = xr_strdup(embedded_path);
+        } else {
+            xr_module_id_cleanup(&mid);
+            return;
+        }
+    }
+
+    /* Find or create target spec in the graph. */
+    int target_idx = xr_module_graph_find(g, mid.canonical);
+    if (target_idx < 0) {
+        target_idx = graph_add_spec(g, mid.canonical, mid.source_path, mid.kind);
+        if (target_idx >= 0 && mid.kind == XR_MOD_STDLIB && mid.source_path &&
+            strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
+                    strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
+            g->specs[target_idx].embedded_source = true;
+        }
+    }
+    xr_module_id_cleanup(&mid);
+
+    if (target_idx >= 0) {
+        /* Re-fetch from_spec pointer since realloc may have moved it. */
+        from_spec = &g->specs[spec_idx];
+        spec_add_dep(from_spec, target_idx);
+    }
+}
+
+/* Collect import and re-export specifiers from an AST program node and resolve each.
  * For every resolved module, ensure it exists in the graph and add an edge. */
 static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct AstNode *ast) {
     XR_DCHECK(ast != NULL, "collect_and_resolve_imports: NULL ast");
@@ -187,49 +234,17 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
 
     for (int i = 0; i < ast->as.program.count; i++) {
         struct AstNode *stmt = ast->as.program.statements[i];
-        if (!stmt || stmt->type != AST_IMPORT_STMT)
+        if (!stmt)
             continue;
 
-        const char *specifier = stmt->as.import_stmt.module_name;
-        bool is_bare = !stmt->as.import_stmt.is_quoted;
-
-        XrModuleId mid;
-        char *err = NULL;
-        int rc = xr_module_resolver_resolve(g->resolver, specifier, is_bare, from_spec->source_path,
-                                            &mid, &err);
-        if (rc != 0) {
-            /* Resolution failed — skip (stdlib native modules won't have source) */
-            xr_free(err);
+        if (stmt->type == AST_IMPORT_STMT) {
+            graph_resolve_and_add_dep(g, spec_idx, stmt->as.import_stmt.module_name,
+                                      !stmt->as.import_stmt.is_quoted);
             continue;
         }
-
-        /* Stdlib native modules without a script layer need no graph node. */
-        if (mid.kind == XR_MOD_STDLIB && !mid.source_path) {
-            char embedded_path[XR_PATH_MAX];
-            if (graph_stdlib_embedded_path(mid.canonical, embedded_path, sizeof(embedded_path))) {
-                mid.source_path = xr_strdup(embedded_path);
-            } else {
-                xr_module_id_cleanup(&mid);
-                continue;
-            }
-        }
-
-        /* Find or create target spec in the graph */
-        int target_idx = xr_module_graph_find(g, mid.canonical);
-        if (target_idx < 0) {
-            target_idx = graph_add_spec(g, mid.canonical, mid.source_path, mid.kind);
-            if (target_idx >= 0 && mid.kind == XR_MOD_STDLIB && mid.source_path &&
-                strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
-                        strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
-                g->specs[target_idx].embedded_source = true;
-            }
-        }
-        xr_module_id_cleanup(&mid);
-
-        if (target_idx >= 0) {
-            /* Re-fetch from_spec pointer since realloc may have moved it */
-            from_spec = &g->specs[spec_idx];
-            spec_add_dep(from_spec, target_idx);
+        if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.from_path) {
+            graph_resolve_and_add_dep(g, spec_idx, stmt->as.export_stmt.from_path, false);
+            continue;
         }
     }
 
