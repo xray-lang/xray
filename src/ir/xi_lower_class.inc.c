@@ -373,9 +373,9 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
     }
 
-    XiFunc *result = ml.had_error ? NULL : ml.func;
-    if (result)
-        xi_lower_capture_source_vars(&ml);
+    XiFunc *result = NULL;
+    if (!ml.had_error && xi_lower_capture_source_vars(&ml))
+        result = ml.func;
     xi_lower_cleanup(&ml);
     return result;
 }

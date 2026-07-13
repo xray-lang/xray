@@ -5706,11 +5706,11 @@ static XiFunc *parallel_call_lower_lambda_func(
     if (child_l.cur_block)
         xi_block_set_return(child_l.cur_block, NULL);
 
-    XiFunc *result = child_l.had_error ? NULL : child_l.func;
-    if (result) {
+    XiFunc *result = NULL;
+    if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
+        result = child_l.func;
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
-        xi_lower_capture_source_vars(&child_l);
     } else {
         xi_func_free(child_l.func);
     }
@@ -6149,6 +6149,12 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     child_l.cur_block = entry;
 
     XiCapture *cap = &child_l.func->captures[0];
+    if (xi_lower_reject_error_type(&child_l, plan->type, "capture metadata",
+                                   node ? node->line : 0)) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
     cap->source = XI_CAPTURE_SRC_REG;
     cap->index = 0;
     cap->name = arena_strdup(child_l.func, "__parallel_plan");
@@ -6179,11 +6185,11 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     if (child_l.cur_block)
         xi_block_set_return(child_l.cur_block, NULL);
 
-    XiFunc *result = child_l.had_error ? NULL : child_l.func;
-    if (result) {
+    XiFunc *result = NULL;
+    if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
+        result = child_l.func;
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
-        xi_lower_capture_source_vars(&child_l);
     } else {
         xi_func_free(child_l.func);
     }
