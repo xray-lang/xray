@@ -2380,6 +2380,18 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
            "Array<byte> hot path must not fall back to dynamic dispatch");
+    assert(count_between(fn_body, fn_end, "strcmp(") == 0 &&
+           count_between(fn_body, fn_end, "\"appendFrom\"") == 0 &&
+           count_between(fn_body, fn_end, "\"repeatFrom\"") == 0 &&
+           count_between(fn_body, fn_end, "\"copyFrom\"") == 0 &&
+           count_between(fn_body, fn_end, "\"commonPrefix\"") == 0 &&
+           count_between(fn_body, fn_end, "\"load\"") == 0 &&
+           count_between(fn_body, fn_end, "\"store\"") == 0 &&
+           "Array<byte>/Slice<byte> hot path must not use hidden method-name matching");
+    assert(count_between(fn_body, fn_end, "XR_ELEM_ANY") == 0 &&
+           "Array<byte>/Slice<byte> hot path must not degrade to tagged element storage");
+    assert(count_between(fn_body, fn_end, "((XrValue*)") == 0 &&
+           "Array<byte>/Slice<byte> hot path must not reinterpret raw bytes as boxed values");
     assert(count_between(fn_body, fn_end, "xrt_map_new(3)") == 0 &&
            count_between(fn_body, fn_end, "xrt_getprop_name(") == 0 &&
            count_between(fn_body, fn_end, "_ev_Endian_LE") == 0 &&
