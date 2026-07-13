@@ -960,6 +960,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
             param_types[param_count] = param->type;
 
             if (xr_parser_match(parser, TK_ASSIGN)) {
+                xr_parse_reject_ref_out_default_param(parser, param);
                 default_values[param_count] = xr_parse_expression(parser);
                 if (param_types[param_count] == NULL && default_values[param_count] != NULL) {
                     AstNode *dv = default_values[param_count];

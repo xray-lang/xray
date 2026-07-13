@@ -1,0 +1,5 @@
+class Box {
+    fill(x: out int = 0) {
+        x = 1
+    }
+}

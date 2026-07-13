@@ -218,6 +218,7 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
 XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
                                                      XrParamMode *out_mode, XrTypeRef **out_type);
 XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags);
+XR_FUNC void xr_parse_reject_ref_out_default_param(Parser *parser, const XrParamNode *param);
 
 // True for built-in heap type names constructed via `T(args)` (Map/Array/...).
 XR_FUNC bool xr_is_construct_only_type_name(const char *name);
