@@ -1052,11 +1052,16 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     // for variables captured from enclosing scopes (the closure runs lazily,
     // so the variable may be assigned before the closure is called even if
     // the assignment textually follows the closure literal).
-    if (links && !links->is_definitely_assigned && sym->kind == XA_SYM_VARIABLE &&
-        !sym->is_builtin) {
+    if (links && !links->is_definitely_assigned && !sym->is_builtin &&
+        (sym->kind == XA_SYM_VARIABLE ||
+         (sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_OUT))) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
-        snprintf(msg, sizeof(msg), "Variable '%s' is used before being assigned", name);
+        if (sym->kind == XA_SYM_PARAMETER) {
+            snprintf(msg, sizeof(msg), "out parameter '%s' is read before being assigned", name);
+        } else {
+            snprintf(msg, sizeof(msg), "Variable '%s' is used before being assigned", name);
+        }
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
     }
@@ -3739,7 +3744,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 p->symbol_id = param_sym->id;
                 XaSymbolLinks *pl = xa_analyzer_get_links(ctx->analyzer, param_sym);
                 pl->type = param_types ? param_types[i] : xr_type_new_unknown(NULL);
-                pl->is_definitely_assigned = true;
+                param_sym->passing_mode = p->passing_mode;
+                pl->is_definitely_assigned = p->passing_mode != XR_PARAM_OUT;
             }
         }
 
@@ -3807,7 +3813,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             int kept = 0;
             while (d) {
                 XaDiagnostic *next = d->next;
-                if (d->code == XR_ERR_ANALYZE_USED_BEFORE_ASSIGN) {
+                if (d->code == XR_ERR_ANALYZE_USED_BEFORE_ASSIGN && d->message &&
+                    strncmp(d->message, "Variable '", strlen("Variable '")) == 0) {
                     if (d->message)
                         xr_free((void *) d->message);
                     xr_free(d);

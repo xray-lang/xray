@@ -1,0 +1,11 @@
+class Box {
+    constructor() {}
+
+    fill(x: out int) {
+        return
+    }
+}
+
+var box = Box()
+var y = 0
+box.fill(out y)
