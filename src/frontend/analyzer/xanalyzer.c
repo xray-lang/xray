@@ -26,6 +26,7 @@
 #include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
+#include "../../module/xmodule_graph.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -503,18 +504,74 @@ static const char *get_export_decl_name(AstNode *decl) {
     }
 }
 
+static bool xa_symbol_exportable(const XaSymbol *sym) {
+    /* Classes may be exported as namespace values for construction/static
+     * method lookup even when they do not carry an ordinary expression type
+     * in links.type (notably stdlib script overlays on native modules). */
+    return sym && (sym->links.type || (sym->kind == XA_SYM_CLASS && sym->links.class_info));
+}
+
+static bool xa_export_map_set_symbol(XrHashMap **exports, const char *name, XaSymbol *sym) {
+    if (!name || !xa_symbol_exportable(sym))
+        return false;
+    if (!*exports)
+        *exports = xr_hashmap_new();
+    if (!*exports)
+        return false;
+    return xr_hashmap_set(*exports, name, sym);
+}
+
+static const XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode *ast) {
+    XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
+    if (!graph || !ast)
+        return NULL;
+    for (int i = 0; i < graph->spec_count; i++) {
+        if (graph->specs[i].ast == (struct AstNode *) ast)
+            return &graph->specs[i];
+    }
+    return NULL;
+}
+
+static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNode *ast,
+                                                   const char *from_path) {
+    XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
+    if (!graph || !graph->resolver || !from_path)
+        return NULL;
+
+    const XrModuleSpec *owner = xa_graph_spec_for_ast(analyzer, ast);
+    const char *importer =
+        owner && owner->source_path ? owner->source_path : analyzer->current_file;
+    XrModuleId mid;
+    char *err = NULL;
+    int rc = xr_module_resolver_resolve(graph->resolver, from_path, false, importer, &mid, &err);
+    xr_free(err);
+    if (rc != 0)
+        return NULL;
+
+    int idx = xr_module_graph_find(graph, mid.canonical);
+    xr_module_id_cleanup(&mid);
+    if (idx < 0)
+        return NULL;
+    return graph->specs[idx].export_symbols;
+}
+
+typedef struct XaReexportAllCtx {
+    XrHashMap **exports;
+} XaReexportAllCtx;
+
+static void xa_reexport_all_symbol_cb(const char *key, void *value, void *userdata) {
+    XaReexportAllCtx *ctx = (XaReexportAllCtx *) userdata;
+    if (!ctx || !ctx->exports)
+        return;
+    (void) xa_export_map_set_symbol(ctx->exports, key, (XaSymbol *) value);
+}
+
 XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast) {
     if (!analyzer || !ast || ast->type != AST_PROGRAM)
         return NULL;
 
     ProgramNode *prog = &ast->as.program;
     XrHashMap *exports = NULL;
-
-    /* Classes may be exported as namespace values for construction/static
-     * method lookup even when they do not carry an ordinary expression type
-     * in links.type (notably stdlib script overlays on native modules). */
-#define XA_SYMBOL_EXPORTABLE(sym_)                                                                 \
-    ((sym_) && ((sym_)->links.type || ((sym_)->kind == XA_SYM_CLASS && (sym_)->links.class_info)))
 
     for (int i = 0; i < prog->count; i++) {
         AstNode *stmt = prog->statements[i];
@@ -530,15 +587,7 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
                 XaScope *export_scope =
                     analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
                 XaSymbol *sym = xa_scope_lookup(export_scope, name);
-                if (XA_SYMBOL_EXPORTABLE(sym)) {
-                    if (!exports)
-                        exports = xr_hashmap_new();
-                    /* OOM: skip the entry. A missing entry means "no semantic
-                     * info for this export", which consumers already
-                     * tolerate (same as sym->links.type == NULL). */
-                    if (exports)
-                        (void) xr_hashmap_set(exports, name, sym);
-                }
+                (void) xa_export_map_set_symbol(&exports, name, sym);
             }
         }
 
@@ -550,16 +599,30 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
             XaScope *export_scope =
                 analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
             XaSymbol *sym = xa_scope_lookup(export_scope, name);
-            if (XA_SYMBOL_EXPORTABLE(sym)) {
-                if (!exports)
-                    exports = xr_hashmap_new();
-                if (exports)
-                    (void) xr_hashmap_set(exports, name, sym);
+            (void) xa_export_map_set_symbol(&exports, name, sym);
+        }
+
+        /* Case 3: export { a, b as c } from "./file" / export * from "./file" */
+        if (exp->from_path) {
+            XrHashMap *source_exports =
+                xa_graph_reexport_source_exports(analyzer, ast, exp->from_path);
+            if (!source_exports)
+                continue;
+            if (exp->is_reexport_all) {
+                XaReexportAllCtx ctx = {.exports = &exports};
+                xr_hashmap_foreach(source_exports, xa_reexport_all_symbol_cb, &ctx);
+                continue;
+            }
+            for (int j = 0; j < exp->reexport_count; j++) {
+                ReexportMember *member = &exp->reexport_members[j];
+                if (!member->name)
+                    continue;
+                XaSymbol *sym = (XaSymbol *) xr_hashmap_get(source_exports, member->name);
+                const char *export_name = member->alias ? member->alias : member->name;
+                (void) xa_export_map_set_symbol(&exports, export_name, sym);
             }
         }
     }
-
-#undef XA_SYMBOL_EXPORTABLE
 
     return exports;
 }

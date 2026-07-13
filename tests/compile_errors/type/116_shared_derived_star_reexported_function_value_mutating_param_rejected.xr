@@ -1,0 +1,11 @@
+import "../../fixtures/shared_mutation_reexport_all" as mut
+
+fn main() {
+    shared bytes = Array<byte>(4, 0)
+    var view: Slice<byte> = bytes[:]
+    const f = mut.overwrite
+    f(view)
+}
+
+main()
+
