@@ -102,13 +102,13 @@ static bool reject_removed_source_type_name(Parser *parser, const char *name) {
 static XrTypeRef *expand_type_alias(Parser *parser, XrTypeAlias *alias, XrTypeRef **type_args,
                                     int type_arg_count) {
     if (!alias)
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
 
     if (!alias->type_ref) {
         char msg[256];
         snprintf(msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
         xr_parser_error(parser, msg);
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
     }
 
     if (alias->type_param_count != type_arg_count) {
@@ -121,14 +121,14 @@ static XrTypeRef *expand_type_alias(Parser *parser, XrTypeAlias *alias, XrTypeRe
                      alias->name ? alias->name : "?", alias->type_param_count, type_arg_count);
         }
         xr_parser_error(parser, msg);
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
     }
 
     if (alias->is_expanding) {
         char msg[256];
         snprintf(msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
         xr_parser_error(parser, msg);
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
     }
 
     alias->is_expanding = true;
@@ -159,7 +159,7 @@ static XrTypeRef *expand_generic_or_clone(Parser *parser, const char *name, XrTy
 XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name) {
     XR_DCHECK(parser != NULL, "xr_parse_type_name_ref: NULL parser");
     if (reject_removed_source_type_name(parser, name))
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
     return expand_named_or_clone(parser, name);
 }
 
@@ -167,14 +167,14 @@ XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *na
                                                   XrTypeRef **args, int arg_count) {
     XR_DCHECK(parser != NULL, "xr_parse_generic_type_name_ref: NULL parser");
     if (reject_removed_source_type_name(parser, name))
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
     return expand_generic_or_clone(parser, name, args, arg_count);
 }
 
 static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                                        const XrTypeAlias *subst_alias, XrTypeRef **type_args) {
     if (!src)
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
 
     switch ((XrTypeRefKind) src->kind) {
         case XR_TREF_INT:
@@ -191,8 +191,8 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             return xr_tref_unit(parser->compiler_session);
         case XR_TREF_NULL:
             return xr_tref_null(parser->compiler_session);
-        case XR_TREF_UNKNOWN:
-            return xr_tref_unknown(parser->compiler_session);
+        case XR_TREF_ERROR:
+            return xr_tref_error(parser->compiler_session);
         case XR_TREF_INT_WIDTH:
             return xr_tref_int_width(parser->compiler_session, src->native_width);
         case XR_TREF_FLOAT_WIDTH:
@@ -215,7 +215,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_OPTIONAL: {
             XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                          subst_alias, type_args)
-                                                  : xr_tref_unknown(parser->compiler_session);
+                                                  : xr_tref_error(parser->compiler_session);
             return xr_tref_optional(parser->compiler_session, inner);
         }
         case XR_TREF_UNION: {
@@ -264,12 +264,12 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_FIXED_ARRAY: {
             XrTypeRef *elem = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                         subst_alias, type_args)
-                                                 : xr_tref_unknown(parser->compiler_session);
+                                                 : xr_tref_error(parser->compiler_session);
             return xr_tref_fixed_array_expr(parser->compiler_session, elem, src->fixed_length_expr,
                                             src->fixed_length);
         }
     }
-    return xr_tref_unknown(parser->compiler_session);
+    return xr_tref_error(parser->compiler_session);
 }
 
 /* ========== Type Annotation Parsing (returns XrTypeRef) ========== */
@@ -339,7 +339,7 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
 
         if (count > XR_TREF_UNION_MAX) {
             xr_parser_error(parser, "union type exceeds maximum of 6 members");
-            return xr_tref_unknown(parser->compiler_session);
+            return xr_tref_error(parser->compiler_session);
         }
 
         reject_redundant_null_union(parser, members, count);
@@ -354,7 +354,7 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
     if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
         parser->recursion_depth--;
         xr_parser_error(parser, "type nesting too deep (max 1000 levels)");
-        return xr_tref_unknown(parser->compiler_session);
+        return xr_tref_error(parser->compiler_session);
     }
     XrTypeRef *result = parse_type_annotation_inner(parser);
     parser->recursion_depth--;
@@ -539,14 +539,14 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         xr_parser_advance(parser);
         if (parser->current.type == TK_LITERAL_INT) {
             xr_parser_error(parser, "fixed array type uses [T; N], e.g. [uint8; 64]");
-            return xr_tref_unknown(parser->compiler_session);
+            return xr_tref_error(parser->compiler_session);
         }
         XrTypeRef *elem = xr_parse_type_annotation(parser);
         xr_parser_consume(parser, TK_SEMICOLON, "expected ';' before fixed array length in [T; N]");
         AstNode *length_expr = xr_parse_expression(parser);
         if (!length_expr) {
             xr_parser_error(parser, "fixed array length must be a compile-time integer expression");
-            return xr_tref_unknown(parser->compiler_session);
+            return xr_tref_error(parser->compiler_session);
         }
         int literal_length = 0;
         if (length_expr->type == AST_LITERAL_INT) {
@@ -691,7 +691,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             if (param_modes)
                 xr_free(param_modes);
             xr_parser_error(parser, "out of memory while parsing type list");
-            return xr_tref_unknown(parser->compiler_session);
+            return xr_tref_error(parser->compiler_session);
         }
         int count = 0;
         bool saw_param_mode = false;
@@ -712,7 +712,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                     xr_free(elems);
                     xr_free(param_modes);
                     xr_parser_error(parser, "out of memory while growing type list");
-                    return xr_tref_unknown(parser->compiler_session);
+                    return xr_tref_error(parser->compiler_session);
                 }
                 elems = resized;
                 param_modes = resized_modes;
@@ -760,7 +760,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             return xr_tref_named(parser->compiler_session, "Json");
         }
         if (reject_removed_source_type_name(parser, temp_name))
-            return xr_tref_unknown(parser->compiler_session);
+            return xr_tref_error(parser->compiler_session);
         if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
             xr_parser_error(parser, "type 'string' must be lowercase in Xray");
             return xr_tref_string(parser->compiler_session);
@@ -823,7 +823,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
 
     /* Error recovery */
     xr_parser_error_expected_name(parser, "expected type name");
-    return xr_tref_unknown(parser->compiler_session);
+    return xr_tref_error(parser->compiler_session);
 }
 
 /* Parse one or more interface constraints joined by '&'.

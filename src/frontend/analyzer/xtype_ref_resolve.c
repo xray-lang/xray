@@ -1011,7 +1011,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
             return xr_type_new_unit(NULL);
         case XR_TREF_NULL:
             return xr_type_new_null(NULL);
-        case XR_TREF_UNKNOWN:
+        case XR_TREF_ERROR:
             return xr_type_new_unknown(NULL);
 
         case XR_TREF_INT_WIDTH:

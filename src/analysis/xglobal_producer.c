@@ -772,7 +772,7 @@ static void class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
             row->semantic_kind = XG_CLASS_FIELD_TYPE_NULL;
             row->flags |= XG_CLASS_FIELD_NULLABLE;
             break;
-        case XR_TREF_UNKNOWN:
+        case XR_TREF_ERROR:
         default:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_DYNAMIC;
             break;

@@ -7186,7 +7186,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             case XR_TREF_NULL:
                 tid = 0;
                 break; /* XR_TID_NULL */
-            case XR_TREF_UNKNOWN:
+            case XR_TREF_ERROR:
             case XR_TREF_INT_WIDTH:
             case XR_TREF_FLOAT_WIDTH:
             case XR_TREF_NAMED:
@@ -7330,7 +7330,7 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                 tid = 0;
                 tname = "null";
                 break; /* XR_TID_NULL */
-            case XR_TREF_UNKNOWN:
+            case XR_TREF_ERROR:
             case XR_TREF_INT_WIDTH:
             case XR_TREF_FLOAT_WIDTH:
             case XR_TREF_NAMED:

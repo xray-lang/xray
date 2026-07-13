@@ -60,7 +60,7 @@ REMOVED_UNKNOWN_DIAGNOSTIC_RE = re.compile(r"'unknown' type has been removed")
 UNKNOWN_IDENTIFIER_GUARD_RE = re.compile(
     r"\b(?:var|const|let)\s+unknown\b|scan_single\(\"unknown\"\)"
 )
-TREF_UNKNOWN_RE = re.compile(r"\b(?:XR_TREF_UNKNOWN|xr_tref_unknown)\b")
+TREF_ERROR_RE = re.compile(r"\b(?:XR_TREF_ERROR|xr_tref_error)\b")
 RUNTIME_UNKNOWN_RE = re.compile(
     r"\b(?:XR_KIND_UNKNOWN|XR_TYPE_IS_UNKNOWN|xr_type_new_unknown|g_type_unknown|"
     r"TYPE_NAME_UNKNOWN|unknown_type_count)\b"
@@ -75,7 +75,7 @@ AOT_UNKNOWN_RE = re.compile(
     r"\b(?:XR_KIND_UNKNOWN|TYPE_NAME_UNKNOWN|type_any|XR_ELEM_ANY|"
     r"unknown\.toString|unknown boundary|unknown direct callee)\b"
 )
-IR_UNKNOWN_RE = re.compile(r"\b(?:XR_KIND_UNKNOWN|XR_TREF_UNKNOWN|type_any|XR_ELEM_ANY)\b")
+IR_UNKNOWN_RE = re.compile(r"\b(?:XR_KIND_UNKNOWN|type_any|XR_ELEM_ANY)\b")
 FORMATTER_LSP_RE = re.compile(
     r"\b(?:TYPE_NAME_UNKNOWN|XLSP_TYPE_UNKNOWN|unknown\?)\b|<unknown>|"
     r"xfmt_write_str\([^,\n]*,\s*\"unknown\""
@@ -93,7 +93,7 @@ CATEGORIES = (
     "SOURCE_UNKNOWN_TYPE_SURFACE",
     "UNKNOWN_IDENTIFIER_ALLOWED_GUARD",
     "REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC",
-    "TREF_UNKNOWN_RECOVERY",
+    "TREF_ERROR_RECOVERY",
     "RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY",
     "XR_TYPE_IS_UNKNOWN_CONSUMER",
     "ASSIGNABILITY_OR_GENERIC_UNKNOWN_COMPAT",
@@ -170,8 +170,8 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         categories.append("UNKNOWN_IDENTIFIER_ALLOWED_GUARD")
     if REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
         categories.append("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC")
-    if TREF_UNKNOWN_RE.search(line):
-        categories.append("TREF_UNKNOWN_RECOVERY")
+    if TREF_ERROR_RE.search(line):
+        categories.append("TREF_ERROR_RECOVERY")
     if RUNTIME_UNKNOWN_RE.search(line):
         categories.append("RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY")
     if XR_TYPE_IS_UNKNOWN_RE.search(line):
