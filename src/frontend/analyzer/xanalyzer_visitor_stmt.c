@@ -17,6 +17,7 @@
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
+#include "../../base/xhashmap.h"
 #include "../../base/xstorage.h"
 #include <stdint.h>
 #include <string.h>
@@ -6845,7 +6846,33 @@ static bool xa_call_return_storage_owner(XaInferContext *ctx, AstNode *node, uin
 
 static AstNode *xa_direct_function_value_source(AstNode *expr) {
     AstNode *source = xa_storage_boundary_identity_source(expr);
-    return source && source->type == AST_VARIABLE ? source : NULL;
+    if (!source)
+        return NULL;
+    return (source->type == AST_VARIABLE || source->type == AST_MEMBER_ACCESS) ? source : NULL;
+}
+
+static XaSymbol *xa_function_value_source_symbol(XaInferContext *ctx, AstNode *source) {
+    if (!ctx || !ctx->analyzer || !source)
+        return NULL;
+    if (source->type == AST_VARIABLE)
+        return source->as.variable.name ? xa_lookup_visible_symbol(ctx, source->as.variable.name)
+                                        : NULL;
+    if (source->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &source->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+    XaSymbol *mod_sym = xa_scope_lookup(ctx->analyzer->current_scope, ma->object->as.variable.name);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
+                                                                 : ma->object->as.variable.name;
+    bool is_quoted = mod_name && (mod_name[0] == '.' || mod_name[0] == '/');
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XaSymbol *member_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, ma->name) : NULL;
+    return member_sym && member_sym->kind == XA_SYM_FUNCTION ? member_sym : NULL;
 }
 
 static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *dst_sym,
@@ -6856,10 +6883,10 @@ static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *d
         return;
 
     AstNode *source = xa_direct_function_value_source(initializer);
-    if (!source || !source->as.variable.name)
+    if (!source)
         return;
 
-    XaSymbol *src_sym = xa_lookup_visible_symbol(ctx, source->as.variable.name);
+    XaSymbol *src_sym = xa_function_value_source_symbol(ctx, source);
     if (!src_sym)
         return;
     XaSymbolLinks *src_links = xa_analyzer_get_links(ctx->analyzer, src_sym);
