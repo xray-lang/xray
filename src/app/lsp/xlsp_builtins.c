@@ -297,6 +297,24 @@ static void xlsp_build_registry_signature(XrType *receiver, const XlspReceiverMe
     snprintf(buf + n, buf_size > (size_t) n ? buf_size - (size_t) n : 0, "): %s", result_buf);
 }
 
+static void xlsp_build_registry_documentation(const XlspReceiverMethodSpec *spec, char *buf,
+                                              size_t buf_size) {
+    XaBuiltinMethodDocumentationGroup group = xa_builtin_receiver_method_documentation_group(spec);
+    XaBuiltinMethodProfileAvailability profile =
+        xa_builtin_receiver_method_profile_availability(spec);
+    snprintf(
+        buf, buf_size,
+        "%s\n\nAvailability: %s\nEffect: %s\nAllocation: %s\nUnsafe: %s\nLowering: %s",
+        xa_builtin_receiver_documentation_group_label(group),
+        xa_builtin_receiver_profile_availability_label(profile),
+        xa_builtin_receiver_effect_label(spec ? spec->effect : XA_BUILTIN_EFFECT_READS_RECEIVER),
+        xa_builtin_receiver_allocation_label(spec ? spec->allocation
+                                                  : XA_BUILTIN_ALLOCATION_NO_HEAP),
+        xa_builtin_receiver_unsafe_requirement_label(spec ? spec->unsafe_requirement
+                                                          : XA_BUILTIN_UNSAFE_NONE),
+        spec && spec->lowering ? spec->lowering : "none");
+}
+
 static bool xlsp_completion_has_label(XrJsonValue *items, const char *label) {
     int count = xjson_array_len(items);
     for (int i = 0; i < count; i++) {
@@ -325,8 +343,8 @@ static int xlsp_append_receiver_registry_completions(XrJsonValue *items, XrType 
         xjson_object_set(item, "kind", xjson_new_number(XLSP_KIND_METHOD));
         xjson_object_set(item, "detail", xjson_new_string(signature));
 
-        char doc[256];
-        snprintf(doc, sizeof(doc), "receiver-specialized builtin method (%s)", spec->lowering);
+        char doc[512];
+        xlsp_build_registry_documentation(spec, doc, sizeof(doc));
         xjson_object_set(item, "documentation", xjson_new_string(doc));
         xjson_array_push(items, item);
         added++;
@@ -455,8 +473,9 @@ const char *xlsp_builtin_get_hover_for_type(XrType *type, const char *method_nam
         char receiver[160];
         xlsp_receiver_label(type, spec, receiver, sizeof(receiver));
         xlsp_build_registry_signature(type, spec, signature, sizeof(signature));
-        snprintf(buf, buf_size, "```xray\n%s.%s\n```\n\nreceiver-specialized builtin method",
-                 receiver, signature);
+        char doc[512];
+        xlsp_build_registry_documentation(spec, doc, sizeof(doc));
+        snprintf(buf, buf_size, "```xray\n%s.%s\n```\n\n%s", receiver, signature, doc);
         return buf;
     }
 
