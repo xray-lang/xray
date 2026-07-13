@@ -367,6 +367,89 @@ XrType *xr_type_get_base(XrType *optional_type) {
     return xr_type_non_nullable(NULL, optional_type);
 }
 
+static bool xr_type_contains_error_impl(const XrType *type, int depth) {
+    if (!type || depth > 64)
+        return false;
+    if (XR_TYPE_IS_ERROR(type))
+        return true;
+
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
+        case XR_KIND_POINTER:
+            return xr_type_contains_error_impl(type->container.element_type, depth + 1);
+        case XR_KIND_FIXED_ARRAY:
+            return xr_type_contains_error_impl(type->fixed_array.element_type, depth + 1);
+        case XR_KIND_MAP:
+            return xr_type_contains_error_impl(type->map.key_type, depth + 1) ||
+                   xr_type_contains_error_impl(type->map.value_type, depth + 1);
+        case XR_KIND_JSON:
+        case XR_KIND_RECORD:
+            for (int i = 0; i < type->object.field_count; i++) {
+                XrType *field_type = type->object.field_types ? type->object.field_types[i] : NULL;
+                if (xr_type_contains_error_impl(field_type, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_INSTANCE:
+        case XR_KIND_CLASS:
+        case XR_KIND_INTERFACE:
+            if (xr_type_contains_error_impl(type->instance.superclass, depth + 1))
+                return true;
+            for (int i = 0; i < type->instance.type_arg_count; i++) {
+                XrType *arg = type->instance.type_args ? type->instance.type_args[i] : NULL;
+                if (xr_type_contains_error_impl(arg, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_FUNCTION:
+            for (int i = 0; i < type->function.param_count; i++) {
+                XrType *param_type = type->function.params ? type->function.params[i].type : NULL;
+                if (xr_type_contains_error_impl(param_type, depth + 1))
+                    return true;
+            }
+            return xr_type_contains_error_impl(type->function.return_type, depth + 1);
+        case XR_KIND_TYPE_PARAM:
+            return xr_type_contains_error_impl(type->type_param.constraint, depth + 1);
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                XrType *element_type =
+                    type->tuple.element_types ? type->tuple.element_types[i] : NULL;
+                if (xr_type_contains_error_impl(element_type, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                XrType *member = type->union_type.members ? type->union_type.members[i] : NULL;
+                if (xr_type_contains_error_impl(member, depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_STRING:
+        case XR_KIND_BOOL:
+        case XR_KIND_NULL:
+        case XR_KIND_UNKNOWN:
+        case XR_KIND_ERROR:
+        case XR_KIND_NEVER:
+        case XR_KIND_UNIT:
+        case XR_KIND_ENUM:
+        case XR_KIND_RUNE:
+        case XR_KIND_COUNT:
+            return false;
+    }
+    return false;
+}
+
+bool xr_type_contains_error(const XrType *type) {
+    return xr_type_contains_error_impl(type, 0);
+}
+
 // Type parameter (for generics)
 XrType *xr_type_new_type_param(XrVMRuntime *X, const char *name, int id) {
     X = resolve_isolate(X);

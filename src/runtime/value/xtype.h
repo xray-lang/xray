@@ -300,6 +300,8 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_UNION(t) ((t)->kind == XR_KIND_UNION)
 #define XR_TYPE_IS_POINTER(t) ((t)->kind == XR_KIND_POINTER)
 
+XR_FUNC bool xr_type_contains_error(const XrType *type);
+
 static inline bool xr_type_is_exact_u8(const XrType *type) {
     return type && type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_U8;
 }

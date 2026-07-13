@@ -62,7 +62,7 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
         verr(ctx, "function has NULL name");
         return;
     }
-    if (f->return_type && XR_TYPE_IS_ERROR(f->return_type)) {
+    if (f->return_type && xr_type_contains_error(f->return_type)) {
         verr(ctx, "func '%s': return type is compiler-only ErrorType", f->name);
         return;
     }
@@ -144,7 +144,7 @@ static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
 
 static bool verify_type_reject_error(VerifyCtx *ctx, const XiFunc *f, const char *owner,
                                      uint32_t owner_id, const XrType *type) {
-    if (!type || !XR_TYPE_IS_ERROR(type))
+    if (!xr_type_contains_error(type))
         return false;
     verr(ctx, "func '%s': %s v%u uses compiler-only ErrorType", f->name, owner, owner_id);
     return true;

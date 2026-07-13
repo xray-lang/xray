@@ -28,6 +28,8 @@ static XrType stub_u64 = {
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
 static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
+static XrType stub_array_error = {
+    .kind = XR_KIND_ARRAY, .id = 13, .frozen = true, .container = {.element_type = &stub_error}};
 static XrType stub_array_i8 = {
     .kind = XR_KIND_ARRAY, .id = 7, .frozen = true, .container = {.element_type = &stub_i8}};
 static XrType stub_array_u64 = {
@@ -427,6 +429,18 @@ TEST(comparison_must_produce_bool_fails) {
 
 TEST(error_return_type_fails) {
     XiFunc *f = xi_func_new("error_return_type", &stub_error);
+    ASSERT(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+    xi_block_set_return(entry, xi_const_int(f, entry, 1, &stub_int));
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(nested_error_return_type_fails) {
+    XiFunc *f = xi_func_new("nested_error_return_type", &stub_array_error);
     ASSERT(f != NULL);
     XiBlock *entry = xi_block_new(f);
     ASSERT(entry != NULL);
@@ -1277,6 +1291,7 @@ int main(void) {
     run_obsolete_multi_return_ops_fail();
     run_comparison_must_produce_bool_fails();
     run_error_return_type_fails();
+    run_nested_error_return_type_fails();
     run_error_value_type_fails();
     run_error_phi_type_fails();
     run_call_method_missing_aux_fails();
