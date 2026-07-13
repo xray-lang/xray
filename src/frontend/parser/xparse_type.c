@@ -381,6 +381,15 @@ static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrPara
             *out_mode = XR_PARAM_OUT;
         return true;
     }
+    if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
+        Token move_token = parser->current;
+        xr_parser_advance(parser);
+        xr_parser_emit_removed_syntax(
+            parser, &move_token, XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED,
+            "`move` is not a parameter mode",
+            "Use a value parameter and write `move value` at the call site when transferring "
+            "ownership.");
+    }
     return false;
 }
 
@@ -405,11 +414,75 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
     return true;
 }
 
+static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **out_mode) {
+    const char *mode = NULL;
+    if (xr_parser_check(parser, TK_IN)) {
+        mode = "in";
+    } else if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
+        mode = "ref";
+    } else if (xr_parser_check_name(parser, "out")) {
+        mode = "out";
+    } else {
+        return false;
+    }
+
+    Scanner saved_scan = parser->scanner;
+    Token saved_cur = parser->current;
+    Token saved_prev = parser->previous;
+    xr_parser_advance(parser);
+    bool is_prefix = xr_parser_check(parser, TK_NAME);
+    parser->scanner = saved_scan;
+    parser->current = saved_cur;
+    parser->previous = saved_prev;
+    if (!is_prefix)
+        return false;
+    if (out_mode)
+        *out_mode = mode;
+    return true;
+}
+
+static bool xr_parse_current_is_move_param_prefix(Parser *parser) {
+    if (!xr_parser_check(parser, TK_MOVE) && !xr_parser_check_name(parser, "move"))
+        return false;
+
+    Scanner saved_scan = parser->scanner;
+    Token saved_cur = parser->current;
+    Token saved_prev = parser->previous;
+    xr_parser_advance(parser);
+    bool is_prefix = xr_parser_check(parser, TK_NAME);
+    parser->scanner = saved_scan;
+    parser->current = saved_cur;
+    parser->previous = saved_prev;
+    return is_prefix;
+}
+
 XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
     XR_DCHECK(parser != NULL, "xr_parse_parameter: NULL parser");
     bool is_rest = false;
     if (flags & XR_PARSE_PARAMETER_ALLOW_REST)
         is_rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
+
+    if (!is_rest && xr_parse_current_is_move_param_prefix(parser)) {
+        Token move_token = parser->current;
+        xr_parser_advance(parser);
+        xr_parser_emit_removed_syntax(
+            parser, &move_token, XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED,
+            "`move` is not a parameter mode",
+            "Use a value parameter and write `move value` at the call site when transferring "
+            "ownership.");
+    }
+
+    const char *prefix_mode = NULL;
+    if (!is_rest && xr_parse_current_is_param_mode_prefix(parser, &prefix_mode)) {
+        Token mode_token = parser->current;
+        xr_parser_advance(parser);
+        char title[128];
+        snprintf(title, sizeof(title), "parameter mode '%s' before parameter name was removed",
+                 prefix_mode ? prefix_mode : "?");
+        xr_parser_emit_removed_syntax(
+            parser, &mode_token, XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED, title,
+            "Write parameter modes after the colon, for example `name: ref T`.");
+    }
 
     xr_parser_consume(parser, TK_NAME,
                       is_rest ? "expected parameter name after ..." : "expected parameter name");
