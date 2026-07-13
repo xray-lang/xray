@@ -14849,6 +14849,85 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
+    setup_parser_session();
+    const char *source = "enum Color { Red, Green, Blue, Yellow, Purple }\n"
+                         "fn denseEnumLookup() -> int {\n"
+                         "    var scores = #{ Color.Red: 10, Color.Green: 11, Color.Blue: 12, "
+                         "Color.Yellow: 13, Color.Purple: 14 }\n"
+                         "    var seen: Set<Color> = #[Color.Red, Color.Green, Color.Blue, "
+                         "Color.Yellow, Color.Purple]\n"
+                         "    var fromIndex = scores[Color.Blue]\n"
+                         "    var viaGet = scores.get(Color.Purple)\n"
+                         "    if (scores.containsKey(Color.Green)) {\n"
+                         "        if (seen.contains(Color.Yellow)) { return fromIndex + viaGet }\n"
+                         "    }\n"
+                         "    return 0\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 10);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 4);
+    ASSERT_EQ_UINT(ev.nhash_eqs, 1);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_DENSE_ENUM) != 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_DENSE_ENUM) != 0);
+    ASSERT_TRUE((ev.map_shapes[0].flags & XG_MAP_SHAPE_SMALL) == 0);
+    ASSERT_TRUE((ev.map_shapes[1].flags & XG_MAP_SHAPE_SMALL) == 0);
+    ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_ENUM_ORDINAL);
+    for (uint32_t i = 0; i < 5; i++) {
+        ASSERT_TRUE((ev.map_entries[i].flags & XG_MAP_ENTRY_ENUM_KEY) != 0);
+        ASSERT_TRUE(ev.map_entries[i].key_i64 == (int64_t) i);
+        ASSERT_TRUE((ev.map_entries[5 + i].flags & XG_MAP_ENTRY_ENUM_KEY) != 0);
+        ASSERT_TRUE(ev.map_entries[5 + i].key_i64 == (int64_t) i);
+    }
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotMapShapePlan *map_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
+    const XaotMapShapePlan *set_shape_plan =
+        xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[1].shape_id);
+    ASSERT_NOT_NULL(map_shape_plan);
+    ASSERT_NOT_NULL(set_shape_plan);
+    ASSERT_EQ_UINT(map_shape_plan->action, XAOT_MAP_SHAPE_DENSE_ENUM_TABLE);
+    ASSERT_EQ_UINT(set_shape_plan->action, XAOT_MAP_SHAPE_DENSE_ENUM_TABLE);
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XaotKeyAccessPlan *access_plan =
+            xaot_bundle_find_key_access_plan(&bundle, ev.key_accesses[i].access_id);
+        ASSERT_NOT_NULL(access_plan);
+        ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX);
+        ASSERT_TRUE((access_plan->evidence & XAOT_MAP_EV_DENSE_DOMAIN) != 0);
+    }
+
+    char *dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "kind=enum_ordinal"));
+    ASSERT_NOT_NULL(strstr(dump, "key_i64=0"));
+    ASSERT_NOT_NULL(strstr(dump, "key_i64=4"));
+    xr_free(dump);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_bool_direct_map_shape) {
     setup_parser_session();
     const char *source = "fn boolLookup(flag: bool) -> int {\n"
@@ -16221,6 +16300,7 @@ RUN_TEST(global_evidence_producer_propagates_record_shape_through_field_and_cont
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
+RUN_TEST(global_evidence_producer_records_dense_enum_map_set_lookup);
 RUN_TEST(global_evidence_producer_records_bool_direct_map_shape);
 RUN_TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map);
 RUN_TEST(global_evidence_producer_propagates_map_shape_through_local_alias);

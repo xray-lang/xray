@@ -1126,10 +1126,16 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         }
     }
     if (cg_key_access_plan_is_dense_index(key_plan)) {
+        bool dense_enum = cg_key_access_plan_is_dense_enum_index(ctx, key_plan, method);
+        if (ctx && ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
         if (op == XG_KEY_ACCESS_GET) {
             const char *conv_suffix =
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-            fprintf(out, "xrt_map_get_dense_i64_owned(");
+            fprintf(out,
+                    dense_enum ? "xrt_map_get_dense_enum_owned(" : "xrt_map_get_dense_i64_owned(");
             cg_emit_local_map_recv(out, recv);
             fprintf(out, ", ");
             emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
@@ -1139,7 +1145,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         }
         if (op == XG_KEY_ACCESS_HAS) {
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-            fprintf(out, "(int64_t)xrt_map_has_dense_i64(");
+            fprintf(out, dense_enum ? "(int64_t)xrt_map_has_dense_enum("
+                                    : "(int64_t)xrt_map_has_dense_i64(");
             cg_emit_local_map_recv(out, recv);
             fprintf(out, ", ");
             emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
@@ -1820,8 +1827,14 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (emit_key_access_abort_expr_if_needed(ctx, out))
         return true;
     if (cg_key_access_plan_is_dense_index(key_plan) && op == XG_KEY_ACCESS_HAS) {
+        bool dense_enum = cg_key_access_plan_is_dense_enum_index(ctx, key_plan, method);
+        if (ctx && ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-        fprintf(out, "(int64_t)xrt_set_has_dense_i64(");
+        fprintf(out, dense_enum ? "(int64_t)xrt_set_has_dense_enum("
+                                : "(int64_t)xrt_set_has_dense_i64(");
         cg_emit_local_set_recv(out, recv);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);

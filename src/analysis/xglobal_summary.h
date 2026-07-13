@@ -565,6 +565,7 @@ enum {
     XG_MAP_ENTRY_DUPLICATE_KEY = 1u << 2,
     XG_MAP_ENTRY_INT_KEY = 1u << 3,
     XG_MAP_ENTRY_BOOL_KEY = 1u << 4,
+    XG_MAP_ENTRY_ENUM_KEY = 1u << 5,
 };
 
 enum {

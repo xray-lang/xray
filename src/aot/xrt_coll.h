@@ -1939,6 +1939,26 @@ static inline XrValue xrt_map_get_dense_i64_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get_dense_i64(m, key));
 }
 
+static inline int64_t xrt_map_find_dense_enum_slot(xrt_map_t *m, XrValue key) {
+    uint32_t ordinal = 0;
+    if (!m || xrt_map_is_boolmap(m) || xrt_map_is_typed(m) || (m->flags & XR_MAP_FLAG_DUMMY) != 0 ||
+        !xrt_enum_key_parts(key, NULL, NULL, &ordinal, NULL) || ordinal >= m->nentries)
+        return -1;
+    XrMapEntry *entry = &m->entries[ordinal];
+    if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+        return -1;
+    return xrt_map_key_eq(entry, key, xrt_value_type_tag(key)) ? (int64_t) ordinal : -1;
+}
+
+static inline XrValue xrt_map_get_dense_enum(xrt_map_t *m, XrValue key) {
+    int64_t slot = xrt_map_find_dense_enum_slot(m, key);
+    return slot >= 0 ? xrt_map_slot_value(m, slot) : xrt_map_get(m, key);
+}
+
+static inline XrValue xrt_map_get_dense_enum_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_get_dense_enum(m, key));
+}
+
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_has_v((xrt_boolmap_t *) m, key);
@@ -1999,6 +2019,11 @@ static inline int xrt_map_has_small(xrt_map_t *m, XrValue key) {
 
 static inline int xrt_map_has_dense_i64(xrt_map_t *m, XrValue key) {
     int64_t slot = xrt_map_find_dense_i64_slot(m, key);
+    return slot >= 0 ? 1 : xrt_map_has(m, key);
+}
+
+static inline int xrt_map_has_dense_enum(xrt_map_t *m, XrValue key) {
+    int64_t slot = xrt_map_find_dense_enum_slot(m, key);
     return slot >= 0 ? 1 : xrt_map_has(m, key);
 }
 
@@ -2667,6 +2692,22 @@ static inline int64_t xrt_set_find_dense_i64_slot(xrt_set_t *s, XrValue value) {
 
 static inline int xrt_set_has_dense_i64(xrt_set_t *s, XrValue value) {
     int64_t slot = xrt_set_find_dense_i64_slot(s, value);
+    return slot >= 0 ? 1 : xrt_set_has(s, value);
+}
+
+static inline int64_t xrt_set_find_dense_enum_slot(xrt_set_t *s, XrValue value) {
+    uint32_t ordinal = 0;
+    if (!s || xrt_set_is_typed(s) || (s->flags & XR_SET_FLAG_DUMMY) != 0 ||
+        !xrt_enum_key_parts(value, NULL, NULL, &ordinal, NULL) || ordinal >= s->nentries)
+        return -1;
+    XrSetEntry *entry = &s->entries[ordinal];
+    if (entry->val_tt == XR_SET_ENTRY_NIL)
+        return -1;
+    return xrt_set_value_eq(entry, value, xrt_value_type_tag(value)) ? (int64_t) ordinal : -1;
+}
+
+static inline int xrt_set_has_dense_enum(xrt_set_t *s, XrValue value) {
+    int64_t slot = xrt_set_find_dense_enum_slot(s, value);
     return slot >= 0 ? 1 : xrt_set_has(s, value);
 }
 

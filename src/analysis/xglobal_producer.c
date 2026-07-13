@@ -27,10 +27,11 @@
 #include <string.h>
 
 enum {
-    XG_SMALL_MAP_LITERAL_MAX = 4
+    XG_SMALL_MAP_LITERAL_MAX = 4,
+    XG_DENSE_ENUM_MEMBER_MAX = 256
 };
 
-#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000003)
+#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000004)
 
 typedef struct XgClassNameRow {
     XgModuleId module_id;
@@ -55,6 +56,13 @@ typedef struct XgInterfaceNameRow {
     const InterfaceDeclNode *decl;
 } XgInterfaceNameRow;
 
+typedef struct XgEnumNameRow {
+    XgModuleId module_id;
+    const char *name;
+    uint32_t type_key;
+    const EnumDeclNode *decl;
+} XgEnumNameRow;
+
 typedef struct XgStdlibImportRow {
     XgModuleId module_id;
     const char *local_name;
@@ -73,6 +81,9 @@ typedef struct XgProducer {
     XgInterfaceNameRow *interfaces;
     uint32_t ninterfaces;
     uint32_t interface_cap;
+    XgEnumNameRow *enums;
+    uint32_t nenums;
+    uint32_t enum_cap;
     XgFuncNameRow *funcs;
     uint32_t nfuncs;
     uint32_t func_cap;
@@ -1131,6 +1142,45 @@ static bool producer_register_interface(XgProducer *p, XgModuleId module_id, con
     return true;
 }
 
+static bool producer_reserve_enums(XgProducer *p, uint32_t needed) {
+    uint32_t new_cap;
+    XgEnumNameRow *rows;
+    if (p->enum_cap >= needed)
+        return true;
+    new_cap = p->enum_cap < 8 ? 8 : p->enum_cap;
+    while (new_cap < needed)
+        new_cap *= 2;
+    rows = (XgEnumNameRow *) xr_realloc(p->enums, (size_t) new_cap * sizeof(*rows));
+    if (!rows)
+        return false;
+    p->enums = rows;
+    p->enum_cap = new_cap;
+    return true;
+}
+
+static bool producer_register_enum(XgProducer *p, XgModuleId module_id, const char *name,
+                                   const EnumDeclNode *decl, uint32_t type_key) {
+    if (!name)
+        return true;
+    for (uint32_t i = 0; i < p->nenums; i++) {
+        XgEnumNameRow *existing = &p->enums[i];
+        if (existing->module_id == module_id && existing->name &&
+            strcmp(existing->name, name) == 0) {
+            existing->decl = decl;
+            existing->type_key = type_key;
+            return true;
+        }
+    }
+    if (!producer_reserve_enums(p, p->nenums + 1))
+        return false;
+    p->enums[p->nenums].module_id = module_id;
+    p->enums[p->nenums].name = name;
+    p->enums[p->nenums].type_key = type_key;
+    p->enums[p->nenums].decl = decl;
+    p->nenums++;
+    return true;
+}
+
 static XgInterfaceId producer_lookup_interface(const XgProducer *p, const char *name) {
     XgInterfaceNameRow *row = producer_lookup_interface_row(p, name);
     return row ? row->interface_id : XG_NO_ID;
@@ -1381,6 +1431,32 @@ static XgInterfaceNameRow *producer_lookup_interface_row_scoped(const XgProducer
         return match;
     for (uint32_t i = 0; i < p->ninterfaces; i++) {
         XgInterfaceNameRow *row = &p->interfaces[i];
+        if (hash_name32(row->name) != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
+}
+
+static XgEnumNameRow *producer_lookup_enum_row_scoped(const XgProducer *p, XgModuleId module_id,
+                                                      uint32_t name_id, bool allow_global_unique) {
+    XgEnumNameRow *match = NULL;
+    if (!p || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < p->nenums; i++) {
+        XgEnumNameRow *row = &p->enums[i];
+        if (row->module_id != module_id || hash_name32(row->name) != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    if (match || !allow_global_unique)
+        return match;
+    for (uint32_t i = 0; i < p->nenums; i++) {
+        XgEnumNameRow *row = &p->enums[i];
         if (hash_name32(row->name) != name_id)
             continue;
         if (match)
@@ -2840,6 +2916,9 @@ static const XrTypeRef *body_call_return_type_ref(XgBodyCollect *bc, const CallE
     return body_pending_return_type_ref(body_find_call_body(bc, call));
 }
 
+static bool body_expr_enum_access_parts(XgBodyCollect *bc, const AstNode *expr,
+                                        const char **out_enum_name, const char **out_member_name);
+
 static const XrTypeRef *body_expr_type_ref(XgBodyCollect *bc, const AstNode *expr) {
     if (!bc || !expr)
         return NULL;
@@ -2884,6 +2963,13 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_named_type_key32("BigInt", NULL, 0);
         case AST_LITERAL_REGEX:
             return hash_named_type_key32("Regex", NULL, 0);
+        case AST_ENUM_ACCESS:
+        case AST_MEMBER_ACCESS: {
+            const char *enum_name = NULL;
+            if (body_expr_enum_access_parts(bc, expr, &enum_name, NULL))
+                return hash_named_type_key32(enum_name, NULL, 0);
+            break;
+        }
         case AST_VARIABLE: {
             XgLocalType *row = body_find_local(bc, expr->as.variable.name);
             if (!row)
@@ -5825,7 +5911,7 @@ static void body_add_record_member_access(XgBodyCollect *bc, const AstNode *node
     (void) xg_global_evidence_add_record_access(bc->evidence, &row);
 }
 
-static uint32_t body_const_expr_id(const AstNode *expr) {
+static uint32_t body_const_expr_id(XgBodyCollect *bc, const AstNode *expr) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!expr)
         return 0;
@@ -5847,6 +5933,26 @@ static uint32_t body_const_expr_id(const AstNode *expr) {
         case AST_LITERAL_NULL:
             h = fold_u64(h, 0);
             return hash_folded32(h);
+        case AST_ENUM_ACCESS:
+        case AST_MEMBER_ACCESS: {
+            const char *enum_name = NULL;
+            const char *member_name = NULL;
+            if (!body_expr_enum_access_parts(bc, expr, &enum_name, &member_name))
+                return 0;
+            h = fold_bytes(h, enum_name, strlen(enum_name));
+            h = fold_bytes(h, member_name, strlen(member_name));
+            return hash_folded32(h);
+        }
+        case AST_GROUPING:
+            return body_const_expr_id(bc, expr->as.grouping);
+        case AST_COMPTIME_EXPR:
+            return body_const_expr_id(bc, expr->as.comptime_expr.expr);
+        case AST_MOVE_EXPR:
+            return body_const_expr_id(bc, expr->as.move_expr.expr);
+        case AST_UNSAFE_EXPR:
+            return body_const_expr_id(bc, expr->as.unsafe_expr.operand);
+        case AST_FORCE_UNWRAP:
+            return body_const_expr_id(bc, expr->as.unary.operand);
         default:
             return 0;
     }
@@ -5905,6 +6011,139 @@ static bool body_map_key_type_is_dense_int(uint32_t key_type_key) {
 
 static bool body_map_key_type_is_bool(uint32_t key_type_key) {
     return key_type_key == hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0);
+}
+
+static const XgEnumNameRow *body_enum_row_for_name(XgBodyCollect *bc, const char *name) {
+    if (!bc || !bc->producer || !name || !name[0])
+        return NULL;
+    return producer_lookup_enum_row_scoped(bc->producer, bc->module_id, hash_name32(name), true);
+}
+
+static bool body_enum_decl_has_ordinal_domain(const EnumDeclNode *decl) {
+    if (!decl || decl->type_param_count != 0 || decl->member_count <= 0 ||
+        decl->member_count > XG_DENSE_ENUM_MEMBER_MAX)
+        return false;
+    for (int i = 0; i < decl->member_count; i++) {
+        const AstNode *member = decl->members ? decl->members[i] : NULL;
+        const EnumMemberNode *variant;
+        if (!member || member->type != AST_ENUM_MEMBER)
+            return false;
+        variant = &member->as.enum_member;
+        if (!variant->name || variant->payload_count != 0)
+            return false;
+        for (int j = i + 1; j < decl->member_count; j++) {
+            const AstNode *other = decl->members ? decl->members[j] : NULL;
+            const EnumMemberNode *other_variant;
+            if (!other || other->type != AST_ENUM_MEMBER)
+                return false;
+            other_variant = &other->as.enum_member;
+            if (other_variant->name && strcmp(variant->name, other_variant->name) == 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool body_expr_enum_access_parts(XgBodyCollect *bc, const AstNode *expr,
+                                        const char **out_enum_name, const char **out_member_name) {
+    const char *enum_name = NULL;
+    const char *member_name = NULL;
+    if (out_enum_name)
+        *out_enum_name = NULL;
+    if (out_member_name)
+        *out_member_name = NULL;
+    if (!expr)
+        return false;
+    switch (expr->type) {
+        case AST_ENUM_ACCESS:
+            enum_name = expr->as.enum_access.enum_name;
+            member_name = expr->as.enum_access.member_name;
+            break;
+        case AST_MEMBER_ACCESS:
+            if (expr->as.member_access.object &&
+                expr->as.member_access.object->type == AST_VARIABLE) {
+                enum_name = expr->as.member_access.object->as.variable.name;
+                member_name = expr->as.member_access.name;
+            }
+            break;
+        case AST_GROUPING:
+            return body_expr_enum_access_parts(bc, expr->as.grouping, out_enum_name,
+                                               out_member_name);
+        case AST_COMPTIME_EXPR:
+            return body_expr_enum_access_parts(bc, expr->as.comptime_expr.expr, out_enum_name,
+                                               out_member_name);
+        case AST_MOVE_EXPR:
+            return body_expr_enum_access_parts(bc, expr->as.move_expr.expr, out_enum_name,
+                                               out_member_name);
+        case AST_UNSAFE_EXPR:
+            return body_expr_enum_access_parts(bc, expr->as.unsafe_expr.operand, out_enum_name,
+                                               out_member_name);
+        case AST_FORCE_UNWRAP:
+            return body_expr_enum_access_parts(bc, expr->as.unary.operand, out_enum_name,
+                                               out_member_name);
+        default:
+            return false;
+    }
+    if (!enum_name || !member_name || !body_enum_row_for_name(bc, enum_name))
+        return false;
+    if (out_enum_name)
+        *out_enum_name = enum_name;
+    if (out_member_name)
+        *out_member_name = member_name;
+    return true;
+}
+
+static bool body_enum_member_ordinal(XgBodyCollect *bc, const char *enum_name,
+                                     const char *member_name, uint32_t *out_ordinal) {
+    const XgEnumNameRow *row = body_enum_row_for_name(bc, enum_name);
+    const EnumDeclNode *decl = row ? row->decl : NULL;
+    if (out_ordinal)
+        *out_ordinal = 0;
+    if (!body_enum_decl_has_ordinal_domain(decl) || !member_name)
+        return false;
+    for (int i = 0; i < decl->member_count; i++) {
+        const AstNode *member = decl->members ? decl->members[i] : NULL;
+        const EnumMemberNode *variant;
+        if (!member || member->type != AST_ENUM_MEMBER)
+            return false;
+        variant = &member->as.enum_member;
+        if (variant->name && strcmp(variant->name, member_name) == 0) {
+            if (out_ordinal)
+                *out_ordinal = (uint32_t) i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool body_map_literal_has_dense_enum_domain(XgBodyCollect *bc, AstNode **keys, int count,
+                                                   uint32_t key_type_key) {
+    const char *enum_name = NULL;
+    const XgEnumNameRow *row = NULL;
+    const EnumDeclNode *decl = NULL;
+    if (!bc || !keys || count <= 0 || count > XG_DENSE_ENUM_MEMBER_MAX || key_type_key == 0)
+        return false;
+    for (int i = 0; i < count; i++) {
+        const char *key_enum = NULL;
+        const char *member_name = NULL;
+        uint32_t ordinal = 0;
+        if (!body_expr_enum_access_parts(bc, keys[i], &key_enum, &member_name))
+            return false;
+        if (!enum_name) {
+            enum_name = key_enum;
+            row = body_enum_row_for_name(bc, enum_name);
+            decl = row ? row->decl : NULL;
+            if (!row || !body_enum_decl_has_ordinal_domain(decl) || key_type_key != row->type_key ||
+                count != decl->member_count)
+                return false;
+        } else if (!key_enum || strcmp(enum_name, key_enum) != 0) {
+            return false;
+        }
+        if (!body_enum_member_ordinal(bc, key_enum, member_name, &ordinal) ||
+            ordinal != (uint32_t) i)
+            return false;
+    }
+    return true;
 }
 
 static bool body_map_value_type_supports_bool_direct(uint32_t value_type_key) {
@@ -6001,6 +6240,27 @@ static void body_ensure_builtin_hash_eq(XgBodyCollect *bc, uint32_t key_type_key
     row.kind = XG_HASH_EQ_BUILTIN;
     row.flags = XG_HASH_EQ_NO_ALLOC | XG_HASH_EQ_NO_THROW | XG_HASH_EQ_PURE | XG_HASH_EQ_FINAL;
     (void) xg_global_evidence_add_hash_eq(bc->evidence, &row);
+}
+
+static void body_ensure_enum_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+    XgHashEqSummary row;
+    if (!bc || !bc->evidence || key_type_key == 0)
+        return;
+    if (xg_global_evidence_find_hash_eq(bc->evidence, key_type_key))
+        return;
+    for (uint32_t i = 0; i < bc->evidence->ndecls; i++) {
+        const XgDeclSummary *decl = &bc->evidence->decls[i];
+        if (decl->kind == XG_DECL_ENUM && decl->type_key == key_type_key) {
+            memset(&row, 0, sizeof(row));
+            row.hash_eq_id = (XgHashEqId) (bc->evidence->nhash_eqs + 1);
+            row.type_key = key_type_key;
+            row.kind = XG_HASH_EQ_ENUM_ORDINAL;
+            row.flags =
+                XG_HASH_EQ_NO_ALLOC | XG_HASH_EQ_NO_THROW | XG_HASH_EQ_PURE | XG_HASH_EQ_FINAL;
+            (void) xg_global_evidence_add_hash_eq(bc->evidence, &row);
+            return;
+        }
+    }
 }
 
 static bool body_type_ref_is_named(const XrTypeRef *type, const char *name) {
@@ -6128,6 +6388,7 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     uint32_t const_stack[16];
     uint32_t *const_ids = const_stack;
     bool const_ids_heap = false;
+    bool dense_enum_domain = false;
     if (out_receiver_type_key)
         *out_receiver_type_key = 0;
     if (out_key_type_key)
@@ -6165,7 +6426,7 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
             key_type_key = kt;
         if (value_type_key == 0 && vt != 0)
             value_type_key = vt;
-        const_ids[i] = body_const_expr_id(keys ? keys[i] : NULL);
+        const_ids[i] = body_const_expr_id(bc, keys ? keys[i] : NULL);
     }
     if (key_type_key == 0 || (container_kind == XG_MAP_CONTAINER_MAP && value_type_key == 0)) {
         if (const_ids_heap)
@@ -6192,6 +6453,9 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
         body_map_value_type_supports_bool_direct(value_type_key) &&
         body_map_literal_has_bool_domain(keys, count, key_type_key))
         shape.flags |= XG_MAP_SHAPE_BOOL_DIRECT;
+    dense_enum_domain = body_map_literal_has_dense_enum_domain(bc, keys, count, key_type_key);
+    if (dense_enum_domain)
+        shape.flags |= XG_MAP_SHAPE_DENSE_ENUM;
     if (body_map_literal_has_dense_i64_domain(keys, count, key_type_key))
         shape.flags |= XG_MAP_SHAPE_DENSE_INT;
     shape.shape_hash =
@@ -6204,7 +6468,7 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     for (int i = 0; i < count; i++) {
         XgMapEntrySummary entry;
         uint32_t key_const_id = const_ids[i];
-        uint32_t value_const_id = values ? body_const_expr_id(values[i]) : 0;
+        uint32_t value_const_id = values ? body_const_expr_id(bc, values[i]) : 0;
         memset(&entry, 0, sizeof(entry));
         entry.entry_id = (XgMapEntryId) (bc->evidence->nmap_entries + 1);
         entry.shape_id = shape.shape_id;
@@ -6224,6 +6488,16 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
             entry.key_i64 = keys[i]->as.literal.raw_value.bool_val ? 1 : 0;
             entry.flags |= XG_MAP_ENTRY_BOOL_KEY;
         }
+        if (dense_enum_domain) {
+            const char *enum_name = NULL;
+            const char *member_name = NULL;
+            uint32_t ordinal = 0;
+            if (body_expr_enum_access_parts(bc, keys[i], &enum_name, &member_name) &&
+                body_enum_member_ordinal(bc, enum_name, member_name, &ordinal)) {
+                entry.key_i64 = (int64_t) ordinal;
+                entry.flags |= XG_MAP_ENTRY_ENUM_KEY;
+            }
+        }
         if (value_const_id != 0)
             entry.flags |= XG_MAP_ENTRY_CONST_VALUE;
         for (int j = 0; j < i; j++) {
@@ -6234,7 +6508,10 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
         }
         (void) xg_global_evidence_add_map_entry(bc->evidence, &entry);
     }
-    body_ensure_hash_eq(bc, key_type_key);
+    if (dense_enum_domain)
+        body_ensure_enum_hash_eq(bc, key_type_key);
+    else
+        body_ensure_hash_eq(bc, key_type_key);
     if (out_receiver_type_key)
         *out_receiver_type_key = receiver_type_key;
     if (out_key_type_key)
@@ -6819,7 +7096,7 @@ static void body_add_map_key_access_row(XgBodyCollect *bc, const AstNode *node,
     XgKeyAccessSummary row;
     if (!bc || !node || !local || local->map_shape_id == XG_NO_ID)
         return;
-    key_const_id = body_const_expr_id(key);
+    key_const_id = body_const_expr_id(bc, key);
     memset(&row, 0, sizeof(row));
     row.access_id = (XgKeyAccessId) (bc->evidence->nkey_accesses + 1);
     row.owner_func_id = bc->owner_func_id;
@@ -6967,8 +7244,8 @@ static void body_add_sequence_access_row(XgBodyCollect *bc, const AstNode *node,
             ? local->type_key
             : body_sequence_receiver_type_key(local->sequence_kind, local->sequence_elem_type_key);
     row.elem_type_key = local->sequence_elem_type_key;
-    row.index_expr_id = body_const_expr_id(index);
-    row.length_expr_id = body_const_expr_id(length);
+    row.index_expr_id = body_const_expr_id(bc, index);
+    row.length_expr_id = body_const_expr_id(bc, length);
     if (mutating)
         row.flags |= XG_SEQ_ACCESS_MUTATING;
     if (row.index_expr_id != 0)
@@ -9002,11 +9279,13 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     const EnumDeclNode *e = &node->as.enum_decl;
     XgDeclSummary decl;
     uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
+    uint32_t type_key = hash_named_type_key32(e->name, NULL, 0);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_ENUM;
     decl.name_id = hash_name32(e->name);
+    decl.type_key = type_key;
     decl.signature_key = (uint32_t) e->member_count;
     decl.source_node_id =
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
@@ -9020,6 +9299,8 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
+        return false;
+    if (!producer_register_enum(p, module_id, e->name, e, type_key))
         return false;
     return producer_add_decl_derives(p, module_id, decl.decl_id, (uint32_t) node->line, e->name,
                                      derive_flags, NULL, 0);
@@ -9392,6 +9673,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
             !xg_global_evidence_add_module(evidence, &module_summary)) {
             xr_free(producer.classes);
             xr_free(producer.interfaces);
+            xr_free(producer.enums);
             xr_free(producer.funcs);
             xr_free(producer.stdlib_imports);
             producer_free_bodies(&producer);
@@ -9403,6 +9685,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
         if (!add_module_ast(&producer, module_id, spec->ast)) {
             xr_free(producer.classes);
             xr_free(producer.interfaces);
+            xr_free(producer.enums);
             xr_free(producer.funcs);
             xr_free(producer.stdlib_imports);
             producer_free_bodies(&producer);
@@ -9414,6 +9697,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
     if (!producer_finalize_class_graph(&producer) || !producer_emit_body_summaries(&producer)) {
         xr_free(producer.classes);
         xr_free(producer.interfaces);
+        xr_free(producer.enums);
         xr_free(producer.funcs);
         xr_free(producer.stdlib_imports);
         producer_free_bodies(&producer);
@@ -9422,6 +9706,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
     }
     xr_free(producer.classes);
     xr_free(producer.interfaces);
+    xr_free(producer.enums);
     xr_free(producer.funcs);
     xr_free(producer.stdlib_imports);
     producer_free_bodies(&producer);
