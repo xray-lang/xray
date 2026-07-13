@@ -54,10 +54,13 @@ static struct XrType *xi_lower_param_type(XiLower *l, XrParamNode *param) {
     if (l && l->analyzer && param && param->symbol_id != 0) {
         XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, param->symbol_id);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
-        if (links && links->type)
+        if (links && links->type && links->type->kind != XR_KIND_UNKNOWN)
             return links->type;
     }
-    struct XrType *type = (param && param->type) ? xr_tref_resolve(l->isolate, param->type) : NULL;
+    struct XrType *type =
+        (l && l->analyzer && param && param->type)
+            ? xr_tref_resolve_in_analyzer(l->analyzer, param->type)
+            : ((param && param->type) ? xr_tref_resolve(l ? l->isolate : NULL, param->type) : NULL);
     return type ? type : (l ? l->type_any : NULL);
 }
 
