@@ -1628,6 +1628,25 @@ static bool verify_map_shape_supports_bool_direct(const XgMapShapeSummary *shape
            shape->entry_count > 0 && shape->entry_count <= 2;
 }
 
+static const XgDeclSummary *verify_find_enum_decl_by_type_key(const XgGlobalEvidence *ev,
+                                                              XgModuleId module_id,
+                                                              uint32_t type_key) {
+    const XgDeclSummary *global_match = NULL;
+    uint32_t global_count = 0;
+    if (!ev || type_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->kind != XG_DECL_ENUM || decl->type_key != type_key)
+            continue;
+        if (decl->module_id == module_id)
+            return decl;
+        global_match = decl;
+        global_count++;
+    }
+    return global_count == 1 ? global_match : NULL;
+}
+
 static bool verify_map_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len,
@@ -1658,6 +1677,28 @@ static bool verify_map_rows(const XgGlobalEvidence *ev, char *errbuf, size_t err
                 if (entry->entry_ordinal != ei)
                     return set_error(errbuf, errbuf_len,
                                      "AOT Map/Set entry ordinal does not re-derive");
+            }
+            if ((shape->flags & XG_MAP_SHAPE_DENSE_ENUM) != 0) {
+                const XgDeclSummary *decl =
+                    verify_find_enum_decl_by_type_key(ev, shape->module_id, shape->key_type_key);
+                if (!decl)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT dense enum Map/Set shape has no enum declaration");
+                if (decl->signature_key != shape->entry_count)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT dense enum Map/Set shape domain length is stale");
+                for (uint32_t ei = 0; ei < shape->entry_count; ei++) {
+                    const XgMapEntrySummary *entry = &ev->map_entries[start - 1 + ei];
+                    if ((entry->flags & XG_MAP_ENTRY_ENUM_KEY) == 0)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT dense enum Map/Set shape has non-enum key evidence");
+                    if (entry->key_i64 != (int64_t) ei)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT dense enum Map/Set shape key domain is stale");
+                    if ((entry->flags & XG_MAP_ENTRY_DUPLICATE_KEY) != 0)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT dense enum Map/Set shape has duplicate key evidence");
+                }
             }
             if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0) {
                 for (uint32_t ei = 0; ei < shape->entry_count; ei++) {

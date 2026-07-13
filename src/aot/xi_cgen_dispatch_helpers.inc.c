@@ -7722,9 +7722,14 @@ static bool xicgen_emit_map_index_get_dense_index(XiCgenCtx *ctx, FILE *out, con
     if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_MAP || !xicgen_map_index_plan_is_dense_index(plan))
         return false;
+    bool dense_enum = cg_key_access_plan_is_dense_enum_index(ctx, plan, "Map.index_get");
+    if (ctx && ctx->error) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_map_get_dense_i64_owned(");
+    fprintf(out, dense_enum ? "xrt_map_get_dense_enum_owned(" : "xrt_map_get_dense_i64_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);

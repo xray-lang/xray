@@ -317,6 +317,32 @@ static const XaotKeyAccessPlan *cg_verified_key_access_plan(XiCgenCtx *ctx, cons
     return plan;
 }
 
+static const XaotMapShapePlan *
+cg_key_access_receiver_shape_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *plan, const char *site) {
+    if (!plan || plan->receiver_shape_id == XG_NO_ID)
+        return NULL;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotMapShapePlan *shape =
+        bundle ? xaot_bundle_find_map_shape_plan(bundle, plan->receiver_shape_id) : NULL;
+    if (!shape) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: missing receiver map-shape plan for %s "
+                "(shape=%u key_access=%u)\n",
+                site ? site : "Map/Set", plan->receiver_shape_id, plan->access_id);
+        return NULL;
+    }
+    return shape;
+}
+
+static bool cg_key_access_plan_is_dense_enum_index(XiCgenCtx *ctx, const XaotKeyAccessPlan *plan,
+                                                   const char *site) {
+    if (!plan || plan->action != XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX)
+        return false;
+    const XaotMapShapePlan *shape = cg_key_access_receiver_shape_plan(ctx, plan, site);
+    return shape && shape->action == XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
+}
+
 static bool cg_key_access_plan_action_has_backend(XiCgenCtx *ctx, const XaotKeyAccessPlan *plan,
                                                   const XiValue *v, const char *site) {
     if (!plan)
