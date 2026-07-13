@@ -1,0 +1,15 @@
+fn readFirst(view: Slice<byte>) -> int {
+    return int(view[0]) + len(view)
+}
+
+fn choose() -> (Slice<byte>) -> int {
+    return readFirst
+}
+
+@test
+fn test_shared_provenance_returned_readonly_function_value_param() {
+    shared bytes = Array<byte>(2, 5)
+    var view: Slice<byte> = bytes[:]
+    const f = choose()
+    assert_eq(f(view), 7)
+}
