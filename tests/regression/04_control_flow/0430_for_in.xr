@@ -108,7 +108,7 @@ fn test_for_in_map_keys() {
 
 @test
 fn test_for_in_empty_map() {
-    var m = #{}
+    var m: Map<string, int> = #{}
     var count = 0
     for (kv in m) {
         count++

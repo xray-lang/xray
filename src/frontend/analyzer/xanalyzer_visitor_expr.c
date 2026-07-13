@@ -2717,14 +2717,20 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     MapLiteralNode *map = &node->as.map_literal;
     if (map->count == 0) {
         // Empty map: use expected type if available
-        if (ctx->expected_type && XR_TYPE_IS_MAP(ctx->expected_type)) {
+        if (ctx->expected_type && XR_TYPE_IS_MAP(ctx->expected_type) &&
+            ctx->expected_type->map.key_type && ctx->expected_type->map.value_type &&
+            !XR_TYPE_IS_UNKNOWN(ctx->expected_type->map.key_type) &&
+            !XR_TYPE_IS_UNKNOWN(ctx->expected_type->map.value_type)) {
             XrType *ek = ctx->expected_type->map.key_type;
             XrType *ev = ctx->expected_type->map.value_type;
-            return xr_type_new_map(ctx->analyzer->isolate, ek ? ek : xr_type_new_unknown(NULL),
-                                   ev ? ev : xr_type_new_unknown(NULL));
+            return xr_type_new_map(ctx->analyzer->isolate, ek, ev);
         }
-        return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL),
-                               xr_type_new_unknown(NULL));
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        XaInferVar *var = xa_infer_var_new(ctx, "empty map key/value", &loc);
+        return xa_infer_var_report_unsolved(
+            ctx, var,
+            "cannot infer key/value types for empty map literal; add an explicit Map<K, V> "
+            "annotation or contextual type");
     }
 
     // Propagate expected key/value types to children

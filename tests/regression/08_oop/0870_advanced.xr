@@ -298,7 +298,7 @@ class MapUser {
 
 @test
 fn test_object_in_map() {
-    var users = #{}  // 使用 #{} 创建 Map，不是 {}
+    var users: Map<string, MapUser> = #{}  // 使用 #{} 创建 Map，不是 {}
     users["alice"] = MapUser("Alice", 10)
     users["bob"] = MapUser("Bob", 5)
 
@@ -307,4 +307,3 @@ fn test_object_in_map() {
     assert_eq(users["bob"].name, "Bob")
     assert_eq(users["bob"].level, 5)
 }
-

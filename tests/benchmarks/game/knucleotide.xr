@@ -37,7 +37,7 @@ fn generate_sequence(count) {
 }
 
 fn count_frequencies(seq, k) {
-    var freq = #{}
+    var freq: Map<string, int> = #{}
     var end = len(seq) - k + 1
     for (j in 0..end) {
         var subseq = seq.slice(j, j + k)

@@ -92,7 +92,7 @@ fn test_empty_array() {
 
 @test
 fn test_empty_map() {
-    var m = #{}
+    var m: Map<string, int> = #{}
     assert_eq(len(m), 0)
 }
 

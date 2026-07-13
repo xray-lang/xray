@@ -24,7 +24,7 @@ fn test_common_headers() {
 
 @test
 fn test_empty_headers() {
-    var h = #{}
+    var h: Map<string, string> = #{}
     assert_eq(h.get("X-Not-Exist"), null)
 }
 

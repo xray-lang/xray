@@ -8,7 +8,7 @@
 fn run(n: int) {
     // Phase 1: Build a long-lived map, then repeatedly overwrite values
     // This forces write barriers: old container ← young value
-    var bigMap = #{}
+    var bigMap: Map<string, Json> = #{}
     var i = 0
     while (i < 1000) {
         bigMap["key_" + i] = i
