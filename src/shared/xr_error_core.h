@@ -50,15 +50,15 @@
 #define XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG "Slice<byte>.load<uint64>() offset out of bounds"
 #define XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG "cannot write through readonly Slice<byte>"
 #define XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG                                                \
-    "Slice<byte>.copyFrom expects integer offsets and count"
+    "Array<byte> copy-within expects integer offsets and count"
 #define XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG                                               \
-    "Slice<byte>.copyFrom receiver must be Slice<byte>"
-#define XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG "Slice<byte>.copyFrom range out of bounds"
+    "Array<byte> copy-within receiver must be Array<byte>"
+#define XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG "Array<byte> copy-within range out of bounds"
 #define XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG                                                  \
-    "Slice<byte>.copyFrom expects Slice<byte> and integer ranges"
+    "Array<byte> copy range expects Array<byte> operands and integer ranges"
 #define XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG                                                 \
-    "Slice<byte>.copyFrom operands must be Slice<byte>"
-#define XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG "Slice<byte>.copyFrom range out of bounds"
+    "Array<byte> copy range operands must be Array<byte>"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG "Array<byte> copy range out of bounds"
 #define XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG                                                \
     "Array<byte>.appendFrom(src) expects Slice<byte>"
 #define XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG                                               \

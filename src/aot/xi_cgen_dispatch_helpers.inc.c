@@ -9127,7 +9127,7 @@ static void xicgen_byte_array_copy_from(XiCgenCtx *ctx, FILE *out, const XiFunc 
     bool boxed = cg_rep(v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_copy_from_raw(");
+    fprintf(out, "xrt_bytes_copy_from_checked_raw(");
     xicgen_byte_array_ptr_arg(ctx, out, f, v, prefix, 0);
     fprintf(out, ", ");
     xicgen_byte_array_ptr_arg(ctx, out, f, v, prefix, 1);
