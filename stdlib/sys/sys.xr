@@ -166,19 +166,11 @@ class Process {
     }
 }
 
-class _ThreadLocalSlot<T> {
-    value: T
-
-    constructor(value: T) {
-        this.value = value
-    }
-}
-
 enum _ThreadLocalError {
     RecursiveInit
 }
 
-fn _threadLocalPruneDeadSlots<T>(values: Map<int, _ThreadLocalSlot<T>>) {
+fn _threadLocalPruneDeadSlots<T>(values: Map<int, T>) {
     var keys = values.keys()
     for (key in keys) {
         if (!__threadLocalAlive(key)) {
@@ -198,7 +190,7 @@ fn _threadLocalPruneDeadFlags(values: Map<int, bool>) {
 
 class ThreadLocal<T> {
     _lock: OsMutex
-    _values: Map<int, _ThreadLocalSlot<T>>
+    _values: Map<int, T>
     _initializing: Map<int, bool>
     _init: () -> T
 
@@ -216,8 +208,7 @@ class ThreadLocal<T> {
             defer { this._lock.unlock() }
             _threadLocalPruneDeadSlots(this._values)
             if (this._values.containsKey(key)) {
-                var slot = this._values.get(key)!
-                return slot.value
+                return this._values[key]
             }
             _threadLocalPruneDeadFlags(this._initializing)
             if (this._initializing.containsKey(key)) {
@@ -237,9 +228,9 @@ class ThreadLocal<T> {
                 _threadLocalPruneDeadFlags(this._initializing)
                 this._initializing.delete(key)
                 if (!this._values.containsKey(key)) {
-                    this._values.set(key, _ThreadLocalSlot<T>(value))
+                    this._values.set(key, value)
                 }
-                result = this._values.get(key)!.value
+                result = this._values[key]
             }
             return result
         } catch (e) {
@@ -258,10 +249,9 @@ class ThreadLocal<T> {
         defer { this._lock.unlock() }
         _threadLocalPruneDeadSlots(this._values)
         if (this._values.containsKey(key)) {
-            var slot = this._values.get(key)!
-            slot.value = value
+            this._values[key] = value
         } else {
-            this._values.set(key, _ThreadLocalSlot<T>(value))
+            this._values.set(key, value)
         }
         this._initializing.delete(key)
     }
