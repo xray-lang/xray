@@ -2083,17 +2083,30 @@ static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
 
 static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr) {
     while (expr) {
-        if (expr->type == AST_VARIABLE)
-            return xa_call_variable_symbol(ctx, expr);
-        if (expr->type == AST_MEMBER_ACCESS) {
-            expr = expr->as.member_access.object;
-            continue;
+        switch (expr->type) {
+            case AST_VARIABLE:
+                return xa_call_variable_symbol(ctx, expr);
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                continue;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                continue;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                continue;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                continue;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                continue;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                continue;
+            default:
+                return NULL;
         }
-        if (expr->type == AST_INDEX_GET) {
-            expr = expr->as.index_get.array;
-            continue;
-        }
-        break;
     }
     return NULL;
 }
@@ -4055,7 +4068,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);
         if (param_mode == XR_PARAM_IN || param_mode == XR_PARAM_REF || param_mode == XR_PARAM_OUT) {
-            XaSymbol *arg_sym = xa_call_variable_symbol(ctx, arg_node);
+            XaSymbol *arg_sym = xa_call_root_variable_symbol(ctx, arg_node);
             if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
                 effective_arg_names[slot] = arg_sym->name;

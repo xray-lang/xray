@@ -1,0 +1,17 @@
+class Pair {
+    left: int
+    right: int
+
+    constructor() {
+        this.left = 0
+        this.right = 0
+    }
+}
+
+fn fill_pair(left: out int, right: out int) {
+    left = 1
+    right = 2
+}
+
+var pair = Pair()
+fill_pair(out pair.left, out pair.right)
